@@ -25,18 +25,16 @@
 #include <QStringList>
 #include <QUrl>
 #include <QVariant>
+#include <cstdlib>
+#include <memory>
+#include <morph/session/session_auth.hpp>
+#include <optional>
+#include <string>
 
 #include "bookmark_qml_bridges.hpp"
 #include "bookmarks/auth/bookmarks_authorizer.hpp"
 #include "bookmarks/db/database.hpp"
 #include "gui/app_context.hpp"
-
-#include <morph/session/session_auth.hpp>
-
-#include <cstdlib>
-#include <memory>
-#include <optional>
-#include <string>
 
 namespace {
 
@@ -85,9 +83,8 @@ int main(int argc, char** argv) {
     // env var, a keyring) would suggest it does.
     if (!serverUrl) {
         const char* connectionString = std::getenv("BOOKMARKS_DB");
-        bookmarks::db::setup(connectionString != nullptr
-                                 ? connectionString
-                                 : "DRIVER=SQLite3;Database=bookmarks.db;Timeout=5000");
+        bookmarks::db::setup(connectionString != nullptr ? connectionString
+                                                         : "DRIVER=SQLite3;Database=bookmarks.db;Timeout=5000");
         // hmacSha256 named explicitly -- see the identical note at
         // bookmarks/src/app/app.cpp's setTokenIssuer() call: TokenIssuer's
         // default is dropped entirely under MORPH_REQUIRE_VETTED_HMAC.

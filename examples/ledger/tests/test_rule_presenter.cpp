@@ -5,21 +5,17 @@
 // transport and QML layers carry each result -- including the version, which
 // is the field that makes a rule edit's non-retroactivity visible.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <ledger/db/ledger_entity.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "rule_qml_bridge.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-
-#include <ledger/db/ledger_entity.hpp>
-
-#include <memory>
-#include <string>
 
 namespace {
 
@@ -46,8 +42,7 @@ using morph::ladder::testkit::pumpUntil;
 
 }  // namespace
 
-TEST_CASE("RulePresenter emits ruleCreated and ruleUpdated with the bumped version",
-          "[ledger][gui]") {
+TEST_CASE("RulePresenter emits ruleCreated and ruleUpdated with the bumped version", "[ledger][gui]") {
     DbFixture fixture;
     const auto ledgerId = seedLedger("Personal");
     auto rig = makeAuthedRig("alice");
@@ -62,19 +57,18 @@ TEST_CASE("RulePresenter emits ruleCreated and ruleUpdated with the bumped versi
         created = true;
     });
 
-    presenter.createRule(ledgerId, ledger::RuleTrigger::DescriptionContains, "COFFEE",
-                         ledger::RuleAction::SetCategory, "7");
+    presenter.createRule(ledgerId, ledger::RuleTrigger::DescriptionContains, "COFFEE", ledger::RuleAction::SetCategory,
+                         "7");
     REQUIRE(pumpUntil([&] { return created || failed; }));
     REQUIRE_FALSE(failed);
     REQUIRE(ruleId.hasValue());
 
     ledger::RuleInfo updated;
     bool gotUpdate = false;
-    QObject::connect(&presenter, &ledger::gui::RulePresenter::ruleUpdated,
-                     [&](ledger::RuleInfo rule) {
-                         updated = std::move(rule);
-                         gotUpdate = true;
-                     });
+    QObject::connect(&presenter, &ledger::gui::RulePresenter::ruleUpdated, [&](ledger::RuleInfo rule) {
+        updated = std::move(rule);
+        gotUpdate = true;
+    });
 
     presenter.updateRule(ruleId, "ESPRESSO", "9");
     REQUIRE(pumpUntil([&] { return gotUpdate || failed; }));

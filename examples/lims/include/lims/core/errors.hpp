@@ -8,22 +8,22 @@
 namespace lims {
 
 class LimsError : public std::runtime_error {
-  public:
+public:
     explicit LimsError(std::string message) : std::runtime_error{std::move(message)} {}
 };
 
 class ValidationError : public LimsError {
-  public:
+public:
     explicit ValidationError(std::string message) : LimsError{std::move(message)} {}
 };
 
 class NotFound : public LimsError {
-  public:
+public:
     explicit NotFound(std::string message) : LimsError{std::move(message)} {}
 };
 
 class Forbidden : public LimsError {
-  public:
+public:
     explicit Forbidden(std::string message) : LimsError{std::move(message)} {}
 };
 
@@ -33,7 +33,7 @@ class Forbidden : public LimsError {
 /// Distinct from `IllegalTransition`, which is about the sample's lifecycle:
 /// this one is about a *record* that has already reached a terminal state.
 class Conflict : public LimsError {
-  public:
+public:
     explicit Conflict(std::string message) : LimsError{std::move(message)} {}
 };
 
@@ -45,7 +45,7 @@ class Conflict : public LimsError {
 /// published sample that quietly accepted a new result would be a regulatory
 /// problem, not a UI inconvenience.
 class IllegalTransition : public LimsError {
-  public:
+public:
     explicit IllegalTransition(std::string message) : LimsError{std::move(message)} {}
 };
 
@@ -57,7 +57,7 @@ class IllegalTransition : public LimsError {
 /// as disqualifying for this rung specifically, so every mutating action
 /// checks rather than assuming the authorizer ran.
 class EmptyPrincipalError : public LimsError {
-  public:
+public:
     EmptyPrincipalError() : LimsError{"mutating action dispatched with an empty principal"} {}
 };
 

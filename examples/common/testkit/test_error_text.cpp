@@ -7,15 +7,13 @@
 // behaviour for a non-std::exception throw changes from "escapes the callback"
 // to "returns text". These pin both the preserved behaviour and the fixed one.
 
-#include "gui/error_text.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
 #include <QString>
-
+#include <catch2/catch_test_macros.hpp>
 #include <exception>
 #include <stdexcept>
 #include <string>
+
+#include "gui/error_text.hpp"
 
 using morph::ladder::gui::errorText;
 

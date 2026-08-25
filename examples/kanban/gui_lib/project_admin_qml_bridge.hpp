@@ -12,10 +12,10 @@
 // doc comment for the full rationale (mirrors
 // bookmark_qml_bridges.hpp's identical guard).
 #ifndef Q_MOC_RUN
-#include "project_admin_presenter.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "project_admin_presenter.hpp"
 #endif
 
 namespace kanban::gui {
@@ -44,7 +44,7 @@ class ProjectAdminBridge : public QObject {
     ///        requested project, each a `{principal, role}` map.
     Q_PROPERTY(QVariantList roles READ roles NOTIFY rolesListed)
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -92,7 +92,7 @@ class ProjectAdminBridge : public QObject {
     /// @param principal The member to remove.
     Q_INVOKABLE void removeMember(qlonglong projectId, const QString& principal);
 
-  signals:
+signals:
     /// @brief Emitted once the wrapped presenter's registration round trip
     ///        settles — successfully or not (`Presenter::bound()`,
     ///        `morph/core/bridge.hpp`'s `whenBound()`).
@@ -118,7 +118,7 @@ class ProjectAdminBridge : public QObject {
     /// @param message The model's own `what()`.
     void failed(const QString& message);
 
-  private:
+private:
 #ifndef Q_MOC_RUN
     ProjectAdminPresenter _presenter;
 #endif

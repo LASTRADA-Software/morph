@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "report_qml_bridge.hpp"
-#include "gui/id_qml.hpp"
 
 #include <glaze/glaze.hpp>
-
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "gui/id_qml.hpp"
 
 namespace ledger::gui {
 
@@ -16,8 +16,7 @@ using ::morph::ladder::gui::idFromText;
 
 }  // namespace
 
-ReportQmlBridge::ReportQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                                 QObject* parent)
+ReportQmlBridge::ReportQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
     : QObject{parent}, _presenter{bridge, executor} {
     connect(&_presenter, &ReportPresenter::submitted, this,
             [this](ReportJobId) { setStatus(QStringLiteral("pending")); });
@@ -62,16 +61,13 @@ void ReportQmlBridge::setStatus(QString status) {
     emit statusChanged();
 }
 
-void ReportQmlBridge::openLedger(const QString& ledgerId) {
-    _ledgerId = idFromText<LedgerId>(ledgerId);
-}
+void ReportQmlBridge::openLedger(const QString& ledgerId) { _ledgerId = idFromText<LedgerId>(ledgerId); }
 
 void ReportQmlBridge::requestMonthlyStatement(int year, int month, int timezoneOffsetMinutes) {
     _lines.clear();
     emit linesChanged();
     setStatus(QStringLiteral("pending"));
-    _presenter.submitMonthlyStatement(_ledgerId, year, static_cast<unsigned>(month),
-                                      timezoneOffsetMinutes);
+    _presenter.submitMonthlyStatement(_ledgerId, year, static_cast<unsigned>(month), timezoneOffsetMinutes);
 }
 
 }  // namespace ledger::gui

@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <morph/core/bridge.hpp>
-
 #include <filesystem>
+#include <morph/core/bridge.hpp>
 #include <string>
 
 #include "bank/app/app.hpp"
@@ -12,8 +10,8 @@
 #include "bank/dto/account_dto.hpp"
 #include "bank/dto/budget_dto.hpp"
 #include "bank/dto/transaction_dto.hpp"
-#include "bank/models/customer_model.hpp"
 #include "bank/models/budget_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/transaction_model.hpp"
 #include "bank_test_support.hpp"
 
@@ -23,8 +21,7 @@ namespace {
 
 std::string testConnection() {
     bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" +
-           (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
+    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
 }
 
 }  // namespace
@@ -54,8 +51,7 @@ TEST_CASE("BudgetModel upserts budgets and computes spending", "[budget]") {
     }
 
     SECTION("spending-by-kind sums debits from the ledger") {
-        const auto acct =
-            await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
+        const auto acct = await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
         await(txns.execute(bank::dto::Deposit{.accountId = acct, .amountMinor = 100000}), app.guiLoop());
         await(txns.execute(bank::dto::Withdraw{.accountId = acct, .amountMinor = 3000}), app.guiLoop());
         await(txns.execute(bank::dto::Withdraw{.accountId = acct, .amountMinor = 2000}), app.guiLoop());

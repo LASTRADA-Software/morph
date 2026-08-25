@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "ledger/db/database.hpp"
-
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlMigration.hpp>
+
+#include "ledger/db/database.hpp"
 
 namespace ledger::db {
 
@@ -37,21 +37,15 @@ using Lightweight::SqlForeignKeyReferenceDefinition;
 // chained onto CreateTableIfNotExists (bookmarks' own imported_ops table).
 
 namespace {
-constexpr auto ledgersRef() {
-    return SqlForeignKeyReferenceDefinition{.tableName = "ledgers", .columnName = "id"};
-}
-constexpr auto accountsRef() {
-    return SqlForeignKeyReferenceDefinition{.tableName = "accounts", .columnName = "id"};
-}
+constexpr auto ledgersRef() { return SqlForeignKeyReferenceDefinition{.tableName = "ledgers", .columnName = "id"}; }
+constexpr auto accountsRef() { return SqlForeignKeyReferenceDefinition{.tableName = "accounts", .columnName = "id"}; }
 constexpr auto transactionJournalsRef() {
     return SqlForeignKeyReferenceDefinition{.tableName = "transaction_journals", .columnName = "id"};
 }
 constexpr auto categoriesRef() {
     return SqlForeignKeyReferenceDefinition{.tableName = "categories", .columnName = "id"};
 }
-constexpr auto budgetsRef() {
-    return SqlForeignKeyReferenceDefinition{.tableName = "budgets", .columnName = "id"};
-}
+constexpr auto budgetsRef() { return SqlForeignKeyReferenceDefinition{.tableName = "budgets", .columnName = "id"}; }
 }  // namespace
 
 LIGHTWEIGHT_SQL_MIGRATION(20260819000001, "Create ledgers table") {
@@ -74,9 +68,9 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000003, "Create transaction_journals table") {
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
         .RequiredColumn("description", Varchar(256))
-        .RequiredColumn("date", Bigint())  // Timestamp at rest -- epoch millis, per morph::time convention
+        .RequiredColumn("date", Bigint())          // Timestamp at rest -- epoch millis, per morph::time convention
         .Column("causal_parent_id", Varchar(64));  // nullable: NULL means "no parent" -- the entity layer wraps this
-                                                    // as std::optional<SqlAnsiString<64>>, not an empty-string sentinel
+                                                   // as std::optional<SqlAnsiString<64>>, not an empty-string sentinel
 }
 
 LIGHTWEIGHT_SQL_MIGRATION(20260819000004, "Create transaction_legs table") {
@@ -88,8 +82,8 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000004, "Create transaction_legs table") {
         .RequiredColumn("amount_den", Bigint())
         .RequiredColumn("amount_dp", Integer())
         .RequiredColumn("currency_code", Varchar(3))
-        .Column("foreign_amount_num", Bigint())    // nullable triple -- present only on a
-        .Column("foreign_amount_den", Bigint())    // foreign-amount-pair leg (design spec §1 step 3)
+        .Column("foreign_amount_num", Bigint())  // nullable triple -- present only on a
+        .Column("foreign_amount_den", Bigint())  // foreign-amount-pair leg (design spec §1 step 3)
         .Column("foreign_amount_dp", Integer())
         .Column("foreign_currency_code", Varchar(3));
 }
@@ -141,8 +135,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000009, "Create ledger_imported_ops table") {
         .RequiredColumn("owner_principal", Varchar(64))
         .RequiredColumn("op_id", Varchar(128))
         .RequiredColumn("applied_at_ms", Bigint());
-    plan.CreateUniqueIndex("idx_ledger_imported_ops_owner_op", "ledger_imported_ops",
-                            {"owner_principal", "op_id"});
+    plan.CreateUniqueIndex("idx_ledger_imported_ops_owner_op", "ledger_imported_ops", {"owner_principal", "op_id"});
 }
 
 LIGHTWEIGHT_SQL_MIGRATION(20260819000010, "Create ledger_imported_txn_hashes table") {
@@ -154,7 +147,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000010, "Create ledger_imported_txn_hashes tab
         .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
         .RequiredColumn("hash", Varchar(64));
     plan.CreateUniqueIndex("idx_ledger_imported_txn_hashes_ledger_hash", "ledger_imported_txn_hashes",
-                            {"ledger_id", "hash"});
+                           {"ledger_id", "hash"});
 }
 
 LIGHTWEIGHT_SQL_MIGRATION(20260819000011, "Create ledger_report_jobs table") {
@@ -165,8 +158,8 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000011, "Create ledger_report_jobs table") {
         .RequiredColumn("kind", Integer())
         .RequiredColumn("status", Integer())
         .Column("result_json", NVarchar(0))  // nullable, unbounded -- absent until the job completes; NVarchar(0) is
-                                              // the ladder-wide "unbounded text" convention (IMPLEMENTATION.md rule 3,
-                                              // never Text() -- see pastebin's own `content` column)
+                                             // the ladder-wide "unbounded text" convention (IMPLEMENTATION.md rule 3,
+                                             // never Text() -- see pastebin's own `content` column)
         .RequiredColumn("created_at_ms", Bigint());
 }
 

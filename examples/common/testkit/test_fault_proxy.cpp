@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <QUrl>
+#include <QWebSocket>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
-
-#include "testkit/fault_proxy.hpp"
-#include "testkit/pump.hpp"
-
+#include <chrono>
+#include <cstdint>
+#include <exception>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -11,16 +14,10 @@
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
-
-#include <QUrl>
-#include <QWebSocket>
-
-#include <atomic>
-#include <chrono>
-#include <cstdint>
-#include <exception>
-#include <memory>
 #include <stdexcept>
+
+#include "testkit/fault_proxy.hpp"
+#include "testkit/pump.hpp"
 
 // Deliberately at namespace scope, not inside an anonymous namespace: glz's
 // reflection (which BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION rely on to
@@ -242,8 +239,7 @@ TEST_CASE("FaultProxy::duplicateReply delivers the reply twice on the wire but r
     // The duplicate really did go out on the wire — without this the
     // single-invocation assertion below would pass just as happily against a
     // proxy that quietly forwarded one copy.
-    REQUIRE(::morph::ladder::testkit::pumpUntil(
-        [&] { return rig.proxy->repliesForwarded() - forwardedBefore >= 2; }));
+    REQUIRE(::morph::ladder::testkit::pumpUntil([&] { return rig.proxy->repliesForwarded() - forwardedBefore >= 2; }));
     CHECK(rig.proxy->repliesForwarded() - forwardedBefore == 2);
 
     // The second copy of the reply must not re-fire the callback:
@@ -290,7 +286,8 @@ TEST_CASE("FaultProxy: an undecodable client frame is forwarded unreported, not 
     ProxyRig rig;
 
     bool observerCalled = false;
-    rig.proxy->setRequestObserver([&](std::uint64_t, ::morph::ladder::testkit::FaultProxy&) { observerCalled = true; });
+    rig.proxy->setRequestObserver(
+        [&](std::uint64_t, ::morph::ladder::testkit::FaultProxy&) { observerCalled = true; });
 
     // A raw socket, not a QtWebSocketBackend: the backend only ever emits
     // well-formed wire::Envelopes, so reaching onClientTextMessage's
@@ -343,9 +340,9 @@ TEST_CASE("FaultProxy::killAfter drops the connection instead of the targeted re
     });
 
     const std::uint64_t forwardedBefore = rig.proxy->repliesForwarded();
-    handler.execute(FaultProbeAdd{1})
-        .then([&](int) { resolved = true; })
-        .onError([&](const std::exception_ptr&) { failed = true; });
+    handler.execute(FaultProbeAdd{1}).then([&](int) { resolved = true; }).onError([&](const std::exception_ptr&) {
+        failed = true;
+    });
 
     REQUIRE(::morph::ladder::testkit::pumpUntil([&] { return disconnected.load(); }));
     CHECK(requestsSeen == 1);
@@ -381,10 +378,9 @@ TEST_CASE("isValidIncomingConnection rejects null, accepts non-null", "[ladder][
 // See its doc comment in fault_proxy.hpp.
 TEST_CASE("decodeCallIdOrZero round-trips a valid envelope's callId, and is 0 for garbage",
           "[ladder][testkit][fault-proxy]") {
-    const QString validReply =
-        QString::fromStdString(::morph::wire::encode(::morph::wire::makeOk(/*callId=*/7)));
+    const QString validReply = QString::fromStdString(::morph::wire::encode(::morph::wire::makeOk(/*callId=*/7)));
     CHECK(::morph::ladder::testkit::detail::decodeCallIdOrZero(validReply) == 7);
 
-    CHECK(::morph::ladder::testkit::detail::decodeCallIdOrZero(
-              QStringLiteral("not-json-and-not-a-wire-envelope")) == 0);
+    CHECK(::morph::ladder::testkit::detail::decodeCallIdOrZero(QStringLiteral("not-json-and-not-a-wire-envelope")) ==
+          0);
 }

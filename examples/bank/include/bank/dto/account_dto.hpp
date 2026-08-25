@@ -20,10 +20,10 @@ namespace bank::dto {
 
 /// @brief Open a new account for the current session's owner.
 struct OpenAccount {
-    std::string owner;                  ///< empty => use the session principal
-    int kind = 0;                       ///< bank::AccountKind
-    int currency = 0;                   ///< bank::Currency
-    std::int64_t overdraftMinor = 0;    ///< permitted overdraft, minor units
+    std::string owner;                ///< empty => use the session principal
+    int kind = 0;                     ///< bank::AccountKind
+    int currency = 0;                 ///< bank::Currency
+    std::int64_t overdraftMinor = 0;  ///< permitted overdraft, minor units
 
     /// Form-readiness predicate (used by `BridgeHandler::set<>` streaming).
     [[nodiscard]] bool validate() const {

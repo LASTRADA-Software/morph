@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <glaze/glaze.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <thread>
+#include <vector>
+
 #include "ledger/core/errors.hpp"
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/ledger_model.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/step_executor.hpp"
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <morph/session/session.hpp>
-
-#include <glaze/glaze.hpp>
-
-#include <chrono>
-#include <memory>
-#include <thread>
-#include <vector>
 
 namespace {
 
@@ -52,7 +50,7 @@ using morph::ladder::testkit::StepExecutor;
 /// @param jobId The submitted job.
 /// @return The last status observed -- still `Pending` only if the cap was hit.
 [[nodiscard]] ledger::GetReportStatusResult pollUntilSettled(ledger::LedgerModel& model,
-                                                              const ledger::ReportJobId& jobId) {
+                                                             const ledger::ReportJobId& jobId) {
     ledger::GetReportStatusResult status;
     for (int i = 0; i < 100; ++i) {
         status = model.execute(ledger::GetReportStatus{.jobId = jobId});
@@ -108,8 +106,10 @@ TEST_CASE("SubmitReport returns immediately; GetReportStatus transitions Pending
 
     ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{
-        .ledgerId = ledgerId, .name = "Checking", .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
                                       .name = "Groceries",
                                       .kind = ledger::AccountKind::Expense,
@@ -125,9 +125,9 @@ TEST_CASE("SubmitReport returns immediately; GetReportStatus transitions Pending
         .ledgerId = ledgerId,
         .description = "Weekly shop",
         .date = morph::time::Timestamp::now(),
-        .legs = {ledger::TransactionLeg{.accountId = checkingId,
-                                        .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
-                                                                        DecimalPlaces{2}}},
+        .legs = {ledger::TransactionLeg{
+                     .accountId = checkingId,
+                     .amount = morph::math::Rational{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}}},
                  ledger::TransactionLeg{
                      .accountId = groceriesId,
                      .amount = morph::math::Rational{Numerator{5000}, Denominator{1}, DecimalPlaces{2}}}}});
@@ -150,8 +150,7 @@ TEST_CASE("SubmitReport returns immediately; GetReportStatus transitions Pending
     CHECK(lines[0].decimalPlaces == 2);
 }
 
-TEST_CASE("A 23:30-local transaction is reported in its local month, not its UTC one",
-          "[ledger][reports][time]") {
+TEST_CASE("A 23:30-local transaction is reported in its local month, not its UTC one", "[ledger][reports][time]") {
     // Design spec §9's own stated assertion. At UTC-5:
     //   2026-02-01T04:30Z == 2026-01-31T23:30 local -> belongs to JANUARY
     //   2026-02-01T05:01Z == 2026-02-01T00:01 local -> belongs to FEBRUARY
@@ -190,19 +189,18 @@ TEST_CASE("A 23:30-local transaction is reported in its local month, not its UTC
             .ledgerId = ledgerId,
             .description = std::string{description},
             .date = morph::time::Timestamp{*instant},
-            .legs = {ledger::TransactionLeg{.accountId = checkingId,
-                                            .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
-                                                                            DecimalPlaces{2}}},
-                     ledger::TransactionLeg{.accountId = groceriesId,
-                                            .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
-                                                                            DecimalPlaces{2}}}}});
+            .legs = {ledger::TransactionLeg{
+                         .accountId = checkingId,
+                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}}},
+                     ledger::TransactionLeg{
+                         .accountId = groceriesId,
+                         .amount = morph::math::Rational{Numerator{5000}, Denominator{1}, DecimalPlaces{2}}}}});
     };
     storeAt("2026-02-01T04:30:00Z", "late on the 31st, local");
     storeAt("2026-02-01T05:01:00Z", "just after midnight, local");
 
     const auto countFor = [&](int year, unsigned month) {
-        const ledger::MonthlyStatementParams params{
-            .year = year, .month = month, .timezoneOffsetMinutes = -300};
+        const ledger::MonthlyStatementParams params{.year = year, .month = month, .timezoneOffsetMinutes = -300};
         std::string paramsJson;
         REQUIRE(!glz::write_json(params, paramsJson));
         const auto jobId = model.execute(ledger::SubmitReport{
@@ -245,8 +243,10 @@ TEST_CASE("Re-polling the same completed job returns byte-identical results", "[
     auto worker = std::make_shared<StepExecutor>();
     ledger::LedgerModel model{worker};
     const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{
-        .ledgerId = ledgerId, .name = "Checking", .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
 
     auto jobId = model.execute(
         ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
@@ -282,8 +282,10 @@ TEST_CASE("A submitted report stays Pending until its worker actually runs", "[l
     auto worker = std::make_shared<StepExecutor>();
     ledger::LedgerModel model{worker};
     const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{
-        .ledgerId = ledgerId, .name = "Checking", .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
 
     const auto jobId = model.execute(
         ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
@@ -326,8 +328,10 @@ TEST_CASE("Running one report job settles that job and no other", "[ledger][repo
     auto worker = std::make_shared<StepExecutor>();
     ledger::LedgerModel model{worker};
     const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{
-        .ledgerId = ledgerId, .name = "Checking", .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
 
     const auto first = model.execute(
         ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
@@ -353,14 +357,13 @@ TEST_CASE("SubmitReport rejects a disengaged ledgerId and an unknown ledger", "[
 
     ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
-    CHECK_THROWS_AS(model.execute(ledger::SubmitReport{.ledgerId = ledger::LedgerId{},
-                                                       .kind = ledger::ReportKind::MonthlyStatement,
-                                                       .params = "{}"}),
+    CHECK_THROWS_AS(model.execute(ledger::SubmitReport{
+                        .ledgerId = ledger::LedgerId{}, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"}),
                     ledger::ValidationError);
-    CHECK_THROWS_AS(model.execute(ledger::SubmitReport{.ledgerId = ledger::LedgerId{9999},
-                                                       .kind = ledger::ReportKind::MonthlyStatement,
-                                                       .params = "{}"}),
-                    ledger::NotFound);
+    CHECK_THROWS_AS(
+        model.execute(ledger::SubmitReport{
+            .ledgerId = ledger::LedgerId{9999}, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"}),
+        ledger::NotFound);
 }
 
 TEST_CASE("GetReportStatus rejects a disengaged jobId and an unknown job", "[ledger][reports]") {

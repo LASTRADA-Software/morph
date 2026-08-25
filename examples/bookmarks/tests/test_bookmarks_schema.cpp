@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+
 #include "bookmarks/db/bookmark_entity.hpp"
 #include "bookmarks/db/bookmark_tag_entity.hpp"
 #include "bookmarks/db/imported_op_entity.hpp"
 #include "bookmarks/db/tag_entity.hpp"
 #include "testkit/db_fixture.hpp"
 
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <catch2/catch_test_macros.hpp>
-
 using morph::ladder::testkit::DbFixture;
 
-TEST_CASE("The bookmarks schema creates all four tables and a bookmark round-trips",
-          "[bookmarks][schema]") {
+TEST_CASE("The bookmarks schema creates all four tables and a bookmark round-trips", "[bookmarks][schema]") {
     DbFixture fixture;
     Lightweight::DataMapper mapper;
 
@@ -52,8 +51,7 @@ TEST_CASE("The bookmarks schema creates all four tables and a bookmark round-tri
     CHECK(rows.front().tag.Value() == tag.id.Value());
 }
 
-TEST_CASE("Duplicate (ownerPrincipal, name) tags are rejected by the unique index",
-          "[bookmarks][schema]") {
+TEST_CASE("Duplicate (ownerPrincipal, name) tags are rejected by the unique index", "[bookmarks][schema]") {
     DbFixture fixture;
     Lightweight::DataMapper mapper;
     bookmarks::db::TagRecord first;
@@ -73,8 +71,7 @@ TEST_CASE("Duplicate (ownerPrincipal, name) tags are rejected by the unique inde
     CHECK_NOTHROW(mapper.Create(thirdOwner));
 }
 
-TEST_CASE("BookmarkRecord has no relation-typed member -- Update() must compile",
-          "[bookmarks][schema]") {
+TEST_CASE("BookmarkRecord has no relation-typed member -- Update() must compile", "[bookmarks][schema]") {
     // A compile-time proof, not a runtime assertion: if BookmarkRecord ever
     // grows an embedded HasMany/HasManyThrough field, this line stops
     // compiling with the exact "no member IsModified" error the Global

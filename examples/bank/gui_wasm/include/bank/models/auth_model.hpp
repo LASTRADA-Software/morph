@@ -6,8 +6,8 @@
 // dependency (no db_model.hpp). Persistence is the in-memory store. This header
 // is placed first on the WASM include path so it wins over the native one.
 
-#include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
+#include <morph/core/registry.hpp>
 
 #include "bank/dto/auth_dto.hpp"
 #include "bank/dto/common.hpp"

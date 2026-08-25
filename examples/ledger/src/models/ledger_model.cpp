@@ -1,33 +1,31 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "ledger/core/errors.hpp"
-#include "ledger/core/time_util.hpp"
-#include "ledger/core/units.hpp"
-#include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/ledger_model.hpp"
-
-#include "clock.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
+#include <cstdint>
+#include <functional>
+#include <glaze/glaze.hpp>
+#include <map>
+#include <memory>
 #include <morph/core/logger.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
-
-#include <glaze/glaze.hpp>
-
-#include <cstdint>
-#include <functional>
-#include <map>
-#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#include "clock.hpp"
+#include "ledger/core/errors.hpp"
+#include "ledger/core/time_util.hpp"
+#include "ledger/core/units.hpp"
+#include "ledger/db/ledger_entity.hpp"
 
 namespace ledger {
 
@@ -50,11 +48,11 @@ namespace {
 ///        Null sums every leg, which is what an all-time balance wants.
 /// @return The account's balance over the legs the filter admits.
 [[nodiscard]] morph::math::Rational sumAccountLegs(Lightweight::DataMapper& mapper, std::uint64_t accountId,
-                                                    morph::math::DecimalPlaces decimalPlaces,
-                                                    const std::unordered_set<std::uint64_t>* journalFilter = nullptr) {
+                                                   morph::math::DecimalPlaces decimalPlaces,
+                                                   const std::unordered_set<std::uint64_t>* journalFilter = nullptr) {
     auto legRows = mapper.Query<db::TransactionLegRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, "=", accountId)
-                        .All();
+                       .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, "=", accountId)
+                       .All();
     auto total = morph::math::Rational::zero(decimalPlaces);
     for (const auto& legRow : legRows) {
         // A period-scoped report counts only legs whose journal falls inside
@@ -63,10 +61,9 @@ namespace {
         if (journalFilter != nullptr && !journalFilter->contains(legRow.journal.Value())) {
             continue;
         }
-        const auto legAmount = morph::math::Rational{morph::math::Numerator{legRow.amountNum.Value()},
-                                                       morph::math::Denominator{legRow.amountDen.Value()},
-                                                       morph::math::DecimalPlaces{
-                                                           static_cast<std::uint32_t>(legRow.amountDp.Value())}};
+        const auto legAmount = morph::math::Rational{
+            morph::math::Numerator{legRow.amountNum.Value()}, morph::math::Denominator{legRow.amountDen.Value()},
+            morph::math::DecimalPlaces{static_cast<std::uint32_t>(legRow.amountDp.Value())}};
         total = total + legAmount;
     }
     return total;
@@ -129,18 +126,18 @@ namespace {
     // not balance.
     if (!accountIds.empty()) {
         auto legRows = mapper.Query<db::TransactionLegRecord>()
-                            .WhereIn(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, accountIds)
-                            .All();
+                           .WhereIn(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, accountIds)
+                           .All();
         for (const auto& legRow : legRows) {
             const auto slot = slotOf.find(legRow.account.Value());
             if (slot == slotOf.end()) {
                 continue;
             }
             auto& balance = result.accounts[slot->second].balance;
-            balance = balance + morph::math::Rational{morph::math::Numerator{legRow.amountNum.Value()},
-                                                       morph::math::Denominator{legRow.amountDen.Value()},
-                                                       morph::math::DecimalPlaces{static_cast<std::uint32_t>(
-                                                           legRow.amountDp.Value())}};
+            balance = balance + morph::math::Rational{
+                                    morph::math::Numerator{legRow.amountNum.Value()},
+                                    morph::math::Denominator{legRow.amountDen.Value()},
+                                    morph::math::DecimalPlaces{static_cast<std::uint32_t>(legRow.amountDp.Value())}};
         }
     }
     return result;
@@ -210,7 +207,7 @@ namespace {
     const std::int64_t magnitude = digits.empty() ? 0 : std::stoll(digits);
     const std::int64_t numerator = (sign == "-") ? -magnitude : magnitude;
     return morph::math::Rational{morph::math::Numerator{numerator}, morph::math::Denominator{1},
-                                  morph::math::DecimalPlaces{decimalPlaces}};
+                                 morph::math::DecimalPlaces{decimalPlaces}};
 }
 
 /// @brief RAII guard around a raw SQLite read-transaction snapshot
@@ -236,7 +233,7 @@ namespace {
 ///        propagating (or, on the non-exceptional path, silently eat a
 ///        real return value -- there is none here, this guard is void-only).
 class WalSnapshotGuard {
-  public:
+public:
     /// @brief Pins a read snapshot on @p connection's connection by issuing
     ///        `BEGIN DEFERRED` as the first statement.
     /// @param connection The connection to pin. Must not already have an
@@ -260,7 +257,7 @@ class WalSnapshotGuard {
     WalSnapshotGuard(WalSnapshotGuard&&) = delete;
     WalSnapshotGuard& operator=(WalSnapshotGuard&&) = delete;
 
-  private:
+private:
     Lightweight::SqlConnection& _connection;
 };
 
@@ -334,8 +331,8 @@ class WalSnapshotGuard {
         journalsInPeriod.has_value() ? &*journalsInPeriod : nullptr;
 
     auto accountRows = mapper.Query<db::AccountRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", *ledgerId)
-                            .All();
+                           .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", *ledgerId)
+                           .All();
     std::map<std::string, morph::math::Rational> totalsByCurrency;
     // Journals counted per currency, so the body says how many transactions
     // it covered rather than only what they netted to. Counted over journals
@@ -372,14 +369,14 @@ class WalSnapshotGuard {
     lines.reserve(totalsByCurrency.size());
     for (const auto& [code, total] : totalsByCurrency) {
         const auto journalsForCode = journalsByCurrency.find(code);
-        lines.push_back(ReportLine{
-            .currency = code,
-            .numerator = total.numerator,
-            .denominator = total.denominator,
-            .decimalPlaces = total.decimalPlaces.value,
-            .transactionCount = journalsForCode == journalsByCurrency.end()
-                                    ? 0
-                                    : static_cast<std::int64_t>(journalsForCode->second.size())});
+        lines.push_back(
+            ReportLine{.currency = code,
+                       .numerator = total.numerator,
+                       .denominator = total.denominator,
+                       .decimalPlaces = total.decimalPlaces.value,
+                       .transactionCount = journalsForCode == journalsByCurrency.end()
+                                               ? 0
+                                               : static_cast<std::int64_t>(journalsForCode->second.size())});
     }
     std::string resultJson;
     if (auto err = glz::write_json(lines, resultJson); err) {
@@ -399,11 +396,11 @@ class WalSnapshotGuard {
 /// @param resultJson The serialized report body, or `std::nullopt` to leave
 ///        the column untouched.
 void finishReportJob(Lightweight::DataMapper& mapper, std::int64_t jobId, ReportStatus status,
-                      std::optional<std::string> resultJson) {
-    auto jobRows = mapper.Query<db::ReportJobRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=",
-                               static_cast<std::uint64_t>(jobId))
-                        .All();
+                     std::optional<std::string> resultJson) {
+    auto jobRows =
+        mapper.Query<db::ReportJobRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=", static_cast<std::uint64_t>(jobId))
+            .All();
     if (jobRows.empty()) {
         return;
     }
@@ -444,12 +441,12 @@ void LedgerModel::logAction(const Action& action, const Result& result, std::str
         entry.principal = ctx->principal;
     }
     entry.timestampMs = (*morph::ladder::now().value).value.time_since_epoch().count();  // server-stamped audit
-                                                                                            // timestamp -- goes
-                                                                                            // through the ladder's
-                                                                                            // injectable clock
-                                                                                            // convention, unlike
-                                                                                            // StoreTransaction's own
-                                                                                            // client-supplied date
+                                                                                         // timestamp -- goes
+                                                                                         // through the ladder's
+                                                                                         // injectable clock
+                                                                                         // convention, unlike
+                                                                                         // StoreTransaction's own
+                                                                                         // client-supplied date
     entry.causalParentId = std::move(causalParentId);
     _log->append(std::move(entry));
     // See kanban's own identical comment (design spec §5's citation) for
@@ -486,8 +483,9 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
     // BelongsTo assignment needs the real persisted parent (per
     // polls::db::OptionRecord's own `opt.poll = poll;` usage, where `poll`
     // is a row that has actually round-tripped through Create/Query).
-    auto ledgerRows =
-        mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId).All();
+    auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                          .All();
     if (ledgerRows.empty()) {
         throw NotFound{"OpenAccount: no such ledger"};
     }
@@ -505,16 +503,18 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
         .name = action.name,
         .kind = action.kind,
         .currency = action.currency,
-        .balance = morph::math::Rational{
-            morph::math::Numerator{0}, morph::math::Denominator{1},
-            morph::math::DecimalPlaces{UnitTraits<Currency>::meta(action.currency).defaultDecimals}},  // no
-                                                                            // legs exist yet at this task's
-                                                                            // scope -- Task 8 computes a real
-                                                                            // balance -- but the placeholder
-                                                                            // zero is still tagged at the
-                                                                            // account's actual currency
-                                                                            // precision (0 for JPY/KRW, 2 for
-                                                                            // USD/EUR), not a hardcoded 2
+        .balance =
+            morph::math::Rational{
+                morph::math::Numerator{0}, morph::math::Denominator{1},
+                morph::math::DecimalPlaces{
+                    UnitTraits<Currency>::meta(action.currency).defaultDecimals}},  // no
+                                                                                    // legs exist yet at this task's
+                                                                                    // scope -- Task 8 computes a real
+                                                                                    // balance -- but the placeholder
+                                                                                    // zero is still tagged at the
+                                                                                    // account's actual currency
+                                                                                    // precision (0 for JPY/KRW, 2 for
+                                                                                    // USD/EUR), not a hardcoded 2
     };
     logAction(action, result);
     return result;
@@ -539,7 +539,8 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         throw EmptyPrincipalError{};
     }
     if (!action.validate()) {
-        throw ValidationError{"StoreTransaction: description and at least two legs with engaged accountIds are required"};
+        throw ValidationError{
+            "StoreTransaction: description and at least two legs with engaged accountIds are required"};
     }
     Lightweight::DataMapper mapper;
 
@@ -552,9 +553,9 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
     // block -- never attempts a lookup against an empty string key.
     if (action.opId.hasValue()) {
         auto existingOp = mapper.Query<db::AppliedOpRecord>()
-                               .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::ledger>, "=", *action.ledgerId)
-                               .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::opId>, "=", *action.opId)
-                               .All();
+                              .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::ledger>, "=", *action.ledgerId)
+                              .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::opId>, "=", *action.opId)
+                              .All();
         if (!existingOp.empty()) {
             GetLedgerResult replayed;
             if (auto err = glz::read_json(replayed, std::string{existingOp.front().resultJson.Value()}); err) {
@@ -617,8 +618,8 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
     // tasks, not a client-supplied journal date).
     journalRow.date = action.date.value.has_value() ? (*action.date.value).value.time_since_epoch().count() : 0;
     auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                           .All();
+                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                          .All();
     if (ledgerRows.empty()) {
         throw NotFound{"StoreTransaction: no such ledger"};
     }
@@ -717,8 +718,7 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         }
         if (categorizableLegIndex.has_value()) {
             for (const auto& rule : rules) {
-                if (action.description.find(std::string{rule.matchText.Value().ToStringView()}) ==
-                    std::string::npos) {
+                if (action.description.find(std::string{rule.matchText.Value().ToStringView()}) == std::string::npos) {
                     continue;
                 }
                 // Decision 2: lookup, never auto-create -- a rule naming a
@@ -772,9 +772,10 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
     }
     Lightweight::DataMapper mapper;
 
-    auto journalRows = mapper.Query<db::TransactionJournalRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::id>, "=", *action.journalId)
-                            .All();
+    auto journalRows =
+        mapper.Query<db::TransactionJournalRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::id>, "=", *action.journalId)
+            .All();
     if (journalRows.empty()) {
         throw NotFound{"UndoTransaction: no such journal"};
     }
@@ -807,23 +808,22 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
         throw AlreadyReversed{};
     }
 
-    auto originalLegRows = mapper.Query<db::TransactionLegRecord>()
-                                .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::journal>, "=",
-                                       originalJournalRow.id.Value())
-                                .All();
+    auto originalLegRows =
+        mapper.Query<db::TransactionLegRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::journal>, "=", originalJournalRow.id.Value())
+            .All();
 
     std::vector<TransactionLeg> reversalLegs;
     std::vector<db::AccountRecord> reversalLegAccounts;
     reversalLegs.reserve(originalLegRows.size());
     reversalLegAccounts.reserve(originalLegRows.size());
     for (const auto& legRow : originalLegRows) {
-        const auto originalAmount = morph::math::Rational{morph::math::Numerator{legRow.amountNum.Value()},
-                                                            morph::math::Denominator{legRow.amountDen.Value()},
-                                                            morph::math::DecimalPlaces{
-                                                                static_cast<std::uint32_t>(legRow.amountDp.Value())}};
+        const auto originalAmount = morph::math::Rational{
+            morph::math::Numerator{legRow.amountNum.Value()}, morph::math::Denominator{legRow.amountDen.Value()},
+            morph::math::DecimalPlaces{static_cast<std::uint32_t>(legRow.amountDp.Value())}};
         auto accountRows = mapper.Query<db::AccountRecord>()
-                                .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", legRow.account.Value())
-                                .All();
+                               .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", legRow.account.Value())
+                               .All();
         if (accountRows.empty()) {
             throw NotFound{"UndoTransaction: no such account"};
         }
@@ -831,8 +831,8 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
         // Member unary negation (Rational::operator-() const), never the
         // free binary subtraction operator also declared in rational.hpp --
         // see this action's own doc comment.
-        reversalLegs.push_back(TransactionLeg{.accountId = AccountId{static_cast<std::int64_t>(legRow.account.Value())},
-                                               .amount = -originalAmount});
+        reversalLegs.push_back(TransactionLeg{
+            .accountId = AccountId{static_cast<std::int64_t>(legRow.account.Value())}, .amount = -originalAmount});
     }
 
     // The reversal's own date is "now" (when the undo happened), via
@@ -842,10 +842,9 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
     // why journalRow.date does NOT go through morph::ladder::now()) -- NOT
     // the original journal's own date, which belongs to the transaction
     // being reversed, not the reversal itself.
-    auto result = storeJournalImpl(mapper, action.ledgerId,
-                                    "Reversal of: " + std::string{originalJournalRow.description.Value().ToStringView()},
-                                    morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts,
-                                    reversalCausalParentId);
+    auto result = storeJournalImpl(
+        mapper, action.ledgerId, "Reversal of: " + std::string{originalJournalRow.description.Value().ToStringView()},
+        morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts, reversalCausalParentId);
 
     logAction(action, result, reversalCausalParentId);
     return result;
@@ -898,15 +897,17 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
     // already-committed row from earlier in the same chunk in place
     // (each was its own complete, self-balancing journal entry), it just
     // does not roll the whole chunk back to empty.
-    auto ledgerRows =
-        mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId).All();
+    auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                          .All();
     if (ledgerRows.empty()) {
         throw NotFound{"ImportLedgerChunk: no such ledger"};
     }
 
-    auto counterAccountRows = mapper.Query<db::AccountRecord>()
-                                   .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.counterAccountId)
-                                   .All();
+    auto counterAccountRows =
+        mapper.Query<db::AccountRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.counterAccountId)
+            .All();
     if (counterAccountRows.empty()) {
         throw NotFound{"ImportLedgerChunk: no such account"};
     }
@@ -941,8 +942,8 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
         const auto amount = parseAmount(amountField);
 
         auto rowAccountRows = mapper.Query<db::AccountRecord>()
-                                   .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *rowAccountId)
-                                   .All();
+                                  .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *rowAccountId)
+                                  .All();
         if (rowAccountRows.empty()) {
             throw NotFound{"ImportLedgerChunk: no such account"};
         }
@@ -954,15 +955,15 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
         // value): description + "|" + ISO date string + "|" + numerator +
         // "|" + denominator + "|" + decimalPlaces.
         const std::string hashInput = descriptionField + "|" + dateField + "|" + std::to_string(amount.numerator) +
-                                       "|" + std::to_string(amount.denominator) + "|" +
-                                       std::to_string(amount.decimalPlaces.value);
+                                      "|" + std::to_string(amount.denominator) + "|" +
+                                      std::to_string(amount.decimalPlaces.value);
         const std::string hash = std::to_string(std::hash<std::string>{}(hashInput));
 
-        auto existingHashRows = mapper.Query<db::ImportedTxnHashRecord>()
-                                     .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::ledger>, "=",
-                                            *action.ledgerId)
-                                     .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::hash>, "=", hash)
-                                     .All();
+        auto existingHashRows =
+            mapper.Query<db::ImportedTxnHashRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::ledger>, "=", *action.ledgerId)
+                .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::hash>, "=", hash)
+                .All();
         if (!existingHashRows.empty()) {
             ++duplicates;
             continue;
@@ -972,8 +973,8 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
             TransactionLeg{.accountId = rowAccountId, .amount = amount},
             TransactionLeg{.accountId = action.counterAccountId, .amount = -amount}};
         const std::vector<db::AccountRecord> legAccounts{rowAccountRow, counterAccountRow};
-        [[maybe_unused]] auto rowResult =
-            storeJournalImpl(mapper, action.ledgerId, descriptionField, morph::time::Timestamp{*parsedDate}, legs, legAccounts);
+        [[maybe_unused]] auto rowResult = storeJournalImpl(mapper, action.ledgerId, descriptionField,
+                                                           morph::time::Timestamp{*parsedDate}, legs, legAccounts);
 
         db::ImportedTxnHashRecord hashRow;
         hashRow.ledger = ledgerRows.front();
@@ -993,11 +994,11 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
     // lookup here exists purely to keep the replay safe, not to short-
     // circuit any of the work above.
     if (action.opId.hasValue()) {
-        auto existingOpRows = mapper.Query<db::ImportedOpRecord>()
-                                   .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::ownerPrincipal>, "=",
-                                          principal)
-                                   .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::opId>, "=", *action.opId)
-                                   .All();
+        auto existingOpRows =
+            mapper.Query<db::ImportedOpRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::ownerPrincipal>, "=", principal)
+                .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::opId>, "=", *action.opId)
+                .All();
         if (existingOpRows.empty()) {
             db::ImportedOpRecord opRow;
             opRow.ownerPrincipal = principal;
@@ -1021,8 +1022,9 @@ ReportJobId LedgerModel::execute(const SubmitReport& action) {
         throw ValidationError{"SubmitReport: ledgerId is required"};
     }
     Lightweight::DataMapper mapper;
-    auto ledgerRows =
-        mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId).All();
+    auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                          .All();
     if (ledgerRows.empty()) {
         throw NotFound{"SubmitReport: no such ledger"};
     }
@@ -1137,9 +1139,9 @@ GetReportStatusResult LedgerModel::execute(const GetReportStatus& action) {
     }
     Lightweight::DataMapper mapper;
     auto jobRows = mapper.Query<db::ReportJobRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=",
-                               static_cast<std::uint64_t>(*action.jobId))
-                        .All();
+                       .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=",
+                              static_cast<std::uint64_t>(*action.jobId))
+                       .All();
     if (jobRows.empty()) {
         throw NotFound{"GetReportStatus: no such job"};
     }
@@ -1167,11 +1169,11 @@ SetCategoryResult LedgerModel::execute(const SetCategory& action) {
 
 void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCategory& action) {
     auto accountRows = mapper.Query<db::AccountRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.accountId)
-                            .All();
+                           .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.accountId)
+                           .All();
     auto categoryRows = mapper.Query<db::CategoryRecord>()
-                             .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
-                             .All();
+                            .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
+                            .All();
     if (accountRows.empty() || categoryRows.empty()) {
         throw NotFound{"SetCategory: no such account or category"};
     }
@@ -1180,18 +1182,19 @@ void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCate
 }
 
 GetLedgerResult LedgerModel::storeJournalImpl(Lightweight::DataMapper& mapper, const LedgerId& ledgerId,
-                                                const std::string& description, const morph::time::Timestamp& date,
-                                                const std::vector<TransactionLeg>& legs,
-                                                const std::vector<db::AccountRecord>& legAccounts,
-                                                std::optional<std::string> causalParentId) {
+                                              const std::string& description, const morph::time::Timestamp& date,
+                                              const std::vector<TransactionLeg>& legs,
+                                              const std::vector<db::AccountRecord>& legAccounts,
+                                              std::optional<std::string> causalParentId) {
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     db::TransactionJournalRecord journalRow;
     journalRow.description = description;
     journalRow.causalParentId =
         causalParentId ? std::optional{Lightweight::SqlAnsiString<64>{*causalParentId}} : std::nullopt;
     journalRow.date = date.value.has_value() ? (*date.value).value.time_since_epoch().count() : 0;
-    auto ledgerRows =
-        mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *ledgerId).All();
+    auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *ledgerId)
+                          .All();
     if (ledgerRows.empty()) {
         throw NotFound{"storeJournalImpl: no such ledger"};
     }
@@ -1211,8 +1214,9 @@ GetLedgerResult LedgerModel::storeJournalImpl(Lightweight::DataMapper& mapper, c
         legRow.foreignAmountDp =
             foreignAmount ? std::optional{static_cast<int>(foreignAmount->decimalPlaces.value)} : std::nullopt;
         legRow.foreignCurrencyCode =
-            legs[i].foreignCurrency ? std::optional{Lightweight::SqlAnsiString<3>{currencyToCode(*legs[i].foreignCurrency)}}
-                                     : std::nullopt;
+            legs[i].foreignCurrency
+                ? std::optional{Lightweight::SqlAnsiString<3>{currencyToCode(*legs[i].foreignCurrency)}}
+                : std::nullopt;
         mapper.Create(legRow);
     }
     auto result = buildLedgerState(mapper, ledgerId);

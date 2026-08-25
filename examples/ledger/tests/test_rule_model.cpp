@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <morph/journal/action_log.hpp>
+#include <morph/session/session.hpp>
+
 #include "ledger/core/errors.hpp"
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/rule_model.hpp"
 #include "testkit/db_fixture.hpp"
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <morph/journal/action_log.hpp>
-#include <morph/session/session.hpp>
-
-#include <memory>
 
 namespace {
 
@@ -24,10 +23,10 @@ namespace {
 }
 
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -44,9 +43,11 @@ TEST_CASE("CreateRule persists a rule at version 1", "[ledger][rule]") {
 
     ledger::RuleModel model;
     ScopedPrincipal principal{"alice"};  // per Task 11's convention -- mutating actions require a principal
-    auto ruleId = model.execute(ledger::CreateRule{
-        .ledgerId = ledgerId, .trigger = ledger::RuleTrigger::DescriptionContains,
-        .matchText = "Coffee", .action = ledger::RuleAction::SetCategory, .actionValue = "Dining"});
+    auto ruleId = model.execute(ledger::CreateRule{.ledgerId = ledgerId,
+                                                   .trigger = ledger::RuleTrigger::DescriptionContains,
+                                                   .matchText = "Coffee",
+                                                   .action = ledger::RuleAction::SetCategory,
+                                                   .actionValue = "Dining"});
     REQUIRE(ruleId.hasValue());
 
     auto ruleRows = mapper.Query<ledger::db::RuleRecord>()
@@ -66,12 +67,14 @@ TEST_CASE("UpdateRule bumps the version", "[ledger][rule]") {
 
     ledger::RuleModel model;
     ScopedPrincipal principal{"alice"};
-    auto ruleId = model.execute(ledger::CreateRule{
-        .ledgerId = ledgerId, .trigger = ledger::RuleTrigger::DescriptionContains,
-        .matchText = "Coffee", .action = ledger::RuleAction::SetCategory, .actionValue = "Dining"});
+    auto ruleId = model.execute(ledger::CreateRule{.ledgerId = ledgerId,
+                                                   .trigger = ledger::RuleTrigger::DescriptionContains,
+                                                   .matchText = "Coffee",
+                                                   .action = ledger::RuleAction::SetCategory,
+                                                   .actionValue = "Dining"});
 
-    auto updated = model.execute(
-        ledger::UpdateRule{.ruleId = ruleId, .matchText = "Cafe", .actionValue = "Dining Out"});
+    auto updated =
+        model.execute(ledger::UpdateRule{.ruleId = ruleId, .matchText = "Cafe", .actionValue = "Dining Out"});
     CHECK(updated.version == 2);
 }
 

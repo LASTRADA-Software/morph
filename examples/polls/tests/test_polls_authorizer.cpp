@@ -5,10 +5,10 @@
 // @file comment) -- every hook is unconditionally permissive, so these
 // tests confirm exactly that against the real morph::session::IAuthorizer
 // signatures, not against a guessed shape.
-#include "polls/auth/polls_authorizer.hpp"
-
 #include <catch2/catch_test_macros.hpp>
 #include <morph/session/session.hpp>
+
+#include "polls/auth/polls_authorizer.hpp"
 
 using morph::session::Context;
 using polls::auth::PollsAuthorizer;
@@ -25,8 +25,7 @@ TEST_CASE("PollsAuthorizer::authorize admits every call -- there is no signed to
     CHECK(authorizer.authorize(withToken, "PollModel", "FinalizePoll"));
 }
 
-TEST_CASE("PollsAuthorizer::authorizeRegister admits every register, by this rung's own design",
-          "[polls][auth]") {
+TEST_CASE("PollsAuthorizer::authorizeRegister admits every register, by this rung's own design", "[polls][auth]") {
     const PollsAuthorizer authorizer;
 
     // `anonymous` is one real input among others now that

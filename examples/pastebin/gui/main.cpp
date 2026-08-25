@@ -23,14 +23,13 @@
 #include <QStringList>
 #include <QUrl>
 #include <QVariant>
+#include <cstdlib>
+#include <memory>
+#include <optional>
 
 #include "gui/app_context.hpp"
 #include "paste_qml_bridges.hpp"
 #include "pastebin/db/database.hpp"
-
-#include <cstdlib>
-#include <memory>
-#include <optional>
 
 namespace {
 

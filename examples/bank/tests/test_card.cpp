@@ -10,8 +10,8 @@
 #include "bank/core/types.hpp"
 #include "bank/dto/account_dto.hpp"
 #include "bank/dto/card_dto.hpp"
-#include "bank/models/customer_model.hpp"
 #include "bank/models/card_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank_test_support.hpp"
 
 using bank::testing::await;

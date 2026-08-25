@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "bank/db/row_versions.hpp"
-
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -11,6 +9,7 @@
 
 #include "bank/core/errors.hpp"
 #include "bank/core/types.hpp"
+#include "bank/db/row_versions.hpp"
 #include "bank/wasm/store.hpp"
 
 /// @file
@@ -24,8 +23,7 @@ namespace bank::wasm {
 
 /// @brief Unix epoch milliseconds (ledger timestamp / ordering key).
 [[nodiscard]] inline std::int64_t nowMillis() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
         .count();
 }
 
@@ -64,8 +62,7 @@ inline std::uint64_t ensureUser(Db& db, std::string_view username, std::string_v
 
 /// @brief Loads an account, requiring it to exist and be owned by @p ownerId.
 /// @throws NotFound / Unauthorized.
-[[nodiscard]] inline AccountRow loadOwnedAccount(Db& db, std::int64_t accountId,
-                                                 std::uint64_t ownerId) {
+[[nodiscard]] inline AccountRow loadOwnedAccount(Db& db, std::int64_t accountId, std::uint64_t ownerId) {
     auto* acct = db.accounts.find(static_cast<std::uint64_t>(accountId));
     if (acct == nullptr) {
         throw NotFound{"account not found"};
@@ -78,8 +75,7 @@ inline std::uint64_t ensureUser(Db& db, std::string_view username, std::string_v
 
 /// @brief Like loadOwnedAccount but also requires the account to be Open.
 /// @throws NotFound / Unauthorized / ConflictError.
-[[nodiscard]] inline AccountRow loadOwnedOpenAccount(Db& db, std::int64_t accountId,
-                                                     std::uint64_t ownerId) {
+[[nodiscard]] inline AccountRow loadOwnedOpenAccount(Db& db, std::int64_t accountId, std::uint64_t ownerId) {
     auto acct = loadOwnedAccount(db, accountId, ownerId);
     if (acct.status != static_cast<int>(AccountStatus::Open)) {
         throw ConflictError{"account is not open"};
@@ -91,8 +87,7 @@ inline std::uint64_t ensureUser(Db& db, std::string_view username, std::string_v
 
 /// @brief Appends a ledger row reflecting @p account's *current* balance.
 inline TxnRow postEntry(Db& db, const AccountRow& account, TxnDirection direction, TxnKind kind,
-                        std::int64_t amountMinor, std::int64_t counterpartyId,
-                        const std::string& description) {
+                        std::int64_t amountMinor, std::int64_t counterpartyId, const std::string& description) {
     TxnRow txn;
     txn.accountId = account.id;
     txn.counterpartyId = counterpartyId;

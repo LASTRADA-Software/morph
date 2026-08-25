@@ -6,7 +6,6 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
-
 #include <memory>
 
 // Guarded exactly like bookmark_qml_bridges.hpp's own includes: AUTOMOC runs
@@ -14,12 +13,12 @@
 // bridge.hpp or event_poller.hpp — see poll_presenter.hpp's identical guard
 // and doc comment for the full rationale.
 #ifndef Q_MOC_RUN
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+
 #include "gui/event_poller.hpp"
 #include "poll_forms_controller.hpp"
 #include "poll_presenter.hpp"
-
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
 #endif
 
 /// @file
@@ -68,7 +67,7 @@ class PollBridge : public QObject {
     ///        `UndoLastVoteChange` — everything the QML renderer needs.
     Q_PROPERTY(QString schemasJson READ schemasJson CONSTANT)
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -137,7 +136,7 @@ class PollBridge : public QObject {
     ///        no-op if no poll is currently open.
     Q_INVOKABLE void stopPolling();
 
-  signals:
+signals:
     /// @brief `createPoll` succeeded. @p result carries `pollId`,
     ///        `adminToken`, `participantToken`.
     /// @param result The new poll's identifiers, as a property bag.
@@ -180,7 +179,7 @@ class PollBridge : public QObject {
     /// @param message The model's own `what()`.
     void failed(const QString& message);
 
-  private:
+private:
 #ifndef Q_MOC_RUN
     using Poller = ::morph::ladder::gui::EventPoller<PollEvent, PollEventId>;
 

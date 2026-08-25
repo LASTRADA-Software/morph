@@ -2,7 +2,6 @@
 #include "sample_presenter.hpp"
 
 #include <QStringList>
-
 #include <utility>
 
 namespace lims::gui {
@@ -86,33 +85,21 @@ void SamplePresenter::registerSample(ClientId clientId, const QString& reference
     dispatchTransition(RegisterSample{.clientId = clientId, .reference = reference.toStdString()});
 }
 
-void SamplePresenter::openSample(SampleId sampleId) {
-    dispatchTransition(OpenSample{.sampleId = sampleId});
-}
+void SamplePresenter::openSample(SampleId sampleId) { dispatchTransition(OpenSample{.sampleId = sampleId}); }
 
-void SamplePresenter::refresh() {
-    dispatchTransition(GetSample{});
-}
+void SamplePresenter::refresh() { dispatchTransition(GetSample{}); }
 
-void SamplePresenter::receiveSample() {
-    dispatchTransition(ReceiveSample{});
-}
+void SamplePresenter::receiveSample() { dispatchTransition(ReceiveSample{}); }
 
-void SamplePresenter::startWork() {
-    dispatchTransition(StartWork{});
-}
+void SamplePresenter::startWork() { dispatchTransition(StartWork{}); }
 
-void SamplePresenter::submitForVerification() {
-    dispatchTransition(SubmitForVerification{});
-}
+void SamplePresenter::submitForVerification() { dispatchTransition(SubmitForVerification{}); }
 
 void SamplePresenter::returnForRework(const QString& reason) {
     dispatchTransition(ReturnForRework{.reason = reason.toStdString()});
 }
 
-void SamplePresenter::publishSample() {
-    dispatchTransition(PublishSample{});
-}
+void SamplePresenter::publishSample() { dispatchTransition(PublishSample{}); }
 
 void SamplePresenter::rejectSample(const QString& reason) {
     dispatchTransition(RejectSample{.reason = reason.toStdString()});

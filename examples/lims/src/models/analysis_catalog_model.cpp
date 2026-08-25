@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "lims/models/analysis_catalog_model.hpp"
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlTransaction.hpp>
+#include <algorithm>
+#include <morph/forms/forms.hpp>
+#include <morph/forms/instance_constraints.hpp>
+#include <morph/session/session.hpp>
+#include <optional>
+#include <string>
+#include <utility>
+
 #include "lims/core/errors.hpp"
 #include "lims/core/model_support.hpp"
 #include "lims/db/lims_entity.hpp"
 #include "lims/dto/result_dto.hpp"
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <Lightweight/SqlTransaction.hpp>
-#include <morph/forms/forms.hpp>
-#include <morph/forms/instance_constraints.hpp>
-#include <morph/session/session.hpp>
-
-#include <algorithm>
-#include <optional>
-#include <string>
-#include <utility>
 
 namespace lims {
 
@@ -158,10 +157,10 @@ DefineAnalysisResult AnalysisCatalogModel::execute(const ReviseAnalysis& action)
     // The new version number is one past the highest existing one, read
     // rather than counted: a gap (however it arose) must not cause a
     // duplicate version number on an append-only table.
-    auto existing = mapper.Query<db::AnalysisVersionRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::AnalysisVersionRecord::analysis>, "=",
-                               *action.analysisId)
-                        .All();
+    auto existing =
+        mapper.Query<db::AnalysisVersionRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::AnalysisVersionRecord::analysis>, "=", *action.analysisId)
+            .All();
     std::int32_t highest = 0;
     for (const auto& row : existing) {
         highest = std::max(highest, row.version.Value());
@@ -195,10 +194,10 @@ ListAnalysesResult AnalysisCatalogModel::execute(const ListAnalyses& action) {
     ListAnalysesResult result;
     result.analyses.reserve(analysisRows.size());
     for (const auto& analysisRow : analysisRows) {
-        auto versions = mapper.Query<db::AnalysisVersionRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::AnalysisVersionRecord::analysis>, "=",
-                                   analysisRow.id.Value())
-                            .All();
+        auto versions =
+            mapper.Query<db::AnalysisVersionRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::AnalysisVersionRecord::analysis>, "=", analysisRow.id.Value())
+                .All();
         if (versions.empty()) {
             continue;
         }
@@ -224,10 +223,10 @@ AnalysisVersionView AnalysisCatalogModel::execute(const GetAnalysisVersion& acti
     if (versions.empty()) {
         throw NotFound{"GetAnalysisVersion: no such analysis version"};
     }
-    auto analysisRows = mapper.Query<db::AnalysisRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::AnalysisRecord::id>, "=",
-                                   versions.front().analysis.Value())
-                            .All();
+    auto analysisRows =
+        mapper.Query<db::AnalysisRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::AnalysisRecord::id>, "=", versions.front().analysis.Value())
+            .All();
     if (analysisRows.empty()) {
         throw NotFound{"GetAnalysisVersion: version's analysis is missing"};
     }
@@ -244,8 +243,8 @@ AnalysisSchemaView AnalysisCatalogModel::execute(const GetAnalysisSchema& action
         // one compiled result-entry action per *unit family*, not per
         // analysis, so a version denominated in anything but mg/L has no form
         // to serve — see the rung README's findings section.
-        throw ValidationError{"GetAnalysisSchema: no compiled result-entry action for unit '" +
-                              version.canonicalUnit + "'"};
+        throw ValidationError{"GetAnalysisSchema: no compiled result-entry action for unit '" + version.canonicalUnit +
+                              "'"};
     }
     return AnalysisSchemaView{
         .versionId = version.id,

@@ -6,22 +6,22 @@
 // callback executor identity, atomic-once delivery, orphan logging, atomic
 // backend swap under load, monitor reentrancy, and mid-replay cancellation.
 
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/completion.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/logger.hpp>
-#include <morph/offline/network_monitor.hpp>
-#include <morph/offline/offline_queue.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/core/strand.hpp>
-#include <morph/offline/sync_worker.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/strand.hpp>
+#include <morph/offline/network_monitor.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/offline/sync_worker.hpp>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -248,8 +248,10 @@ struct morph::model::ActionTraits<LoadCountAction> {
 };
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("morph::bridge::Bridge: concurrent executeVia under repeated switchBackend resolves every morph::async::Completion",
-          "[bridge][concurrency][quantum-parity]") {
+TEST_CASE(
+    "morph::bridge::Bridge: concurrent executeVia under repeated switchBackend resolves every "
+    "morph::async::Completion",
+    "[bridge][concurrency][quantum-parity]") {
     morph::exec::ThreadPoolExecutor poolA{2};
     morph::exec::ThreadPoolExecutor poolB{2};
     InlineExec cbExec;
@@ -385,12 +387,12 @@ TEST_CASE("morph::offline::SyncWorker: stop() called mid-replay aborts before pr
     morph::offline::SyncWorker* workerPtr = nullptr;
     std::atomic<int> processed{0};
     morph::offline::SyncWorker worker{queue, [&](const std::string&) {
-                          int now = processed.fetch_add(1) + 1;
-                          if (now == 3) {
-                              workerPtr->stop();
-                          }
-                          return true;
-                      }};
+                                          int now = processed.fetch_add(1) + 1;
+                                          if (now == 3) {
+                                              workerPtr->stop();
+                                          }
+                                          return true;
+                                      }};
     workerPtr = &worker;
 
     auto result = worker.run();

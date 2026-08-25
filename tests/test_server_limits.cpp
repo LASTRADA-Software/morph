@@ -5,17 +5,17 @@
 // captures throughput numbers for the local round-trip via Catch2's benchmark
 // support (see catch2/benchmark).
 
+#include <atomic>
+#include <catch2/benchmark/catch_benchmark.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
-#include <atomic>
-#include <catch2/benchmark/catch_benchmark.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <chrono>
-#include <memory>
 #include <string>
 #include <thread>
 #include <vector>

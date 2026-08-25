@@ -16,15 +16,14 @@
 // failing with "no member named 'ledger' in namespace 'Lightweight'". moc
 // needs none of these declarations; the real compiler still sees them all.
 #ifndef Q_MOC_RUN
-#include "ledger/models/ledger_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "ledger/models/ledger_model.hpp"
 #endif
 
 #include <QObject>
 #include <QString>
-
 #include <cstdint>
 #include <exception>
 #include <vector>
@@ -55,12 +54,11 @@ namespace ledger::gui {
 /// `storeTransaction`'s `opId` parameter.
 class LedgerPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
-    LedgerPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                    QObject* parent = nullptr);
+    LedgerPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent = nullptr);
 
     /// @brief Attaches to @p ledgerId and reads its current state. Emits
     ///        `ledgerListed` on success, `failed` on error.
@@ -108,10 +106,9 @@ class LedgerPresenter : public ::morph::ladder::gui::Presenter {
     /// @param opId             The import's idempotency key, minted by the
     ///        bridge -- re-importing the same statement is what this
     ///        deduplicates, so it is per-import, not per-row.
-    void importChunk(LedgerId ledgerId, AccountId counterAccountId, const QString& csvChunk,
-                     const ImportOpId& opId);
+    void importChunk(LedgerId ledgerId, AccountId counterAccountId, const QString& csvChunk, const ImportOpId& opId);
 
-  signals:
+signals:
     /// @brief A ledger's state was read successfully.
     /// @param result The ledger's accounts and their balances.
     void ledgerListed(ledger::GetLedgerResult result);
@@ -137,7 +134,7 @@ class LedgerPresenter : public ::morph::ladder::gui::Presenter {
     /// @param message The exception's `what()`.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Re-emits @p err as `failed` carrying its `what()`.
     /// @param err The exception the completion carried.
     void reportError(const std::exception_ptr& err);

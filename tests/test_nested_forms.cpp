@@ -107,12 +107,12 @@ struct TreeNode {
 // Specimen and Attachment are each used from two places below, so glaze
 // deduplicates both via a shared `$defs` entry referenced by `$ref`.
 struct Record {
-    std::string operatorName;         // flat -- unaffected by this feature
-    double temperature = 0.0;         // flat -- unaffected by this feature
-    Specimen reference;                // single nested aggregate ($ref form)
-    Specimen secondary;                // second use of Specimen -> forces $ref/$defs
-    Attachment primary;                // single nested aggregate ($ref form)
-    std::vector<Attachment> files;     // second use of Attachment -> forces $ref/$defs
+    std::string operatorName;       // flat -- unaffected by this feature
+    double temperature = 0.0;       // flat -- unaffected by this feature
+    Specimen reference;             // single nested aggregate ($ref form)
+    Specimen secondary;             // second use of Specimen -> forces $ref/$defs
+    Attachment primary;             // single nested aggregate ($ref form)
+    std::vector<Attachment> files;  // second use of Attachment -> forces $ref/$defs
 };
 
 // Specimen used exactly once here -- glaze inlines the object schema
@@ -143,13 +143,13 @@ struct RichSub {
 
     static constexpr std::array fieldMetadata{
         morph::forms::FieldMeta{.field = "code",
-                                 .label = "Custom Code",
-                                 .help = "Help text",
-                                 .placeholder = "e.g. 42",
-                                 .i18nKey = "custom.code",
-                                 .widget = "custom-widget",
-                                 .readOnly = true,
-                                 .hidden = true},
+                                .label = "Custom Code",
+                                .help = "Help text",
+                                .placeholder = "e.g. 42",
+                                .i18nKey = "custom.code",
+                                .widget = "custom-widget",
+                                .readOnly = true,
+                                .hidden = true},
     };
 };
 
@@ -263,7 +263,7 @@ std::vector<std::string> requiredNamesOf(const glz::generic_u64& node) {
 // ── Flat top-level fields are unaffected ────────────────────────────────────
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: flat top-level members still render exactly as before",
-         "[forms][nested]") {
+          "[forms][nested]") {
     auto const schema = morph::forms::schemaJson<Record>();
     REQUIRE_FALSE(schema.empty());
 
@@ -278,7 +278,7 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: flat top-level members still rend
 // ── Single nested aggregate member, deduplicated ($ref/$defs form) ─────────
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: a nested struct member's $defs entry gets annotated ($ref form)",
-         "[forms][nested][issue25]") {
+          "[forms][nested][issue25]") {
     auto const schema = morph::forms::schemaJson<Record>();
     glz::generic_u64 dom{};
     REQUIRE_FALSE(glz::read_json(dom, schema));
@@ -330,7 +330,7 @@ TEST_CASE(
 // ── Single nested aggregate member, inlined (used exactly once) ────────────
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: a singly-used nested struct member is annotated in place (inline form)",
-         "[forms][nested][issue25]") {
+          "[forms][nested][issue25]") {
     auto const schema = morph::forms::schemaJson<SingleUseRecord>();
     glz::generic_u64 dom{};
     REQUIRE_FALSE(glz::read_json(dom, schema));
@@ -371,7 +371,7 @@ TEST_CASE(
 // ── Recursion continues past one level (no depth cap) ───────────────────────
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: recursion continues past one level to whatever depth exists",
-         "[forms][nested][issue25]") {
+          "[forms][nested][issue25]") {
     auto const schema = morph::forms::schemaJson<DeepRecord>();
     glz::generic_u64 dom{};
     REQUIRE_FALSE(glz::read_json(dom, schema));
@@ -483,9 +483,8 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: re-annotating a shared $defs entr
 
 // ── FieldMeta found but no optional attributes set ──────────────────────────
 
-TEST_CASE(
-    "Forms::SchemaJson::NestedAggregate: a FieldMeta entry with no optional attributes leaves them all unset",
-    "[forms][nested][issue25]") {
+TEST_CASE("Forms::SchemaJson::NestedAggregate: a FieldMeta entry with no optional attributes leaves them all unset",
+          "[forms][nested][issue25]") {
     auto const schema = morph::forms::schemaJson<PlainMetaRecord>();
     glz::generic_u64 dom{};
     REQUIRE_FALSE(glz::read_json(dom, schema));
@@ -520,9 +519,8 @@ TEST_CASE(
 
 // ── declaredOptional applies one level down too ─────────────────────────────
 
-TEST_CASE(
-    "Forms::SchemaJson::NestedAggregate: optionalFields marks a non-std::optional nested member as not required",
-    "[forms][nested][issue25]") {
+TEST_CASE("Forms::SchemaJson::NestedAggregate: optionalFields marks a non-std::optional nested member as not required",
+          "[forms][nested][issue25]") {
     auto const schema = morph::forms::schemaJson<DeclaredOptionalRecord>();
     glz::generic_u64 dom{};
     REQUIRE_FALSE(glz::read_json(dom, schema));
@@ -542,7 +540,7 @@ TEST_CASE(
 // function's own doc comment ("left untouched rather than guessed at").
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves a non-string $ref untouched",
-         "[forms][nested][issue25]") {
+          "[forms][nested][issue25]") {
     glz::generic_u64 dom{};
     glz::generic_u64 property{};
     property["$ref"] = std::uint64_t{42};  // malformed: $ref present but not a string
@@ -551,7 +549,7 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves
 }
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves a $ref outside #/$defs/ untouched",
-         "[forms][nested][issue25]") {
+          "[forms][nested][issue25]") {
     glz::generic_u64 dom{};
     glz::generic_u64 property{};
     property["$ref"] = std::string{"#/other/Specimen"};
@@ -623,7 +621,7 @@ TEST_CASE(
 // ── Self-referential nested-aggregate type, standalone ─────────────────────
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: a self-referential nested-aggregate type round-trips fine on its own",
-         "[forms][nested][issue25]") {
+          "[forms][nested][issue25]") {
     // TreeNode is never passed to morph::forms::schemaJson<A>() in this file
     // -- see its doc comment. This only proves the type itself, and ordinary
     // glaze JSON round-tripping over it, are completely unaffected by

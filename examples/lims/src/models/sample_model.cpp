@@ -3,9 +3,9 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
+#include <algorithm>
 #include <morph/forms/instance_constraints.hpp>
 #include <morph/session/session.hpp>
-#include <algorithm>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -42,9 +42,9 @@ namespace {
     const auto den = row.valueDen.Value();
     Concentration value;
     if (num.has_value() && den.has_value()) {
-        value = Concentration{::morph::math::Rational{
-            ::morph::math::Numerator{*num}, ::morph::math::Denominator{*den},
-            ::morph::math::DecimalPlaces{static_cast<std::uint32_t>(row.valueDp.Value())}}};
+        value = Concentration{
+            ::morph::math::Rational{::morph::math::Numerator{*num}, ::morph::math::Denominator{*den},
+                                    ::morph::math::DecimalPlaces{static_cast<std::uint32_t>(row.valueDp.Value())}}};
     }
     return ResultView{
         .id = ResultId{static_cast<std::int64_t>(row.id.Value())},
@@ -97,8 +97,8 @@ namespace {
 /// @return `true` for an action whose result carries a sample state.
 [[nodiscard]] bool isLifecycleAction(std::string_view actionType) {
     return actionType == "RegisterSample" || actionType == "ReceiveSample" || actionType == "StartWork" ||
-           actionType == "SubmitForVerification" || actionType == "ReturnForRework" ||
-           actionType == "PublishSample" || actionType == "RejectSample";
+           actionType == "SubmitForVerification" || actionType == "ReturnForRework" || actionType == "PublishSample" ||
+           actionType == "RejectSample";
 }
 
 /// @brief Reconstructs one audit step from one journal entry.
@@ -122,8 +122,8 @@ namespace {
         .principal = entry.principal,
         .action = entry.actionType,
         .kind = AuditStepKind::Unreadable,
-        .outcome = entry.outcome == ::morph::journal::Outcome::Succeeded ? AuditOutcome::Succeeded
-                                                                        : AuditOutcome::Refused,
+        .outcome =
+            entry.outcome == ::morph::journal::Outcome::Succeeded ? AuditOutcome::Succeeded : AuditOutcome::Refused,
         .state = SampleState::Registered,
         .version = SampleVersion{},
         .detail = entry.error,
@@ -133,8 +133,8 @@ namespace {
     // action, the author, the instant, and why it was refused. There is no
     // result to decode, so the kind is settled here.
     if (step.outcome == AuditOutcome::Refused) {
-        step.kind = isLifecycleAction(entry.actionType) ? AuditStepKind::LifecycleTransition
-                                                        : AuditStepKind::Unreadable;
+        step.kind =
+            isLifecycleAction(entry.actionType) ? AuditStepKind::LifecycleTransition : AuditStepKind::Unreadable;
         if (step.kind == AuditStepKind::Unreadable && !entry.actionType.empty()) {
             // A recognised non-lifecycle action that was refused is still a
             // readable step, just not a lifecycle one.
@@ -170,8 +170,8 @@ namespace {
             const auto replay = ::morph::model::ActionTraits<QueuedCapture>::resultFromJson(entry.result);
             step.kind = AuditStepKind::OfflineReplay;
             step.version = replay.serverVersion;
-            step.detail = replay.outcome == ReplayOutcome::Conflicted ? std::string{"conflicted"}
-                                                                      : std::string{"applied"};
+            step.detail =
+                replay.outcome == ReplayOutcome::Conflicted ? std::string{"conflicted"} : std::string{"applied"};
         } else if (entry.actionType == "ResolveConflict") {
             static_cast<void>(::morph::model::ActionTraits<ResolveConflict>::resultFromJson(entry.result));
             step.kind = AuditStepKind::ConflictResolved;
@@ -357,10 +357,10 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
             std::string{stateName(sample.state)}};
     }
 
-    auto versions = mapper.Query<db::AnalysisVersionRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::AnalysisVersionRecord::id>, "=",
-                               *capture.analysisVersionId)
-                        .All();
+    auto versions =
+        mapper.Query<db::AnalysisVersionRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::AnalysisVersionRecord::id>, "=", *capture.analysisVersionId)
+            .All();
     if (versions.empty()) {
         throw NotFound{"CaptureConcentration: no such analysis version"};
     }
@@ -461,11 +461,11 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
 
     // Re-capturing one analysis version replaces its previous answer; the
     // journal, not a second row, is where the superseded value lives.
-    for (auto& existing : mapper.Query<db::ResultRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *sampleId)
-                              .Where(::Lightweight::FieldNameOf<&db::ResultRecord::analysisVersion>, "=",
-                                     *capture.analysisVersionId)
-                              .All()) {
+    for (auto& existing :
+         mapper.Query<db::ResultRecord>()
+             .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *sampleId)
+             .Where(::Lightweight::FieldNameOf<&db::ResultRecord::analysisVersion>, "=", *capture.analysisVersionId)
+             .All()) {
         mapper.Delete(existing);
     }
 
@@ -531,7 +531,6 @@ ListResultsResult SampleModel::execute(const ListResults& action) {
     return result;
 }
 
-
 bool SampleModel::alreadyDecided(const std::string& opKey) {
     if (opKey.empty()) {
         return false;
@@ -567,7 +566,8 @@ ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
     requirePrincipal();
     try {
         if (!action.validate()) {
-            throw ValidationError{"QueuedCapture: a sample, an author, an operation key and a usable capture are required"};
+            throw ValidationError{
+                "QueuedCapture: a sample, an author, an operation key and a usable capture are required"};
         }
         const auto& principal = ::morph::session::current()->principal;
         if (action.capturedBy != principal) {
@@ -614,8 +614,8 @@ ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
             // would normalise away anything this build no longer understands,
             // which is exactly the journal-payload-evolution failure the rung
             // README warns about.
-            row.payload = Lightweight::SqlDynamicAnsiString<4096>{
-                ::morph::model::ActionTraits<QueuedCapture>::toJson(action)};
+            row.payload =
+                Lightweight::SqlDynamicAnsiString<4096>{::morph::model::ActionTraits<QueuedCapture>::toJson(action)};
             row.detectedBy = Lightweight::SqlAnsiString<64>{principal};
             row.detectedAt = nowMillis();
             row.resolvedBy = Lightweight::SqlAnsiString<64>{std::string{}};
@@ -703,14 +703,15 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
             // took it; the resolver is recorded separately, just below. Any
             // rejection (the sample has since been published, say) propagates
             // and leaves the conflict open rather than half-resolved.
-            const auto queued = ::morph::model::ActionTraits<QueuedCapture>::fromJson(
-                std::string{row.payload.Value().ToStringView()});
+            const auto queued =
+                ::morph::model::ActionTraits<QueuedCapture>::fromJson(std::string{row.payload.Value().ToStringView()});
             static_cast<void>(applyCapture(SampleId{static_cast<std::int64_t>(row.sample.Value())}, queued.capture,
                                            queued.capturedBy));
         }
 
-        row.status = static_cast<int>(action.resolution == ConflictResolution::ApplyAnyway ? ConflictStatus::Applied
-                                                                                           : ConflictStatus::Discarded);
+        row.status =
+            static_cast<int>(action.resolution == ConflictResolution::ApplyAnyway ? ConflictStatus::Applied
+                                                                                  : ConflictStatus::Discarded);
         row.resolvedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
         row.resolvedAt = nowMillis();
         row.resolutionNote = Lightweight::SqlAnsiString<255>{action.note};
@@ -724,7 +725,6 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
         throw;
     }
 }
-
 
 std::vector<LimsRole> SampleModel::rolesOf(std::string_view principal) {
     Lightweight::DataMapper mapper;
@@ -832,8 +832,7 @@ VerificationView SampleModel::execute(const VerifyResult& action) {
         // model and action type ids and never the row -- so it can only live
         // here.
         if (capturedBy == principal) {
-            throw Forbidden{"VerifyResult: '" + principal +
-                            "' captured this result and cannot also verify it"};
+            throw Forbidden{"VerifyResult: '" + principal + "' captured this result and cannot also verify it"};
         }
 
         const auto sampleId = static_cast<std::int64_t>(result.sample.Value());
@@ -890,10 +889,10 @@ ListVerificationsResult SampleModel::execute(const ListVerifications& action) {
     for (const auto& resultRow : mapper.Query<db::ResultRecord>()
                                      .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *_sampleId)
                                      .All()) {
-        for (const auto& row : mapper.Query<db::VerificationRecord>()
-                                   .Where(::Lightweight::FieldNameOf<&db::VerificationRecord::result>, "=",
-                                          resultRow.id.Value())
-                                   .All()) {
+        for (const auto& row :
+             mapper.Query<db::VerificationRecord>()
+                 .Where(::Lightweight::FieldNameOf<&db::VerificationRecord::result>, "=", resultRow.id.Value())
+                 .All()) {
             result.verifications.push_back(VerificationView{
                 .id = VerificationId{static_cast<std::int64_t>(row.id.Value())},
                 .resultId = ResultId{static_cast<std::int64_t>(resultRow.id.Value())},

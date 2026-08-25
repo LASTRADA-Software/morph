@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <cstdint>
+#include <morph/core/bridge.hpp>
+#include <morph/core/model_key.hpp>
+#include <morph/core/registry.hpp>
+#include <optional>
+#include <string>
+#include <vector>
+
 #include "polls/core/errors.hpp"
 #include "polls/dto/event_dto.hpp"
 #include "polls/dto/poll_dto.hpp"
 #include "polls/dto/vote_dto.hpp"
-
-#include <morph/core/bridge.hpp>
-#include <morph/core/model_key.hpp>
-#include <morph/core/registry.hpp>
-
-#include <cstdint>
-#include <optional>
-#include <string>
-#include <vector>
 
 /// @file
 /// `PollModel` -- this rung's one entity-owning model, keyed by `pollId`
@@ -88,7 +87,7 @@ namespace polls {
 /// against a shared instance are still serialized one at a time on its own
 /// strand, so no two `execute()` calls ever contend for one acquisition.
 class PollModel {
-  public:
+public:
     /// @brief Creates a poll with its candidate options.
     /// @param action Title and 2-20 bounded-label options.
     /// @return The generated `pollId`/`adminToken`/`participantToken`.
@@ -212,7 +211,7 @@ class PollModel {
     /// @throws NotFound if this handler was never attached via `OpenPoll`.
     GetEventsSinceResult execute(const GetEventsSince& action);
 
-  private:
+private:
     /// @brief Throws `Forbidden` unless `session::current()->token` equals
     ///        @p adminToken. Takes the already-decoded token rather than a
     ///        `db::PollRecord&` deliberately: the entity is an
@@ -276,8 +275,8 @@ class PollModel {
     /// @return The freshly-rebuilt state of this handler's attached poll.
     /// @throws Conflict if the poll is already finalized.
     GetPollStateResult applyVotes(const std::string& participantName, const std::vector<OneVote>& votes,
-                                   const std::string& summaryVerb, WriteHistory writeHistory,
-                                   std::optional<std::uint64_t> historyRowIdToDelete = std::nullopt);
+                                  const std::string& summaryVerb, WriteHistory writeHistory,
+                                  std::optional<std::uint64_t> historyRowIdToDelete = std::nullopt);
 
     /// @brief The poll this handler is attached to, cached on the first
     ///        successful `execute(OpenPoll)`. Unset until then -- reading it

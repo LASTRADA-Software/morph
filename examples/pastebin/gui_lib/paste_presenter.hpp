@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <exception>
+
 #include "gui/presenter.hpp"
 #include "pastebin/dto/paste_dto.hpp"
-
-#include <exception>
 
 // Guarded like examples/bank/gui/controllers/AccountController.hpp and
 // examples/forms/gui_qml/FormsController.hpp: moc only needs the
@@ -19,10 +19,10 @@
 // connection per execute() call from Lightweight::GlobalDataMapperPool()
 // instead of owning one, but this guard stays for bridge.hpp's own sake).
 #ifndef Q_MOC_RUN
-#include "pastebin/models/paste_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "pastebin/models/paste_model.hpp"
 #endif
 
 namespace pastebin::gui {
@@ -34,7 +34,7 @@ namespace pastebin::gui {
 ///        (`IMPLEMENTATION.md` rule 2).
 class PastePresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -63,7 +63,7 @@ class PastePresenter : public ::morph::ladder::gui::Presenter {
     /// @param action The page request.
     void list(ListPastes action);
 
-  signals:
+signals:
     void created(CreatePasteResult result);
     void loaded(PasteView view);
     void edited(PasteView view);
@@ -73,7 +73,7 @@ class PastePresenter : public ::morph::ladder::gui::Presenter {
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Shared error-display body passed as every `track()` call's
     ///        third argument below: rethrows @p err to recover the concrete
     ///        message and emits `failed`. Passed as `track<T>`'s `onErr`

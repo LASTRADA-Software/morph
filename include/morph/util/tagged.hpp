@@ -36,10 +36,9 @@
 /// field does — nothing in the palette special-cases it away like a plain,
 /// non-empty-capable scalar member would be.
 
-#include <glaze/glaze.hpp>
-
 #include <compare>
 #include <cstddef>
+#include <glaze/glaze.hpp>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -95,8 +94,7 @@ struct Tagged {
     /// @brief Three-way comparison on the wrapped value, when `T` supports it.
     /// @param other Tagged value to compare against (same `T`/`Tag`).
     /// @return The ordering of the wrapped values.
-    [[nodiscard]] constexpr auto operator<=>(const Tagged& other) const
-        noexcept(noexcept(value <=> other.value))
+    [[nodiscard]] constexpr auto operator<=>(const Tagged& other) const noexcept(noexcept(value <=> other.value))
         requires std::three_way_comparable<T>
     = default;
 };

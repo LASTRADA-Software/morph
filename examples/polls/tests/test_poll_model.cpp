@@ -9,14 +9,13 @@
 // model invariant, tested under retry" requirement), wholesale replacement,
 // and the finalized-poll Conflict dead-letter both vote-writing actions and
 // AddComment share.
-#include "testkit/db_fixture.hpp"
-
 #include "polls/core/errors.hpp"
 #include "polls/core/types.hpp"
 #include "polls/dto/event_dto.hpp"
 #include "polls/dto/poll_dto.hpp"
 #include "polls/dto/vote_dto.hpp"
 #include "polls/models/poll_model.hpp"
+#include "testkit/db_fixture.hpp"
 
 // Task 9's own instance-rebirth test drives PollModel through real
 // BridgeHandlers over a real Bridge/backend (BackendRig), not direct
@@ -25,10 +24,10 @@
 // its place, per this rung's shared-instance design (BRIDGE_MODEL_KEY(
 // polls::PollModel, polls::OpenPoll, &polls::OpenPoll::pollId) in
 // poll_model.hpp).
+#include <morph/core/bridge.hpp>
+
 #include "testkit/backend_rig.hpp"
 #include "testkit/pump.hpp"
-
-#include <morph/core/bridge.hpp>
 
 // Test-only: FinalizePoll (Task 7) does not exist yet, so the two
 // finalized-poll Conflict cases below reach into the entity directly to put
@@ -40,14 +39,12 @@
 // is a poll_model.cpp-only implementation detail) -- this is the test
 // harness reaching past that boundary on purpose, not a precedent for
 // application code.
-#include "polls/db/poll_entity.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
-
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <morph/session/session.hpp>
 
-#include <algorithm>
+#include "polls/db/poll_entity.hpp"
 
 using morph::bridge::AllowShared;
 using morph::bridge::BridgeHandler;
@@ -87,10 +84,10 @@ namespace {
 ///        design (README design decision 1): `PollModel::requireAdmin()`
 ///        reads `session::current()->token`, never `->principal`.
 class ScopedToken {
-  public:
+public:
     explicit ScopedToken(std::string token) : _ctx{contextForToken(std::move(token))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -157,7 +154,7 @@ TEST_CASE("GetPollState after OpenPoll returns the same poll's state", "[polls][
     DbFixture fixture;
     PollModel model;
     auto created = model.execute(CreatePoll{.title = "Lunch spot", .options = {{"Cafe"}, {"Diner"}}});
-    (void) model.execute(OpenPoll{.pollId = created.pollId});
+    (void)model.execute(OpenPoll{.pollId = created.pollId});
 
     auto state = model.execute(polls::GetPollState{});
     CHECK(state.pollId == created.pollId);
@@ -187,8 +184,8 @@ TEST_CASE("SubmitVotes writes one vote per option, visible in the next GetPollSt
     auto opts = model.execute(polls::GetPollState{}).options;
 
     auto state = model.execute(SubmitVotes{.participantName = "alice",
-                                            .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes},
-                                                      {.optionId = opts[1].id, .choice = VoteChoice::No}}});
+                                           .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes},
+                                                     {.optionId = opts[1].id, .choice = VoteChoice::No}}});
     CHECK(state.options[0].yesCount == polls::Count::fromDouble(1.0));
     CHECK(state.options[1].noCount == polls::Count::fromDouble(1.0));
     REQUIRE(state.votes.size() == 2);
@@ -206,7 +203,7 @@ TEST_CASE("A retried SubmitVotes for the same participant does not double-count"
     // not dedup by itself, so the model's own unique constraint (backed by
     // applyVotes()'s delete-then-recreate) is what actually prevents
     // double-counting -- assert on the real outcome, not the mechanism.
-    auto state = model.execute(action);  // retried identically
+    auto state = model.execute(action);                                 // retried identically
     CHECK(state.options[0].yesCount == polls::Count::fromDouble(1.0));  // still 1, not 2
     REQUIRE(state.votes.size() == 1);
 }
@@ -234,8 +231,8 @@ TEST_CASE("SubmitVotes against a finalized poll throws Conflict, a visible dead-
     auto opts = model.execute(polls::GetPollState{}).options;
     finalizePollDirectly(created.pollId);
     CHECK_THROWS_AS(model.execute(SubmitVotes{.participantName = "bob",
-                                               .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}}),
-                     Conflict);
+                                              .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}}),
+                    Conflict);
 }
 
 TEST_CASE("AddComment writes a comment visible in the next GetPollState", "[polls][model]") {
@@ -339,8 +336,7 @@ TEST_CASE("FinalizePoll rejects an optionId belonging to a different poll", "[po
     CHECK(stateA.finalized == polls::Finalized::No);
 }
 
-TEST_CASE("SubmitVotes rejects a vote naming an optionId from a different poll, atomically",
-          "[polls][model]") {
+TEST_CASE("SubmitVotes rejects a vote naming an optionId from a different poll, atomically", "[polls][model]") {
     // /code-review max finding: without this check, a cross-poll vote would
     // be written but never counted by buildState()'s per-poll tally loop --
     // the participant is told they voted, and the vote silently vanishes.
@@ -359,8 +355,8 @@ TEST_CASE("SubmitVotes rejects a vote naming an optionId from a different poll, 
     // B's option) in the same submission -- the whole call must be rejected,
     // not partially applied.
     CHECK_THROWS_AS(modelA.execute(SubmitVotes{.participantName = "alice",
-                                                .votes = {{.optionId = optsA[0].id, .choice = VoteChoice::Yes},
-                                                          {.optionId = optsB[0].id, .choice = VoteChoice::No}}}),
+                                               .votes = {{.optionId = optsA[0].id, .choice = VoteChoice::Yes},
+                                                         {.optionId = optsB[0].id, .choice = VoteChoice::No}}}),
                     NotFound);
 
     // Nothing was written -- not even the valid first vote.
@@ -403,16 +399,19 @@ TEST_CASE("GetEventsSince rejects a negative lastEventId with ValidationError", 
 // install into a live shared instance.
 // ---------------------------------------------------------------------------
 
-TEST_CASE("Principal-scoped undo: A votes, B votes, A undoes -> only A's vote dies (the rung's headline design record)",
-          "[polls][model]") {
+TEST_CASE(
+    "Principal-scoped undo: A votes, B votes, A undoes -> only A's vote dies (the rung's headline design record)",
+    "[polls][model]") {
     DbFixture fixture;
     PollModel model;
     auto created = model.execute(CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     model.execute(OpenPoll{.pollId = created.pollId});
     auto opts = model.execute(polls::GetPollState{}).options;
 
-    model.execute(SubmitVotes{.participantName = "alice", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
-    model.execute(SubmitVotes{.participantName = "bob", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
+    model.execute(
+        SubmitVotes{.participantName = "alice", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
+    model.execute(
+        SubmitVotes{.participantName = "bob", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
     // Both voted yes on option 0: count should be 2.
     auto before = model.execute(polls::GetPollState{});
     REQUIRE(before.options[0].yesCount == polls::Count::fromDouble(2.0));
@@ -448,13 +447,13 @@ TEST_CASE("Undo is one-shot: undoing twice in a row throws Conflict the second t
     auto created = model.execute(CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     model.execute(OpenPoll{.pollId = created.pollId});
     auto opts = model.execute(polls::GetPollState{}).options;
-    model.execute(SubmitVotes{.participantName = "alice", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
+    model.execute(
+        SubmitVotes{.participantName = "alice", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
     model.execute(UndoLastVoteChange{.participantName = "alice"});
     CHECK_THROWS_AS(model.execute(UndoLastVoteChange{.participantName = "alice"}), Conflict);
 }
 
-TEST_CASE("UndoLastVoteChange restores a genuinely non-empty prior vote set, not just \"no vote\"",
-          "[polls][model]") {
+TEST_CASE("UndoLastVoteChange restores a genuinely non-empty prior vote set, not just \"no vote\"", "[polls][model]") {
     DbFixture fixture;
     PollModel model;
     auto created = model.execute(CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
@@ -464,8 +463,8 @@ TEST_CASE("UndoLastVoteChange restores a genuinely non-empty prior vote set, not
     model.execute(SubmitVotes{.participantName = "alice",
                               .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes},
                                         {.optionId = opts[1].id, .choice = VoteChoice::No}}});
-    model.execute(UpdateVotes{.participantName = "alice",
-                              .votes = {{.optionId = opts[1].id, .choice = VoteChoice::IfNeedBe}}});
+    model.execute(
+        UpdateVotes{.participantName = "alice", .votes = {{.optionId = opts[1].id, .choice = VoteChoice::IfNeedBe}}});
     model.execute(UndoLastVoteChange{.participantName = "alice"});
 
     auto after = model.execute(polls::GetPollState{});
@@ -488,7 +487,8 @@ TEST_CASE("GetEventsSince{} (from the beginning) returns every event in order", 
     auto created = model.execute(CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     model.execute(OpenPoll{.pollId = created.pollId});
     auto opts = model.execute(polls::GetPollState{}).options;
-    model.execute(SubmitVotes{.participantName = "alice", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
+    model.execute(
+        SubmitVotes{.participantName = "alice", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
     model.execute(AddComment{.participantName = "alice", .body = "hi"});
 
     auto events = model.execute(GetEventsSince{}).events;
@@ -504,7 +504,8 @@ TEST_CASE("GetEventsSince{lastEventId} returns only strictly-newer events", "[po
     auto created = model.execute(CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     model.execute(OpenPoll{.pollId = created.pollId});
     auto opts = model.execute(polls::GetPollState{}).options;
-    model.execute(SubmitVotes{.participantName = "alice", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
+    model.execute(
+        SubmitVotes{.participantName = "alice", .votes = {{.optionId = opts[0].id, .choice = VoteChoice::Yes}}});
     auto firstEvents = model.execute(GetEventsSince{}).events;
     REQUIRE(firstEvents.size() == 1);
 
@@ -520,9 +521,10 @@ TEST_CASE("GetEventsSince throws NotFound against a handler never attached via O
     CHECK_THROWS_AS(model.execute(GetEventsSince{}), NotFound);
 }
 
-TEST_CASE("The event log survives full detach/reattach (instance rebirth), and a stale cursor "
-          "gets everything after it -- no epoch token needed",
-          "[polls][model]") {
+TEST_CASE(
+    "The event log survives full detach/reattach (instance rebirth), and a stale cursor "
+    "gets everything after it -- no epoch token needed",
+    "[polls][model]") {
     // This is the DoD's own required test: "Event log survives full
     // detach/reattach (instance rebirth) and a stale cursor triggers a clean
     // full resync, verified by test." Per this rung's resolved design
@@ -564,11 +566,11 @@ TEST_CASE("The event log survives full detach/reattach (instance rebirth), and a
         BridgeHandler<PollModel, AllowShared> handlerA{rig.bridge(0), rig.executor()};
         BridgeHandler<PollModel, AllowShared> handlerB{rig.bridge(0), rig.executor()};
         auto state = awaitQt(handlerA.execute(OpenPoll{.pollId = pollId}));
-        (void) awaitQt(handlerB.execute(OpenPoll{.pollId = pollId}));
+        (void)awaitQt(handlerB.execute(OpenPoll{.pollId = pollId}));
         REQUIRE(awaitQt(handlerA.instances()) == std::vector<std::string>{pollId});
 
-        awaitQt(handlerA.execute(
-            SubmitVotes{.participantName = "alice", .votes = {{.optionId = state.options[0].id, .choice = VoteChoice::Yes}}}));
+        awaitQt(handlerA.execute(SubmitVotes{
+            .participantName = "alice", .votes = {{.optionId = state.options[0].id, .choice = VoteChoice::Yes}}}));
         auto events = awaitQt(handlerB.execute(GetEventsSince{})).events;
         REQUIRE(events.size() == 1);
         lastEventId = events.back().id;

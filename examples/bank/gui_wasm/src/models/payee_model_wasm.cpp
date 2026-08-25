@@ -2,12 +2,11 @@
 //
 // In-memory implementation of PayeeModel for the WASM build.
 
-#include "bank/models/payee_model.hpp"
-
 #include <string>
 
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
+#include "bank/models/payee_model.hpp"
 #include "bank/wasm/store.hpp"
 #include "bank/wasm/store_ops.hpp"
 

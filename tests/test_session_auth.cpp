@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/session/session_auth.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/session/session_auth.hpp>
 #include <string>
 #include <string_view>
 #include <vector>

@@ -13,6 +13,16 @@
 // failure), so a CI failure is reproducible by re-running with the same seed
 // rather than by guessing.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <cstdlib>
+#include <ledger/db/ledger_entity.hpp>
+#include <ledger/models/ledger_model.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+#include <vector>
+
 #include "ledger_presenter.hpp"
 #include "testkit/action_driver.hpp"
 #include "testkit/backend_rig.hpp"
@@ -20,20 +30,6 @@
 #include "testkit/convergence.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-
-#include <ledger/db/ledger_entity.hpp>
-#include <ledger/models/ledger_model.hpp>
-
-#include <cstdlib>
-#include <memory>
-#include <string>
-#include <vector>
 
 namespace {
 
@@ -67,8 +63,7 @@ struct Move {
 
 }  // namespace
 
-TEST_CASE("N clients storing concurrent transactions converge, legs always sum zero",
-          "[ledger][stress]") {
+TEST_CASE("N clients storing concurrent transactions converge, legs always sum zero", "[ledger][stress]") {
     const auto nClients = static_cast<std::size_t>(envCount("MORPH_LADDER_CLIENTS", 4));
     const int nActions = envCount("MORPH_LADDER_ACTIONS", 40);
 
@@ -114,37 +109,35 @@ TEST_CASE("N clients storing concurrent transactions converge, legs always sum z
 
     int failures = 0;
     for (std::size_t i = 0; i < clients.size(); ++i) {
-        QObject::connect(&clients.at(i), &ledger::gui::LedgerPresenter::failed,
-                         [&](const QString&) { ++failures; });
+        QObject::connect(&clients.at(i), &ledger::gui::LedgerPresenter::failed, [&](const QString&) { ++failures; });
     }
 
     // Weighted 3:1 toward the forward direction, so the script is not a
     // trivially symmetric alternation -- an alternating sequence would cancel
     // out and could hide an ordering bug that an uneven one exposes.
-    SeededScript<Move> script{
-        /*defaultSeed=*/20260819,
-        /*generators=*/
-        {{3, [] { return Move{.amountMinor = 500, .reversed = false}; }},
-         {1, [] { return Move{.amountMinor = 250, .reversed = true}; }}},
-        /*burstSize=*/10,
-        /*onBurst=*/
-        [&](const std::vector<Move>&) {
-            // Per-burst invariant: whatever has been applied so far, the
-            // ledger's own per-currency zero-sum must hold. It is enforced by
-            // the model on every write, so a violation here means concurrency
-            // broke an invariant single-threaded tests already prove.
-            morph::session::Context ctx;
-            ctx.principal = "alice";
-            const morph::session::detail::ScopedContext scope{ctx};
-            ledger::LedgerModel model;
-            const auto state = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
-            morph::math::Rational total =
-                morph::math::Rational::zero(morph::math::DecimalPlaces{2});
-            for (const auto& account : state.accounts) {
-                total = total + account.balance;
-            }
-            CHECK(total.numerator == 0);
-        }};
+    SeededScript<Move> script{/*defaultSeed=*/20260819,
+                              /*generators=*/
+                              {{3, [] { return Move{.amountMinor = 500, .reversed = false}; }},
+                               {1, [] { return Move{.amountMinor = 250, .reversed = true}; }}},
+                              /*burstSize=*/10,
+                              /*onBurst=*/
+                              [&](const std::vector<Move>&) {
+                                  // Per-burst invariant: whatever has been applied so far, the
+                                  // ledger's own per-currency zero-sum must hold. It is enforced by
+                                  // the model on every write, so a violation here means concurrency
+                                  // broke an invariant single-threaded tests already prove.
+                                  morph::session::Context ctx;
+                                  ctx.principal = "alice";
+                                  const morph::session::detail::ScopedContext scope{ctx};
+                                  ledger::LedgerModel model;
+                                  const auto state = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+                                  morph::math::Rational total =
+                                      morph::math::Rational::zero(morph::math::DecimalPlaces{2});
+                                  for (const auto& account : state.accounts) {
+                                      total = total + account.balance;
+                                  }
+                                  CHECK(total.numerator == 0);
+                              }};
 
     using morph::math::DecimalPlaces;
     using morph::math::Denominator;
@@ -152,10 +145,8 @@ TEST_CASE("N clients storing concurrent transactions converge, legs always sum z
     for (int i = 0; i < nActions; ++i) {
         const auto move = script.next();
         auto& client = clients.at(static_cast<std::size_t>(i) % clients.size());
-        const auto amount = morph::math::Rational{Numerator{move.amountMinor}, Denominator{1},
-                                                  DecimalPlaces{2}};
-        const auto negated = morph::math::Rational{Numerator{-move.amountMinor}, Denominator{1},
-                                                   DecimalPlaces{2}};
+        const auto amount = morph::math::Rational{Numerator{move.amountMinor}, Denominator{1}, DecimalPlaces{2}};
+        const auto negated = morph::math::Rational{Numerator{-move.amountMinor}, Denominator{1}, DecimalPlaces{2}};
         const auto from = move.reversed ? groceriesId : checkingId;
         const auto to = move.reversed ? checkingId : groceriesId;
         client.storeTransaction(ledgerId, QStringLiteral("stress"), morph::time::Timestamp::now(),

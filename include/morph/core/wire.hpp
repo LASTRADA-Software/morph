@@ -192,7 +192,8 @@ inline Envelope makeRegisterShared(std::string typeId, std::string primary, std:
 ///                    way `register` carries it, so an instance created via
 ///                    its *first* `attach` (rather than a shared `register`)
 ///                    still gets a configured `LogProvider`'s log attached.
-inline Envelope makeAttach(std::string typeId, std::string primary, uint64_t modelId = 0, std::string contextKey = {}) {
+inline Envelope makeAttach(std::string typeId, std::string primary, uint64_t modelId = 0,
+                           std::string contextKey = {}) {
     Envelope env;
     env.kind = "attach";
     env.typeId = std::move(typeId);

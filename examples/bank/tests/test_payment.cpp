@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <morph/core/bridge.hpp>
-
 #include <filesystem>
+#include <morph/core/bridge.hpp>
 #include <string>
 
 #include "bank/app/app.hpp"
@@ -26,8 +24,7 @@ namespace {
 
 std::string testConnection() {
     bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" +
-           (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
+    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
 }
 
 }  // namespace
@@ -44,17 +41,16 @@ TEST_CASE("PaymentModel pays bills, schedules, and cancels", "[payment]") {
     const auto account =
         await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
     await(txns.execute(bank::dto::Deposit{.accountId = account, .amountMinor = 50000}), app.guiLoop());
-    const auto payee = await(payees.execute(bank::dto::AddPayee{.name = "Electric Co",
-                                                               .iban = "DE89370400440532013000"}),
-                             app.guiLoop())
-                           .id;
+    const auto payee =
+        await(payees.execute(bank::dto::AddPayee{.name = "Electric Co", .iban = "DE89370400440532013000"}),
+              app.guiLoop())
+            .id;
 
     SECTION("paying a bill debits the account and records a completed payment") {
-        auto info = await(payments.execute(bank::dto::PayBill{.fromAccountId = account,
-                                                             .payeeId = payee,
-                                                             .amountMinor = 12000,
-                                                             .description = "March bill"}),
-                          app.guiLoop());
+        auto info =
+            await(payments.execute(bank::dto::PayBill{
+                      .fromAccountId = account, .payeeId = payee, .amountMinor = 12000, .description = "March bill"}),
+                  app.guiLoop());
         REQUIRE(info.status == static_cast<int>(bank::PaymentStatus::Completed));
 
         auto acct = await(accounts.execute(bank::dto::GetAccount{.id = account}), app.guiLoop());
@@ -62,32 +58,29 @@ TEST_CASE("PaymentModel pays bills, schedules, and cancels", "[payment]") {
     }
 
     SECTION("scheduling and a standing order start pending and can be cancelled") {
-        auto scheduled = await(payments.execute(bank::dto::SchedulePayment{.fromAccountId = account,
-                                                                          .payeeId = payee,
-                                                                          .amountMinor = 1000,
-                                                                          .dueAtMs = 9999999999999}),
-                               app.guiLoop());
+        auto scheduled =
+            await(payments.execute(bank::dto::SchedulePayment{
+                      .fromAccountId = account, .payeeId = payee, .amountMinor = 1000, .dueAtMs = 9999999999999}),
+                  app.guiLoop());
         REQUIRE(scheduled.status == static_cast<int>(bank::PaymentStatus::Pending));
         REQUIRE(scheduled.schedule == static_cast<int>(bank::PaymentSchedule::Scheduled));
 
         auto standing = await(payments.execute(bank::dto::CreateStandingOrder{.fromAccountId = account,
-                                                                             .payeeId = payee,
-                                                                             .amountMinor = 2000,
-                                                                             .intervalDays = 30,
-                                                                             .firstDueAtMs = 9999999999999}),
+                                                                              .payeeId = payee,
+                                                                              .amountMinor = 2000,
+                                                                              .intervalDays = 30,
+                                                                              .firstDueAtMs = 9999999999999}),
                               app.guiLoop());
         REQUIRE(standing.schedule == static_cast<int>(bank::PaymentSchedule::Standing));
         REQUIRE(standing.intervalDays == 30);
 
-        auto cancelled =
-            await(payments.execute(bank::dto::CancelPayment{.id = scheduled.id}), app.guiLoop());
+        auto cancelled = await(payments.execute(bank::dto::CancelPayment{.id = scheduled.id}), app.guiLoop());
         REQUIRE(cancelled.ok);
     }
 
     SECTION("paying more than the balance is rejected") {
-        REQUIRE_THROWS_AS(await(payments.execute(bank::dto::PayBill{.fromAccountId = account,
-                                                                    .payeeId = payee,
-                                                                    .amountMinor = 999999}),
+        REQUIRE_THROWS_AS(await(payments.execute(bank::dto::PayBill{
+                                    .fromAccountId = account, .payeeId = payee, .amountMinor = 999999}),
                                 app.guiLoop()),
                           bank::InsufficientFunds);
     }

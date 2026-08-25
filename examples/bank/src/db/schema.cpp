@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include "bank/db/database.hpp"
-
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlMigration.hpp>
-
 #include <algorithm>
 #include <cctype>
 #include <string>
+
+#include "bank/db/database.hpp"
 
 namespace bank::db {
 
@@ -17,8 +16,7 @@ void configure(const std::string& connectionString) {
     // writer lock they wait-and-retry instead of failing immediately with
     // SQLITE_BUSY. (The SQLite ODBC driver reads `Timeout` in milliseconds.)
     std::string lower = connectionString;
-    std::ranges::transform(lower, lower.begin(),
-                           [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    std::ranges::transform(lower, lower.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
     std::string augmented = connectionString;
     if (lower.find("timeout=") == std::string::npos) {
         if (!augmented.empty() && augmented.back() != ';') {
@@ -58,15 +56,9 @@ using Lightweight::SqlForeignKeyReferenceDefinition;
 // `PRAGMA foreign_keys=ON`, which the example leaves at its default (off).
 
 namespace {
-constexpr auto usersRef() {
-    return SqlForeignKeyReferenceDefinition{.tableName = "users", .columnName = "id"};
-}
-constexpr auto accountsRef() {
-    return SqlForeignKeyReferenceDefinition{.tableName = "accounts", .columnName = "id"};
-}
-constexpr auto payeesRef() {
-    return SqlForeignKeyReferenceDefinition{.tableName = "payees", .columnName = "id"};
-}
+constexpr auto usersRef() { return SqlForeignKeyReferenceDefinition{.tableName = "users", .columnName = "id"}; }
+constexpr auto accountsRef() { return SqlForeignKeyReferenceDefinition{.tableName = "accounts", .columnName = "id"}; }
+constexpr auto payeesRef() { return SqlForeignKeyReferenceDefinition{.tableName = "payees", .columnName = "id"}; }
 }  // namespace
 
 LIGHTWEIGHT_SQL_MIGRATION(20260630000001, "Create users table") {

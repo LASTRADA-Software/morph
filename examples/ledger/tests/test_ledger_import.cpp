@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <morph/session/session.hpp>
+
 #include "ledger/core/errors.hpp"
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/ledger_model.hpp"
 #include "testkit/db_fixture.hpp"
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <morph/session/session.hpp>
-
-#include <algorithm>
 
 namespace {
 

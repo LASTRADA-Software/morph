@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "kanban/core/types.hpp"
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -10,6 +8,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "kanban/core/types.hpp"
 
 namespace kanban {
 

@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "kanban/http/attachment_server.hpp"
 
-#include "kanban/core/types.hpp"
-#include "kanban/db/kanban_entity.hpp"
-#include "kanban/dto/attachment_dto.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
-
 #include <QByteArray>
-
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -17,6 +11,10 @@
 #include <optional>
 #include <random>
 #include <sstream>
+
+#include "kanban/core/types.hpp"
+#include "kanban/db/kanban_entity.hpp"
+#include "kanban/dto/attachment_dto.hpp"
 
 namespace kanban::http {
 
@@ -62,7 +60,7 @@ namespace {
 ///        third, independent translation unit with the same shape of need:
 ///        "does this principal hold at least this role on this project."
 [[nodiscard]] std::optional<Role> loadCallerRole(::Lightweight::DataMapper& mapper, std::uint64_t projectDbId,
-                                                  const std::string& principal) {
+                                                 const std::string& principal) {
     auto rows = mapper.Query<db::ProjectRoleRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::project>, "=", projectDbId)
                     .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::principal>, "=", principal)
@@ -95,17 +93,17 @@ namespace {
 ///         unauthorized prober.
 [[nodiscard]] bool callerMayReadAttachment(std::string_view storageKey, const std::string& principal) {
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    auto attachmentRows = mapper->Query<db::AttachmentRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::AttachmentRecord::storageKey>, "=",
-                                     std::string{storageKey})
-                              .All();
+    auto attachmentRows =
+        mapper->Query<db::AttachmentRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::AttachmentRecord::storageKey>, "=", std::string{storageKey})
+            .All();
     if (attachmentRows.empty()) {
         return false;
     }
-    auto taskRows = mapper->Query<db::TaskRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=",
-                               attachmentRows.front().task.Value())
-                        .All();
+    auto taskRows =
+        mapper->Query<db::TaskRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=", attachmentRows.front().task.Value())
+            .All();
     if (taskRows.empty()) {
         // Cross-tenant/dangling-FK re-check discipline (design spec §2):
         // TaskRecord::project is FK-shaped but not FK-enforced by SQLite, so
@@ -263,9 +261,8 @@ struct ParsedRequest {
     bool firstLine = true;
     while (lineStart <= headerBlock.size()) {
         const auto lineEnd = headerBlock.find("\r\n", lineStart);
-        const std::string_view line = headerBlock.substr(lineStart, lineEnd == std::string_view::npos
-                                                                         ? std::string_view::npos
-                                                                         : lineEnd - lineStart);
+        const std::string_view line = headerBlock.substr(
+            lineStart, lineEnd == std::string_view::npos ? std::string_view::npos : lineEnd - lineStart);
         if (firstLine) {
             firstLine = false;
             const auto sp1 = line.find(' ');
@@ -432,9 +429,9 @@ void AttachmentServer::handleRequest(QTcpSocket* socket, ConnectionState& state)
         // on the same connection must not be allowed to grow this buffer
         // past the configured bound regardless of what the header claimed.
         if (state.buffer.size() - state.bodyStart > _cfg.maxBodyBytes) {
-            respondAndClose(socket, state,
-                             buildResponse(413, "Payload Too Large",
-                                           errorJson("attachment exceeds the configured size bound")));
+            respondAndClose(
+                socket, state,
+                buildResponse(413, "Payload Too Large", errorJson("attachment exceeds the configured size bound")));
             return;
         }
         const qint64 bodyBytesSoFar = state.buffer.size() - state.bodyStart;
@@ -468,9 +465,11 @@ void AttachmentServer::handleRequest(QTcpSocket* socket, ConnectionState& state)
     // attachment blob by storage key. See the class doc comment's
     // "Authorization (not just authentication)" section.
     const auto token = extractBearerToken(req);
-    const auto verified = token ? _verifier.verify(*token, nowMs()) : std::unexpected(::morph::session::AuthError::Malformed);
+    const auto verified =
+        token ? _verifier.verify(*token, nowMs()) : std::unexpected(::morph::session::AuthError::Malformed);
     if (!verified.has_value()) {
-        respondAndClose(socket, state, buildResponse(401, "Unauthorized", errorJson("missing or invalid bearer token")));
+        respondAndClose(socket, state,
+                        buildResponse(401, "Unauthorized", errorJson("missing or invalid bearer token")));
         return;
     }
     const std::string& principal = verified->principal;
@@ -522,7 +521,8 @@ void AttachmentServer::handleRequest(QTcpSocket* socket, ConnectionState& state)
     if (req.method == "POST" && req.path == "/attachments") {
         const auto contentLenIt = req.headers.find("content-length");
         if (contentLenIt == req.headers.end()) {
-            respondAndClose(socket, state, buildResponse(411, "Length Required", errorJson("Content-Length is required")));
+            respondAndClose(socket, state,
+                            buildResponse(411, "Length Required", errorJson("Content-Length is required")));
             return;
         }
         std::int64_t declaredLength = -1;
@@ -542,8 +542,9 @@ void AttachmentServer::handleRequest(QTcpSocket* socket, ConnectionState& state)
         // the point of being buffered in full: it is rejected the moment
         // its own Content-Length header says it will not fit.
         if (declaredLength > _cfg.maxBodyBytes) {
-            respondAndClose(socket, state,
-                             buildResponse(413, "Payload Too Large", errorJson("attachment exceeds the configured size bound")));
+            respondAndClose(
+                socket, state,
+                buildResponse(413, "Payload Too Large", errorJson("attachment exceeds the configured size bound")));
             return;
         }
 
@@ -553,8 +554,8 @@ void AttachmentServer::handleRequest(QTcpSocket* socket, ConnectionState& state)
         // must never survive to be interpolated into a future GET response's
         // `Content-Type:` header line (response-header-injection finding).
         const auto contentTypeIt = req.headers.find("x-attachment-content-type");
-        state.uploadContentType =
-            contentTypeIt != req.headers.end() ? sanitizedContentType(contentTypeIt->second) : std::string{kDefaultContentType};
+        state.uploadContentType = contentTypeIt != req.headers.end() ? sanitizedContentType(contentTypeIt->second)
+                                                                     : std::string{kDefaultContentType};
         state.contentLength = declaredLength;
         state.headersParsed = true;
 

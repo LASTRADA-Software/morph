@@ -5,10 +5,9 @@
 #include <concepts>
 #include <cstdint>
 #include <functional>
-#include <morph/util/rational.hpp>
-
 #include <glaze/glaze.hpp>
 #include <memory>
+#include <morph/util/rational.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -503,9 +502,9 @@ public:
     void registerModel(std::string_view modelId, Factory factory) {
         _factories.insert_or_assign(std::string{modelId}, [factory = std::move(factory)]() mutable {
             std::unique_ptr<IModelHolder> holder{factory()};
-            assert(!holder
-                   || (holder->type() == std::type_index(typeid(Model))
-                       && "registerModel<Model>(modelId, factory): factory returned a holder for a different type"));
+            assert(!holder ||
+                   (holder->type() == std::type_index(typeid(Model)) &&
+                    "registerModel<Model>(modelId, factory): factory returned a holder for a different type"));
             return holder;
         });
     }
@@ -644,11 +643,11 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 ///
 /// @param M    Concrete model type.
 /// @param NAME String literal used as the type-id.
-#define BRIDGE_REGISTER_MODEL(M, NAME)                        \
-    template <>                                                \
-    struct morph::model::ModelTraits<M> {                      \
+#define BRIDGE_REGISTER_MODEL(M, NAME)                                       \
+    template <>                                                              \
+    struct morph::model::ModelTraits<M> {                                    \
         static constexpr std::string_view typeId() noexcept { return NAME; } \
-    };                                                          \
+    };                                                                       \
     MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
 
 /// @brief Registers action type @p A (for model @p M) with the string id @p NAME.
@@ -731,9 +730,9 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param RESULT The action's result type, named explicitly.
 /// @param NAME   String literal used as the action type-id.
 /// @param ...    Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
-#define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                                                     \
-    BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5,                       \
-                                            BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)                                   \
+#define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                               \
+    BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5, \
+                                           BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)              \
     (__VA_ARGS__)
 
 /// @cond detail
@@ -769,21 +768,21 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
             /* guaranteed trailing '\0' (e.g. an execute envelope's `body`) — see    */                        \
             /* the identical fix + rationale on morph::wire::decode (wire.hpp).      */                        \
             static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
-            /* The codec boundary for an action payload: morph::wire carries `body` as                \
-               an opaque string and never parses it, so this is the first and only                    \
-               place a Rational inside it is decoded. A Rational decode cannot fail --                \
-               it clamps what it cannot represent -- so {"num":5,"den":0,"dp":2} would                \
-               otherwise arrive as a plausible 5/1 that no model-level validate() could               \
-               recognise as altered. Deciding that a silently-altered payload is a                    \
-               protocol violation belongs here, where we know the bytes came off a wire. */           \
-            ::morph::math::WireClampScope clampedRationals;                                           \
+            /* The codec boundary for an action payload: morph::wire carries `body` as                         \
+               an opaque string and never parses it, so this is the first and only                             \
+               place a Rational inside it is decoded. A Rational decode cannot fail --                         \
+               it clamps what it cannot represent -- so {"num":5,"den":0,"dp":2} would                         \
+               otherwise arrive as a plausible 5/1 that no model-level validate() could                        \
+               recognise as altered. Deciding that a silently-altered payload is a                             \
+               protocol violation belongs here, where we know the bytes came off a wire. */                    \
+            ::morph::math::WireClampScope clampedRationals;                                                    \
             if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                     \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
             }                                                                                                  \
-            if (clampedRationals.clamped() != 0) {                                                    \
-                throw morph::model::detail::ParseError{                                               \
-                    "action body contains a Rational that cannot be represented exactly"};            \
-            }                                                                                         \
+            if (clampedRationals.clamped() != 0) {                                                             \
+                throw morph::model::detail::ParseError{                                                        \
+                    "action body contains a Rational that cannot be represented exactly"};                     \
+            }                                                                                                  \
             return action;                                                                                     \
         }                                                                                                      \
         static std::string resultToJson(const Result& result) {                                                \
@@ -845,21 +844,21 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
             /* guaranteed trailing '\0' (e.g. an execute envelope's `body`) — see    */                        \
             /* the identical fix + rationale on morph::wire::decode (wire.hpp).      */                        \
             static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
-            /* The codec boundary for an action payload: morph::wire carries `body` as                \
-               an opaque string and never parses it, so this is the first and only                    \
-               place a Rational inside it is decoded. A Rational decode cannot fail --                \
-               it clamps what it cannot represent -- so {"num":5,"den":0,"dp":2} would                \
-               otherwise arrive as a plausible 5/1 that no model-level validate() could               \
-               recognise as altered. Deciding that a silently-altered payload is a                    \
-               protocol violation belongs here, where we know the bytes came off a wire. */           \
-            ::morph::math::WireClampScope clampedRationals;                                           \
+            /* The codec boundary for an action payload: morph::wire carries `body` as                         \
+               an opaque string and never parses it, so this is the first and only                             \
+               place a Rational inside it is decoded. A Rational decode cannot fail --                         \
+               it clamps what it cannot represent -- so {"num":5,"den":0,"dp":2} would                         \
+               otherwise arrive as a plausible 5/1 that no model-level validate() could                        \
+               recognise as altered. Deciding that a silently-altered payload is a                             \
+               protocol violation belongs here, where we know the bytes came off a wire. */                    \
+            ::morph::math::WireClampScope clampedRationals;                                                    \
             if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                     \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
             }                                                                                                  \
-            if (clampedRationals.clamped() != 0) {                                                    \
-                throw morph::model::detail::ParseError{                                               \
-                    "action body contains a Rational that cannot be represented exactly"};            \
-            }                                                                                         \
+            if (clampedRationals.clamped() != 0) {                                                             \
+                throw morph::model::detail::ParseError{                                                        \
+                    "action body contains a Rational that cannot be represented exactly"};                     \
+            }                                                                                                  \
             return action;                                                                                     \
         }                                                                                                      \
         static std::string resultToJson(const Result& result) {                                                \

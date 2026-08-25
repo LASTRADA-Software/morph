@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstdint>
 #include <string_view>
 
@@ -21,8 +20,8 @@ struct PaymentRecord {
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     /// Owning user.
-    Light::BelongsTo<&UserRecord::id, Light::SqlRealName{"user_id"}> user;  // 1
-    Light::Field<int, Light::SqlRealName{"currency"}> currency;             // 2
+    Light::BelongsTo<&UserRecord::id, Light::SqlRealName{"user_id"}> user;       // 1
+    Light::Field<int, Light::SqlRealName{"currency"}> currency;                  // 2
     Light::Field<std::int64_t, Light::SqlRealName{"amount_minor"}> amountMinor;  // 3
     /// Account the payment is drawn from.
     Light::BelongsTo<&AccountRecord::id, Light::SqlRealName{"from_account_id"}> fromAccount;  // 4
@@ -35,7 +34,7 @@ struct PaymentRecord {
     /// Due time (epoch ms) for scheduled/standing payments; 0 for one-off.
     Light::Field<std::int64_t, Light::SqlRealName{"due_at_ms"}> dueAtMs{0};  // 8
     /// Recurrence period in days for standing orders; 0 otherwise.
-    Light::Field<int, Light::SqlRealName{"interval_days"}> intervalDays{0};  // 9
+    Light::Field<int, Light::SqlRealName{"interval_days"}> intervalDays{0};                  // 9
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"description"}> description;  // 10
 };
 

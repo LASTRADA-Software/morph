@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "bookmarks/core/types.hpp"
-#include "bookmarks/units.hpp"
-
 #include <cstddef>
 #include <string>
+
+#include "bookmarks/core/types.hpp"
+#include "bookmarks/units.hpp"
 
 namespace bookmarks {
 

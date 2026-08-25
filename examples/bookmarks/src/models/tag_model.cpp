@@ -1,28 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bookmarks/models/tag_model.hpp"
 
-#include "bookmarks/auth/bookmarks_authorizer.hpp"
-#include "bookmarks/db/bookmark_tag_entity.hpp"
-#include "bookmarks/db/outbox_entity.hpp"
-#include "bookmarks/db/tag_entity.hpp"
-
-#include "clock.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlErrorDetection.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
-
-#include <morph/core/registry.hpp>
-#include <morph/session/session.hpp>
-
 #include <atomic>
 #include <cstdint>
+#include <morph/core/registry.hpp>
+#include <morph/session/session.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "bookmarks/auth/bookmarks_authorizer.hpp"
+#include "bookmarks/db/bookmark_tag_entity.hpp"
+#include "bookmarks/db/outbox_entity.hpp"
+#include "bookmarks/db/tag_entity.hpp"
+#include "clock.hpp"
 
 namespace bookmarks {
 
@@ -76,7 +73,8 @@ namespace {
 /// @brief Loads tag @p id, requiring it to exist and be owned by @p owner.
 /// @throws NotFound if no such row exists at all.
 /// @throws Forbidden if it exists but belongs to a different principal.
-[[nodiscard]] db::TagRecord loadOwnedTag(::Lightweight::DataMapper& mapper, std::uint64_t id, const std::string& owner) {
+[[nodiscard]] db::TagRecord loadOwnedTag(::Lightweight::DataMapper& mapper, std::uint64_t id,
+                                         const std::string& owner) {
     auto rows = mapper.Query<db::TagRecord>().Where(::Lightweight::FieldNameOf<&db::TagRecord::id>, "=", id).All();
     if (rows.empty()) {
         throw NotFound{"no such tag"};
@@ -116,19 +114,17 @@ Ack TagModel::execute(const MergeTags& action) {
     const auto sourceId = static_cast<std::uint64_t>(*action.sourceId);
     const auto targetId = static_cast<std::uint64_t>(*action.targetId);
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    (void) loadOwnedTag(mapper.Get(), sourceId, owner);
-    (void) loadOwnedTag(mapper.Get(), targetId, owner);
+    (void)loadOwnedTag(mapper.Get(), sourceId, owner);
+    (void)loadOwnedTag(mapper.Get(), targetId, owner);
 
     ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
 
-    auto sourceRows = mapper
-                          ->Query<db::BookmarkTagRecord>()
+    auto sourceRows = mapper->Query<db::BookmarkTagRecord>()
                           .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::tag>, "=", sourceId)
                           .All();
     for (const auto& row : sourceRows) {
         const auto bookmarkId = row.bookmark.Value();
-        auto clash = mapper
-                         ->Query<db::BookmarkTagRecord>()
+        auto clash = mapper->Query<db::BookmarkTagRecord>()
                          .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::bookmark>, "=", bookmarkId)
                          .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::tag>, "=", targetId)
                          .All();
@@ -144,7 +140,7 @@ Ack TagModel::execute(const MergeTags& action) {
         {
             ::Lightweight::SqlStatement stmt{mapper->Connection()};
             stmt.Prepare("DELETE FROM bookmark_tags WHERE bookmark_id = ? AND tag_id = ?");
-            (void) stmt.Execute(bookmarkId, sourceId);
+            (void)stmt.Execute(bookmarkId, sourceId);
         }
         if (clash.empty()) {
             // No existing target association for this bookmark -- recreate
@@ -162,7 +158,7 @@ Ack TagModel::execute(const MergeTags& action) {
     {
         ::Lightweight::SqlStatement stmt{mapper->Connection()};
         stmt.Prepare("DELETE FROM tags WHERE id = ?");
-        (void) stmt.Execute(sourceId);
+        (void)stmt.Execute(sourceId);
     }
 
     Ack result{};
@@ -193,8 +189,9 @@ Ack TagModel::execute(const MergeTags& action) {
 ListTagsResult TagModel::execute(const ListTags&) {
     const auto& owner = requireOwner();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    auto rows =
-        mapper->Query<db::TagRecord>().Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner).All();
+    auto rows = mapper->Query<db::TagRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner)
+                    .All();
 
     // Batched, not per-tag: one query for every junction row across all of
     // this owner's tags, counted in-memory below -- instead of a `COUNT`

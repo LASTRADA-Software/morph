@@ -15,8 +15,8 @@
 // replaces it for a stamped one.
 
 #include <catch2/catch_test_macros.hpp>
-#include <glaze/glaze.hpp>
 #include <cstdint>
+#include <glaze/glaze.hpp>
 #include <map>
 #include <memory>
 #include <morph/core/bridge.hpp>

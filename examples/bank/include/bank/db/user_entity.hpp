@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstdint>
 #include <string_view>
 
@@ -34,9 +33,9 @@ struct UserRecord {
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"username"}> username;                       // 1
-    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"password_hash"}> passwordHash;            // 2
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"display_name"}> displayName;             // 3
-    Light::Field<int, Light::SqlRealName{"status"}> status{0};                                            // 4
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"password_hash"}> passwordHash;              // 2
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"display_name"}> displayName;               // 3
+    Light::Field<int, Light::SqlRealName{"status"}> status{0};                                             // 4
     /// All accounts owned by this user (inverse of `AccountRecord::user`).
     Light::HasMany<AccountRecord> accounts;  // 5
 };

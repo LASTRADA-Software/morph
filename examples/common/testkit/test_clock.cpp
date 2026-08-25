@@ -5,8 +5,7 @@
 
 using namespace std::chrono_literals;
 
-TEST_CASE("morph::ladder::now() reads the real wall clock with no override installed",
-          "[ladder][testkit][clock]") {
+TEST_CASE("morph::ladder::now() reads the real wall clock with no override installed", "[ladder][testkit][clock]") {
     const auto before = ::morph::time::DateTime::now();
     const auto observed = morph::ladder::now();
     const auto after = ::morph::time::DateTime::now();
@@ -16,8 +15,8 @@ TEST_CASE("morph::ladder::now() reads the real wall clock with no override insta
 }
 
 TEST_CASE("ScopedClockOverride freezes now() at the given instant", "[ladder][testkit][clock]") {
-    const ::morph::time::DateTime frozen{std::chrono::year{2030}, std::chrono::month{1}, std::chrono::day{1},
-                                          std::chrono::hours{0},   std::chrono::minutes{0}, std::chrono::seconds{0}};
+    const ::morph::time::DateTime frozen{std::chrono::year{2030}, std::chrono::month{1},   std::chrono::day{1},
+                                         std::chrono::hours{0},   std::chrono::minutes{0}, std::chrono::seconds{0}};
     {
         morph::ladder::ScopedClockOverride guard{frozen};
         REQUIRE(*morph::ladder::now() == frozen);
@@ -32,8 +31,8 @@ TEST_CASE("ScopedClockOverride freezes now() at a pre-1970 instant", "[ladder][t
     // to the real wall clock instead of the frozen instant, silently. The
     // sentinel is now INT64_MIN, which no real DateTime a test constructs can
     // ever equal.
-    const ::morph::time::DateTime frozen{std::chrono::year{1965}, std::chrono::month{3}, std::chrono::day{12},
-                                          std::chrono::hours{0},   std::chrono::minutes{0}, std::chrono::seconds{0}};
+    const ::morph::time::DateTime frozen{std::chrono::year{1965}, std::chrono::month{3},   std::chrono::day{12},
+                                         std::chrono::hours{0},   std::chrono::minutes{0}, std::chrono::seconds{0}};
     REQUIRE(frozen.value.time_since_epoch().count() < 0);
     morph::ladder::ScopedClockOverride guard{frozen};
     REQUIRE(*morph::ladder::now() == frozen);
@@ -41,10 +40,10 @@ TEST_CASE("ScopedClockOverride freezes now() at a pre-1970 instant", "[ladder][t
 
 TEST_CASE("ScopedClockOverride nests: the inner guard wins, the outer resumes on inner's destruction",
           "[ladder][testkit][clock]") {
-    const ::morph::time::DateTime outer{std::chrono::year{2030}, std::chrono::month{1}, std::chrono::day{1},
-                                         std::chrono::hours{0},   std::chrono::minutes{0}, std::chrono::seconds{0}};
-    const ::morph::time::DateTime inner{std::chrono::year{2031}, std::chrono::month{6}, std::chrono::day{15},
-                                         std::chrono::hours{12},  std::chrono::minutes{0}, std::chrono::seconds{0}};
+    const ::morph::time::DateTime outer{std::chrono::year{2030}, std::chrono::month{1},   std::chrono::day{1},
+                                        std::chrono::hours{0},   std::chrono::minutes{0}, std::chrono::seconds{0}};
+    const ::morph::time::DateTime inner{std::chrono::year{2031}, std::chrono::month{6},   std::chrono::day{15},
+                                        std::chrono::hours{12},  std::chrono::minutes{0}, std::chrono::seconds{0}};
     morph::ladder::ScopedClockOverride outerGuard{outer};
     REQUIRE(*morph::ladder::now() == outer);
     {

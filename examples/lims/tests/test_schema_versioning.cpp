@@ -20,10 +20,10 @@
 // boundary rung 7's runtime custom fields will run into head-on.
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <glaze/glaze.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/rational.hpp>
-#include <cstddef>
 #include <string>
 
 #include "lims/core/errors.hpp"
@@ -152,8 +152,7 @@ TEST_CASE("Revising an analysis does not change the form its old version serves"
     CHECK(schemaV2.schemaJson != schemaBefore.schemaJson);
 }
 
-TEST_CASE("Each version's form carries its own precision, in the framework's own key",
-          "[lims][schema][versioning]") {
+TEST_CASE("Each version's form carries its own precision, in the framework's own key", "[lims][schema][versioning]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
@@ -251,8 +250,7 @@ TEST_CASE("A reading outside the served spec range is stored, and flagged", "[li
     CHECK(flagged == 1);
 }
 
-TEST_CASE("A qualifier makes no numeric claim, so it is never out of specification",
-          "[lims][schema][versioning]") {
+TEST_CASE("A qualifier makes no numeric claim, so it is never out of specification", "[lims][schema][versioning]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
@@ -268,8 +266,7 @@ TEST_CASE("A qualifier makes no numeric claim, so it is never out of specificati
     CHECK(!stored.outOfSpec);
 }
 
-TEST_CASE("Per-version precision is refused, from the same declaration that served it",
-          "[lims][schema][versioning]") {
+TEST_CASE("Per-version precision is refused, from the same declaration that served it", "[lims][schema][versioning]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;

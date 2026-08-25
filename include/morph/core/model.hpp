@@ -57,10 +57,10 @@ concept BackendChangedNotifiable = requires(M& model) {
 /// `BackendChangedNotifiable`/`BackendChangedMixin` already establish for
 /// `onBackendChanged()`.
 template <typename M>
-concept ModelLevelActionLogAttachable = requires(M& model, std::shared_ptr<::morph::journal::IActionLog> log,
-                                                  std::string key) {
-    { model.attachActionLog(log, key) } -> std::same_as<void>;
-};
+concept ModelLevelActionLogAttachable =
+    requires(M& model, std::shared_ptr<::morph::journal::IActionLog> log, std::string key) {
+        { model.attachActionLog(log, key) } -> std::same_as<void>;
+    };
 
 // ── Conditional mixin ─────────────────────────────────────────────────────────
 
@@ -212,9 +212,9 @@ protected:
     /// @param log        Sink entries are forwarded to.
     /// @param contextKey Stable identity of this model instance.
     virtual void onActionLogAttached(const std::shared_ptr<::morph::journal::IActionLog>& log,
-                                      const std::string& contextKey) {
-        (void) log;
-        (void) contextKey;
+                                     const std::string& contextKey) {
+        (void)log;
+        (void)contextKey;
     }
 
 private:
@@ -258,11 +258,11 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
         }
     }
 
-  protected:
+protected:
     /// @brief Forwards to `Model::attachActionLog(log, contextKey)` iff `Model`
     ///        declared one matching `ModelLevelActionLogAttachable`; no-op otherwise.
     void onActionLogAttached(const std::shared_ptr<::morph::journal::IActionLog>& log,
-                              const std::string& contextKey) override {
+                             const std::string& contextKey) override {
         if constexpr (ModelLevelActionLogAttachable<Model>) {
             model.attachActionLog(log, contextKey);
         }

@@ -17,14 +17,14 @@
 #include <QSslSocket>
 #include <QTimer>
 #include <QUrl>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/qt/qt_executor.hpp>
-#include <morph/qt/qt_websocket_backend.hpp>
 #include <atomic>
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/qt/qt_executor.hpp>
+#include <morph/qt/qt_websocket_backend.hpp>
 #include <optional>
 #include <string>
 #include <thread>
@@ -69,8 +69,8 @@ int main(int argc, char* argv[]) {
         tls = cfg;
     }
 
-    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
-        url, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(), tls);
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::model::detail::defaultDispatcher(),
+                                                                      morph::model::detail::defaultRegistry(), tls);
     if (!backendPtr->waitForConnected(3000)) {
         std::cerr << "qt_test_client: connect failed\n";
         return 10;
@@ -82,9 +82,9 @@ int main(int argc, char* argv[]) {
 
     if (useFail) {
         std::atomic<bool> errored{false};
-        handler.execute(ProcTestEchoFailAction{})
-            .then([](int) {})
-            .onError([&](const std::exception_ptr&) { errored.store(true); });
+        handler.execute(ProcTestEchoFailAction{}).then([](int) {}).onError([&](const std::exception_ptr&) {
+            errored.store(true);
+        });
         pumpUntil([&] { return errored.load(); }, 300);
         if (!errored.load()) {
             std::cerr << "qt_test_client: expected onError, none fired\n";

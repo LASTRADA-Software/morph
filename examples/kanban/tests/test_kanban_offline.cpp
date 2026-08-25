@@ -44,18 +44,18 @@
 //      contention needed in addition -- see that test's own comment for the
 //      tuned numbers, why they had to be this large, and the real observed
 //      mix.
-#include "kanban/auth/kanban_authorizer.hpp"
-#include "kanban/dto/project_dto.hpp"
-#include "kanban/models/board_model.hpp"
-#include "kanban/models/project_admin_model.hpp"
-
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_busy_fixture.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/db_pool_drain.hpp"
-#include "testkit/fault_proxy.hpp"
-#include "testkit/pump.hpp"
-
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
+#include <Lightweight/SqlMigration.hpp>
+#include <QTcpServer>
+#include <QUrl>
+#include <algorithm>
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -64,27 +64,22 @@
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/session/session.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <Lightweight/DataMapper/Pool.hpp>
-#include <Lightweight/SqlMigration.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <QTcpServer>
-#include <QUrl>
-
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdint>
-#include <filesystem>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include "kanban/auth/kanban_authorizer.hpp"
+#include "kanban/dto/project_dto.hpp"
+#include "kanban/models/board_model.hpp"
+#include "kanban/models/project_admin_model.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_busy_fixture.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/db_pool_drain.hpp"
+#include "testkit/fault_proxy.hpp"
+#include "testkit/pump.hpp"
 
 using morph::bridge::AllowShared;
 using morph::bridge::BridgeHandler;
@@ -109,7 +104,7 @@ constexpr std::string_view kSecret = "test-secret-32-bytes-minimum!!!!";
 ///        `KanbanAuthorizer` is `SigningAuthorizer`-derived, so a bare
 ///        (unsigned) principal is not enough to pass `requireRole`.
 [[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
-                                                       std::string principal) {
+                                                      std::string principal) {
     morph::session::Context ctx;
     ctx.principal = principal;
     ctx.token = issuer.issue(morph::session::SessionToken{
@@ -147,11 +142,8 @@ struct SeededBoard {
             .tasks.front()
             .id;
 
-    return SeededBoard{.projectId = projectId,
-                        .columnA = colA,
-                        .columnB = colB,
-                        .swimlaneId = swimlaneId,
-                        .taskId = taskId};
+    return SeededBoard{
+        .projectId = projectId, .columnA = colA, .columnB = colB, .swimlaneId = swimlaneId, .taskId = taskId};
 }
 
 }  // namespace
@@ -196,7 +188,7 @@ TEST_CASE("Dropping MoveTaskPosition's reply frame and retrying is exactly-once,
     bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
 
     BridgeHandler<kanban::BoardModel, AllowShared> handler{bridge, &qtExec};
-    (void) awaitQt(handler.execute(kanban::OpenBoard{.projectId = board.projectId}));
+    (void)awaitQt(handler.execute(kanban::OpenBoard{.projectId = board.projectId}));
 
     // Arm the fault for the specific upcoming MoveTaskPosition call --
     // test_fault_proxy.cpp's own "count requests, target the k-th" idiom,
@@ -210,9 +202,11 @@ TEST_CASE("Dropping MoveTaskPosition's reply frame and retrying is exactly-once,
         }
     });
 
-    const kanban::MoveTaskPosition move{
-        .taskId = board.taskId, .columnId = board.columnB, .swimlaneId = board.swimlaneId, .position = 0,
-        .opId = "move-1"};
+    const kanban::MoveTaskPosition move{.taskId = board.taskId,
+                                        .columnId = board.columnB,
+                                        .swimlaneId = board.swimlaneId,
+                                        .position = 0,
+                                        .opId = "move-1"};
     handler.execute(move)
         .then([&](const kanban::GetBoardResult&) { firstResolved = true; })
         .onError([&](const std::exception_ptr&) { firstFailed = true; });
@@ -249,7 +243,7 @@ TEST_CASE("Dropping MoveTaskPosition's reply frame and retrying is exactly-once,
     // duplicated the task itself (rather than just double-recording the
     // move) would show up here too.
     CHECK(std::ranges::count_if(freshState.tasks,
-                                 [&](const kanban::TaskView& t) { return t.columnId == board.columnB; }) == 1);
+                                [&](const kanban::TaskView& t) { return t.columnId == board.columnB; }) == 1);
 
     // GetActivity shows one "move" event, not two -- both the server-side
     // ledger (no double-apply) and the read-side journal-dedup from Task 13
@@ -264,8 +258,7 @@ TEST_CASE("Dropping MoveTaskPosition's reply frame and retrying is exactly-once,
     // this retry is the actual first successful application) returns early
     // before ever reaching that insert.
     const auto events = awaitQt(handler.execute(kanban::GetEventsSince{.lastEventId = {}}));
-    const auto moveEvents =
-        std::ranges::count_if(events.events, [](const auto& e) { return e.kind == "move"; });
+    const auto moveEvents = std::ranges::count_if(events.events, [](const auto& e) { return e.kind == "move"; });
     CHECK(moveEvents == 1);
 }
 
@@ -310,11 +303,13 @@ TEST_CASE("Reconnecting after a dropped connection replays the offline queue and
     bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
 
     BridgeHandler<kanban::BoardModel, AllowShared> handler{bridge, &qtExec};
-    (void) awaitQt(handler.execute(kanban::OpenBoard{.projectId = board.projectId}));
+    (void)awaitQt(handler.execute(kanban::OpenBoard{.projectId = board.projectId}));
 
-    const kanban::MoveTaskPosition move{
-        .taskId = board.taskId, .columnId = board.columnB, .swimlaneId = board.swimlaneId, .position = 0,
-        .opId = "move-reconnect-1"};
+    const kanban::MoveTaskPosition move{.taskId = board.taskId,
+                                        .columnId = board.columnB,
+                                        .swimlaneId = board.swimlaneId,
+                                        .position = 0,
+                                        .opId = "move-reconnect-1"};
     const auto first = awaitQt(handler.execute(move));
     const auto firstMoved =
         std::ranges::find_if(first.tasks, [&](const kanban::TaskView& t) { return t.id == board.taskId; });
@@ -358,7 +353,7 @@ TEST_CASE("Reconnecting after a dropped connection replays the offline queue and
     CHECK(replayedMoved->position == 0);
     // No second move: exactly one task ever lands in columnB.
     CHECK(std::ranges::count_if(replayed.tasks,
-                                 [&](const kanban::TaskView& t) { return t.columnId == board.columnB; }) == 1);
+                                [&](const kanban::TaskView& t) { return t.columnId == board.columnB; }) == 1);
     // And the replayed result is byte-for-byte the ledgered one (the
     // ledger-hit path returns the *stored* result, not a freshly recomputed
     // one) -- same task count as the very first application.
@@ -520,7 +515,7 @@ TEST_CASE("Two clients' offline queues replaying interleaved converge on a valid
     for (std::size_t i = 0; i < maxLen; ++i) {
         if (i < clientAQueue.size()) {
             try {
-                (void) clientA.execute(clientAQueue[i]);
+                (void)clientA.execute(clientAQueue[i]);
             } catch (const std::exception&) {
                 // A queued move landing on a destination another client's
                 // interleaved move already changed out from under it (e.g. a
@@ -535,7 +530,7 @@ TEST_CASE("Two clients' offline queues replaying interleaved converge on a valid
         }
         if (i < clientBQueue.size()) {
             try {
-                (void) clientB.execute(clientBQueue[i]);
+                (void)clientB.execute(clientBQueue[i]);
             } catch (const std::exception&) {
                 ++failures;
             }
@@ -552,8 +547,8 @@ TEST_CASE("Two clients' offline queues replaying interleaved converge on a valid
     if (!positionsAreDenseAndUniquePerColumnSwimlane(finalState)) {
         for (const auto& task : finalState.tasks) {
             const std::string line = "task " + std::to_string(*task.id) + " column " + std::to_string(*task.columnId) +
-                                      " swimlane " + std::to_string(*task.swimlaneId) +
-                                      " pos " + std::to_string(task.position);
+                                     " swimlane " + std::to_string(*task.swimlaneId) + " pos " +
+                                     std::to_string(task.position);
             WARN(line);
         }
     }
@@ -614,7 +609,7 @@ namespace {
 /// see it applied at least once before the racing writes begin, so it goes
 /// through the same hook `busy_timeout` uses, for the same reason.
 class ScopedShortBusyTimeout {
-  public:
+public:
     /// @param milliseconds Value installed as both the `PRAGMA busy_timeout`
     ///        on every newly-opened connection and the default connection
     ///        string's `Timeout=` (the sqliteodbc driver's own outer retry
@@ -629,9 +624,9 @@ class ScopedShortBusyTimeout {
         ::Lightweight::SqlConnection::SetPostConnectedHook(
             [milliseconds, useWalJournalMode](::Lightweight::SqlConnection& connection) {
                 ::Lightweight::SqlStatement stmt{connection};
-                (void) stmt.ExecuteDirect("PRAGMA busy_timeout = " + std::to_string(milliseconds));
+                (void)stmt.ExecuteDirect("PRAGMA busy_timeout = " + std::to_string(milliseconds));
                 if (useWalJournalMode) {
-                    (void) stmt.ExecuteDirect("PRAGMA journal_mode = WAL");
+                    (void)stmt.ExecuteDirect("PRAGMA journal_mode = WAL");
                 }
             });
         ::Lightweight::SqlConnection::SetDefaultConnectionString(
@@ -647,7 +642,7 @@ class ScopedShortBusyTimeout {
     ScopedShortBusyTimeout(ScopedShortBusyTimeout&&) = delete;
     ScopedShortBusyTimeout& operator=(ScopedShortBusyTimeout&&) = delete;
 
-  private:
+private:
     /// @brief Replaces (or appends) `Timeout=` in @p connectionString with
     ///        @p milliseconds -- same string-surgery idiom
     ///        `test_db_busy_fixture.cpp`'s `shortTimeoutConnectionString()`
@@ -816,10 +811,10 @@ TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-th
             try {
                 model.execute(kanban::OpenBoard{.projectId = boards[static_cast<std::size_t>(i)].projectId});
                 model.execute(kanban::MoveTaskPosition{.taskId = boards[static_cast<std::size_t>(i)].taskId,
-                                                        .columnId = boards[static_cast<std::size_t>(i)].columnB,
-                                                        .swimlaneId = boards[static_cast<std::size_t>(i)].swimlaneId,
-                                                        .position = 0,
-                                                        .opId = "contend-1"});
+                                                       .columnId = boards[static_cast<std::size_t>(i)].columnB,
+                                                       .swimlaneId = boards[static_cast<std::size_t>(i)].swimlaneId,
+                                                       .position = 0,
+                                                       .opId = "contend-1"});
                 ++succeeded;
             } catch (const std::exception&) {
                 threw[static_cast<std::size_t>(i)] = 1;
@@ -857,7 +852,8 @@ TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-th
         ctx.principal = "alice";
         morph::session::detail::ScopedContext scope{ctx};
         kanban::BoardModel model;
-        const auto state = model.execute(kanban::OpenBoard{.projectId = boards[static_cast<std::size_t>(i)].projectId});
+        const auto state =
+            model.execute(kanban::OpenBoard{.projectId = boards[static_cast<std::size_t>(i)].projectId});
         const auto movedCount = std::ranges::count_if(state.tasks, [&](const kanban::TaskView& t) {
             return t.id == boards[static_cast<std::size_t>(i)].taskId &&
                    t.columnId == boards[static_cast<std::size_t>(i)].columnB;
@@ -873,8 +869,8 @@ TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-th
         // this board took -- a partial write (some rows renumbered, the
         // ledger row not, or vice versa) would show up as a gap or
         // duplicate here even when movedCount itself looks right.
-        for (const auto& column : {boards[static_cast<std::size_t>(i)].columnA,
-                                    boards[static_cast<std::size_t>(i)].columnB}) {
+        for (const auto& column :
+             {boards[static_cast<std::size_t>(i)].columnA, boards[static_cast<std::size_t>(i)].columnB}) {
             std::vector<std::int64_t> positions;
             for (const auto& t : state.tasks) {
                 if (t.columnId == column) {
@@ -933,7 +929,7 @@ namespace {
 /// construction, so `AcquireThreadLocal()`'s permanent pin to the shared
 /// file is simply never exercised here.
 class ScopedWalDatabaseFile {
-  public:
+public:
     /// @param path SQLite file this scenario's connections use for this
     ///        object's lifetime -- must not collide with `DbFixture`'s own
     ///        shared `morph_ladder_test.db`. Must be constructed
@@ -984,7 +980,7 @@ class ScopedWalDatabaseFile {
     ScopedWalDatabaseFile(ScopedWalDatabaseFile&&) = delete;
     ScopedWalDatabaseFile& operator=(ScopedWalDatabaseFile&&) = delete;
 
-  private:
+private:
     /// @brief Extracts the plain filesystem path out of `DbFixture`'s own
     ///        shared connection string (`DRIVER=SQLite3;Database=<path>;...`)
     ///        -- the file this object copies its own dedicated database
@@ -1127,10 +1123,10 @@ TEST_CASE("32 boards writing concurrently under SQLite contention (WAL mode): no
             try {
                 model.execute(kanban::OpenBoard{.projectId = boards[static_cast<std::size_t>(i)].projectId});
                 model.execute(kanban::MoveTaskPosition{.taskId = boards[static_cast<std::size_t>(i)].taskId,
-                                                        .columnId = boards[static_cast<std::size_t>(i)].columnB,
-                                                        .swimlaneId = boards[static_cast<std::size_t>(i)].swimlaneId,
-                                                        .position = 0,
-                                                        .opId = "contend-1"});
+                                                       .columnId = boards[static_cast<std::size_t>(i)].columnB,
+                                                       .swimlaneId = boards[static_cast<std::size_t>(i)].swimlaneId,
+                                                       .position = 0,
+                                                       .opId = "contend-1"});
                 ++succeeded;
             } catch (const std::exception& ex) {
                 threw[static_cast<std::size_t>(i)] = 1;
@@ -1160,7 +1156,8 @@ TEST_CASE("32 boards writing concurrently under SQLite contention (WAL mode): no
         ctx.principal = "alice";
         morph::session::detail::ScopedContext scope{ctx};
         kanban::BoardModel model;
-        const auto state = model.execute(kanban::OpenBoard{.projectId = boards[static_cast<std::size_t>(i)].projectId});
+        const auto state =
+            model.execute(kanban::OpenBoard{.projectId = boards[static_cast<std::size_t>(i)].projectId});
         const auto movedCount = std::ranges::count_if(state.tasks, [&](const kanban::TaskView& t) {
             return t.id == boards[static_cast<std::size_t>(i)].taskId &&
                    t.columnId == boards[static_cast<std::size_t>(i)].columnB;
@@ -1173,8 +1170,8 @@ TEST_CASE("32 boards writing concurrently under SQLite contention (WAL mode): no
             CAPTURE(i);
             CHECK(movedCount == 1);
         }
-        for (const auto& column : {boards[static_cast<std::size_t>(i)].columnA,
-                                    boards[static_cast<std::size_t>(i)].columnB}) {
+        for (const auto& column :
+             {boards[static_cast<std::size_t>(i)].columnA, boards[static_cast<std::size_t>(i)].columnB}) {
             std::vector<std::int64_t> positions;
             for (const auto& t : state.tasks) {
                 if (t.columnId == column) {

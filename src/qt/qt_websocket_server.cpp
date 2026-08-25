@@ -254,8 +254,8 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
         // the same reply-without-full-decode pattern the maxMessageBytes
         // branch above uses. The connection stays open: rate limiting throttles
         // a client, it does not evict one (morph#225).
-        socket->sendTextMessage(QString::fromStdString(
-            ::morph::wire::encode(::morph::wire::makeErr("rate limited", peekedCallId()))));
+        socket->sendTextMessage(
+            QString::fromStdString(::morph::wire::encode(::morph::wire::makeErr("rate limited", peekedCallId()))));
         return;
     }
 

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/session/session.hpp>
-
 #include <cstdint>
+#include <morph/session/session.hpp>
 #include <string_view>
 
 /// @file
@@ -62,7 +61,7 @@ namespace polls::auth {
 ///        hook. See this file's `@file` comment for why that is the
 ///        correct, verified shape here rather than an oversight.
 class PollsAuthorizer : public ::morph::session::AllowAllAuthorizer {
-  public:
+public:
     using AllowAllAuthorizer::AllowAllAuthorizer;
 
     /// @brief Admits every registration, by this rung's own design -- not

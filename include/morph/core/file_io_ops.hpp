@@ -45,9 +45,7 @@ struct FileIoOps {
     /// @brief Writes @p size bytes from @p buffer to @p file. Mirrors `std::fwrite`.
     /// @return The number of bytes actually written; short of @p size on failure.
     std::function<std::size_t(const void* buffer, std::size_t size, std::FILE* file)> fwrite =
-        [](const void* buffer, std::size_t size, std::FILE* file) {
-            return std::fwrite(buffer, 1, size, file);
-        };
+        [](const void* buffer, std::size_t size, std::FILE* file) { return std::fwrite(buffer, 1, size, file); };
 
     /// @brief Flushes @p file's stdio buffer. Mirrors `std::fflush`.
     /// @return `0` on success, nonzero on failure.
@@ -67,11 +65,11 @@ struct FileIoOps {
     /// @brief Opens @p path in mode @p mode. Mirrors `std::fopen`.
     /// @return The open file, or `nullptr` on failure.
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) — mirrors std::fopen's own raw-owning-pointer return
-    std::function<std::FILE*(const std::string& path, const char* mode)> fopen =
-        [](const std::string& path, const char* mode) {
-            // NOLINTNEXTLINE(cert-err33-c) — callers check the returned handle themselves
-            return std::fopen(path.c_str(), mode);
-        };
+    std::function<std::FILE*(const std::string& path, const char* mode)> fopen = [](const std::string& path,
+                                                                                    const char* mode) {
+        // NOLINTNEXTLINE(cert-err33-c) — callers check the returned handle themselves
+        return std::fopen(path.c_str(), mode);
+    };
 
     /// @brief Reports whether @p path can be opened for reading right now.
     ///        Stands in for `std::ifstream{path}`'s own open-succeeded check
@@ -81,8 +79,9 @@ struct FileIoOps {
     ///        consulted first; the real default performs the real open
     ///        `std::ifstream` itself would.
     /// @return `true` if @p path is currently readable.
-    std::function<bool(const std::filesystem::path& path)> canOpenForRead =
-        [](const std::filesystem::path& path) { return static_cast<bool>(std::ifstream{path}); };
+    std::function<bool(const std::filesystem::path& path)> canOpenForRead = [](const std::filesystem::path& path) {
+        return static_cast<bool>(std::ifstream{path});
+    };
 
     /// @brief Truncates/extends @p path to @p newSize bytes. Mirrors
     ///        `std::filesystem::resize_file`.

@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "gui/presenter.hpp"
-
-#include "lims/dto/sample_dto.hpp"
-
 #include <QString>
-
 #include <exception>
+
+#include "gui/presenter.hpp"
+#include "lims/dto/sample_dto.hpp"
 
 // moc is not a C++ front end and mis-parses morph's template machinery, so it
 // must never see `morph/core/bridge.hpp` or this rung's model headers — the
@@ -15,10 +13,10 @@
 // `kanban::gui::ProjectAdminPresenter`'s (examples/kanban/gui_lib/
 // project_admin_presenter.hpp).
 #ifndef Q_MOC_RUN
-#include "lims/models/sample_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "lims/models/sample_model.hpp"
 #endif
 
 namespace lims::gui {
@@ -55,7 +53,7 @@ namespace lims::gui {
 /// works in all three deployment modes.
 class SamplePresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -117,7 +115,7 @@ class SamplePresenter : public ::morph::ladder::gui::Presenter {
     /// @param bodyJson The form's assembled JSON body.
     void submitIfValid(const QString& actionType, const QString& bodyJson);
 
-  signals:
+signals:
     /// @brief Emitted once per `submitIfValid`, whichever way it resolved.
     /// @param actionType The action the reply belongs to.
     /// @param ok Whether it succeeded.
@@ -140,7 +138,7 @@ class SamplePresenter : public ::morph::ladder::gui::Presenter {
     /// @param message Ready for direct display.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Shared error body passed as every `track()` call's third
     ///        argument — see `Presenter::track()`.
     /// @param err The failed completion's exception.

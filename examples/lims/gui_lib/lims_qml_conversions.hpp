@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <QString>
+#include <QVariant>
+#include <QVariantList>
+#include <QVariantMap>
+#include <cstdint>
+#include <string>
+
+#include "gui/id_qml.hpp"
 #include "lims/dto/analysis_dto.hpp"
 #include "lims/dto/offline_dto.hpp"
 #include "lims/dto/result_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
 #include "lims/dto/verification_dto.hpp"
-
-#include "gui/id_qml.hpp"
-
-#include <QString>
-#include <QVariant>
-#include <QVariantList>
-#include <QVariantMap>
-
-#include <cstdint>
-#include <string>
 
 #ifndef Q_MOC_RUN
 #include <morph/util/quantity.hpp>

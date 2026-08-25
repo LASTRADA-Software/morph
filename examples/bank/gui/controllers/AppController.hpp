@@ -32,8 +32,7 @@ public:
     [[nodiscard]] QString displayName() const { return _displayName; }
 
     Q_INVOKABLE void login(const QString& username, const QString& password);
-    Q_INVOKABLE void registerUser(const QString& username, const QString& password,
-                                  const QString& displayName);
+    Q_INVOKABLE void registerUser(const QString& username, const QString& password, const QString& displayName);
     Q_INVOKABLE void logout();
 
 signals:

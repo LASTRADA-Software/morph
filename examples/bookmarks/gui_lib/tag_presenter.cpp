@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "tag_presenter.hpp"
+
 #include "gui/error_text.hpp"
 
 namespace bookmarks::gui {
@@ -9,9 +10,7 @@ TagPresenter::TagPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExec
     trackBound(_handler.whenBound());
 }
 
-void TagPresenter::reportError(const std::exception_ptr& err) {
-    emit failed(::morph::ladder::gui::errorText(err));
-}
+void TagPresenter::reportError(const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); }
 
 void TagPresenter::rename(RenameTag action) {
     track<Ack>(

@@ -5,20 +5,19 @@
 // to show that the model code and call sites are identical regardless of where
 // the models actually execute.
 
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/journal/file_action_log.hpp>
-#include <morph/journal/journal.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/session/session.hpp>
-
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/journal/file_action_log.hpp>
+#include <morph/journal/journal.hpp>
+#include <morph/session/session.hpp>
 #include <optional>
 #include <print>
 #include <string>
@@ -36,10 +35,10 @@
 #include "bank/dto/payment_dto.hpp"
 #include "bank/dto/statement_dto.hpp"
 #include "bank/dto/transaction_dto.hpp"
-#include "bank/models/customer_model.hpp"
 #include "bank/models/auth_model.hpp"
 #include "bank/models/budget_model.hpp"
 #include "bank/models/card_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/loan_model.hpp"
 #include "bank/models/notification_model.hpp"
 #include "bank/models/payee_model.hpp"
@@ -55,8 +54,15 @@ T await(morph::async::Completion<T> completion, morph::exec::MainThreadExecutor&
     std::atomic<bool> done{false};
     std::optional<T> value;
     std::exception_ptr error;
-    completion.then([&](T resolved) { value = std::move(resolved); done.store(true); })
-        .onError([&](const std::exception_ptr& err) { error = err; done.store(true); });
+    completion
+        .then([&](T resolved) {
+            value = std::move(resolved);
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr& err) {
+            error = err;
+            done.store(true);
+        });
     while (!done.load()) {
         gui.runFor(std::chrono::milliseconds{10});
     }
@@ -90,9 +96,9 @@ void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor&
     morph::bridge::BridgeHandler<bank::StatementModel> statements{bridge, &gui};
 
     // Register + login. After login the bridge carries the principal on every call.
-    await(auth.execute(bank::dto::RegisterUser{.username = principal, .password = "s3cret",
-                                               .displayName = "Demo User"}),
-          gui);
+    await(
+        auth.execute(bank::dto::RegisterUser{.username = principal, .password = "s3cret", .displayName = "Demo User"}),
+        gui);
     auto login = await(auth.execute(bank::dto::LoginRequest{.username = principal, .password = "s3cret"}), gui);
     morph::session::Context ctx;
     ctx.principal = login.principal;
@@ -100,20 +106,19 @@ void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor&
     std::println("logged in as {} ({})", login.principal, login.displayName);
 
     // Open two accounts.
-    auto checking = await(accounts.execute(bank::dto::OpenAccount{
-                              .kind = static_cast<int>(bank::AccountKind::Checking),
-                              .currency = static_cast<int>(bank::Currency::USD),
-                              .overdraftMinor = 20000}),
-                          gui);
-    auto savings = await(accounts.execute(bank::dto::OpenAccount{
-                             .kind = static_cast<int>(bank::AccountKind::Savings),
-                             .currency = static_cast<int>(bank::Currency::USD)}),
+    auto checking =
+        await(accounts.execute(bank::dto::OpenAccount{.kind = static_cast<int>(bank::AccountKind::Checking),
+                                                      .currency = static_cast<int>(bank::Currency::USD),
+                                                      .overdraftMinor = 20000}),
+              gui);
+    auto savings = await(accounts.execute(bank::dto::OpenAccount{.kind = static_cast<int>(bank::AccountKind::Savings),
+                                                                 .currency = static_cast<int>(bank::Currency::USD)}),
                          gui);
     std::println("opened checking {} and savings {}", checking.number, savings.number);
 
     // Deposit + transfer.
-    await(txns.execute(bank::dto::Deposit{.accountId = checking.id, .amountMinor = 100000,
-                                          .description = "opening deposit"}),
+    await(txns.execute(
+              bank::dto::Deposit{.accountId = checking.id, .amountMinor = 100000, .description = "opening deposit"}),
           gui);
     auto transfer = await(txns.execute(bank::dto::Transfer{.fromAccountId = checking.id,
                                                            .toAccountId = savings.id,
@@ -124,45 +129,42 @@ void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor&
                  bank::format(usd(transfer.toBalanceMinor)));
 
     // Payee + bill payment.
-    auto payee = await(payees.execute(bank::dto::AddPayee{.name = "City Power",
-                                                          .iban = "DE89370400440532013000",
-                                                          .bankName = "Stadtbank"}),
+    auto payee = await(payees.execute(bank::dto::AddPayee{
+                           .name = "City Power", .iban = "DE89370400440532013000", .bankName = "Stadtbank"}),
                        gui);
-    await(payments.execute(bank::dto::PayBill{.fromAccountId = checking.id, .payeeId = payee.id,
-                                              .amountMinor = 7500, .description = "electricity"}),
+    await(payments.execute(bank::dto::PayBill{
+              .fromAccountId = checking.id, .payeeId = payee.id, .amountMinor = 7500, .description = "electricity"}),
           gui);
     std::println("paid {} to {}", bank::format(usd(7500)), payee.name);
 
     // Card lifecycle.
-    auto card = await(cards.execute(bank::dto::IssueCard{.accountId = checking.id,
-                                                         .kind = static_cast<int>(bank::CardKind::Debit),
-                                                         .dailyLimitMinor = 50000}),
-                      gui);
+    auto card = await(
+        cards.execute(bank::dto::IssueCard{
+            .accountId = checking.id, .kind = static_cast<int>(bank::CardKind::Debit), .dailyLimitMinor = 50000}),
+        gui);
     await(cards.execute(bank::dto::FreezeCard{.id = card.id}), gui);
     await(cards.execute(bank::dto::UnfreezeCard{.id = card.id}), gui);
     std::println("issued debit card ****{} (frozen, then unfrozen)", card.panLast4);
 
     // Loan: apply, show first 3 schedule rows, repay.
-    auto loan = await(loans.execute(bank::dto::ApplyLoan{.accountId = checking.id, .principalMinor = 1200000,
-                                                         .rateBps = 600, .termMonths = 12}),
+    auto loan = await(loans.execute(bank::dto::ApplyLoan{
+                          .accountId = checking.id, .principalMinor = 1200000, .rateBps = 600, .termMonths = 12}),
                       gui);
     auto schedule = await(loans.execute(bank::dto::LoanScheduleRequest{.loanId = loan.id}), gui);
-    std::println("loan {} disbursed; monthly payment {}", loan.id,
-                 bank::format(usd(schedule.monthlyPaymentMinor)));
+    std::println("loan {} disbursed; monthly payment {}", loan.id, bank::format(usd(schedule.monthlyPaymentMinor)));
     for (int idx = 0; idx < 3 && idx < static_cast<int>(schedule.installments.size()); ++idx) {
         const auto& inst = schedule.installments[static_cast<std::size_t>(idx)];
         std::println("  month {}: principal {} interest {} remaining {}", inst.month,
                      bank::format(usd(inst.principalMinor)), bank::format(usd(inst.interestMinor)),
                      bank::format(usd(inst.remainingMinor)));
     }
-    auto repaid = await(loans.execute(bank::dto::RepayLoan{.loanId = loan.id, .fromAccountId = checking.id,
-                                                           .amountMinor = 20000}),
-                        gui);
+    auto repaid = await(
+        loans.execute(bank::dto::RepayLoan{.loanId = loan.id, .fromAccountId = checking.id, .amountMinor = 20000}),
+        gui);
     std::println("after repayment, loan outstanding {}", bank::format(usd(repaid.outstandingMinor)));
 
     // Budget + spending analytics.
-    await(budgets.execute(bank::dto::SetBudget{.category = "utilities", .monthlyLimitMinor = 30000,
-                                               .currency = 0}),
+    await(budgets.execute(bank::dto::SetBudget{.category = "utilities", .monthlyLimitMinor = 30000, .currency = 0}),
           gui);
     auto spend = await(budgets.execute(bank::dto::SpendingByKind{.accountId = checking.id}), gui);
     std::println("total debits on checking: {}", bank::format(usd(spend.totalDebitsMinor)));
@@ -175,8 +177,7 @@ void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor&
     // Statement across accounts.
     auto statement = await(statements.execute(bank::dto::GenerateStatement{}), gui);
     std::println("statement: {} accounts, credits {} debits {}", statement.lines.size(),
-                 bank::format(usd(statement.totalCreditsMinor)),
-                 bank::format(usd(statement.totalDebitsMinor)));
+                 bank::format(usd(statement.totalCreditsMinor)), bank::format(usd(statement.totalDebitsMinor)));
 }
 
 }  // namespace

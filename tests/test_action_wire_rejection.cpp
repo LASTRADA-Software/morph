@@ -10,12 +10,10 @@
 // which makes it the layer that has to decide what a clamped value means,
 // because it is the layer that knows the bytes came off a wire.
 
+#include <catch2/catch_test_macros.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/util/rational.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
 #include <string>
 
 // External linkage, deliberately: glaze's reflection needs it -- a type in an
@@ -59,15 +57,13 @@ TEST_CASE("A zero denominator is rejected at the decode boundary", "[registry][w
     // Previously this decoded to a perfectly plausible 5/1 and travelled on.
     // The model's own validate() could not have caught it -- by then there is
     // nothing to see.
-    CHECK_THROWS_AS(
-        morph::model::ActionTraits<WireAmountAction>::fromJson(R"({"amount":{"num":5,"den":0,"dp":2}})"),
-        morph::model::detail::ParseError);
+    CHECK_THROWS_AS(morph::model::ActionTraits<WireAmountAction>::fromJson(R"({"amount":{"num":5,"den":0,"dp":2}})"),
+                    morph::model::detail::ParseError);
 }
 
 TEST_CASE("An out-of-range precision is rejected at the decode boundary", "[registry][wire]") {
-    CHECK_THROWS_AS(
-        morph::model::ActionTraits<WireAmountAction>::fromJson(R"({"amount":{"num":5,"den":2,"dp":99}})"),
-        morph::model::detail::ParseError);
+    CHECK_THROWS_AS(morph::model::ActionTraits<WireAmountAction>::fromJson(R"({"amount":{"num":5,"den":2,"dp":99}})"),
+                    morph::model::detail::ParseError);
 }
 
 TEST_CASE("A component whose magnitude is not representable is rejected", "[registry][wire]") {
@@ -77,9 +73,8 @@ TEST_CASE("A component whose magnitude is not representable is rejected", "[regi
 }
 
 TEST_CASE("Rejection does not leak into the next decode", "[registry][wire]") {
-    CHECK_THROWS_AS(
-        morph::model::ActionTraits<WireAmountAction>::fromJson(R"({"amount":{"num":5,"den":0,"dp":2}})"),
-        morph::model::detail::ParseError);
+    CHECK_THROWS_AS(morph::model::ActionTraits<WireAmountAction>::fromJson(R"({"amount":{"num":5,"den":0,"dp":2}})"),
+                    morph::model::detail::ParseError);
 
     // The clamp count is scoped to one decode; a rejected payload must not
     // poison the payload after it.

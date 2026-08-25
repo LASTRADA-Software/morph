@@ -282,8 +282,9 @@ TEST_CASE("Forms::Rules::EmitNode::KindStringsNeverExercisedViaSchemaJson", "[fo
     CHECK(morph::forms::greaterOrEqual(&CFRDiscountForm::discount, &CFRDiscountForm::promo)
               .emitNode()["kind"]
               .get<std::string>() == "greaterOrEqual");
-    CHECK(morph::forms::less(&CFRDiscountForm::discount, &CFRDiscountForm::promo).emitNode()["kind"].get<std::string>() ==
-          "less");
+    CHECK(morph::forms::less(&CFRDiscountForm::discount, &CFRDiscountForm::promo)
+              .emitNode()["kind"]
+              .get<std::string>() == "less");
     CHECK(morph::forms::lessOrEqual(&CFRDiscountForm::discount, &CFRDiscountForm::promo)
               .emitNode()["kind"]
               .get<std::string>() == "lessOrEqual");
@@ -330,8 +331,8 @@ struct CFRSumTypeOptedOut {
     CFRMoney qualifier;
 
     static constexpr std::array optionalFields{std::string_view{"value"}, std::string_view{"qualifier"}};
-    static constexpr auto formRules = morph::forms::ruleList(
-        morph::forms::exactlyOneOf(&CFRSumTypeOptedOut::value, &CFRSumTypeOptedOut::qualifier));
+    static constexpr auto formRules =
+        morph::forms::ruleList(morph::forms::exactlyOneOf(&CFRSumTypeOptedOut::value, &CFRSumTypeOptedOut::qualifier));
 };
 
 /// Exactly ONE required field inside a capping rule is satisfiable -- engage
@@ -363,9 +364,8 @@ struct CFRCappedPairPlusRequiredNeighbour {
     CFRMoney qualifier;
 
     static constexpr std::array optionalFields{std::string_view{"value"}, std::string_view{"qualifier"}};
-    static constexpr auto formRules = morph::forms::ruleList(
-        morph::forms::mutuallyExclusive(&CFRCappedPairPlusRequiredNeighbour::value,
-                                        &CFRCappedPairPlusRequiredNeighbour::qualifier));
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::mutuallyExclusive(
+        &CFRCappedPairPlusRequiredNeighbour::value, &CFRCappedPairPlusRequiredNeighbour::qualifier));
 };
 
 TEST_CASE("Forms::Rules::Unsatisfiable::ExactlyOneOfOverTwoRequiredFieldsThrows", "[forms][rules][unsatisfiable]") {
@@ -563,9 +563,8 @@ struct CFRCompoundForm {
 
     // discount required when (promo engaged AND email engaged)
     static constexpr auto formRules = morph::forms::ruleList(morph::forms::requiredWhen(
-        &CFRCompoundForm::discount,
-        morph::forms::andOf(morph::forms::engaged(&CFRCompoundForm::promo),
-                             morph::forms::engaged(&CFRCompoundForm::email))));
+        &CFRCompoundForm::discount, morph::forms::andOf(morph::forms::engaged(&CFRCompoundForm::promo),
+                                                        morph::forms::engaged(&CFRCompoundForm::email))));
 
     [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
 };
@@ -589,8 +588,8 @@ struct CFRNotForm {
     CFRMoney discount;
 
     // discount required when promo is NOT engaged.
-    static constexpr auto formRules = morph::forms::ruleList(
-        morph::forms::requiredWhen(&CFRNotForm::discount, morph::forms::notOf(morph::forms::engaged(&CFRNotForm::promo))));
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::requiredWhen(
+        &CFRNotForm::discount, morph::forms::notOf(morph::forms::engaged(&CFRNotForm::promo))));
 
     [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
 };
@@ -604,10 +603,9 @@ struct CFRNestedForm {
     // discount required when NOT(promo engaged) OR (email engaged AND phone engaged)
     static constexpr auto formRules = morph::forms::ruleList(morph::forms::requiredWhen(
         &CFRNestedForm::discount,
-        morph::forms::orOf(
-            morph::forms::notOf(morph::forms::engaged(&CFRNestedForm::promo)),
-            morph::forms::andOf(morph::forms::engaged(&CFRNestedForm::email),
-                                morph::forms::engaged(&CFRNestedForm::phone)))));
+        morph::forms::orOf(morph::forms::notOf(morph::forms::engaged(&CFRNestedForm::promo)),
+                           morph::forms::andOf(morph::forms::engaged(&CFRNestedForm::email),
+                                               morph::forms::engaged(&CFRNestedForm::phone)))));
 
     [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
 };
@@ -619,9 +617,9 @@ struct CFRTopLevelCompoundForm {
     CFRMoney promo;
     std::optional<std::string> email;
 
-    static constexpr auto formRules = morph::forms::ruleList(
-        morph::forms::andOf(morph::forms::engaged(&CFRTopLevelCompoundForm::promo),
-                            morph::forms::engaged(&CFRTopLevelCompoundForm::email)));
+    static constexpr auto formRules =
+        morph::forms::ruleList(morph::forms::andOf(morph::forms::engaged(&CFRTopLevelCompoundForm::promo),
+                                                   morph::forms::engaged(&CFRTopLevelCompoundForm::email)));
 
     [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
 };
@@ -694,11 +692,10 @@ TEST_CASE("Forms::Rules::Compound::UsableDirectlyAsATopLevelRule", "[forms][rule
 
 TEST_CASE("Forms::Rules::SchemaJson::AndOrNotEmitXRulesAsNestedNodes", "[forms][rules][compound]") {
     auto const schema = morph::forms::schemaJson<CFRCompoundForm>();
-    CHECK(schema.contains(
-        R"("x-rules":[{"kind":"requiredWhen","fields":["discount"],)"
-        R"("when":{"kind":"and","conditions":[)"
-        R"({"kind":"engaged","fields":["promo"]},)"
-        R"({"kind":"engaged","fields":["email"]}]}}])"));
+    CHECK(schema.contains(R"("x-rules":[{"kind":"requiredWhen","fields":["discount"],)"
+                          R"("when":{"kind":"and","conditions":[)"
+                          R"({"kind":"engaged","fields":["promo"]},)"
+                          R"({"kind":"engaged","fields":["email"]}]}}])"));
 
     auto const orSchema = morph::forms::schemaJson<CFROrForm>();
     CHECK(orSchema.contains(R"("kind":"or","conditions":[)"));
@@ -714,9 +711,8 @@ TEST_CASE("Forms::Rules::And::VariadicAcceptsMoreThanTwoConditions", "[forms][ru
         CFRMoney c;
     };
     CFRTriple triple{};
-    auto const cond =
-        morph::forms::andOf(morph::forms::engaged(&CFRTriple::a), morph::forms::engaged(&CFRTriple::b),
-                            morph::forms::engaged(&CFRTriple::c));
+    auto const cond = morph::forms::andOf(morph::forms::engaged(&CFRTriple::a), morph::forms::engaged(&CFRTriple::b),
+                                          morph::forms::engaged(&CFRTriple::c));
     CHECK_FALSE(cond.test(triple));
     triple.a = Rational{1, DecimalPlaces{2}};
     triple.b = Rational{1, DecimalPlaces{2}};

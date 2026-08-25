@@ -5,13 +5,13 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #endif
 
-#include "polls/core/types.hpp"
-#include "polls/dto/poll_dto.hpp"
-#include "polls/dto/vote_dto.hpp"
-
 #include <cstdint>
 #include <string>
 #include <string_view>
+
+#include "polls/core/types.hpp"
+#include "polls/dto/poll_dto.hpp"
+#include "polls/dto/vote_dto.hpp"
 
 /// @file
 /// Six ladder-rung-3 entities. Every child table (`OptionRecord`,
@@ -56,10 +56,10 @@ struct PollRecord {
     /// already enforces at the DTO boundary; `poll_model.cpp`'s
     /// `static_assert` pins the two together.
     Light::Field<Light::SqlAnsiString<kMaxTitleBytes>, Light::SqlRealName{"title"}> title;  // 4
-    Light::Field<bool, Light::SqlRealName{"finalized"}> finalized{false};  // 5
+    Light::Field<bool, Light::SqlRealName{"finalized"}> finalized{false};                   // 5
     /// 0 = not finalized; FK-shaped but not FK-enforced (SQLite).
     Light::Field<std::int64_t, Light::SqlRealName{"finalized_option_id"}> finalizedOptionId{0};  // 6
-    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 7
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};              // 7
 };
 
 /// @brief One row of the `poll_options` table.
@@ -67,7 +67,7 @@ struct OptionRecord {
     static constexpr std::string_view TableName = "poll_options";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
+    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;                                 // 1
     /// Free-form Unicode text, bounded to `kMaxOptionLabelBytes`
     /// (`polls/dto/poll_dto.hpp`) -- see `PollRecord::title`'s doc comment
     /// for the same convention.
@@ -84,12 +84,13 @@ struct VoteRecord {
     static constexpr std::string_view TableName = "votes";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
-    Light::BelongsTo<&OptionRecord::id, Light::SqlRealName{"option_id"}> option;  // 2
+    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;                                 // 1
+    Light::BelongsTo<&OptionRecord::id, Light::SqlRealName{"option_id"}> option;                           // 2
     /// Free-form Unicode text, bounded to `kMaxParticipantNameBytes`
     /// (`polls/dto/vote_dto.hpp`) -- see `PollRecord::title`'s doc comment
     /// for the same convention.
-    Light::Field<Light::SqlAnsiString<kMaxParticipantNameBytes>, Light::SqlRealName{"participant_name"}> participantName;  // 3
+    Light::Field<Light::SqlAnsiString<kMaxParticipantNameBytes>, Light::SqlRealName{"participant_name"}>
+        participantName;  // 3
     /// `VoteChoice`'s underlying value.
     Light::Field<std::uint8_t, Light::SqlRealName{"choice"}> choice{std::uint8_t{0}};  // 4
 };
@@ -99,16 +100,17 @@ struct CommentRecord {
     static constexpr std::string_view TableName = "comments";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
+    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;                                 // 1
     /// Free-form Unicode text, bounded to `kMaxParticipantNameBytes`
     /// (`polls/dto/vote_dto.hpp`) -- see `PollRecord::title`'s doc comment
     /// for the same convention.
-    Light::Field<Light::SqlAnsiString<kMaxParticipantNameBytes>, Light::SqlRealName{"participant_name"}> participantName;  // 2
+    Light::Field<Light::SqlAnsiString<kMaxParticipantNameBytes>, Light::SqlRealName{"participant_name"}>
+        participantName;  // 2
     /// Free-form Unicode text, bounded to `kMaxCommentBytes`
     /// (`polls/dto/vote_dto.hpp`) -- see `PollRecord::title`'s doc comment
     /// for the same convention.
     Light::Field<Light::SqlAnsiString<kMaxCommentBytes>, Light::SqlRealName{"body"}> body;  // 3
-    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};         // 4
 };
 
 /// @brief Undo's own history, one row per vote-changing call
@@ -120,11 +122,12 @@ struct VoteHistoryRecord {
     static constexpr std::string_view TableName = "vote_history";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
+    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;                                 // 1
     /// Free-form Unicode text, bounded to `kMaxParticipantNameBytes`
     /// (`polls/dto/vote_dto.hpp`) -- see `PollRecord::title`'s doc comment
     /// for the same convention.
-    Light::Field<Light::SqlAnsiString<kMaxParticipantNameBytes>, Light::SqlRealName{"participant_name"}> participantName;  // 2
+    Light::Field<Light::SqlAnsiString<kMaxParticipantNameBytes>, Light::SqlRealName{"participant_name"}>
+        participantName;  // 2
     /// The pre-change vote set, JSON-encoded. Unbounded: no business limit
     /// on this serialized form exists today, so this is
     /// `Light::SqlMaxDynamicAnsiString`, not a fixed-capacity
@@ -134,7 +137,7 @@ struct VoteHistoryRecord {
     /// ASCII-safe base64/plain-integer content, produced only by
     /// `encodeVotesJson()` in this same TU).
     Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"previous_votes_json"}> previousVotesJson;  // 3
-    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};                             // 4
 };
 
 /// @brief The event log. Table-wide autoincrement `id` is `PollEventId`'s
@@ -143,7 +146,7 @@ struct PollEventRecord {
     static constexpr std::string_view TableName = "poll_events";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
+    Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;                                 // 1
     /// A short internal enum-like tag ("vote"/"comment"/"finalize", see
     /// `PollModel`'s writers) -- 32 bytes comfortably covers every literal
     /// this TU emits today, with headroom, and there is no existing
@@ -155,7 +158,7 @@ struct PollEventRecord {
     /// and none is invented here, since this is a human-readable summary
     /// string, not a wire-validated field.
     Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"summary"}> summary;  // 3
-    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};       // 4
 };
 
 #else

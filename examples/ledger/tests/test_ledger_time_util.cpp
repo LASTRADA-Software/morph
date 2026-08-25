@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "ledger/core/time_util.hpp"
-
 #include <catch2/catch_test_macros.hpp>
-
 #include <morph/util/datetime.hpp>
-
 #include <string>
+
+#include "ledger/core/time_util.hpp"
 
 namespace {
 
@@ -21,8 +19,7 @@ namespace {
 
 }  // namespace
 
-TEST_CASE("A transaction at 23:30 local time lands in its local month across a UTC boundary",
-          "[ledger][time]") {
+TEST_CASE("A transaction at 23:30 local time lands in its local month across a UTC boundary", "[ledger][time]") {
     // UTC-5. 2026-01-31T23:30 local is 2026-02-01T04:30 UTC -- still January
     // where the client lives, already February in the column it is stored in.
     const auto [start, end] = ledger::localMonthToUtcRange(2026, /*month=*/1, /*timezoneOffsetMinutes=*/-300);

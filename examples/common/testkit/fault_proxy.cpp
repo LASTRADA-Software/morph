@@ -3,7 +3,6 @@
 
 #include <QHostAddress>
 #include <QTimer>
-
 #include <utility>
 
 namespace morph::ladder::testkit {

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "lims/db/database.hpp"
-
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlMigration.hpp>
+
+#include "lims/db/database.hpp"
 
 namespace lims::db {
 
@@ -66,11 +66,11 @@ LIGHTWEIGHT_SQL_MIGRATION(20260823000003, "Create lims_analysis_versions table")
         .RequiredColumn("version", Integer())
         .RequiredColumn("canonical_unit", Varchar(32))
         .RequiredColumn("decimal_places", Integer())
-        .Column("spec_low_num", Bigint())    // nullable: not every analysis has a
-        .Column("spec_low_den", Bigint())    // specification range
+        .Column("spec_low_num", Bigint())  // nullable: not every analysis has a
+        .Column("spec_low_den", Bigint())  // specification range
         .Column("spec_high_num", Bigint())
         .Column("spec_high_den", Bigint())
-        .Column("lod_num", Bigint())         // nullable: nor a detection limit
+        .Column("lod_num", Bigint())  // nullable: nor a detection limit
         .Column("lod_den", Bigint())
         .Column("udl_num", Bigint())
         .Column("udl_den", Bigint())

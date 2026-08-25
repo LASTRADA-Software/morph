@@ -3,7 +3,6 @@
 #include "bank/models/notification_model.hpp"
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstdint>
 #include <string>
 

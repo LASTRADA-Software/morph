@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "ledger/core/import_op_id.hpp"
-#include "ledger/core/types.hpp"
-#include "ledger/core/units.hpp"
-
+#include <algorithm>
 #include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
-
-#include <algorithm>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "ledger/core/import_op_id.hpp"
+#include "ledger/core/types.hpp"
+#include "ledger/core/units.hpp"
 
 namespace ledger {
 
@@ -21,8 +20,8 @@ namespace ledger {
 struct TransactionLeg {
     AccountId accountId;
     morph::math::Rational amount;  // real currency comes from the account this leg names, per design spec §2
-    std::optional<morph::math::Rational> foreignAmount;    // display/audit metadata only --
-    std::optional<Currency> foreignCurrency;                // never enters a zero-sum check (design spec §1 step 3)
+    std::optional<morph::math::Rational> foreignAmount;  // display/audit metadata only --
+    std::optional<Currency> foreignCurrency;             // never enters a zero-sum check (design spec §1 step 3)
 };
 
 /// @brief Records a multi-leg transaction against `ledgerId`'s accounts,
@@ -112,9 +111,7 @@ struct UndoTransaction {
     LedgerId ledgerId;
     JournalId journalId;
 
-    [[nodiscard]] bool validate() const noexcept {
-        return ledgerId.hasValue() && journalId.hasValue();
-    }
+    [[nodiscard]] bool validate() const noexcept { return ledgerId.hasValue() && journalId.hasValue(); }
 };
 
 }  // namespace ledger

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "project_admin_qml_bridge.hpp"
-#include "gui/id_qml.hpp"
 
 #include <QString>
 #include <QVariant>
-
 #include <utility>
+
+#include "gui/id_qml.hpp"
 
 namespace kanban::gui {
 
@@ -80,17 +80,11 @@ ProjectAdminBridge::ProjectAdminBridge(::morph::bridge::Bridge& bridge, ::morph:
     connect(&_presenter, &ProjectAdminPresenter::failed, this, &ProjectAdminBridge::failed);
 }
 
-void ProjectAdminBridge::login(const QString& username) {
-    _presenter.login(username);
-}
+void ProjectAdminBridge::login(const QString& username) { _presenter.login(username); }
 
-void ProjectAdminBridge::refreshProjects() {
-    _presenter.refreshProjects();
-}
+void ProjectAdminBridge::refreshProjects() { _presenter.refreshProjects(); }
 
-void ProjectAdminBridge::createProject(const QString& name) {
-    _presenter.createProject(name);
-}
+void ProjectAdminBridge::createProject(const QString& name) { _presenter.createProject(name); }
 
 void ProjectAdminBridge::listRoles(qlonglong projectId) {
     _presenter.listRoles(ProjectId{static_cast<std::int64_t>(projectId)});

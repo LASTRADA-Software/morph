@@ -39,12 +39,11 @@
 #define MORPH_QUANTITY_PROVENANCE 1
 #endif
 
-#include <glaze/glaze.hpp>
-
 #include <array>
 #include <compare>
 #include <cstdint>
 #include <format>
+#include <glaze/glaze.hpp>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -96,9 +95,9 @@ namespace detail {
     bool const negative = value.numerator < 0;
     // Negating INT64_MIN would overflow int64; widen before taking the absolute
     // value so the magnitude is always representable.
-    auto const num = negative ? static_cast<std::uint64_t>(-static_cast<std::int64_t>(
-                                    static_cast<std::uint64_t>(value.numerator)))
-                              : static_cast<std::uint64_t>(value.numerator);
+    auto const num =
+        negative ? static_cast<std::uint64_t>(-static_cast<std::int64_t>(static_cast<std::uint64_t>(value.numerator)))
+                 : static_cast<std::uint64_t>(value.numerator);
     auto const den = static_cast<std::uint64_t>(value.denominator);
     auto const places = static_cast<std::uint32_t>(value.decimalPlaces.value);
 
@@ -334,9 +333,9 @@ struct RatioResult {
 /// @param value A strictly-positive rational.
 /// @return `1 / value`.
 [[nodiscard]] consteval morph::math::Rational reciprocal(const morph::math::Rational& value) {
-    static_cast<void>(requirePositiveRatio(value));    // compile error on a bad ratio
-    return morph::math::Rational{morph::math::Numerator{value.denominator},
-                                 morph::math::Denominator{value.numerator}, value.decimalPlaces};
+    static_cast<void>(requirePositiveRatio(value));  // compile error on a bad ratio
+    return morph::math::Rational{morph::math::Numerator{value.denominator}, morph::math::Denominator{value.numerator},
+                                 value.decimalPlaces};
 }
 
 /// @brief Breadth-first search of the relation graph for a `from → to` ratio.
@@ -435,12 +434,12 @@ template <auto U>
         std::size_t index = 0;
         for (auto const& relation : UnitTraits<E>::relations) {
             if (relation.to == U) {
-                result[index] = UnitAlternative<E>{relation.from, relation.fromTo.numerator,
-                                                   relation.fromTo.denominator};
+                result[index] =
+                    UnitAlternative<E>{relation.from, relation.fromTo.numerator, relation.fromTo.denominator};
                 ++index;
             } else if (relation.from == U) {
-                result[index] = UnitAlternative<E>{relation.to, relation.fromTo.denominator,
-                                                   relation.fromTo.numerator};
+                result[index] =
+                    UnitAlternative<E>{relation.to, relation.fromTo.denominator, relation.fromTo.numerator};
                 ++index;
             }
         }
@@ -487,15 +486,13 @@ void convert(const Quantity<From>& in, Quantity<To>& out);
 /// @brief Concept: the application supplied a `UnitTraits<E>::convert` static
 ///        for this pair (a non-ratio override, e.g. °C → °F) (template params `From`, `To`).
 template <auto From, auto To>
-concept HasUserConvert = requires(Quantity<From> from, Quantity<To>& to) {
-    UnitTraits<decltype(From)>::convert(from, to);
-};
+concept HasUserConvert =
+    requires(Quantity<From> from, Quantity<To>& to) { UnitTraits<decltype(From)>::convert(from, to); };
 
 /// @brief Concept: `From → To` is convertible — a user override takes
 ///        precedence over an auto-generated ratio path (template params `From`, `To`).
 template <auto From, auto To>
-concept Convertible =
-    detail::SameEnumDistinct<From, To> && (HasUserConvert<From, To> || RatioConvertible<From, To>);
+concept Convertible = detail::SameEnumDistinct<From, To> && (HasUserConvert<From, To> || RatioConvertible<From, To>);
 
 #if MORPH_QUANTITY_PROVENANCE
 
@@ -546,23 +543,24 @@ struct Context {
 /// @cond INTERNAL
 #if MORPH_QUANTITY_PROVENANCE
 #define MORPH_Q_NODE(quantity) (quantity)._ctx.node
-#define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode)         \
-    do {                                                                                     \
-        auto morphProvNode = std::make_shared<::morph::units::detail::ASTNode>();            \
-        morphProvNode->current.operation = (op);                                             \
-        morphProvNode->current.lhs = (lhsValue);                                             \
-        morphProvNode->current.rhs = (rhsValue);                                             \
-        morphProvNode->current.result = (resultValue);                                       \
-        morphProvNode->left = (leftNode);                                                    \
-        morphProvNode->right = (rightNode);                                                  \
-        (out)._ctx.node = std::move(morphProvNode);                                          \
+#define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode) \
+    do {                                                                             \
+        auto morphProvNode = std::make_shared<::morph::units::detail::ASTNode>();    \
+        morphProvNode->current.operation = (op);                                     \
+        morphProvNode->current.lhs = (lhsValue);                                     \
+        morphProvNode->current.rhs = (rhsValue);                                     \
+        morphProvNode->current.result = (resultValue);                               \
+        morphProvNode->left = (leftNode);                                            \
+        morphProvNode->right = (rightNode);                                          \
+        (out)._ctx.node = std::move(morphProvNode);                                  \
     } while (0)
 
 #else
 
 #define MORPH_Q_NODE(quantity) nullptr
 #define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode) \
-    do { } while (0)
+    do {                                                                             \
+    } while (0)
 
 #endif
 /// @endcond
@@ -732,8 +730,7 @@ struct Quantity {
     ///        the decimal display path.
     /// @return The rounded quantity, or empty if this is empty.
     [[nodiscard]] Quantity roundedToDecimalPlaces(
-        math::DecimalPlaces newPrecision,
-        math::RoundingMode mode = math::RoundingMode::HalfAwayFromZero) const {
+        math::DecimalPlaces newPrecision, math::RoundingMode mode = math::RoundingMode::HalfAwayFromZero) const {
         if (!payload) {
             return *this;
         }
@@ -870,8 +867,7 @@ template <auto U, std::uint32_t DecA, std::uint32_t DecB>
 /// @return The ordering of the two exact values.
 /// @throws std::logic_error when either operand is empty.
 template <auto U, std::uint32_t DecA, std::uint32_t DecB>
-[[nodiscard]] constexpr std::strong_ordering operator<=>(const Quantity<U, DecA>& lhs,
-                                                         const Quantity<U, DecB>& rhs) {
+[[nodiscard]] constexpr std::strong_ordering operator<=>(const Quantity<U, DecA>& lhs, const Quantity<U, DecB>& rhs) {
     if (!lhs.payload || !rhs.payload) {
         throw std::logic_error{"morph::units::Quantity: relational comparison requires engaged operands"};
     }
@@ -1052,7 +1048,8 @@ struct NamedQuantity : Quantity<U> {
 
     /// @brief Constructs from a payload, then names.
     /// @param adopted Engaged or empty payload.
-    NamedQuantity(std::optional<math::Rational> adopted) : Base{Base{std::move(adopted)}.named(std::string{Name.view()})} {}
+    NamedQuantity(std::optional<math::Rational> adopted)
+        : Base{Base{std::move(adopted)}.named(std::string{Name.view()})} {}
 
     /// @brief Constructs from a plain quantity, then names.
     /// @param quantity The source quantity.

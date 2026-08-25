@@ -4,14 +4,13 @@
 // Mirrors src/models/account_model.cpp: one account per instance, cached in the
 // instance, re-hydrated from bank::wasm::Db only when the row version moves.
 
-#include "bank/models/account_model.hpp"
-
 #include <string>
 
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
 #include "bank/db/row_versions.hpp"
+#include "bank/models/account_model.hpp"
 #include "bank/wasm/store.hpp"
 #include "bank/wasm/store_ops.hpp"
 

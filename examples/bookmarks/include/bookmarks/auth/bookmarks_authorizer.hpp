@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/session/session_auth.hpp>
-
 #include <cstdint>
 #include <memory>
+#include <morph/session/session_auth.hpp>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -84,9 +83,8 @@ inline constexpr std::size_t kMaxPrincipalBytes = 64;
     }
     for (const char ch : principal) {
         const auto byte = static_cast<unsigned char>(ch);
-        const bool ok = (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') ||
-                       (byte >= '0' && byte <= '9') || byte == '.' || byte == '_' || byte == '-' ||
-                       byte == ':';
+        const bool ok = (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') || (byte >= '0' && byte <= '9') ||
+                        byte == '.' || byte == '_' || byte == '-' || byte == ':';
         if (!ok) {
             return false;
         }
@@ -121,7 +119,7 @@ inline constexpr std::size_t kMaxPrincipalBytes = 64;
 ///        enforcing for plain-registered instances; see each hook's own doc
 ///        comment.
 class BookmarksAuthorizer : public ::morph::session::SigningAuthorizer {
-  public:
+public:
     using SigningAuthorizer::SigningAuthorizer;
 
     /// @brief Model type id of the one model a tokenless caller may execute on.
@@ -209,7 +207,7 @@ class BookmarksAuthorizer : public ::morph::session::SigningAuthorizer {
     ///                  this rung serves.
     /// @return `true`, always — see this function's own doc comment.
     [[nodiscard]] bool authorizeRegister([[maybe_unused]] const ::morph::session::Context& ctx,
-                                        [[maybe_unused]] std::string_view modelType) const override {
+                                         [[maybe_unused]] std::string_view modelType) const override {
         return true;
     }
 
@@ -254,10 +252,10 @@ class BookmarksAuthorizer : public ::morph::session::SigningAuthorizer {
     ///                       empty if none was recorded (a shared instance).
     /// @return `true` if @p ownerPrincipal is empty or matches `ctx.principal`.
     [[nodiscard]] bool authorizeInstance(const ::morph::session::Context& ctx,
-                                        [[maybe_unused]] std::string_view modelType,
-                                        [[maybe_unused]] std::string_view actionType,
-                                        [[maybe_unused]] std::uint64_t modelId,
-                                        std::string_view ownerPrincipal) const override {
+                                         [[maybe_unused]] std::string_view modelType,
+                                         [[maybe_unused]] std::string_view actionType,
+                                         [[maybe_unused]] std::uint64_t modelId,
+                                         std::string_view ownerPrincipal) const override {
         return ownerPrincipal.empty() || ownerPrincipal == ctx.principal;
     }
 };

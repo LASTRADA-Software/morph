@@ -26,12 +26,12 @@
 /// See each entity header for the member-ordering constraint that Lightweight's
 /// index-based `HasMany` resolution imposes.
 
-#include "bank/db/user_entity.hpp"
 #include "bank/db/account_entity.hpp"
-#include "bank/db/payee_entity.hpp"
-#include "bank/db/txn_entity.hpp"
+#include "bank/db/budget_entity.hpp"
 #include "bank/db/card_entity.hpp"
 #include "bank/db/loan_entity.hpp"
-#include "bank/db/payment_entity.hpp"
-#include "bank/db/budget_entity.hpp"
 #include "bank/db/notification_entity.hpp"
+#include "bank/db/payee_entity.hpp"
+#include "bank/db/payment_entity.hpp"
+#include "bank/db/txn_entity.hpp"
+#include "bank/db/user_entity.hpp"

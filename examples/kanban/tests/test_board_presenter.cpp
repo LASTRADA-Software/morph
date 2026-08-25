@@ -8,19 +8,16 @@
 // proves the presenter wires each action to the right signal and neither
 // crashes nor hangs).
 
+#include <catch2/catch_test_macros.hpp>
+#include <kanban/models/project_admin_model.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "board_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <kanban/models/project_admin_model.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-
-#include <memory>
-#include <string>
 
 namespace {
 
@@ -64,11 +61,10 @@ TEST_CASE("BoardPresenter::openBoard attaches and reports the board's empty init
 
     kanban::GetBoardResult opened;
     bool gotOpened = false;
-    QObject::connect(&presenter, &kanban::gui::BoardPresenter::boardOpened,
-                      [&](kanban::GetBoardResult result) {
-                          opened = std::move(result);
-                          gotOpened = true;
-                      });
+    QObject::connect(&presenter, &kanban::gui::BoardPresenter::boardOpened, [&](kanban::GetBoardResult result) {
+        opened = std::move(result);
+        gotOpened = true;
+    });
     presenter.openBoard(projectId);
     REQUIRE(pumpUntil([&] { return gotOpened; }));
     REQUIRE_FALSE(presenter.busy());
@@ -157,11 +153,10 @@ TEST_CASE("BoardPresenter opens a board, creates a column/swimlane/task, and rep
 
     QString movedTaskId;
     bool moved = false;
-    QObject::connect(&presenter, &kanban::gui::BoardPresenter::taskMoved,
-                      [&](QString id) {
-                          movedTaskId = std::move(id);
-                          moved = true;
-                      });
+    QObject::connect(&presenter, &kanban::gui::BoardPresenter::taskMoved, [&](QString id) {
+        movedTaskId = std::move(id);
+        moved = true;
+    });
     presenter.moveTask(taskId, col2, swimlaneId, 0, QStringLiteral("op-1"));
     REQUIRE(pumpUntil([&] { return moved || failed; }));
     REQUIRE_FALSE(presenter.busy());
@@ -202,11 +197,10 @@ TEST_CASE("BoardPresenter::addComment reports the commented task and getActivity
 
     QString commentedTaskId;
     bool commented = false;
-    QObject::connect(&presenter, &kanban::gui::BoardPresenter::commentAdded,
-                      [&](QString id) {
-                          commentedTaskId = std::move(id);
-                          commented = true;
-                      });
+    QObject::connect(&presenter, &kanban::gui::BoardPresenter::commentAdded, [&](QString id) {
+        commentedTaskId = std::move(id);
+        commented = true;
+    });
     presenter.addComment(taskId, "looking into it");
     REQUIRE(pumpUntil([&] { return commented; }));
     REQUIRE_FALSE(presenter.busy());
@@ -219,10 +213,10 @@ TEST_CASE("BoardPresenter::addComment reports the commented task and getActivity
     kanban::GetEventsSinceResult events;
     bool gotEvents = false;
     QObject::connect(&presenter, &kanban::gui::BoardPresenter::eventsReceived,
-                      [&](kanban::GetEventsSinceResult result) {
-                          events = std::move(result);
-                          gotEvents = true;
-                      });
+                     [&](kanban::GetEventsSinceResult result) {
+                         events = std::move(result);
+                         gotEvents = true;
+                     });
     presenter.getEventsSince(kanban::BoardEventId{});
     REQUIRE(pumpUntil([&] { return gotEvents; }));
     REQUIRE_FALSE(presenter.busy());
@@ -233,11 +227,10 @@ TEST_CASE("BoardPresenter::addComment reports the commented task and getActivity
     // is the correct, non-error outcome here.
     kanban::GetActivityResult activity;
     bool gotActivity = false;
-    QObject::connect(&presenter, &kanban::gui::BoardPresenter::activityUpdated,
-                      [&](kanban::GetActivityResult result) {
-                          activity = std::move(result);
-                          gotActivity = true;
-                      });
+    QObject::connect(&presenter, &kanban::gui::BoardPresenter::activityUpdated, [&](kanban::GetActivityResult result) {
+        activity = std::move(result);
+        gotActivity = true;
+    });
     presenter.getActivity();
     REQUIRE(pumpUntil([&] { return gotActivity; }));
     REQUIRE_FALSE(presenter.busy());

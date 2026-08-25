@@ -102,7 +102,8 @@ TEST_CASE("AccountModel reports errors through onError", "[account]") {
         // so morph's ActionValidator gate catches this before AccountModel::
         // execute() runs -- see docs/spec/forms/forms.md, "Security / trust
         // boundary".
-        REQUIRE_THROWS_AS(await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 99}), app.guiLoop()),
-                          morph::model::ValidationError);
+        REQUIRE_THROWS_AS(
+            await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 99}), app.guiLoop()),
+            morph::model::ValidationError);
     }
 }

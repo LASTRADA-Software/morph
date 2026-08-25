@@ -3,22 +3,22 @@
 // Tests covering issues found during codebase analysis.
 // Each section corresponds to a numbered issue in the analysis document.
 
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <functional>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
-#include <morph/offline/network_monitor.hpp>
-#include <morph/offline/offline_queue.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/strand.hpp>
-#include <morph/offline/sync_worker.hpp>
 #include <morph/core/wire.hpp>
-#include <atomic>
-#include <catch2/catch_test_macros.hpp>
-#include <chrono>
-#include <functional>
+#include <morph/offline/network_monitor.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/offline/sync_worker.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -64,7 +64,8 @@ TEST_CASE("Issue 2: attachThen on errored state does not call handler and does n
 
 // ── Issue 4: morph::exec::detail::StrandExecutor map cleaned up after queue drains ─────────────────
 
-TEST_CASE("Issue 4: morph::exec::detail::StrandExecutor works correctly after strand entries are cleaned up", "[strand][issue4]") {
+TEST_CASE("Issue 4: morph::exec::detail::StrandExecutor works correctly after strand entries are cleaned up",
+          "[strand][issue4]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::detail::StrandExecutor strand{pool};
 
@@ -125,15 +126,16 @@ TEST_CASE("Issue 5: morph::offline::NetworkMonitor probe that throws is treated 
     std::atomic<int> offlineCount{0};
     std::atomic<int> probeCallCount{0};
 
-    morph::offline::NetworkMonitor monitor{[&] {
-                               probeCallCount.fetch_add(1);
-                               if (probeCallCount.load() % 2 == 0) {
-                                   throw std::runtime_error("probe exploded");
-                               }
-                               return false;
-                           },
-                           [&] { offlineCount.fetch_add(1); }, [] {},
-                           morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 2, .onlineThreshold = 1}};
+    morph::offline::NetworkMonitor monitor{
+        [&] {
+            probeCallCount.fetch_add(1);
+            if (probeCallCount.load() % 2 == 0) {
+                throw std::runtime_error("probe exploded");
+            }
+            return false;
+        },
+        [&] { offlineCount.fetch_add(1); }, [] {},
+        morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 2, .onlineThreshold = 1}};
 
     REQUIRE(waitUntil([&] { return offlineCount.load() >= 1; }, 1s));
     REQUIRE(monitor.isOnline() == false);
@@ -145,9 +147,10 @@ TEST_CASE("Issue 5: morph::offline::NetworkMonitor probe that always throws trea
     std::atomic<int> offlineCount{0};
     std::atomic<int> onlineCount{0};
 
-    morph::offline::NetworkMonitor monitor{[]() -> bool { throw std::runtime_error("always explodes"); },
-                           [&] { offlineCount.fetch_add(1); }, [&] { onlineCount.fetch_add(1); },
-                           morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 1, .onlineThreshold = 1}};
+    morph::offline::NetworkMonitor monitor{
+        []() -> bool { throw std::runtime_error("always explodes"); }, [&] { offlineCount.fetch_add(1); },
+        [&] { onlineCount.fetch_add(1); },
+        morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 1, .onlineThreshold = 1}};
 
     REQUIRE(waitUntil([&] { return offlineCount.load() >= 1; }, 1s));
     std::this_thread::sleep_for(80ms);
@@ -172,7 +175,8 @@ TEST_CASE("Issue 6: morph::offline::NetworkMonitor stop() called from onOffline 
                 mon->stop();  // must not deadlock even from probe thread
             }
         },
-        [] {}, morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 1, .onlineThreshold = 1});
+        [] {},
+        morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 1, .onlineThreshold = 1});
     monitorPtr.store(monitor.get());
 
     REQUIRE(waitUntil([&] { return callbackFired.load(); }, 1s));
@@ -233,7 +237,8 @@ struct morph::model::ActionTraits<Iss9ActionB> {
 inline int Iss9ModelA::execute(const Iss9ActionA& act) { return act.delta * 2; }
 inline int Iss9ModelB::execute(const Iss9ActionB& act) { return act.delta * 3; }
 
-TEST_CASE("Issue 9: morph::model::detail::ActionDispatcher dispatches correctly with similar-prefix type IDs", "[registry][issue9]") {
+TEST_CASE("Issue 9: morph::model::detail::ActionDispatcher dispatches correctly with similar-prefix type IDs",
+          "[registry][issue9]") {
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<Iss9ModelA>("ISS9_Model_A");
@@ -264,7 +269,8 @@ struct Iss11BarModel {
     double val = 0.0;
 };
 
-TEST_CASE("Issue 11: morph::model::detail::IModelHolder::into throws bad_cast on wrong model type", "[model][issue11]") {
+TEST_CASE("Issue 11: morph::model::detail::IModelHolder::into throws bad_cast on wrong model type",
+          "[model][issue11]") {
     auto holder = std::make_unique<morph::model::detail::ModelHolder<Iss11FooModel>>();
     REQUIRE_NOTHROW(holder->into<Iss11FooModel>());
     REQUIRE_THROWS_AS(holder->into<Iss11BarModel>(), std::bad_cast);
@@ -404,7 +410,8 @@ TEST_CASE("Issue 10: in-flight execute after deregisterModel completes without c
 
 // ── Issue 12: morph::offline::SyncWorker — concurrent enqueue during run does not corrupt queue
 
-TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run does not corrupt queue", "[sync][issue12]") {
+TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run does not corrupt queue",
+          "[sync][issue12]") {
     morph::offline::InMemoryOfflineQueue queue;
     queue.enqueue("pre1");
     queue.enqueue("pre2");
@@ -412,10 +419,10 @@ TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run do
     std::atomic<bool> replayStarted{false};
 
     morph::offline::SyncWorker worker{queue, [&](const std::string&) {
-                          replayStarted.store(true);
-                          std::this_thread::sleep_for(30ms);
-                          return true;
-                      }};
+                                          replayStarted.store(true);
+                                          std::this_thread::sleep_for(30ms);
+                                          return true;
+                                      }};
 
     std::thread enqueuer{[&] {
         waitUntil([&] { return replayStarted.load(); });
@@ -433,7 +440,8 @@ TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run do
 
 // ── Issue 13: morph::exec::ThreadPoolExecutor drains queued tasks on shutdown ───────────────
 
-TEST_CASE("Issue 13: morph::exec::ThreadPoolExecutor processes all queued tasks before shutdown", "[executor][issue13]") {
+TEST_CASE("Issue 13: morph::exec::ThreadPoolExecutor processes all queued tasks before shutdown",
+          "[executor][issue13]") {
     std::atomic<int> count{0};
     {
         morph::exec::ThreadPoolExecutor pool{1};

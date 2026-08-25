@@ -23,14 +23,14 @@
 // the 3-arg invocation form combined with MORPH_CLIENT_ONLY's empty
 // MORPH_DETAIL_REGISTER_ACTION_LOCAL expansion.
 
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/registry.hpp>
 #include <atomic>
 #include <chrono>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>

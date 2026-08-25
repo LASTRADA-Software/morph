@@ -1,24 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "gui/presenter.hpp"
+#include <QString>
+#include <exception>
 
+#include "gui/presenter.hpp"
 #include "kanban/dto/auth_dto.hpp"
 #include "kanban/dto/project_dto.hpp"
-
-#include <QString>
-
-#include <exception>
 
 // See bookmarks::gui::BookmarkPresenter's identical guard and doc comment
 // (examples/bookmarks/gui_lib/bookmark_presenter.hpp) for why moc must never
 // see morph/core/bridge.hpp or this rung's model headers: moc is not a C++
 // front end and mis-parses their template machinery.
 #ifndef Q_MOC_RUN
-#include "kanban/models/project_admin_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "kanban/models/project_admin_model.hpp"
 #endif
 
 namespace kanban::gui {
@@ -38,7 +36,7 @@ namespace kanban::gui {
 /// unlocks rather than splitting it into a third presenter/bridge pair.
 class ProjectAdminPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -79,7 +77,7 @@ class ProjectAdminPresenter : public ::morph::ladder::gui::Presenter {
     /// @param principal The member to remove.
     void removeMember(ProjectId projectId, const QString& principal);
 
-  signals:
+signals:
     /// @brief Emitted after a successful `Login` has been *applied* — i.e.
     ///        after the token is installed, so a slot may dispatch straight
     ///        away.
@@ -109,7 +107,7 @@ class ProjectAdminPresenter : public ::morph::ladder::gui::Presenter {
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Installs @p result's token as the shared `Bridge`'s default
     ///        session, so every subsequent action from every presenter
     ///        carries it, then announces the new identity.

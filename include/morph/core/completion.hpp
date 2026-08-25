@@ -97,8 +97,7 @@ struct CompletionState {
                         try {
                             fn(savedErr);
                         } catch (...) {
-                            ::morph::log::logError(
-                                "[completion] onError handler threw; continuing with next handler");
+                            ::morph::log::logError("[completion] onError handler threw; continuing with next handler");
                         }
                     }
                 };

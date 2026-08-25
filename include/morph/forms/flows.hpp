@@ -227,9 +227,7 @@ public:
     /// that can pump an event loop (a `sendSync`-style blocking call) would
     /// otherwise deliver into a half-dead session. This is the "teardown that
     /// pumps" escape hatch docs/spec/core/callback_scope.md documents.
-    ~FlowSession() {
-        _callbacks.requestStop();
-    }
+    ~FlowSession() { _callbacks.requestStop(); }
 
     FlowSession(const FlowSession&) = delete;
     FlowSession& operator=(const FlowSession&) = delete;

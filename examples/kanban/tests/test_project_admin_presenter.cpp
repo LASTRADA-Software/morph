@@ -10,18 +10,16 @@
 // wires each action to the right signal, sets busy()/idle() correctly, and
 // neither crashes nor hangs).
 
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <morph/session/session_auth.hpp>
+#include <string>
+#include <vector>
+
 #include "project_admin_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session_auth.hpp>
-
-#include <memory>
-#include <string>
-#include <vector>
 
 namespace {
 
@@ -57,10 +55,10 @@ TEST_CASE("ProjectAdminPresenter emits projectsListed after a successful refresh
     kanban::GetMyProjectsResult listed;
     bool gotListed = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectsListed,
-                      [&](kanban::GetMyProjectsResult result) {
-                          listed = std::move(result);
-                          gotListed = true;
-                      });
+                     [&](kanban::GetMyProjectsResult result) {
+                         listed = std::move(result);
+                         gotListed = true;
+                     });
     bool failed = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::failed, [&](QString) { failed = true; });
 
@@ -83,10 +81,10 @@ TEST_CASE("ProjectAdminPresenter::createProject then refreshProjects sees the ne
     kanban::CreateProjectResult created;
     bool gotCreated = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectCreated,
-                      [&](kanban::CreateProjectResult result, QString) {
-                          created = result;
-                          gotCreated = true;
-                      });
+                     [&](kanban::CreateProjectResult result, QString) {
+                         created = result;
+                         gotCreated = true;
+                     });
     presenter.createProject("Sprint Board");
     REQUIRE(pumpUntil([&] { return gotCreated; }));
     REQUIRE_FALSE(presenter.busy());
@@ -95,10 +93,10 @@ TEST_CASE("ProjectAdminPresenter::createProject then refreshProjects sees the ne
     kanban::GetMyProjectsResult listed;
     bool gotListed = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectsListed,
-                      [&](kanban::GetMyProjectsResult result) {
-                          listed = std::move(result);
-                          gotListed = true;
-                      });
+                     [&](kanban::GetMyProjectsResult result) {
+                         listed = std::move(result);
+                         gotListed = true;
+                     });
     presenter.refreshProjects();
     REQUIRE(pumpUntil([&] { return gotListed; }));
     REQUIRE(listed.projects.size() == 1);
@@ -115,20 +113,20 @@ TEST_CASE("ProjectAdminPresenter::listRoles reports the caller as Manager right 
     kanban::CreateProjectResult created;
     bool gotCreated = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectCreated,
-                      [&](kanban::CreateProjectResult result, QString) {
-                          created = result;
-                          gotCreated = true;
-                      });
+                     [&](kanban::CreateProjectResult result, QString) {
+                         created = result;
+                         gotCreated = true;
+                     });
     presenter.createProject("Sprint Board");
     REQUIRE(pumpUntil([&] { return gotCreated; }));
 
     kanban::GetProjectRolesResult roles;
     bool gotRoles = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::rolesListed,
-                      [&](kanban::GetProjectRolesResult result) {
-                          roles = std::move(result);
-                          gotRoles = true;
-                      });
+                     [&](kanban::GetProjectRolesResult result) {
+                         roles = std::move(result);
+                         gotRoles = true;
+                     });
     presenter.listRoles(created.id);
     REQUIRE(pumpUntil([&] { return gotRoles; }));
     REQUIRE_FALSE(presenter.busy());
@@ -137,8 +135,7 @@ TEST_CASE("ProjectAdminPresenter::listRoles reports the caller as Manager right 
     CHECK(roles.roles.front().role == kanban::Role::Manager);
 }
 
-TEST_CASE("ProjectAdminPresenter::setMemberRole then removeMember round-trips a member",
-          "[kanban][gui][presenter]") {
+TEST_CASE("ProjectAdminPresenter::setMemberRole then removeMember round-trips a member", "[kanban][gui][presenter]") {
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     kanban::gui::ProjectAdminPresenter presenter{rig->bridge(0), rig->executor()};
@@ -146,10 +143,10 @@ TEST_CASE("ProjectAdminPresenter::setMemberRole then removeMember round-trips a 
     kanban::CreateProjectResult created;
     bool gotCreated = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectCreated,
-                      [&](kanban::CreateProjectResult result, QString) {
-                          created = result;
-                          gotCreated = true;
-                      });
+                     [&](kanban::CreateProjectResult result, QString) {
+                         created = result;
+                         gotCreated = true;
+                     });
     presenter.createProject("Sprint Board");
     REQUIRE(pumpUntil([&] { return gotCreated; }));
 
@@ -162,10 +159,10 @@ TEST_CASE("ProjectAdminPresenter::setMemberRole then removeMember round-trips a 
     kanban::GetProjectRolesResult roles;
     bool gotRoles = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::rolesListed,
-                      [&](kanban::GetProjectRolesResult result) {
-                          roles = std::move(result);
-                          gotRoles = true;
-                      });
+                     [&](kanban::GetProjectRolesResult result) {
+                         roles = std::move(result);
+                         gotRoles = true;
+                     });
     presenter.listRoles(created.id);
     REQUIRE(pumpUntil([&] { return gotRoles; }));
     REQUIRE(roles.roles.size() == 2);
@@ -189,8 +186,8 @@ TEST_CASE("ProjectAdminPresenter::login mints a token and installs it as the bri
     // unauthenticated bridge — login is what installs the session every
     // other action needs.
     DbFixture fixture;
-    const auto issuer = std::make_shared<morph::session::TokenIssuer>("presenter-login-secret",
-                                                                        morph::session::hmacSha256);
+    const auto issuer =
+        std::make_shared<morph::session::TokenIssuer>("presenter-login-secret", morph::session::hmacSha256);
     kanban::auth::setTokenIssuer(issuer);
     struct IssuerGuard {
         ~IssuerGuard() { kanban::auth::setTokenIssuer(nullptr); }
@@ -215,10 +212,10 @@ TEST_CASE("ProjectAdminPresenter::login mints a token and installs it as the bri
     kanban::GetMyProjectsResult listed;
     bool gotListed = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectsListed,
-                      [&](kanban::GetMyProjectsResult result) {
-                          listed = std::move(result);
-                          gotListed = true;
-                      });
+                     [&](kanban::GetMyProjectsResult result) {
+                         listed = std::move(result);
+                         gotListed = true;
+                     });
     presenter.refreshProjects();
     REQUIRE(pumpUntil([&] { return gotListed; }));
     CHECK(listed.projects.empty());
@@ -252,10 +249,10 @@ TEST_CASE("ProjectAdminPresenter::createProject: two overlapping calls each repo
     };
     std::vector<Created> created;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectCreated,
-                      [&](kanban::CreateProjectResult result, QString name) {
-                          created.push_back(Created{result.id.hasValue() ? static_cast<qlonglong>(*result.id) : -1,
-                                                     std::move(name)});
-                      });
+                     [&](kanban::CreateProjectResult result, QString name) {
+                         created.push_back(
+                             Created{result.id.hasValue() ? static_cast<qlonglong>(*result.id) : -1, std::move(name)});
+                     });
 
     // Both calls dispatched before either's completion has had any chance to
     // arrive -- exactly the "double-click" / concurrent-latency shape the

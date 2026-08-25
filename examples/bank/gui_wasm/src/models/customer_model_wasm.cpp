@@ -3,14 +3,13 @@
 // In-memory implementation of CustomerModel for the WASM build — the per-owner
 // half of what used to be one AccountModel. Mirrors src/models/customer_model.cpp.
 
-#include "bank/models/customer_model.hpp"
-
 #include <random>
 #include <string>
 
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/wasm/store.hpp"
 #include "bank/wasm/store_ops.hpp"
 

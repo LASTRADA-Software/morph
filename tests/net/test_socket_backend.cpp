@@ -213,18 +213,23 @@ TEST_CASE("SocketBackend: two clients sharing a key reach one instance over the 
 
     // Two genuinely separate clients, two sockets, one server-side directory.
     std::atomic<int> lastA{-1};
-    fromA.execute(SbBump{.id = 77, .by = 10}).then([&](const SbTotal& res) { lastA.store(res.value); }).onError([](const std::exception_ptr&) {});
+    fromA.execute(SbBump{.id = 77, .by = 10})
+        .then([&](const SbTotal& res) { lastA.store(res.value); })
+        .onError([](const std::exception_ptr&) {});
     spinUntil([&] { return lastA.load() != -1; });
     REQUIRE(lastA.load() == 10);
 
     std::atomic<int> lastB{-1};
-    fromB.execute(SbBump{.id = 77, .by = 5}).then([&](const SbTotal& res) { lastB.store(res.value); }).onError([](const std::exception_ptr&) {});
+    fromB.execute(SbBump{.id = 77, .by = 5})
+        .then([&](const SbTotal& res) { lastB.store(res.value); })
+        .onError([](const std::exception_ptr&) {});
     spinUntil([&] { return lastB.load() != -1; });
     // 15, not 5: the second client attached to the first client's instance.
     REQUIRE(lastB.load() == 15);
 
     std::atomic<int> keyCount{-1};
-    fromB.instances().then([&](const std::vector<std::int64_t>& keys) { keyCount.store(static_cast<int>(keys.size())); })
+    fromB.instances()
+        .then([&](const std::vector<std::int64_t>& keys) { keyCount.store(static_cast<int>(keys.size())); })
         .onError([](const std::exception_ptr&) {});
     spinUntil([&] { return keyCount.load() != -1; });
     REQUIRE(keyCount.load() == 1);
@@ -249,12 +254,16 @@ TEST_CASE("SocketBackend: a plain handler keeps its own instance over the wire",
     morph::bridge::BridgeHandler<SbCounterModel> alone{privBridge, &cbPool};
 
     std::atomic<int> lastShared{-1};
-    joined.execute(SbBump{.id = 88, .by = 30}).then([&](const SbTotal& res) { lastShared.store(res.value); }).onError([](const std::exception_ptr&) {});
+    joined.execute(SbBump{.id = 88, .by = 30})
+        .then([&](const SbTotal& res) { lastShared.store(res.value); })
+        .onError([](const std::exception_ptr&) {});
     spinUntil([&] { return lastShared.load() != -1; });
     REQUIRE(lastShared.load() == 30);
 
     std::atomic<int> lastPriv{-1};
-    alone.execute(SbBump{.id = 88, .by = 1}).then([&](const SbTotal& res) { lastPriv.store(res.value); }).onError([](const std::exception_ptr&) {});
+    alone.execute(SbBump{.id = 88, .by = 1})
+        .then([&](const SbTotal& res) { lastPriv.store(res.value); })
+        .onError([](const std::exception_ptr&) {});
     spinUntil([&] { return lastPriv.load() != -1; });
     // Opted out, so it registered its own instance and counts from zero.
     REQUIRE(lastPriv.load() == 1);

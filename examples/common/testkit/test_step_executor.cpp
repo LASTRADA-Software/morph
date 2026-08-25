@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <catch2/catch_test_macros.hpp>
-#include <morph/core/executor.hpp>
 #include <functional>
+#include <morph/core/executor.hpp>
 #include <stdexcept>
 #include <string>
 #include <vector>

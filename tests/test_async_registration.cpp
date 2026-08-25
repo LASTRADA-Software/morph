@@ -141,7 +141,9 @@ template <>
 struct morph::model::ActionTraits<ARThrowingKeyTouch> {
     using Result = int;
     static constexpr std::string_view typeId() { return "AR_ThrowingKeyTouch"; }
-    static std::string toJson(const ARThrowingKeyTouch& act) { return R"({"amount":)" + std::to_string(act.amount) + "}"; }
+    static std::string toJson(const ARThrowingKeyTouch& act) {
+        return R"({"amount":)" + std::to_string(act.amount) + "}";
+    }
     static ARThrowingKeyTouch fromJson(std::string_view /*json*/) { return {}; }
     static std::string resultToJson(const int& res) { return std::to_string(res); }
     static int resultFromJson(std::string_view text) { return std::stoi(std::string{text}); }
@@ -153,9 +155,7 @@ template <>
 struct morph::model::ActionKeyTraits<ARThrowingKeyTouch> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
-    static std::string key(const ARThrowingKeyTouch&) {
-        throw std::runtime_error("key extraction failed");
-    }
+    static std::string key(const ARThrowingKeyTouch&) { throw std::runtime_error("key extraction failed"); }
 };
 
 BRIDGE_MODEL_KEY(ARKeyedModel, ARTouch, &ARTouch::id);
@@ -212,8 +212,8 @@ public:
         _models.erase(mid.v);
     }
     morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId mid,
-                                                             morph::backend::detail::ActionCall call,
-                                                             morph::exec::IExecutor* cbExec) override {
+                                                            morph::backend::detail::ActionCall call,
+                                                            morph::exec::IExecutor* cbExec) override {
         auto state = std::make_shared<morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         morph::async::Completion<std::shared_ptr<void>> comp{state, cbExec};
         std::scoped_lock const lock{_regMtx};
@@ -433,8 +433,8 @@ public:
     }
     void deregisterModel(morph::exec::detail::ModelId mid) override { _target->deregisterModel(mid); }
     morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId mid,
-                                                             morph::backend::detail::ActionCall call,
-                                                             morph::exec::IExecutor* cbExec) override {
+                                                            morph::backend::detail::ActionCall call,
+                                                            morph::exec::IExecutor* cbExec) override {
         return _target->execute(mid, std::move(call), cbExec);
     }
     void notifyBackendChanged() override { _target->notifyBackendChanged(); }
@@ -442,7 +442,8 @@ public:
     void setReconnectHandler(const std::function<void()>& handler) override { _target->setReconnectHandler(handler); }
     bool registerModelAsync(const std::string& typeId,
                             std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                            std::string_view contextKey, std::function<void(morph::exec::detail::ModelId)> onRegistered,
+                            std::string_view contextKey,
+                            std::function<void(morph::exec::detail::ModelId)> onRegistered,
                             std::function<void(const std::string&)> onError) override {
         return _target->registerModelAsync(typeId, std::move(factory), contextKey, std::move(onRegistered),
                                            std::move(onError));
@@ -453,7 +454,7 @@ public:
                                   std::function<void(morph::exec::detail::ModelId)> onRegistered,
                                   std::function<void(const std::string&)> onError) override {
         return _target->registerModelSharedAsync(typeId, std::move(factory), identity, std::move(onRegistered),
-                                                  std::move(onError));
+                                                 std::move(onError));
     }
     bool attachModelAsync(const std::string& typeId,
                           std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
@@ -536,7 +537,7 @@ private:
 using SyncExec = morph::testing::InlineExecutor;
 
 TEST_CASE("Bridge::registerHandler: uses the async path when the backend offers one; binding starts unbound",
-         "[bridge][registration][issue26]") {
+          "[bridge][registration][issue26]") {
     auto backend = std::make_unique<AsyncRegisterBackend>();
     auto* rawBackend = backend.get();
     morph::bridge::Bridge bridge{std::move(backend)};
@@ -556,7 +557,7 @@ TEST_CASE("Bridge::registerHandler: uses the async path when the backend offers 
 }
 
 TEST_CASE("Bridge::registerHandler: async execute works once the deferred registration completes",
-         "[bridge][registration][issue26]") {
+          "[bridge][registration][issue26]") {
     SyncExec cbExec;
     auto backend = std::make_unique<AsyncRegisterBackend>();
     auto* rawBackend = backend.get();
@@ -573,7 +574,7 @@ TEST_CASE("Bridge::registerHandler: async execute works once the deferred regist
 }
 
 TEST_CASE("Bridge::registerHandler: onError leaves the binding unbound (no crash, logged)",
-         "[bridge][registration][issue26]") {
+          "[bridge][registration][issue26]") {
     auto backend = std::make_unique<AsyncRegisterBackend>();
     auto* rawBackend = backend.get();
     morph::bridge::Bridge bridge{std::move(backend)};
@@ -589,7 +590,7 @@ TEST_CASE("Bridge::registerHandler: onError leaves the binding unbound (no crash
 }
 
 TEST_CASE("Bridge::registerHandler: a stale async reply after switchBackend() does not clobber the new id",
-         "[bridge][registration][issue26]") {
+          "[bridge][registration][issue26]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
 
@@ -708,7 +709,7 @@ TEST_CASE(
 }
 
 TEST_CASE("Bridge::registerHandler: an async reply arriving after ~Bridge() is a safe no-op",
-         "[bridge][registration][issue26]") {
+          "[bridge][registration][issue26]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<morph::backend::LocalBackend>(pool));
 
@@ -731,7 +732,7 @@ TEST_CASE("Bridge::registerHandler: an async reply arriving after ~Bridge() is a
 }
 
 TEST_CASE("Bridge::registerHandler: an async reply arriving after the binding itself is dropped is a safe no-op",
-         "[bridge][registration][issue26]") {
+          "[bridge][registration][issue26]") {
     // Distinct from the ~Bridge() case above: here the Bridge and backend are
     // both still alive, but the caller's own shared_ptr<HandlerBinding> --
     // the only strong owner, since Bridge tracks handlers via weak_ptr -- is
@@ -786,7 +787,7 @@ TEST_CASE(
 }
 
 TEST_CASE("Bridge::registerHandler: falls back to the synchronous path for a backend with no async support",
-         "[bridge][registration][issue26]") {
+          "[bridge][registration][issue26]") {
     // LocalBackend does not override registerModelAsync, so the default
     // (returns false) applies and registerHandler falls back to
     // registerModelWithContext -- binding is bound immediately, exactly as
@@ -809,7 +810,7 @@ TEST_CASE("Bridge::registerHandler: falls back to the synchronous path for a bac
 // seam to await that settlement instead of failing fast or polling by hand.
 
 TEST_CASE("Bridge::whenBound: resolves immediately true for an already-bound handler",
-         "[bridge][registration][issue60]") {
+          "[bridge][registration][issue60]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     SyncExec cbExec;
@@ -823,7 +824,7 @@ TEST_CASE("Bridge::whenBound: resolves immediately true for an already-bound han
 }
 
 TEST_CASE("Bridge::whenBound: resolves false immediately when nothing is in flight and the handler is unbound",
-         "[bridge][registration][issue60]") {
+          "[bridge][registration][issue60]") {
     // A binding that was never handed to registerHandler at all -- nothing is
     // registering, so there is nothing to wait for.
     morph::exec::ThreadPoolExecutor pool{2};
@@ -837,15 +838,15 @@ TEST_CASE("Bridge::whenBound: resolves false immediately when nothing is in flig
     morph::testing::InlineExecutor exec;
     bool sawFalse = false;
     bool errored = false;
-    bridge.whenBound(binding, &exec)
-        .then([&](bool ok) { sawFalse = !ok; })
-        .onError([&](const std::exception_ptr&) { errored = true; });
+    bridge.whenBound(binding, &exec).then([&](bool ok) { sawFalse = !ok; }).onError([&](const std::exception_ptr&) {
+        errored = true;
+    });
     REQUIRE(sawFalse);
     REQUIRE_FALSE(errored);
 }
 
 TEST_CASE("BridgeHandler::whenBound: fires once the deferred async registration completes",
-         "[bridge][registration][issue60]") {
+          "[bridge][registration][issue60]") {
     SyncExec cbExec;
     auto backend = std::make_unique<AsyncRegisterBackend>();
     auto* rawBackend = backend.get();
@@ -880,7 +881,7 @@ TEST_CASE("BridgeHandler::whenBound: fires once the deferred async registration 
 }
 
 TEST_CASE("BridgeHandler::whenBound: delivers the registration failure via onError",
-         "[bridge][registration][issue60]") {
+          "[bridge][registration][issue60]") {
     SyncExec cbExec;
     auto backend = std::make_unique<AsyncRegisterBackend>();
     auto* rawBackend = backend.get();
@@ -900,7 +901,7 @@ TEST_CASE("BridgeHandler::whenBound: delivers the registration failure via onErr
 }
 
 TEST_CASE("Bridge::whenBound: multiple waiters on the same in-flight registration all resolve",
-         "[bridge][registration][issue60]") {
+          "[bridge][registration][issue60]") {
     SyncExec cbExec;
     auto backend = std::make_unique<AsyncRegisterBackend>();
     auto* rawBackend = backend.get();
@@ -972,10 +973,9 @@ TEST_CASE("Bridge::assignHandlerPrimary: async promotion failure leaves the bind
     morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
 
     std::atomic<bool> done{false};
-    handler.execute(ARCreate{.initial = 3}).then([&](ARCreated) { done.store(true); }).onError([&](
-                                                                                                    const std::exception_ptr&) {
-        done.store(true);
-    });
+    handler.execute(ARCreate{.initial = 3})
+        .then([&](ARCreated) { done.store(true); })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
     REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
     REQUIRE(rawBackend->pendingCount() == 1);
 
@@ -983,9 +983,8 @@ TEST_CASE("Bridge::assignHandlerPrimary: async promotion failure leaves the bind
     CHECK_FALSE(handler.primary().has_value());
 }
 
-TEST_CASE(
-    "Bridge::assignHandlerPrimary: a stale async reply from a backend that is no longer current is ignored",
-    "[bridge][registration][issue67]") {
+TEST_CASE("Bridge::assignHandlerPrimary: a stale async reply from a backend that is no longer current is ignored",
+          "[bridge][registration][issue67]") {
     // Mirrors registerHandlerImpl's own "stale reply after switchBackend()"
     // test above: the async promotion is still pending on the *old* backend
     // when switchBackend() moves the bridge to a new one; the eventual reply
@@ -999,10 +998,9 @@ TEST_CASE(
     morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
 
     std::atomic<bool> done{false};
-    handler.execute(ARCreate{.initial = 4}).then([&](ARCreated) { done.store(true); }).onError([&](
-                                                                                                    const std::exception_ptr&) {
-        done.store(true);
-    });
+    handler.execute(ARCreate{.initial = 4})
+        .then([&](ARCreated) { done.store(true); })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
     REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
     REQUIRE(asyncBackend->pendingCount() == 1);
     CHECK_FALSE(handler.primary().has_value());
@@ -1018,9 +1016,8 @@ TEST_CASE(
     CHECK_FALSE(handler.primary().has_value());
 }
 
-TEST_CASE(
-    "Bridge::assignHandlerPrimary: an async reply for an already-promoted binding does not overwrite it",
-    "[bridge][registration][issue67]") {
+TEST_CASE("Bridge::assignHandlerPrimary: an async reply for an already-promoted binding does not overwrite it",
+          "[bridge][registration][issue67]") {
     // A binding whose primary is already set (by a concurrent
     // attach/assign that raced ahead of this async reply, or simply already
     // promoted) must not be overwritten -- the "if (!strongBinding->primary.
@@ -1083,9 +1080,8 @@ TEST_CASE("Bridge::assignHandlerPrimary: a never-attached binding (currentId sti
     CHECK(binding->primary.empty());
 }
 
-TEST_CASE(
-    "Bridge::assignHandlerPrimary: a stale async reply after the binding itself is dropped is a safe no-op",
-    "[bridge][registration][issue67]") {
+TEST_CASE("Bridge::assignHandlerPrimary: a stale async reply after the binding itself is dropped is a safe no-op",
+          "[bridge][registration][issue67]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto backend = std::make_unique<AsyncAssignPrimaryBackend>(pool);
     auto* rawBackend = backend.get();
@@ -1095,10 +1091,9 @@ TEST_CASE(
     {
         morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
         std::atomic<bool> done{false};
-        handler.execute(ARCreate{.initial = 1}).then([&](ARCreated) { done.store(true); }).onError([&](
-                                                                                                        const std::exception_ptr&) {
-            done.store(true);
-        });
+        handler.execute(ARCreate{.initial = 1})
+            .then([&](ARCreated) { done.store(true); })
+            .onError([&](const std::exception_ptr&) { done.store(true); });
         REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
         REQUIRE(rawBackend->pendingCount() == 1);
     }  // handler (and its binding, held only weakly by the bridge) drops out of scope here.
@@ -1108,9 +1103,8 @@ TEST_CASE(
     REQUIRE_NOTHROW(rawBackend->completeNext());
 }
 
-TEST_CASE(
-    "Bridge::assignHandlerPrimary: an async reply arriving after ~Bridge() is a safe no-op",
-    "[bridge][registration][issue67]") {
+TEST_CASE("Bridge::assignHandlerPrimary: an async reply arriving after ~Bridge() is a safe no-op",
+          "[bridge][registration][issue67]") {
     morph::exec::ThreadPoolExecutor pool{2};
     // Co-owned via shared_ptr (installed through the switchBackend(shared_ptr)
     // overload, before any handler exists to be re-registered by it) so the
@@ -1122,13 +1116,12 @@ TEST_CASE(
     bridge->switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(rawBackend));
     SyncExec cbExec;
 
-    auto handler = std::make_unique<morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared>>(*bridge,
-                                                                                                              &cbExec);
+    auto handler =
+        std::make_unique<morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared>>(*bridge, &cbExec);
     std::atomic<bool> done{false};
-    handler->execute(ARCreate{.initial = 9}).then([&](ARCreated) { done.store(true); }).onError([&](
-                                                                                                     const std::exception_ptr&) {
-        done.store(true);
-    });
+    handler->execute(ARCreate{.initial = 9})
+        .then([&](ARCreated) { done.store(true); })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
     REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
     REQUIRE(rawBackend->pendingCount() == 1);
 
@@ -1813,8 +1806,8 @@ TEST_CASE("attachHandlerAsync's out-of-frame success callback is a genuine no-op
         weakBinding = binding;
 
         std::atomic<bool> onDoneFired{false};
-        bridge.template attachHandlerAsync<ARKeyedModel>(binding, "13",
-                                                         [&onDoneFired](std::exception_ptr) { onDoneFired.store(true); });
+        bridge.template attachHandlerAsync<ARKeyedModel>(
+            binding, "13", [&onDoneFired](std::exception_ptr) { onDoneFired.store(true); });
         REQUIRE(rawBackend->pendingCount() == 1);
         // `binding` (the only remaining strong reference, now that onDone
         // captures none) goes out of scope at the end of this block.

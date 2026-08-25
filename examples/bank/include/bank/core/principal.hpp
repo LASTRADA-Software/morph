@@ -2,7 +2,6 @@
 #pragma once
 
 #include <morph/session/session.hpp>
-
 #include <string>
 
 /// @file

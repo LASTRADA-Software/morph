@@ -52,8 +52,8 @@ void AccountController::refresh() {
                     }
                 }
             }
-            _totalBalance = (sameCurrency && _openCount > 0) ? fmt::money(total, currency)
-                                                             : QString::number(_openCount);
+            _totalBalance =
+                (sameCurrency && _openCount > 0) ? fmt::money(total, currency) : QString::number(_openCount);
             emit accountsChanged();
         })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
@@ -61,8 +61,7 @@ void AccountController::refresh() {
 
 void AccountController::openAccount(int kind, int currency, const QString& overdraft) {
     const auto minor = overdraft.trimmed().isEmpty() ? 0 : fmt::parseMinor(overdraft).value_or(0);
-    _model
-        .execute(bank::dto::OpenAccount{.kind = kind, .currency = currency, .overdraftMinor = minor})
+    _model.execute(bank::dto::OpenAccount{.kind = kind, .currency = currency, .overdraftMinor = minor})
         .then([this](bank::dto::AccountInfo) { refresh(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "kanban/core/types.hpp"
-#include "kanban/core/errors.hpp"
-
 #include <catch2/catch_test_macros.hpp>
+
+#include "kanban/core/errors.hpp"
+#include "kanban/core/types.hpp"
 
 TEST_CASE("ProjectId default-constructs empty and engages via explicit int64_t", "[kanban][types]") {
     kanban::ProjectId empty;

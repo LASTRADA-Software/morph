@@ -5,7 +5,6 @@
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlMigration.hpp>
 #include <Lightweight/SqlSchema.hpp>
-
 #include <cstdlib>
 #include <string>
 
@@ -27,7 +26,7 @@ namespace morph::ladder::testkit {
 /// ...)`'s usage in Lightweight's own suite) so every test starts from a
 /// clean, real schema on the same real connection.
 class DbFixture {
-  public:
+public:
     DbFixture() {
         ensureConnectionConfigured();
         ::Lightweight::SqlStatement stmt;
@@ -41,7 +40,7 @@ class DbFixture {
     DbFixture& operator=(DbFixture&&) = delete;
     ~DbFixture() = default;
 
-  public:
+public:
     /// @brief Pure decision logic behind `ensureConnectionConfigured()`,
     ///        factored out so it is directly unit-testable: that function
     ///        applies its result behind a `static const` guard that runs
@@ -69,7 +68,7 @@ class DbFixture {
         return "DRIVER=SQLite3;Database=morph_ladder_test.db;Timeout=5000";
     }
 
-  private:
+private:
     /// @brief Points Lightweight's default connection at the connection
     ///        string `computeConnectionString` computes, exactly once per
     ///        process. All the interesting logic (env value set vs. not)

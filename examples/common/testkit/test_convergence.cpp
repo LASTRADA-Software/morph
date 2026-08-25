@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "testkit/convergence.hpp"
-
 #include <catch2/catch_test_macros.hpp>
-
 #include <string>
 #include <vector>
+
+#include "testkit/convergence.hpp"
 
 TEST_CASE("assertConverged succeeds once every fingerprint agrees", "[testkit][convergence]") {
     std::vector<std::string> fingerprints{"a", "a", "a"};
@@ -17,7 +16,8 @@ TEST_CASE("assertConverged succeeds once every fingerprint agrees", "[testkit][c
     CHECK(calls == 1);
 }
 
-TEST_CASE("pollUntilConverged retries until fingerprints agree, then gives up after maxAttempts", "[testkit][convergence]") {
+TEST_CASE("pollUntilConverged retries until fingerprints agree, then gives up after maxAttempts",
+          "[testkit][convergence]") {
     int calls = 0;
     auto poll = [&]() -> std::vector<std::string> {
         ++calls;

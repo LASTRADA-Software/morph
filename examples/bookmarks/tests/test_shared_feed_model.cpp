@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <catch2/catch_test_macros.hpp>
+#include <morph/session/session.hpp>
+
 #include "bookmarks/models/bookmark_model.hpp"
 #include "bookmarks/models/shared_feed_model.hpp"
 #include "testkit/db_fixture.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <morph/session/session.hpp>
 
 using morph::ladder::testkit::DbFixture;
 
@@ -26,10 +26,10 @@ namespace {
 }
 
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -37,7 +37,7 @@ class ScopedPrincipal {
 /// @brief A `CreateBookmark` for @p url with the given @p visibility. See
 ///        `contextFor` for why this is not a designated initializer.
 [[nodiscard]] bookmarks::CreateBookmark makeCreate(std::string url,
-                                                    bookmarks::Visibility visibility = bookmarks::Visibility::Private) {
+                                                   bookmarks::Visibility visibility = bookmarks::Visibility::Private) {
     bookmarks::CreateBookmark action;
     action.url = std::move(url);
     action.visibility = visibility;
@@ -46,8 +46,7 @@ class ScopedPrincipal {
 
 }  // namespace
 
-TEST_CASE("ListSharedFeed returns every user's shared bookmarks, never a private one",
-          "[bookmarks][model]") {
+TEST_CASE("ListSharedFeed returns every user's shared bookmarks, never a private one", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel bookmarkModel;
     bookmarks::SharedFeedModel feedModel;

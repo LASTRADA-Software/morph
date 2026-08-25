@@ -74,8 +74,9 @@ TEST_CASE("Bridge::setDefaultSession's token reaches the register envelope so au
     morph::bridge::BridgeHandler<RegSessModel> handler{bridge, &cbExec};
 
     std::atomic<int> result{-1};
-    handler.execute(RegSessAction{41}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
-    });
+    handler.execute(RegSessAction{41})
+        .then([&](int val) { result.store(val); })
+        .onError([](const std::exception_ptr&) {});
 
     for (int idx = 0; idx < 50 && result.load() == -1; ++idx) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));

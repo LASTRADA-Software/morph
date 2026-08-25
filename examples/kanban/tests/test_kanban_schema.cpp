@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
+#include <catch2/catch_test_macros.hpp>
+
 #include "kanban/db/database.hpp"
 #include "kanban/db/kanban_entity.hpp"
 #include "kanban/dto/attachment_dto.hpp"
 #include "kanban/dto/rule_dto.hpp"
-
 #include "testkit/db_fixture.hpp"
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <Lightweight/DataMapper/Pool.hpp>
-
-#include <catch2/catch_test_macros.hpp>
 
 using morph::ladder::testkit::DbFixture;
 
@@ -19,9 +17,8 @@ TEST_CASE("The kanban schema creates all eleven tables", "[kanban][schema]") {
     // A query against each table must not throw -- proves the table exists
     // and is reachable through Lightweight's ODBC connection, the same
     // smoke-test shape bookmarks'/polls' own schema tests use.
-    for (const auto* table :
-         {"projects", "project_has_roles", "board_columns", "swimlanes", "tasks", "comments", "board_applied_ops",
-          "board_events", "rules", "task_tags", "attachments"}) {
+    for (const auto* table : {"projects", "project_has_roles", "board_columns", "swimlanes", "tasks", "comments",
+                              "board_applied_ops", "board_events", "rules", "task_tags", "attachments"}) {
         ::Lightweight::SqlStatement stmt{mapper->Connection()};
         REQUIRE_NOTHROW(stmt.ExecuteDirect(std::string{"SELECT COUNT(*) FROM "} + table));
     }
@@ -148,16 +145,16 @@ TEST_CASE("CreateRule/GetRules/DeleteRule validate() and enum string round-trips
     // DTO-only compile/behavior proof for this task -- CreateRule/GetRules/
     // DeleteRule's actual model-level execute() is a later task's job (rule
     // evaluation), not this one.
-    kanban::CreateRule createRule{
-        .projectId = kanban::ProjectId{1}, .triggerColumnId = kanban::ColumnId{2},
-        .mutationType = kanban::RuleMutationType::AddTag, .mutationValue = "urgent"};
+    kanban::CreateRule createRule{.projectId = kanban::ProjectId{1},
+                                  .triggerColumnId = kanban::ColumnId{2},
+                                  .mutationType = kanban::RuleMutationType::AddTag,
+                                  .mutationValue = "urgent"};
     CHECK(createRule.validate());
 
     kanban::CreateRule missingColumn{.projectId = kanban::ProjectId{1}, .mutationValue = "urgent"};
     CHECK_FALSE(missingColumn.validate());
 
-    kanban::CreateRule emptyValue{
-        .projectId = kanban::ProjectId{1}, .triggerColumnId = kanban::ColumnId{2}};
+    kanban::CreateRule emptyValue{.projectId = kanban::ProjectId{1}, .triggerColumnId = kanban::ColumnId{2}};
     CHECK_FALSE(emptyValue.validate());
 
     kanban::GetRules getRules{.projectId = kanban::ProjectId{1}};
@@ -178,9 +175,10 @@ TEST_CASE("CreateRule/GetRules/DeleteRule validate() and enum string round-trips
     CHECK(kanban::ruleTriggerEventFromString("TaskMovedToColumn") == kanban::RuleTriggerEvent::TaskMovedToColumn);
 
     kanban::GetRulesResult result;
-    result.rules.push_back(kanban::RuleView{
-        .id = kanban::RuleId{7}, .triggerColumnId = kanban::ColumnId{2},
-        .mutationType = kanban::RuleMutationType::AddTag, .mutationValue = "urgent"});
+    result.rules.push_back(kanban::RuleView{.id = kanban::RuleId{7},
+                                            .triggerColumnId = kanban::ColumnId{2},
+                                            .mutationType = kanban::RuleMutationType::AddTag,
+                                            .mutationValue = "urgent"});
     CHECK(result.rules.size() == 1);
 
     kanban::CreateRuleResult createResult{.ruleId = kanban::RuleId{7}};
@@ -284,63 +282,63 @@ TEST_CASE("AttachmentRecord has no relation-typed member -- Update() must compil
 
 TEST_CASE("AddAttachment/GetAttachments/RemoveAttachment validate()", "[kanban][schema]") {
     kanban::AddAttachment add{.taskId = kanban::TaskId{1},
-                               .filename = "report.pdf",
-                               .contentType = "application/pdf",
-                               .sizeBytes = 1024,
-                               .storageKey = "abc123"};
+                              .filename = "report.pdf",
+                              .contentType = "application/pdf",
+                              .sizeBytes = 1024,
+                              .storageKey = "abc123"};
     CHECK(add.validate());
     CHECK_FALSE(kanban::AddAttachment{}.validate());
     CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
-                                        .filename = "",
-                                        .contentType = "application/pdf",
-                                        .sizeBytes = 1024,
-                                        .storageKey = "abc123"})
+                                       .filename = "",
+                                       .contentType = "application/pdf",
+                                       .sizeBytes = 1024,
+                                       .storageKey = "abc123"})
                     .validate());
     CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
-                                        .filename = "report.pdf",
-                                        .contentType = "",
-                                        .sizeBytes = 1024,
-                                        .storageKey = "abc123"})
+                                       .filename = "report.pdf",
+                                       .contentType = "",
+                                       .sizeBytes = 1024,
+                                       .storageKey = "abc123"})
                     .validate());
     CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
-                                        .filename = "report.pdf",
-                                        .contentType = "application/pdf",
-                                        .sizeBytes = -1,
-                                        .storageKey = "abc123"})
+                                       .filename = "report.pdf",
+                                       .contentType = "application/pdf",
+                                       .sizeBytes = -1,
+                                       .storageKey = "abc123"})
                     .validate());
     CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
-                                        .filename = "report.pdf",
-                                        .contentType = "application/pdf",
-                                        .sizeBytes = 1024,
-                                        .storageKey = ""})
+                                       .filename = "report.pdf",
+                                       .contentType = "application/pdf",
+                                       .sizeBytes = 1024,
+                                       .storageKey = ""})
                     .validate());
     // Task 16 review finding: a `storageKey`/`filename`/`contentType` that fits
     // in memory but overflows its bounded SqlAnsiString column must be
     // rejected here -- otherwise it silently truncates on write (mirrors
     // CreateColumn's/CreateTask's own bounded-name over-length checks above).
     CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
-                                        .filename = std::string(kanban::kMaxAttachmentFilenameBytes + 1, 'x'),
-                                        .contentType = "application/pdf",
-                                        .sizeBytes = 1024,
-                                        .storageKey = "abc123"})
+                                       .filename = std::string(kanban::kMaxAttachmentFilenameBytes + 1, 'x'),
+                                       .contentType = "application/pdf",
+                                       .sizeBytes = 1024,
+                                       .storageKey = "abc123"})
                     .validate());
     CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
-                                        .filename = "report.pdf",
-                                        .contentType = std::string(kanban::kMaxAttachmentContentTypeBytes + 1, 'x'),
-                                        .sizeBytes = 1024,
-                                        .storageKey = "abc123"})
+                                       .filename = "report.pdf",
+                                       .contentType = std::string(kanban::kMaxAttachmentContentTypeBytes + 1, 'x'),
+                                       .sizeBytes = 1024,
+                                       .storageKey = "abc123"})
                     .validate());
     CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
-                                        .filename = "report.pdf",
-                                        .contentType = "application/pdf",
-                                        .sizeBytes = 1024,
-                                        .storageKey = std::string(kanban::kMaxAttachmentStorageKeyBytes + 1, 'x')})
+                                       .filename = "report.pdf",
+                                       .contentType = "application/pdf",
+                                       .sizeBytes = 1024,
+                                       .storageKey = std::string(kanban::kMaxAttachmentStorageKeyBytes + 1, 'x')})
                     .validate());
     CHECK((kanban::AddAttachment{.taskId = kanban::TaskId{1},
-                                  .filename = std::string(kanban::kMaxAttachmentFilenameBytes, 'x'),
-                                  .contentType = std::string(kanban::kMaxAttachmentContentTypeBytes, 'x'),
-                                  .sizeBytes = 1024,
-                                  .storageKey = std::string(kanban::kMaxAttachmentStorageKeyBytes, 'x')})
+                                 .filename = std::string(kanban::kMaxAttachmentFilenameBytes, 'x'),
+                                 .contentType = std::string(kanban::kMaxAttachmentContentTypeBytes, 'x'),
+                                 .sizeBytes = 1024,
+                                 .storageKey = std::string(kanban::kMaxAttachmentStorageKeyBytes, 'x')})
               .validate());
 
     kanban::GetAttachments getAttachments{.taskId = kanban::TaskId{1}};

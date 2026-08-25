@@ -230,7 +230,8 @@ public:
     /// @return `true` always — this backend has an async path (`false` is never returned).
     bool registerModelAsync(const std::string& typeId,
                             std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-                            std::string_view contextKey, std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                            std::string_view contextKey,
+                            std::function<void(::morph::exec::detail::ModelId)> onRegistered,
                             std::function<void(const std::string&)> onError) override;
 
     /// @brief Sends a shared (register-or-attach) `register` and blocks for the reply.

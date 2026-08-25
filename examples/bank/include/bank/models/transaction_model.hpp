@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
+#include <morph/core/registry.hpp>
 
 #include "bank/db/db_model.hpp"
 #include "bank/dto/transaction_dto.hpp"

@@ -4,17 +4,15 @@
 // executor) and the per-domain controllers, exposes them to QML as context
 // properties, and loads the QML front-end.
 
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
-#include <QVariantMap>
-
-#include <QElapsedTimer>
-#include <QEventLoop>
 #include <QThread>
-
+#include <QVariantMap>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -111,10 +109,8 @@ int main(int argc, char* argv[]) {
 
         const QByteArray seedUser = qgetenv("BANK_SEED_USER");
         const QByteArray seedPass = qgetenv("BANK_SEED_PASS");
-        appController.registerUser(seedUser.isEmpty() ? QStringLiteral("gui-demo")
-                                                      : QString::fromUtf8(seedUser),
-                                   seedPass.isEmpty() ? QStringLiteral("demo1234")
-                                                      : QString::fromUtf8(seedPass),
+        appController.registerUser(seedUser.isEmpty() ? QStringLiteral("gui-demo") : QString::fromUtf8(seedUser),
+                                   seedPass.isEmpty() ? QStringLiteral("demo1234") : QString::fromUtf8(seedPass),
                                    QStringLiteral("Demo User"));
         pump(600);
         accountController.openAccount(0, 0, "500");

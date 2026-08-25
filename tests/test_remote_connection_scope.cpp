@@ -178,7 +178,7 @@ static CsEnv& csEnv() {
                 if (!CsRaceModel::slowFactoryTaken.exchange(true)) {
                     std::this_thread::sleep_for(std::chrono::milliseconds{200});
                 }
-                return std::make_unique<morph::model::detail::ModelHolder<CsRaceModel> >();
+                return std::make_unique<morph::model::detail::ModelHolder<CsRaceModel>>();
             });
         env2.dispatcher.registerAction<CsRaceModel, CsSquareAction>("CS_RaceModel", "CS_SquareAction");
         return env2;
@@ -319,8 +319,7 @@ TEST_CASE(
     auto cidB = server->openConnection();
 
     WaitReply regA;
-    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regA),
-                   cidA);
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regA), cidA);
     REQUIRE(regA.await());
     REQUIRE(regA.env.kind == "ok");
     auto modelId = regA.env.modelId;
@@ -329,8 +328,7 @@ TEST_CASE(
     // the instance, exactly the case a single-owner ModelId->ConnectionId map
     // would misattribute the instance to.
     WaitReply regB;
-    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regB),
-                   cidB);
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regB), cidB);
     REQUIRE(regB.await());
     REQUIRE(regB.env.modelId == modelId);
 
@@ -387,8 +385,7 @@ TEST_CASE(
     // A creates the shared instance and keeps a live reference to it, so the
     // directory entry B is about to attach to still exists.
     WaitReply regA;
-    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regA),
-                   cidA);
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regA), cidA);
     REQUIRE(regA.await());
     REQUIRE(regA.env.kind == "ok");
     auto modelId = regA.env.modelId;
@@ -674,7 +671,8 @@ TEST_CASE("morph::backend::RemoteServer: instances lists live shared keys",
     REQUIRE(regSeven.env.kind == "ok");
 
     WaitReply regNine;
-    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "9")), std::ref(regNine), cid);
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "9")), std::ref(regNine),
+                   cid);
     REQUIRE(regNine.await());
     REQUIRE(regNine.env.kind == "ok");
 
@@ -800,7 +798,6 @@ TEST_CASE("morph::backend::RemoteServer: assign files a live instance under a ke
                    cid);
     REQUIRE(attached.await());
     REQUIRE(attached.env.modelId == anon.env.modelId);
-
 }
 
 TEST_CASE("morph::backend::RemoteServer: assign never displaces the incumbent holder of a key",
@@ -828,14 +825,16 @@ TEST_CASE("morph::backend::RemoteServer: assign never displaces the incumbent ho
     REQUIRE(clash.env.kind == "ok");
 
     WaitReply again;
-    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "200")), std::ref(again), cid);
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "200")), std::ref(again),
+                   cid);
     REQUIRE(again.await());
     REQUIRE(again.env.modelId == incumbent.env.modelId);
 }
 
-TEST_CASE("morph::backend::RemoteServer: assign with an empty primary or an unregistered modelId is a silent "
-          "no-op, still reporting \"ok\"",
-          "[remote][connection-scope][shared-instances]") {
+TEST_CASE(
+    "morph::backend::RemoteServer: assign with an empty primary or an unregistered modelId is a silent "
+    "no-op, still reporting \"ok\"",
+    "[remote][connection-scope][shared-instances]") {
     // applyAssignLocked's own early-return guard (env.primary.empty() ||
     // !_models.contains(mid)) never actually fires in any of this file's
     // other assign tests -- every one of them assigns a real, just-created
@@ -879,9 +878,10 @@ TEST_CASE("morph::backend::RemoteServer: assign with an empty primary or an unre
     REQUIRE(attached.env.modelId != anon.env.modelId);
 }
 
-TEST_CASE("morph::backend::RemoteServer: assign stamps the caller's authenticated principal, not just the "
-          "unauthenticated-empty case",
-          "[remote][connection-scope][shared-instances][auth]") {
+TEST_CASE(
+    "morph::backend::RemoteServer: assign stamps the caller's authenticated principal, not just the "
+    "unauthenticated-empty case",
+    "[remote][connection-scope][shared-instances][auth]") {
     // "assign"'s authenticate() call has two branches: the caller is
     // unauthenticated (env.session.principal cleared -- already covered by
     // every other assign test in this file, none of which configure an
@@ -936,8 +936,8 @@ TEST_CASE("morph::backend::RemoteServer: the new kinds reject an empty typeId",
     auto& env = csEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
-    for (const auto& request : {morph::wire::makeAttach("", "1"), morph::wire::makeAssign("", "1", 7),
-                                morph::wire::makeInstances("")}) {
+    for (const auto& request :
+         {morph::wire::makeAttach("", "1"), morph::wire::makeAssign("", "1", 7), morph::wire::makeInstances("")}) {
         WaitReply reply;
         server->handle(morph::wire::encode(request), std::ref(reply));
         REQUIRE(reply.await());
@@ -989,9 +989,10 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: the unscoped constructor stil
     REQUIRE(server->health().liveModels == 1U);
 }
 
-TEST_CASE("morph::backend::SimulatedRemoteBackend: a connection-scoped backend's registrations are reclaimed by "
-          "closeConnection",
-          "[remote][connection-scope][issue48]") {
+TEST_CASE(
+    "morph::backend::SimulatedRemoteBackend: a connection-scoped backend's registrations are reclaimed by "
+    "closeConnection",
+    "[remote][connection-scope][issue48]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = csEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
@@ -1035,9 +1036,10 @@ TEST_CASE(
     REQUIRE(server->health().liveModels == 0U);
 }
 
-TEST_CASE("morph::backend::SimulatedRemoteBackend: deregisterModel releases this backend's own connection "
-          "reference, not whichever connection attached last",
-          "[remote][connection-scope][issue48][shared-instances]") {
+TEST_CASE(
+    "morph::backend::SimulatedRemoteBackend: deregisterModel releases this backend's own connection "
+    "reference, not whichever connection attached last",
+    "[remote][connection-scope][issue48][shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = csEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
@@ -1200,7 +1202,7 @@ namespace {
 ///        is reliably still held up in authorize() when the second's own
 ///        pre-CAS work finishes and wins the increment.
 class CsSlowFirstAuthorizer : public morph::session::IAuthorizer {
-  public:
+public:
     [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
         if (!_slowCallTaken.exchange(true)) {
             std::this_thread::sleep_for(std::chrono::milliseconds{200});
@@ -1208,7 +1210,7 @@ class CsSlowFirstAuthorizer : public morph::session::IAuthorizer {
         return true;
     }
 
-  private:
+private:
     mutable std::atomic<bool> _slowCallTaken{false};
 };
 
@@ -1277,8 +1279,8 @@ TEST_CASE(
     // reading `.env.kind` before observing `.ready == true` is a real data
     // race (caught by this file's own TSan CI leg the first time this test
     // was written this way).
-    REQUIRE(morph::testing::waitUntil(
-        [&] { return replyA.ready.load() || replyB.ready.load(); }, std::chrono::milliseconds{2000}));
+    REQUIRE(morph::testing::waitUntil([&] { return replyA.ready.load() || replyB.ready.load(); },
+                                      std::chrono::milliseconds{2000}));
 
     const bool aErr = replyA.ready.load() && replyA.env.kind == "err";
     const bool bErr = replyB.ready.load() && replyB.env.kind == "err";
@@ -1292,9 +1294,10 @@ TEST_CASE(
     REQUIRE(winner.env.kind == "ok");
 }
 
-TEST_CASE("morph::backend::RemoteServer: an action that throws still cancels its own executeTimeout, not just "
-          "one that returns normally",
-          "[remote][connection-scope][limits]") {
+TEST_CASE(
+    "morph::backend::RemoteServer: an action that throws still cancels its own executeTimeout, not just "
+    "one that returns normally",
+    "[remote][connection-scope][limits]") {
     // dispatchExecute's strand task cancels timeoutHandle in two places: the
     // try block's normal-completion path, and the catch block's
     // exception path. Every existing executeTimeout test in
@@ -1384,15 +1387,14 @@ TEST_CASE(
     // this is the call whose own second attachExistingLocked check must find
     // the race already lost.
     WaitReply first;
-    server->handle(
-        morph::wire::encode(morph::wire::makeAttach("CS_RaceModel", "race-key-release", oldMid)), std::ref(first));
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_RaceModel", "race-key-release", oldMid)),
+                   std::ref(first));
 
     // Second attach: a plain fresh attach for the same key, no releaseCurrent
     // -- CsRaceModel's factory does not sleep for this call, so it reliably
     // wins the insert while the first is still constructing.
     WaitReply second;
-    server->handle(
-        morph::wire::encode(morph::wire::makeAttach("CS_RaceModel", "race-key-release")), std::ref(second));
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_RaceModel", "race-key-release")), std::ref(second));
 
     REQUIRE(first.await(std::chrono::milliseconds{2000}));
     REQUIRE(second.await(std::chrono::milliseconds{2000}));

@@ -1,6 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bookmarks/models/bookmark_model.hpp"
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
+#include <Lightweight/SqlError.hpp>
+#include <Lightweight/SqlErrorDetection.hpp>
+#include <Lightweight/SqlStatement.hpp>
+#include <Lightweight/SqlTransaction.hpp>
+#include <algorithm>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <morph/core/registry.hpp>
+#include <morph/session/session.hpp>
+#include <optional>
+#include <string>
+#include <vector>
+
 #include "bookmarks/auth/bookmarks_authorizer.hpp"
 #include "bookmarks/db/bookmark_entity.hpp"
 #include "bookmarks/db/bookmark_tag_entity.hpp"
@@ -8,26 +24,7 @@
 #include "bookmarks/db/outbox_entity.hpp"
 #include "bookmarks/db/tag_entity.hpp"
 #include "bookmarks/import/netscape_bookmarks.hpp"
-
 #include "clock.hpp"
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <Lightweight/DataMapper/Pool.hpp>
-#include <Lightweight/SqlError.hpp>
-#include <Lightweight/SqlErrorDetection.hpp>
-#include <Lightweight/SqlStatement.hpp>
-#include <Lightweight/SqlTransaction.hpp>
-
-#include <morph/core/registry.hpp>
-#include <morph/session/session.hpp>
-
-#include <algorithm>
-#include <atomic>
-#include <cstddef>
-#include <cstdint>
-#include <optional>
-#include <string>
-#include <vector>
 
 namespace bookmarks {
 
@@ -77,8 +74,8 @@ namespace {
 }
 
 [[nodiscard]] ::morph::time::Timestamp fromEpochMs(std::int64_t epochMs) noexcept {
-    return ::morph::time::Timestamp{::morph::time::DateTime{
-        std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{epochMs}}}};
+    return ::morph::time::Timestamp{
+        ::morph::time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{epochMs}}}};
 }
 
 /// @brief The authenticated caller's principal, or throws `Forbidden`.
@@ -170,16 +167,17 @@ void writeOutboxEntry(::Lightweight::DataMapper& mapper, const std::string& owne
 /// `applyTagSet` below never creates a cross-owner association -- so the
 /// junction rows for one bookmark are already owner-homogeneous, and the
 /// caller has already established that the bookmark itself is readable.
-[[nodiscard]] static std::vector<std::string> readTagNames(::Lightweight::DataMapper& mapper, std::uint64_t bookmarkId) {
+[[nodiscard]] static std::vector<std::string> readTagNames(::Lightweight::DataMapper& mapper,
+                                                           std::uint64_t bookmarkId) {
     auto junctionRows = mapper.Query<db::BookmarkTagRecord>()
-                             .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::bookmark>, "=", bookmarkId)
-                             .All();
+                            .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::bookmark>, "=", bookmarkId)
+                            .All();
     std::vector<std::string> names;
     names.reserve(junctionRows.size());
     for (const auto& row : junctionRows) {
         auto tagRows = mapper.Query<db::TagRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::TagRecord::id>, "=", row.tag.Value())
-                            .All();
+                           .Where(::Lightweight::FieldNameOf<&db::TagRecord::id>, "=", row.tag.Value())
+                           .All();
         if (!tagRows.empty()) {
             // `TagRecord::name` is `Light::SqlAnsiString<kMaxTagNameBytes>`
             // (`tag_entity.hpp`); `names` stays a plain `std::vector<std::string>`
@@ -220,15 +218,15 @@ static void applyTagSet(::Lightweight::DataMapper& mapper, std::uint64_t bookmar
 
     for (const auto& name : toRemove) {
         auto tagRows = mapper.Query<db::TagRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner)
-                            .Where(::Lightweight::FieldNameOf<&db::TagRecord::name>, "=", name)
-                            .All();
+                           .Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner)
+                           .Where(::Lightweight::FieldNameOf<&db::TagRecord::name>, "=", name)
+                           .All();
         if (tagRows.empty()) {
             continue;
         }
         ::Lightweight::SqlStatement stmt{mapper.Connection()};
         stmt.Prepare("DELETE FROM bookmark_tags WHERE bookmark_id = ? AND tag_id = ?");
-        (void) stmt.Execute(bookmarkId, tagRows.front().id.Value());
+        (void)stmt.Execute(bookmarkId, tagRows.front().id.Value());
     }
 }
 
@@ -353,18 +351,18 @@ Ack BookmarkModel::execute(const DeleteBookmark& action) {
     const auto& owner = requireOwner();
     const auto id = static_cast<std::uint64_t>(*action.id);
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    (void) loadOwned(mapper.Get(), id, owner);  // NotFound/Forbidden, same as every other action
+    (void)loadOwned(mapper.Get(), id, owner);  // NotFound/Forbidden, same as every other action
 
     ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
     {
         ::Lightweight::SqlStatement stmt{mapper->Connection()};
         stmt.Prepare("DELETE FROM bookmark_tags WHERE bookmark_id = ?");
-        (void) stmt.Execute(id);
+        (void)stmt.Execute(id);
     }
     {
         ::Lightweight::SqlStatement stmt{mapper->Connection()};
         stmt.Prepare("DELETE FROM bookmarks WHERE id = ?");
-        (void) stmt.Execute(id);
+        (void)stmt.Execute(id);
     }
     transaction.Commit();
     return Ack{};
@@ -384,20 +382,20 @@ ListBookmarksResult BookmarkModel::execute(const ListBookmarks& action) {
     const auto& owner = requireOwner();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     auto query = mapper->Query<db::BookmarkRecord>();
-    (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::ownerPrincipal>, "=", owner);
+    (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::ownerPrincipal>, "=", owner);
     if (action.archiveFilter == ArchiveFilter::ActiveOnly) {
-        (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isArchived>, "=", false);
+        (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isArchived>, "=", false);
     } else if (action.archiveFilter == ArchiveFilter::ArchivedOnly) {
-        (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isArchived>, "=", true);
+        (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isArchived>, "=", true);
     }
     if (action.readFilter == ReadFilter::UnreadOnly) {
-        (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isUnread>, "=", true);
+        (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isUnread>, "=", true);
     } else if (action.readFilter == ReadFilter::ReadOnly) {
-        (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isUnread>, "=", false);
+        (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isUnread>, "=", false);
     }
     if (action.cursor.hasValue()) {
-        (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, "<",
-                           static_cast<std::uint64_t>(*action.cursor));
+        (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, "<",
+                          static_cast<std::uint64_t>(*action.cursor));
     }
     // Text/tag filters run in C++ after the SQL page is fetched, not as a
     // LIKE/JOIN in the query above: this rung's scale (a demo bookmark
@@ -405,8 +403,10 @@ ListBookmarksResult BookmarkModel::execute(const ListBookmarks& action) {
     // combining a tag filter with keyset pagination correctly needs the
     // junction table anyway, which the per-row loop below already touches.
     constexpr std::size_t kPageSize = 20;
-    auto rows = query.OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, ::Lightweight::SqlResultOrdering::DESCENDING)
-                    .First(kPageSize + 1);
+    auto rows =
+        query
+            .OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, ::Lightweight::SqlResultOrdering::DESCENDING)
+            .First(kPageSize + 1);
     const bool hasMore = rows.size() > kPageSize;
     if (hasMore) {
         rows.resize(kPageSize);
@@ -468,20 +468,19 @@ GetChangesSinceResult BookmarkModel::execute(const GetChangesSince& action) {
     // qualifies only if its id is past the last one already delivered at
     // that same instant.
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    auto rows = mapper
-                    ->Query<db::BookmarkRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::ownerPrincipal>, "=", owner)
-                    .Where([&](auto& q) {
-                        return q.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>, ">", sinceMs)
-                            .OrWhere([&](auto& q2) {
-                                return q2.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>, "=",
-                                                sinceMs)
-                                    .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, ">", sinceLastId);
-                            });
-                    })
-                    .OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>)
-                    .OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>)
-                    .All();
+    auto rows =
+        mapper->Query<db::BookmarkRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::ownerPrincipal>, "=", owner)
+            .Where([&](auto& q) {
+                return q.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>, ">", sinceMs)
+                    .OrWhere([&](auto& q2) {
+                        return q2.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>, "=", sinceMs)
+                            .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, ">", sinceLastId);
+                    });
+            })
+            .OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>)
+            .OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>)
+            .All();
 
     GetChangesSinceResult result;
     result.asOf.timestampMs = fromEpochMs(asOf);
@@ -533,7 +532,7 @@ BulkEditResult BookmarkModel::execute(const BulkEdit& action) {
             throw ValidationError{"BulkEdit: every id must be engaged"};
         }
         const auto id = static_cast<std::uint64_t>(*bookmarkId);
-        (void) loadOwned(mapper.Get(), id, owner);  // throws Forbidden/NotFound -> whole transaction rolls back
+        (void)loadOwned(mapper.Get(), id, owner);  // throws Forbidden/NotFound -> whole transaction rolls back
         ids.push_back(id);
     }
 
@@ -541,19 +540,18 @@ BulkEditResult BookmarkModel::execute(const BulkEdit& action) {
         if (action.archive == BulkArchiveOp::Archive) {
             ::Lightweight::SqlStatement stmt{mapper->Connection()};
             stmt.Prepare("UPDATE bookmarks SET is_archived = 1, updated_at_ms = ? WHERE id = ?");
-            (void) stmt.Execute(nowMs(), id);
+            (void)stmt.Execute(nowMs(), id);
         } else if (action.archive == BulkArchiveOp::Unarchive) {
             ::Lightweight::SqlStatement stmt{mapper->Connection()};
             stmt.Prepare("UPDATE bookmarks SET is_archived = 0, updated_at_ms = ? WHERE id = ?");
-            (void) stmt.Execute(nowMs(), id);
+            (void)stmt.Execute(nowMs(), id);
         }
         for (const auto& name : action.addTags) {
             const auto tagId = findOrCreateTagId(mapper.Get(), owner, name);
             addTagAssociationIfAbsent(mapper.Get(), id, tagId);
         }
         for (const auto& name : action.removeTags) {
-            auto tagRows = mapper
-                               ->Query<db::TagRecord>()
+            auto tagRows = mapper->Query<db::TagRecord>()
                                .Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner)
                                .Where(::Lightweight::FieldNameOf<&db::TagRecord::name>, "=", name)
                                .All();
@@ -562,7 +560,7 @@ BulkEditResult BookmarkModel::execute(const BulkEdit& action) {
             }
             ::Lightweight::SqlStatement stmt{mapper->Connection()};
             stmt.Prepare("DELETE FROM bookmark_tags WHERE bookmark_id = ? AND tag_id = ?");
-            (void) stmt.Execute(id, tagRows.front().id.Value());
+            (void)stmt.Execute(id, tagRows.front().id.Value());
         }
     }
 
@@ -652,8 +650,7 @@ ImportBookmarksResult BookmarkModel::execute(const ImportBookmarks& action) {
     const auto& opIdStr = *action.opId;
 
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    auto existingOp = mapper
-                          ->Query<db::ImportedOpRecord>()
+    auto existingOp = mapper->Query<db::ImportedOpRecord>()
                           .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::ownerPrincipal>, "=", owner)
                           .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::opId>, "=", opIdStr)
                           .All();
@@ -709,8 +706,7 @@ ImportBookmarksResult BookmarkModel::execute(const ImportBookmarks& action) {
 ExportBookmarksResult BookmarkModel::execute(const ExportBookmarks&) {
     const auto& owner = requireOwner();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    auto rows = mapper
-                    ->Query<db::BookmarkRecord>()
+    auto rows = mapper->Query<db::BookmarkRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::ownerPrincipal>, "=", owner)
                     .All();
     std::string html = "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n";
@@ -718,7 +714,7 @@ ExportBookmarksResult BookmarkModel::execute(const ExportBookmarks&) {
         // `escapeHtml` takes a `std::string_view`; `.str()` is `SqlAnsiString`'s
         // own view accessor for exactly this (see this file's other reads).
         html += "    <DT><A HREF=\"" + ::bookmarks::import::escapeHtml(rec.url.Value().str()) + "\">" +
-               ::bookmarks::import::escapeHtml(rec.title.Value().str()) + "</A>\n";
+                ::bookmarks::import::escapeHtml(rec.title.Value().str()) + "</A>\n";
     }
     html += "</DL><p>\n";
     return ExportBookmarksResult{.html = std::move(html)};

@@ -2,20 +2,18 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
-
-#include "testkit/backend_rig.hpp"
-#include "testkit/pump.hpp"
-
+#include <chrono>
+#include <cstddef>
 #include <morph/core/bridge.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/session/session.hpp>
-
-#include <chrono>
-#include <cstddef>
 #include <stdexcept>
 #include <string>
+
+#include "testkit/backend_rig.hpp"
+#include "testkit/pump.hpp"
 
 namespace {
 
@@ -23,7 +21,7 @@ namespace {
 ///        authorizer} genuinely threads the authorizer through to the
 ///        RemoteServer it builds, rather than silently ignoring it.
 class DenyAllAuthorizer : public morph::session::IAuthorizer {
-  public:
+public:
     // authorize() is IAuthorizer's one pure-virtual hook (dispatch-time
     // gating); this test only exercises the registration-time hook below, so
     // this stays permissive, matching AllowAllAuthorizer's own default.
@@ -90,7 +88,7 @@ BRIDGE_REGISTER_ACTION(RigBlobModel, RigBlobAction, "RigBlobAction")
 
 TEST_CASE("BackendRig: one action round-trips in every mode", "[ladder][testkit][rig]") {
     auto mode = GENERATE(morph::ladder::testkit::Mode::Local, morph::ladder::testkit::Mode::LocalSingleThread,
-                          morph::ladder::testkit::Mode::Socket);
+                         morph::ladder::testkit::Mode::Socket);
 
     morph::ladder::testkit::BackendRig rig{mode, /*nClients=*/1};
     auto handler = rig.client<RigProbeModel>(0);
@@ -101,7 +99,7 @@ TEST_CASE("BackendRig: one action round-trips in every mode", "[ladder][testkit]
 
 TEST_CASE("BackendRig exposes bridge/executor/url so presenters compose over it", "[ladder][testkit][rig]") {
     auto mode = GENERATE(morph::ladder::testkit::Mode::Local, morph::ladder::testkit::Mode::LocalSingleThread,
-                          morph::ladder::testkit::Mode::Socket);
+                         morph::ladder::testkit::Mode::Socket);
 
     morph::ladder::testkit::BackendRig rig{mode, /*nClients=*/1};
 
@@ -161,7 +159,7 @@ TEST_CASE("BackendRig::Socket: N clients each get an isolated model instance", "
 
 TEST_CASE("BackendRig::mode() reports the mode it was constructed with", "[ladder][testkit][rig]") {
     auto mode = GENERATE(morph::ladder::testkit::Mode::Local, morph::ladder::testkit::Mode::LocalSingleThread,
-                          morph::ladder::testkit::Mode::Socket);
+                         morph::ladder::testkit::Mode::Socket);
     morph::ladder::testkit::BackendRig rig{mode, /*nClients=*/1};
     REQUIRE(rig.mode() == mode);
 }
@@ -183,7 +181,7 @@ TEST_CASE("BackendRig::Socket threads a custom QtWebSocketServerConfig through t
     morph::qt::QtWebSocketServerConfig cfg;
     cfg.maxMessageBytes = 1024;  // far below the 8 MiB wire cap the default carries
     morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, /*nClients=*/1,
-                                            /*authorizer=*/nullptr, cfg};
+                                           /*authorizer=*/nullptr, cfg};
 
     // Registration frames stay well under the cap, so the handler itself
     // constructs normally — only the oversized action frame below is refused,
@@ -195,9 +193,8 @@ TEST_CASE("BackendRig::Socket threads a custom QtWebSocketServerConfig through t
     // If the config were silently dropped (the pre-extension behavior), this
     // 64 KiB frame would sail through the default 8 MiB cap and resolve with
     // its own size instead of rejecting.
-    REQUIRE_THROWS_WITH(
-        morph::ladder::testkit::awaitQt(handler.execute(RigBlobAction{std::string(64 * 1024, 'x')})),
-        Catch::Matchers::ContainsSubstring("maxMessageBytes"));
+    REQUIRE_THROWS_WITH(morph::ladder::testkit::awaitQt(handler.execute(RigBlobAction{std::string(64 * 1024, 'x')})),
+                        Catch::Matchers::ContainsSubstring("maxMessageBytes"));
 }
 
 TEST_CASE("BackendRig::socketBackend() hands out the live backend, usable for hello negotiation",
@@ -220,8 +217,7 @@ TEST_CASE("BackendRig::socketBackend() throws out_of_range past nClients, and lo
         morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, /*nClients=*/1};
         REQUIRE_THROWS_AS(rig.socketBackend(1), std::out_of_range);
     }
-    auto localMode =
-        GENERATE(morph::ladder::testkit::Mode::Local, morph::ladder::testkit::Mode::LocalSingleThread);
+    auto localMode = GENERATE(morph::ladder::testkit::Mode::Local, morph::ladder::testkit::Mode::LocalSingleThread);
     morph::ladder::testkit::BackendRig localRig{localMode, /*nClients=*/1};
     REQUIRE_THROWS_AS(localRig.socketBackend(0), std::logic_error);
 }

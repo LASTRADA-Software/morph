@@ -3,7 +3,6 @@
 #include "bank/models/auth_model.hpp"
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <optional>
 #include <string>
 #include <string_view>
@@ -29,9 +28,7 @@ std::string hashPassword(std::string_view username, std::string_view password) {
 /// Finds a user by username, or std::nullopt. Uses the relation-free `UserRow`
 /// projection so the fluent query/update work (see `UserRecord`'s warning).
 std::optional<db::UserRow> findUser(Lightweight::DataMapper& mapper, const std::string& username) {
-    return mapper.Query<db::UserRow>()
-        .Where(Lightweight::FieldNameOf<&db::UserRow::username>, "=", username)
-        .First();
+    return mapper.Query<db::UserRow>().Where(Lightweight::FieldNameOf<&db::UserRow::username>, "=", username).First();
 }
 
 }  // namespace
@@ -47,8 +44,7 @@ dto::AuthResult AuthModel::execute(const dto::RegisterUser& action) {
     db::UserRow rec;
     rec.username = Light::SqlAnsiString<64>{action.username};
     rec.passwordHash = Light::SqlAnsiString<32>{hashPassword(action.username, action.password)};
-    rec.displayName =
-        Light::SqlAnsiString<128>{action.displayName.empty() ? action.username : action.displayName};
+    rec.displayName = Light::SqlAnsiString<128>{action.displayName.empty() ? action.username : action.displayName};
     rec.status = 0;
     mapper().Create(rec);
 

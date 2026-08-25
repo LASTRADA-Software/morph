@@ -3,7 +3,6 @@
 #include "bank/models/budget_model.hpp"
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstdint>
 #include <map>
 #include <string>
@@ -75,10 +74,8 @@ dto::BudgetList BudgetModel::execute(const dto::ListBudgets& action) {
         throw Unauthorized{"no session principal"};
     }
     const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::BudgetRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::BudgetRecord::user>, "=", userId)
-                    .All();
+    auto rows =
+        mapper().Query<db::BudgetRecord>().Where(Lightweight::FieldNameOf<&db::BudgetRecord::user>, "=", userId).All();
     dto::BudgetList out;
     out.budgets.reserve(rows.size());
     for (const auto& rec : rows) {
@@ -90,13 +87,13 @@ dto::BudgetList BudgetModel::execute(const dto::ListBudgets& action) {
 dto::SpendingReport BudgetModel::execute(const dto::SpendingByKind& action) {
     // Push the account/direction/time filters into the query so only the rows we
     // aggregate cross the wire; the by-kind rollup stays in code (no GROUP BY SQL).
-    auto rows = mapper()
-                    .Query<db::TxnRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::account>, "=", action.accountId)
-                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::direction>, "=",
-                           static_cast<int>(TxnDirection::Debit))
-                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::createdAtMs>, ">=", action.sinceMs)
-                    .All();
+    auto rows =
+        mapper()
+            .Query<db::TxnRecord>()
+            .Where(Lightweight::FieldNameOf<&db::TxnRecord::account>, "=", action.accountId)
+            .Where(Lightweight::FieldNameOf<&db::TxnRecord::direction>, "=", static_cast<int>(TxnDirection::Debit))
+            .Where(Lightweight::FieldNameOf<&db::TxnRecord::createdAtMs>, ">=", action.sinceMs)
+            .All();
 
     std::map<int, dto::KindSpend> byKind;
     std::int64_t totalDebits = 0;

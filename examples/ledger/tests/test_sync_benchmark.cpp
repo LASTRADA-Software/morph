@@ -8,17 +8,16 @@
 // and easy to leave unimplemented in code, that a stale edit is *rejected*
 // rather than merged or silently applied.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "ledger/core/errors.hpp"
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/ledger_model.hpp"
 #include "ledger/models/rule_model.hpp"
 #include "testkit/db_fixture.hpp"
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <morph/session/session.hpp>
-
-#include <string>
 
 namespace {
 
@@ -31,10 +30,10 @@ namespace {
 /// @brief Installs @p principal for this scope. `_ctx` is a member declared
 ///        before `_scope` because `ScopedContext` holds a reference to it.
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -49,8 +48,7 @@ class ScopedPrincipal {
 
 }  // namespace
 
-TEST_CASE("Scenario B: a stale base-version edit is rejected outright, never merged",
-          "[ledger][sync-benchmark]") {
+TEST_CASE("Scenario B: a stale base-version edit is rejected outright, never merged", "[ledger][sync-benchmark]") {
     // Two clients read the same rule at version 1. Client 1 commits, taking it
     // to version 2. Client 2's edit still carries base version 1.
     morph::ladder::testkit::DbFixture fixture;
@@ -59,10 +57,10 @@ TEST_CASE("Scenario B: a stale base-version edit is rejected outright, never mer
 
     ledger::RuleModel model;
     const auto ruleId = model.execute(ledger::CreateRule{.ledgerId = ledgerId,
-                                                          .trigger = ledger::RuleTrigger::DescriptionContains,
-                                                          .matchText = "COFFEE",
-                                                          .action = ledger::RuleAction::SetCategory,
-                                                          .actionValue = "7"});
+                                                         .trigger = ledger::RuleTrigger::DescriptionContains,
+                                                         .matchText = "COFFEE",
+                                                         .action = ledger::RuleAction::SetCategory,
+                                                         .actionValue = "7"});
     REQUIRE(ruleId.hasValue());
 
     // Both clients read version 1.
@@ -70,10 +68,7 @@ TEST_CASE("Scenario B: a stale base-version edit is rejected outright, never mer
 
     // Client 1 commits first: server arrival order decides, and it arrived.
     const auto afterFirst = model.execute(ledger::UpdateRule{
-        .ruleId = ruleId,
-        .matchText = "ESPRESSO",
-        .actionValue = "8",
-        .expectedVersion = baseVersionBothClientsRead});
+        .ruleId = ruleId, .matchText = "ESPRESSO", .actionValue = "8", .expectedVersion = baseVersionBothClientsRead});
     CHECK(afterFirst.version == 2);
     CHECK(afterFirst.matchText == "ESPRESSO");
 
@@ -81,9 +76,9 @@ TEST_CASE("Scenario B: a stale base-version edit is rejected outright, never mer
     // Rejected outright -- not merged with client 1's edit, and not applied
     // over the top of it.
     CHECK_THROWS_AS(model.execute(ledger::UpdateRule{.ruleId = ruleId,
-                                                      .matchText = "FLAT WHITE",
-                                                      .actionValue = "9",
-                                                      .expectedVersion = baseVersionBothClientsRead}),
+                                                     .matchText = "FLAT WHITE",
+                                                     .actionValue = "9",
+                                                     .expectedVersion = baseVersionBothClientsRead}),
                     ledger::VersionConflict);
 
     // And the rejection left client 1's edit intact. A silent overwrite would
@@ -99,8 +94,7 @@ TEST_CASE("Scenario B: a stale base-version edit is rejected outright, never mer
     CHECK(rows.front().version.Value() == 2);
 }
 
-TEST_CASE("A re-read after a conflict succeeds: rejection is recoverable, not terminal",
-          "[ledger][sync-benchmark]") {
+TEST_CASE("A re-read after a conflict succeeds: rejection is recoverable, not terminal", "[ledger][sync-benchmark]") {
     // The other half of Scenario B's claim. Rejecting a stale edit is only
     // reasonable if the client can then re-read and reapply -- otherwise
     // "rejected outright" would mean the user's work is simply lost, which is
@@ -111,26 +105,25 @@ TEST_CASE("A re-read after a conflict succeeds: rejection is recoverable, not te
 
     ledger::RuleModel model;
     const auto ruleId = model.execute(ledger::CreateRule{.ledgerId = ledgerId,
-                                                          .trigger = ledger::RuleTrigger::DescriptionContains,
-                                                          .matchText = "COFFEE",
-                                                          .action = ledger::RuleAction::SetCategory,
-                                                          .actionValue = "7"});
-    model.execute(ledger::UpdateRule{
-        .ruleId = ruleId, .matchText = "ESPRESSO", .actionValue = "8", .expectedVersion = 1});
+                                                         .trigger = ledger::RuleTrigger::DescriptionContains,
+                                                         .matchText = "COFFEE",
+                                                         .action = ledger::RuleAction::SetCategory,
+                                                         .actionValue = "7"});
+    model.execute(
+        ledger::UpdateRule{.ruleId = ruleId, .matchText = "ESPRESSO", .actionValue = "8", .expectedVersion = 1});
 
     CHECK_THROWS_AS(model.execute(ledger::UpdateRule{
                         .ruleId = ruleId, .matchText = "FLAT WHITE", .actionValue = "9", .expectedVersion = 1}),
                     ledger::VersionConflict);
 
     // Re-read, then reapply against what is actually there now.
-    const auto reapplied = model.execute(ledger::UpdateRule{
-        .ruleId = ruleId, .matchText = "FLAT WHITE", .actionValue = "9", .expectedVersion = 2});
+    const auto reapplied = model.execute(
+        ledger::UpdateRule{.ruleId = ruleId, .matchText = "FLAT WHITE", .actionValue = "9", .expectedVersion = 2});
     CHECK(reapplied.matchText == "FLAT WHITE");
     CHECK(reapplied.version == 3);
 }
 
-TEST_CASE("An update without an expected version still applies unconditionally",
-          "[ledger][sync-benchmark]") {
+TEST_CASE("An update without an expected version still applies unconditionally", "[ledger][sync-benchmark]") {
     // The opt-in half. Every caller predating optimistic concurrency passes no
     // expectedVersion and must keep working -- otherwise adding the mechanism
     // would silently turn existing unconditional updates into conflicts.
@@ -140,10 +133,10 @@ TEST_CASE("An update without an expected version still applies unconditionally",
 
     ledger::RuleModel model;
     const auto ruleId = model.execute(ledger::CreateRule{.ledgerId = ledgerId,
-                                                          .trigger = ledger::RuleTrigger::DescriptionContains,
-                                                          .matchText = "COFFEE",
-                                                          .action = ledger::RuleAction::SetCategory,
-                                                          .actionValue = "7"});
+                                                         .trigger = ledger::RuleTrigger::DescriptionContains,
+                                                         .matchText = "COFFEE",
+                                                         .action = ledger::RuleAction::SetCategory,
+                                                         .actionValue = "7"});
     model.execute(ledger::UpdateRule{.ruleId = ruleId, .matchText = "ESPRESSO", .actionValue = "8"});
 
     // Version is now 2, but this edit names no base version at all.
@@ -187,18 +180,18 @@ TEST_CASE("Scenario A, in the form this rung can express: two clients reversing 
         return morph::math::Rational{Numerator{cents}, Denominator{1}, DecimalPlaces{2}};
     };
 
-    model.execute(ledger::StoreTransaction{
-        .ledgerId = ledgerId,
-        .description = "Weekly shop",
-        .date = morph::time::Timestamp::now(),
-        .legs = {ledger::TransactionLeg{.accountId = checking.id, .amount = amount(-5000)},
-                 ledger::TransactionLeg{.accountId = groceries.id, .amount = amount(5000)}}});
+    model.execute(
+        ledger::StoreTransaction{.ledgerId = ledgerId,
+                                 .description = "Weekly shop",
+                                 .date = morph::time::Timestamp::now(),
+                                 .legs = {ledger::TransactionLeg{.accountId = checking.id, .amount = amount(-5000)},
+                                          ledger::TransactionLeg{.accountId = groceries.id, .amount = amount(5000)}}});
 
     Lightweight::DataMapper mapper;
-    auto journals = mapper.Query<ledger::db::TransactionJournalRecord>()
-                        .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::ledger>,
-                               "=", *ledgerId)
-                        .All();
+    auto journals =
+        mapper.Query<ledger::db::TransactionJournalRecord>()
+            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::ledger>, "=", *ledgerId)
+            .All();
     REQUIRE(journals.size() == 1);
     const auto journalId = ledger::JournalId{static_cast<std::int64_t>(journals.front().id.Value())};
 
@@ -206,7 +199,7 @@ TEST_CASE("Scenario A, in the form this rung can express: two clients reversing 
     model.execute(ledger::UndoTransaction{.ledgerId = ledgerId, .journalId = journalId});
     {
         const auto afterFirst = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
-        for (const auto& account: afterFirst.accounts) {
+        for (const auto& account : afterFirst.accounts) {
             INFO("after first reversal: " << account.name);
             CHECK(account.balance.numerator == 0);
         }
@@ -222,20 +215,20 @@ TEST_CASE("Scenario A, in the form this rung can express: two clients reversing 
 
     // Rejected outright, not applied and not quietly swallowed: the ledger
     // still holds exactly two journals, the shop and its one reversal.
-    const auto journalsAfter = mapper.Query<ledger::db::TransactionJournalRecord>()
-                                   .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::ledger>,
-                                          "=", *ledgerId)
-                                   .All();
+    const auto journalsAfter =
+        mapper.Query<ledger::db::TransactionJournalRecord>()
+            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::ledger>, "=", *ledgerId)
+            .All();
     CHECK(journalsAfter.size() == 2);
 
     const auto afterSecond = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
     morph::math::Rational total = morph::math::Rational::zero(DecimalPlaces{2});
-    for (const auto& account: afterSecond.accounts) {
+    for (const auto& account : afterSecond.accounts) {
         total = total + account.balance;
     }
     CHECK(total.numerator == 0);
 
-    for (const auto& account: afterSecond.accounts) {
+    for (const auto& account : afterSecond.accounts) {
         INFO("after second reversal: " << account.name << " = " << account.balance.numerator);
         // The user reversed one transaction, once, from two devices. Their
         // Checking account must not end up +50.00 -- money that never existed
@@ -245,7 +238,6 @@ TEST_CASE("Scenario A, in the form this rung can express: two clients reversing 
 
     // The guard is per-journal, not a blanket ban on reversing a reversal:
     // deliberately undoing the correction is still a legitimate action.
-    const auto reversalId =
-        ledger::JournalId{static_cast<std::int64_t>(journalsAfter.back().id.Value())};
+    const auto reversalId = ledger::JournalId{static_cast<std::int64_t>(journalsAfter.back().id.Value())};
     CHECK_NOTHROW(model.execute(ledger::UndoTransaction{.ledgerId = ledgerId, .journalId = reversalId}));
 }

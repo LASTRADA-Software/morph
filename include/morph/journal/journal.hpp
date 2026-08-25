@@ -14,9 +14,9 @@
 #include <utility>
 #include <vector>
 
-#include "action_log.hpp"
 #include "../core/model.hpp"
 #include "../core/registry.hpp"
+#include "action_log.hpp"
 
 namespace morph::journal {
 
@@ -175,7 +175,7 @@ inline bool& tlsIsReplaying() {
 /// on the inner guard's destruction -- the same nesting behavior
 /// `session::detail::ScopedContext` already has for `Context`.
 class ScopedReplayFlag {
-  public:
+public:
     /// @brief Sets the thread-local replay flag to `true`, saving whatever
     ///        value was there before.
     ScopedReplayFlag() : _previous{tlsIsReplaying()} { tlsIsReplaying() = true; }
@@ -187,7 +187,7 @@ class ScopedReplayFlag {
     ScopedReplayFlag(ScopedReplayFlag&&) = delete;
     ScopedReplayFlag& operator=(ScopedReplayFlag&&) = delete;
 
-  private:
+private:
     bool _previous;
 };
 
@@ -431,8 +431,8 @@ public:
     /// @param dispatcher  Supplies each action's `coalesce` policy; defaults to
     ///                    the process-level singleton (the same one actions were
     ///                    registered against via `BRIDGE_REGISTER_ACTION`).
-    void checkpoint(IActionLog& durableSink,
-                    ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher()) {
+    void checkpoint(IActionLog& durableSink, ::morph::model::detail::ActionDispatcher& dispatcher =
+                                                 ::morph::model::detail::defaultDispatcher()) {
         // `_checkpointMtx` serializes the *entire* checkpoint body across
         // concurrent callers, so {take the pending slice + advance the
         // watermark} and {forward that slice to the sink} happen atomically with

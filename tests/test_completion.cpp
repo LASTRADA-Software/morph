@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/completion.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/completion.hpp>
 #include <stdexcept>
 #include <thread>
 
@@ -77,8 +77,7 @@ TEST_CASE("morph::async::Completion on_error does not fire on value", "[completi
     REQUIRE_FALSE(errorFired);
 }
 
-TEST_CASE("morph::async::Completion onError composes every attached handler, in attachment order",
-          "[completion]") {
+TEST_CASE("morph::async::Completion onError composes every attached handler, in attachment order", "[completion]") {
     // CompletionState<T>::attachOnError appends to a vector of handlers, so a
     // second .onError() call on the same still-pending Completion<T> — even
     // via the separate Completion& returned from the first call, since

@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/DataMapper/Pool.hpp>
-
 #include <cstddef>
 #include <vector>
 

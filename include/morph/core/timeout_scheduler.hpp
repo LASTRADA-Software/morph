@@ -243,7 +243,7 @@ public:
 
 private:
     struct State {
-        std::unordered_map<Handle, std::function<void()>> pending;
+        std::unordered_map<Handle, std::function<void()> > pending;
         Handle nextHandle{0};
     };
 

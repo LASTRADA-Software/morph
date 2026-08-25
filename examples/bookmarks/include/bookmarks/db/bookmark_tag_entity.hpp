@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "bookmarks/db/bookmark_entity.hpp"
-#include "bookmarks/db/tag_entity.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
-
 #include <cstdint>
 #include <string_view>
+
+#include "bookmarks/db/bookmark_entity.hpp"
+#include "bookmarks/db/tag_entity.hpp"
 
 namespace bookmarks::db {
 
@@ -22,8 +21,8 @@ struct BookmarkTagRecord {
     static constexpr std::string_view TableName = "bookmark_tags";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::BelongsTo<&BookmarkRecord::id, Light::SqlRealName{"bookmark_id"}> bookmark;  // 1
-    Light::BelongsTo<&TagRecord::id, Light::SqlRealName{"tag_id"}> tag;  // 2
+    Light::BelongsTo<&BookmarkRecord::id, Light::SqlRealName{"bookmark_id"}> bookmark;                     // 1
+    Light::BelongsTo<&TagRecord::id, Light::SqlRealName{"tag_id"}> tag;                                    // 2
 };
 
 }  // namespace bookmarks::db

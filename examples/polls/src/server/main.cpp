@@ -19,24 +19,21 @@
 /// POLLS_DB=... POLLS_PORT=8767 ladder_polls_server
 /// @endcode
 
-#include "polls/app/app.hpp"
-#include "polls/db/database.hpp"
-
-#include <morph/qt/qt_websocket_server.hpp>
-
 #include <QCoreApplication>
 #include <QTimer>
-
+#include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <morph/qt/qt_websocket_server.hpp>
 #include <string_view>
 #include <system_error>
 
-#include <charconv>
+#include "polls/app/app.hpp"
+#include "polls/db/database.hpp"
 
 namespace {
 
@@ -65,8 +62,7 @@ int main(int argc, char** argv) {
     }
 
     const char* connectionString = std::getenv("POLLS_DB");
-    polls::db::setup(connectionString != nullptr ? connectionString
-                                                  : "DRIVER=SQLite3;Database=polls.db;Timeout=5000");
+    polls::db::setup(connectionString != nullptr ? connectionString : "DRIVER=SQLite3;Database=polls.db;Timeout=5000");
 
     // `std::from_chars`, not `std::atoi`: `atoi` has no error channel at all,
     // so `POLLS_PORT=abc` would silently bind port 0 (a kernel-assigned

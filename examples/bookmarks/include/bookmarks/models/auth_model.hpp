@@ -23,7 +23,7 @@ namespace bookmarks {
 /// the secret through instead, exactly as `morph::journal::setActionLog`
 /// already works around for action logs.
 class AuthModel {
-  public:
+public:
     /// @brief Verifies @p action's username and mints a token for it.
     /// @param action The login request.
     /// @return The minted token plus the principal it was minted for.

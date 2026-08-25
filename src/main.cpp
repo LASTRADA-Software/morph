@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <iostream>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
-#include <iostream>
 #include <thread>
 
 // NOLINTBEGIN(misc-use-internal-linkage)

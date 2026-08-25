@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "board_presenter.hpp"
-#include "gui/error_text.hpp"
-#include "gui/id_qml.hpp"
 
 #include <utility>
+
+#include "gui/error_text.hpp"
+#include "gui/id_qml.hpp"
 
 namespace kanban::gui {
 
@@ -22,9 +23,7 @@ BoardPresenter::BoardPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::I
     trackBound(_handler.whenBound());
 }
 
-void BoardPresenter::reportError(const std::exception_ptr& err) {
-    emit failed(::morph::ladder::gui::errorText(err));
-}
+void BoardPresenter::reportError(const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); }
 
 void BoardPresenter::openBoard(ProjectId projectId) {
     // Stashed for createRule()/getRules() below -- see `_projectId`'s own doc
@@ -59,14 +58,13 @@ void BoardPresenter::createSwimlane(const QString& name) {
 
 void BoardPresenter::createTask(ColumnId columnId, SwimlaneId swimlaneId, const QString& title) {
     track<GetBoardResult>(
-        _handler.execute(
-            CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = title.toStdString()}),
+        _handler.execute(CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = title.toStdString()}),
         [this](GetBoardResult result) { emit boardOpened(std::move(result)); },
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 
 void BoardPresenter::moveTask(TaskId taskId, ColumnId columnId, SwimlaneId swimlaneId, std::int64_t position,
-                               QString opId) {
+                              QString opId) {
     // `taskId` is captured by this call's own lambda, not stashed on any
     // shared member: two overlapping moveTask() calls (this task's own
     // concurrent-drag test drives exactly that) each get their own track()
@@ -77,10 +75,10 @@ void BoardPresenter::moveTask(TaskId taskId, ColumnId columnId, SwimlaneId swiml
     // comment for the fuller account of that defect).
     track<GetBoardResult>(
         _handler.execute(MoveTaskPosition{.taskId = taskId,
-                                           .columnId = columnId,
-                                           .swimlaneId = swimlaneId,
-                                           .position = position,
-                                           .opId = opId.toStdString()}),
+                                          .columnId = columnId,
+                                          .swimlaneId = swimlaneId,
+                                          .position = position,
+                                          .opId = opId.toStdString()}),
         [this, taskId](GetBoardResult) { emit taskMoved(idText(taskId)); },
         [this](const std::exception_ptr& err) { reportError(err); });
 }
@@ -89,10 +87,10 @@ void BoardPresenter::moveTask(TaskId taskId, ColumnId columnId, SwimlaneId swiml
                                                                              SwimlaneId swimlaneId,
                                                                              std::int64_t position, QString opId) {
     return _handler.execute(MoveTaskPosition{.taskId = taskId,
-                                              .columnId = columnId,
-                                              .swimlaneId = swimlaneId,
-                                              .position = position,
-                                              .opId = opId.toStdString()});
+                                             .columnId = columnId,
+                                             .swimlaneId = swimlaneId,
+                                             .position = position,
+                                             .opId = opId.toStdString()});
 }
 
 void BoardPresenter::addComment(TaskId taskId, const QString& body) {
@@ -124,9 +122,9 @@ void BoardPresenter::getActivity() {
 void BoardPresenter::createRule(ColumnId triggerColumnId, const QString& mutationType, const QString& mutationValue) {
     track<CreateRuleResult>(
         _handler.execute(CreateRule{.projectId = _projectId,
-                                     .triggerColumnId = triggerColumnId,
-                                     .mutationType = ruleMutationTypeFromString(mutationType.toStdString()),
-                                     .mutationValue = mutationValue.toStdString()}),
+                                    .triggerColumnId = triggerColumnId,
+                                    .mutationType = ruleMutationTypeFromString(mutationType.toStdString()),
+                                    .mutationValue = mutationValue.toStdString()}),
         [this](CreateRuleResult) { emit ruleCreated(); }, [this](const std::exception_ptr& err) { reportError(err); });
 }
 
@@ -144,8 +142,8 @@ void BoardPresenter::deleteRule(RuleId ruleId) {
 }
 
 ::morph::async::Completion<Ack> BoardPresenter::addAttachment(TaskId taskId, const QString& filename,
-                                                                const QString& contentType, std::int64_t sizeBytes,
-                                                                const QString& storageKey) {
+                                                              const QString& contentType, std::int64_t sizeBytes,
+                                                              const QString& storageKey) {
     return _handler.execute(AddAttachment{.taskId = taskId,
                                           .filename = filename.toStdString(),
                                           .contentType = contentType.toStdString(),

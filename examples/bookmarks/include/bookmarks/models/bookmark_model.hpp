@@ -58,12 +58,12 @@ public:
     Ack execute(const UnarchiveBookmark& action);
     Ack execute(const DeleteBookmark& action);
     BookmarkView execute(const GetBookmark& action);
-    ListBookmarksResult execute(const ListBookmarks& action);            // Task 7
-    GetChangesSinceResult execute(const GetChangesSince& action);        // Task 7
-    BulkEditResult execute(const BulkEdit& action);                      // Task 8
-    Ack execute(const RecordMetadata& action);                          // Task 8, internal-only
-    ImportBookmarksResult execute(const ImportBookmarks& action);        // Task 11
-    ExportBookmarksResult execute(const ExportBookmarks& action);        // Task 11
+    ListBookmarksResult execute(const ListBookmarks& action);      // Task 7
+    GetChangesSinceResult execute(const GetChangesSince& action);  // Task 7
+    BulkEditResult execute(const BulkEdit& action);                // Task 8
+    Ack execute(const RecordMetadata& action);                     // Task 8, internal-only
+    ImportBookmarksResult execute(const ImportBookmarks& action);  // Task 11
+    ExportBookmarksResult execute(const ExportBookmarks& action);  // Task 11
 };
 
 }  // namespace bookmarks

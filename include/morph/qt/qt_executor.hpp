@@ -3,9 +3,9 @@
 #pragma once
 #include <QCoreApplication>
 #include <QMetaObject>
-#include <morph/core/executor.hpp>
 #include <functional>
 #include <memory>
+#include <morph/core/executor.hpp>
 #include <utility>
 
 namespace morph::qt {

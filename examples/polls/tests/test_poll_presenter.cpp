@@ -26,20 +26,18 @@
 // admin token CreatePoll returned, exactly test_poll_model.cpp's/
 // test_shared_instance_lifecycle.cpp's own pattern.
 
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <polls/auth/polls_authorizer.hpp>
+#include <string>
+#include <vector>
+
 #include "poll_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <polls/auth/polls_authorizer.hpp>
-#include <morph/session/session.hpp>
-
-#include <memory>
-#include <string>
-#include <vector>
 
 namespace {
 
@@ -110,17 +108,16 @@ TEST_CASE("PollPresenter::getPollState after openPoll returns the same poll's st
 
     polls::CreatePollResult createdResult;
     bool created = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::created,
-                      [&](polls::CreatePollResult result) {
-                          createdResult = std::move(result);
-                          created = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::created, [&](polls::CreatePollResult result) {
+        createdResult = std::move(result);
+        created = true;
+    });
     presenter.createPoll(polls::CreatePoll{.title = "Lunch spot", .options = {{"Cafe"}, {"Diner"}}});
     REQUIRE(pumpUntil([&] { return created; }));
 
     bool gotOpened = false;
     QObject::connect(&presenter, &polls::gui::PollPresenter::opened,
-                      [&](polls::GetPollStateResult) { gotOpened = true; });
+                     [&](polls::GetPollStateResult) { gotOpened = true; });
     presenter.openPoll(createdResult.pollId);
     REQUIRE(pumpUntil([&] { return gotOpened; }));
 
@@ -138,8 +135,7 @@ TEST_CASE("PollPresenter::getPollState after openPoll returns the same poll's st
     REQUIRE(state.options.size() == 2);
 }
 
-TEST_CASE("PollPresenter::submitVotes tallies a participant's vote, all three backend modes",
-          "[polls][presenter]") {
+TEST_CASE("PollPresenter::submitVotes tallies a participant's vote, all three backend modes", "[polls][presenter]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -148,11 +144,10 @@ TEST_CASE("PollPresenter::submitVotes tallies a participant's vote, all three ba
 
     polls::CreatePollResult createdResult;
     bool created = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::created,
-                      [&](polls::CreatePollResult result) {
-                          createdResult = std::move(result);
-                          created = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::created, [&](polls::CreatePollResult result) {
+        createdResult = std::move(result);
+        created = true;
+    });
     presenter.createPoll(polls::CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     REQUIRE(pumpUntil([&] { return created; }));
 
@@ -168,11 +163,10 @@ TEST_CASE("PollPresenter::submitVotes tallies a participant's vote, all three ba
 
     polls::GetPollStateResult afterVote;
     bool gotVote = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::votesSubmitted,
-                      [&](polls::GetPollStateResult result) {
-                          afterVote = std::move(result);
-                          gotVote = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::votesSubmitted, [&](polls::GetPollStateResult result) {
+        afterVote = std::move(result);
+        gotVote = true;
+    });
     presenter.submitVotes(polls::SubmitVotes{
         .participantName = "alice", .votes = {{.optionId = opened.options[0].id, .choice = polls::VoteChoice::Yes}}});
     REQUIRE(pumpUntil([&] { return gotVote; }));
@@ -192,11 +186,10 @@ TEST_CASE("PollPresenter::updateVotes replaces a participant's votes wholesale, 
 
     polls::CreatePollResult createdResult;
     bool created = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::created,
-                      [&](polls::CreatePollResult result) {
-                          createdResult = std::move(result);
-                          created = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::created, [&](polls::CreatePollResult result) {
+        createdResult = std::move(result);
+        created = true;
+    });
     presenter.createPoll(polls::CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     REQUIRE(pumpUntil([&] { return created; }));
 
@@ -211,7 +204,7 @@ TEST_CASE("PollPresenter::updateVotes replaces a participant's votes wholesale, 
 
     bool submitted = false;
     QObject::connect(&presenter, &polls::gui::PollPresenter::votesSubmitted,
-                      [&](polls::GetPollStateResult) { submitted = true; });
+                     [&](polls::GetPollStateResult) { submitted = true; });
     presenter.submitVotes(polls::SubmitVotes{
         .participantName = "alice", .votes = {{.optionId = opened.options[0].id, .choice = polls::VoteChoice::Yes}}});
     REQUIRE(pumpUntil([&] { return submitted; }));
@@ -241,17 +234,16 @@ TEST_CASE("PollPresenter::addComment writes a comment visible in the next getPol
 
     polls::CreatePollResult createdResult;
     bool created = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::created,
-                      [&](polls::CreatePollResult result) {
-                          createdResult = std::move(result);
-                          created = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::created, [&](polls::CreatePollResult result) {
+        createdResult = std::move(result);
+        created = true;
+    });
     presenter.createPoll(polls::CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     REQUIRE(pumpUntil([&] { return created; }));
 
     bool gotOpened = false;
     QObject::connect(&presenter, &polls::gui::PollPresenter::opened,
-                      [&](polls::GetPollStateResult) { gotOpened = true; });
+                     [&](polls::GetPollStateResult) { gotOpened = true; });
     presenter.openPoll(createdResult.pollId);
     REQUIRE(pumpUntil([&] { return gotOpened; }));
 
@@ -279,11 +271,10 @@ TEST_CASE("PollPresenter::finalizePoll marks the poll finalized given the admin 
 
     polls::CreatePollResult createdResult;
     bool created = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::created,
-                      [&](polls::CreatePollResult result) {
-                          createdResult = std::move(result);
-                          created = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::created, [&](polls::CreatePollResult result) {
+        createdResult = std::move(result);
+        created = true;
+    });
     presenter.createPoll(polls::CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     REQUIRE(pumpUntil([&] { return created; }));
 
@@ -325,11 +316,10 @@ TEST_CASE("PollPresenter::undoLastVoteChange reverses a participant's own last v
 
     polls::CreatePollResult createdResult;
     bool created = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::created,
-                      [&](polls::CreatePollResult result) {
-                          createdResult = std::move(result);
-                          created = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::created, [&](polls::CreatePollResult result) {
+        createdResult = std::move(result);
+        created = true;
+    });
     presenter.createPoll(polls::CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     REQUIRE(pumpUntil([&] { return created; }));
 
@@ -344,7 +334,7 @@ TEST_CASE("PollPresenter::undoLastVoteChange reverses a participant's own last v
 
     bool submitted = false;
     QObject::connect(&presenter, &polls::gui::PollPresenter::votesSubmitted,
-                      [&](polls::GetPollStateResult) { submitted = true; });
+                     [&](polls::GetPollStateResult) { submitted = true; });
     presenter.submitVotes(polls::SubmitVotes{
         .participantName = "alice", .votes = {{.optionId = opened.options[0].id, .choice = polls::VoteChoice::Yes}}});
     REQUIRE(pumpUntil([&] { return submitted; }));
@@ -352,10 +342,10 @@ TEST_CASE("PollPresenter::undoLastVoteChange reverses a participant's own last v
     polls::UndoLastVoteChangeResult undoResult;
     bool undone = false;
     QObject::connect(&presenter, &polls::gui::PollPresenter::voteChangeUndone,
-                      [&](polls::UndoLastVoteChangeResult result) {
-                          undoResult = result;
-                          undone = true;
-                      });
+                     [&](polls::UndoLastVoteChangeResult result) {
+                         undoResult = result;
+                         undone = true;
+                     });
     presenter.undoLastVoteChange(polls::UndoLastVoteChange{.participantName = "alice"});
     REQUIRE(pumpUntil([&] { return undone; }));
     REQUIRE_FALSE(presenter.busy());
@@ -373,9 +363,10 @@ TEST_CASE("PollPresenter::undoLastVoteChange reverses a participant's own last v
     CHECK(afterUndo.options[0].yesCount == polls::Count::fromDouble(0.0));
 }
 
-TEST_CASE("PollPresenter::getEventsSince returns every event recorded on this handler's attached poll, "
-          "all three backend modes",
-          "[polls][presenter]") {
+TEST_CASE(
+    "PollPresenter::getEventsSince returns every event recorded on this handler's attached poll, "
+    "all three backend modes",
+    "[polls][presenter]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -384,11 +375,10 @@ TEST_CASE("PollPresenter::getEventsSince returns every event recorded on this ha
 
     polls::CreatePollResult createdResult;
     bool created = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::created,
-                      [&](polls::CreatePollResult result) {
-                          createdResult = std::move(result);
-                          created = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::created, [&](polls::CreatePollResult result) {
+        createdResult = std::move(result);
+        created = true;
+    });
     presenter.createPoll(polls::CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     REQUIRE(pumpUntil([&] { return created; }));
 
@@ -403,24 +393,23 @@ TEST_CASE("PollPresenter::getEventsSince returns every event recorded on this ha
 
     bool submitted = false;
     QObject::connect(&presenter, &polls::gui::PollPresenter::votesSubmitted,
-                      [&](polls::GetPollStateResult) { submitted = true; });
+                     [&](polls::GetPollStateResult) { submitted = true; });
     presenter.submitVotes(polls::SubmitVotes{
         .participantName = "alice", .votes = {{.optionId = opened.options[0].id, .choice = polls::VoteChoice::Yes}}});
     REQUIRE(pumpUntil([&] { return submitted; }));
 
     bool commented = false;
     QObject::connect(&presenter, &polls::gui::PollPresenter::commentAdded,
-                      [&](polls::GetPollStateResult) { commented = true; });
+                     [&](polls::GetPollStateResult) { commented = true; });
     presenter.addComment(polls::AddComment{.participantName = "alice", .body = "hi"});
     REQUIRE(pumpUntil([&] { return commented; }));
 
     polls::GetEventsSinceResult events;
     bool gotEvents = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::eventsReceived,
-                      [&](polls::GetEventsSinceResult result) {
-                          events = std::move(result);
-                          gotEvents = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::eventsReceived, [&](polls::GetEventsSinceResult result) {
+        events = std::move(result);
+        gotEvents = true;
+    });
     presenter.getEventsSince(polls::GetEventsSince{});
     REQUIRE(pumpUntil([&] { return gotEvents; }));
     REQUIRE_FALSE(presenter.busy());
@@ -486,9 +475,10 @@ TEST_CASE("Every PollPresenter validation-driven action routes its failure to fa
     CHECK_FALSE(failure.isEmpty());
 }
 
-TEST_CASE("PollPresenter::getPollState and getEventsSince against a handler never attached via openPoll "
-          "emit failed, not a crash",
-          "[polls][presenter]") {
+TEST_CASE(
+    "PollPresenter::getPollState and getEventsSince against a handler never attached via openPoll "
+    "emit failed, not a crash",
+    "[polls][presenter]") {
     // PollModel::execute(GetPollState)/execute(GetEventsSince) both throw
     // NotFound when this handler's own _pollId was never populated by a
     // prior execute(OpenPoll) (poll_model.cpp) -- proves the presenter
@@ -530,11 +520,10 @@ TEST_CASE("PollPresenter::finalizePoll with no session at all emits failed, not 
 
     polls::CreatePollResult createdResult;
     bool created = false;
-    QObject::connect(&presenter, &polls::gui::PollPresenter::created,
-                      [&](polls::CreatePollResult result) {
-                          createdResult = std::move(result);
-                          created = true;
-                      });
+    QObject::connect(&presenter, &polls::gui::PollPresenter::created, [&](polls::CreatePollResult result) {
+        createdResult = std::move(result);
+        created = true;
+    });
     presenter.createPoll(polls::CreatePoll{.title = "T", .options = {{"1"}, {"2"}}});
     REQUIRE(pumpUntil([&] { return created; }));
 

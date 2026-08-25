@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
-
-#include <atomic>
-#include <catch2/catch_test_macros.hpp>
-#include <memory>
 #include <optional>
 #include <string>
 
@@ -153,9 +152,8 @@ const bool kRegThrowOnSerialise =
         "Test_ExecJson_ThrowSerialiseModel", "Test_ExecJson_ThrowOnSerialise");
 const bool kRegThrowOnExecuteModel =
     morph::model::detail::registerModelOnce<ThrowOnExecuteModel>("Test_ExecJson_ThrowExecuteModel");
-const bool kRegThrowOnExecute =
-    morph::model::detail::registerActionExecutorOnce<ThrowOnExecuteModel, ThrowOnExecute>(
-        "Test_ExecJson_ThrowExecuteModel", "Test_ExecJson_ThrowOnExecute");
+const bool kRegThrowOnExecute = morph::model::detail::registerActionExecutorOnce<ThrowOnExecuteModel, ThrowOnExecute>(
+    "Test_ExecJson_ThrowExecuteModel", "Test_ExecJson_ThrowOnExecute");
 }  // namespace
 
 TEST_CASE("ActionExecuteRegistry: executeJson routes a throwing resultToJson to onError (not a hang)",

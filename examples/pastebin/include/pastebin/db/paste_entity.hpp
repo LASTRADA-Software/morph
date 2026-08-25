@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
-
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -51,16 +50,16 @@ struct PasteRecord {
 
     /// The animal-name id; caller-assigned, not auto-incremented.
     Light::Field<Light::SqlAnsiString<32>, Light::PrimaryKey::AutoAssign, Light::SqlRealName{"id"}> id;  // 0
-    Light::Field<Light::SqlMaxDynamicWideString, Light::SqlRealName{"content"}> content;  // 1
-    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"syntax"}> syntax;  // 2
-    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 3
+    Light::Field<Light::SqlMaxDynamicWideString, Light::SqlRealName{"content"}> content;                 // 1
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"syntax"}> syntax;                         // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};                      // 3
     /// `std::nullopt` = never expires.
     Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"expires_at_ms"}> expiresAtMs;  // 4
     /// `std::nullopt` = no burn limit.
     Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"burn_after_reads"}> burnAfterReads;  // 5
-    Light::Field<std::int64_t, Light::SqlRealName{"read_count"}> readCount{0};  // 6
-    Light::Field<bool, Light::SqlRealName{"is_private"}> isPrivate{false};  // 7
-    Light::Field<bool, Light::SqlRealName{"is_editable"}> isEditable{false};  // 8
+    Light::Field<std::int64_t, Light::SqlRealName{"read_count"}> readCount{0};                         // 6
+    Light::Field<bool, Light::SqlRealName{"is_private"}> isPrivate{false};                             // 7
+    Light::Field<bool, Light::SqlRealName{"is_editable"}> isEditable{false};                           // 8
 };
 
 }  // namespace pastebin::db

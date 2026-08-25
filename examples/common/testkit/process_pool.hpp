@@ -4,7 +4,6 @@
 #include <QProcess>
 #include <QString>
 #include <QStringList>
-
 #include <chrono>
 #include <cstddef>
 #include <memory>
@@ -25,7 +24,7 @@ namespace morph::ladder::testkit {
 /// observes exactly what it would in production when a client segfaults or
 /// its machine loses power.
 class ClientProcess {
-  public:
+public:
     /// @param program Absolute path to the client binary.
     /// @param args    Command-line arguments for this client.
     ClientProcess(QString program, QStringList args) : _proc{std::make_unique<QProcess>()} {
@@ -92,15 +91,13 @@ class ClientProcess {
 
     /// @brief Everything the client wrote to stderr, for failure diagnosis.
     /// @return The captured stderr text.
-    [[nodiscard]] std::string stderrText() const {
-        return _proc->readAllStandardError().toStdString();
-    }
+    [[nodiscard]] std::string stderrText() const { return _proc->readAllStandardError().toStdString(); }
 
     /// @brief The underlying process, for cases this wrapper does not cover.
     /// @return A reference to the `QProcess`.
     [[nodiscard]] QProcess& process() { return *_proc; }
 
-  private:
+private:
     std::unique_ptr<QProcess> _proc;
 };
 
@@ -115,7 +112,7 @@ class ClientProcess {
 /// Destroying the pool kills anything still running, so a failed assertion
 /// cannot leak clients into the next test.
 class ProcessPool {
-  public:
+public:
     /// @param program Absolute path to the client binary every `spawn()` runs.
     explicit ProcessPool(QString program) : _program{std::move(program)} {}
 
@@ -151,7 +148,7 @@ class ProcessPool {
     /// ```
     /// @return `true` once no spawned client is still running.
     [[nodiscard]] bool allExited() const {
-        for (const auto& client: _clients) {
+        for (const auto& client : _clients) {
             if (client->running()) {
                 return false;
             }
@@ -161,7 +158,7 @@ class ProcessPool {
 
     /// @brief Kills every client that is still running.
     void killAll() {
-        for (auto& client: _clients) {
+        for (auto& client : _clients) {
             if (client->running()) {
                 client->kill();
             }
@@ -177,7 +174,7 @@ class ProcessPool {
     /// @return A reference to that client.
     [[nodiscard]] ClientProcess& operator[](std::size_t idx) { return *_clients[idx]; }
 
-  private:
+private:
     QString _program;
     std::vector<std::unique_ptr<ClientProcess>> _clients;
 };

@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "paste_qml_bridges.hpp"
-#include "gui/error_text.hpp"
-
-#include "paste_schemas.hpp"
 
 #include <QString>
-
 #include <exception>
 #include <string>
 #include <utility>
+
+#include "gui/error_text.hpp"
+#include "paste_schemas.hpp"
 
 namespace pastebin::gui {
 
@@ -72,9 +71,7 @@ namespace {
 FormsBridge::FormsBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
     : QObject{parent}, _controller{bridge, executor, pasteSchemasJson()} {}
 
-QString FormsBridge::schemasJson() const {
-    return QString::fromStdString(_controller.schemasJson());
-}
+QString FormsBridge::schemasJson() const { return QString::fromStdString(_controller.schemasJson()); }
 
 void FormsBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
     _controller.submitIfValid(
@@ -110,9 +107,7 @@ PasteBridge::PasteBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
     connect(&_presenter, &PastePresenter::failed, this, &PasteBridge::failed);
 }
 
-void PasteBridge::refresh() {
-    _presenter.list(pastebin::ListPastes{});
-}
+void PasteBridge::refresh() { _presenter.list(pastebin::ListPastes{}); }
 
 void PasteBridge::open(const QString& id) {
     _presenter.get(pastebin::GetPaste{.id = pastebin::PasteId{id.toStdString()}});

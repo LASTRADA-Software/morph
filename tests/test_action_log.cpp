@@ -7,21 +7,20 @@
 // runner and Bridge::executeVia's localOp), SessionLog checkpoint/undo, and
 // journal::replay.
 
-#include <morph/journal/action_log.hpp>
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/journal/journal.hpp>
-#include <morph/core/model.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/session/session.hpp>
-
 #include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/model.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/journal/action_log.hpp>
+#include <morph/journal/journal.hpp>
+#include <morph/session/session.hpp>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -269,9 +268,10 @@ struct ALLoggingModel {
 BRIDGE_REGISTER_MODEL(ALLoggingModel, "AL_LoggingModel")
 BRIDGE_REGISTER_ACTION(ALLoggingModel, ALLoggingDeposit, "AL_LoggingDeposit")
 
-TEST_CASE("ModelHolder<Model>::onActionLogAttached forwards to a model-level attachActionLog when the model "
-          "declares one matching ModelLevelActionLogAttachable",
-          "[action_log][holder]") {
+TEST_CASE(
+    "ModelHolder<Model>::onActionLogAttached forwards to a model-level attachActionLog when the model "
+    "declares one matching ModelLevelActionLogAttachable",
+    "[action_log][holder]") {
     static_assert(morph::model::detail::ModelLevelActionLogAttachable<ALLoggingModel>);
     static_assert(!morph::model::detail::ModelLevelActionLogAttachable<ALModel>);
 
@@ -290,9 +290,10 @@ TEST_CASE("ModelHolder<Model>::onActionLogAttached forwards to a model-level att
     REQUIRE(typed.model.contextKey == "board-7");
 }
 
-TEST_CASE("IModelHolder::onActionLogAttached: the no-op default runs when a holder wraps a model with no "
-          "model-level attachActionLog",
-          "[action_log][holder]") {
+TEST_CASE(
+    "IModelHolder::onActionLogAttached: the no-op default runs when a holder wraps a model with no "
+    "model-level attachActionLog",
+    "[action_log][holder]") {
     // ALModel doesn't declare attachActionLog, so ModelHolder<ALModel>::
     // onActionLogAttached resolves its `if constexpr` false and never calls
     // into the model -- attachActionLog must still succeed and populate the
@@ -328,7 +329,8 @@ TEST_CASE("IModelHolder: recordIfAttached captures the active session principal"
 // remote/Qt topology — exercised directly here (isolated dispatcher/registry,
 // matching test_dispatch_di.cpp's style) rather than through a live socket.
 
-TEST_CASE("ActionDispatcher: records loggable actions, skips opted-out ones, tracks coalesce", "[action_log][dispatch]") {
+TEST_CASE("ActionDispatcher: records loggable actions, skips opted-out ones, tracks coalesce",
+          "[action_log][dispatch]") {
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<ALModel>("AL_Model");
@@ -359,7 +361,8 @@ TEST_CASE("ActionDispatcher: records loggable actions, skips opted-out ones, tra
     REQUIRE(entries[0].error.empty());
 }
 
-TEST_CASE("ActionDispatcher: dispatch against a holder with no log attached does not crash", "[action_log][dispatch]") {
+TEST_CASE("ActionDispatcher: dispatch against a holder with no log attached does not crash",
+          "[action_log][dispatch]") {
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<ALModel>("AL_Model");
@@ -372,7 +375,7 @@ TEST_CASE("ActionDispatcher: dispatch against a holder with no log attached does
 }
 
 TEST_CASE("ActionDispatcher: records outcome=Failed with error text when Model::execute throws, still rethrows",
-         "[action_log][dispatch][issue23]") {
+          "[action_log][dispatch][issue23]") {
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<ALModel>("AL_Model");
@@ -397,7 +400,7 @@ TEST_CASE("ActionDispatcher: records outcome=Failed with error text when Model::
 }
 
 TEST_CASE("ActionDispatcher: runner records for hand-written ActionTraits with no loggable member",
-         "[action_log][dispatch]") {
+          "[action_log][dispatch]") {
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<ALLegacyModel>("AL_LegacyModel");
@@ -414,7 +417,7 @@ TEST_CASE("ActionDispatcher: runner records for hand-written ActionTraits with n
 // ── Bridge::executeVia's localOp — the local-mode execution site (bridge.hpp) ──
 
 TEST_CASE("Bridge/LocalBackend: local-mode execution records loggable actions, skips opted-out ones",
-         "[action_log][bridge]") {
+          "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -449,7 +452,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records loggable actions, s
 }
 
 TEST_CASE("Bridge/LocalBackend: local-mode execution records outcome=Failed when Model::execute throws",
-         "[action_log][bridge][issue23]") {
+          "[action_log][bridge][issue23]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -465,9 +468,9 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records outcome=Failed when
     morph::bridge::BridgeHandler<ALModel> handler{bridge, &cbExec, binding};
 
     std::atomic<bool> errored{false};
-    handler.execute(ALWithdraw{.amount = 50})
-        .then([&](int) {})
-        .onError([&](const std::exception_ptr&) { errored.store(true); });
+    handler.execute(ALWithdraw{.amount = 50}).then([&](int) {}).onError([&](const std::exception_ptr&) {
+        errored.store(true);
+    });
     REQUIRE(morph::testing::waitUntil([&] { return errored.load(); }));
 
     auto entries = log->entries();
@@ -479,16 +482,16 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records outcome=Failed when
     REQUIRE(entries[0].error == "insufficient funds");
 }
 
-TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log does not crash",
-         "[action_log][bridge]") {
+TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log does not crash", "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<ALModel> handler{bridge, &cbExec};  // default factory — no log
 
     std::atomic<int> result{-1};
-    handler.execute(ALDeposit{.amount = 4}).then([&](int v) { result.store(v); }).onError([](const std::exception_ptr&) {
-    });
+    handler.execute(ALDeposit{.amount = 4})
+        .then([&](int v) { result.store(v); })
+        .onError([](const std::exception_ptr&) {});
     REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
     REQUIRE(result.load() == 4);
 }
@@ -502,7 +505,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log doe
 // factory itself is never even invoked for a remote backend.
 
 TEST_CASE("SimulatedRemoteBackend: client-side factory (and its attached log) is never invoked",
-         "[action_log][remote]") {
+          "[action_log][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
 
@@ -527,8 +530,9 @@ TEST_CASE("SimulatedRemoteBackend: client-side factory (and its attached log) is
     morph::bridge::BridgeHandler<ALModel> handler{bridge, &cbExec, binding};
 
     std::atomic<int> result{-1};
-    handler.execute(ALDeposit{.amount = 7}).then([&](int v) { result.store(v); }).onError([](const std::exception_ptr&) {
-    });
+    handler.execute(ALDeposit{.amount = 7})
+        .then([&](int v) { result.store(v); })
+        .onError([](const std::exception_ptr&) {});
     REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
     REQUIRE(result.load() == 7);  // executed correctly, server-side, with no log attached there
 
@@ -545,7 +549,8 @@ TEST_CASE("journal::replay: reconstructs state by re-executing entries in order"
     dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
 
     std::vector<LogEntry> entries{
-        makeEntry("AL_Model", "", "AL_Deposit", morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10})),
+        makeEntry("AL_Model", "", "AL_Deposit",
+                  morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10})),
         makeEntry("AL_Model", "", "AL_Deposit", morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 5})),
     };
 
@@ -560,13 +565,13 @@ TEST_CASE("journal::replay: skips Failed entries instead of re-dispatching them"
     dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
     dispatcher.registerAction<ALModel, ALWithdraw>("AL_Model", "AL_Withdraw");
 
-    auto depositEntry =
-        makeEntry("AL_Model", "", "AL_Deposit", morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10}));
+    auto depositEntry = makeEntry("AL_Model", "", "AL_Deposit",
+                                  morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10}));
     // A Failed entry for an over-large withdrawal: if replay() dispatched this
     // (instead of skipping it), ALModel::execute would throw the very same
     // "insufficient funds" again, aborting reconstruction.
-    auto failedWithdraw =
-        makeEntry("AL_Model", "", "AL_Withdraw", morph::model::ActionTraits<ALWithdraw>::toJson(ALWithdraw{.amount = 999}));
+    auto failedWithdraw = makeEntry("AL_Model", "", "AL_Withdraw",
+                                    morph::model::ActionTraits<ALWithdraw>::toJson(ALWithdraw{.amount = 999}));
     failedWithdraw.outcome = morph::journal::Outcome::Failed;
     failedWithdraw.error = "insufficient funds";
 
@@ -596,7 +601,7 @@ TEST_CASE("SessionLog: append/entries/flush behave like InMemoryActionLog", "[ac
 }
 
 TEST_CASE("SessionLog::checkpoint: coalesces by (modelType, entityKey, actionType), keeps distinct actions",
-         "[action_log][journal]") {
+          "[action_log][journal]") {
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<ALModel>("AL_Model");
@@ -665,8 +670,7 @@ TEST_CASE("SessionLog::undoLast: replays the prefix, reconstructing pre-undo sta
     REQUIRE(afterUndo3->into<ALModel>().balance == 0);
 }
 
-TEST_CASE("SessionLog::undoLast: clamps the checkpoint position when undoing past it",
-         "[action_log][journal]") {
+TEST_CASE("SessionLog::undoLast: clamps the checkpoint position when undoing past it", "[action_log][journal]") {
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<ALModel>("AL_Model");
@@ -701,8 +705,7 @@ TEST_CASE("SessionLog::undoLast: clamps the checkpoint position when undoing pas
 // entries. undoLast pops the raw tail, but a subsequent checkpoint must never
 // re-forward the coalesced-away entry `a`: durable state stays monotonic.
 
-TEST_CASE("SessionLog::undoLast: a coalescing checkpoint never re-forwards an undone entry",
-          "[action_log][journal]") {
+TEST_CASE("SessionLog::undoLast: a coalescing checkpoint never re-forwards an undone entry", "[action_log][journal]") {
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<ALModel>("AL_Model");
@@ -833,7 +836,7 @@ TEST_CASE("ScopedActionLog: nested scopes restore in the correct order", "[actio
 }
 
 TEST_CASE("ModelFactory::create: auto-attaches the default action log when one is installed",
-         "[action_log][default]") {
+          "[action_log][default]") {
     auto log = std::make_shared<InMemoryActionLog>();
     morph::journal::ScopedActionLog guard{log};
 
@@ -858,7 +861,7 @@ TEST_CASE("ModelFactory::create: does not attach a log when no default is instal
 }
 
 TEST_CASE("IModelHolder::attachActionLog: an explicit call overrides the auto-attached default",
-         "[action_log][default]") {
+          "[action_log][default]") {
     auto defaultLog = std::make_shared<InMemoryActionLog>();
     morph::journal::ScopedActionLog guard{defaultLog};
 
@@ -878,7 +881,7 @@ TEST_CASE("IModelHolder::attachActionLog: an explicit call overrides the auto-at
 }
 
 TEST_CASE("ModelFactory::create: auto-attach also reaches server-created holders (ModelRegistryFactory)",
-         "[action_log][default]") {
+          "[action_log][default]") {
     auto log = std::make_shared<InMemoryActionLog>();
     morph::journal::ScopedActionLog guard{log};
 
@@ -946,7 +949,8 @@ TEST_CASE("journal::isReplaying: true for every dispatch inside replay(), false 
     REQUIRE_FALSE(morph::journal::isReplaying());
 
     std::vector<LogEntry> entries{
-        makeEntry("AL_Model", "", "AL_Deposit", morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10})),
+        makeEntry("AL_Model", "", "AL_Deposit",
+                  morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10})),
     };
     auto holder = morph::journal::replay("AL_Model", entries, registry, dispatcher);
     REQUIRE(holder->into<ALModel>().balance == 10);
@@ -975,8 +979,8 @@ TEST_CASE("journal::isReplaying: observable as true from inside a replayed Model
 
     // Replayed dispatch: isReplaying() must read true from inside execute().
     {
-        std::vector<LogEntry> entries{makeEntry("RM_Model", "", "AL_Deposit",
-                                                morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 3}))};
+        std::vector<LogEntry> entries{makeEntry(
+            "RM_Model", "", "AL_Deposit", morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 3}))};
         auto holder = morph::journal::replay("RM_Model", entries, registry, dispatcher);
         REQUIRE(holder->into<RMModel>().sawReplayingDuringExecute);
     }

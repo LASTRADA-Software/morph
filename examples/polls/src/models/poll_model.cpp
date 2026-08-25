@@ -9,24 +9,21 @@
 // examples/common is on the include path as a root (see
 // examples/common/CMakeLists.txt's target_include_directories), so the ladder
 // clock is "clock.hpp" -- the same spelling testkit/test_clock.cpp uses.
-#include "clock.hpp"
-
-#include <morph/session/session.hpp>
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlTransaction.hpp>
-
-#include <glaze/glaze.hpp>
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <glaze/glaze.hpp>
+#include <morph/session/session.hpp>
 #include <optional>
 #include <random>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "clock.hpp"
 
 namespace polls {
 
@@ -76,9 +73,7 @@ namespace {
 // goes through the equivalent `Light::SqlAnsiString<kTokenBytes>{...}`
 // construction at the call site.
 // ---------------------------------------------------------------------------
-[[nodiscard]] std::string textOf(const Light::SqlAnsiString<kTokenBytes>& stored) {
-    return std::string{stored.str()};
-}
+[[nodiscard]] std::string textOf(const Light::SqlAnsiString<kTokenBytes>& stored) { return std::string{stored.str()}; }
 
 // ---------------------------------------------------------------------------
 // Free-form Unicode text field conversions (title/label/participantName/body):
@@ -100,9 +95,7 @@ template <std::size_t N>
 // `previousVotesJson`/`summary` are `Light::SqlMaxDynamicAnsiString` (no
 // fixed bound -- see poll_entity.hpp's doc comments on each), so they get
 // their own conversion pair rather than the templated `textOf()` above.
-[[nodiscard]] std::string textOf(const Light::SqlMaxDynamicAnsiString& stored) {
-    return stored.ToString();
-}
+[[nodiscard]] std::string textOf(const Light::SqlMaxDynamicAnsiString& stored) { return stored.ToString(); }
 
 /// @brief The injectable-time convention rung 1/2 established
 ///        (`examples/bookmarks/src/models/bookmark_model.cpp`,
@@ -137,8 +130,7 @@ static_assert((kRandomTokenBytes * 8 + 5) / 6 == kTokenBytes,
 ///        the byte source itself must be a real entropy source, not a
 ///        seeded-once convenience PRNG.
 [[nodiscard]] std::string randomToken() {
-    static constexpr char kAlphabet[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    static constexpr char kAlphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
     std::random_device rd;
     std::uniform_int_distribution<int> byteDist{0, 255};
@@ -202,11 +194,11 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
     if (optionId.value < 0) {
         throw NotFound{"option does not belong to this poll"};
     }
-    auto rows = mapper.Query<db::OptionRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::OptionRecord::id>, "=",
-                           static_cast<std::uint64_t>(optionId.value))
-                    .Where(::Lightweight::FieldNameOf<&db::OptionRecord::poll>, "=", poll.id.Value())
-                    .All();
+    auto rows =
+        mapper.Query<db::OptionRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::OptionRecord::id>, "=", static_cast<std::uint64_t>(optionId.value))
+            .Where(::Lightweight::FieldNameOf<&db::OptionRecord::poll>, "=", poll.id.Value())
+            .All();
     if (rows.empty()) {
         throw NotFound{"option does not belong to this poll"};
     }
@@ -230,9 +222,8 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
                        .Where(::Lightweight::FieldNameOf<&db::OptionRecord::poll>, "=", pollDbId)
                        .OrderBy(::Lightweight::FieldNameOf<&db::OptionRecord::sortOrder>)
                        .All();
-    auto votes = mapper.Query<db::VoteRecord>()
-                     .Where(::Lightweight::FieldNameOf<&db::VoteRecord::poll>, "=", pollDbId)
-                     .All();
+    auto votes =
+        mapper.Query<db::VoteRecord>().Where(::Lightweight::FieldNameOf<&db::VoteRecord::poll>, "=", pollDbId).All();
     for (const auto& opt : options) {
         PollOptionView view;
         view.id = OptionId::fromRowId(static_cast<std::int64_t>(opt.id.Value()));
@@ -266,8 +257,8 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
                     break;
             }
             result.votes.push_back({.participantName = textOf(vote.participantName.Value()),
-                                     .optionId = view.id,
-                                     .choice = static_cast<VoteChoice>(vote.choice.Value())});
+                                    .optionId = view.id,
+                                    .choice = static_cast<VoteChoice>(vote.choice.Value())});
         }
         result.options.push_back(std::move(view));
     }
@@ -276,14 +267,15 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
                         .Where(::Lightweight::FieldNameOf<&db::CommentRecord::poll>, "=", pollDbId)
                         .All();
     for (const auto& c : comments) {
-        result.comments.push_back({.participantName = textOf(c.participantName.Value()), .body = textOf(c.body.Value())});
+        result.comments.push_back(
+            {.participantName = textOf(c.participantName.Value()), .body = textOf(c.body.Value())});
     }
 
     auto lastEvent = mapper.Query<db::PollEventRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::PollEventRecord::poll>, "=", pollDbId)
-                          .OrderBy(::Lightweight::FieldNameOf<&db::PollEventRecord::id>,
-                                   ::Lightweight::SqlResultOrdering::DESCENDING)
-                          .First();
+                         .Where(::Lightweight::FieldNameOf<&db::PollEventRecord::poll>, "=", pollDbId)
+                         .OrderBy(::Lightweight::FieldNameOf<&db::PollEventRecord::id>,
+                                  ::Lightweight::SqlResultOrdering::DESCENDING)
+                         .First();
     result.lastEventId =
         lastEvent ? PollEventId::fromRowId(static_cast<std::int64_t>(lastEvent->id.Value())) : PollEventId{};
     return result;
@@ -387,8 +379,8 @@ CreatePollResult PollModel::execute(const CreatePoll& action) {
     transaction.Commit();
 
     return CreatePollResult{.pollId = textOf(poll.pollId.Value()),
-                             .adminToken = AdminToken{textOf(poll.adminToken.Value())},
-                             .participantToken = ParticipantToken{textOf(poll.participantToken.Value())}};
+                            .adminToken = AdminToken{textOf(poll.adminToken.Value())},
+                            .participantToken = ParticipantToken{textOf(poll.participantToken.Value())}};
 }
 
 GetPollStateResult PollModel::execute(const OpenPoll& action) {
@@ -419,8 +411,8 @@ GetPollStateResult PollModel::execute(const GetPollState& /*action*/) {
 }
 
 GetPollStateResult PollModel::applyVotes(const std::string& participantName, const std::vector<OneVote>& votes,
-                                          const std::string& summaryVerb, WriteHistory writeHistory,
-                                          std::optional<std::uint64_t> historyRowIdToDelete) {
+                                         const std::string& summaryVerb, WriteHistory writeHistory,
+                                         std::optional<std::uint64_t> historyRowIdToDelete) {
     // Both callers (execute(SubmitVotes)/execute(UpdateVotes)) act against
     // this handler's attached poll, exactly like execute(GetPollState) --
     // never attached via OpenPoll is a caller error, not a NotFound-worthy
@@ -452,11 +444,10 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     }
 
     const std::uint64_t pollDbId = poll.id.Value();
-    auto priorVotes = mapper
-                           ->Query<db::VoteRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::VoteRecord::poll>, "=", pollDbId)
-                           .Where(::Lightweight::FieldNameOf<&db::VoteRecord::participantName>, "=", participantName)
-                           .All();
+    auto priorVotes = mapper->Query<db::VoteRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::VoteRecord::poll>, "=", pollDbId)
+                          .Where(::Lightweight::FieldNameOf<&db::VoteRecord::participantName>, "=", participantName)
+                          .All();
 
     // Captured before any row is deleted: the *pre-change* vote set is what
     // UndoLastVoteChange (Task 8) needs to restore.
@@ -502,11 +493,10 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     // deletion commit together or not at all -- see this method's own doc
     // comment (poll_model.hpp) and execute(UndoLastVoteChange)'s call site.
     if (historyRowIdToDelete.has_value()) {
-        auto rowsToDelete = mapper
-                                 ->Query<db::VoteHistoryRecord>()
-                                 .Where(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::id>, "=",
-                                        *historyRowIdToDelete)
-                                 .All();
+        auto rowsToDelete =
+            mapper->Query<db::VoteHistoryRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::id>, "=", *historyRowIdToDelete)
+                .All();
         for (auto& row : rowsToDelete) {
             mapper->Delete(row);
         }
@@ -646,14 +636,13 @@ UndoLastVoteChangeResult PollModel::execute(const UndoLastVoteChange& action) {
     // + First() shape buildState()'s own lastEvent lookup above uses for
     // "most recent PollEventRecord", the established precedent in this TU
     // for this exact query pattern.
-    auto history = mapper
-                       ->Query<db::VoteHistoryRecord>()
-                       .Where(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::poll>, "=", pollDbId)
-                       .Where(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::participantName>, "=",
-                              action.participantName)
-                       .OrderBy(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::id>,
-                                ::Lightweight::SqlResultOrdering::DESCENDING)
-                       .First();
+    auto history =
+        mapper->Query<db::VoteHistoryRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::poll>, "=", pollDbId)
+            .Where(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::participantName>, "=", action.participantName)
+            .OrderBy(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::id>,
+                     ::Lightweight::SqlResultOrdering::DESCENDING)
+            .First();
     if (!history.has_value()) {
         // Nothing to undo: this participant never changed their vote on this
         // poll, or a prior UndoLastVoteChange already consumed the one entry
@@ -684,8 +673,8 @@ UndoLastVoteChangeResult PollModel::execute(const UndoLastVoteChange& action) {
     // This is what makes "undo is one-shot, not a redo stack" (the brief's
     // own words) true, and it is exactly what the "undoing twice in a row"
     // test below verifies.
-    (void) applyVotes(action.participantName, previousVotes, "undid their last vote change", WriteHistory::No,
-                       historyRowId);
+    (void)applyVotes(action.participantName, previousVotes, "undid their last vote change", WriteHistory::No,
+                     historyRowId);
 
     return UndoLastVoteChangeResult{.restored = Restored::Yes};
 }
@@ -719,8 +708,7 @@ GetEventsSinceResult PollModel::execute(const GetEventsSince& action) {
     // is a ServerSideAutoIncrement primary key starting at 1, so
     // `id > 0` already matches every row -- "from the beginning" falls out of
     // this same query with no special-case branch.
-    auto rows = mapper
-                    ->Query<db::PollEventRecord>()
+    auto rows = mapper->Query<db::PollEventRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::PollEventRecord::poll>, "=", pollDbId)
                     .Where(::Lightweight::FieldNameOf<&db::PollEventRecord::id>, ">",
                            static_cast<std::uint64_t>(*action.lastEventId))

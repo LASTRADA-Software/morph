@@ -5,21 +5,17 @@
 // test_budget_presenter.cpp; this file proves the bridge publishes what QML
 // binds to, exactly.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <ledger/db/ledger_entity.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "budget_qml_bridge.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-
-#include <ledger/db/ledger_entity.hpp>
-
-#include <memory>
-#include <string>
 
 namespace {
 
@@ -46,8 +42,7 @@ using morph::ladder::testkit::pumpUntil;
 
 }  // namespace
 
-TEST_CASE("BudgetQmlBridge publishes a report as exact triples, not a rounded number",
-          "[ledger][gui][bridge]") {
+TEST_CASE("BudgetQmlBridge publishes a report as exact triples, not a rounded number", "[ledger][gui][bridge]") {
     // Design spec §7 at the QML boundary: a view receives limit and spent as
     // exact numerator/denominator/decimalPlaces and formats them itself, so
     // no float exists anywhere on the path.

@@ -4,6 +4,4 @@
 // links a full executable (try_compile builds one by default) around
 // src/qt/qt_websocket_backend.cpp, which has no main() of its own.
 
-int main() {
-    return 0;
-}
+int main() { return 0; }

@@ -1,25 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "gui/presenter.hpp"
+#include <QString>
+#include <exception>
 
+#include "gui/presenter.hpp"
 #include "lims/dto/analysis_dto.hpp"
 #include "lims/dto/offline_dto.hpp"
 #include "lims/dto/result_dto.hpp"
 #include "lims/dto/verification_dto.hpp"
 
-#include <QString>
-
-#include <exception>
-
 // See `sample_presenter.hpp`'s identical guard: moc must not be pointed at
 // morph's bridge header or this rung's model headers.
 #ifndef Q_MOC_RUN
-#include "lims/models/analysis_catalog_model.hpp"
-#include "lims/models/sample_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "lims/models/analysis_catalog_model.hpp"
+#include "lims/models/sample_model.hpp"
 #endif
 
 namespace lims::gui {
@@ -51,7 +49,7 @@ namespace lims::gui {
 /// model (the rung README's §3 decision 7); this path cannot produce one.
 class ResultPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -112,7 +110,7 @@ class ResultPresenter : public ::morph::ladder::gui::Presenter {
     /// @param bodyJson The form's assembled JSON body.
     void submitIfValid(const QString& actionType, const QString& bodyJson);
 
-  signals:
+signals:
     /// @brief Emitted once per `submitIfValid`, whichever way it resolved.
     /// @param actionType The action the reply belongs to.
     /// @param ok Whether it succeeded.
@@ -144,7 +142,7 @@ class ResultPresenter : public ::morph::ladder::gui::Presenter {
     /// @param message Ready for direct display.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Shared error body passed as every `track()` call's third
     ///        argument.
     /// @param err The failed completion's exception.

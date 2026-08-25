@@ -3,12 +3,10 @@
 
 #include <QObject>
 #include <QPointer>
-
-#include <morph/core/completion.hpp>
-
 #include <atomic>
 #include <exception>
 #include <functional>
+#include <morph/core/completion.hpp>
 
 /// @file
 /// Shared presenter base (examples/TESTING.md, "Presenter architecture" rule
@@ -22,14 +20,14 @@ namespace morph::ladder::gui {
 class Presenter : public QObject {
     Q_OBJECT
 
-  public:
+public:
     explicit Presenter(QObject* parent = nullptr) : QObject{parent} {}
 
     /// @brief `true` while at least one `track()`ed completion has not yet
     ///        resolved or errored.
     [[nodiscard]] bool busy() const { return _inFlight.load() != 0; }
 
-  signals:
+signals:
     /// @brief Emitted the moment `busy()` transitions from `true` to `false`.
     void idle();
 
@@ -48,7 +46,7 @@ class Presenter : public QObject {
     ///        there.
     void bound();
 
-  protected:
+protected:
     /// @brief Wires @p whenBoundCompletion (a `BridgeHandler::whenBound()`
     ///        call) to emit `bound()` exactly once, however it resolves.
     ///
@@ -177,7 +175,7 @@ class Presenter : public QObject {
             });
     }
 
-  private:
+private:
     void finishOne() {
         if (_inFlight.fetch_sub(1) == 1) {
             emit idle();

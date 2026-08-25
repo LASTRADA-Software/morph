@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "polls/core/types.hpp"
-#include "polls/units.hpp"
-
 #include <compare>
 #include <cstdint>
 #include <glaze/glaze.hpp>
@@ -11,6 +8,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "polls/core/types.hpp"
+#include "polls/units.hpp"
 
 namespace polls {
 
@@ -139,9 +139,9 @@ struct ParticipantToken {
 enum class Finalized : std::uint8_t { No, Yes };
 
 struct CreatePollResult {
-    std::string pollId;                  // the shareable link id -- see Global Constraints
-    AdminToken adminToken;               // kept by the organizer only
-    ParticipantToken participantToken;   // handed out with the shared link; verified by nothing today
+    std::string pollId;                 // the shareable link id -- see Global Constraints
+    AdminToken adminToken;              // kept by the organizer only
+    ParticipantToken participantToken;  // handed out with the shared link; verified by nothing today
 };
 
 /// @brief The keyed attach action -- `BRIDGE_MODEL_KEY(PollModel, OpenPoll, &OpenPoll::pollId)`.

@@ -5,21 +5,17 @@
 // this file proves the presenter wires each action to the right signal and
 // relays a refusal rather than throwing.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <ledger/db/ledger_entity.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "budget_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-
-#include <ledger/db/ledger_entity.hpp>
-
-#include <memory>
-#include <string>
 
 namespace {
 
@@ -55,11 +51,10 @@ TEST_CASE("BudgetPresenter emits budgetCreated after a successful CreateBudget",
     ledger::CategoryId categoryId;
     bool categoryDone = false;
     bool failed = false;
-    QObject::connect(&presenter, &ledger::gui::BudgetPresenter::categoryCreated,
-                     [&](ledger::CategoryId id) {
-                         categoryId = id;
-                         categoryDone = true;
-                     });
+    QObject::connect(&presenter, &ledger::gui::BudgetPresenter::categoryCreated, [&](ledger::CategoryId id) {
+        categoryId = id;
+        categoryDone = true;
+    });
     QObject::connect(&presenter, &ledger::gui::BudgetPresenter::failed, [&] { failed = true; });
 
     presenter.createCategory(ledgerId, "Groceries");
@@ -93,11 +88,10 @@ TEST_CASE("BudgetPresenter reports a month's limit and spend exactly", "[ledger]
     bool step = false;
     bool failed = false;
     QObject::connect(&presenter, &ledger::gui::BudgetPresenter::failed, [&] { failed = true; });
-    QObject::connect(&presenter, &ledger::gui::BudgetPresenter::categoryCreated,
-                     [&](ledger::CategoryId id) {
-                         categoryId = id;
-                         step = true;
-                     });
+    QObject::connect(&presenter, &ledger::gui::BudgetPresenter::categoryCreated, [&](ledger::CategoryId id) {
+        categoryId = id;
+        step = true;
+    });
     presenter.createCategory(ledgerId, "Groceries");
     REQUIRE(pumpUntil([&] { return step || failed; }));
     REQUIRE_FALSE(failed);
@@ -115,8 +109,7 @@ TEST_CASE("BudgetPresenter reports a month's limit and spend exactly", "[ledger]
     using morph::math::DecimalPlaces;
     using morph::math::Denominator;
     using morph::math::Numerator;
-    const auto limit =
-        morph::math::Rational{Numerator{30000}, Denominator{1}, DecimalPlaces{2}};  // 300.00
+    const auto limit = morph::math::Rational{Numerator{30000}, Denominator{1}, DecimalPlaces{2}};  // 300.00
 
     step = false;
     QObject::connect(&presenter, &ledger::gui::BudgetPresenter::limitSet, [&] { step = true; });

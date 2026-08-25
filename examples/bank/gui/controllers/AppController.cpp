@@ -19,12 +19,10 @@ void AppController::adopt(const QString& principal, const QString& displayName) 
 }
 
 void AppController::login(const QString& username, const QString& password) {
-    _auth.execute(bank::dto::LoginRequest{.username = username.toStdString(),
-                                          .password = password.toStdString()})
+    _auth.execute(bank::dto::LoginRequest{.username = username.toStdString(), .password = password.toStdString()})
         .then([this](bank::dto::AuthResult result) {
             if (result.ok) {
-                adopt(QString::fromStdString(result.principal),
-                      QString::fromStdString(result.displayName));
+                adopt(QString::fromStdString(result.principal), QString::fromStdString(result.displayName));
             } else {
                 emit error(QString::fromStdString(result.message));
             }
@@ -32,15 +30,14 @@ void AppController::login(const QString& username, const QString& password) {
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
 
-void AppController::registerUser(const QString& username, const QString& password,
-                                 const QString& displayName) {
-    _auth.execute(bank::dto::RegisterUser{.username = username.toStdString(),
-                                          .password = password.toStdString(),
-                                          .displayName = displayName.toStdString()})
+void AppController::registerUser(const QString& username, const QString& password, const QString& displayName) {
+    _auth
+        .execute(bank::dto::RegisterUser{.username = username.toStdString(),
+                                         .password = password.toStdString(),
+                                         .displayName = displayName.toStdString()})
         .then([this](bank::dto::AuthResult result) {
             if (result.ok) {
-                adopt(QString::fromStdString(result.principal),
-                      QString::fromStdString(result.displayName));
+                adopt(QString::fromStdString(result.principal), QString::fromStdString(result.displayName));
             } else {
                 emit error(QString::fromStdString(result.message));
             }

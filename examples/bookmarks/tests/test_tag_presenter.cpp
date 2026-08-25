@@ -10,23 +10,21 @@
 // test_bookmark_presenter.cpp's own top comment for the full rationale this
 // mirrors, including why every mode needs a real signed token.
 
+#include <algorithm>
+#include <bookmarks/auth/bookmarks_authorizer.hpp>
+#include <bookmarks/models/bookmark_model.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <memory>
+#include <morph/session/session_auth.hpp>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "tag_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <bookmarks/auth/bookmarks_authorizer.hpp>
-#include <bookmarks/models/bookmark_model.hpp>
-#include <morph/session/session_auth.hpp>
-
-#include <algorithm>
-#include <memory>
-#include <string>
-#include <string_view>
-#include <vector>
 
 namespace {
 
@@ -149,9 +147,10 @@ TEST_CASE("TagPresenter::rename renames a tag owned by the caller, all three bac
     CHECK(after.tags.front().name == "new");
 }
 
-TEST_CASE("TagPresenter::merge reassigns every bookmark from source to target and deletes source, "
-          "all three backend modes",
-          "[bookmarks][presenter]") {
+TEST_CASE(
+    "TagPresenter::merge reassigns every bookmark from source to target and deletes source, "
+    "all three backend modes",
+    "[bookmarks][presenter]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;

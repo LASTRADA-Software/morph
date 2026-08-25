@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <catch2/catch_test_macros.hpp>
-
-#include "testkit/pump.hpp"
-
+#include <chrono>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
-
-#include <chrono>
-#include <memory>
 #include <optional>
 #include <utility>
+
+#include "testkit/pump.hpp"
 
 // Deliberately at namespace scope, not inside an anonymous namespace: glz's
 // reflection (which BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION rely on to
@@ -50,9 +48,10 @@ BRIDGE_REGISTER_ACTION(WasmSpikeProbeModel, WasmSpikeProbeAction, "WasmSpikeProb
 // `binding->currentId` used to be polled for directly, without this test
 // ever naming
 // `morph::bridge::detail::HandlerBinding`.
-TEST_CASE("registerHandler() called immediately after Bridge construction, before any event-loop turn, resolves "
-          "once the socket connects -- see finding 017",
-          "[ladder][testkit][wasm-spike]") {
+TEST_CASE(
+    "registerHandler() called immediately after Bridge construction, before any event-loop turn, resolves "
+    "once the socket connects -- see finding 017",
+    "[ladder][testkit][wasm-spike]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::qt::QtWebSocketServer wsServer{*server, 0};
@@ -81,9 +80,10 @@ TEST_CASE("registerHandler() called immediately after Bridge construction, befor
 // `std::optional<BridgeHandler<Model>>` deferred-construction idiom, since a
 // handler cannot be built before there is somewhere to register it into yet
 // must still exist afterward to `execute()` against.
-TEST_CASE("The WASM spike's registration call sequence resolves natively when registerHandler() is deferred to "
-          "setConnectHandler's callback (asyncRegistrationEnabled + setConnectHandler)",
-          "[ladder][testkit][wasm-spike]") {
+TEST_CASE(
+    "The WASM spike's registration call sequence resolves natively when registerHandler() is deferred to "
+    "setConnectHandler's callback (asyncRegistrationEnabled + setConnectHandler)",
+    "[ladder][testkit][wasm-spike]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::qt::QtWebSocketServer wsServer{*server, 0};

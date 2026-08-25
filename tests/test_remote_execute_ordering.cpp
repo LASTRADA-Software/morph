@@ -68,7 +68,7 @@ namespace {
 ///        the pool's other thread — reliably finishes first and reaches the
 ///        ticket-wait point before A ever does.
 class SlowFirstAuthorizer : public morph::session::IAuthorizer {
-  public:
+public:
     [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
         if (!_slowCallTaken.exchange(true)) {
             std::this_thread::sleep_for(std::chrono::milliseconds{200});
@@ -76,7 +76,7 @@ class SlowFirstAuthorizer : public morph::session::IAuthorizer {
         return true;
     }
 
-  private:
+private:
     mutable std::atomic<bool> _slowCallTaken{false};
 };
 
@@ -98,9 +98,9 @@ class SlowFirstAuthorizer : public morph::session::IAuthorizer {
 /// exactly the interleaving `awaitExecuteTurn`'s and `releaseExecuteTicket`'s
 /// own "gate already gone" branches exist for.
 class SlowFirstThenRejectAuthorizer : public morph::session::IAuthorizer {
-  public:
+public:
     [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view,
-                                  std::string_view actionType) const override {
+                                 std::string_view actionType) const override {
         if (actionType == kRejectMarker) {
             return false;
         }
@@ -112,7 +112,7 @@ class SlowFirstThenRejectAuthorizer : public morph::session::IAuthorizer {
 
     static constexpr std::string_view kRejectMarker = "ERO_RejectAction";
 
-  private:
+private:
     mutable std::atomic<bool> _slowCallTaken{false};
 };
 
@@ -185,9 +185,10 @@ morph::model::detail::ModelRegistryFactory& eroRegistry() {
 
 }  // namespace
 
-TEST_CASE("RemoteServer::handle() preserves send order for two same-model executes "
-          "even when the second one's pre-strand work finishes first",
-          "[remote][execute-ordering]") {
+TEST_CASE(
+    "RemoteServer::handle() preserves send order for two same-model executes "
+    "even when the second one's pre-strand work finishes first",
+    "[remote][execute-ordering]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto authorizer = std::make_shared<SlowFirstAuthorizer>();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, eroDispatcher(), eroRegistry());
@@ -243,9 +244,10 @@ TEST_CASE("RemoteServer::handle() preserves send order for two same-model execut
     CHECK(replyB.env.body == "110");
 }
 
-TEST_CASE("RemoteServer::dispatchExecute: awaitExecuteTurn and releaseExecuteTicket both cope when their "
-          "model's execute gate has already fully drained and been erased",
-          "[remote][execute-ordering]") {
+TEST_CASE(
+    "RemoteServer::dispatchExecute: awaitExecuteTurn and releaseExecuteTicket both cope when their "
+    "model's execute gate has already fully drained and been erased",
+    "[remote][execute-ordering]") {
     // Three same-model executes, same send order every run:
     //   A (ticket 0, EroAddAction by=kSlowByValue) -- held up in authorize()
     //     for 200ms by SlowFirstThenRejectAuthorizer, so it is reliably still

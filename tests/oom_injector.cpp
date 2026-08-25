@@ -100,8 +100,8 @@ namespace {
 void* allocateOrInject(std::size_t size) {
     if (injectorArmed && size >= minSizeToFail) {
         injectorArmed = false;  // one-shot: disarm before throwing, so the
-                                 // catch block itself (and anything else on
-                                 // this thread afterward) allocates normally.
+                                // catch block itself (and anything else on
+                                // this thread afterward) allocates normally.
         throw std::bad_alloc{};
     }
     // NOLINTNEXTLINE(cppcoreguidelines-no-malloc, cppcoreguidelines-owning-memory) --
@@ -115,13 +115,9 @@ void* allocateOrInject(std::size_t size) {
 
 }  // namespace
 
-void* operator new(std::size_t size) {
-    return allocateOrInject(size);
-}
+void* operator new(std::size_t size) { return allocateOrInject(size); }
 
-void* operator new[](std::size_t size) {
-    return allocateOrInject(size);
-}
+void* operator new[](std::size_t size) { return allocateOrInject(size); }
 
 void* operator new(std::size_t size, const std::nothrow_t& tag) noexcept {
     (void)tag;
@@ -147,13 +143,9 @@ void* operator new[](std::size_t size, const std::nothrow_t& tag) noexcept {
 // forms' declarations in <new> don't name their second parameter, and
 // std::free is what a hand-written operator delete has to call to release
 // what allocateOrInject's std::malloc above returned.
-void operator delete(void* ptr) noexcept {
-    std::free(ptr);
-}
+void operator delete(void* ptr) noexcept { std::free(ptr); }
 
-void operator delete[](void* ptr) noexcept {
-    std::free(ptr);
-}
+void operator delete[](void* ptr) noexcept { std::free(ptr); }
 
 void operator delete(void* ptr, std::size_t size) noexcept {
     (void)size;

@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <cstdint>
+#include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/model_key.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/journal/action_log.hpp>
+#include <optional>
+#include <string>
+
 #include "kanban/core/errors.hpp"
 #include "kanban/core/types.hpp"
 #include "kanban/dto/activity_dto.hpp"
@@ -9,16 +18,6 @@
 #include "kanban/dto/event_dto.hpp"
 #include "kanban/dto/project_dto.hpp"
 #include "kanban/dto/rule_dto.hpp"
-
-#include <morph/core/bridge.hpp>
-#include <morph/core/model_key.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/journal/action_log.hpp>
-
-#include <cstdint>
-#include <memory>
-#include <optional>
-#include <string>
 
 /// @file
 /// `BoardModel` -- this rung's shared/keyed board model (design spec §2).
@@ -29,7 +28,7 @@
 namespace kanban {
 
 class BoardModel {
-  public:
+public:
     /// @brief Attaches this handler to `action.projectId`'s board -- the
     ///        keyed attach action.
     /// @param action The project to attach to; `action.projectId` becomes
@@ -277,7 +276,7 @@ class BoardModel {
     ///        instance produces (this rung's project id, as a string).
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
-  private:
+private:
     /// @brief Records @p action/@p result as a `LogEntry` if a log is
     ///        attached; no-op otherwise. Called at the end of every
     ///        successful mutating `execute()` -- the model-level equivalent

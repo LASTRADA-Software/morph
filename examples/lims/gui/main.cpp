@@ -37,15 +37,14 @@
 #include <QStringList>
 #include <QUrl>
 #include <QVariant>
+#include <cstdlib>
+#include <memory>
+#include <optional>
 
 #include "gui/app_context.hpp"
 #include "lims/db/database.hpp"
 #include "result_qml_bridge.hpp"
 #include "sample_qml_bridge.hpp"
-
-#include <cstdlib>
-#include <memory>
-#include <optional>
 
 namespace {
 

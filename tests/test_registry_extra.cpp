@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/registry.hpp>
-#include <morph/journal/action_log.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/core/registry.hpp>
+#include <morph/journal/action_log.hpp>
 #include <stdexcept>
 #include <string>
-
 
 struct RxAction {
     int val = 0;
@@ -77,13 +76,16 @@ TEST_CASE("morph::model::ActionTraits: resultToJson/resultFromJson round-trips c
     REQUIRE(result2 == 99);
 }
 
-TEST_CASE("morph::model::ActionTraits: fromJson with bad input throws morph::model::detail::ParseError", "[registry]") {
+TEST_CASE("morph::model::ActionTraits: fromJson with bad input throws morph::model::detail::ParseError",
+          "[registry]") {
     // Non-numeric JSON for an int field
     REQUIRE_THROWS_AS(morph::model::ActionTraits<RxAction>::fromJson("not-json"), morph::model::detail::ParseError);
 }
 
-TEST_CASE("morph::model::ActionTraits: resultFromJson with bad input throws morph::model::detail::ParseError", "[registry]") {
-    REQUIRE_THROWS_AS(morph::model::ActionTraits<RxAction>::resultFromJson("not-a-number"), morph::model::detail::ParseError);
+TEST_CASE("morph::model::ActionTraits: resultFromJson with bad input throws morph::model::detail::ParseError",
+          "[registry]") {
+    REQUIRE_THROWS_AS(morph::model::ActionTraits<RxAction>::resultFromJson("not-a-number"),
+                      morph::model::detail::ParseError);
 }
 
 // ── morph::model::detail::ModelRegistryFactory: insert_or_assign overwrites ─────────────────────────
@@ -112,8 +114,7 @@ struct morph::model::ModelTraits<DiModel> {
     static constexpr std::string_view typeId() { return "REG_DiModel"; }
 };
 
-TEST_CASE("morph::model::detail::ModelRegistryFactory: registerModel accepts a custom factory closure",
-          "[registry]") {
+TEST_CASE("morph::model::detail::ModelRegistryFactory: registerModel accepts a custom factory closure", "[registry]") {
     morph::model::detail::ModelRegistryFactory registry;
     // The DI seam: a factory closure capturing a per-instance dependency
     // (here, a plain int standing in for an injected clock/log/feature flag),
@@ -167,9 +168,10 @@ TEST_CASE(
     REQUIRE_FALSE(holder->hasActionLog());
 }
 
-TEST_CASE("morph::model::detail::ModelRegistryFactory: default-construction overload DOES auto-attach the "
-          "default action log",
-          "[registry]") {
+TEST_CASE(
+    "morph::model::detail::ModelRegistryFactory: default-construction overload DOES auto-attach the "
+    "default action log",
+    "[registry]") {
     // The contrasting case: the plain registerModel<Model>(modelId) overload
     // is unchanged and still goes through ModelFactory::create, which
     // auto-attaches the process-wide default log when one is installed.

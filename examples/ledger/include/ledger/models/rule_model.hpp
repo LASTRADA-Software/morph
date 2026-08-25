@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
-#include "ledger/dto/rule_dto.hpp"
-
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
-
-#include <memory>
 #include <optional>
 #include <string>
+
+#include "ledger/dto/rule_dto.hpp"
 
 namespace ledger {
 
@@ -21,7 +20,7 @@ namespace ledger {
 ///        live RuleModel instance -- there is no established cross-model
 ///        read pattern in this codebase to reuse instead.
 class RuleModel {
-  public:
+public:
     RuleId execute(const CreateRule& action);
     RuleInfo execute(const UpdateRule& action);
 
@@ -39,7 +38,7 @@ class RuleModel {
     ///        instance produces (this rung's ledger id, as a string).
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
-  private:
+private:
     /// @brief Records @p action/@p result as a LogEntry if a log is
     ///        attached; no-op otherwise.
     /// @tparam Action Concrete action type.
@@ -81,4 +80,3 @@ struct morph::model::ActionKeyTraits<ledger::CreateRule> {
 // default (hasKey = false, confirmed the same way Task 10 confirmed it for
 // LinkAccountToCategory), an action with no natural single ledger-scoped key
 // is simply left keyless: no ActionKeyTraits specialization here.
-

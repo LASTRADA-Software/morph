@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <cstddef>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
-
-#include <cstddef>
 #include <string>
 
 /// @file

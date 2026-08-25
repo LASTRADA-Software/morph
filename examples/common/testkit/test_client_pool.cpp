@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "testkit/client_pool.hpp"
-
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <cstddef>
+#include <morph/core/bridge.hpp>
+#include <stdexcept>
 
 #include "testkit/backend_rig.hpp"
+#include "testkit/client_pool.hpp"
 #include "testkit/pump.hpp"
-
-#include <morph/core/bridge.hpp>
-
-#include <cstddef>
-#include <stdexcept>
 
 // Deliberately at namespace scope, not inside an anonymous namespace: glz's
 // reflection (which BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION rely on to
@@ -44,12 +41,12 @@ namespace {
 ///        rung's concrete presenter type, which the shared testkit must not
 ///        do (rungs depend on the testkit, not the reverse).
 class FakePresenter {
-  public:
+public:
     FakePresenter(morph::bridge::Bridge& bridge, morph::exec::IExecutor* executor) : _handler{bridge, executor} {}
 
     [[nodiscard]] int add(int by) { return morph::ladder::testkit::awaitQt(_handler.execute(PoolAddAction{by})); }
 
-  private:
+private:
     morph::bridge::BridgeHandler<PoolCounterModel> _handler;
 };
 
@@ -57,7 +54,7 @@ class FakePresenter {
 
 TEST_CASE("ClientPool constructs one presenter per client, each over its own bridge", "[testkit][client_pool]") {
     auto mode = GENERATE(morph::ladder::testkit::Mode::Local, morph::ladder::testkit::Mode::LocalSingleThread,
-                          morph::ladder::testkit::Mode::Socket);
+                         morph::ladder::testkit::Mode::Socket);
 
     constexpr std::size_t kClients = 3;
     morph::ladder::testkit::BackendRig rig{mode, kClients};

@@ -24,18 +24,6 @@
 // are the presenter's and are covered in test_paste_presenter.cpp. This file
 // only proves the translation.
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include "clock.hpp"
-#include "paste_qml_bridges.hpp"
-#include "paste_schemas.hpp"
-#include "pastebin/models/paste_model.hpp"
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
-#include "testkit/qml_surface.hpp"
-
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaObject>
@@ -46,9 +34,19 @@
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
-
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <string>
+
+#include "clock.hpp"
+#include "paste_qml_bridges.hpp"
+#include "paste_schemas.hpp"
+#include "pastebin/models/paste_model.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
+#include "testkit/qml_surface.hpp"
 
 namespace {
 
@@ -159,9 +157,10 @@ TEST_CASE("Both pastebin bridges expose exactly the surface gui/qml binds, and n
 // FormsBridge: both arms of its one reply signal
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("FormsBridge::submitIfValid relays a successful create as replyReceived(type, true, resultJson), "
-          "all three backend modes",
-          "[pastebin][gui][qml-bridges]") {
+TEST_CASE(
+    "FormsBridge::submitIfValid relays a successful create as replyReceived(type, true, resultJson), "
+    "all three backend modes",
+    "[pastebin][gui][qml-bridges]") {
     auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     DbFixture fixture;
     BackendRig rig{mode, 1};
@@ -237,9 +236,10 @@ TEST_CASE("FormsBridge::submitIfValid relays a rejected create as replyReceived(
 // PasteBridge: the property-bag shapes
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("PasteBridge::open emits a paste bag carrying every key PasteView.qml reads, "
-          "all three backend modes",
-          "[pastebin][gui][qml-bridges]") {
+TEST_CASE(
+    "PasteBridge::open emits a paste bag carrying every key PasteView.qml reads, "
+    "all three backend modes",
+    "[pastebin][gui][qml-bridges]") {
     auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     DbFixture fixture;
     BackendRig rig{mode, 1};
@@ -306,8 +306,8 @@ TEST_CASE("PasteBridge::refresh emits list rows in the narrower summary shape, a
     pastebin::gui::FormsBridge forms{rig.bridge(0), rig.executor()};
     pastebin::gui::PasteBridge pastes{rig.bridge(0), rig.executor()};
 
-    (void) createPasteVia(forms, QStringLiteral("first"), QStringLiteral("text"));
-    (void) createPasteVia(forms, QStringLiteral("second"), QStringLiteral("md"));
+    (void)createPasteVia(forms, QStringLiteral("first"), QStringLiteral("text"));
+    (void)createPasteVia(forms, QStringLiteral("second"), QStringLiteral("md"));
 
     // A private paste, submitted through the same form path with the optional
     // `visibility` member engaged — it must not appear in the listing.
@@ -425,7 +425,6 @@ TEST_CASE("PasteBridge renders the engaged arm of every formatted field, and the
     CHECK(rows.isEmpty());
 }
 
-
 TEST_CASE("PasteBridge::remove emits removed(), and a follow-up open emits failed() with the model's message",
           "[pastebin][gui][qml-bridges]") {
     auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
@@ -455,8 +454,7 @@ TEST_CASE("PasteBridge::remove emits removed(), and a follow-up open emits faile
     CHECK(message.contains(QStringLiteral("GetPaste")));
 }
 
-TEST_CASE("PasteBridge::open against an unknown id emits failed(), not loaded()",
-          "[pastebin][gui][qml-bridges]") {
+TEST_CASE("PasteBridge::open against an unknown id emits failed(), not loaded()", "[pastebin][gui][qml-bridges]") {
     DbFixture fixture;
     BackendRig rig{Mode::Local, 1};
     pastebin::gui::PasteBridge pastes{rig.bridge(0), rig.executor()};

@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlMigration.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "testkit/db_fixture.hpp"
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <Lightweight/SqlMigration.hpp>
 
 // Not an anonymous namespace: reflection-cpp's `DataMapper` reflects on this
 // struct via `Reflection::detail::External<T>`, which requires `T` to have
@@ -52,7 +51,8 @@ TEST_CASE("DbFixture resets the shared database: a row from a prior fixture is g
     REQUIRE(rows.empty());
 }
 
-TEST_CASE("DbFixture applies pending migrations so a registered table exists and is writable", "[ladder][testkit][db]") {
+TEST_CASE("DbFixture applies pending migrations so a registered table exists and is writable",
+          "[ladder][testkit][db]") {
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     LadderTestkitProbe row;

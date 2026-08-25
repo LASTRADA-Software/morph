@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "pastebin/db/database.hpp"
-
 #include <Lightweight/SqlConnection.hpp>
 #include <Lightweight/SqlMigration.hpp>
 #include <Lightweight/SqlQuery/Migrate.hpp>
+
+#include "pastebin/db/database.hpp"
 
 namespace pastebin::db {
 

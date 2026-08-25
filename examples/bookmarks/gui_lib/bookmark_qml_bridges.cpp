@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bookmark_qml_bridges.hpp"
-#include "gui/error_text.hpp"
-#include "gui/id_qml.hpp"
-
-#include "bookmark_schemas.hpp"
-
-#include <morph/session/session.hpp>
 
 #include <QString>
 #include <QVariant>
-
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <glaze/glaze.hpp>
+#include <morph/session/session.hpp>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "bookmark_schemas.hpp"
+#include "gui/error_text.hpp"
+#include "gui/id_qml.hpp"
 
 namespace bookmarks::gui {
 
@@ -34,9 +32,7 @@ namespace {
 /// `pastebin::gui::readsText`'s identical note (`paste_qml_bridges.cpp`) —
 /// Emscripten's bundled libc++ fails to compile the `std::format` call for
 /// this `Quantity`-family type outright.
-[[nodiscard]] QString countText(const Count& count) {
-    return QString::fromStdString(morph::units::toString(count));
-}
+[[nodiscard]] QString countText(const Count& count) { return QString::fromStdString(morph::units::toString(count)); }
 
 // A `BookmarkId`/`TagId` as the plain number QML rows carry, `kNoId` when
 // unengaged — a number, not a string, is what `open`/`archive`/`remove` take.
@@ -136,9 +132,7 @@ std::optional<LoginResult> decodeLoginResult(const std::string& resultJson) {
 FormsBridge::FormsBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
     : QObject{parent}, _bridge{bridge}, _controller{bridge, executor, bookmarkSchemasJson()} {}
 
-QString FormsBridge::schemasJson() const {
-    return QString::fromStdString(_controller.schemasJson());
-}
+QString FormsBridge::schemasJson() const { return QString::fromStdString(_controller.schemasJson()); }
 
 void FormsBridge::onLoginSucceeded(const LoginResult& result) {
     ::morph::session::Context session;
@@ -206,17 +200,14 @@ BookmarkBridge::BookmarkBridge(::morph::bridge::Bridge& bridge, ::morph::exec::I
     connect(&_presenter, &BookmarkPresenter::failed, this, &BookmarkBridge::failed);
 }
 
-void BookmarkBridge::refresh() {
-    _presenter.list(ListBookmarks{});
-}
+void BookmarkBridge::refresh() { _presenter.list(ListBookmarks{}); }
 
 void BookmarkBridge::refreshIncludingArchived() {
     // Every member without a default initializer is named explicitly:
     // -Wmissing-designated-field-initializers is on under
     // MORPH_ENABLE_STRICT_COMPILATION. `.cursor = {}` is an empty cursor,
     // i.e. the first page; empty `tag`/`searchText` mean "no filter".
-    _presenter.list(
-        ListBookmarks{.cursor = {}, .archiveFilter = ArchiveFilter::Any, .tag = {}, .searchText = {}});
+    _presenter.list(ListBookmarks{.cursor = {}, .archiveFilter = ArchiveFilter::Any, .tag = {}, .searchText = {}});
 }
 
 void BookmarkBridge::open(qlonglong id) {
@@ -255,14 +246,12 @@ TagBridge::TagBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* 
     connect(&_presenter, &TagPresenter::failed, this, &TagBridge::failed);
 }
 
-void TagBridge::refresh() {
-    _presenter.list(ListTags{});
-}
+void TagBridge::refresh() { _presenter.list(ListTags{}); }
 
 // ── SharedFeedBridge ────────────────────────────────────────────────────────
 
 SharedFeedBridge::SharedFeedBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                                    QObject* parent)
+                                   QObject* parent)
     : QObject{parent}, _presenter{bridge, executor} {
     connect(&_presenter, &SharedFeedPresenter::bound, this, &SharedFeedBridge::bound);
     connect(&_presenter, &SharedFeedPresenter::listed, this,
@@ -270,8 +259,6 @@ SharedFeedBridge::SharedFeedBridge(::morph::bridge::Bridge& bridge, ::morph::exe
     connect(&_presenter, &SharedFeedPresenter::failed, this, &SharedFeedBridge::failed);
 }
 
-void SharedFeedBridge::refresh() {
-    _presenter.list(ListSharedFeed{});
-}
+void SharedFeedBridge::refresh() { _presenter.list(ListSharedFeed{}); }
 
 }  // namespace bookmarks::gui

@@ -5,13 +5,10 @@
 
 namespace ledger::gui {
 
-ReportJobPoller::ReportJobPoller(::morph::bridge::Bridge& bridge, ReportJobId jobId, Dispatch dispatch,
-                                 OnDone onDone, OnFailed onFailed, std::chrono::milliseconds interval,
+ReportJobPoller::ReportJobPoller(::morph::bridge::Bridge& bridge, ReportJobId jobId, Dispatch dispatch, OnDone onDone,
+                                 OnFailed onFailed, std::chrono::milliseconds interval,
                                  std::chrono::milliseconds executeDeadline)
-    : _jobId{jobId},
-      _dispatch{std::move(dispatch)},
-      _onDone{std::move(onDone)},
-      _onFailed{std::move(onFailed)} {
+    : _jobId{jobId}, _dispatch{std::move(dispatch)}, _onDone{std::move(onDone)}, _onFailed{std::move(onFailed)} {
     bridge.setExecuteDeadline(executeDeadline);
     // `&_timer` as the connection's context object, not `this`: this class is
     // not a QObject, and `_timer` is a member that always outlives the

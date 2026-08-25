@@ -17,19 +17,18 @@
 //           their declared precision so the stored value matches the schema's
 //           advertised x-decimalPlaces.
 
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/forms/forms.hpp>
-#include <morph/util/quantity.hpp>
-#include <morph/util/rational.hpp>
-#include <morph/core/registry.hpp>
-
 #include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/forms/forms.hpp>
+#include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -248,9 +247,7 @@ template <>
 struct morph::model::ActionTraits<SubmitMass> {
     using Result = MassAck;
     static constexpr std::string_view typeId() { return "BF_SubmitMass"; }
-    static std::string toJson(const SubmitMass& act) {
-        return glz::write_json(act).value_or(std::string{});
-    }
+    static std::string toJson(const SubmitMass& act) { return glz::write_json(act).value_or(std::string{}); }
     static SubmitMass fromJson(std::string_view json) {
         SubmitMass act{};
         if (auto err = glz::read_json(act, json)) {
@@ -259,8 +256,8 @@ struct morph::model::ActionTraits<SubmitMass> {
         return act;
     }
     static std::string resultToJson(const MassAck& res) {
-        return R"({"receivedDp":)" + std::to_string(res.receivedDp) +
-               R"(,"engaged":)" + (res.engaged ? "true" : "false") + "}";
+        return R"({"receivedDp":)" + std::to_string(res.receivedDp) + R"(,"engaged":)" +
+               (res.engaged ? "true" : "false") + "}";
     }
     static MassAck resultFromJson(std::string_view) { return {}; }
 };

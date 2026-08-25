@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <catch2/catch_test_macros.hpp>
+
 #include "bookmarks/dto/bulk_dto.hpp"
 #include "bookmarks/dto/import_export_dto.hpp"
 #include "bookmarks/dto/shared_feed_dto.hpp"
 #include "bookmarks/dto/tag_dto.hpp"
-
-#include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("RenameTag requires an id and a non-empty, bounded name", "[bookmarks][dto]") {
     bookmarks::RenameTag action;
@@ -40,9 +40,10 @@ TEST_CASE("BulkArchiveOp reflects as a readable string", "[bookmarks][dto]") {
     CHECK(json == "\"Archive\"");
 }
 
-TEST_CASE("ImportBookmarks requires a non-empty chunk and an opId; the chunk-size bound is "
-          "deliberately NOT one of validate()'s checks",
-          "[bookmarks][dto]") {
+TEST_CASE(
+    "ImportBookmarks requires a non-empty chunk and an opId; the chunk-size bound is "
+    "deliberately NOT one of validate()'s checks",
+    "[bookmarks][dto]") {
     bookmarks::ImportBookmarks action;
     CHECK_FALSE(action.validate());
     action.chunk = "<A HREF=\"https://example.com\">Example</A>";
@@ -60,8 +61,7 @@ TEST_CASE("ImportBookmarks requires a non-empty chunk and an opId; the chunk-siz
     CHECK(action.validate());
 }
 
-TEST_CASE("ListSharedFeed/ListTags/ExportBookmarks validate() with no required fields",
-          "[bookmarks][dto]") {
+TEST_CASE("ListSharedFeed/ListTags/ExportBookmarks validate() with no required fields", "[bookmarks][dto]") {
     CHECK(bookmarks::ListSharedFeed{}.validate());
     CHECK(bookmarks::ListTags{}.validate());
     CHECK(bookmarks::ExportBookmarks{}.validate());

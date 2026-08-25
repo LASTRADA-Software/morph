@@ -174,19 +174,18 @@
 /// file is a control-flow shape (`OpenPoll`'s async attach) this repository
 /// has only exercised natively before now.
 
+#include <emscripten/emscripten.h>
+
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QString>
 #include <QUrl>
 #include <QVariant>
+#include <cstdlib>
+#include <memory>
 
 #include "gui/app_context.hpp"
 #include "poll_qml_bridges.hpp"
-
-#include <emscripten/emscripten.h>
-
-#include <cstdlib>
-#include <memory>
 
 namespace {
 

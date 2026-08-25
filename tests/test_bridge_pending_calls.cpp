@@ -7,12 +7,12 @@
 // returned Completion resolves — on success, on error, and when the handler
 // is not bound (immediate synchronous failure). See docs/spec/core/bridge.md.
 
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/registry.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
 #include <stdexcept>
 #include <thread>
 

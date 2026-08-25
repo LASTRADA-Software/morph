@@ -27,10 +27,10 @@ TEST_CASE("GetPollStateResult contains all nested views with correct field value
     polls::GetPollStateResult result;
     result.pollId = "abc";
     result.title = "Team offsite";
-    result.options.push_back({.id = polls::OptionId{.value = 1}, .label = "2026-09-01",
-                               .yesCount = polls::Count::fromDouble(2.0)});
-    result.votes.push_back({.participantName = "alice", .optionId = polls::OptionId{.value = 1},
-                             .choice = polls::VoteChoice::Yes});
+    result.options.push_back(
+        {.id = polls::OptionId{.value = 1}, .label = "2026-09-01", .yesCount = polls::Count::fromDouble(2.0)});
+    result.votes.push_back(
+        {.participantName = "alice", .optionId = polls::OptionId{.value = 1}, .choice = polls::VoteChoice::Yes});
     result.comments.push_back({.participantName = "alice", .body = "works for me"});
 
     // Verify field values directly; JSON round-trip via ActionTraits<GetPollState>::resultToJson/resultFromJson

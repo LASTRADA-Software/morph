@@ -110,7 +110,7 @@ namespace morph::testkit {
 /// below any parameter `Bridge` could plausibly accept. Overriding the
 /// global allocator is the standard technique for exactly this shape of gap.
 class OomInjector {
-  public:
+public:
     /// @brief Arms the injector so the first future `operator new` call on
     ///        this thread whose requested size is at least @p minSize
     ///        throws `std::bad_alloc` instead of allocating. Smaller

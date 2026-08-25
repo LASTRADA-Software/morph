@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "bookmarks/models/auth_model.hpp"
-#include "bookmarks/models/bookmark_model.hpp"
-#include "bookmarks/models/tag_model.hpp"
-
+#include <exception>
 #include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
-
-#include <exception>
 #include <string>
 #include <utility>
+
+#include "bookmarks/models/auth_model.hpp"
+#include "bookmarks/models/bookmark_model.hpp"
+#include "bookmarks/models/tag_model.hpp"
 
 namespace bookmarks::gui {
 
@@ -78,7 +77,7 @@ namespace bookmarks::gui {
 /// status line rather than silent corruption. Stated here rather than
 /// smoothed over — see `examples/bookmarks/README.md`'s known-gaps entry.
 class BookmarkFormsController {
-  public:
+public:
     /// @param bridge      The shared `Bridge` `AppContext` owns.
     /// @param executor    The executor `Completion` callbacks land on.
     /// @param schemasJson Pre-assembled `{actionType: schemaJson<A>()}` map,
@@ -116,16 +115,15 @@ class BookmarkFormsController {
     void submitIfValid(std::string actionType, std::string bodyJson, OnReply onReply, OnError onError) {
         try {
             dispatch(actionType, bodyJson)
-                .then([onReply = std::move(onReply)](std::string resultJson) mutable {
-                    onReply(std::move(resultJson));
-                })
+                .then(
+                    [onReply = std::move(onReply)](std::string resultJson) mutable { onReply(std::move(resultJson)); })
                 .onError([onError](const std::exception_ptr& err) mutable { onError(err); });
         } catch (...) {
             onError(std::current_exception());
         }
     }
 
-  private:
+private:
     /// @brief Routes @p actionType to the handler for the model that serves
     ///        it and starts the dispatch.
     /// @param actionType Registered action type id.

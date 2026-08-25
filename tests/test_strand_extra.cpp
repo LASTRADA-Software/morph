@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <array>
-#include <morph/core/strand.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/strand.hpp>
 #include <stdexcept>
 #include <thread>
-
 
 TEST_CASE("morph::exec::detail::StrandExecutor: exception in task is swallowed and next task still runs", "[strand]") {
     morph::exec::ThreadPoolExecutor pool{2};

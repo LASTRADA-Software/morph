@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "lims/core/types.hpp"
-
+#include <cstdint>
 #include <morph/core/model_key.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/forms/instance_constraints.hpp>
 #include <morph/util/rational.hpp>
-
-#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "lims/core/types.hpp"
 
 namespace lims {
 
@@ -98,9 +97,8 @@ struct DefineAnalysis {
         const auto boundOk = [](const std::optional<AnalysisBound>& bound) {
             return !bound.has_value() || bound->validate();
         };
-        return !name.empty() && !canonicalUnit.empty() && decimalPlaces >= 0 && decimalPlaces <= 18
-            && boundOk(specLow) && boundOk(specHigh) && boundOk(limitOfDetection)
-            && boundOk(upperDetectionLimit);
+        return !name.empty() && !canonicalUnit.empty() && decimalPlaces >= 0 && decimalPlaces <= 18 &&
+               boundOk(specLow) && boundOk(specHigh) && boundOk(limitOfDetection) && boundOk(upperDetectionLimit);
     }
 };
 
@@ -124,9 +122,8 @@ struct ReviseAnalysis {
         const auto boundOk = [](const std::optional<AnalysisBound>& bound) {
             return !bound.has_value() || bound->validate();
         };
-        return analysisId.hasValue() && !canonicalUnit.empty() && decimalPlaces >= 0 && decimalPlaces <= 18
-            && boundOk(specLow) && boundOk(specHigh) && boundOk(limitOfDetection)
-            && boundOk(upperDetectionLimit);
+        return analysisId.hasValue() && !canonicalUnit.empty() && decimalPlaces >= 0 && decimalPlaces <= 18 &&
+               boundOk(specLow) && boundOk(specHigh) && boundOk(limitOfDetection) && boundOk(upperDetectionLimit);
     }
 };
 

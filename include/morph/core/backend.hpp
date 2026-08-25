@@ -145,10 +145,11 @@ struct IBackend {
     /// @return `true` if this backend accepted the request and will invoke
     ///         exactly one callback later; `false` if it has no async path
     ///         (neither callback is invoked in that case).
-    virtual bool registerModelAsync(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        std::string_view contextKey, std::function<void(::morph::exec::detail::ModelId)> onRegistered,
-        std::function<void(const std::string&)> onError) {
+    virtual bool registerModelAsync(const std::string& typeId,
+                                    std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+                                    std::string_view contextKey,
+                                    std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                                    std::function<void(const std::string&)> onError) {
         (void)typeId;
         (void)factory;
         (void)contextKey;
@@ -910,7 +911,8 @@ private:
     std::unordered_map<DirectoryKey, ::morph::exec::detail::ModelId, ::morph::model::detail::PairKeyHash> _directory;
     std::unordered_map<::morph::exec::detail::ModelId, DirectoryKey, ::morph::exec::detail::ModelIdHash> _sharedKeyOf;
     std::unordered_map<::morph::exec::detail::ModelId, std::size_t, ::morph::exec::detail::ModelIdHash> _attachCount;
-    std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<HydrationFlags>, ::morph::exec::detail::ModelIdHash>
+    std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<HydrationFlags>,
+                       ::morph::exec::detail::ModelIdHash>
         _hydrationFlags;
     std::atomic<uint64_t> _nextId{0};
     std::mutex _pendingMtx;

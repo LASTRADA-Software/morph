@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <catch2/catch_test_macros.hpp>
+#include <glaze/glaze.hpp>
+
 #include "bookmarks/core/errors.hpp"
 #include "bookmarks/core/types.hpp"
 #include "bookmarks/units.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <glaze/glaze.hpp>
 
 TEST_CASE("BookmarkId/TagId round-trip through JSON as a nullable integer", "[bookmarks][types]") {
     bookmarks::BookmarkId empty;
@@ -46,8 +46,7 @@ TEST_CASE("Count is a whole-number dimensionless quantity", "[bookmarks][types]"
     CHECK(morph::math::floor(*five) == 5);
 }
 
-TEST_CASE("Every bookmarks error derives from BookmarksError and carries its message",
-          "[bookmarks][types]") {
+TEST_CASE("Every bookmarks error derives from BookmarksError and carries its message", "[bookmarks][types]") {
     try {
         throw bookmarks::NotFound{"no such bookmark"};
     } catch (const bookmarks::BookmarksError& err) {

@@ -3,13 +3,11 @@
 
 #include <QCoreApplication>
 #include <QEventLoop>
-
-#include <morph/core/completion.hpp>
-
 #include <chrono>
 #include <concepts>
 #include <cstdlib>
 #include <exception>
+#include <morph/core/completion.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -67,8 +65,8 @@ inline double deadlineScale() {
 /// @return `true` if @p pred became true before the deadline, `false` on timeout.
 template <std::predicate<> Pred>
 [[nodiscard]] bool pumpUntil(Pred pred, std::chrono::milliseconds deadline = std::chrono::milliseconds{5000}) {
-    const auto scaledDeadline =
-        std::chrono::milliseconds{static_cast<long long>(static_cast<double>(deadline.count()) * detail::deadlineScale())};
+    const auto scaledDeadline = std::chrono::milliseconds{
+        static_cast<long long>(static_cast<double>(deadline.count()) * detail::deadlineScale())};
     const auto start = std::chrono::steady_clock::now();
     while (!pred()) {
         if (std::chrono::steady_clock::now() - start >= scaledDeadline) {
@@ -87,7 +85,8 @@ template <std::predicate<> Pred>
 /// @return The resolved value.
 /// @throws std::runtime_error if the deadline elapses before resolution.
 template <typename T>
-T awaitQt(::morph::async::Completion<T> completion, std::chrono::milliseconds deadline = std::chrono::milliseconds{5000}) {
+T awaitQt(::morph::async::Completion<T> completion,
+          std::chrono::milliseconds deadline = std::chrono::milliseconds{5000}) {
     // `value`/`error` live in a heap-allocated block kept alive by `shared_ptr`s
     // captured (by value) in the `then`/`onError` handlers below. Those handlers
     // are held by the completion's backing state, which can outlive this stack
@@ -103,8 +102,7 @@ T awaitQt(::morph::async::Completion<T> completion, std::chrono::milliseconds de
     };
     auto state = std::make_shared<State>();
 
-    completion
-        .then([state](T resolved) { state->value = std::move(resolved); })
+    completion.then([state](T resolved) { state->value = std::move(resolved); })
         .onError([state](const std::exception_ptr& err) { state->error = err; });
 
     const bool settled = pumpUntil([state] { return state->value.has_value() || state->error != nullptr; }, deadline);
@@ -129,7 +127,8 @@ T awaitQt(::morph::async::Completion<T> completion, std::chrono::milliseconds de
 ///         "the action never completed" into "the assertion below reads stale
 ///         state", which is exactly the flake this primitive exists to avoid.
 template <typename PresenterLike>
-[[nodiscard]] bool settle(const PresenterLike& presenter, std::chrono::milliseconds deadline = std::chrono::milliseconds{5000}) {
+[[nodiscard]] bool settle(const PresenterLike& presenter,
+                          std::chrono::milliseconds deadline = std::chrono::milliseconds{5000}) {
     return pumpUntil([&] { return !presenter.busy(); }, deadline);
 }
 

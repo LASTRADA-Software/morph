@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
-#include <atomic>
-#include <catch2/catch_test_macros.hpp>
-#include <chrono>
 #include <thread>
 
 #include "test_support.hpp"
 
 using SyncExec = morph::testing::InlineExecutor;
-
 
 struct HBAction {
     int x = 0;
@@ -42,7 +41,9 @@ struct morph::model::ActionTraits<HBAction> {
 // A fresh handler registered afterwards must work correctly, proving the
 // slot was not corrupted.
 
-TEST_CASE("morph::bridge::detail::HandlerBinding: RAII  -  model deregistered when morph::bridge::BridgeHandler destroyed", "[binding]") {
+TEST_CASE(
+    "morph::bridge::detail::HandlerBinding: RAII  -  model deregistered when morph::bridge::BridgeHandler destroyed",
+    "[binding]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -82,7 +83,8 @@ TEST_CASE("morph::bridge::detail::HandlerBinding: RAII  -  model deregistered wh
 // slot". morph::bridge::Bridge::executeVia must return a failed morph::async::Completion immediately rather
 // than forwarding to the backend with an invalid id.
 
-TEST_CASE("morph::bridge::detail::HandlerBinding: executeVia with currentId=0 delivers error immediately", "[binding]") {
+TEST_CASE("morph::bridge::detail::HandlerBinding: executeVia with currentId=0 delivers error immediately",
+          "[binding]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -114,7 +116,10 @@ TEST_CASE("morph::bridge::detail::HandlerBinding: executeVia with currentId=0 de
 // proving morph::bridge::Bridge does not retain the destroyed binding or crash on the stale
 // weak_ptr.
 
-TEST_CASE("morph::bridge::detail::HandlerBinding: morph::bridge::Bridge holds weak_ptr  -  destroyed handler does not block new registration", "[binding]") {
+TEST_CASE(
+    "morph::bridge::detail::HandlerBinding: morph::bridge::Bridge holds weak_ptr  -  destroyed handler does not block "
+    "new registration",
+    "[binding]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -145,7 +150,10 @@ TEST_CASE("morph::bridge::detail::HandlerBinding: morph::bridge::Bridge holds we
 // grab a second strong reference and verifies the object is still intact after
 // the handler is destroyed.
 
-TEST_CASE("morph::bridge::detail::HandlerBinding: shared_ptr keeps binding alive past morph::bridge::BridgeHandler destructor", "[binding]") {
+TEST_CASE(
+    "morph::bridge::detail::HandlerBinding: shared_ptr keeps binding alive past morph::bridge::BridgeHandler "
+    "destructor",
+    "[binding]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};

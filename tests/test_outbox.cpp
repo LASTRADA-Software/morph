@@ -384,9 +384,8 @@ TEST_CASE("OutboxRelay::relay(): a null sink is logged, not rejected, at call ti
     auto result = relay.relay();
     REQUIRE(result.relayed == 0);
 
-    bool sawWarning = std::any_of(logged.begin(), logged.end(), [](const std::string& line) {
-        return line.find("null sink") != std::string::npos;
-    });
+    bool sawWarning = std::any_of(logged.begin(), logged.end(),
+                                  [](const std::string& line) { return line.find("null sink") != std::string::npos; });
     REQUIRE(sawWarning);
 }
 
@@ -411,9 +410,8 @@ TEST_CASE("OutboxRelay::relay(): a null sink reaching a non-empty drain throws N
 
     REQUIRE_THROWS_AS(relay.relay(), morph::journal::NullSinkError);
 
-    bool sawWarning = std::any_of(logged.begin(), logged.end(), [](const std::string& line) {
-        return line.find("null sink") != std::string::npos;
-    });
+    bool sawWarning = std::any_of(logged.begin(), logged.end(),
+                                  [](const std::string& line) { return line.find("null sink") != std::string::npos; });
     REQUIRE(sawWarning);
 }
 

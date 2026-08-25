@@ -14,33 +14,33 @@ namespace kanban {
 
 /// @brief Base for every exception `BoardModel`/`ProjectAdminModel` throws.
 class KanbanError : public std::runtime_error {
-  public:
+public:
     using std::runtime_error::runtime_error;
 };
 
 /// @brief An action's `validate()` rejected the request.
 class ValidationError : public KanbanError {
-  public:
+public:
     using KanbanError::KanbanError;
 };
 
 /// @brief The named project/column/task/etc. does not exist (or does not
 ///        belong to the project it was claimed to).
 class NotFound : public KanbanError {
-  public:
+public:
     using KanbanError::KanbanError;
 };
 
 /// @brief The caller's role does not permit the requested action.
 class Forbidden : public KanbanError {
-  public:
+public:
     using KanbanError::KanbanError;
 };
 
 /// @brief The action cannot proceed given the target's current state (WIP
 ///        limit exceeded, project archived, etc.).
 class Conflict : public KanbanError {
-  public:
+public:
     using KanbanError::KanbanError;
 };
 

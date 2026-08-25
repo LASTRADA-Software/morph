@@ -58,22 +58,20 @@
 //    whole test class does not apply. Considered and explicitly skipped,
 //    not silently omitted; see this task's commit message.
 
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "polls/auth/polls_authorizer.hpp"
 #include "polls/dto/poll_dto.hpp"
 #include "polls/dto/vote_dto.hpp"
 #include "polls/models/poll_model.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <memory>
-#include <string>
-#include <string_view>
-#include <vector>
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
 
 using morph::bridge::AllowShared;
 using morph::bridge::BridgeHandler;
@@ -113,9 +111,8 @@ TEST_CASE("PollModel over the full backend-mode matrix: create -> keyed-attach -
     REQUIRE(opened.pollId == created.pollId);
     REQUIRE(opened.options.size() == 2);
 
-    const auto afterVote = awaitQt(handler.execute(
-        SubmitVotes{.participantName = "alice",
-                    .votes = {{.optionId = opened.options[0].id, .choice = VoteChoice::Yes}}}));
+    const auto afterVote = awaitQt(handler.execute(SubmitVotes{
+        .participantName = "alice", .votes = {{.optionId = opened.options[0].id, .choice = VoteChoice::Yes}}}));
     REQUIRE(afterVote.votes.size() == 1);
     CHECK(afterVote.votes.front().participantName == "alice");
     CHECK(afterVote.votes.front().choice == VoteChoice::Yes);
@@ -126,9 +123,10 @@ TEST_CASE("PollModel over the full backend-mode matrix: create -> keyed-attach -
     CHECK(state.votes.front().participantName == "alice");
 }
 
-TEST_CASE("N shared handlers on one pollId observe each other's writes, and instances() reflects "
-          "the instance's real lifetime",
-          "[polls][model][shared-instances]") {
+TEST_CASE(
+    "N shared handlers on one pollId observe each other's writes, and instances() reflects "
+    "the instance's real lifetime",
+    "[polls][model][shared-instances]") {
     DbFixture fixture;
     // 5 clients, not 4: the fifth connection is reserved for the fresh
     // "prober" handler below. Reusing one of the four attached connections
@@ -179,7 +177,7 @@ TEST_CASE("N shared handlers on one pollId observe each other's writes, and inst
     // One handler submits a vote; the other three see it on their next
     // GetPollState, proving they share one instance's state, not four
     // divergent copies.
-    (void) awaitQt(handlers[0]->execute(
+    (void)awaitQt(handlers[0]->execute(
         SubmitVotes{.participantName = "carol", .votes = {{.optionId = firstOptionId, .choice = VoteChoice::Yes}}}));
     for (std::size_t i = 1; i < handlers.size(); ++i) {
         const auto state = awaitQt(handlers[i]->execute(GetPollState{}));
@@ -214,9 +212,10 @@ TEST_CASE("N shared handlers on one pollId observe each other's writes, and inst
     CHECK(remaining.empty());
 }
 
-TEST_CASE("Opening a stale pollId is NotFound through .onError(), not a crash, and a second attempt "
-          "to the same bad key gets a fresh (still-failing) instance, not stale poisoned state",
-          "[polls][model][shared-instances]") {
+TEST_CASE(
+    "Opening a stale pollId is NotFound through .onError(), not a crash, and a second attempt "
+    "to the same bad key gets a fresh (still-failing) instance, not stale poisoned state",
+    "[polls][model][shared-instances]") {
     // Per docs/spec/core/shared_instances.md's "Failure modes" section: this
     // handler's primary is set to the poisoned key on the very first
     // execute() (attachHandler records the primary before dispatch), so its
@@ -252,7 +251,7 @@ TEST_CASE("Opening a stale pollId is NotFound through .onError(), not a crash, a
     // LocalSingleThread, never Socket -- this is that same constraint made
     // explicit rather than silently avoided.
     try {
-        (void) awaitQt(handler.execute(OpenPoll{.pollId = "not-a-real-poll"}));
+        (void)awaitQt(handler.execute(OpenPoll{.pollId = "not-a-real-poll"}));
         FAIL("expected a third attempt against the same poisoned handler to fail identically");
     } catch (const std::exception& exc) {
         CHECK(std::string{exc.what()}.find("poll not found") != std::string::npos);
@@ -284,8 +283,7 @@ TEST_CASE("A poll's admin token does not finalize a different poll", "[polls][mo
     REQUIRE(pumpUntil([&failed] { return failed; }));
 }
 
-TEST_CASE("The real rate limiter refuses an over-budget call without hanging it",
-          "[polls][model][shared-instances]") {
+TEST_CASE("The real rate limiter refuses an over-budget call without hanging it", "[polls][model][shared-instances]") {
     // BackendRig's Mode::Socket constructor takes an optional
     // QtWebSocketServerConfig (Task 11's own README-named
     // "Expected strain point": pastebin's own maxMessageBytes case is the
@@ -304,8 +302,8 @@ TEST_CASE("The real rate limiter refuses an over-budget call without hanging it"
     DbFixture fixture;
     ::morph::qt::QtWebSocketServerConfig cfg;
     cfg.messagesPerSecond = 5;  // bucket capacity 5, refills at 5/s -- same
-                                 // value test_qt_websocket.cpp's own
-                                 // messagesPerSecond test uses.
+                                // value test_qt_websocket.cpp's own
+                                // messagesPerSecond test uses.
     BackendRig rig{Mode::Socket, 1, std::make_shared<polls::auth::PollsAuthorizer>(), cfg};
 
     // Set the deadline before any traffic: setExecuteDeadline races every
@@ -316,8 +314,7 @@ TEST_CASE("The real rate limiter refuses an over-budget call without hanging it"
     rig.bridge(0).setExecuteDeadline(std::chrono::milliseconds{500});
 
     auto creator = rig.client<PollModel>(0);
-    const auto created =
-        awaitQt(creator.execute(CreatePoll{.title = "Rate-limited poll", .options = {{"a"}, {"b"}}}));
+    const auto created = awaitQt(creator.execute(CreatePoll{.title = "Rate-limited poll", .options = {{"a"}, {"b"}}}));
     BridgeHandler<PollModel, AllowShared> handler{rig.bridge(0), rig.executor()};
     const auto opened = awaitQt(handler.execute(OpenPoll{.pollId = created.pollId}));
 
@@ -341,7 +338,7 @@ TEST_CASE("The real rate limiter refuses an over-budget call without hanging it"
     for (int i = 0; i < kBurstSize; ++i) {
         handler
             .execute(SubmitVotes{.participantName = "voter-" + std::to_string(i),
-                                  .votes = {{.optionId = opened.options[0].id, .choice = VoteChoice::Yes}}})
+                                 .votes = {{.optionId = opened.options[0].id, .choice = VoteChoice::Yes}}})
             .then([&successes](polls::GetPollStateResult) { ++successes; })
             .onError([&errors, &clientTimeouts, &rateLimited](const std::exception_ptr& err) {
                 ++errors;

@@ -5,8 +5,8 @@
 // D-test — all three "no number" meanings surviving the wire, the journal and
 // an offline payload *distinguishably*.
 
-#include <array>
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/forms/forms.hpp>
@@ -666,8 +666,7 @@ TEST_CASE("Both halves of the sum engaged is refused by the model, not just by v
     CHECK(model.execute(lims::ListResults{}).results.empty());
 }
 
-TEST_CASE("A version declaring an impossible precision cannot be captured against",
-          "[lims][result][precision]") {
+TEST_CASE("A version declaring an impossible precision cannot be captured against", "[lims][result][precision]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
@@ -698,7 +697,7 @@ TEST_CASE("A version declaring an impossible precision cannot be captured agains
     }
 
     CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = impossible,
-                                                              .value = lims::Concentration{exact(12, 5, 3)}}),
+                                                             .value = lims::Concentration{exact(12, 5, 3)}}),
                     lims::ValidationError);
     CHECK(model.execute(lims::ListResults{}).results.empty());
 }

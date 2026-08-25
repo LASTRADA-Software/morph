@@ -74,10 +74,11 @@ TEST_CASE("PayeeModel notifies subscribers of the state it produces", "[payee][s
     // An incomplete payee fails validate() (no IBAN), so the dispatch-path
     // validator rejects it and no subscriber is notified.
     std::atomic<bool> rejected{false};
-    payees.execute(bank::dto::AddPayee{.name = "Streamed Payee", .iban = ""})
-        .onError([&](const std::exception_ptr&) { rejected.store(true); });
-    REQUIRE(waitUntil([&] { return rejected.load(); }, std::chrono::milliseconds{2000},
-                      std::chrono::milliseconds{5}, app.guiLoop()));
+    payees.execute(bank::dto::AddPayee{.name = "Streamed Payee", .iban = ""}).onError([&](const std::exception_ptr&) {
+        rejected.store(true);
+    });
+    REQUIRE(waitUntil([&] { return rejected.load(); }, std::chrono::milliseconds{2000}, std::chrono::milliseconds{5},
+                      app.guiLoop()));
     REQUIRE_FALSE(fired.load());
 
     // A complete one succeeds and the subscription fires.

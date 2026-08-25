@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/util/quantity.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
 #include <array>
+#include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <format>
+#include <morph/util/quantity.hpp>
 #include <optional>
 #include <span>
 #include <string>
@@ -46,20 +44,34 @@ template <>
 struct morph::units::UnitTraits<qt::U> {
     static constexpr morph::units::UnitMeta meta(qt::U unit) noexcept {
         switch (unit) {
-            case qt::U::scalar: return {"scalar", "", 3};
-            case qt::U::watt: return {"watt", "W", 1};
-            case qt::U::kilowatt: return {"kilowatt", "kW", 3};
-            case qt::U::hour: return {"hour", "h", 2};
-            case qt::U::kilowatt_hour: return {"kwh", "kWh", 3};
-            case qt::U::euro: return {"euro", "EUR", 2};
-            case qt::U::euro_per_kwh: return {"eur_per_kwh", "EUR/kWh", 4};
-            case qt::U::gram: return {"g", "g", 3};
-            case qt::U::kilogram: return {"kg", "kg", 3};
-            case qt::U::tonne: return {"t", "t", 3};
-            case qt::U::celsius: return {"celsius", "C", 1};
-            case qt::U::fahrenheit: return {"fahrenheit", "F", 1};
-            case qt::U::yen: return {"yen", "JPY", 0};
-            default:               return {"?", "?", 3};
+            case qt::U::scalar:
+                return {"scalar", "", 3};
+            case qt::U::watt:
+                return {"watt", "W", 1};
+            case qt::U::kilowatt:
+                return {"kilowatt", "kW", 3};
+            case qt::U::hour:
+                return {"hour", "h", 2};
+            case qt::U::kilowatt_hour:
+                return {"kwh", "kWh", 3};
+            case qt::U::euro:
+                return {"euro", "EUR", 2};
+            case qt::U::euro_per_kwh:
+                return {"eur_per_kwh", "EUR/kWh", 4};
+            case qt::U::gram:
+                return {"g", "g", 3};
+            case qt::U::kilogram:
+                return {"kg", "kg", 3};
+            case qt::U::tonne:
+                return {"t", "t", 3};
+            case qt::U::celsius:
+                return {"celsius", "C", 1};
+            case qt::U::fahrenheit:
+                return {"fahrenheit", "F", 1};
+            case qt::U::yen:
+                return {"yen", "JPY", 0};
+            default:
+                return {"?", "?", 3};
         }
     }
 
@@ -75,8 +87,8 @@ struct morph::units::UnitTraits<qt::U> {
     static void convert(const morph::units::Quantity<qt::U::celsius, DIn>& in,
                         morph::units::Quantity<qt::U::fahrenheit, DOut>& out) {
         if (in.value()) {
-            out = morph::units::Quantity<qt::U::fahrenheit, DOut>::fromDouble(in.value()->toDouble() * 9.0 / 5.0 +
-                                                                             32.0);
+            out =
+                morph::units::Quantity<qt::U::fahrenheit, DOut>::fromDouble(in.value()->toDouble() * 9.0 / 5.0 + 32.0);
         } else {
             out = morph::units::Quantity<qt::U::fahrenheit, DOut>{};
         }
@@ -155,7 +167,8 @@ static_assert(Yen::declaredDecimals == 0);
 static_assert(std::same_as<Yen, Quantity<qt::U::yen, 0>>);
 static_assert(std::same_as<decltype(std::declval<Kilowatt>() * std::declval<Hours>()), KilowattHour>);
 static_assert(std::same_as<decltype(std::declval<KilowattHour>() / std::declval<Hours>()), Kilowatt>);
-static_assert(std::same_as<decltype(std::declval<KilowattHour>() / std::declval<KilowattHour>()), Quantity<qt::U::scalar>>);
+static_assert(
+    std::same_as<decltype(std::declval<KilowattHour>() / std::declval<KilowattHour>()), Quantity<qt::U::scalar>>);
 
 TEST_CASE("Quantity::construction and access", "[quantity]") {
     Kilowatt empty;
@@ -337,8 +350,7 @@ TEST_CASE("formatRationalDecimal - exact decimal rendering (no double path)", "[
 
     // Non-terminating decimals: round-half-away-from-zero at DecimalPlaces.
     // 1/3 at 18 places is eighteen 3s (no trailing 5 leaking in from a double).
-    CHECK(formatRationalDecimal(Rational{Numerator{1}, Denominator{3}, DecimalPlaces{18}}) ==
-          "0.333333333333333333");
+    CHECK(formatRationalDecimal(Rational{Numerator{1}, Denominator{3}, DecimalPlaces{18}}) == "0.333333333333333333");
     // 2/3 at 4 places rounds up: 0.66666.. -> 0.6667.
     CHECK(formatRationalDecimal(Rational{Numerator{2}, Denominator{3}, DecimalPlaces{4}}) == "0.6667");
     // 1/6 = 0.16666.. at 3 places rounds to 0.167.
@@ -349,8 +361,8 @@ TEST_CASE("formatRationalDecimal - exact decimal rendering (no double path)", "[
 
     // Large exact integers survive without the 2^53 double-mantissa error.
     // 9007199254740993 == 2^53 + 1 (the classic non-representable double).
-    CHECK(formatRationalDecimal(
-              Rational{Numerator{9007199254740993}, Denominator{1}, DecimalPlaces{3}}) == "9007199254740993");
+    CHECK(formatRationalDecimal(Rational{Numerator{9007199254740993}, Denominator{1}, DecimalPlaces{3}}) ==
+          "9007199254740993");
 
     // Negatives: rounding is symmetric (away from zero) and the sign is kept.
     CHECK(formatRationalDecimal(Rational{Numerator{-1}, Denominator{3}, DecimalPlaces{18}}) ==
@@ -376,8 +388,8 @@ TEST_CASE("toDecimalString - the exact decimal without the unit", "[quantity][fo
         CHECK(toDecimalString(Celsius{Rational{Numerator{-42}, Denominator{10}, DecimalPlaces{3}}}) == "-4.2");
 
         // The unit is genuinely absent, not merely invisible at the end.
-        CHECK(toDecimalString(Kilowatt{Rational{Numerator{52}, Denominator{10}, DecimalPlaces{1}}})
-                  .find("kW") == std::string::npos);
+        CHECK(toDecimalString(Kilowatt{Rational{Numerator{52}, Denominator{10}, DecimalPlaces{1}}}).find("kW") ==
+              std::string::npos);
     }
 
     SECTION("empty renders \"N/A\", not an empty string") {
@@ -399,8 +411,7 @@ TEST_CASE("toDecimalString - the exact decimal without the unit", "[quantity][fo
             using Q = std::remove_cvref_t<decltype(quantity)>;
             CHECK(toString(quantity) == toDecimalString(quantity) + std::string{Q::unitMeta().display});
             // ... and the formatter is that same text again (one print path).
-            CHECK(std::format("{}", quantity) ==
-                  toDecimalString(quantity) + std::string{Q::unitMeta().display});
+            CHECK(std::format("{}", quantity) == toDecimalString(quantity) + std::string{Q::unitMeta().display});
         };
 
         holds(Kilowatt{Rational{Numerator{52}, Denominator{10}, DecimalPlaces{1}}});
@@ -530,7 +541,7 @@ TEST_CASE("equation() - worked formula with inlined values", "[quantity][equatio
 TEST_CASE("equation() - reused value earns one placeholder", "[quantity][equation]") {
     auto a = KilowattHour::fromDouble(6.0).named("a");
     auto b = KilowattHour::fromDouble(1.8).named("b");
-    auto diff = a - b;                  // unnamed, computed, used twice
+    auto diff = a - b;  // unnamed, computed, used twice
     auto share = diff / (diff + b);
 
     auto const lines = share.equation();

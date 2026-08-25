@@ -27,7 +27,7 @@ struct LoginRequest {
 /// @brief Result of register/login: on success carries the principal to install.
 struct AuthResult {
     bool ok = false;
-    std::string principal;    ///< the username to use as the session principal
+    std::string principal;  ///< the username to use as the session principal
     std::string displayName;
     std::string message;
 };

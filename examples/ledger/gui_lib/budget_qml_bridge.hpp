@@ -34,12 +34,11 @@ class BudgetQmlBridge : public QObject {
     /// @brief The last error surfaced by the presenter, or empty.
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
-    BudgetQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                    QObject* parent = nullptr);
+    BudgetQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent = nullptr);
 
     /// @return The last computed report, as a QML-ready map.
     [[nodiscard]] QVariantMap report() const { return _report; }
@@ -90,7 +89,7 @@ class BudgetQmlBridge : public QObject {
     /// @return The most recently created budget's id, for the same reason.
     [[nodiscard]] Q_INVOKABLE QString lastBudgetId() const;
 
-  signals:
+signals:
     /// @brief `report()` changed.
     void reportChanged();
 
@@ -111,7 +110,7 @@ class BudgetQmlBridge : public QObject {
     /// @brief A month's limit was stored.
     void limitSet();
 
-  private:
+private:
     /// @brief Records @p message as `lastError` and notifies QML.
     /// @param message The presenter's error text.
     void publishError(const QString& message);

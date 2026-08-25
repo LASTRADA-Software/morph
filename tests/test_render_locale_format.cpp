@@ -37,8 +37,7 @@ TEST_CASE("render::normalizeLocaleNumber rejects empty input", "[render][locale]
     CHECK(normalizeLocaleNumber("", ".", "") == std::nullopt);
 }
 
-TEST_CASE("render::normalizeLocaleNumber rejects a sign that is not in the leading position",
-          "[render][locale]") {
+TEST_CASE("render::normalizeLocaleNumber rejects a sign that is not in the leading position", "[render][locale]") {
     // A `-` reached after digits have already been emitted is sign injection,
     // not a leading sign -- distinct from the lone-dash case (`sawAnyOutput`
     // is still false there) and from the multi-decimal case (a different
@@ -46,8 +45,7 @@ TEST_CASE("render::normalizeLocaleNumber rejects a sign that is not in the leadi
     CHECK(normalizeLocaleNumber("1-2", ".", "") == std::nullopt);
 }
 
-TEST_CASE("render::normalizeLocaleNumber supports a locale with no decimal separator",
-          "[render][locale]") {
+TEST_CASE("render::normalizeLocaleNumber supports a locale with no decimal separator", "[render][locale]") {
     // Some locales (e.g. integer-only entry fields) pass an empty
     // decimalSeparator: the decimal-separator match must short-circuit on
     // `decimalSeparator.empty()` rather than call `starts_with` on an empty

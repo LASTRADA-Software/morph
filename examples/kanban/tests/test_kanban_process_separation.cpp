@@ -23,8 +23,21 @@
 // has no meaning under Emscripten.
 #ifdef MORPH_LADDER_HEADLESS_BIN
 
-#include "kanban/app/app.hpp"
+#include <QFileInfo>
+#include <QString>
+#include <QStringList>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <filesystem>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/qt/qt_executor.hpp>
+#include <morph/qt/qt_websocket_server.hpp>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <string>
 
+#include "kanban/app/app.hpp"
 #include "kanban/dto/board_dto.hpp"
 #include "kanban/dto/project_dto.hpp"
 #include "kanban/models/board_model.hpp"
@@ -32,23 +45,6 @@
 #include "testkit/db_fixture.hpp"
 #include "testkit/process_pool.hpp"
 #include "testkit/pump.hpp"
-
-#include <QFileInfo>
-#include <QString>
-#include <QStringList>
-
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/qt/qt_executor.hpp>
-#include <morph/qt/qt_websocket_server.hpp>
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <chrono>
-#include <filesystem>
-#include <string>
 
 using morph::bridge::Bridge;
 using morph::bridge::BridgeHandler;
@@ -67,7 +63,7 @@ constexpr std::string_view kSecret = "process-separation-secret-at-least-32-byte
 }
 
 [[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
-                                                       std::string principal) {
+                                                      std::string principal) {
     morph::session::Context ctx;
     ctx.principal = principal;
     ctx.token = issuer.issue(morph::session::SessionToken{
@@ -100,27 +96,23 @@ struct Fixture {
         bridge.setDefaultSession(ctx);
 
         BridgeHandler<kanban::ProjectAdminModel> admin{bridge, &exec};
-        const auto created = morph::ladder::testkit::awaitQt(
-            admin.execute(kanban::CreateProject{.name = "Process Separation Board"}));
+        const auto created =
+            morph::ladder::testkit::awaitQt(admin.execute(kanban::CreateProject{.name = "Process Separation Board"}));
         REQUIRE(created.id.hasValue());
         projectId = created.id;
 
         BridgeHandler<kanban::BoardModel, morph::bridge::AllowShared> board{bridge, &exec};
         morph::ladder::testkit::awaitQt(board.execute(kanban::OpenBoard{.projectId = projectId}));
-        const auto column = morph::ladder::testkit::awaitQt(
-            board.execute(kanban::CreateColumn{.name = "Todo", .wipLimit = 0}));
-        const auto lane = morph::ladder::testkit::awaitQt(
-            board.execute(kanban::CreateSwimlane{.name = "Default"}));
+        const auto column =
+            morph::ladder::testkit::awaitQt(board.execute(kanban::CreateColumn{.name = "Todo", .wipLimit = 0}));
+        const auto lane = morph::ladder::testkit::awaitQt(board.execute(kanban::CreateSwimlane{.name = "Default"}));
         REQUIRE_FALSE(column.columns.empty());
         REQUIRE_FALSE(lane.swimlanes.empty());
-        morph::ladder::testkit::awaitQt(board.execute(kanban::CreateTask{.columnId = column.columns.front().id,
-                                                                         .swimlaneId = lane.swimlanes.front().id,
-                                                                         .title = "Shared task"}));
+        morph::ladder::testkit::awaitQt(board.execute(kanban::CreateTask{
+            .columnId = column.columns.front().id, .swimlaneId = lane.swimlanes.front().id, .title = "Shared task"}));
     }
 
-    [[nodiscard]] QString url() const {
-        return QStringLiteral("ws://127.0.0.1:%1").arg(transport.port());
-    }
+    [[nodiscard]] QString url() const { return QStringLiteral("ws://127.0.0.1:%1").arg(transport.port()); }
 
     [[nodiscard]] QStringList clientArgs() const {
         return QStringList{QStringLiteral("--url"),       url(),
@@ -164,8 +156,8 @@ TEST_CASE("Process separation: real client processes drive one shared board", "[
     Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*fixture.app.server())};
     bridge.setDefaultSession(tokenContextFor(fixture.issuer, "alice"));
     BridgeHandler<kanban::BoardModel, morph::bridge::AllowShared> board{bridge, &fixture.exec};
-    const auto state = morph::ladder::testkit::awaitQt(
-        board.execute(kanban::OpenBoard{.projectId = fixture.projectId}));
+    const auto state =
+        morph::ladder::testkit::awaitQt(board.execute(kanban::OpenBoard{.projectId = fixture.projectId}));
     CHECK(state.comments.size() == static_cast<std::size_t>(kClients));
 }
 
@@ -189,12 +181,11 @@ TEST_CASE("Process separation: a killed client's models are reclaimed", "[kanban
     // nothing -- the failure mode this whole file is about.
     REQUIRE(pumpUntil(
         [&] {
-            return client->process().readAllStandardOutput().contains("ATTACHED")
-                   || fixture.app.server()->health().liveModels > baseline;
+            return client->process().readAllStandardOutput().contains("ATTACHED") ||
+                   fixture.app.server()->health().liveModels > baseline;
         },
         std::chrono::seconds{20}));
-    REQUIRE(pumpUntil([&] { return fixture.app.server()->health().liveModels > baseline; },
-                      std::chrono::seconds{10}));
+    REQUIRE(pumpUntil([&] { return fixture.app.server()->health().liveModels > baseline; }, std::chrono::seconds{10}));
     const auto attached = fixture.app.server()->health().liveModels;
     INFO("liveModels baseline=" << baseline << " attached=" << attached);
 
@@ -217,8 +208,8 @@ TEST_CASE("Process separation: a killed client's models are reclaimed", "[kanban
     Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*fixture.app.server())};
     bridge.setDefaultSession(tokenContextFor(fixture.issuer, "alice"));
     BridgeHandler<kanban::BoardModel, morph::bridge::AllowShared> board{bridge, &fixture.exec};
-    const auto state = morph::ladder::testkit::awaitQt(
-        board.execute(kanban::OpenBoard{.projectId = fixture.projectId}));
+    const auto state =
+        morph::ladder::testkit::awaitQt(board.execute(kanban::OpenBoard{.projectId = fixture.projectId}));
     CHECK(state.name == "Process Separation Board");
 }
 

@@ -5,13 +5,12 @@
 // code can gate itself (e.g. disable a button) instead of attempting an
 // action and catching the refusal.
 
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/session/session.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-#include <memory>
 #include <string>
 
 using morph::session::Principal;
@@ -26,7 +25,7 @@ TEST_CASE("morph::session::Principal: default-constructed has no id and no roles
 }
 
 TEST_CASE("morph::session::Principal::hasRole: true for a present role, false for an absent one",
-         "[session][principal]") {
+          "[session][principal]") {
     Principal principal{.id = "alice", .roles = {"viewer", "editor"}, .claims = {}};
     REQUIRE(principal.hasRole("viewer"));
     REQUIRE(principal.hasRole("editor"));
@@ -45,7 +44,7 @@ TEST_CASE("morph::bridge::Bridge::currentPrincipal: empty before any setPrincipa
 }
 
 TEST_CASE("morph::bridge::Bridge::setPrincipal/currentPrincipal: round-trips id, roles, and claims",
-         "[bridge][principal]") {
+          "[bridge][principal]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
 
@@ -64,7 +63,7 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal/currentPrincipal: round-trips id,
 }
 
 TEST_CASE("morph::bridge::Bridge::setPrincipal: readable without an active dispatch (UI-gating use case)",
-         "[bridge][principal]") {
+          "[bridge][principal]") {
     // No BridgeHandler, no execute() call anywhere in this test -- proves the
     // Principal is readable purely from the Bridge, independent of any
     // in-flight or prior dispatch. This is exactly the gap issue #24 reports:
@@ -79,7 +78,7 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal: readable without an active dispa
 }
 
 TEST_CASE("morph::bridge::Bridge::setPrincipal: passing a default-constructed Principal clears it (sign-out)",
-         "[bridge][principal]") {
+          "[bridge][principal]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
 
@@ -92,7 +91,7 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal: passing a default-constructed Pr
 }
 
 TEST_CASE("morph::bridge::Bridge::setPrincipal/currentPrincipal: independent per Bridge instance",
-         "[bridge][principal]") {
+          "[bridge][principal]") {
     morph::exec::ThreadPoolExecutor pool1{2};
     morph::exec::ThreadPoolExecutor pool2{2};
     morph::bridge::Bridge bridgeA{std::make_unique<morph::backend::LocalBackend>(pool1)};

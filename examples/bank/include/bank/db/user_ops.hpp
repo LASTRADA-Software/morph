@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -37,8 +36,7 @@ namespace bank::db {
 
 /// @brief Resolves @p username to its user id, or throws if no such user exists.
 /// @throws Unauthorized when the principal has no backing `users` row.
-[[nodiscard]] inline std::uint64_t requireUserId(Lightweight::DataMapper& mapper,
-                                                 std::string_view username) {
+[[nodiscard]] inline std::uint64_t requireUserId(Lightweight::DataMapper& mapper, std::string_view username) {
     if (auto id = findUserId(mapper, username); id.has_value()) {
         return *id;
     }
@@ -60,8 +58,7 @@ inline std::uint64_t ensureUser(Lightweight::DataMapper& mapper, std::string_vie
     UserRow rec;
     rec.username = Light::SqlAnsiString<64>{std::string{username}};
     rec.passwordHash = Light::SqlAnsiString<32>{};
-    rec.displayName =
-        Light::SqlAnsiString<128>{std::string{displayName.empty() ? username : displayName}};
+    rec.displayName = Light::SqlAnsiString<128>{std::string{displayName.empty() ? username : displayName}};
     rec.status = 0;
     mapper.Create(rec);
     return rec.id.Value();

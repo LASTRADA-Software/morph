@@ -14,11 +14,11 @@
 // nothing from these headers: the macros, signals and `Q_INVOKABLE`
 // signatures below are all it reads.
 #ifndef Q_MOC_RUN
-#include "paste_forms_controller.hpp"
-#include "paste_presenter.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "paste_forms_controller.hpp"
+#include "paste_presenter.hpp"
 #endif
 
 /// @file

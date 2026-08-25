@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "ledger/dto/account_dto.hpp"
-#include "ledger/dto/import_dto.hpp"
-#include "ledger/dto/report_dto.hpp"
-#include "ledger/dto/transaction_dto.hpp"
-
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
-
-#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "ledger/dto/account_dto.hpp"
+#include "ledger/dto/import_dto.hpp"
+#include "ledger/dto/report_dto.hpp"
+#include "ledger/dto/transaction_dto.hpp"
 
 // Hidden from moc, which mis-parses this block: moc's own parser treats the
 // forward declaration's `}` as closing the *class* rather than the
@@ -64,7 +63,7 @@ namespace ledger {
 ///        action this model implements carries its own `ledgerId`
 ///        explicitly.
 class LedgerModel {
-  public:
+public:
     /// @brief The ordinary shape: owns a one-thread `ThreadPoolExecutor` for
     ///        `execute(SubmitReport)`'s worker, per `_reportExecutor`'s own
     ///        default. This is the constructor the bridge registry uses --
@@ -229,7 +228,7 @@ class LedgerModel {
     ///        instance produces (this rung's ledger id, as a string).
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
-  private:
+private:
     /// @brief Records @p action/@p result as a LogEntry if a log is
     ///        attached; no-op otherwise.
     /// @tparam Action Concrete action type.
@@ -309,10 +308,10 @@ class LedgerModel {
     /// @return The full rebuilt ledger state, per the ladder-wide
     ///         full-rebuilt-state convention.
     [[nodiscard]] GetLedgerResult storeJournalImpl(Lightweight::DataMapper& mapper, const LedgerId& ledgerId,
-                                                     const std::string& description, const morph::time::Timestamp& date,
-                                                     const std::vector<TransactionLeg>& legs,
-                                                     const std::vector<db::AccountRecord>& legAccounts,
-                                                     std::optional<std::string> causalParentId = std::nullopt);
+                                                   const std::string& description, const morph::time::Timestamp& date,
+                                                   const std::vector<TransactionLeg>& legs,
+                                                   const std::vector<db::AccountRecord>& legAccounts,
+                                                   std::optional<std::string> causalParentId = std::nullopt);
 
     std::optional<std::string> _entityKeyStr;
     std::shared_ptr<::morph::journal::IActionLog> _log;
@@ -341,8 +340,7 @@ class LedgerModel {
     ///        `explicit LedgerModel(std::shared_ptr<IExecutor>)` constructor
     ///        above, which is what `test_ledger_reports.cpp` uses to drive
     ///        the worker deterministically.
-    std::shared_ptr<::morph::exec::IExecutor> _reportExecutor =
-        std::make_shared<::morph::exec::ThreadPoolExecutor>(1);
+    std::shared_ptr<::morph::exec::IExecutor> _reportExecutor = std::make_shared<::morph::exec::ThreadPoolExecutor>(1);
 };
 
 }  // namespace ledger
@@ -372,9 +370,7 @@ template <>
 struct morph::model::ActionKeyTraits<ledger::OpenAccount> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
-    static std::string key(const ledger::OpenAccount& action) {
-        return morph::model::keyToString(*action.ledgerId);
-    }
+    static std::string key(const ledger::OpenAccount& action) { return morph::model::keyToString(*action.ledgerId); }
 };
 template <>
 struct morph::model::ModelKeyTraits<ledger::LedgerModel> {
@@ -384,9 +380,7 @@ template <>
 struct morph::model::ActionKeyTraits<ledger::GetLedger> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
-    static std::string key(const ledger::GetLedger& action) {
-        return morph::model::keyToString(*action.ledgerId);
-    }
+    static std::string key(const ledger::GetLedger& action) { return morph::model::keyToString(*action.ledgerId); }
 };
 
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::StoreTransaction, "StoreTransaction")
@@ -438,9 +432,7 @@ template <>
 struct morph::model::ActionKeyTraits<ledger::SubmitReport> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
-    static std::string key(const ledger::SubmitReport& action) {
-        return morph::model::keyToString(*action.ledgerId);
-    }
+    static std::string key(const ledger::SubmitReport& action) { return morph::model::keyToString(*action.ledgerId); }
 };
 
 // GetReportStatus carries no ledgerId, only jobId -- resolving its key by
@@ -455,7 +447,5 @@ template <>
 struct morph::model::ActionKeyTraits<ledger::GetReportStatus> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
-    static std::string key(const ledger::GetReportStatus& action) {
-        return morph::model::keyToString(*action.jobId);
-    }
+    static std::string key(const ledger::GetReportStatus& action) { return morph::model::keyToString(*action.jobId); }
 };

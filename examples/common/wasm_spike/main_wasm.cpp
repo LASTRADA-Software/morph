@@ -25,18 +25,17 @@
 // callback instead, which is fully WASM-safe (no nested event loop) and
 // simpler to reason about than the queue.
 
-#include "spike_model.hpp"
-
 #include <QCoreApplication>
 #include <QDebug>
 #include <QTimer>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
-
-#include <memory>
 #include <optional>
 #include <utility>
+
+#include "spike_model.hpp"
 
 BRIDGE_REGISTER_MODEL(SpikeEchoModel, "SpikeEchoModel")
 BRIDGE_REGISTER_ACTION(SpikeEchoModel, SpikeEchoAction, "SpikeEchoAction")

@@ -32,7 +32,7 @@ struct FetchedMetadata {
 /// @brief Pluggable page-metadata fetcher. See this file's own `@file`
 ///        comment for why this rung ships no real HTTP implementation.
 class IBookmarkMetadataFetcher {
-  public:
+public:
     IBookmarkMetadataFetcher() = default;
     virtual ~IBookmarkMetadataFetcher() = default;
     IBookmarkMetadataFetcher(const IBookmarkMetadataFetcher&) = delete;
@@ -55,7 +55,7 @@ class IBookmarkMetadataFetcher {
 ///        result. Deterministic and instant, for tests and for a deployment
 ///        that has not yet plugged in a real fetcher.
 class NullMetadataFetcher : public IBookmarkMetadataFetcher {
-  public:
+public:
     /// @brief Ignores @p url and reports "nothing found".
     /// @param url Ignored.
     /// @return A default-constructed `FetchedMetadata`.

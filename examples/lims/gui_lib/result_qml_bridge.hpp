@@ -8,10 +8,10 @@
 
 // Guarded exactly like `sample_qml_bridge.hpp`'s own includes.
 #ifndef Q_MOC_RUN
-#include "result_presenter.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "result_presenter.hpp"
 #endif
 
 namespace lims::gui {
@@ -39,7 +39,7 @@ class ResultBridge : public QObject {
     ///        renders this surface's forms from.
     Q_PROPERTY(QString schemasJson READ schemasJson CONSTANT)
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -113,7 +113,7 @@ class ResultBridge : public QObject {
     /// @param note       The resolver's stated rationale. Required.
     Q_INVOKABLE void resolveConflict(qlonglong conflictId, const QString& resolution, const QString& note);
 
-  signals:
+signals:
     /// @brief Emitted once the wrapped presenter's registration round trip
     ///        settles, successfully or not.
     void bound();
@@ -147,7 +147,7 @@ class ResultBridge : public QObject {
     /// @param message The model's own `what()`.
     void failed(const QString& message);
 
-  private:
+private:
 #ifndef Q_MOC_RUN
     ResultPresenter _presenter;
 #endif

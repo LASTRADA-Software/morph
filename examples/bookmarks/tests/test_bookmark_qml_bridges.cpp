@@ -57,19 +57,6 @@
 // themselves purely for a test. Stated rather than silently skipped; if a later
 // rung adds the missing action, the arms become reachable and belong here.
 
-#include "bookmark_qml_bridges.hpp"
-#include "bookmark_schemas.hpp"
-#include "bookmarks/auth/bookmarks_authorizer.hpp"
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
-#include "testkit/qml_surface.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaMethod>
@@ -81,13 +68,23 @@
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
-
+#include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <memory>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+
+#include "bookmark_qml_bridges.hpp"
+#include "bookmark_schemas.hpp"
+#include "bookmarks/auth/bookmarks_authorizer.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
+#include "testkit/qml_surface.hpp"
 
 namespace {
 
@@ -132,7 +129,7 @@ constexpr std::string_view kSecret = "qml-bridges-test-secret";
 ///        failing-REQUIRE-must-not-leak-it rationale, as
 ///        test_bookmarks_authorizer.cpp's own.
 class ScopedTokenIssuer {
-  public:
+public:
     explicit ScopedTokenIssuer(std::shared_ptr<morph::session::TokenIssuer> issuer) {
         bookmarks::auth::setTokenIssuer(std::move(issuer));
     }
@@ -155,14 +152,13 @@ class ScopedTokenIssuer {
     bool ok = false;
     QString payload;
     QString echoedType;
-    const auto connection =
-        QObject::connect(&forms, &bookmarks::gui::FormsBridge::replyReceived,
-                         [&](const QString& type, bool succeeded, const QString& body) {
-                             echoedType = type;
-                             ok = succeeded;
-                             payload = body;
-                             replied = true;
-                         });
+    const auto connection = QObject::connect(&forms, &bookmarks::gui::FormsBridge::replyReceived,
+                                             [&](const QString& type, bool succeeded, const QString& body) {
+                                                 echoedType = type;
+                                                 ok = succeeded;
+                                                 payload = body;
+                                                 replied = true;
+                                             });
     forms.submitIfValid(actionType, bodyJson);
     const bool settled = pumpUntil([&] { return replied; });
     QObject::disconnect(connection);
@@ -203,11 +199,11 @@ class ScopedTokenIssuer {
 [[nodiscard]] QVariantMap openBag(bookmarks::gui::BookmarkBridge& bridge, qlonglong id) {
     QVariantMap bag;
     bool loaded = false;
-    const auto connection = QObject::connect(&bridge, &bookmarks::gui::BookmarkBridge::loaded,
-                                             [&](const QVariantMap& bookmark) {
-                                                 bag = bookmark;
-                                                 loaded = true;
-                                             });
+    const auto connection =
+        QObject::connect(&bridge, &bookmarks::gui::BookmarkBridge::loaded, [&](const QVariantMap& bookmark) {
+            bag = bookmark;
+            loaded = true;
+        });
     bridge.open(id);
     const bool settled = pumpUntil([&] { return loaded; });
     QObject::disconnect(connection);
@@ -225,11 +221,11 @@ template <typename Refresh>
 [[nodiscard]] QVariantList listRows(bookmarks::gui::BookmarkBridge& bridge, Refresh refresh) {
     QVariantList rows;
     bool listed = false;
-    const auto connection = QObject::connect(&bridge, &bookmarks::gui::BookmarkBridge::listed,
-                                             [&](const QVariantList& page) {
-                                                 rows = page;
-                                                 listed = true;
-                                             });
+    const auto connection =
+        QObject::connect(&bridge, &bookmarks::gui::BookmarkBridge::listed, [&](const QVariantList& page) {
+            rows = page;
+            listed = true;
+        });
     refresh();
     const bool settled = pumpUntil([&] { return listed; });
     QObject::disconnect(connection);
@@ -243,11 +239,10 @@ template <typename Refresh>
 [[nodiscard]] QVariantList tagRows(bookmarks::gui::TagBridge& tags) {
     QVariantList rows;
     bool listed = false;
-    const auto connection =
-        QObject::connect(&tags, &bookmarks::gui::TagBridge::listed, [&](const QVariantList& page) {
-            rows = page;
-            listed = true;
-        });
+    const auto connection = QObject::connect(&tags, &bookmarks::gui::TagBridge::listed, [&](const QVariantList& page) {
+        rows = page;
+        listed = true;
+    });
     tags.refresh();
     const bool settled = pumpUntil([&] { return listed; });
     QObject::disconnect(connection);
@@ -375,8 +370,9 @@ TEST_CASE("BookmarkBridge::open emits a bookmark bag carrying every key Bookmark
     bookmarks::gui::BookmarkBridge bookmarkBridge{rig->bridge(0), rig->executor()};
 
     const qlonglong id = createVia(
-        forms, QStringLiteral(R"({"url":"https://bag.example","title":"Bag","description":"desc","notes":"private note",)"
-                              R"("tags":["work","home"]})"));
+        forms,
+        QStringLiteral(R"({"url":"https://bag.example","title":"Bag","description":"desc","notes":"private note",)"
+                       R"("tags":["work","home"]})"));
     const QVariantMap bag = openBag(bookmarkBridge, id);
 
     // Every key below is read by name in QML: `title`/`url` from
@@ -438,8 +434,8 @@ TEST_CASE("BookmarkBridge::refresh emits rows in the narrower summary shape, wit
     bookmarks::gui::FormsBridge forms{rig->bridge(0), rig->executor()};
     bookmarks::gui::BookmarkBridge bookmarkBridge{rig->bridge(0), rig->executor()};
 
-    static_cast<void>(createVia(
-        forms, QStringLiteral(R"({"url":"https://row.example","title":"Row","notes":"must not leak"})")));
+    static_cast<void>(
+        createVia(forms, QStringLiteral(R"({"url":"https://row.example","title":"Row","notes":"must not leak"})")));
 
     const QVariantList rows = listRows(bookmarkBridge, [&bookmarkBridge] { bookmarkBridge.refresh(); });
     REQUIRE(rows.size() == 1);
@@ -448,8 +444,8 @@ TEST_CASE("BookmarkBridge::refresh emits rows in the narrower summary shape, wit
     // `id`/`title`/`url`/`visibility`/`archiveState` are read off `modelData`
     // at BookmarkListView.qml:290, :296-298, :301, :307; the remaining four are
     // the summary shape the shared-feed delegate also reads (:516-517).
-    for (const char* key : {"id", "url", "title", "tags", "createdAt", "updatedAt", "readState", "archiveState",
-                            "visibility"}) {
+    for (const char* key :
+         {"id", "url", "title", "tags", "createdAt", "updatedAt", "readState", "archiveState", "visibility"}) {
         INFO("missing key: " << key);
         REQUIRE(bag.contains(QString::fromLatin1(key)));
     }
@@ -474,8 +470,7 @@ TEST_CASE("TagBridge::refresh emits {id, name, bookmarkCount} rows and nothing e
     bookmarks::gui::FormsBridge forms{rig->bridge(0), rig->executor()};
     bookmarks::gui::TagBridge tags{rig->bridge(0), rig->executor()};
 
-    static_cast<void>(
-        createVia(forms, QStringLiteral(R"({"url":"https://tagged.example","tags":["work"]})")));
+    static_cast<void>(createVia(forms, QStringLiteral(R"({"url":"https://tagged.example","tags":["work"]})")));
 
     const QVariantList rows = tagRows(tags);
     REQUIRE(rows.size() == 1);
@@ -549,8 +544,7 @@ TEST_CASE("BookmarkBridge renders the second arm of the visibility and archive-s
     bookmarks::gui::FormsBridge forms{rig->bridge(0), rig->executor()};
     bookmarks::gui::BookmarkBridge bookmarkBridge{rig->bridge(0), rig->executor()};
 
-    const qlonglong id =
-        createVia(forms, QStringLiteral(R"({"url":"https://arms.example","visibility":"Shared"})"));
+    const qlonglong id = createVia(forms, QStringLiteral(R"({"url":"https://arms.example","visibility":"Shared"})"));
     CHECK(openBag(bookmarkBridge, id).value(QStringLiteral("visibility")).toString() == QStringLiteral("Shared"));
 
     bool archived = false;
@@ -601,7 +595,8 @@ TEST_CASE("BookmarkBridge::bulkArchive maps true to BulkArchiveOp::Archive and f
     // bookmark(s)", :148).
     CHECK(affected.startsWith(QStringLiteral("2")));
     CHECK(listRows(bookmarkBridge, [&bookmarkBridge] { bookmarkBridge.refresh(); }).isEmpty());
-    for (const QVariant& row : listRows(bookmarkBridge, [&bookmarkBridge] { bookmarkBridge.refreshIncludingArchived(); })) {
+    for (const QVariant& row :
+         listRows(bookmarkBridge, [&bookmarkBridge] { bookmarkBridge.refreshIncludingArchived(); })) {
         CHECK(row.toMap().value(QStringLiteral("archiveState")).toString() == QStringLiteral("Archived"));
     }
 
@@ -645,8 +640,7 @@ TEST_CASE("BookmarkFormsController::dispatch routes every one of the six form ac
 
     // 2/6 — CreateBookmark -> BookmarkModel. Reaching the model at all proves
     // Login's reply was decoded and installed as the bridge's default session.
-    const qlonglong id = createVia(
-        forms, QStringLiteral(R"({"url":"https://route.example","tags":["work","home"]})"));
+    const qlonglong id = createVia(forms, QStringLiteral(R"({"url":"https://route.example","tags":["work","home"]})"));
 
     // 3/6 — EditBookmark -> BookmarkModel.
     {
@@ -677,8 +671,8 @@ TEST_CASE("BookmarkFormsController::dispatch routes every one of the six form ac
     REQUIRE(workId > 0);
     REQUIRE(homeId > 0);
     {
-        const auto [ok, payload] = submit(forms, QStringLiteral("RenameTag"),
-                                          QStringLiteral(R"({"id":%1,"name":"office"})").arg(workId));
+        const auto [ok, payload] =
+            submit(forms, QStringLiteral("RenameTag"), QStringLiteral(R"({"id":%1,"name":"office"})").arg(workId));
         INFO(payload.toStdString());
         REQUIRE(ok);
     }
@@ -686,9 +680,8 @@ TEST_CASE("BookmarkFormsController::dispatch routes every one of the six form ac
 
     // 6/6 — MergeTags -> TagModel.
     {
-        const auto [ok, payload] =
-            submit(forms, QStringLiteral("MergeTags"),
-                   QStringLiteral(R"({"sourceId":%1,"targetId":%2})").arg(homeId).arg(workId));
+        const auto [ok, payload] = submit(forms, QStringLiteral("MergeTags"),
+                                          QStringLiteral(R"({"sourceId":%1,"targetId":%2})").arg(homeId).arg(workId));
         INFO(payload.toStdString());
         REQUIRE(ok);
     }
@@ -749,11 +742,11 @@ TEST_CASE("FormsBridge installs the returned token and announces loggedIn before
     {
         QString message;
         bool failed = false;
-        const auto connection = QObject::connect(&bookmarkBridge, &bookmarks::gui::BookmarkBridge::failed,
-                                                 [&](const QString& text) {
-                                                     message = text;
-                                                     failed = true;
-                                                 });
+        const auto connection =
+            QObject::connect(&bookmarkBridge, &bookmarks::gui::BookmarkBridge::failed, [&](const QString& text) {
+                message = text;
+                failed = true;
+            });
         bookmarkBridge.refresh();
         REQUIRE(pumpUntil([&] { return failed; }));
         QObject::disconnect(connection);
@@ -800,8 +793,7 @@ TEST_CASE("decodeLoginResult accepts a real Login reply and rejects anything tha
     // always written by `resultToJson` from the same reflected type this reads
     // back. See `decodeLoginResult`'s own doc comment: the decision was split
     // out precisely so both arms are testable without a fake backend.
-    const auto decoded =
-        bookmarks::gui::decodeLoginResult(R"({"token":"signed.token.value","principal":"alice"})");
+    const auto decoded = bookmarks::gui::decodeLoginResult(R"({"token":"signed.token.value","principal":"alice"})");
     REQUIRE(decoded.has_value());
     REQUIRE(decoded->token.hasValue());
     CHECK(*decoded->token == "signed.token.value");

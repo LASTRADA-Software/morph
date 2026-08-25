@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "polls/auth/polls_authorizer.hpp"
-
+#include <cstddef>
+#include <filesystem>
+#include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/journal/file_action_log.hpp>
 
-#include <cstddef>
-#include <filesystem>
-#include <memory>
+#include "polls/auth/polls_authorizer.hpp"
 
 /// @file
 /// `polls::app::App` -- this rung's server bootstrap. Mirrors
@@ -42,7 +41,7 @@ namespace polls::app {
 /// stays `examples/common/gui::AppContext`'s job on the client side; this
 /// is exclusively the server side.
 class App {
-  public:
+public:
     /// @brief Wires up the whole server side: worker pool, `RemoteServer`
     ///        (with `auth::PollsAuthorizer` and this rung's `maxLiveModels`
     ///        cap installed), and the durable action log.
@@ -63,7 +62,7 @@ class App {
     /// @return The shared `RemoteServer`; never null.
     [[nodiscard]] std::shared_ptr<::morph::backend::RemoteServer> server() const noexcept { return _server; }
 
-  private:
+private:
     std::shared_ptr<::morph::journal::FileActionLog> _actionLog;
     ::morph::exec::ThreadPoolExecutor _pool;
     std::shared_ptr<::morph::backend::RemoteServer> _server;

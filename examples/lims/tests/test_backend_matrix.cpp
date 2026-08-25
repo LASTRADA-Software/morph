@@ -19,6 +19,20 @@
 // LimsAuthorizer` is that authorizer, so the matrix runs it end-to-end
 // against a real server rather than only unit-testing its policy.
 
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/model.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <morph/util/rational.hpp>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "lims/auth/lims_authorizer.hpp"
 #include "lims/core/errors.hpp"
 #include "lims/models/analysis_catalog_model.hpp"
@@ -27,22 +41,6 @@
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <morph/core/backend.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/model.hpp>
-#include <morph/offline/offline_queue.hpp>
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-#include <morph/util/rational.hpp>
-
-#include <memory>
-#include <string>
-#include <string_view>
-#include <vector>
 
 using morph::bridge::AllowShared;
 using morph::bridge::BridgeHandler;
@@ -73,7 +71,7 @@ constexpr std::string_view kSecret = "lims-matrix-test-secret-at-least-32-bytes"
 /// @param principal The identity to name in the claims.
 /// @return The context, ready for `Bridge::setDefaultSession`.
 [[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
-                                                       std::string principal) {
+                                                      std::string principal) {
     morph::session::Context ctx;
     ctx.principal = principal;
     ctx.token = issuer.issue(morph::session::SessionToken{
@@ -86,14 +84,12 @@ constexpr std::string_view kSecret = "lims-matrix-test-secret-at-least-32-bytes"
 /// @return The authorizer, for `BackendRig`'s `Socket` mode.
 [[nodiscard]] std::shared_ptr<lims::auth::LimsAuthorizer> makeAuthorizer() {
     return std::make_shared<lims::auth::LimsAuthorizer>(
-        std::string{kSecret},
-        [](std::string_view principal) { return lims::SampleModel::rolesOf(principal); });
+        std::string{kSecret}, [](std::string_view principal) { return lims::SampleModel::rolesOf(principal); });
 }
 
 }  // namespace
 
-TEST_CASE("SampleModel over the full backend-mode matrix: register, attach, transition, capture",
-          "[lims][matrix]") {
+TEST_CASE("SampleModel over the full backend-mode matrix: register, attach, transition, capture", "[lims][matrix]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -104,8 +100,8 @@ TEST_CASE("SampleModel over the full backend-mode matrix: register, attach, tran
 
     // A catalogue entry, through a plain handler on the unkeyed model.
     auto catalog = rig.client<lims::AnalysisCatalogModel>(0);
-    const auto nitrate = awaitQt(catalog.execute(
-        lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3}));
+    const auto nitrate = awaitQt(
+        catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3}));
     REQUIRE(nitrate.versionId.hasValue());
 
     // `RegisterClient` carries no key at all, so it needs a plain handler:
@@ -214,8 +210,8 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
     rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "fiona"));
 
     auto catalog = rig.client<lims::AnalysisCatalogModel>(0);
-    const auto nitrate = awaitQt(catalog.execute(
-        lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3}));
+    const auto nitrate = awaitQt(
+        catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3}));
 
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
@@ -231,9 +227,9 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
     lims::offline::FieldOutbox outbox{queue, "fiona"};
     outbox.observe(atWork);
     outbox.enqueue(atWork.id, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
-                                                          .value = lims::Concentration{exact(12, 5, 3)}});
+                                                         .value = lims::Concentration{exact(12, 5, 3)}});
     outbox.enqueue(atWork.id, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
-                                                          .value = lims::Concentration{exact(13, 5, 3)}});
+                                                         .value = lims::Concentration{exact(13, 5, 3)}});
 
     // Reconnect: drain and re-dispatch. Every item goes through the same
     // authenticated bridge every other action uses.
@@ -253,8 +249,7 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
     CHECK(awaitQt(handler.execute(lims::ListConflicts{})).conflicts.empty());
 }
 
-TEST_CASE("A queued capture replayed as the wrong operator is refused over the wire too",
-          "[lims][matrix][offline]") {
+TEST_CASE("A queued capture replayed as the wrong operator is refused over the wire too", "[lims][matrix][offline]") {
     DbFixture fixture;
     BackendRig rig{Mode::Socket, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
@@ -265,8 +260,8 @@ TEST_CASE("A queued capture replayed as the wrong operator is refused over the w
     rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "mallory"));
 
     auto catalog = rig.client<lims::AnalysisCatalogModel>(0);
-    const auto nitrate = awaitQt(catalog.execute(
-        lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3}));
+    const auto nitrate = awaitQt(
+        catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3}));
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
     BridgeHandler<lims::SampleModel, AllowShared> handler{rig.bridge(0), rig.executor()};
@@ -278,9 +273,9 @@ TEST_CASE("A queued capture replayed as the wrong operator is refused over the w
     auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
     lims::offline::FieldOutbox outbox{queue, "fiona"};
     outbox.observe(atWork);
-    const auto queued = outbox.enqueue(
-        atWork.id, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
-                                              .value = lims::Concentration{exact(12, 5, 3)}});
+    const auto queued =
+        outbox.enqueue(atWork.id, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
+                                                             .value = lims::Concentration{exact(12, 5, 3)}});
 
     CHECK_THROWS(awaitQt(handler.execute(queued)));
     CHECK(awaitQt(handler.execute(lims::ListResults{})).results.empty());
@@ -316,10 +311,9 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
         const morph::session::Context ctx{.principal = "fiona"};
         const morph::session::detail::ScopedContext scope{ctx};
         lims::AnalysisCatalogModel catalog;
-        versionId = catalog
-                        .execute(lims::DefineAnalysis{
-                            .name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3})
-                        .versionId;
+        versionId =
+            catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3})
+                .versionId;
         lims::SampleModel setup;
         const auto client = setup.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
         const auto sample = setup.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-6"});

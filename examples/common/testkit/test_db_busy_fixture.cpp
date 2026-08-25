@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
-
-#include "testkit/db_busy_fixture.hpp"
-#include "testkit/db_fixture.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlMigration.hpp>
-
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <cstdlib>
 #include <string>
+
+#include "testkit/db_busy_fixture.hpp"
+#include "testkit/db_fixture.hpp"
 
 // Not an anonymous namespace: reflection-cpp's `DataMapper` reflects on this
 // struct via `Reflection::detail::External<T>`, which requires `T` to have
@@ -29,11 +27,10 @@ struct BusyProbe {
 
 using ladder_testkit_busy_probe::BusyProbe;
 
-LIGHTWEIGHT_SQL_MIGRATION(2, "busy_fixture_probe: create probe table")
-{
+LIGHTWEIGHT_SQL_MIGRATION(2, "busy_fixture_probe: create probe table") {
     plan.CreateTable("busy_fixture_probe")
         .PrimaryKeyWithAutoIncrement("id")
-        .Column("label", Lightweight::SqlColumnTypeDefinitions::Varchar{ 64 });
+        .Column("label", Lightweight::SqlColumnTypeDefinitions::Varchar{64});
 }
 
 namespace {
@@ -49,8 +46,7 @@ namespace {
 /// Derived from the process's actual active connection string (rather than
 /// a hard-coded literal) so this stays correct if `ODBC_CONNECTION_STRING`
 /// ever points somewhere other than `DbFixture`'s own SQLite-file default.
-[[nodiscard]] std::string shortTimeoutConnectionString()
-{
+[[nodiscard]] std::string shortTimeoutConnectionString() {
     std::string connStr =
         morph::ladder::testkit::DbFixture::computeConnectionString(std::getenv("ODBC_CONNECTION_STRING"));
     static constexpr std::string_view key = "Timeout=";
@@ -70,8 +66,7 @@ namespace {
 }  // namespace
 
 TEST_CASE("DbBusyFixture forces a genuine SQLITE_BUSY on a concurrent write to the same table",
-          "[ladder][testkit][db][busy]")
-{
+          "[ladder][testkit][db][busy]") {
     morph::ladder::testkit::DbFixture fixture;
     {
         Lightweight::DataMapper mapper;
@@ -80,9 +75,9 @@ TEST_CASE("DbBusyFixture forces a genuine SQLITE_BUSY on a concurrent write to t
         mapper.Create(row);
     }
 
-    morph::ladder::testkit::DbBusyFixture busy{ "busy_fixture_probe" };
+    morph::ladder::testkit::DbBusyFixture busy{"busy_fixture_probe"};
 
-    Lightweight::DataMapper mapper{ Lightweight::SqlConnectionString{ shortTimeoutConnectionString() } };
+    Lightweight::DataMapper mapper{Lightweight::SqlConnectionString{shortTimeoutConnectionString()}};
     // Lightweight::SqlConnection::PostConnect() unconditionally issues
     // `PRAGMA busy_timeout = 60000` for every SQLite connection right after
     // connect, which *does* win over whatever the connection string's
@@ -98,7 +93,7 @@ TEST_CASE("DbBusyFixture forces a genuine SQLITE_BUSY on a concurrent write to t
     // DbFixture::computeConnectionString's own default) as the effective
     // total bound. Together, both bounds are short, and the racy write below
     // fails within a few hundred milliseconds.
-    (void) Lightweight::SqlStatement{ mapper.Connection() }.ExecuteDirect("PRAGMA busy_timeout = 200");
+    (void)Lightweight::SqlStatement{mapper.Connection()}.ExecuteDirect("PRAGMA busy_timeout = 200");
 
     BusyProbe row;
     row.label = "should collide";
@@ -110,5 +105,5 @@ TEST_CASE("DbBusyFixture forces a genuine SQLITE_BUSY on a concurrent write to t
     // combined override above: tens of seconds, occasionally exceeding even
     // the ladder_common_tests suite's 120s ctest TIMEOUT budget for a single
     // test case).
-    REQUIRE(elapsed < std::chrono::seconds{ 5 });
+    REQUIRE(elapsed < std::chrono::seconds{5});
 }

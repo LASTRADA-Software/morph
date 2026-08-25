@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "result_qml_bridge.hpp"
 
+#include <utility>
+
 #include "lims_qml_conversions.hpp"
 #include "lims_schemas.hpp"
-
-#include <utility>
 
 namespace lims::gui {
 
@@ -38,9 +38,7 @@ ResultBridge::ResultBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExec
     });
 }
 
-void ResultBridge::refreshAnalyses() {
-    _presenter.refreshAnalyses();
-}
+void ResultBridge::refreshAnalyses() { _presenter.refreshAnalyses(); }
 
 void ResultBridge::openSample(qlonglong sampleId) {
     _presenter.openSample(SampleId{static_cast<std::int64_t>(sampleId)});
@@ -54,25 +52,19 @@ void ResultBridge::captureQualifier(qlonglong versionId, const QString& code) {
     _presenter.captureQualifier(AnalysisVersionId{static_cast<std::int64_t>(versionId)}, code);
 }
 
-void ResultBridge::refreshResults() {
-    _presenter.refreshResults();
-}
+void ResultBridge::refreshResults() { _presenter.refreshResults(); }
 
 void ResultBridge::verifyResult(qlonglong resultId) {
     _presenter.verifyResult(ResultId{static_cast<std::int64_t>(resultId)});
 }
 
-void ResultBridge::refreshConflicts() {
-    _presenter.refreshConflicts();
-}
+void ResultBridge::refreshConflicts() { _presenter.refreshConflicts(); }
 
 void ResultBridge::resolveConflict(qlonglong conflictId, const QString& resolution, const QString& note) {
     _presenter.resolveConflict(ConflictId{static_cast<std::int64_t>(conflictId)}, resolution, note);
 }
 
-QString ResultBridge::schemasJson() const {
-    return QString::fromStdString(limsSchemasJson());
-}
+QString ResultBridge::schemasJson() const { return QString::fromStdString(limsSchemasJson()); }
 
 void ResultBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
     _presenter.submitIfValid(actionType, bodyJson);

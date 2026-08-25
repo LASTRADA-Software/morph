@@ -46,19 +46,17 @@
 #include <QStringList>
 #include <QUrl>
 #include <QVariant>
+#include <cstdlib>
+#include <memory>
+#include <morph/session/session_auth.hpp>
+#include <optional>
+#include <string>
 
 #include "board_qml_bridge.hpp"
 #include "gui/app_context.hpp"
 #include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban/db/database.hpp"
 #include "project_admin_qml_bridge.hpp"
-
-#include <morph/session/session_auth.hpp>
-
-#include <cstdlib>
-#include <memory>
-#include <optional>
-#include <string>
 
 namespace {
 
@@ -119,7 +117,7 @@ int main(int argc, char** argv) {
     if (!serverUrl) {
         const char* connectionString = std::getenv("KANBAN_DB");
         kanban::db::setup(connectionString != nullptr ? connectionString
-                                                       : "DRIVER=SQLite3;Database=kanban.db;Timeout=5000");
+                                                      : "DRIVER=SQLite3;Database=kanban.db;Timeout=5000");
         // hmacSha256 named explicitly -- see the identical note at
         // kanban/src/app/app.cpp's setTokenIssuer() call: TokenIssuer's
         // default is dropped entirely under MORPH_REQUIRE_VETTED_HMAC.
@@ -151,8 +149,8 @@ int main(int argc, char** argv) {
         // Local mode (no AttachmentServer to point at) and defaults to
         // src/server/main.cpp's own KANBAN_ATTACHMENT_PORT default otherwise.
         if (serverUrl) {
-            boardBridge->setAttachmentServerUrl(
-                attachmentServerUrl ? *attachmentServerUrl : QStringLiteral("http://127.0.0.1:8769"));
+            boardBridge->setAttachmentServerUrl(attachmentServerUrl ? *attachmentServerUrl
+                                                                    : QStringLiteral("http://127.0.0.1:8769"));
         }
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
         // Turns on BoardBridge's offline queue/replay stack (Task 5,

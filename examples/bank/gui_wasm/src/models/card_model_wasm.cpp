@@ -2,8 +2,6 @@
 //
 // In-memory implementation of CardModel for the WASM build.
 
-#include "bank/models/card_model.hpp"
-
 #include <format>
 #include <random>
 #include <string>
@@ -13,6 +11,7 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
+#include "bank/models/card_model.hpp"
 #include "bank/wasm/store.hpp"
 #include "bank/wasm/store_ops.hpp"
 
@@ -26,9 +25,7 @@ std::string randomLast4() {
     return std::format("{:04}", dist(rng));
 }
 
-std::string hashPin(std::string_view pin) {
-    return demoHash(std::string{pin} + ":pin");
-}
+std::string hashPin(std::string_view pin) { return demoHash(std::string{pin} + ":pin"); }
 
 dto::CardInfo toInfo(const wasm::CardRow& rec, const std::string& owner) {
     return dto::CardInfo{

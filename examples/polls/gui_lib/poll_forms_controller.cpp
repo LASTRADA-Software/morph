@@ -6,7 +6,7 @@
 namespace polls::gui {
 
 PollFormsController::PollFormsController(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                                          std::string schemasJson)
+                                         std::string schemasJson)
     : _handler{bridge, executor}, _schemasJson{std::move(schemasJson)} {}
 
 ::morph::async::Completion<GetPollStateResult> PollFormsController::openPoll(std::string pollId) {

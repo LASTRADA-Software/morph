@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "bookmarks/db/database.hpp"
-
 #include <Lightweight/SqlConnection.hpp>
 #include <Lightweight/SqlMigration.hpp>
 #include <Lightweight/SqlQuery/Migrate.hpp>
+
+#include "bookmarks/db/database.hpp"
 
 namespace bookmarks::db {
 
@@ -46,7 +46,8 @@ LIGHTWEIGHT_SQL_MIGRATION(20260807000001, "Create bookmarks tables") {
     // may both have a tag named "work".
     plan.CreateUniqueIndex("idx_tags_owner_name", "tags", {"owner_principal", "name"});
 
-    const auto bookmarksRef = Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "bookmarks", .columnName = "id"};
+    const auto bookmarksRef =
+        Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "bookmarks", .columnName = "id"};
     const auto tagsRef = Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "tags", .columnName = "id"};
     plan.CreateTableIfNotExists("bookmark_tags")
         .PrimaryKeyWithAutoIncrement("id", Bigint())

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "gui/presenter.hpp"
-#include "bookmarks/dto/shared_feed_dto.hpp"
-
 #include <exception>
+
+#include "bookmarks/dto/shared_feed_dto.hpp"
+#include "gui/presenter.hpp"
 
 // See pastebin::gui::PastePresenter's identical guard and doc comment
 // (examples/pastebin/gui_lib/paste_presenter.hpp) for why moc must never see
@@ -16,10 +16,10 @@
 // a connection per execute() call from Lightweight::GlobalDataMapperPool()
 // instead of owning one, but this guard stays for bridge.hpp's own sake.
 #ifndef Q_MOC_RUN
-#include "bookmarks/models/shared_feed_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "bookmarks/models/shared_feed_model.hpp"
 #endif
 
 namespace bookmarks::gui {
@@ -29,7 +29,7 @@ namespace bookmarks::gui {
 ///        domain logic (`IMPLEMENTATION.md` rule 2).
 class SharedFeedPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -41,13 +41,13 @@ class SharedFeedPresenter : public ::morph::ladder::gui::Presenter {
     /// @param action The page request.
     void list(ListSharedFeed action);
 
-  signals:
+signals:
     void listed(ListSharedFeedResult result);
     /// @brief Emitted for any action's typed error — @p message is
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Shared error-display body passed as every `track()` call's
     ///        third argument below — see `Presenter::track()`'s doc comment
     ///        (`examples/common/gui/presenter.hpp`) for why.

@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "gui/presenter.hpp"
-#include "ledger/dto/rule_dto.hpp"
-
 #include <QObject>
 #include <QString>
-
 #include <exception>
+
+#include "gui/presenter.hpp"
+#include "ledger/dto/rule_dto.hpp"
 
 // Guarded exactly like `ledger_presenter.hpp`'s own includes, and for the
 // same reason it documents: moc must not be pointed at morph's
 // template-heavy bridge.hpp nor the model header's Lightweight ORM.
 #ifndef Q_MOC_RUN
-#include "ledger/models/rule_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "ledger/models/rule_model.hpp"
 #endif
 
 /// @file
@@ -33,12 +32,11 @@ namespace ledger::gui {
 /// shared-instance directory rather than each registering a private instance.
 class RulePresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
-    RulePresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                  QObject* parent = nullptr);
+    RulePresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent = nullptr);
 
     /// @brief Creates a categorisation rule. Emits `ruleCreated` on success,
     ///        `failed` on error.
@@ -62,7 +60,7 @@ class RulePresenter : public ::morph::ladder::gui::Presenter {
     /// @param actionValue The new action value.
     void updateRule(RuleId ruleId, const QString& matchText, const QString& actionValue);
 
-  signals:
+signals:
     /// @brief A rule was created.
     /// @param ruleId The new rule's id.
     void ruleCreated(ledger::RuleId ruleId);
@@ -75,7 +73,7 @@ class RulePresenter : public ::morph::ladder::gui::Presenter {
     /// @param message The exception's `what()`.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Re-emits @p err as `failed` carrying its `what()`.
     /// @param err The exception the completion carried.
     void reportError(const std::exception_ptr& err);

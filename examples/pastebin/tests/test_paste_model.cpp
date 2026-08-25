@@ -23,45 +23,29 @@
 #pragma warning(disable : 4702)
 #endif
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
-
-#include "clock.hpp"
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_busy_fixture.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/db_pool_drain.hpp"
-#include "testkit/pump.hpp"
-
-#include "pastebin/app/app.hpp"
-#include "pastebin/core/errors.hpp"
-#include "pastebin/db/database.hpp"
-#include "pastebin/db/paste_entity.hpp"
-#include "pastebin/models/paste_model.hpp"
-
-#include <morph/core/registry.hpp>
-#include <morph/core/wire.hpp>
-#include <morph/qt/qt_websocket_server.hpp>
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlConnection.hpp>
 #include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlLogger.hpp>
 #include <Lightweight/SqlStatement.hpp>
-
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
-#include <cstddef>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <morph/core/registry.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/qt/qt_websocket_server.hpp>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -69,13 +53,25 @@
 #include <thread>
 #include <vector>
 
+#include "clock.hpp"
+#include "pastebin/app/app.hpp"
+#include "pastebin/core/errors.hpp"
+#include "pastebin/db/database.hpp"
+#include "pastebin/db/paste_entity.hpp"
+#include "pastebin/models/paste_model.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_busy_fixture.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/db_pool_drain.hpp"
+#include "testkit/pump.hpp"
+
 namespace {
 
+using morph::ladder::testkit::awaitQt;
 using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
-using morph::ladder::testkit::Mode;
-using morph::ladder::testkit::awaitQt;
 using morph::ladder::testkit::drainPoolIdleMappers;
+using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::pumpUntil;
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -122,8 +118,7 @@ using morph::ladder::testkit::pumpUntil;
 // lacks, that create finds a free id and the test fails loudly.
 
 constexpr std::array<std::string_view, 16> kAnimals = {
-    "cat", "dog", "fox", "owl", "bee", "ant", "elk", "ram",
-    "yak", "cod", "eel", "hen", "pig", "cow", "bat", "jay",
+    "cat", "dog", "fox", "owl", "bee", "ant", "elk", "ram", "yak", "cod", "eel", "hen", "pig", "cow", "bat", "jay",
 };
 constexpr std::array<std::string_view, 16> kAdjectives = {
     "red",  "blue", "gold", "dark", "swift", "calm",  "bold", "wild",
@@ -162,12 +157,13 @@ void occupyKeyspace(std::size_t comboCount) {
     REQUIRE(emitted == comboCount);
 
     ::Lightweight::SqlStatement stmt;
-    (void) stmt.ExecuteDirect("WITH RECURSIVE suffix(x) AS (SELECT 0 UNION ALL SELECT x + 1 FROM suffix WHERE x < " +
-                       std::to_string(kSuffixes - 1) +
-                       ") INSERT INTO pastes (id, content, syntax, created_at_ms, expires_at_ms, burn_after_reads, "
-                       "read_count, is_private, is_editable) SELECT c.prefix || '-' || suffix.x, 'occupied', 'text', "
-                       "0, NULL, NULL, 0, 0, 0 FROM suffix, (" +
-                       combos + ") c");
+    (void)stmt.ExecuteDirect(
+        "WITH RECURSIVE suffix(x) AS (SELECT 0 UNION ALL SELECT x + 1 FROM suffix WHERE x < " +
+        std::to_string(kSuffixes - 1) +
+        ") INSERT INTO pastes (id, content, syntax, created_at_ms, expires_at_ms, burn_after_reads, "
+        "read_count, is_private, is_editable) SELECT c.prefix || '-' || suffix.x, 'occupied', 'text', "
+        "0, NULL, NULL, 0, 0, 0 FROM suffix, (" +
+        combos + ") c");
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -262,11 +258,11 @@ void occupyKeyspace(std::size_t comboCount) {
 /// idle one — the two call sites below accept that as a documented,
 /// not-fully-deterministic tradeoff rather than a hard guarantee.
 class ScopedShortBusyTimeout {
-  public:
+public:
     explicit ScopedShortBusyTimeout(int milliseconds) {
         ::Lightweight::SqlConnection::SetPostConnectedHook([milliseconds](::Lightweight::SqlConnection& connection) {
             ::Lightweight::SqlStatement stmt{connection};
-            (void) stmt.ExecuteDirect("PRAGMA busy_timeout = " + std::to_string(milliseconds));
+            (void)stmt.ExecuteDirect("PRAGMA busy_timeout = " + std::to_string(milliseconds));
         });
     }
     ~ScopedShortBusyTimeout() { ::Lightweight::SqlConnection::ResetPostConnectedHook(); }
@@ -446,8 +442,7 @@ TEST_CASE("GetPaste against an unknown id throws NotFound, and an empty id is a 
     DbFixture fixture;
     pastebin::PasteModel model;
 
-    REQUIRE_THROWS_AS(model.execute(pastebin::GetPaste{.id = pastebin::PasteId{"no-such-paste"}}),
-                      pastebin::NotFound);
+    REQUIRE_THROWS_AS(model.execute(pastebin::GetPaste{.id = pastebin::PasteId{"no-such-paste"}}), pastebin::NotFound);
     REQUIRE_THROWS_AS(model.execute(pastebin::GetPaste{}), pastebin::ValidationError);
 }
 
@@ -469,8 +464,7 @@ TEST_CASE("EditPaste replaces an editable paste's content and syntax", "[pastebi
     CHECK(refetched.syntax == "cpp");
 }
 
-TEST_CASE("EditPaste refuses an immutable paste, an unknown id, and an incomplete action",
-          "[pastebin][model]") {
+TEST_CASE("EditPaste refuses an immutable paste, an unknown id, and an incomplete action", "[pastebin][model]") {
     DbFixture fixture;
     pastebin::PasteModel model;
     const auto id = model.execute(makeCreate("immutable")).id;  // Editability::Immutable by default
@@ -512,7 +506,7 @@ TEST_CASE("A concurrent write between EditPaste's read and its write is a Confli
     // lock; when it is finally released, the guard compares against
     // content that is no longer there.
     class WaitForGuardedUpdate : public ::Lightweight::SqlLogger::Null {
-      public:
+    public:
         void OnExecute(std::string_view const& query) override {
             if (query.find("SET content = ?, syntax = ?") == std::string_view::npos) {
                 return;
@@ -529,7 +523,7 @@ TEST_CASE("A concurrent write between EditPaste's read and its write is a Confli
             _cv.wait(lock, [this] { return _reached; });
         }
 
-      private:
+    private:
         std::mutex _mutex;
         std::condition_variable _cv;
         bool _reached = false;
@@ -559,8 +553,8 @@ TEST_CASE("A concurrent write between EditPaste's read and its write is a Confli
     ::Lightweight::SqlConnection lockingConnection;
     {
         ::Lightweight::SqlStatement stmt{lockingConnection};
-        (void) stmt.ExecuteDirect("BEGIN IMMEDIATE");
-        (void) stmt.ExecuteDirect("UPDATE pastes SET id = id WHERE id = '" + *id + "'");
+        (void)stmt.ExecuteDirect("BEGIN IMMEDIATE");
+        (void)stmt.ExecuteDirect("UPDATE pastes SET id = id WHERE id = '" + *id + "'");
     }
 
     WaitForGuardedUpdate probe;
@@ -585,8 +579,8 @@ TEST_CASE("A concurrent write between EditPaste's read and its write is a Confli
 
     {
         ::Lightweight::SqlStatement stmt{lockingConnection};
-        (void) stmt.ExecuteDirect("UPDATE pastes SET content = 'concurrent writer' WHERE id = '" + *id + "'");
-        (void) stmt.ExecuteDirect("COMMIT");
+        (void)stmt.ExecuteDirect("UPDATE pastes SET content = 'concurrent writer' WHERE id = '" + *id + "'");
+        (void)stmt.ExecuteDirect("COMMIT");
     }
 
     editor.join();
@@ -616,9 +610,10 @@ TEST_CASE("A concurrent write between EditPaste's read and its write is a Confli
     CHECK(seedModel.execute(pastebin::GetPaste{.id = id}).content == "concurrent writer");
 }
 
-TEST_CASE("A concurrent delete between EditPaste's read and its guarded write is a NotFound, "
-          "not a lost update or a Conflict",
-          "[pastebin][model]") {
+TEST_CASE(
+    "A concurrent delete between EditPaste's read and its guarded write is a NotFound, "
+    "not a lost update or a Conflict",
+    "[pastebin][model]") {
     // Same forced-interleaving idiom as "A concurrent write between
     // EditPaste's read and its write is a Conflict" above, but the
     // concurrent writer deletes the row outright instead of editing its
@@ -630,7 +625,7 @@ TEST_CASE("A concurrent delete between EditPaste's read and its guarded write is
     // one has the row present and readable at EditPaste's first SELECT, and
     // only disappears in the window the CAS UPDATE itself is blocked in.
     class WaitForGuardedUpdate : public ::Lightweight::SqlLogger::Null {
-      public:
+    public:
         void OnExecute(std::string_view const& query) override {
             if (query.find("SET content = ?, syntax = ?") == std::string_view::npos) {
                 return;
@@ -647,7 +642,7 @@ TEST_CASE("A concurrent delete between EditPaste's read and its guarded write is
             _cv.wait(lock, [this] { return _reached; });
         }
 
-      private:
+    private:
         std::mutex _mutex;
         std::condition_variable _cv;
         bool _reached = false;
@@ -667,8 +662,8 @@ TEST_CASE("A concurrent delete between EditPaste's read and its guarded write is
     ::Lightweight::SqlConnection lockingConnection;
     {
         ::Lightweight::SqlStatement stmt{lockingConnection};
-        (void) stmt.ExecuteDirect("BEGIN IMMEDIATE");
-        (void) stmt.ExecuteDirect("UPDATE pastes SET id = id WHERE id = '" + *id + "'");
+        (void)stmt.ExecuteDirect("BEGIN IMMEDIATE");
+        (void)stmt.ExecuteDirect("UPDATE pastes SET id = id WHERE id = '" + *id + "'");
     }
 
     WaitForGuardedUpdate probe;
@@ -689,8 +684,8 @@ TEST_CASE("A concurrent delete between EditPaste's read and its guarded write is
 
     {
         ::Lightweight::SqlStatement stmt{lockingConnection};
-        (void) stmt.ExecuteDirect("DELETE FROM pastes WHERE id = '" + *id + "'");
-        (void) stmt.ExecuteDirect("COMMIT");
+        (void)stmt.ExecuteDirect("DELETE FROM pastes WHERE id = '" + *id + "'");
+        (void)stmt.ExecuteDirect("COMMIT");
     }
 
     editor.join();
@@ -710,9 +705,10 @@ TEST_CASE("A concurrent delete between EditPaste's read and its guarded write is
     REQUIRE(sawNotFound);
 }
 
-TEST_CASE("A concurrent DeletePaste is not the only way to reach EditPaste's post-CAS \"not editable\" "
-          "classification, but flipping is_editable underneath a pending edit reaches it too",
-          "[pastebin][model]") {
+TEST_CASE(
+    "A concurrent DeletePaste is not the only way to reach EditPaste's post-CAS \"not editable\" "
+    "classification, but flipping is_editable underneath a pending edit reaches it too",
+    "[pastebin][model]") {
     // Mirrors the delete case above, but the concurrent writer clears
     // is_editable instead of removing the row -- the other branch of the
     // same "Zero rows matched: classify why" block (paste_model.cpp).
@@ -723,7 +719,7 @@ TEST_CASE("A concurrent DeletePaste is not the only way to reach EditPaste's pos
     // there is no in-API way to un-edit a paste, which is exactly why this
     // classification branch has no other route to it.
     class WaitForGuardedUpdate : public ::Lightweight::SqlLogger::Null {
-      public:
+    public:
         void OnExecute(std::string_view const& query) override {
             if (query.find("SET content = ?, syntax = ?") == std::string_view::npos) {
                 return;
@@ -740,7 +736,7 @@ TEST_CASE("A concurrent DeletePaste is not the only way to reach EditPaste's pos
             _cv.wait(lock, [this] { return _reached; });
         }
 
-      private:
+    private:
         std::mutex _mutex;
         std::condition_variable _cv;
         bool _reached = false;
@@ -760,8 +756,8 @@ TEST_CASE("A concurrent DeletePaste is not the only way to reach EditPaste's pos
     ::Lightweight::SqlConnection lockingConnection;
     {
         ::Lightweight::SqlStatement stmt{lockingConnection};
-        (void) stmt.ExecuteDirect("BEGIN IMMEDIATE");
-        (void) stmt.ExecuteDirect("UPDATE pastes SET id = id WHERE id = '" + *id + "'");
+        (void)stmt.ExecuteDirect("BEGIN IMMEDIATE");
+        (void)stmt.ExecuteDirect("UPDATE pastes SET id = id WHERE id = '" + *id + "'");
     }
 
     WaitForGuardedUpdate probe;
@@ -782,8 +778,8 @@ TEST_CASE("A concurrent DeletePaste is not the only way to reach EditPaste's pos
 
     {
         ::Lightweight::SqlStatement stmt{lockingConnection};
-        (void) stmt.ExecuteDirect("UPDATE pastes SET is_editable = 0 WHERE id = '" + *id + "'");
-        (void) stmt.ExecuteDirect("COMMIT");
+        (void)stmt.ExecuteDirect("UPDATE pastes SET is_editable = 0 WHERE id = '" + *id + "'");
+        (void)stmt.ExecuteDirect("COMMIT");
     }
 
     editor.join();
@@ -822,7 +818,7 @@ TEST_CASE("ListPastes returns only public pastes, one page at a time, and its cu
     DbFixture fixture;
     pastebin::PasteModel model;
 
-    constexpr int kPublic = 25;   // one full 20-row page plus a partial second one
+    constexpr int kPublic = 25;  // one full 20-row page plus a partial second one
     constexpr int kPrivate = 3;
     std::vector<pastebin::PasteId> publicIds;
     for (int i = 0; i < kPublic; ++i) {
@@ -886,8 +882,7 @@ TEST_CASE("ListPastes does not consume a read budget — listing is not reading"
 // Step 2 — burn-after-read semantics, single client
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("GetPaste spends the burn budget and deletes the paste on the last allowed read",
-          "[pastebin][model]") {
+TEST_CASE("GetPaste spends the burn budget and deletes the paste on the last allowed read", "[pastebin][model]") {
     DbFixture fixture;
     pastebin::PasteModel model;
 
@@ -908,8 +903,7 @@ TEST_CASE("GetPaste spends the burn budget and deletes the paste on the last all
     REQUIRE_THROWS_AS(model.execute(pastebin::GetPaste{.id = id}), pastebin::NotFound);
 }
 
-TEST_CASE("GetPaste against a row already at its burn budget throws Burned, not NotFound",
-          "[pastebin][model]") {
+TEST_CASE("GetPaste against a row already at its burn budget throws Burned, not NotFound", "[pastebin][model]") {
     // Seeds the row directly at the storage layer with read_count already at
     // burn_after_reads, bypassing the delete-on-last-read step that would
     // normally have removed it. This is the "conditional UPDATE matched zero
@@ -1043,7 +1037,7 @@ TEST_CASE("BackendRig::Socket: concurrent GetPaste against a burn-after-N paste 
     auto handler2 = rig.client<pastebin::PasteModel>(2);
     auto handler3 = rig.client<pastebin::PasteModel>(3);
     const std::array<morph::bridge::BridgeHandler<pastebin::PasteModel>*, kClients> handlers{&handler0, &handler1,
-                                                                                              &handler2, &handler3};
+                                                                                             &handler2, &handler3};
 
     struct Tally {
         std::atomic<int> successes{0};
@@ -1079,9 +1073,8 @@ TEST_CASE("BackendRig::Socket: concurrent GetPaste against a burn-after-N paste 
                     .onError([tally](const std::exception_ptr&) { tally->failures.fetch_add(1); });
             }
 
-            REQUIRE(pumpUntil([tally] {
-                return tally->successes.load() + tally->failures.load() == static_cast<int>(kClients);
-            }));
+            REQUIRE(pumpUntil(
+                [tally] { return tally->successes.load() + tally->failures.load() == static_cast<int>(kClients); }));
             // Exactly `budget` clients get the content — never one more, no
             // matter how the four dispatches interleave.
             REQUIRE(tally->successes.load() == budget);
@@ -1098,8 +1091,7 @@ TEST_CASE("BackendRig::Socket: concurrent GetPaste against a burn-after-N paste 
 // Step 4 — expiry, driven by the injectable clock rather than by sleeping
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("A paste past its expiresAt throws Expired from GetPaste, before any sweep runs",
-          "[pastebin][model]") {
+TEST_CASE("A paste past its expiresAt throws Expired from GetPaste, before any sweep runs", "[pastebin][model]") {
     DbFixture fixture;
     pastebin::PasteModel model;
 
@@ -1126,8 +1118,8 @@ TEST_CASE("Expiry edges: an expiresAt at the epoch, and one already in the past 
     // what a disengaged `Timestamp` means. A paste stamped with it is simply
     // long expired.
     auto atEpoch = makeCreate("epoch");
-    atEpoch.expiresAt = ::morph::time::Timestamp{::morph::time::DateTime{
-        std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{0}}}};
+    atEpoch.expiresAt = ::morph::time::Timestamp{
+        ::morph::time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{0}}}};
     const auto epochId = model.execute(atEpoch).id;
     REQUIRE_THROWS_AS(model.execute(pastebin::GetPaste{.id = epochId}), pastebin::Expired);
 
@@ -1143,8 +1135,7 @@ TEST_CASE("Expiry edges: an expiresAt at the epoch, and one already in the past 
     CHECK(model.execute(pastebin::GetPaste{.id = liveId}).content == "still live");
 }
 
-TEST_CASE("A malformed expiresAt on the wire is a decode error, never a clamped value",
-          "[pastebin][model]") {
+TEST_CASE("A malformed expiresAt on the wire is a decode error, never a clamped value", "[pastebin][model]") {
     // The third expiry edge the README requires, and the one the two cases
     // above cannot reach: past and epoch are *values*, but "malformed" is not
     // representable as a `Timestamp` at all, so it can only be exercised where
@@ -1186,8 +1177,7 @@ TEST_CASE("A malformed expiresAt on the wire is a decode error, never a clamped 
     CHECK_THROWS_AS(Traits::fromJson(body), ::morph::model::detail::ParseError);
 }
 
-TEST_CASE("ExpirePaste reclaims only a genuinely expired paste, so replaying it is safe",
-          "[pastebin][model]") {
+TEST_CASE("ExpirePaste reclaims only a genuinely expired paste, so replaying it is safe", "[pastebin][model]") {
     DbFixture fixture;
     pastebin::PasteModel model;
 
@@ -1249,7 +1239,7 @@ TEST_CASE("App's periodic sweep dispatches ExpirePaste for a past-expiry paste, 
         // the effect is observed by pumping rather than by the call returning.
         REQUIRE(pumpUntil([&] {
             try {
-                (void) model.execute(pastebin::GetPaste{.id = sweptId});
+                (void)model.execute(pastebin::GetPaste{.id = sweptId});
                 return false;  // still there
             } catch (const pastebin::NotFound&) {
                 return true;  // reclaimed
@@ -1268,8 +1258,7 @@ TEST_CASE("App's periodic sweep dispatches ExpirePaste for a past-expiry paste, 
     CHECK(model.execute(pastebin::GetPaste{.id = survivorId}).content == "no expiry");
 }
 
-TEST_CASE("A sweep firing between two pages of a ListPastes cursor walk skips no surviving paste",
-          "[pastebin][app]") {
+TEST_CASE("A sweep firing between two pages of a ListPastes cursor walk skips no surviving paste", "[pastebin][app]") {
     // Keyset pagination on the primary key is what makes this safe: the
     // cursor is the previous page's last id, so rows reclaimed mid-walk
     // cannot shift a later page's offset the way LIMIT/OFFSET would.
@@ -1287,7 +1276,7 @@ TEST_CASE("A sweep firing between two pages of a ListPastes cursor walk skips no
     for (int i = 0; i < kDoomed; ++i) {
         auto doomed = makeCreate("doomed " + std::to_string(i));
         doomed.expiresAt = morph::ladder::now();
-        (void) model.execute(doomed);
+        (void)model.execute(doomed);
     }
     REQUIRE(pasteRowCount() == kSurvivors + kDoomed);
 
@@ -1333,8 +1322,7 @@ TEST_CASE("A sweep firing between two pages of a ListPastes cursor walk skips no
 // Step 5 — duplicate create on retry (this rung's honest, weaker behavior)
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("Two CreatePaste calls with identical content mint two distinct pastes at this rung",
-          "[pastebin][model]") {
+TEST_CASE("Two CreatePaste calls with identical content mint two distinct pastes at this rung", "[pastebin][model]") {
     // Documents a known limitation rather than a guarantee. The README's
     // "duplicate create on retry" bullet points at idempotency-key discipline,
     // but rung 1's `CreatePaste` has no such key — LADDER.md scopes
@@ -1359,8 +1347,7 @@ TEST_CASE("Two CreatePaste calls with identical content mint two distinct pastes
 // Step 6 — id-collision handling in the tiny animal-name keyspace
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("CreatePaste retries past colliding animal-name ids instead of failing the call",
-          "[pastebin][model]") {
+TEST_CASE("CreatePaste retries past colliding animal-name ids instead of failing the call", "[pastebin][model]") {
     DbFixture fixture;
 
     // A quarter of the keyspace is occupied up front, so roughly one
@@ -1389,8 +1376,7 @@ TEST_CASE("CreatePaste retries past colliding animal-name ids instead of failing
     }
 }
 
-TEST_CASE("CreatePaste gives up with a ValidationError once the whole keyspace is occupied",
-          "[pastebin][model]") {
+TEST_CASE("CreatePaste gives up with a ValidationError once the whole keyspace is occupied", "[pastebin][model]") {
     // The other side of the retry budget, and the guard that keeps the
     // keyspace mirrored at the top of this file honest: with every id the
     // model can spell already taken, all eight attempts must collide and the
@@ -1438,8 +1424,7 @@ TEST_CASE("An oversized CreatePaste is refused by the transport with a typed, re
 // Step 8 — hostile content round-trip
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("Fuzz-corpus findings survive CreatePaste/GetPaste as paste content, both backends",
-          "[pastebin][model]") {
+TEST_CASE("Fuzz-corpus findings survive CreatePaste/GetPaste as paste content, both backends", "[pastebin][model]") {
     const auto mode = GENERATE(Mode::Local, Mode::Socket);
     DbFixture fixture;
     BackendRig rig{mode, 1};
@@ -1518,8 +1503,7 @@ TEST_CASE("Fail-open default: an unauthenticated client registers and reads a pa
 // Step 10 — `hello` protocol-version negotiation
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("hello negotiates the protocol version the server is built against",
-          "[pastebin][security][socket-only]") {
+TEST_CASE("hello negotiates the protocol version the server is built against", "[pastebin][security][socket-only]") {
     // No example exercised the `hello` handshake before this rung (README's
     // "Required tests"). `negotiateProtocolVersion()` is transport-level and
     // blocks on a nested QEventLoop, which is exactly what a native Catch2
@@ -1545,8 +1529,7 @@ TEST_CASE("hello negotiates the protocol version the server is built against",
 // Step 11 — store-error branch coverage
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("GetPaste surfaces a real SQLITE_BUSY as a thrown error, not as silent data loss",
-          "[pastebin][model]") {
+TEST_CASE("GetPaste surfaces a real SQLITE_BUSY as a thrown error, not as silent data loss", "[pastebin][model]") {
     // Finding 018's designated resolution for the busy class: a genuine
     // competing write transaction on a second connection, not a mock. The
     // model must let that failure reach the client as itself — treating a
@@ -1587,7 +1570,7 @@ TEST_CASE("CreatePaste surfaces a real SQLITE_BUSY rather than mistaking it for 
     DbFixture fixture;
     {
         pastebin::PasteModel warmup;
-        (void) warmup.execute(makeCreate("seed"));
+        (void)warmup.execute(makeCreate("seed"));
     }
 
     // Same requirement as the other two SQLITE_BUSY tests in this file:
@@ -1640,8 +1623,7 @@ TEST_CASE("The read-count unit carries its schema id, display text and precision
     CHECK(meta.defaultDecimals == 1U);
 }
 
-TEST_CASE("db::setup points the default connection at a database and applies the schema",
-          "[pastebin][model]") {
+TEST_CASE("db::setup points the default connection at a database and applies the schema", "[pastebin][model]") {
     // The entry point the server/GUI binaries call at startup, in place of a
     // DbFixture. Pointed at the same database this suite already uses, so it
     // is idempotent here: both of its migration calls are no-ops against an

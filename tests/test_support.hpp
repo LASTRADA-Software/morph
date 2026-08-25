@@ -8,14 +8,13 @@
 // keeps the test code consistent and lets the production API not have to expose
 // test-only utilities.
 
-#include <morph/core/executor.hpp>
-#include <morph/core/wire.hpp>
-
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <deque>
 #include <functional>
+#include <morph/core/executor.hpp>
+#include <morph/core/wire.hpp>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -150,7 +149,7 @@ private:
 /// and the exception is often a `REQUIRE` failure the test needs to see
 /// rather than have silently swallowed.
 class DeterministicExecutor : public ::morph::exec::IExecutor {
-  public:
+public:
     void post(std::function<void()> task) override {
         std::lock_guard lock{_mtx};
         _queue.push_back(std::move(task));
@@ -202,7 +201,7 @@ class DeterministicExecutor : public ::morph::exec::IExecutor {
         }
     }
 
-  private:
+private:
     mutable std::mutex _mtx;
     std::deque<std::function<void()>> _queue;
 };

@@ -50,16 +50,13 @@ void LoanController::reloadLoans() {
                 map[QStringLiteral("id")] = static_cast<qlonglong>(loan.id);
                 map[QStringLiteral("accountId")] = static_cast<qlonglong>(loan.accountId);
                 map[QStringLiteral("title")] = QStringLiteral("Loan #%1").arg(loan.id);
-                map[QStringLiteral("detail")] =
-                    QStringLiteral("Outstanding %1  ·  %2 bps  ·  %3 mo")
-                        .arg(fmt::money(loan.outstandingMinor, loan.currency))
-                        .arg(loan.rateBps)
-                        .arg(loan.termMonths);
+                map[QStringLiteral("detail")] = QStringLiteral("Outstanding %1  ·  %2 bps  ·  %3 mo")
+                                                    .arg(fmt::money(loan.outstandingMinor, loan.currency))
+                                                    .arg(loan.rateBps)
+                                                    .arg(loan.termMonths);
                 map[QStringLiteral("outstanding")] = static_cast<qlonglong>(loan.outstandingMinor);
-                map[QStringLiteral("statusText")] = paid ? QStringLiteral("Paid off")
-                                                         : QStringLiteral("Active");
-                map[QStringLiteral("statusKind")] = paid ? QStringLiteral("good")
-                                                         : QStringLiteral("neutral");
+                map[QStringLiteral("statusText")] = paid ? QStringLiteral("Paid off") : QStringLiteral("Active");
+                map[QStringLiteral("statusKind")] = paid ? QStringLiteral("good") : QStringLiteral("neutral");
                 map[QStringLiteral("active")] = status == bank::LoanStatus::Active;
                 _loans.append(map);
             }
@@ -77,8 +74,8 @@ void LoanController::apply(qlonglong accountId, const QString& principal, int ra
         return;
     }
     _loanModel
-        .execute(bank::dto::ApplyLoan{.accountId = accountId, .principalMinor = *minor,
-                                      .rateBps = rateBps, .termMonths = termMonths})
+        .execute(bank::dto::ApplyLoan{
+            .accountId = accountId, .principalMinor = *minor, .rateBps = rateBps, .termMonths = termMonths})
         .then([this](bank::dto::LoanInfo) { reloadLoans(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
@@ -89,8 +86,7 @@ void LoanController::repay(qlonglong loanId, qlonglong accountId, const QString&
         emit error(QStringLiteral("Enter a valid amount."));
         return;
     }
-    _loanModel
-        .execute(bank::dto::RepayLoan{.loanId = loanId, .fromAccountId = accountId, .amountMinor = *minor})
+    _loanModel.execute(bank::dto::RepayLoan{.loanId = loanId, .fromAccountId = accountId, .amountMinor = *minor})
         .then([this](bank::dto::LoanInfo) { reloadLoans(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }

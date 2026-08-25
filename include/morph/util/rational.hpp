@@ -88,10 +88,6 @@
 ///       (e.g. sums over large coprime denominators). Keep operands within
 ///       the decimal-scaled ranges the precision tags imply.
 
-#include <morph/core/logger.hpp>
-
-#include <glaze/glaze.hpp>
-
 #include <atomic>
 #include <cassert>
 #include <cmath>
@@ -100,7 +96,9 @@
 #include <cstdint>
 #include <expected>
 #include <format>
+#include <glaze/glaze.hpp>
 #include <limits>
+#include <morph/core/logger.hpp>
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -221,7 +219,7 @@ namespace detail {
 /// Thread-local and scoped: a decode is synchronous on one thread, and a
 /// nested decode must not steal its parent's count.
 class WireClampScope {
-  public:
+public:
     /// @brief Starts a fresh count, saving any enclosing scope's.
     WireClampScope() noexcept : _saved{detail::wireClampCounter()} { detail::wireClampCounter() = 0; }
 
@@ -237,7 +235,7 @@ class WireClampScope {
     /// @return The clamp count.
     [[nodiscard]] std::size_t clamped() const noexcept { return detail::wireClampCounter(); }
 
-  private:
+private:
     std::size_t _saved;
 };
 
@@ -331,14 +329,14 @@ struct U128 {
 /// @brief Multiplies two u64 exactly into 128 bits (for exact fraction comparison).
 [[nodiscard]] constexpr U128 mulU64(std::uint64_t lhs, std::uint64_t rhs) noexcept {
 #ifdef __SIZEOF_INT128__
-#  if defined(__GNUC__) && !defined(__clang__)
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wpedantic"
-#  endif
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
     auto const product = static_cast<unsigned __int128>(lhs) * rhs;
-#  if defined(__GNUC__) && !defined(__clang__)
-#    pragma GCC diagnostic pop
-#  endif
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
     return U128{.hi = static_cast<std::uint64_t>(product >> 64), .lo = static_cast<std::uint64_t>(product)};
 #else
     // Portable 32-bit limb multiplication (MSVC has no __int128).
@@ -352,8 +350,7 @@ struct U128 {
     auto const highLow = lhsHigh * rhsLow;
     auto const highHigh = lhsHigh * rhsHigh;
     auto const mid = (lowLow >> 32) + (lowHigh & mask) + (highLow & mask);
-    return U128{.hi = highHigh + (lowHigh >> 32) + (highLow >> 32) + (mid >> 32),
-                .lo = (mid << 32) | (lowLow & mask)};
+    return U128{.hi = highHigh + (lowHigh >> 32) + (highLow >> 32) + (mid >> 32), .lo = (mid << 32) | (lowLow & mask)};
 #endif
 }
 
@@ -384,7 +381,7 @@ struct Rational {
     constexpr Rational(std::int64_t whole, DecimalPlaces wantedPrecision) noexcept
         : numerator{whole}, decimalPlaces{detail::clampDecimalPlaces(wantedPrecision.value)} {}
 
-        /// @brief Constructs from explicit numerator/denominator, then canonicalises.
+    /// @brief Constructs from explicit numerator/denominator, then canonicalises.
     ///
     /// A negative @p wantedDenominator flips the sign of @p wantedNumerator,
     /// the pair is reduced by `gcd`, and a denominator of `0` is clamped to
@@ -510,10 +507,10 @@ struct Rational {
             return std::strong_ordering::equal;
         }
 
-        auto const leftProduct = detail::mulU64(detail::absU64(numerator),
-                                                static_cast<std::uint64_t>(other.denominator));
-        auto const rightProduct = detail::mulU64(detail::absU64(other.numerator),
-                                                 static_cast<std::uint64_t>(denominator));
+        auto const leftProduct =
+            detail::mulU64(detail::absU64(numerator), static_cast<std::uint64_t>(other.denominator));
+        auto const rightProduct =
+            detail::mulU64(detail::absU64(other.numerator), static_cast<std::uint64_t>(denominator));
         auto const magnitude = leftProduct <=> rightProduct;
         if (leftSign > 0) {
             return magnitude;
@@ -606,9 +603,9 @@ struct Rational {
     ///
     /// Field names are the wire contract: `{"num":..,"den":..,"dp":..}`.
     struct Wire {
-        std::int64_t num{0};   ///< Signed numerator as sent/received.
-        std::int64_t den{1};   ///< Denominator as sent/received; may be non-canonical.
-        std::uint32_t dp{1};   ///< Decimal-precision tag as sent/received.
+        std::int64_t num{0};  ///< Signed numerator as sent/received.
+        std::int64_t den{1};  ///< Denominator as sent/received; may be non-canonical.
+        std::uint32_t dp{1};  ///< Decimal-precision tag as sent/received.
 
         /// @brief Whether these raw values decode without being clamped.
         ///
@@ -628,8 +625,8 @@ struct Rational {
             // the actual requirement is that the component can be negated,
             // which is to say its magnitude is representable as int64. That is
             // what canonicalising needs, and it says so directly.
-            return den != 0 && dp <= kMaxDecimalPlaces && std::in_range<std::int64_t>(detail::absU64(num))
-                && std::in_range<std::int64_t>(detail::absU64(den));
+            return den != 0 && dp <= kMaxDecimalPlaces && std::in_range<std::int64_t>(detail::absU64(num)) &&
+                   std::in_range<std::int64_t>(detail::absU64(den));
         }
     };
 
@@ -660,7 +657,9 @@ struct Rational {
 
     /// @brief Wire-codec exit (Glaze write side).
     /// @return The canonical members, ready for JSON encoding.
-    [[nodiscard]] Wire getWire() const noexcept { return Wire{.num = numerator, .den = denominator, .dp = decimalPlaces.value}; }
+    [[nodiscard]] Wire getWire() const noexcept {
+        return Wire{.num = numerator, .den = denominator, .dp = decimalPlaces.value};
+    }
 
 private:
     /// @brief Logs an overflow that `operator+=`/`-=`/`*=` saturated instead
@@ -676,9 +675,10 @@ private:
     /// @param where Which operator saturated.
     static constexpr void reportOverflow(std::string_view where) noexcept {
         if (!std::is_constant_evaluated()) {
-            ::morph::log::logError("[Rational] {} overflowed int64 and saturated; the result is clamped, "
-                                   "not exact. Use checkedAdd/checkedSub/checkedMul to detect this instead.",
-                                   where);
+            ::morph::log::logError(
+                "[Rational] {} overflowed int64 and saturated; the result is clamped, "
+                "not exact. Use checkedAdd/checkedSub/checkedMul to detect this instead.",
+                where);
         }
     }
 
@@ -688,9 +688,10 @@ private:
     /// `reportOverflow` -- see that function for why the `catch` is there.
     static constexpr void reportClamp() noexcept {
         if (!std::is_constant_evaluated()) {
-            ::morph::log::logError("[Rational] an INT64_MIN component was clamped to -INT64_MAX; "
-                                   "canonicalising it would require negating a value with no positive "
-                                   "counterpart.");
+            ::morph::log::logError(
+                "[Rational] an INT64_MIN component was clamped to -INT64_MAX; "
+                "canonicalising it would require negating a value with no positive "
+                "counterpart.");
         }
     }
 
@@ -775,7 +776,7 @@ private:
         canonicalise();
     }
 
-  public:
+public:
     /// @brief Applies `+=`'s arithmetic, having already proven it cannot overflow.
     ///
     /// For `checkedAdd`, which has just run `addWouldOverflow` and must not
@@ -799,8 +800,8 @@ private:
         auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
         auto const rightScaled = rhs.denominator / denominatorGcd;
         auto const leftScaled = denominator / denominatorGcd;
-        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled)
-            || detail::mulOverflows(denominator, rightScaled)) {
+        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled) ||
+            detail::mulOverflows(denominator, rightScaled)) {
             return true;
         }
         return detail::addOverflows(numerator * rightScaled, rhs.numerator * leftScaled);
@@ -813,8 +814,8 @@ private:
         auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
         auto const rightScaled = rhs.denominator / denominatorGcd;
         auto const leftScaled = denominator / denominatorGcd;
-        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled)
-            || detail::mulOverflows(denominator, rightScaled)) {
+        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled) ||
+            detail::mulOverflows(denominator, rightScaled)) {
             return true;
         }
         return detail::subOverflows(numerator * rightScaled, rhs.numerator * leftScaled);
@@ -835,8 +836,8 @@ private:
         if (crossDivisorOne == 0 || crossDivisorTwo == 0) {
             return false;  // a zero numerator: the product is zero
         }
-        return detail::mulOverflows(numerator / crossDivisorOne, rhs.numerator / crossDivisorTwo)
-            || detail::mulOverflows(denominator / crossDivisorTwo, rhs.denominator / crossDivisorOne);
+        return detail::mulOverflows(numerator / crossDivisorOne, rhs.numerator / crossDivisorTwo) ||
+               detail::mulOverflows(denominator / crossDivisorTwo, rhs.denominator / crossDivisorOne);
     }
 
 private:
@@ -903,8 +904,9 @@ static_assert(std::is_standard_layout_v<Rational>);
 /// @param value Value to take the absolute value of.
 /// @return The non-negative value with the same magnitude.
 [[nodiscard]] constexpr Rational abs(const Rational& value) noexcept {
-    return value.numerator < 0 ? Rational{Numerator{-value.numerator}, Denominator{value.denominator}, value.decimalPlaces}
-                               : value;
+    return value.numerator < 0
+               ? Rational{Numerator{-value.numerator}, Denominator{value.denominator}, value.decimalPlaces}
+               : value;
 }
 
 /// @brief Rounds toward positive infinity.
@@ -960,9 +962,8 @@ static_assert(std::is_standard_layout_v<Rational>);
 /// @param mode   Tie-breaking rule. Defaults to half away from zero, matching
 ///               morph's display path.
 /// @return The rounded value, tagged at @p places.
-[[nodiscard]] constexpr Rational roundToDecimalPlaces(
-    const Rational& value, DecimalPlaces places,
-    RoundingMode mode = RoundingMode::HalfAwayFromZero) noexcept;
+[[nodiscard]] constexpr Rational roundToDecimalPlaces(const Rational& value, DecimalPlaces places,
+                                                      RoundingMode mode = RoundingMode::HalfAwayFromZero) noexcept;
 
 // ---------------------------------------------------------------------------
 // Plain Rational arithmetic (max-precision propagation).
@@ -1104,7 +1105,8 @@ concept NeedsLifting = IsExpectedRational<T> || IsFloat<T>;
 }
 
 /// @brief Forwards an `ExpectedRational` unchanged.
-[[nodiscard]] constexpr ExpectedRational lift(const ExpectedRational& value, DecimalPlaces /*wantedPrecision*/) noexcept {
+[[nodiscard]] constexpr ExpectedRational lift(const ExpectedRational& value,
+                                              DecimalPlaces /*wantedPrecision*/) noexcept {
     return value;
 }
 
@@ -1139,9 +1141,9 @@ template <typename Left, typename Right>
 /// @param rhs Right operand (Rational, expected-Rational, or floating point).
 /// @return The exact sum, or the first error encountered left to right.
 template <typename Left, typename Right>
-    requires(detail::RationalLike<Left> || detail::RationalLike<Right>)
-            && (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>)
-            && (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
+    requires(detail::RationalLike<Left> || detail::RationalLike<Right>) &&
+            (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
+            (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator+(const Left& lhs, const Right& rhs) noexcept {
     auto const precision = detail::liftPrecision(lhs, rhs);
     auto const leftExpected = detail::lift(lhs, precision);
@@ -1160,9 +1162,9 @@ template <typename Left, typename Right>
 /// @param rhs Right operand (Rational, expected-Rational, or floating point).
 /// @return The exact difference, or the first error encountered left to right.
 template <typename Left, typename Right>
-    requires(detail::RationalLike<Left> || detail::RationalLike<Right>)
-            && (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>)
-            && (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
+    requires(detail::RationalLike<Left> || detail::RationalLike<Right>) &&
+            (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
+            (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator-(const Left& lhs, const Right& rhs) noexcept {
     auto const precision = detail::liftPrecision(lhs, rhs);
     auto const leftExpected = detail::lift(lhs, precision);
@@ -1181,9 +1183,9 @@ template <typename Left, typename Right>
 /// @param rhs Right operand (Rational, expected-Rational, or floating point).
 /// @return The exact product, or the first error encountered left to right.
 template <typename Left, typename Right>
-    requires(detail::RationalLike<Left> || detail::RationalLike<Right>)
-            && (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>)
-            && (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
+    requires(detail::RationalLike<Left> || detail::RationalLike<Right>) &&
+            (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
+            (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator*(const Left& lhs, const Right& rhs) noexcept {
     auto const precision = detail::liftPrecision(lhs, rhs);
     auto const leftExpected = detail::lift(lhs, precision);
@@ -1202,9 +1204,9 @@ template <typename Left, typename Right>
 /// @param rhs Divisor (Rational, expected-Rational, or floating point).
 /// @return The exact quotient, or the first error encountered left to right.
 template <typename Left, typename Right>
-    requires(detail::RationalLike<Left> || detail::RationalLike<Right>)
-            && (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>)
-            && (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
+    requires(detail::RationalLike<Left> || detail::RationalLike<Right>) &&
+            (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
+            (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator/(const Left& lhs, const Right& rhs) noexcept {
     auto const precision = detail::liftPrecision(lhs, rhs);
     auto const leftExpected = detail::lift(lhs, precision);
@@ -1266,8 +1268,7 @@ template <std::floating_point Float>
 
 }  // namespace detail
 
-constexpr Rational roundToDecimalPlaces(const Rational& value, DecimalPlaces places,
-                                        RoundingMode mode) noexcept {
+constexpr Rational roundToDecimalPlaces(const Rational& value, DecimalPlaces places, RoundingMode mode) noexcept {
     auto const wanted = detail::clampWireDecimalPlaces(places.value);
     // `wanted <= kMaxDecimalPlaces` after the clamp, so this never returns the
     // overflow sentinel and `scale >= 1`.

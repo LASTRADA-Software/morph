@@ -25,20 +25,18 @@
 // sub-view whose property is called plain `bridge`. Both names reach the same
 // instance, so both are bound to it and the audit pools their coverage.
 
+#include <QString>
+#include <QStringList>
+#include <catch2/catch_test_macros.hpp>
+#include <initializer_list>
+#include <utility>
+
 #include "budget_qml_bridge.hpp"
 #include "ledger_qml_bridge.hpp"
 #include "report_qml_bridge.hpp"
 #include "rule_qml_bridge.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/qml_surface.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <QString>
-#include <QStringList>
-
-#include <initializer_list>
-#include <utility>
 
 namespace {
 

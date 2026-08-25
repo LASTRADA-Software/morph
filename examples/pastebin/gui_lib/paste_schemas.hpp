@@ -2,7 +2,6 @@
 #pragma once
 
 #include <morph/forms/forms.hpp>
-
 #include <string>
 
 #include "pastebin/dto/paste_dto.hpp"

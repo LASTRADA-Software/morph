@@ -11,20 +11,19 @@
 /// offscreen engine-load smoke test does. Same convention, and same reason, as
 /// kanban's own `main.cpp`.
 
-#include "budget_qml_bridge.hpp"
-#include "gui/app_context.hpp"
-#include "ledger_qml_bridge.hpp"
-#include "report_qml_bridge.hpp"
-#include "rule_qml_bridge.hpp"
-
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QString>
 #include <QUrl>
 #include <QVariant>
-
 #include <memory>
 #include <optional>
+
+#include "budget_qml_bridge.hpp"
+#include "gui/app_context.hpp"
+#include "ledger_qml_bridge.hpp"
+#include "report_qml_bridge.hpp"
+#include "rule_qml_bridge.hpp"
 
 namespace {
 

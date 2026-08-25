@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "kanban/core/types.hpp"
-#include "kanban/dto/project_dto.hpp"
-
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "kanban/core/types.hpp"
+#include "kanban/dto/project_dto.hpp"
 
 /// @file
 /// `AddAttachment`/`GetAttachments`/`RemoveAttachment` -- README build-order

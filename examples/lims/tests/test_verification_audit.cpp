@@ -15,7 +15,6 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <algorithm>
-
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/journal/action_log.hpp>
@@ -544,8 +543,8 @@ TEST_CASE("Offline replay and conflict resolution both reach the sample's trail"
     auto log = std::make_shared<morph::journal::InMemoryActionLog>();
 
     lims::AnalysisCatalogModel catalog;
-    const auto nitrate = catalog.execute(
-        lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
+    const auto nitrate =
+        catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
     lims::SampleModel bench;
     bench.attachActionLog(log, std::string{});
     const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
@@ -622,15 +621,14 @@ TEST_CASE("The audit and verification listings need an attached handler", "[lims
     CHECK_THROWS_AS(model.execute(lims::ListVerifications{}), lims::NotFound);
 }
 
-TEST_CASE("Every refused action kind is named in the trail, not lumped as unreadable",
-          "[lims][audit]") {
+TEST_CASE("Every refused action kind is named in the trail, not lumped as unreadable", "[lims][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>();
 
     lims::AnalysisCatalogModel catalog;
-    const auto nitrate = catalog.execute(
-        lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
+    const auto nitrate =
+        catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
     lims::SampleModel bench;
     bench.attachActionLog(log, std::string{});
     const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
@@ -647,9 +645,9 @@ TEST_CASE("Every refused action kind is named in the trail, not lumped as unread
                     lims::ValidationError);
     CHECK_THROWS_AS(bench.execute(lims::QueuedCapture{.sampleId = atWork.id, .capturedBy = "alice"}),
                     lims::ValidationError);
-    CHECK_THROWS_AS(bench.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242},
-                                                        .note = "no such conflict"}),
-                    lims::NotFound);
+    CHECK_THROWS_AS(
+        bench.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "no such conflict"}),
+        lims::NotFound);
     // A supervisor has to exist before a grant can be refused at all — the
     // bootstrap carve-out lets the *first* grant through whoever makes it.
     bench.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Supervisor});
@@ -657,8 +655,7 @@ TEST_CASE("Every refused action kind is named in the trail, not lumped as unread
         const ScopedPrincipal mallory{"mallory"};
         lims::SampleModel intruder;
         intruder.attachActionLog(log, std::to_string(*atWork.id));
-        CHECK_THROWS_AS(intruder.execute(lims::GrantRole{.principal = "mallory",
-                                                          .role = lims::LimsRole::Supervisor}),
+        CHECK_THROWS_AS(intruder.execute(lims::GrantRole{.principal = "mallory", .role = lims::LimsRole::Supervisor}),
                         lims::Forbidden);
     }
 

@@ -13,6 +13,15 @@
 // leaking between steps, a failed step corrupting what follows, an error path
 // that leaves the client wedged, a session that outlives sign-out.
 
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <string>
+#include <string_view>
+
 #include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban/core/errors.hpp"
 #include "kanban/dto/auth_dto.hpp"
@@ -25,17 +34,8 @@
 #include "testkit/journey.hpp"
 #include "testkit/pump.hpp"
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <morph/core/bridge.hpp>
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-
-#include <algorithm>
-#include <string>
-#include <string_view>
-
+using kanban::BoardModel;
+using kanban::ProjectAdminModel;
 using morph::bridge::AllowShared;
 using morph::bridge::BridgeHandler;
 using morph::ladder::testkit::awaitQt;
@@ -43,8 +43,6 @@ using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
 using morph::ladder::testkit::Journey;
 using morph::ladder::testkit::Mode;
-using kanban::BoardModel;
-using kanban::ProjectAdminModel;
 
 namespace {
 
@@ -57,7 +55,7 @@ constexpr std::string_view kSecret = "journey-test-secret-at-least-32-bytes-ok";
 /// directly has to stand in for it, or `Login` fails with "no token issuer
 /// installed" -- which is exactly how this test first failed.
 class ScopedTokenIssuer {
-  public:
+public:
     explicit ScopedTokenIssuer(std::string secret) {
         kanban::auth::setTokenIssuer(
             std::make_shared<morph::session::TokenIssuer>(std::move(secret), morph::session::hmacSha256));
@@ -68,7 +66,7 @@ class ScopedTokenIssuer {
 };
 
 [[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
-                                                       std::string principal) {
+                                                      std::string principal) {
     morph::session::Context ctx;
     ctx.principal = principal;
     ctx.token = issuer.issue(morph::session::SessionToken{
@@ -174,8 +172,8 @@ TEST_CASE("Journey: a rejected sign-in, a successful retry, and a session that e
                   // authority the user believed they had given up.
                   rig.bridge(0).setDefaultSession({});
                   auto admin = rig.client<ProjectAdminModel>(0);
-                  const auto message =
-                      errorMessageFrom([&] { awaitQt(admin.execute(kanban::CreateProject{.name = "After sign-out"})); });
+                  const auto message = errorMessageFrom(
+                      [&] { awaitQt(admin.execute(kanban::CreateProject{.name = "After sign-out"})); });
                   INFO("error was: " << message);
                   REQUIRE_FALSE(message.empty());
                   CHECK(isRejection(message));
@@ -183,8 +181,7 @@ TEST_CASE("Journey: a rejected sign-in, a successful retry, and a session that e
         .run();
 }
 
-TEST_CASE("Journey: open a board, add work, move it, and have a second client converge",
-          "[kanban][journey]") {
+TEST_CASE("Journey: open a board, add work, move it, and have a second client converge", "[kanban][journey]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -222,7 +219,8 @@ TEST_CASE("Journey: open a board, add work, move it, and have a second client co
         .step("set up a backlog and an in-progress column",
               [&] {
                   awaitQt(board.execute(kanban::CreateColumn{.name = "Backlog", .wipLimit = 0}));
-                  const auto state = awaitQt(board.execute(kanban::CreateColumn{.name = "In Progress", .wipLimit = 0}));
+                  const auto state =
+                      awaitQt(board.execute(kanban::CreateColumn{.name = "In Progress", .wipLimit = 0}));
                   REQUIRE(state.columns.size() == 2);
                   backlogId = state.columns[0].id;
                   inProgressId = state.columns[1].id;
@@ -232,8 +230,8 @@ TEST_CASE("Journey: open a board, add work, move it, and have a second client co
               })
         .step("create \"write the thing\" -- it appears in the backlog",
               [&] {
-                  const auto state = awaitQt(board.execute(kanban::CreateTask{
-                      .columnId = backlogId, .swimlaneId = laneId, .title = "write the thing"}));
+                  const auto state = awaitQt(board.execute(
+                      kanban::CreateTask{.columnId = backlogId, .swimlaneId = laneId, .title = "write the thing"}));
                   REQUIRE(state.tasks.size() == 1);
                   CHECK(state.tasks.front().title == "write the thing");
                   CHECK(state.tasks.front().columnId == backlogId);
@@ -272,9 +270,9 @@ TEST_CASE("Journey: open a board, add work, move it, and have a second client co
                   // that no longer responds.
                   const auto message = errorMessageFrom([&] {
                       awaitQt(board.execute(kanban::MoveTaskPosition{.taskId = kanban::TaskId{999999},
-                                                                      .columnId = inProgressId,
-                                                                      .swimlaneId = laneId,
-                                                                      .position = 0}));
+                                                                     .columnId = inProgressId,
+                                                                     .swimlaneId = laneId,
+                                                                     .position = 0}));
                   });
                   INFO("error was: " << message);
                   REQUIRE_FALSE(message.empty());

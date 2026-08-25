@@ -3,7 +3,6 @@
 
 #include <QString>
 #include <QTimer>
-
 #include <chrono>
 #include <exception>
 #include <functional>
@@ -11,9 +10,9 @@
 #include <string>
 
 #ifndef Q_MOC_RUN
-#include "ledger/dto/report_dto.hpp"
-
 #include <morph/core/bridge.hpp>
+
+#include "ledger/dto/report_dto.hpp"
 #endif
 
 /// @file
@@ -43,7 +42,7 @@ namespace ledger::gui {
 /// that could be restarted would invite a second terminal callback for one
 /// job.
 class ReportJobPoller {
-  public:
+public:
     /// @brief Called with the job's serialized body once, on `Done`.
     using OnDone = std::function<void(std::string resultJson)>;
 
@@ -88,7 +87,7 @@ class ReportJobPoller {
     /// @return Whether this poller has already reported a terminal outcome.
     [[nodiscard]] bool finished() const noexcept { return _finished; }
 
-  private:
+private:
     /// @brief One tick: dispatches `GetReportStatus` unless already finished.
     void pollOnce();
 

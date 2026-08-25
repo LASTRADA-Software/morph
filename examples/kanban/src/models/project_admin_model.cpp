@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "kanban/models/project_admin_model.hpp"
 
-#include "kanban/auth/kanban_authorizer.hpp"
-#include "kanban/db/kanban_entity.hpp"
-
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlTransaction.hpp>
-
 #include <algorithm>
 #include <cstdint>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+
+#include "kanban/auth/kanban_authorizer.hpp"
+#include "kanban/db/kanban_entity.hpp"
 
 namespace kanban {
 
@@ -47,7 +45,7 @@ namespace {
 /// @brief The caller's own role on @p projectId, or `std::nullopt` if they
 ///        have none.
 [[nodiscard]] std::optional<Role> loadCallerRole(::Lightweight::DataMapper& mapper, std::uint64_t projectId,
-                                                  const std::string& principal) {
+                                                 const std::string& principal) {
     auto rows = mapper.Query<db::ProjectRoleRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::project>, "=", projectId)
                     .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::principal>, "=", principal)
@@ -64,8 +62,7 @@ namespace {
 ///        row regardless, so a delete-then-recreate cleanly self-heals if
 ///        more than one ever existed).
 [[nodiscard]] std::vector<db::ProjectRoleRecord> loadRoleRows(::Lightweight::DataMapper& mapper,
-                                                               std::uint64_t projectId,
-                                                               const std::string& principal) {
+                                                              std::uint64_t projectId, const std::string& principal) {
     return mapper.Query<db::ProjectRoleRecord>()
         .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::project>, "=", projectId)
         .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::principal>, "=", principal)
@@ -86,7 +83,7 @@ void ProjectAdminModel::requireRole(ProjectId projectId, Role minimum) const {
     }
     const auto& owner = requireOwner();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    (void) loadProject(mapper.Get(), static_cast<std::uint64_t>(*projectId));  // throws NotFound
+    (void)loadProject(mapper.Get(), static_cast<std::uint64_t>(*projectId));  // throws NotFound
     const auto role = loadCallerRole(mapper.Get(), static_cast<std::uint64_t>(*projectId), owner);
     if (!role.has_value() || static_cast<std::uint8_t>(*role) < static_cast<std::uint8_t>(minimum)) {
         throw Forbidden{"caller's role does not permit this action"};
@@ -119,8 +116,9 @@ CreateProjectResult ProjectAdminModel::execute(const CreateProject& action) {
 
 Ack ProjectAdminModel::execute(const SetMemberRole& action) {
     if (!action.validate()) {
-        throw ValidationError{"SetMemberRole: projectId is required and principal must be a valid, bounded "
-                               "principal"};
+        throw ValidationError{
+            "SetMemberRole: projectId is required and principal must be a valid, bounded "
+            "principal"};
     }
     requireRole(action.projectId, Role::Manager);
 
@@ -145,8 +143,9 @@ Ack ProjectAdminModel::execute(const SetMemberRole& action) {
 
 Ack ProjectAdminModel::execute(const RemoveMember& action) {
     if (!action.validate()) {
-        throw ValidationError{"RemoveMember: projectId is required and principal must be a valid, bounded "
-                               "principal"};
+        throw ValidationError{
+            "RemoveMember: projectId is required and principal must be a valid, bounded "
+            "principal"};
     }
     requireRole(action.projectId, Role::Manager);
 
@@ -178,8 +177,8 @@ GetProjectRolesResult ProjectAdminModel::execute(const GetProjectRoles& action) 
     GetProjectRolesResult result;
     result.roles.reserve(rows.size());
     for (const auto& row : rows) {
-        result.roles.push_back(
-            MemberRole{.principal = std::string{row.principal.Value().str()}, .role = roleFromString(row.role.Value().str())});
+        result.roles.push_back(MemberRole{.principal = std::string{row.principal.Value().str()},
+                                          .role = roleFromString(row.role.Value().str())});
     }
     return result;
 }
@@ -197,8 +196,8 @@ GetMyProjectsResult ProjectAdminModel::execute(const GetMyProjects&) {
     for (const auto& roleRow : roleRows) {
         const auto projectId = roleRow.project.Value();
         auto projectRows = mapper->Query<db::ProjectRecord>()
-                                .Where(::Lightweight::FieldNameOf<&db::ProjectRecord::id>, "=", projectId)
-                                .All();
+                               .Where(::Lightweight::FieldNameOf<&db::ProjectRecord::id>, "=", projectId)
+                               .All();
         if (projectRows.empty()) {
             continue;  // Project deleted underneath a stale role row; skip.
         }

@@ -5,13 +5,13 @@
 // ordering via `morph::testing::StepExecutor`, without naming
 // `morph::exec::detail::StrandExecutor` or `morph::exec::detail::ModelId`.
 
+#include <catch2/catch_test_macros.hpp>
+#include <functional>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <functional>
-#include <memory>
 #include <string>
 
 #include "test_support.hpp"
@@ -41,7 +41,8 @@ namespace {
 /// @brief Registers a fresh `StepILOrderModel` instance and returns the
 ///        server-assigned model id as a plain `uint64_t` -- the wire's own
 ///        vocabulary, never `morph::exec::detail::ModelId`.
-uint64_t registerModel(const std::shared_ptr<morph::backend::RemoteServer>& server, morph::testing::StepExecutor& exec) {
+uint64_t registerModel(const std::shared_ptr<morph::backend::RemoteServer>& server,
+                       morph::testing::StepExecutor& exec) {
     morph::testing::WaitReply waiter;
     server->handle(morph::wire::encode(morph::wire::makeRegister("StepIL_OrderModel")), std::ref(waiter));
     exec.runAll();

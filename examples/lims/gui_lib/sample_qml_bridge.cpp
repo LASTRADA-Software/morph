@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "sample_qml_bridge.hpp"
 
+#include <utility>
+
 #include "lims_qml_conversions.hpp"
 #include "lims_schemas.hpp"
-
-#include <utility>
 
 namespace lims::gui {
 
@@ -29,9 +29,7 @@ SampleBridge::SampleBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExec
     });
 }
 
-void SampleBridge::registerClient(const QString& name) {
-    _presenter.registerClient(name);
-}
+void SampleBridge::registerClient(const QString& name) { _presenter.registerClient(name); }
 
 void SampleBridge::registerSample(qlonglong clientId, const QString& reference) {
     _presenter.registerSample(ClientId{static_cast<std::int64_t>(clientId)}, reference);
@@ -41,37 +39,21 @@ void SampleBridge::openSample(qlonglong sampleId) {
     _presenter.openSample(SampleId{static_cast<std::int64_t>(sampleId)});
 }
 
-void SampleBridge::refresh() {
-    _presenter.refresh();
-}
+void SampleBridge::refresh() { _presenter.refresh(); }
 
-void SampleBridge::receiveSample() {
-    _presenter.receiveSample();
-}
+void SampleBridge::receiveSample() { _presenter.receiveSample(); }
 
-void SampleBridge::startWork() {
-    _presenter.startWork();
-}
+void SampleBridge::startWork() { _presenter.startWork(); }
 
-void SampleBridge::submitForVerification() {
-    _presenter.submitForVerification();
-}
+void SampleBridge::submitForVerification() { _presenter.submitForVerification(); }
 
-void SampleBridge::returnForRework(const QString& reason) {
-    _presenter.returnForRework(reason);
-}
+void SampleBridge::returnForRework(const QString& reason) { _presenter.returnForRework(reason); }
 
-void SampleBridge::publishSample() {
-    _presenter.publishSample();
-}
+void SampleBridge::publishSample() { _presenter.publishSample(); }
 
-void SampleBridge::rejectSample(const QString& reason) {
-    _presenter.rejectSample(reason);
-}
+void SampleBridge::rejectSample(const QString& reason) { _presenter.rejectSample(reason); }
 
-QString SampleBridge::schemasJson() const {
-    return QString::fromStdString(limsSchemasJson());
-}
+QString SampleBridge::schemasJson() const { return QString::fromStdString(limsSchemasJson()); }
 
 void SampleBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
     _presenter.submitIfValid(actionType, bodyJson);

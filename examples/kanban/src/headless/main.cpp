@@ -23,25 +23,23 @@
 //   13 no task to comment on                  14 comment failed/timed out
 //    2 bad arguments
 
-#include <kanban/dto/board_dto.hpp>
-#include "board_presenter.hpp"
-
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QString>
 #include <QUrl>
-
+#include <chrono>
+#include <functional>
+#include <iostream>
+#include <kanban/dto/board_dto.hpp>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/session/session.hpp>
-
-#include <chrono>
-#include <functional>
-#include <iostream>
-#include <memory>
 #include <string>
 #include <thread>
+
+#include "board_presenter.hpp"
 
 namespace {
 
@@ -93,9 +91,9 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 
-    auto backend = std::make_unique<morph::qt::QtWebSocketBackend>(
-        QUrl{opts.url}, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(),
-        std::nullopt);
+    auto backend =
+        std::make_unique<morph::qt::QtWebSocketBackend>(QUrl{opts.url}, morph::model::detail::defaultDispatcher(),
+                                                        morph::model::detail::defaultRegistry(), std::nullopt);
     if (!backend->waitForConnected(5000)) {
         std::cerr << "headless: connect failed\n";
         return 10;
@@ -118,11 +116,10 @@ int main(int argc, char* argv[]) {
     bool failed = false;
     std::string failure;
     kanban::GetBoardResult board;
-    QObject::connect(&presenter, &kanban::gui::BoardPresenter::boardOpened,
-                     [&](const kanban::GetBoardResult& result) {
-                         board = result;
-                         opened = true;
-                     });
+    QObject::connect(&presenter, &kanban::gui::BoardPresenter::boardOpened, [&](const kanban::GetBoardResult& result) {
+        board = result;
+        opened = true;
+    });
     QObject::connect(&presenter, &kanban::gui::BoardPresenter::failed, [&](const QString& message) {
         failure = message.toStdString();
         failed = true;

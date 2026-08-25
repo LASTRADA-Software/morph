@@ -9,18 +9,6 @@
 // binds by *string*, so every assertion below pins a real string a future
 // `LoginView.qml`/`ProjectListView.qml`/`MembersView.qml` will bind against.
 
-#include "project_admin_qml_bridge.hpp"
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <kanban/auth/kanban_authorizer.hpp>
-
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-
 #include <QMetaMethod>
 #include <QMetaObject>
 #include <QMetaProperty>
@@ -29,10 +17,18 @@
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
-
+#include <catch2/catch_test_macros.hpp>
+#include <kanban/auth/kanban_authorizer.hpp>
 #include <memory>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
 #include <string>
 #include <vector>
+
+#include "project_admin_qml_bridge.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
 
 namespace {
 
@@ -59,7 +55,7 @@ using morph::ladder::testkit::pumpUntil;
 ///        without one. Same shape as
 ///        `test_bookmark_qml_bridges.cpp`'s `ScopedTokenIssuer`.
 class ScopedTokenIssuer {
-  public:
+public:
     explicit ScopedTokenIssuer(std::shared_ptr<morph::session::TokenIssuer> issuer) {
         kanban::auth::setTokenIssuer(std::move(issuer));
     }
@@ -125,7 +121,7 @@ TEST_CASE("ProjectAdminBridge::login installs the returned token and updates the
     {
         bool failed = false;
         const auto connection = QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::failed,
-                                                  [&](const QString&) { failed = true; });
+                                                 [&](const QString&) { failed = true; });
         bridge.refreshProjects();
         REQUIRE(pumpUntil([&] { return failed; }));
         QObject::disconnect(connection);
@@ -165,11 +161,11 @@ TEST_CASE("ProjectAdminBridge::createProject then refreshProjects updates the pr
     QString createdName;
     bool created = false;
     QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectCreated,
-                      [&](qlonglong id, const QString& name) {
-                          createdId = id;
-                          createdName = name;
-                          created = true;
-                      });
+                     [&](qlonglong id, const QString& name) {
+                         createdId = id;
+                         createdName = name;
+                         created = true;
+                     });
     bridge.createProject(QStringLiteral("Sprint Board"));
     REQUIRE(pumpUntil([&] { return created; }));
     CHECK(createdId > 0);
@@ -177,7 +173,7 @@ TEST_CASE("ProjectAdminBridge::createProject then refreshProjects updates the pr
 
     bool listed = false;
     QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectsListed,
-                      [&](const QVariantList&) { listed = true; });
+                     [&](const QVariantList&) { listed = true; });
     bridge.refreshProjects();
     REQUIRE(pumpUntil([&] { return listed; }));
 
@@ -201,11 +197,10 @@ TEST_CASE("ProjectAdminBridge::listRoles/setMemberRole/removeMember round-trip a
 
     qlonglong projectId = -1;
     bool created = false;
-    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectCreated,
-                      [&](qlonglong id, const QString&) {
-                          projectId = id;
-                          created = true;
-                      });
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectCreated, [&](qlonglong id, const QString&) {
+        projectId = id;
+        created = true;
+    });
     bridge.createProject(QStringLiteral("Sprint Board"));
     REQUIRE(pumpUntil([&] { return created; }));
     REQUIRE(projectId > 0);
@@ -217,7 +212,7 @@ TEST_CASE("ProjectAdminBridge::listRoles/setMemberRole/removeMember round-trip a
 
     bool rolesListed = false;
     QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::rolesListed,
-                      [&](const QVariantList&) { rolesListed = true; });
+                     [&](const QVariantList&) { rolesListed = true; });
     bridge.listRoles(projectId);
     REQUIRE(pumpUntil([&] { return rolesListed; }));
     REQUIRE(bridge.roles().size() == 2);
@@ -274,7 +269,7 @@ TEST_CASE("ProjectAdminBridge::createProject: two overlapping calls each report 
     };
     std::vector<Created> created;
     QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectCreated,
-                      [&](qlonglong id, const QString& name) { created.push_back(Created{id, name}); });
+                     [&](qlonglong id, const QString& name) { created.push_back(Created{id, name}); });
 
     // Dispatched back-to-back, before either call's completion has any
     // chance to arrive -- a double-click, or real latency under
@@ -287,9 +282,8 @@ TEST_CASE("ProjectAdminBridge::createProject: two overlapping calls each report 
     REQUIRE(created[0].id > 0);
     REQUIRE(created[1].id > 0);
 
-    const bool sawAWithA =
-        (created[0].name == QStringLiteral("A") && created[1].name == QStringLiteral("B")) ||
-        (created[0].name == QStringLiteral("B") && created[1].name == QStringLiteral("A"));
+    const bool sawAWithA = (created[0].name == QStringLiteral("A") && created[1].name == QStringLiteral("B")) ||
+                           (created[0].name == QStringLiteral("B") && created[1].name == QStringLiteral("A"));
     CHECK(sawAWithA);
 }
 
@@ -316,8 +310,8 @@ TEST_CASE("ProjectAdminBridge relays failed() and never emits a raw token on any
         for (int p = 0; p < method.parameterCount(); ++p) {
             const auto typeId = method.parameterMetaType(p).id();
             INFO("signal: " << method.methodSignature().toStdString());
-            CHECK((typeId == QMetaType::QString || typeId == QMetaType::QVariantList ||
-                   typeId == QMetaType::LongLong));
+            CHECK(
+                (typeId == QMetaType::QString || typeId == QMetaType::QVariantList || typeId == QMetaType::LongLong));
         }
     }
 

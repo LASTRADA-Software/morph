@@ -360,8 +360,7 @@ TEST_CASE("Resolving needs a stated reason and a conflict that exists", "[lims][
 
 // ── Replay's own guards ────────────────────────────────────────────────────
 
-TEST_CASE("A queued update may only be replayed by the operator who captured it",
-          "[lims][offline][audit]") {
+TEST_CASE("A queued update may only be replayed by the operator who captured it", "[lims][offline][audit]") {
     DbFixture fixture;
     lims::SampleId sampleId;
     lims::QueuedCapture queued;

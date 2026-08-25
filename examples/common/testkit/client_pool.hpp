@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "testkit/backend_rig.hpp"
-
 #include <cstddef>
 #include <memory>
 #include <vector>
+
+#include "testkit/backend_rig.hpp"
 
 /// @file
 /// `ClientPool<Presenter>` -- N presenter instances over one `BackendRig`'s
@@ -17,7 +17,7 @@ namespace morph::ladder::testkit {
 
 template <typename Presenter>
 class ClientPool {
-  public:
+public:
     /// @brief Constructs one `Presenter` per client in @p rig, forwarding
     ///        each client's `(Bridge&, IExecutor*)` pair to `Presenter`'s
     ///        constructor -- the same pair every rung's presenter already
@@ -43,7 +43,7 @@ class ClientPool {
     /// @return How many presenters this pool holds.
     [[nodiscard]] std::size_t size() const noexcept { return _presenters.size(); }
 
-  private:
+private:
     std::vector<std::unique_ptr<Presenter>> _presenters;
 };
 

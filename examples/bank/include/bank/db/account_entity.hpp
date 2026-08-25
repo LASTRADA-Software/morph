@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstdint>
 #include <string_view>
 

@@ -22,22 +22,20 @@
 // dispatches through, exactly the recipe test_bookmark_model.cpp's own
 // backend-mode-matrix case uses.
 
+#include <algorithm>
+#include <bookmarks/auth/bookmarks_authorizer.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <memory>
+#include <morph/session/session_auth.hpp>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "bookmark_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <bookmarks/auth/bookmarks_authorizer.hpp>
-#include <morph/session/session_auth.hpp>
-
-#include <algorithm>
-#include <memory>
-#include <string>
-#include <string_view>
-#include <vector>
 
 namespace {
 
@@ -85,10 +83,10 @@ TEST_CASE("BookmarkPresenter::create then get round-trips a bookmark, all three 
     bookmarks::BookmarkId createdId;
     bool created = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::created,
-                      [&](bookmarks::CreateBookmarkResult result) {
-                          createdId = result.id;
-                          created = true;
-                      });
+                     [&](bookmarks::CreateBookmarkResult result) {
+                         createdId = result.id;
+                         created = true;
+                     });
     presenter.create(makeCreate("https://one.example", "One"));
     REQUIRE(pumpUntil([&] { return created; }));
     REQUIRE_FALSE(presenter.busy());
@@ -108,8 +106,7 @@ TEST_CASE("BookmarkPresenter::create then get round-trips a bookmark, all three 
     CHECK(loaded.title == "One");
 }
 
-TEST_CASE("BookmarkPresenter::edit replaces a bookmark's fields, all three backend modes",
-          "[bookmarks][presenter]") {
+TEST_CASE("BookmarkPresenter::edit replaces a bookmark's fields, all three backend modes", "[bookmarks][presenter]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -119,10 +116,10 @@ TEST_CASE("BookmarkPresenter::edit replaces a bookmark's fields, all three backe
     bookmarks::BookmarkId createdId;
     bool created = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::created,
-                      [&](bookmarks::CreateBookmarkResult result) {
-                          createdId = result.id;
-                          created = true;
-                      });
+                     [&](bookmarks::CreateBookmarkResult result) {
+                         createdId = result.id;
+                         created = true;
+                     });
     presenter.create(makeCreate("https://before.example", "Before"));
     REQUIRE(pumpUntil([&] { return created; }));
 
@@ -132,8 +129,12 @@ TEST_CASE("BookmarkPresenter::edit replaces a bookmark's fields, all three backe
         edited = view;
         gotEdited = true;
     });
-    presenter.edit(bookmarks::EditBookmark{
-        .id = createdId, .url = "https://after.example", .title = "After", .description = {}, .notes = {}, .tags = {}});
+    presenter.edit(bookmarks::EditBookmark{.id = createdId,
+                                           .url = "https://after.example",
+                                           .title = "After",
+                                           .description = {},
+                                           .notes = {},
+                                           .tags = {}});
     REQUIRE(pumpUntil([&] { return gotEdited; }));
     REQUIRE_FALSE(presenter.busy());
     CHECK(edited.id == createdId);
@@ -153,8 +154,7 @@ TEST_CASE("BookmarkPresenter::edit replaces a bookmark's fields, all three backe
     CHECK(reloaded.title == "After");
 }
 
-TEST_CASE("BookmarkPresenter::archive then unarchive a bookmark, all three backend modes",
-          "[bookmarks][presenter]") {
+TEST_CASE("BookmarkPresenter::archive then unarchive a bookmark, all three backend modes", "[bookmarks][presenter]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -164,10 +164,10 @@ TEST_CASE("BookmarkPresenter::archive then unarchive a bookmark, all three backe
     bookmarks::BookmarkId createdId;
     bool created = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::created,
-                      [&](bookmarks::CreateBookmarkResult result) {
-                          createdId = result.id;
-                          created = true;
-                      });
+                     [&](bookmarks::CreateBookmarkResult result) {
+                         createdId = result.id;
+                         created = true;
+                     });
     presenter.create(makeCreate("https://archivable.example"));
     REQUIRE(pumpUntil([&] { return created; }));
 
@@ -205,10 +205,10 @@ TEST_CASE("BookmarkPresenter::remove deletes a bookmark, and a follow-up get fai
     bookmarks::BookmarkId createdId;
     bool created = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::created,
-                      [&](bookmarks::CreateBookmarkResult result) {
-                          createdId = result.id;
-                          created = true;
-                      });
+                     [&](bookmarks::CreateBookmarkResult result) {
+                         createdId = result.id;
+                         created = true;
+                     });
     presenter.create(makeCreate("https://doomed.example"));
     REQUIRE(pumpUntil([&] { return created; }));
 
@@ -240,7 +240,7 @@ TEST_CASE("BookmarkPresenter::list returns the bookmarks just created, all three
 
     std::vector<bookmarks::BookmarkId> createdIds;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::created,
-                      [&](bookmarks::CreateBookmarkResult result) { createdIds.push_back(result.id); });
+                     [&](bookmarks::CreateBookmarkResult result) { createdIds.push_back(result.id); });
 
     constexpr int kCount = 3;
     for (int i = 0; i < kCount; ++i) {
@@ -252,10 +252,10 @@ TEST_CASE("BookmarkPresenter::list returns the bookmarks just created, all three
     bookmarks::ListBookmarksResult listed;
     bool gotListed = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::listed,
-                      [&](bookmarks::ListBookmarksResult result) {
-                          listed = std::move(result);
-                          gotListed = true;
-                      });
+                     [&](bookmarks::ListBookmarksResult result) {
+                         listed = std::move(result);
+                         gotListed = true;
+                     });
     presenter.list(bookmarks::ListBookmarks{});
     REQUIRE(pumpUntil([&] { return gotListed; }));
     REQUIRE_FALSE(presenter.busy());
@@ -268,9 +268,10 @@ TEST_CASE("BookmarkPresenter::list returns the bookmarks just created, all three
     }
 }
 
-TEST_CASE("BookmarkPresenter::getChangesSince returns only bookmarks touched after the given instant, "
-          "all three backend modes",
-          "[bookmarks][presenter]") {
+TEST_CASE(
+    "BookmarkPresenter::getChangesSince returns only bookmarks touched after the given instant, "
+    "all three backend modes",
+    "[bookmarks][presenter]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -280,10 +281,10 @@ TEST_CASE("BookmarkPresenter::getChangesSince returns only bookmarks touched aft
     bookmarks::GetChangesSinceResult firstPoll;
     bool gotFirstPoll = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::changesSince,
-                      [&](bookmarks::GetChangesSinceResult result) {
-                          firstPoll = std::move(result);
-                          gotFirstPoll = true;
-                      });
+                     [&](bookmarks::GetChangesSinceResult result) {
+                         firstPoll = std::move(result);
+                         gotFirstPoll = true;
+                     });
     presenter.getChangesSince(bookmarks::GetChangesSince{});
     REQUIRE(pumpUntil([&] { return gotFirstPoll; }));
     REQUIRE_FALSE(presenter.busy());
@@ -293,20 +294,20 @@ TEST_CASE("BookmarkPresenter::getChangesSince returns only bookmarks touched aft
     bookmarks::BookmarkId createdId;
     bool created = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::created,
-                      [&](bookmarks::CreateBookmarkResult result) {
-                          createdId = result.id;
-                          created = true;
-                      });
+                     [&](bookmarks::CreateBookmarkResult result) {
+                         createdId = result.id;
+                         created = true;
+                     });
     presenter.create(makeCreate("https://changed.example"));
     REQUIRE(pumpUntil([&] { return created; }));
 
     bookmarks::GetChangesSinceResult secondPoll;
     bool gotSecondPoll = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::changesSince,
-                      [&](bookmarks::GetChangesSinceResult result) {
-                          secondPoll = std::move(result);
-                          gotSecondPoll = true;
-                      });
+                     [&](bookmarks::GetChangesSinceResult result) {
+                         secondPoll = std::move(result);
+                         gotSecondPoll = true;
+                     });
     presenter.getChangesSince(bookmarks::GetChangesSince{.since = cursor});
     REQUIRE(pumpUntil([&] { return gotSecondPoll; }));
     REQUIRE_FALSE(presenter.busy());
@@ -314,9 +315,10 @@ TEST_CASE("BookmarkPresenter::getChangesSince returns only bookmarks touched aft
     CHECK(secondPoll.changed.front().id == createdId);
 }
 
-TEST_CASE("BookmarkPresenter::bulkEdit applies tags and archive state to every given id, "
-          "all three backend modes",
-          "[bookmarks][presenter]") {
+TEST_CASE(
+    "BookmarkPresenter::bulkEdit applies tags and archive state to every given id, "
+    "all three backend modes",
+    "[bookmarks][presenter]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -325,7 +327,7 @@ TEST_CASE("BookmarkPresenter::bulkEdit applies tags and archive state to every g
 
     std::vector<bookmarks::BookmarkId> createdIds;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::created,
-                      [&](bookmarks::CreateBookmarkResult result) { createdIds.push_back(result.id); });
+                     [&](bookmarks::CreateBookmarkResult result) { createdIds.push_back(result.id); });
     presenter.create(makeCreate("https://bulk-one.example"));
     REQUIRE(pumpUntil([&] { return createdIds.size() == 1; }));
     presenter.create(makeCreate("https://bulk-two.example"));
@@ -334,14 +336,12 @@ TEST_CASE("BookmarkPresenter::bulkEdit applies tags and archive state to every g
     bookmarks::BulkEditResult bulkResult;
     bool bulkEdited = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::bulkEdited,
-                      [&](bookmarks::BulkEditResult result) {
-                          bulkResult = result;
-                          bulkEdited = true;
-                      });
-    presenter.bulkEdit(bookmarks::BulkEdit{.ids = createdIds,
-                                           .addTags = {"batch"},
-                                           .removeTags = {},
-                                           .archive = bookmarks::BulkArchiveOp::Archive});
+                     [&](bookmarks::BulkEditResult result) {
+                         bulkResult = result;
+                         bulkEdited = true;
+                     });
+    presenter.bulkEdit(bookmarks::BulkEdit{
+        .ids = createdIds, .addTags = {"batch"}, .removeTags = {}, .archive = bookmarks::BulkArchiveOp::Archive});
     REQUIRE(pumpUntil([&] { return bulkEdited; }));
     REQUIRE_FALSE(presenter.busy());
     CHECK(morph::math::floor(*bulkResult.affected) == 2);
@@ -358,10 +358,10 @@ TEST_CASE("BookmarkPresenter::importChunk then exportAll round-trips bookmarks, 
     bookmarks::ImportBookmarksResult importResult;
     bool imported = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::imported,
-                      [&](bookmarks::ImportBookmarksResult result) {
-                          importResult = result;
-                          imported = true;
-                      });
+                     [&](bookmarks::ImportBookmarksResult result) {
+                         importResult = result;
+                         imported = true;
+                     });
     bookmarks::ImportBookmarks importAction;
     importAction.chunk = R"(<DT><A HREF="https://imported.example">Imported</A>)";
     importAction.opId = bookmarks::ImportOpId{"presenter-import-1"};
@@ -373,10 +373,10 @@ TEST_CASE("BookmarkPresenter::importChunk then exportAll round-trips bookmarks, 
     bookmarks::ExportBookmarksResult exportResult;
     bool exported = false;
     QObject::connect(&presenter, &bookmarks::gui::BookmarkPresenter::exported,
-                      [&](bookmarks::ExportBookmarksResult result) {
-                          exportResult = std::move(result);
-                          exported = true;
-                      });
+                     [&](bookmarks::ExportBookmarksResult result) {
+                         exportResult = std::move(result);
+                         exported = true;
+                     });
     presenter.exportAll(bookmarks::ExportBookmarks{});
     REQUIRE(pumpUntil([&] { return exported; }));
     REQUIRE_FALSE(presenter.busy());
@@ -451,9 +451,10 @@ TEST_CASE("BookmarkPresenter::get against an unknown id emits failed, not a cras
     REQUIRE_FALSE(presenter.busy());
 }
 
-TEST_CASE("BookmarkPresenter::list/getChangesSince/exportAll all emit failed with no session at all, "
-          "not a crash",
-          "[bookmarks][presenter]") {
+TEST_CASE(
+    "BookmarkPresenter::list/getChangesSince/exportAll all emit failed with no session at all, "
+    "not a crash",
+    "[bookmarks][presenter]") {
     // list/getChangesSince/exportAll all have `validate() { return true; }`
     // unconditionally -- their only reachable failure is a genuine model-level
     // error, not a validation one. `BookmarkModel`'s own `requirePrincipal()`

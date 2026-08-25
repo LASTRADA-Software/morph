@@ -2,10 +2,10 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
+#include <string>
 
 #include "bank/db/db_model.hpp"
 #include "bank/db/entities.hpp"
@@ -42,9 +42,9 @@ private:
     /// @brief Loads `_row` for @p accountId if it is absent, stale, or for another account.
     void hydrate(std::int64_t accountId);
 
-    db::AccountRecord _row{};      ///< the account itself — in memory, not re-queried
-    std::string _owner;            ///< resolved owner username for `_row`
-    std::int64_t _loadedId = 0;    ///< which account `_row` holds; 0 = none
+    db::AccountRecord _row{};        ///< the account itself — in memory, not re-queried
+    std::string _owner;              ///< resolved owner username for `_row`
+    std::int64_t _loadedId = 0;      ///< which account `_row` holds; 0 = none
     std::uint64_t _seenVersion = 0;  ///< row version `_row` was hydrated at
 };
 

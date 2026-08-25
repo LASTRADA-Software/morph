@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/util/datetime.hpp>
-
 #include <chrono>
+#include <morph/util/datetime.hpp>
 #include <utility>
 
 /// @file
@@ -49,8 +48,8 @@ namespace ledger {
     // moment in a UTC-typed time_point -- they become real UTC instants only
     // after the offset is removed below.
     const auto localStart = static_cast<std::chrono::sys_days>(localMonth / std::chrono::day{1});
-    const auto localEnd = static_cast<std::chrono::sys_days>((localMonth + std::chrono::months{1}) /
-                                                             std::chrono::day{1});
+    const auto localEnd =
+        static_cast<std::chrono::sys_days>((localMonth + std::chrono::months{1}) / std::chrono::day{1});
 
     // local = utc + offset, so utc = local - offset.
     const std::chrono::minutes offset{timezoneOffsetMinutes};

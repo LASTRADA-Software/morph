@@ -554,8 +554,7 @@ TEST_CASE("FileActionLog: append and flush on a log whose rotate() left it close
 // file but crashed before the first append()'s fwrite. That arm must be a
 // no-op, not a crash or a spurious truncation warning.
 
-TEST_CASE("FileActionLog: opening a pre-existing, zero-byte file is a no-op repair",
-          "[action_log][phase2][file]") {
+TEST_CASE("FileActionLog: opening a pre-existing, zero-byte file is a no-op repair", "[action_log][phase2][file]") {
     TempFile const tmp{"file_preexisting_empty"};
     {
         // Create the file with zero bytes, without going through FileActionLog.

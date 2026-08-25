@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "testkit/db_fixture.hpp"
-
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlScopedLock.hpp>
-
 #include <chrono>
 #include <string>
 #include <string_view>
+
+#include "testkit/db_fixture.hpp"
 
 /// @file
 /// Genuine cross-session lock contention for the ladder's store-error
@@ -25,7 +24,7 @@ namespace morph::ladder::testkit {
 ///        (the fixture's own default-connection `SqlStatement`s, or a
 ///        model's `DataMapper`) observes a genuine contention failure.
 class DbFaultFixture {
-  public:
+public:
     /// @param lockName Advisory lock name to contend on — pick one that
     ///        matches what the code under test actually locks (e.g. a
     ///        model's own `SqlScopedLock` name), or a dedicated probe name
@@ -47,7 +46,7 @@ class DbFaultFixture {
     ///        `const std::string&` (which cannot bind to a `string_view`).
     [[nodiscard]] std::string_view lockName() const noexcept { return _lock.Name(); }
 
-  private:
+private:
     DbFixture _fixture;
     ::Lightweight::SqlConnection _lockingConnection;
     ::Lightweight::SqlScopedLock _lock;

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
-#include "polls/core/types.hpp"
 #include <string>
 #include <vector>
+
+#include "polls/core/types.hpp"
 
 namespace polls {
 

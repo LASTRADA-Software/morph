@@ -100,8 +100,8 @@ concept SelfDeclaredKey = requires { typename M::PrimaryKey; } && ModelKey<typen
 
 /// @brief Satisfied by a model whose key was deduced from a keyed action.
 template <typename M>
-concept DeducedKey = requires { typename ModelKeyTraits<M>::PrimaryKey; } &&
-                     ModelKey<typename ModelKeyTraits<M>::PrimaryKey>;
+concept DeducedKey =
+    requires { typename ModelKeyTraits<M>::PrimaryKey; } && ModelKey<typename ModelKeyTraits<M>::PrimaryKey>;
 
 }  // namespace detail
 
@@ -282,7 +282,7 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// `MEMBER` is a pointer-to-data-member of `A` (e.g. `&LoadAccount::id`) whose
 /// type satisfies `morph::model::ModelKey`. Must appear at global scope, in
 /// exactly one translation unit, like the other `BRIDGE_REGISTER_*` macros.
-#define BRIDGE_MODEL_KEY(M, A, MEMBER)                                                                 \
+#define BRIDGE_MODEL_KEY(M, A, MEMBER)                                                                \
     template <>                                                                                       \
     struct morph::model::ActionKeyTraits<A> {                                                         \
         static constexpr bool hasKey = true;                                                          \
@@ -319,7 +319,7 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// result type (e.g. `&AccountInfo::id`).
 ///
 /// Must appear at global scope, in exactly one translation unit.
-#define BRIDGE_MODEL_KEY_FROM_RESULT(M, A, MEMBER)                                     \
+#define BRIDGE_MODEL_KEY_FROM_RESULT(M, A, MEMBER)                               \
     template <>                                                                  \
     struct morph::model::ActionKeyTraits<A> {                                    \
         static constexpr bool hasKey = true;                                     \

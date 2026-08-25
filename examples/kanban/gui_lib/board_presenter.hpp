@@ -1,27 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "gui/presenter.hpp"
+#include <QString>
+#include <exception>
+#include <string>
 
+#include "gui/presenter.hpp"
 #include "kanban/dto/activity_dto.hpp"
 #include "kanban/dto/attachment_dto.hpp"
 #include "kanban/dto/board_dto.hpp"
 #include "kanban/dto/event_dto.hpp"
-
-#include <QString>
-
-#include <exception>
-#include <string>
 
 // See kanban::gui::ProjectAdminPresenter's identical guard and doc comment
 // (project_admin_presenter.hpp) for why moc must never see
 // morph/core/bridge.hpp or this rung's model headers: moc is not a C++
 // front end and mis-parses their template machinery.
 #ifndef Q_MOC_RUN
-#include "kanban/models/board_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "kanban/models/board_model.hpp"
 #endif
 
 namespace kanban::gui {
@@ -51,7 +49,7 @@ namespace kanban::gui {
 /// rung.
 class BoardPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -127,8 +125,8 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     /// @param opId       The idempotency key this specific move was minted with.
     /// @return The call's own completion — nothing else can be attributed to it.
     [[nodiscard]] ::morph::async::Completion<GetBoardResult> moveTaskForReplay(TaskId taskId, ColumnId columnId,
-                                                                                SwimlaneId swimlaneId,
-                                                                                std::int64_t position, QString opId);
+                                                                               SwimlaneId swimlaneId,
+                                                                               std::int64_t position, QString opId);
 
     /// @brief Appends a comment to a task on this handler's attached board.
     ///        Emits `commentAdded(taskId)` on success, `failed` on error.
@@ -210,15 +208,15 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     ///        returned.
     /// @return The call's own completion.
     [[nodiscard]] ::morph::async::Completion<Ack> addAttachment(TaskId taskId, const QString& filename,
-                                                                  const QString& contentType, std::int64_t sizeBytes,
-                                                                  const QString& storageKey);
+                                                                const QString& contentType, std::int64_t sizeBytes,
+                                                                const QString& storageKey);
 
     /// @brief Lists every attachment recorded against a task. Emits
     ///        `attachmentsListed`, or `failed`.
     /// @param taskId The task whose attachments to list.
     void getAttachments(TaskId taskId);
 
-  signals:
+signals:
     /// @brief `OpenBoard`/`GetBoardState`/`CreateColumn`/`CreateSwimlane`/
     ///        `CreateTask` succeeded — the board's full rebuilt state (every
     ///        mutating action in this rung's DTOs returns it, design spec
@@ -251,7 +249,7 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Shared error-display body passed as every `track()` call's
     ///        third argument — see `Presenter::track()`'s doc comment
     ///        (`examples/common/gui/presenter.hpp`).
