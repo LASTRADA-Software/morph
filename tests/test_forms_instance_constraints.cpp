@@ -11,11 +11,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <fstream>
 #include <glaze/glaze.hpp>
+#include <map>
 #include <morph/forms/forms.hpp>
 #include <morph/forms/instance_constraints.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -284,4 +287,155 @@ TEST_CASE("Decoration never mangles a schema it cannot read", "[forms][instance-
 
     // No declarations means the input is handed straight back.
     CHECK(InstanceConstraints{}.decorate(R"({"properties":{"value":{}}})") == R"({"properties":{"value":{}}})");
+}
+
+// ---------------------------------------------------------------------------
+// The renderer half of the seam (morph#164).
+//
+// Serving an instance's keys and checking against them from one declaration is
+// only worth anything if the shipped renderer honours what was served. It
+// honoured `x-decimalPlaces` already; `x-minimum`/`x-maximum` it ignored
+// outright, so an instance's specification range was a second opinion no
+// renderer read -- the two-values-for-one-concept outcome the seam exists to
+// remove, reintroduced inside the fix for it.
+//
+// `src/qt/forms/tests/data/instance_bounds.json` is one file with two readers:
+// this suite, and `src/qt/forms/tests/tst_DynamicFormInstanceBounds.qml`, which
+// drives every row through a real `DynamicForm`. The declaration itself lives
+// in the file, so the schema the renderer is fed and the bound checked here are
+// provably the same declaration rather than two hand-synced copies.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// @brief One row of the instance-bounds corpus.
+struct BoundsCase {
+    std::string id;
+    std::string schema;  ///< `"decorated"` or `"compiled"`.
+    std::string value;   ///< The text a user would have typed.
+    bool ready = false;  ///< Whether the form should become submittable.
+};
+
+/// @brief The corpus file, parsed once.
+struct BoundsCorpus {
+    InstanceConstraints constraints;
+    std::map<std::string, std::string, std::less<>> schemas;
+    std::vector<BoundsCase> cases;
+};
+
+/// @brief Reads a `{"num","den","dp"}` node as an exact rational.
+/// @param node The bound node.
+/// @return The rational it spells.
+[[nodiscard]] Rational boundFrom(const glz::generic_u64& node) {
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — glaze DOM
+    return Rational{Numerator{node["num"].as<std::int64_t>()}, Denominator{node["den"].as<std::int64_t>()},
+                    DecimalPlaces{node["dp"].as<std::uint32_t>()}};
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+}
+
+/// @brief Parses decimal entry text into the exact rational it denotes.
+///
+/// `"12.55"` is 1255/100 at two decimal places — the same value the renderer
+/// builds from the same text, which is the point: both sides must be judging
+/// one number.
+/// @param text Decimal text, optionally signed, as typed.
+/// @return The exact rational.
+[[nodiscard]] Rational typedValue(const std::string& text) {
+    const auto dot = text.find('.');
+    const auto places = dot == std::string::npos ? 0U : static_cast<std::uint32_t>(text.size() - dot - 1);
+    std::string digits = text;
+    if (dot != std::string::npos) {
+        digits.erase(dot, 1);
+    }
+    std::int64_t denominator = 1;
+    for (std::uint32_t i = 0; i < places; ++i) {
+        denominator *= 10;
+    }
+    return Rational{Numerator{std::stoll(digits)}, Denominator{denominator}, DecimalPlaces{places}};
+}
+
+/// @brief The instance-bounds corpus, read from the shared file.
+[[nodiscard]] const BoundsCorpus& boundsCorpus() {
+    static const BoundsCorpus parsed = [] {
+        std::ifstream file{MORPH_FORMS_INSTANCE_BOUNDS};
+        REQUIRE(file.is_open());
+        std::ostringstream buffer;
+        buffer << file.rdbuf();
+
+        glz::generic_u64 dom{};
+        REQUIRE_FALSE(glz::read_json(dom, buffer.str()));
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — glaze DOM
+        REQUIRE(dom.contains("constraints"));
+        REQUIRE(dom.contains("schemas"));
+        REQUIRE(dom.contains("cases"));
+
+        BoundsCorpus result{};
+        const auto& declared = dom["constraints"];
+        result.constraints.declare(FieldConstraint{.field = declared["field"].as<std::string>(),
+                                                   .decimalPlaces = declared["decimalPlaces"].as<std::uint32_t>(),
+                                                   .minimum = boundFrom(declared["minimum"]),
+                                                   .maximum = boundFrom(declared["maximum"])});
+
+        for (const auto& [name, schema] : dom["schemas"].get<glz::generic_u64::object_t>()) {
+            result.schemas.emplace(name, schema.as<std::string>());
+        }
+        for (const auto& entry : dom["cases"].get<glz::generic_u64::array_t>()) {
+            result.cases.push_back({.id = entry["id"].as<std::string>(),
+                                    .schema = entry["schema"].as<std::string>(),
+                                    .value = entry["state"]["value"].as<std::string>(),
+                                    .ready = entry["ready"].as<bool>()});
+        }
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        REQUIRE_FALSE(result.cases.empty());
+        return result;
+    }();
+    return parsed;
+}
+
+}  // namespace
+
+TEST_CASE("The corpus the renderer is fed is what this declaration emits", "[forms][instance-constraints]") {
+    // Without this the QML half could go on rendering a schema no declaration
+    // in this repository produces, and "the two agree" would be about a fossil.
+    const auto& corpus = boundsCorpus();
+    const auto decorated = corpus.schemas.find("decorated");
+    const auto compiled = corpus.schemas.find("compiled");
+    REQUIRE(decorated != corpus.schemas.end());
+    REQUIRE(compiled != corpus.schemas.end());
+
+    INFO("stale corpus schema; regenerate from:\n" << morph::forms::instanceSchemaJson<ICCapture>(corpus.constraints));
+    CHECK(decorated->second == morph::forms::instanceSchemaJson<ICCapture>(corpus.constraints));
+    INFO("stale corpus schema; regenerate from:\n" << morph::forms::schemaJson<ICCapture>());
+    CHECK(compiled->second == morph::forms::schemaJson<ICCapture>());
+}
+
+TEST_CASE("Every corpus row's checked verdict is the one the corpus records", "[forms][instance-constraints]") {
+    const auto& corpus = boundsCorpus();
+    for (const auto& row : corpus.cases) {
+        const auto value = typedValue(row.value);
+        if (row.schema == "decorated") {
+            INFO("row " << row.id << ": checkValue disagrees with the corpus");
+            CHECK(corpus.constraints.checkValue("value", value).empty() == row.ready);
+        } else {
+            // The control rows: the same values, with no instance declaration
+            // to break. Nothing in the compiled type rejects them, which is
+            // precisely why the decorated rows above prove the decoration did
+            // the work rather than some unrelated per-field check.
+            INFO("row " << row.id << ": a control row must be accepted");
+            CHECK(InstanceConstraints{}.checkValue("value", value).empty());
+            CHECK(row.ready);
+        }
+    }
+}
+
+TEST_CASE("The corpus carries both verdicts", "[forms][instance-constraints]") {
+    // A corpus whose every row said "accept" would pass against a renderer that
+    // never blocks; one whose every row said "reject" would pass against a
+    // renderer that blocks everything.
+    std::size_t accepted = 0;
+    for (const auto& row : boundsCorpus().cases) {
+        accepted += row.ready ? 1U : 0U;
+    }
+    CHECK(accepted > 0);
+    CHECK(accepted < boundsCorpus().cases.size());
 }

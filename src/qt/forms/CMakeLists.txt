@@ -58,7 +58,8 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
     # coverage depends on how it was invoked is exactly the "control that
     # measures nothing" this corpus exists to rule out.
     target_compile_definitions(morph_forms_qml_tests PRIVATE
-        MORPH_FORMS_RULE_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/rule_corpus.json")
+        MORPH_FORMS_RULE_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/rule_corpus.json"
+        MORPH_FORMS_INSTANCE_BOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/instance_bounds.json")
 
     if(WIN32)
         find_program(MORPH_WINDEPLOYQT_EXECUTABLE windeployqt

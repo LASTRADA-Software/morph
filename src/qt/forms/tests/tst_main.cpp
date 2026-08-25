@@ -15,17 +15,23 @@
 
 Q_IMPORT_QML_PLUGIN(MorphFormsPlugin)
 
-/// @brief Publishes the shared `x-rules` corpus to the QML engine.
+/// @brief Publishes the two shared test corpora to the QML engine.
 ///
-/// `tst_DynamicFormRuleCorpus.qml` and `tests/test_forms_rule_corpus.cpp` read
-/// one and the same file (morph#176). QML cannot fetch it itself: an
-/// XMLHttpRequest against a `file:` URL is refused unless
-/// `QML_XHR_ALLOW_FILE_READ` is exported, which would make the suite's result
-/// depend on how it was invoked. Reading it here instead keeps the path in one
-/// place — CMake's `MORPH_FORMS_RULE_CORPUS` — for both readers, and hands QML
-/// the bytes **verbatim**: the corpus stores each schema as JSON text, and any
-/// parse/re-serialise on the way in would round the very int64 literals the
-/// `equals-int64` rows exist to pin.
+/// Each corpus is one file with two readers — a C++ suite and a QML one:
+///
+/// - `tests/data/rule_corpus.json` (morph#176) — read by
+///   `tests/test_forms_rule_corpus.cpp` and `tst_DynamicFormRuleCorpus.qml`;
+/// - `tests/data/instance_bounds.json` (morph#164) — read by
+///   `tests/test_forms_instance_constraints.cpp` and
+///   `tst_DynamicFormInstanceBounds.qml`.
+///
+/// QML cannot fetch either itself: an XMLHttpRequest against a `file:` URL is
+/// refused unless `QML_XHR_ALLOW_FILE_READ` is exported, and a suite whose
+/// coverage depends on how it was invoked is the failure mode these corpora
+/// exist to rule out. Reading them here keeps each path in one place (the
+/// CMake compile definitions) and hands QML the bytes **verbatim**: both files
+/// store schemas as JSON text, and any parse/re-serialise on the way in would
+/// round the very int64 literals some rows exist to pin.
 class MorphFormsQmlTestSetup : public QObject {
     Q_OBJECT
 
@@ -33,17 +39,28 @@ public:
     MorphFormsQmlTestSetup() = default;
 
 public Q_SLOTS:
-    /// @brief Injects `ruleCorpusJson` into the QML root context.
+    /// @brief Injects `ruleCorpusJson` and `instanceBoundsJson` into the QML
+    ///        root context.
     /// @param engine The engine Qt Quick Test just created.
     void qmlEngineAvailable(QQmlEngine* engine) {
-        QString text;
-        QFile corpus(QStringLiteral(MORPH_FORMS_RULE_CORPUS));
-        if (corpus.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            text = QString::fromUtf8(corpus.readAll());
+        // An unreadable file lands as an empty string, which the QML side fails
+        // on explicitly rather than silently running zero rows.
+        engine->rootContext()->setContextProperty(QStringLiteral("ruleCorpusJson"),
+                                                  readAll(QStringLiteral(MORPH_FORMS_RULE_CORPUS)));
+        engine->rootContext()->setContextProperty(QStringLiteral("instanceBoundsJson"),
+                                                  readAll(QStringLiteral(MORPH_FORMS_INSTANCE_BOUNDS)));
+    }
+
+private:
+    /// @brief Reads a whole UTF-8 file, or returns an empty string.
+    /// @param path Absolute path, from a CMake compile definition.
+    /// @return The file's contents, verbatim.
+    static QString readAll(const QString& path) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            return {};
         }
-        // An unreadable corpus lands as an empty string, which the QML side
-        // fails on explicitly rather than silently running zero rows.
-        engine->rootContext()->setContextProperty(QStringLiteral("ruleCorpusJson"), text);
+        return QString::fromUtf8(file.readAll());
     }
 };
 
