@@ -152,7 +152,7 @@ Public Member Functions</h2></td></tr>
 <p>Called once per <span class="tt">execute</span> envelope, before the action is dispatched. A <span class="tt">false</span> return causes the server to reply with <span class="tt">err|unauthorized</span> (the client surfaces the error through the <span class="tt">.onError(...)</span> callback).</p>
 <p>Default implementation supplied by the framework is <span class="tt"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html" title="Default authorizer that permits everything.">AllowAllAuthorizer</a></span>. Real deployments install a custom subclass that checks principal claims, action permissions, rate limits, etc. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a8e866ec952e0075389623c0d48fcb901" name="a8e866ec952e0075389623c0d48fcb901"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8e866ec952e0075389623c0d48fcb901">&#9670;&#160;</a></span>authorize()</h2>
@@ -235,7 +235,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#ab46b3d7dabef6cf09d31cf51023762ef">morph::session::SigningAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00130">130</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>
@@ -290,7 +290,7 @@ caller touch *this instance* (row)?". Model instances on a <span class="tt">Remo
 <div class="line">}</div>
 <div class="ttc" id="astructmorph_1_1session_1_1Context_html"><div class="ttname"><a href="../../dd/d85/structmorph_1_1session_1_1Context.html">morph::session::Context</a></div><div class="ttdoc">Per-call session context carried through the bridge to the model.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00026">session.hpp:26</a></div></div>
 <div class="ttc" id="astructmorph_1_1session_1_1Context_html_a6f3f23e2695b3b2cbd6d85bf6a237c3f"><div class="ttname"><a href="../../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f">morph::session::Context::principal</a></div><div class="ttdeci">std::string principal</div><div class="ttdoc">Auth principal (user id).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00035">session.hpp:35</a></div></div>
-<div class="ttc" id="astructmorph_1_1session_1_1IAuthorizer_html_a521dc064df62863d7afbd860301cc52e"><div class="ttname"><a href="#a521dc064df62863d7afbd860301cc52e">morph::session::IAuthorizer::authorizeInstance</a></div><div class="ttdeci">virtual bool authorizeInstance(const Context &amp;ctx, std::string_view modelType, std::string_view actionType, std::uint64_t modelId, std::string_view ownerPrincipal) const</div><div class="ttdoc">Optional per-**instance** authorization hook — the multi-tenant gate.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00168">session.hpp:168</a></div></div>
+<div class="ttc" id="astructmorph_1_1session_1_1IAuthorizer_html_a521dc064df62863d7afbd860301cc52e"><div class="ttname"><a href="#a521dc064df62863d7afbd860301cc52e">morph::session::IAuthorizer::authorizeInstance</a></div><div class="ttdeci">virtual bool authorizeInstance(const Context &amp;ctx, std::string_view modelType, std::string_view actionType, std::uint64_t modelId, std::string_view ownerPrincipal) const</div><div class="ttdoc">Optional per-**instance** authorization hook — the multi-tenant gate.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00166">session.hpp:166</a></div></div>
 </div><!-- fragment --><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">ctx</td><td>Per-call session (its <span class="tt">principal</span> is authoritative only if a verifying authorizer is installed). </td></tr>
@@ -303,7 +303,7 @@ caller touch *this instance* (row)?". Model instances on a <span class="tt">Remo
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> to allow the operation on this instance, <span class="tt">false</span> to reject. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>
@@ -339,7 +339,7 @@ caller touch *this instance* (row)?". Model instances on a <span class="tt">Remo
 <p>The <b>default allows everything</b>, so an authorizer that does not override it — including <span class="tt"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html" title="Default authorizer that permits everything.">AllowAllAuthorizer</a></span> and a plain <span class="tt"><a class="el" href="../../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html" title="IAuthorizer that authenticates via a signed Context::token.">SigningAuthorizer</a></span> — keeps the pre-existing behaviour exactly (any reachable client may register any known model type). A deployer opts into bounding registration by overriding this, typically requiring authentication and/or restricting <code class="param">modelType:</code> </p><div class="fragment"><div class="line"><span class="keywordtype">bool</span> <a class="code hl_function" href="#a2458bb624e5bc3bd7dad6858413135e6">authorizeRegister</a>(<span class="keyword">const</span> <a class="code hl_struct" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a>&amp; ctx, std::string_view modelType)<span class="keyword"> const override </span>{</div>
 <div class="line">    <span class="keywordflow">return</span> !ctx.<a class="code hl_variable" href="../../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f">principal</a>.empty();  <span class="comment">// only authenticated callers may register</span></div>
 <div class="line">}</div>
-<div class="ttc" id="astructmorph_1_1session_1_1IAuthorizer_html_a2458bb624e5bc3bd7dad6858413135e6"><div class="ttname"><a href="#a2458bb624e5bc3bd7dad6858413135e6">morph::session::IAuthorizer::authorizeRegister</a></div><div class="ttdeci">virtual bool authorizeRegister(const Context &amp;ctx, std::string_view modelType) const</div><div class="ttdoc">Optional gate on model creation — bounds who may create an instance.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00204">session.hpp:204</a></div></div>
+<div class="ttc" id="astructmorph_1_1session_1_1IAuthorizer_html_a2458bb624e5bc3bd7dad6858413135e6"><div class="ttname"><a href="#a2458bb624e5bc3bd7dad6858413135e6">morph::session::IAuthorizer::authorizeRegister</a></div><div class="ttdeci">virtual bool authorizeRegister(const Context &amp;ctx, std::string_view modelType) const</div><div class="ttdoc">Optional gate on model creation — bounds who may create an instance.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00202">session.hpp:202</a></div></div>
 </div><!-- fragment --><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">ctx</td><td>Per-call session for the register envelope; its <span class="tt">principal</span> is already the verified identity when the authorizer authenticates (empty otherwise). </td></tr>
@@ -349,7 +349,7 @@ caller touch *this instance* (row)?". Model instances on a <span class="tt">Remo
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> to allow the registration, <span class="tt">false</span> to reject with <span class="tt">err "unauthorized"</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00204">204</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>

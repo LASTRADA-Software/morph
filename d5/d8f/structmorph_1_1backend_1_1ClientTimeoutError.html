@@ -141,7 +141,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Thrown to a pending <span class="tt">Completion</span> when <span class="tt">Bridge::setExecuteDeadline</span>'s duration elapses before any reply arrives — a frame silently dropped by <span class="tt">QtWebSocketServerConfig::messagesPerSecond</span>, or a genuinely hung server, either way. </p>
 <p>Distinct from <span class="tt"><a class="el" href="../../d5/d80/structmorph_1_1backend_1_1TimeoutError.html" title="Thrown to a pending Completion when the server-side morph::backend::LimitPolicy::executeTimeout elaps...">TimeoutError</a></span>: that type means the <em>server</em> explicitly replied that it hit <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c" title="Max wall-clock time a single execute may take before the server sends an err &quot;timeout&quot; reply and disc...">LimitPolicy::executeTimeout</a></span> while the action was still running. <span class="tt"><a class="el" href="../../d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError.html" title="Thrown to a pending Completion when Bridge::setExecuteDeadline&#39;s duration elapses before any reply ar...">ClientTimeoutError</a></span> means the client gave up waiting — no reply of any kind arrived, so whether the server ever received the request, is still processing it, or replied to a connection that had already dropped is unknown. See <span class="tt">docs/spec/core/completion.md</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00553">553</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00554">554</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="abd73770a167aec770cfd56664e615114" name="abd73770a167aec770cfd56664e615114"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abd73770a167aec770cfd56664e615114">&#9670;&#160;</a></span>ClientTimeoutError()</h2>
@@ -168,7 +168,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Constructs the error with a canned diagnostic message. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00555">555</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00556">556</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

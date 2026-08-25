@@ -160,9 +160,7 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <b>Initial value:</b><div class="fragment"><div class="line">                 =</div>
-<div class="line">[](<span class="keyword">const</span> <span class="keywordtype">void</span>* buffer, std::size_t size, std::FILE* file) {</div>
-<div class="line">    <span class="keywordflow">return</span> std::fwrite(buffer, 1, size, file);</div>
-<div class="line">}</div>
+<div class="line">[](<span class="keyword">const</span> <span class="keywordtype">void</span>* buffer, std::size_t size, std::FILE* file) { <span class="keywordflow">return</span> std::fwrite(buffer, 1, size, file); }</div>
 </div><!-- fragment -->
 <p>Writes <code class="param">size</code> bytes from <code class="param">buffer</code> to <code class="param">file</code>. Mirrors <span class="tt">std::fwrite</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The number of bytes actually written; short of <code class="param">size</code> on failure. </dd></dl>
@@ -186,7 +184,7 @@ Public Attributes</h2></td></tr>
 <p>Flushes <code class="param">file's</code> stdio buffer. Mirrors <span class="tt">std::fflush</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">0</span> on success, nonzero on failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +210,7 @@ Public Attributes</h2></td></tr>
 <p>Commits <code class="param">file's</code> contents to durable storage. POSIX <span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span> / Windows <span class="tt">_commit</span>, resolved from <code class="param">file</code> via <span class="tt">fileno</span>/<span class="tt">_fileno</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">0</span> on success, nonzero on failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
@@ -227,8 +225,8 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">                =</div>
-<div class="line">[](<span class="keyword">const</span> std::string&amp; path, <span class="keyword">const</span> <span class="keywordtype">char</span>* mode) {</div>
+<b>Initial value:</b><div class="fragment"><div class="line">                    = [](<span class="keyword">const</span> std::string&amp; path,</div>
+<div class="line">                                                                                <span class="keyword">const</span> <span class="keywordtype">char</span>* mode) {</div>
 <div class="line">    </div>
 <div class="line">    <span class="keywordflow">return</span> std::fopen(path.c_str(), mode);</div>
 <div class="line">}</div>
@@ -236,7 +234,7 @@ Public Attributes</h2></td></tr>
 <p>Opens <code class="param">path</code> in mode <code class="param">mode</code>. Mirrors <span class="tt">std::fopen</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The open file, or <span class="tt">nullptr</span> on failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
@@ -251,13 +249,14 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">                         =</div>
-<div class="line">[](<span class="keyword">const</span> std::filesystem::path&amp; path) { <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span><span class="keywordtype">bool</span><span class="keyword">&gt;</span>(std::ifstream{path}); }</div>
+<b>Initial value:</b><div class="fragment"><div class="line">                             = [](<span class="keyword">const</span> std::filesystem::path&amp; path) {</div>
+<div class="line">    <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span><span class="keywordtype">bool</span><span class="keyword">&gt;</span>(std::ifstream{path});</div>
+<div class="line">}</div>
 </div><!-- fragment -->
 <p>Reports whether <code class="param">path</code> can be opened for reading right now. Stands in for <span class="tt">std::ifstream{path}</span>'s own open-succeeded check (<span class="tt">repairTornTail()</span>'s <span class="tt">if (!input)</span>) — a fault-injection test has no way to make a <em>real</em> <span class="tt">std::ifstream</span> construction fail without actually breaking the filesystem, so this predicate is consulted first; the real default performs the real open <span class="tt">std::ifstream</span> itself would. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <code class="param">path</code> is currently readable. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
@@ -286,7 +285,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
