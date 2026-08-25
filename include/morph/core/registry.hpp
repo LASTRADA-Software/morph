@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <cassert>
 #include <concepts>
 #include <cstdint>
@@ -14,6 +15,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "../forms/forms.hpp"
 #include "model.hpp"
@@ -259,6 +261,84 @@ struct EscapingWriteOpts : glz::opts {
     bool escape_control_characters = true;
 };
 
+/// @brief Everything a peer that is **not** linked against an action's C++ needs
+///        in order to build, and to sanity-check, a payload for it.
+///
+/// Assembled once per action type (see `actionDescription`) and served verbatim
+/// by `RemoteServer`'s `"schemas"` envelope kind. Two consumers, one document:
+/// a generic client renders `schema` as a form, and `RemoteServer`'s optional
+/// `PayloadCompleteness::RequireDeclaredFields` gate reads `required` — so the
+/// rule the server enforces is by construction the rule it published.
+struct ActionDescription {
+    /// @brief `morph::forms::schemaJson<A>()` with two extra top-level keys
+    ///        merged in: `x-payloadFingerprint` and `x-payloadShape`.
+    ///
+    /// Empty only when schema generation produced nothing usable at all.
+    std::string schema;
+
+    /// @brief Wire names of every member the schema's `required` array lists.
+    ///
+    /// Derived from the served document rather than recomputed, so a field the
+    /// gate insists on is exactly a field the schema told the client about.
+    std::vector<std::string> required;
+};
+
+/// @brief Builds `A`'s `ActionDescription`.
+///
+/// The merge is done over a DOM rather than by splicing text: the fingerprint
+/// and shape are ordinary JSON string values, and glaze's writer is the only
+/// thing here that knows how to escape them. On a DOM read failure the raw
+/// `morph::forms::schemaJson<A>()` text is served unannotated and `required` is
+/// left empty — a description facility degrades, it does not throw.
+///
+/// @tparam A Action type.
+/// @return The assembled description.
+template <typename A>
+[[nodiscard]] inline ActionDescription buildActionDescription() {
+    ActionDescription desc;
+    desc.schema = ::morph::forms::schemaJson<A>();
+    // u64 number mode for the same reason mergeSchemaExtras uses it: the
+    // schema carries int64/uint64 bounds a double-only DOM would round on the
+    // way back out.
+    glz::generic_u64 dom{};
+    if (glz::read_json(dom, desc.schema) || !dom.is_object()) {
+        return desc;
+    }
+    if (dom.contains("required") && dom["required"].is_array()) {
+        for (const auto& name : dom["required"].get_array()) {
+            if (name.is_string()) {
+                desc.required.push_back(name.template get<std::string>());
+            }
+        }
+    }
+    dom["x-payloadFingerprint"] = payloadFingerprint<A>();
+    dom["x-payloadShape"] = payloadShapeString<A>();
+    std::string merged;
+    if (!glz::write_json(dom, merged)) {
+        desc.schema = std::move(merged);
+    }
+    return desc;
+}
+
+/// @brief `A`'s `ActionDescription`, computed once per type per process.
+///
+/// A function-local static, exactly like `morph::forms::schemaJson<A>()`'s own
+/// cache: `RemoteServer` may answer `"schemas"` on any pool thread, and the
+/// maps `ActionDispatcher` fills at static-init time are read-only afterwards,
+/// so the only mutable state involved has to be the one C++ already guarantees
+/// is initialised exactly once. A throw from `buildActionDescription` (an
+/// action whose `formRules` are self-contradicting — see
+/// `forms::UnsatisfiableFormError`) leaves the static uninitialised and a later
+/// call retries, rather than serving a half-built document.
+///
+/// @tparam A Action type.
+/// @return Reference to the process-lifetime description for `A`.
+template <typename A>
+[[nodiscard]] inline const ActionDescription& actionDescription() {
+    static const ActionDescription kDesc = buildActionDescription<A>();
+    return kDesc;
+}
+
 // Forward declarations so instance() methods inside the classes can reference them.
 inline class ActionDispatcher& defaultDispatcher();
 inline class ModelRegistryFactory& defaultRegistry();
@@ -393,6 +473,12 @@ public:
         };
         _coalesce[key] = ActionLogPolicy<Action>::coalesce;
         _schema[key] = detail::actionPayloadSchema<Action>();
+        // Deliberately a thunk, not the description itself: registration runs
+        // at static-init time, where `buildActionDescription`'s throw path (an
+        // action with self-contradicting `formRules`) would abort the process
+        // before `main` rather than surface as an `err` reply. The thunk defers
+        // the whole computation to the first caller who asks.
+        _describe[key] = []() -> const ActionDescription& { return actionDescription<Action>(); };
     }
 
     /// @brief Dispatches an action against @p holder and returns the JSON-encoded result.
@@ -436,14 +522,97 @@ public:
         return iter == _schema.end() ? std::string{} : iter->second;
     }
 
+    /// @brief Returns the `{actionType: schema}` document for every action
+    ///        registered under @p modelId.
+    ///
+    /// The wire's answer to `"schemas"` (`wire::makeSchemas`). Action ids are
+    /// emitted in sorted order so two calls — and two servers built from the
+    /// same sources — produce byte-identical documents; `_describe` is an
+    /// unordered map, whose iteration order is not a contract.
+    ///
+    /// A model type with no registered actions yields `{}` rather than an
+    /// error: "this type exposes no actions" and "this type does not exist"
+    /// are not distinguishable here (`ActionDispatcher` never sees a model
+    /// type that registered no action at all), and inventing a distinction
+    /// would tell an unauthenticated prober which type ids are real.
+    ///
+    /// @param modelId Model type-id to describe.
+    /// @return The `{actionType: schema}` JSON object.
+    /// @throws morph::forms::UnsatisfiableFormError if one of the model's
+    ///         actions declares `formRules` no submission could satisfy —
+    ///         propagated from `morph::forms::schemaJson`, which decides that
+    ///         at generation time.
+    [[nodiscard]] std::string schemasJson(std::string_view modelId) const {
+        std::vector<std::string_view> actionIds;
+        for (const auto& [key, thunk] : _describe) {
+            if (key.first == modelId) {
+                actionIds.emplace_back(key.second);
+            }
+        }
+        std::ranges::sort(actionIds);
+        std::string out{"{"};
+        bool first = true;
+        for (std::string_view const actionId : actionIds) {
+            if (!first) {
+                out += ',';
+            }
+            first = false;
+            // The id is a C++ string literal from BRIDGE_REGISTER_ACTION, but
+            // it reaches a client as JSON, so it is written as JSON rather
+            // than pasted between hand-written quotes.
+            std::string quoted;
+            (void)glz::write_json(std::string{actionId}, quoted);
+            out += quoted;
+            out += ':';
+            const auto& desc = _describe.at(Key{std::string{modelId}, std::string{actionId}})();
+            out += desc.schema.empty() ? "{}" : desc.schema;
+        }
+        out += '}';
+        return out;
+    }
+
+    /// @brief Returns the wire names `(modelId, actionId)`'s served schema
+    ///        marks `required`, or `nullptr` when there is no such list.
+    ///
+    /// The read side of `RemoteServer`'s optional
+    /// `PayloadCompleteness::RequireDeclaredFields` gate. `nullptr` means
+    /// *nothing to check* — the pair is unregistered, or its schema could not
+    /// be generated at all — never *nothing is required*: an action whose
+    /// description cannot be produced never published a requirement, so there
+    /// is no published rule for the gate to enforce.
+    ///
+    /// @param modelId  Model type-id.
+    /// @param actionId Action type-id.
+    /// @return Pointer to the required-field list, or `nullptr`.
+    [[nodiscard]] const std::vector<std::string>* requiredFieldsFor(std::string_view modelId,
+                                                                    std::string_view actionId) const {
+        auto iter = _describe.find(Key{std::string{modelId}, std::string{actionId}});
+        if (iter == _describe.end()) {
+            return nullptr;
+        }
+        try {
+            return &iter->second().required;
+        } catch (const std::exception&) {
+            return nullptr;
+        }
+    }
+
     /// @brief Returns the process-level singleton dispatcher.
     static ActionDispatcher& instance() { return defaultDispatcher(); }
 
 private:
     using Key = std::pair<std::string, std::string>;
+    /// @brief Returns the process-lifetime `ActionDescription` for one action.
+    ///
+    /// Type-erased so `schemasJson`/`requiredFieldsFor` can reach a concrete
+    /// action's forms schema without knowing its type, and a *thunk* rather
+    /// than the value so the cost (and the throw path) lands on the first
+    /// caller instead of on static init.
+    using Describer = std::function<const ActionDescription&()>;
     std::unordered_map<Key, Runner, PairKeyHash> _runners;
     std::unordered_map<Key, bool, PairKeyHash> _coalesce;
     std::unordered_map<Key, std::string, PairKeyHash> _schema;
+    std::unordered_map<Key, Describer, PairKeyHash> _describe;
 };
 
 /// @brief Registry that creates `IModelHolder` instances by string type-id.

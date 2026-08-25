@@ -55,6 +55,35 @@ struct LimitPolicy {
     std::size_t maxInFlightExecutes{0};
 };
 
+/// @brief Whether `RemoteServer` requires an `execute` body to carry every
+///        field the action's served schema marks `required`.
+///
+/// The one mechanical check `morph::wire`'s published action-evolution policy
+/// (docs/spec/core/wire.md, "Action-evolution policy") supports without
+/// contradicting itself. The policy's first bullet — *"New fields must be
+/// optional … so an older peer that omits them decodes cleanly"* — makes
+/// optionality, and only optionality, the wire's marker for *may be absent*.
+/// A field that is **not** optional therefore may not be absent, and the
+/// lenient `fromJson` cannot notice when it is: an absent field is
+/// default-constructed and an unknown one is dropped, so a client/server
+/// rename (`amount` → `amountCents`) decodes to a zero-valued action that
+/// `validate()` cannot tell from a legitimate zero.
+///
+/// @warning Not the default, and deliberately so. Turning it on rejects
+/// payloads a pre-existing client sends today, which is a non-additive change
+/// to the wire contract — precisely what the same policy says requires a
+/// `kProtocolVersion` bump. Enabling it by default would break the policy in
+/// the act of enforcing it. See docs/spec/core/wire.md, "Enforcing the policy".
+enum class PayloadCompleteness : std::uint8_t {
+    /// @brief Today's behaviour: the action codec's lenient decode is the only
+    ///        gate, and a missing field is a default-constructed one.
+    Lenient,
+    /// @brief Reject an `execute` whose `body` omits a key the action's served
+    ///        schema lists in `required`, with
+    ///        `err "payload missing required field(s): …"`.
+    RequireDeclaredFields,
+};
+
 namespace detail {
 
 /// @brief Keyed 64-bit bijection that turns a monotonic counter into an
@@ -437,6 +466,22 @@ public:
         _maxVersion.store(max);
     }
 
+    /// @brief Chooses whether an `execute` body must carry every field the
+    ///        action's served schema marks `required`.
+    ///
+    /// Opt-in, and settable at any time (the flag is read once per `execute`).
+    /// Defaults to `PayloadCompleteness::Lenient` — byte-for-byte today's
+    /// behaviour — for the reason spelled out on `PayloadCompleteness` itself:
+    /// making the check mandatory would be the non-additive wire change the
+    /// policy it enforces forbids without a `kProtocolVersion` bump.
+    ///
+    /// @param mode The completeness rule to apply from the next `execute` on.
+    void setPayloadCompleteness(PayloadCompleteness mode) noexcept { _completeness.store(mode); }
+
+    /// @brief Returns the configured payload-completeness rule.
+    /// @return The current `PayloadCompleteness`.
+    [[nodiscard]] PayloadCompleteness payloadCompleteness() const noexcept { return _completeness.load(); }
+
     /// @brief Snapshots the server's current health. Cheap; safe from any thread.
     /// @return Current `HealthStatus` (`liveModels` from the registry, `inFlight`
     ///         from the same counter the `executeInFlight` metric reads).
@@ -773,6 +818,49 @@ private:
         _attachCount.try_emplace(mid, 1);
     }
 
+    /// @brief Names the fields `(modelType, actionType)`'s served schema marks
+    ///        `required` that @p body does not carry a key for.
+    ///
+    /// The whole of `PayloadCompleteness::RequireDeclaredFields`. Presence is
+    /// judged on the **key**, not on the decoded value, because that is the
+    /// only question the action codec cannot answer: `fromJson` turns an
+    /// absent field and an explicitly-sent zero into the same action, which is
+    /// exactly why a renamed field survives `validate()` today (morph#207).
+    ///
+    /// Conservative in both directions. A `body` that is not a JSON object at
+    /// all reports nothing missing — malformed JSON is `fromJson`'s error to
+    /// raise, with a better message, a moment later — and an action with no
+    /// published requirement (`requiredFieldsFor` returning `nullptr`)
+    /// contributes no rule, since the gate enforces what the schema published
+    /// and cannot enforce what it could not publish.
+    ///
+    /// @param modelType  Model type-id from the envelope.
+    /// @param actionType Action type-id from the envelope.
+    /// @param body       The `execute` envelope's opaque payload JSON.
+    /// @return A comma-separated list of missing field names, or `""` when
+    ///         nothing is missing or nothing is checkable.
+    [[nodiscard]] std::string missingRequiredFields(const std::string& modelType, const std::string& actionType,
+                                                    const std::string& body) const {
+        const auto* required = _dispatcher.requiredFieldsFor(modelType, actionType);
+        if (required == nullptr || required->empty()) {
+            return {};
+        }
+        glz::generic_u64 dom{};
+        if (glz::read_json(dom, body) || !dom.is_object()) {
+            return {};
+        }
+        std::string missing;
+        for (const auto& field : *required) {
+            if (!dom.contains(field)) {
+                if (!missing.empty()) {
+                    missing += ", ";
+                }
+                missing += field;
+            }
+        }
+        return missing;
+    }
+
     /// @brief Answers an `instances` request with the live shared keys of a type.
     /// @param env   Decoded request; uses `typeId` and `callId`.
     /// @param reply Reply sink; always invoked exactly once.
@@ -1030,6 +1118,27 @@ private:
                     return;
                 }
                 handleInstances(env, reply);
+            } else if (env.kind == "schemas") {
+                if (env.typeId.empty()) {
+                    throw std::runtime_error("schemas requires a typeId");
+                }
+                if (auto verified = _authorizer->authenticate(env.session)) {
+                    env.session.principal = std::move(*verified);
+                } else {
+                    env.session.principal.clear();
+                }
+                // Gated exactly like `instances`, and for the same reason: a
+                // description is a read channel over the model type, so
+                // `authorize` with an empty action id lets a deployer refuse
+                // *describing* a type without refusing *using* it. It is a
+                // real disclosure — field names, bounds, rules and the
+                // payload fingerprint of every action — so it must not be
+                // reachable by a caller the server would not let execute.
+                if (!_authorizer->authorize(env.session, env.typeId, {})) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    return;
+                }
+                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, _dispatcher.schemasJson(env.typeId))));
             } else if (env.kind == "deregister") {
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
                 ::morph::exec::detail::ModelId const mid{env.modelId};
@@ -1182,6 +1291,21 @@ private:
         if (known && !_authorizer->authorizeInstance(env.session, env.modelType, env.actionType, mid.v, owner)) {
             rejectAndRelease("unauthorized");
             return;
+        }
+        // Action-evolution policy gate (opt-in; see `PayloadCompleteness`).
+        // Placed after authorization — the diagnostic names the action's own
+        // field, which is exactly what the `"schemas"` kind discloses and is
+        // therefore owed the same gate — and before the in-flight slot is
+        // reserved, so a payload that will not be dispatched never consumes
+        // one. Costs one extra parse of `body`, which is why it is not on by
+        // default.
+        if (_completeness.load() == PayloadCompleteness::RequireDeclaredFields) {
+            const std::string missing = missingRequiredFields(env.modelType, env.actionType, env.body);
+            if (!missing.empty()) {
+                const std::string message = "payload missing required field(s): " + missing;
+                rejectAndRelease(message.c_str());
+                return;
+            }
         }
         // Capture a strong self-reference so the server (and therefore
         // `_dispatcher`, which is a reference member) stays alive until this
@@ -1547,6 +1671,7 @@ private:
     std::atomic<uint64_t> _nextConnectionId{0};
     std::atomic<std::uint32_t> _minVersion{::morph::wire::kProtocolVersion};
     std::atomic<std::uint32_t> _maxVersion{::morph::wire::kProtocolVersion};
+    std::atomic<PayloadCompleteness> _completeness{PayloadCompleteness::Lenient};
     detail::OpaqueIdGenerator _idGen;
     std::mutex _logProviderMtx;
     LogProvider _logProvider;
@@ -1791,6 +1916,35 @@ public:
     ::morph::wire::ProtocolNegotiationResult negotiateProtocolVersion() {
         auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(::morph::wire::makeHello())));
         return ::morph::wire::interpretHelloReply(reply);
+    }
+
+    /// @brief Fetches the server's `{actionType: schema}` document for @p typeId.
+    ///
+    /// Sends a `"schemas"` envelope over the same synchronous control path as
+    /// `registerModel`/`negotiateProtocolVersion` (`handleInline`), carrying
+    /// the current session so an authorizing server can refuse. Opt-in in the
+    /// same sense `negotiateProtocolVersion()` is: nothing calls it for you.
+    ///
+    /// The document is what a client that is **not** linked against the
+    /// model's C++ needs — each action's properties, `required` array, form
+    /// metadata, and its `x-payloadFingerprint`/`x-payloadShape`. A client
+    /// that *is* linked against it can compare that fingerprint against its
+    /// own `morph::model::payloadFingerprint<A>()` to detect a build skew.
+    ///
+    /// @param typeId Model type id to describe.
+    /// @return The raw `{actionType: schema}` JSON document.
+    /// @throws std::runtime_error if the server replies `err` (e.g.
+    ///         `"unauthorized"`, or `"unknown envelope kind: schemas"` from a
+    ///         server predating this kind).
+    [[nodiscard]] std::string fetchActionSchemas(std::string typeId) {
+        auto env = ::morph::wire::makeSchemas(std::move(typeId));
+        env.session = currentSession();
+        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env)));
+        if (reply.kind != "ok") {
+            throw std::runtime_error("schemas request failed: " +
+                                     (reply.message.empty() ? std::string{"malformed reply"} : reply.message));
+        }
+        return reply.body;
     }
 
     /// @brief Serialises the action, sends it to the server, and returns a `Completion`.

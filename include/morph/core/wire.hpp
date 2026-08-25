@@ -55,6 +55,10 @@ inline constexpr std::uint32_t kProtocolVersion = 1;
 /// - `"assign"`    — client files live `modelId` under `primary` of `typeId`.
 /// - `"instances"` — client asks for the live shared primary keys of `typeId`.
 ///                   Replies `ok` with a JSON array of key strings in `body`.
+/// - `"schemas"`   — client asks for the action descriptions of `typeId`.
+///                   Replies `ok` with a `{actionType: schema}` JSON object in
+///                   `body` — see "Serving action schemas" in
+///                   docs/spec/core/wire.md.
 /// - `"deregister"` — client destroys an instance. Uses `modelId`.
 /// - `"execute"`   — client dispatches an action. Uses `callId`, `modelId`,
 ///                   `modelType`, `actionType`, `body`, and optionally `session`.
@@ -232,6 +236,23 @@ inline Envelope makeAssign(std::string typeId, std::string primary, uint64_t mod
 inline Envelope makeInstances(std::string typeId) {
     Envelope env;
     env.kind = "instances";
+    env.typeId = std::move(typeId);
+    return env;
+}
+
+/// @brief Builds a `schemas` envelope — asks for a model type's action descriptions.
+///
+/// The reply's `body` is a `{actionType: schema}` JSON object: one JSON Schema
+/// document per action registered for @p typeId, each carrying that action's
+/// `x-payloadFingerprint` and `x-payloadShape`
+/// (`morph::model::payloadFingerprint` / `payloadShapeString`) alongside the
+/// usual form metadata. A client not linked against the model's C++ has no
+/// other way to learn an action's shape — see "Serving action schemas" in
+/// docs/spec/core/wire.md.
+/// @param typeId Model type id whose action descriptions are wanted.
+inline Envelope makeSchemas(std::string typeId) {
+    Envelope env;
+    env.kind = "schemas";
     env.typeId = std::move(typeId);
     return env;
 }
