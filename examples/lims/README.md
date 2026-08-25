@@ -661,12 +661,15 @@ files no uploaded report contained. Fixed here.
 ## Findings raised by this rung
 
 - **[morph#163](https://github.com/LASTRADA-Software/morph/issues/163)
-  — `ModelKey` rejects strong id types.** `BRIDGE_MODEL_KEY` routes the key
-  through `keyToString`, whose concept admits only `std::integral` or
-  `std::string`, while `IMPLEMENTATION.md` rule 3 mandates a strong id
-  struct for entity identity. ledger and kanban already carry the identical
-  hand-written workaround; lims is the third, which is the rule-of-three
-  trigger.
+  — `ModelKey` rejects strong id types. Closed upstream.** `BRIDGE_MODEL_KEY`
+  routed the key through `keyToString`, whose concept admitted only
+  `std::integral` or `std::string`, while `IMPLEMENTATION.md` rule 3 mandates
+  a strong id struct for entity identity. ledger and kanban carried the
+  identical hand-written workaround; lims was the third, which is the
+  rule-of-three trigger. `ModelKey` now admits a strong id wrapping a raw key
+  (`WrappedModelKey`), and morph#183 deleted all three rungs' hand-written
+  blocks — `SampleModel` keys on `SampleId` itself, and an empty id is refused
+  by `keyToString` instead of dereferenced.
 - **The round-5 "no `and`/`or`/`not` combinators" claim is stale** (build
   order §5 above, corrected in place). They landed in commit 332f82c (#78)
   and are specified in `docs/spec/forms/forms.md`.

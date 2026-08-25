@@ -171,10 +171,12 @@ TEST_CASE(
 
     // All four attached to one shared instance -- instances() reports
     // exactly one live key while at least one handler holds it. BoardModel's
-    // PrimaryKey is the unwrapped std::int64_t (ModelKeyTraits<BoardModel>,
-    // board_model.hpp), not a std::string like PollModel's pollId, so the
-    // expected vector element type differs from the poll template.
-    REQUIRE(awaitQt(handlers[0]->instances()) == std::vector<std::int64_t>{*created.id});
+    // PrimaryKey is kanban::ProjectId itself, deduced by BRIDGE_MODEL_KEY
+    // from &OpenBoard::projectId (board_model.hpp) -- not a std::string like
+    // PollModel's pollId, and no longer the unwrapped std::int64_t this rung
+    // used to declare by hand, so the expected vector element type is the
+    // strong id.
+    REQUIRE(awaitQt(handlers[0]->instances()) == std::vector<kanban::ProjectId>{created.id});
 
     // One handler creates a column; the other three see it on their next
     // GetBoardState, proving they share one instance's state, not four
@@ -205,7 +207,7 @@ TEST_CASE(
     // instances() call until the directory catches up or the deadline
     // elapses.
     BridgeHandler<BoardModel, AllowShared> prober{rig.bridge(4), rig.executor()};
-    std::vector<std::int64_t> remaining;
+    std::vector<kanban::ProjectId> remaining;
     REQUIRE(pumpUntil([&] {
         remaining = awaitQt(prober.instances());
         return remaining.empty();

@@ -104,7 +104,10 @@ forms palette as an empty-capable field. While `ModelKey` admitted only raw
 scalars, those two rules could not both be obeyed: a rung following rule 3
 could not use `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` at all, and three rungs
 independently hand-wrote `ModelKeyTraits`/`ActionKeyTraits` instead — each
-re-stating the `*id` unwrapping the macro exists to hide (morph#163).
+re-stating the `*id` unwrapping the macro exists to hide (morph#163). Those
+three (kanban, ledger, lims) use the macros now; morph#183 deleted the
+hand-written blocks, and with them the `*id` dereference of a possibly-empty
+strong id that each one performed.
 
 A strong id encodes as **whatever it wraps**, so it shares a directory entry
 with the raw key of the same value; the directory stays one map keyed on
@@ -119,7 +122,16 @@ where the caller can see it.
 A model may still declare `using PrimaryKey = …` in its own body, and that wins
 over the deduced type — *infer by default, declare to override*, the same rule
 the rest of `morph::forms` follows. It is useful only when the key type differs
-from the field's type.
+from the field's type. The case that occurs in practice is a model whose keyed
+actions do not all carry the *same* strong id: `ledger::LedgerModel` is named
+by six actions carrying a `LedgerId` and one carrying a `ReportJobId`, and
+`ledger::BudgetModel` by actions carrying a `LedgerId` and a `BudgetId`. Both
+key on the raw `std::int64_t` those ids share, declared in the model's own
+body, and use `BRIDGE_KEY_FROM` on every action purely for the unwrapping;
+deducing either strong id would make `primary()` claim a type that is wrong for
+the other actions. Where every keyed action names one entity — `BoardModel`,
+`SampleModel`, `RuleModel` — the deduced strong id is the right key type and
+nothing overrides it.
 
 ### Attachment is automatic
 
@@ -489,7 +501,7 @@ strictly reduces pressure on it.
 | Symbol | Signature | Meaning |
 |---|---|---|
 | `BRIDGE_MODEL_KEY(M, A, &A::f)` | macro | Designates `A` as the action defining `M`'s key, and deduces the key type from `f`. Once per model. |
-| `Model::PrimaryKey` | optional nested alias | Overrides the deduced key type. Integral or `std::string`. |
+| `Model::PrimaryKey` | optional nested alias | Overrides the deduced key type. Any `ModelKey`: a raw scalar (integral or `std::string`) or a strong id wrapping one. |
 | `morph::bridge::AllowShared` | tag type | Second template argument of `BridgeHandler`. Opts the handler into the directory. |
 | `morph::bridge::NoSharing` | tag type | The default. Today's isolated-instance behaviour. |
 | `BRIDGE_KEY_FROM(A, &A::field)` | macro | Declares that a further action `A` also carries the key. |
