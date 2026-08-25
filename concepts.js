@@ -5,7 +5,8 @@ var concepts =
         [ "EmptyCapableField", "d7/df7/conceptmorph_1_1forms_1_1EmptyCapableField.html", null ],
         [ "EngageableField", "d7/db5/conceptmorph_1_1forms_1_1EngageableField.html", null ],
         [ "RuleLiteral", "db/d8c/conceptmorph_1_1forms_1_1RuleLiteral.html", null ],
-        [ "HasFormRules", "d5/d32/conceptmorph_1_1forms_1_1HasFormRules.html", null ]
+        [ "HasFormRules", "d5/d32/conceptmorph_1_1forms_1_1HasFormRules.html", null ],
+        [ "HasExplicitSubmit", "d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html", null ]
       ] ],
       [ "model", null, [
         [ "RawModelKey", "dc/d43/conceptmorph_1_1model_1_1RawModelKey.html", null ],

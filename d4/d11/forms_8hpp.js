@@ -24,6 +24,7 @@ var forms_8hpp =
     [ "morph::forms::EngageableField", "d7/db5/conceptmorph_1_1forms_1_1EngageableField.html", null ],
     [ "morph::forms::RuleLiteral", "db/d8c/conceptmorph_1_1forms_1_1RuleLiteral.html", null ],
     [ "morph::forms::HasFormRules", "d5/d32/conceptmorph_1_1forms_1_1HasFormRules.html", null ],
+    [ "morph::forms::HasExplicitSubmit", "d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html", null ],
     [ "morph::forms::engaged", "d4/d11/forms_8hpp.html#a07dfc279ee79367cee103d743a21b940", null ],
     [ "morph::forms::notEngaged", "d4/d11/forms_8hpp.html#ac6c3d1449989868831d152b5d3e0ef6e", null ],
     [ "morph::forms::greater", "d4/d11/forms_8hpp.html#a1afefe4ea53ee4ca21c4103f41d7c592", null ],

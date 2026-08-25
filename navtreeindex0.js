@@ -232,6 +232,7 @@ var NAVTREEINDEX0 =
 "d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a0a4a890c46b1171aeb7089517c98d042":[2,0,0,15,5,2],
 "d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4":[2,0,0,15,5,0],
 "d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a54e62e0648c6987bc5acc7b8daef9e24":[2,0,0,15,5,1],
+"d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html":[1,0,0,4],
 "d3/deb/conceptmorph_1_1units_1_1Convertible.html":[1,0,2,5],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html":[2,0,0,16,2],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0d712428fa45193506db2c03b41793aa":[2,0,0,16,2,1],
@@ -248,6 +249,5 @@ var NAVTREEINDEX0 =
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0":[2,0,0,16,2,18],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a898676248ae91890928c1e051a11c4bc":[2,0,0,16,2,23],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a":[2,0,0,16,2,16],
-"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa6b15f2bbb8154ddfb30406de340b8c0":[2,0,0,16,2,14],
-"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aac5c1bf91dcc71dfed8723be6617a40d":[2,0,0,16,2,10]
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa6b15f2bbb8154ddfb30406de340b8c0":[2,0,0,16,2,14]
 };

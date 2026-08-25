@@ -1,5 +1,6 @@
 var NAVTREEINDEX1 =
 {
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aac5c1bf91dcc71dfed8723be6617a40d":[2,0,0,16,2,10],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aaeeb1552d6d0d5601f9457d5bd3494cf":[2,0,0,16,2,19],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ab67ef0cfd83f0e7fd5c5a857e94215bf":[2,0,0,16,2,21],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ab85e641f3cdb1a912948481df77f3c53":[2,0,0,16,2,8],
@@ -248,6 +249,5 @@ var NAVTREEINDEX1 =
 "d7/db5/conceptmorph_1_1forms_1_1EngageableField.html":[1,0,0,1],
 "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html":[2,0,0,11,4,0],
 "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0327fd527eda13c6fb49a67985adc34f":[2,0,0,11,4,0,0],
-"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0c94599c99335c3379941683babb03e9":[2,0,0,11,4,0,2],
-"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a78d32fb54074ac3bbec65a64bdfdbdd8":[2,0,0,11,4,0,3]
+"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0c94599c99335c3379941683babb03e9":[2,0,0,11,4,0,2]
 };

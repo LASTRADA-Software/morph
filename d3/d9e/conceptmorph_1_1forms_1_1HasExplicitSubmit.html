@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::forms::QuantityDecodeError Struct Reference</title>
+<title>morph: morph::forms::HasExplicitSubmit Concept Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html','../../','db/dff/structmorph_1_1forms_1_1QuantityDecodeError-members'); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,85 +117,36 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/d1c/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::forms::QuantityDecodeError Struct Reference</div></div>
+  <div class="headertitle"><div class="title">morph::forms::HasExplicitSubmit Concept Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Thrown when a decoded action has a <span class="tt">Quantity</span> field whose engaged value falls outside its unit's declared bounds (<span class="tt">UnitTraits&lt;E&gt;::bounds</span>).  
- <a href="#details">More...</a></p>
+<p>Concept: action <span class="tt">A</span> declares a <span class="tt">static constexpr bool
+       explicitSubmit</span>, opting its form out of auto-submit-on-validity.  
+<a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>&gt;</code></p>
-<div class="dynheader">
-Inheritance diagram for morph::forms::QuantityDecodeError:</div>
-<div class="dyncontent">
- <div class="center">
-  <img src="../../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.png" alt=""/>
- </div></div>
-<table class="memberdecls">
-<tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
-Public Member Functions</h2></td></tr>
-<tr class="memitem:acace8089d2ec9c984a06fd8a6b0a2313" id="r_acace8089d2ec9c984a06fd8a6b0a2313"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#acace8089d2ec9c984a06fd8a6b0a2313">QuantityDecodeError</a> (std::string_view fieldName)</td></tr>
-<tr class="memdesc:acace8089d2ec9c984a06fd8a6b0a2313"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the error with a message naming the offending field.  <br /></td></tr>
-</table>
-<a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Thrown when a decoded action has a <span class="tt">Quantity</span> field whose engaged value falls outside its unit's declared bounds (<span class="tt">UnitTraits&lt;E&gt;::bounds</span>). </p>
-<p>Distinct from <span class="tt"><a class="el" href="../../d7/d1a/structmorph_1_1model_1_1ValidationError.html" title="Thrown when a decoded action fails ActionValidator&lt;Action&gt;::ready(...) on a server-side or local exec...">morph::model::ValidationError</a></span>: this is a <b>decode-level</b> rejection — a wire payload that violates a physical/unit constraint baked into the field's type, caught before an action's own <span class="tt">validate()</span> (a business-rule check) ever runs. See docs/spec/forms/forms.md, "Pre-decode
-wire validation — `checkQuantityBounds`". </p>
+<h2 id="header-conceptdef" class="groupheader">Concept definition</h2>
+<div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> A&gt;</div>
+<div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html">HasExplicitSubmit</a> = <span class="keyword">requires</span> {</div>
+<div class="line">    { A::explicitSubmit } -&gt; std::convertible_to&lt;bool&gt;;</div>
+<div class="line">}</div>
+<div class="ttc" id="aconceptmorph_1_1forms_1_1HasExplicitSubmit_html"><div class="ttname"><a href="../../d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html">morph::forms::HasExplicitSubmit</a></div><div class="ttdoc">Concept: action A declares a static constexpr bool explicitSubmit, opting its form out of auto-submit...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l01549">forms.hpp:1549</a></div></div>
+</div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
+<div class="textblock"><p>Concept: action <span class="tt">A</span> declares a <span class="tt">static constexpr bool
+       explicitSubmit</span>, opting its form out of auto-submit-on-validity. </p>
+<p>Opt-in, like <span class="tt">formLayout</span>/<span class="tt">fieldSpans</span>/<span class="tt">formRules</span>: an action that says nothing keeps the renderer's default (submit as soon as the form is valid), so adding this changes no existing schema. Declaring it <span class="tt">true</span> emits <span class="tt">x-submitMode: "explicit"</span>; declaring it <span class="tt">false</span> emits nothing, which is the same as not declaring it at all.</p>
+<p>A side-effectful action wants this. Auto-submit fires on <em>every</em> keystroke that leaves the form valid, so a <span class="tt">CreatePaste</span> bound directly to a live controller stores one paste per typed character.</p>
+<p>(The template parameter is intentionally left undocumented: clang's -Wdocumentation does not consider a concept a template declaration, so a parameter-doc command here is an error under -Weverything -Werror, which is how the WASM ladder builds. <span class="tt">HasFormRules</span> above omits it for the same reason. Note the command cannot even be <em>named</em> in this comment &ndash; clang parses it inside backticks too.) </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02603">2603</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
-</div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="acace8089d2ec9c984a06fd8a6b0a2313" name="acace8089d2ec9c984a06fd8a6b0a2313"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#acace8089d2ec9c984a06fd8a6b0a2313">&#9670;&#160;</a></span>QuantityDecodeError()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">morph::forms::QuantityDecodeError::QuantityDecodeError </td>
-          <td>(</td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>fieldName</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel explicit">explicit</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Constructs the error with a message naming the offending field. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">fieldName</td><td>The wire (JSON) name of the out-of-bounds field. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02606">2606</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
-
-</div>
-</div>
-<hr/>The documentation for this struct was generated from the following file:<ul>
-<li>morph/forms/<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a></li>
-</ul>
-</div><!-- contents -->
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01549">1549</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+</div></div><!-- contents -->
 </div><!-- doc-content -->
-<div id="page-nav" class="page-nav-panel">
-<div id="page-nav-resize-handle"></div>
-<div id="page-nav-tree">
-<div id="page-nav-contents">
-</div><!-- page-nav-contents -->
-</div><!-- page-nav-tree -->
-</div><!-- page-nav -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>forms</b></li><li class="navelem"><a href="../../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html">QuantityDecodeError</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>forms</b></li><li class="navelem"><a href="../../d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html">HasExplicitSubmit</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>
