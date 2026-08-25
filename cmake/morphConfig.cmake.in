@@ -1,0 +1,77 @@
+@PACKAGE_INIT@
+
+# morph's package config. Generated from cmake/morphConfig.cmake.in by
+# configure_package_config_file(); see the "Install & export" section of the
+# root CMakeLists.txt.
+#
+# morph is header-only, but it is *not* dependency-free: morph::morph carries
+# glaze::glaze (and Threads) in its interface, and morphTargets.cmake names
+# those imported targets literally. Resolving them here rather than leaving it
+# to the consumer is not a convenience -- an exported target file that names a
+# target nobody created makes every consumer fail at generate time with
+# "target not found", after find_package has already reported success.
+
+include(CMakeFindDependencyMacro)
+
+# Look inside our own prefix first, so a consumer who points CMAKE_PREFIX_PATH
+# at the morph install finds the glaze that was installed next to it. Removed
+# again afterwards: a package config should not permanently edit its
+# consumer's search path.
+set(_morph_added_prefix FALSE)
+if(NOT "${PACKAGE_PREFIX_DIR}" IN_LIST CMAKE_PREFIX_PATH)
+    list(APPEND CMAKE_PREFIX_PATH "${PACKAGE_PREFIX_DIR}")
+    set(_morph_added_prefix TRUE)
+endif()
+
+# The same version bound the build used. An older glaze (a stray 4.x in
+# ~/.local) silently shadows the pinned 7.4 and breaks schema generation, so
+# the consumer gets the bound too rather than rediscovering it the hard way.
+find_dependency(glaze @MORPH_GLAZE_VERSION@ CONFIG)
+
+if(NOT WIN32 AND NOT EMSCRIPTEN)
+    find_dependency(Threads)
+endif()
+
+# Optional components, each present only if its MORPH_BUILD_* option was on
+# for the build that produced this install. A component that was not built is
+# absent here, so find_package(morph COMPONENTS qt REQUIRED) fails with
+# "morph is required but not found" rather than failing later at link time.
+set(morph_KNOWN_COMPONENTS "@MORPH_INSTALLED_COMPONENTS@")
+foreach(_morph_component IN LISTS morph_KNOWN_COMPONENTS)
+    set(morph_${_morph_component}_FOUND TRUE)
+endforeach()
+
+# check_required_components() alone reports only "morph_FOUND is FALSE", which
+# does not tell the reader that the install simply predates the option they
+# needed. Name the component and what was actually installed.
+foreach(_morph_component IN LISTS morph_FIND_COMPONENTS)
+    if(NOT morph_${_morph_component}_FOUND)
+        set(morph_${_morph_component}_FOUND FALSE)
+        string(APPEND morph_NOT_FOUND_MESSAGE
+            "morph component '${_morph_component}' is not part of this install. "
+            "Optional components ship only when the matching MORPH_BUILD_* "
+            "option was ON for the build that produced it (see README, "
+            "\"Using morph in your own project\"). "
+            "Installed components: '${morph_KNOWN_COMPONENTS}'. ")
+    endif()
+endforeach()
+
+if("offline_sqlite" IN_LIST morph_KNOWN_COMPONENTS)
+    find_dependency(SQLite3)
+endif()
+if("qt" IN_LIST morph_KNOWN_COMPONENTS)
+    find_dependency(Qt6 COMPONENTS WebSockets)
+endif()
+if("qt_forms" IN_LIST morph_KNOWN_COMPONENTS)
+    find_dependency(Qt6 6.5 COMPONENTS Core)
+endif()
+
+if(_morph_added_prefix)
+    list(REMOVE_ITEM CMAKE_PREFIX_PATH "${PACKAGE_PREFIX_DIR}")
+endif()
+unset(_morph_added_prefix)
+unset(_morph_component)
+
+include("${CMAKE_CURRENT_LIST_DIR}/morphTargets.cmake")
+
+check_required_components(morph)

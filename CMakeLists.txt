@@ -158,7 +158,11 @@ endif()
 # that CI does not require vcpkg. The version bound matters: without it an
 # older system/user install (e.g. a stray 4.x in ~/.local) silently shadows
 # the pinned v7.4.0 and breaks schema generation.
-find_package(glaze 7.4 CONFIG QUIET)
+# One place for the bound, because morphConfig.cmake has to state it too: an
+# installed morph whose package config asks for a different glaze than the
+# build used would resolve a header set the build never compiled against.
+set(MORPH_GLAZE_VERSION 7.4)
+find_package(glaze ${MORPH_GLAZE_VERSION} CONFIG QUIET)
 if(NOT glaze_FOUND)
     include(FetchContent)
     FetchContent_Declare(
@@ -251,6 +255,25 @@ target_sources(morph
         include/morph/util/tagged.hpp
         include/morph/forms/instance_constraints.hpp
 )
+
+# The detail/ headers that public headers include. They are not public surface
+# and are deliberately outside the verified set -- quantity_equation.hpp is
+# included from partway down quantity.hpp and is not self-contained, so
+# VERIFY_INTERFACE_HEADER_SETS would fail on it -- but they must still ship,
+# or an installed morph/util/quantity.hpp cannot find fixed_string.hpp and the
+# install compiles nowhere (morph#232). A second FILE_SET gets them installed
+# without adding them to what is standalone-compiled;
+# INTERFACE_HEADER_SETS_TO_VERIFY, which otherwise defaults to *every*
+# interface header set, keeps the verification list exactly as it was.
+target_sources(morph
+    INTERFACE
+    FILE_SET morph_detail_headers TYPE HEADERS
+    BASE_DIRS include
+    FILES
+        include/morph/detail/fixed_string.hpp
+        include/morph/detail/quantity_equation.hpp
+)
+set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)
 
 # ── Guard: every public header must belong to some target's FILE_SET ─────────
 #
@@ -668,3 +691,104 @@ endif()
 # flags did not actually reach one of them — the class of silent failure that
 # hid -Weverything from every macOS build (issue #298).
 morph_verify_warning_flags()
+
+# ── Install & export: find_package(morph CONFIG REQUIRED) ───────────────────
+#
+# Before this section existed, `cmake --install` on a morph build **exited 0**
+# and installed Glaze's headers plus a working glazeConfig.cmake -- Glaze
+# carries its own install/export rules and gets them for free through
+# FetchContent -- while installing zero morph headers and no
+# morphConfig.cmake. A consumer running the standard CMake install workflow
+# got a prefix silently holding someone else's dependency and none of the
+# library they meant to install, with nothing to flag it (morph#232). Every
+# interface target already declares FILE_SET HEADERS, which
+# install(TARGETS ... FILE_SET HEADERS) consumes directly, so the rules below
+# are mechanical rather than a retrofit.
+#
+# Off when morph is a subproject: a parent that FetchContent's or
+# add_subdirectory's morph installs its own artefacts, and inheriting ours
+# would put morph's headers and package config into that project's prefix
+# uninvited -- which is the mirror image of the bug above.
+option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
+
+if(MORPH_INSTALL)
+    include(GNUInstallDirs)
+    include(CMakePackageConfigHelpers)
+
+    set(MORPH_CMAKE_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/morph")
+
+    # Both header sets: HEADERS is the public surface, morph_detail_headers is
+    # what that surface #includes. Omitting the second installs a header tree
+    # that resolves in the build directory and nowhere else.
+    install(TARGETS morph
+        EXPORT morphTargets
+        FILE_SET HEADERS DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+        FILE_SET morph_detail_headers DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+    )
+
+    # Optional components ship only when this configuration actually created
+    # them, and morphConfig.cmake is told which ones did, so
+    # find_package(morph COMPONENTS qt REQUIRED) against an install built
+    # without MORPH_BUILD_QT fails at find_package time rather than at link
+    # time.
+    #
+    # EXPORT_NAME, not just NAMESPACE: install(EXPORT NAMESPACE morph::)
+    # prefixes the *target* name, so morph_net would arrive at the consumer as
+    # morph::morph_net while every in-tree ALIAS and every line of
+    # documentation says morph::net. The two names must be the same one.
+    set(MORPH_INSTALLED_COMPONENTS "")
+    foreach(_morph_component IN ITEMS offline_sqlite qt_forms qt net)
+        if(TARGET morph_${_morph_component})
+            set_target_properties(morph_${_morph_component} PROPERTIES
+                EXPORT_NAME ${_morph_component})
+            install(TARGETS morph_${_morph_component}
+                EXPORT morphTargets
+                FILE_SET HEADERS DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+            )
+            list(APPEND MORPH_INSTALLED_COMPONENTS ${_morph_component})
+        endif()
+    endforeach()
+    unset(_morph_component)
+
+    # morph::qt's headers declare QObject subclasses whose definitions live in
+    # morph_qt_impl (a MOC'd static library), so installing the interface
+    # without it would export a component that finds but does not link.
+    if(TARGET morph_qt_impl)
+        set_target_properties(morph_qt_impl PROPERTIES EXPORT_NAME qt_impl)
+        install(TARGETS morph_qt_impl
+            EXPORT morphTargets
+            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        )
+    endif()
+
+    install(EXPORT morphTargets
+        FILE morphTargets.cmake
+        NAMESPACE morph::
+        DESTINATION "${MORPH_CMAKE_INSTALL_DIR}"
+    )
+
+    configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/morphConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/morphConfig.cmake"
+        INSTALL_DESTINATION "${MORPH_CMAKE_INSTALL_DIR}"
+    )
+
+    # SameMajorVersion follows docs/spec/VERSIONING.md, which is what decides
+    # this: there, minor releases are "additive and source-compatible" and
+    # only a major breaks the stable surface, so an install of 0.2 does
+    # satisfy a consumer asking for 0.1. ARCH_INDEPENDENT because a
+    # header-only package has no ABI to match -- without it CMake rejects an
+    # install made on a differently-sized-void* machine.
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/morphConfigVersion.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+        ARCH_INDEPENDENT
+    )
+
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/morphConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/morphConfigVersion.cmake"
+        DESTINATION "${MORPH_CMAKE_INSTALL_DIR}"
+    )
+endif()
