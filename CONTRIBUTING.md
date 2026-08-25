@@ -45,6 +45,22 @@ type or subsystem. The rules, from `AGENTS.md`:
   `cmake -S . -B build -G Ninja -DMORPH_BUILD_DOCUMENTATION=ON
   -DMORPH_BUILD_TESTS=OFF -DMORPH_BUILD_EXAMPLES=OFF` and
   `cmake --build build --target doc`.
+- **Warnings are errors:** `cmake/compiler_options.cmake` turns on
+  `-Weverything` (Clang, AppleClang and clang-cl), the widest practical GCC
+  set, or `/W4` (MSVC), plus `-Werror`/`/WX` while
+  `MORPH_ENABLE_STRICT_COMPILATION` is on — which it is by default, locally as
+  well as in CI. Configuring prints which set was chosen, e.g.
+
+  ```text
+  -- morph: warnings: AppleClang 17.0.0.17000603 -> Clang set applied (29 flags, -Weverything, strict=ON)
+  -- morph: warnings: '-Weverything' verified on 4 target(s)
+  ```
+
+  If those two lines are missing, or the first names a compiler family you did
+  not expect, your local build is not enforcing what CI enforces — say so on
+  the issue rather than working around it. A compiler id the file does not
+  recognise now fails the configure outright instead of quietly building with
+  no diagnostics.
 - **Formatting/linting:** `.clang-format` and `.clang-tidy` govern C++;
   markdown follows `.markdownlint.yaml` (119-column limit; code blocks and
   tables exempt). `pre-commit run --all-files` runs the configured hooks.
