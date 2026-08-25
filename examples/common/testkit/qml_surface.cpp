@@ -106,7 +106,7 @@ const QString kTypeofPrefix = QStringLiteral("typeof ");
     return QString::fromLatin1(object.metaObject()->className());
 }
 
-/// @brief The own (non-inherited) members of @p meta, by kind.
+/// @brief A metaobject's members, by kind.
 struct Surface {
     QStringList properties;
     QStringList signalNames;
@@ -115,13 +115,32 @@ struct Surface {
     QMap<QString, int> signalArities;
 };
 
-/// @brief Reads @p meta's own members — everything at or past its own offsets,
-///        i.e. excluding `QObject`'s and any intermediate base's.
-/// @param meta The bridge class's metaobject.
+/// @brief Which slice of a metaobject an inventory covers.
+///
+/// The two directions of the audit want different slices, and conflating them
+/// is a false finding either way.
+enum class Scope : std::uint8_t {
+    /// Everything at or past the class's own offsets — excluding `QObject`'s
+    /// members and any intermediate base's. This is what the
+    /// unreferenced-member sweep is entitled to complain about: a member a
+    /// shared base declares is that base's business, and reporting it once per
+    /// derived bridge would be noise no rung could act on.
+    Own,
+    /// Every member the class has, inherited ones included. This is what QML
+    /// can actually reach, so it is what a reference written in a `.qml` file
+    /// must be resolved against. `bank`'s six controllers all inherit their
+    /// `error` signal from `BankController`; resolving `onError` against the
+    /// own slice would report six screens as broken that work.
+    Reachable,
+};
+
+/// @brief Reads @p meta's members within @p scope.
+/// @param meta  The bridge class's metaobject.
+/// @param scope Own members only, or every reachable member.
 /// @return The surface inventory.
-[[nodiscard]] Surface surfaceOf(const QMetaObject* meta) {
+[[nodiscard]] Surface surfaceOf(const QMetaObject* meta, Scope scope) {
     Surface surface;
-    for (int i = meta->propertyOffset(); i < meta->propertyCount(); ++i) {
+    for (int i = (scope == Scope::Own ? meta->propertyOffset() : 0); i < meta->propertyCount(); ++i) {
         const QMetaProperty property = meta->property(i);
         surface.properties.append(QString::fromLatin1(property.name()));
         if (property.hasNotifySignal()) {
@@ -129,7 +148,7 @@ struct Surface {
                                             QString::fromLatin1(property.notifySignal().name()));
         }
     }
-    for (int i = meta->methodOffset(); i < meta->methodCount(); ++i) {
+    for (int i = (scope == Scope::Own ? meta->methodOffset() : 0); i < meta->methodCount(); ++i) {
         const QMetaMethod method = meta->method(i);
         const QString name = QString::fromLatin1(method.name());
         if (method.methodType() == QMetaMethod::Signal) {
@@ -296,11 +315,34 @@ QmlScanResult scanQml(const QString& source, const QString& fileName, const QStr
         const QString body = text.mid(open, close - open);
 
         const QRegularExpressionMatch target = targetPattern.match(body);
-        if (!target.hasMatch() || target.captured(2).isEmpty()) {
-            continue;  // a bare-identifier target is not a bridge alias here
+        if (!target.hasMatch()) {
+            continue;
         }
-        const QString alias = target.captured(2);
-        result.connectionsTargets.append(alias);
+        QString alias;
+        if (!target.captured(2).isEmpty()) {
+            // `target: <id>.<alias>` — the shape every ladder rung writes,
+            // where the shell hands the bridge to a view as a property. The
+            // alias is unambiguous, so an unbound one is reported below.
+            alias = target.captured(2);
+            result.connectionsTargets.append(alias);
+        } else if (aliases.contains(target.captured(1))) {
+            // `target: <alias>` — the shape a shell using
+            // `QQmlContext::setContextProperty` writes, because the bridge is
+            // a root-context name rather than a property of anything.
+            // examples/bank/gui/main.cpp is one: `Connections { target: app }`.
+            //
+            // A bare identifier is ambiguous — it is far more often a local
+            // `id` (`target: someTimer`) — so it counts only when it is an
+            // alias the audit was actually handed. That deliberately gives up
+            // drift direction 4 (a `Connections` block on a bridge nobody
+            // bound) for this shape: there is no way to tell such a block from
+            // a block targeting a local element. Direction 1 — a handler for a
+            // signal the bridge does not have — is what this recovers, and it
+            // was silently uncovered for every context-property shell before.
+            alias = target.captured(1);
+        } else {
+            continue;
+        }
         if (!aliases.contains(alias)) {
             continue;
         }
@@ -441,7 +483,12 @@ QStringList QmlSurfaceAudit::run() const {
     for (const QObject* object : objects) {
         const QObject& bridge = *object;
         const QString cls = classNameOf(bridge);
-        const Surface surface = surfaceOf(bridge.metaObject());
+        // Two inventories, deliberately: `surface` is what this class declares
+        // and is therefore answerable for (the sweep), `reachable` is what QML
+        // can actually resolve a name against (every reference below). See
+        // `Scope`.
+        const Surface surface = surfaceOf(bridge.metaObject(), Scope::Own);
+        const Surface reachable = surfaceOf(bridge.metaObject(), Scope::Reachable);
 
         QStringList objectAliases;
         QVector<QmlReference> references;
@@ -485,9 +532,9 @@ QStringList QmlSurfaceAudit::run() const {
             const QString site = QStringLiteral("%1:%2").arg(reference.file).arg(reference.line);
             switch (reference.kind) {
                 case QmlReferenceKind::Read:
-                    if (surface.properties.contains(reference.member)) {
+                    if (reachable.properties.contains(reference.member)) {
                         readProperties.insert(reference.member);
-                    } else if (surface.methodArities.contains(reference.member)) {
+                    } else if (reachable.methodArities.contains(reference.member)) {
                         calledMethods.insert(reference.member);  // a method reference, not a call
                     } else if (byFile.value(reference.file)
                                    .optionalProbes.contains(reference.alias + QLatin1Char('.') + reference.member)) {
@@ -509,8 +556,8 @@ QStringList QmlSurfaceAudit::run() const {
                     }
                     break;
                 case QmlReferenceKind::Call:
-                    if (!surface.methodArities.contains(reference.member)) {
-                        if (surface.signalNames.contains(reference.member)) {
+                    if (!reachable.methodArities.contains(reference.member)) {
+                        if (reachable.signalNames.contains(reference.member)) {
                             findings.append(QStringLiteral("%1 calls '%2.%3()' but %4 declares it as a signal, "
                                                            "not an invokable")
                                                 .arg(site, reference.alias, reference.member, cls));
@@ -518,9 +565,9 @@ QStringList QmlSurfaceAudit::run() const {
                             findings.append(QStringLiteral("%1 calls '%2.%3()' but %4 has no such invokable")
                                                 .arg(site, reference.alias, reference.member, cls));
                         }
-                    } else if (!surface.methodArities.value(reference.member).contains(reference.argumentCount)) {
+                    } else if (!reachable.methodArities.value(reference.member).contains(reference.argumentCount)) {
                         QStringList arities;
-                        for (const int arity : surface.methodArities.value(reference.member)) {
+                        for (const int arity : reachable.methodArities.value(reference.member)) {
                             arities.append(QString::number(arity));
                         }
                         findings.append(QStringLiteral("%1 calls '%2.%3()' with %4 argument(s) but %5 takes %6")
@@ -535,15 +582,15 @@ QStringList QmlSurfaceAudit::run() const {
                     break;
                 case QmlReferenceKind::SignalHandler: {
                     const QString handler = QString(reference.member.at(0).toUpper()) + reference.member.mid(1);
-                    if (!surface.signalNames.contains(reference.member)) {
+                    if (!reachable.signalNames.contains(reference.member)) {
                         findings.append(QStringLiteral("%1 handles 'on%2' but %3 emits no signal '%4'")
                                             .arg(site, handler, cls, reference.member));
-                    } else if (reference.argumentCount > surface.signalArities.value(reference.member)) {
+                    } else if (reference.argumentCount > reachable.signalArities.value(reference.member)) {
                         findings.append(QStringLiteral("%1 handles 'on%2' with %3 parameter(s) but %4::%5 carries %6")
                                             .arg(site, handler)
                                             .arg(reference.argumentCount)
                                             .arg(cls, reference.member)
-                                            .arg(surface.signalArities.value(reference.member)));
+                                            .arg(reachable.signalArities.value(reference.member)));
                         handledSignals.insert(reference.member);
                     } else {
                         handledSignals.insert(reference.member);

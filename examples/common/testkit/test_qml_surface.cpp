@@ -80,6 +80,26 @@ public:
     Q_INVOKABLE void ping() {}
 };
 
+/// @brief A shared base that publishes one signal — the shape `bank`'s
+///        `BankController` has, with six controllers inheriting its `error`.
+class BaseFixtureBridge : public QObject {
+    Q_OBJECT
+
+signals:
+    /// @brief The signal every derived bridge inherits.
+    /// @param message Ignored.
+    void failed(const QString& message);
+};
+
+/// @brief A bridge whose only signal is its base's.
+class DerivedFixtureBridge : public BaseFixtureBridge {
+    Q_OBJECT
+
+public:
+    /// @brief The one member this class declares itself.
+    Q_INVOKABLE void act() {}
+};
+
 /// @brief Writes @p contents to `<dir>/<name>` and returns the path.
 /// @param dir      Directory to write into.
 /// @param name     File name, e.g. `"Main.qml"`.
@@ -445,6 +465,146 @@ TEST_CASE("QmlSurfaceAudit: a Connections block targeting an unbound alias is a 
     CHECK_THAT(describe(audit.run()),
                Catch::Matchers::ContainsSubstring("a Connections block targets 'otherBridge' but no bridge was "
                                                   "bound to that alias"));
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Context-property shells — `Connections { target: <bare alias> }`
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("QmlSurfaceAudit: a Connections block on a bare alias is scanned", "[testkit][qml-surface]") {
+    // A shell that publishes its bridges with QQmlContext::setContextProperty
+    // rather than setInitialProperties writes the target as a bare identifier,
+    // because the bridge is a root-context name and not a property of
+    // anything. examples/bank/gui/main.cpp is one, and every one of its six
+    // `Connections { target: app }` blocks went unscanned while the audit
+    // required an `<id>.<alias>` target -- six handlers whose signal names
+    // nothing checked at all.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    SurfaceFixtureBridge bridge;
+
+    const auto contextPropertyQml = [](const QString& handler) {
+        return QStringLiteral(R"(
+import QtQuick
+Item {
+    id: page
+    readonly property string heading: fixture.title
+    readonly property int level: fixture.depth
+    function reload() { fixture.refresh(); fixture.open(42) }
+    Connections {
+        target: fixture
+        function %1(rows, ok) { console.log(rows, ok) }
+    }
+}
+)")
+            .arg(handler);
+    };
+
+    SECTION("and agreement is still silence") {
+        writeQml(dir, QStringLiteral("Main.qml"), contextPropertyQml(QStringLiteral("onListed")));
+        QmlSurfaceAudit audit{dir.path()};
+        audit.bind(QStringLiteral("fixture"), bridge);
+
+        const QStringList findings = audit.run();
+        INFO(describe(findings));
+        CHECK(findings.isEmpty());
+    }
+
+    SECTION("a handler for a signal the bridge lacks is a finding") {
+        writeQml(dir, QStringLiteral("Main.qml"), contextPropertyQml(QStringLiteral("onListd")));
+        QmlSurfaceAudit audit{dir.path()};
+        audit.bind(QStringLiteral("fixture"), bridge);
+
+        CHECK_THAT(describe(audit.run()),
+                   Catch::Matchers::ContainsSubstring("handles 'onListd' but SurfaceFixtureBridge emits no "
+                                                      "signal 'listd'"));
+    }
+}
+
+TEST_CASE("QmlSurfaceAudit: a bare Connections target that is not a bound alias is left alone",
+          "[testkit][qml-surface]") {
+    // The cost of reading bare targets: an identifier that is not an alias is
+    // far more often a local `id`, and nothing distinguishes the two. Such a
+    // block must therefore be ignored outright rather than reported as an
+    // unbound bridge -- otherwise every `Connections { target: someTimer }` in
+    // every rung becomes a finding.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    writeQml(dir, QStringLiteral("Main.qml"),
+             cleanQml().append(QStringLiteral("\nItem {\n    Timer { id: ticker }\n"
+                                              "    Connections {\n        target: ticker\n"
+                                              "        function onTriggered() {}\n    }\n}\n")));
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    CHECK(findings.isEmpty());
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Inherited surface — resolved in one direction, swept in the other
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("QmlSurfaceAudit: a handler for an inherited signal is correct QML", "[testkit][qml-surface]") {
+    // `bank`'s six controllers each inherit `error` from a shared
+    // `BankController` base and every screen handles it. Resolving `onFailed`
+    // against the derived class's *own* members only would report all six as
+    // broken screens, which is backwards: QML reaches inherited members
+    // exactly as it reaches declared ones.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    writeQml(dir, QStringLiteral("Main.qml"), QStringLiteral(R"(
+import QtQuick
+Item {
+    id: page
+    property var derived: null
+    function go() { page.derived.act() }
+    Connections {
+        target: page.derived
+        function onFailed(message) { console.log(message) }
+    }
+}
+)"));
+
+    DerivedFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("derived"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    CHECK(findings.isEmpty());
+}
+
+TEST_CASE("QmlSurfaceAudit: an inherited member no QML binds is not swept", "[testkit][qml-surface]") {
+    // The other half of the same decision. `failed` is the base's to answer
+    // for; reporting it once per derived bridge would be noise no rung could
+    // act on, and there is no per-derived-class fix for it. Only `act`, which
+    // this class declares, is swept -- and it is, so the audit is not simply
+    // quiet here.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    writeQml(dir, QStringLiteral("Main.qml"), QStringLiteral(R"(
+import QtQuick
+Item {
+    id: page
+    property var derived: null
+    readonly property string nothing: page.derived ? page.derived.objectName : ""
+}
+)"));
+
+    DerivedFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("derived"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    CHECK(findings.size() == 1);
+    CHECK_THAT(describe(findings),
+               Catch::Matchers::ContainsSubstring(
+                   "DerivedFixtureBridge::act is invokable from QML but no scanned .qml calls it"));
 }
 
 // ═════════════════════════════════════════════════════════════════════════
