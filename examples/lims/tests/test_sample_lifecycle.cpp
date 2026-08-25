@@ -7,8 +7,12 @@
 #include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <concepts>
+#include <cstdint>
 #include <memory>
+#include <morph/core/model_key.hpp>
 #include <morph/journal/action_log.hpp>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -335,4 +339,74 @@ TEST_CASE("Registering a sample or a client requires a principal and well-formed
     CHECK_THROWS_AS(model.execute(lims::RegisterClient{}), lims::ValidationError);
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
     CHECK_THROWS_AS(model.execute(lims::RegisterSample{.clientId = client.clientId}), lims::ValidationError);
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// SampleModel's primary key (morph#183)
+//
+// No DbFixture below this line: `ActionKeyTraits<A>::key()` is a pure
+// function over the action's own fields, and that is the point -- key
+// extraction runs inside `BridgeHandler::execute()` before `SampleModel`'s
+// own `validate()` ever sees the action, so it is the first and only place a
+// malformed id can be caught.
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("SampleModel adopts SampleId as its PrimaryKey", "[lims][sample][key]") {
+    // `BRIDGE_MODEL_KEY(SampleModel, OpenSample, &OpenSample::sampleId)`
+    // deduces the key type from the *member*, so it is the strong id
+    // examples/IMPLEMENTATION.md rule 3 requires -- not the unwrapped
+    // `std::int64_t` the hand-written `ModelKeyTraits<SampleModel>` declared
+    // while `morph::model::ModelKey` still admitted only raw scalars.
+    // Asserted at run time rather than with `STATIC_REQUIRE` on purpose: this
+    // way it *fails* against the pre-migration header rather than refusing to
+    // compile it.
+    CHECK((std::same_as<morph::model::PrimaryKeyOf<lims::SampleModel>, lims::SampleId>));
+}
+
+TEST_CASE("Every keyed SampleModel action encodes exactly the key its hand-written specialisation did",
+          "[lims][sample][key]") {
+    // Right-hand sides are literally the deleted bodies. `9007199254740993`
+    // is past 2^53, so an encoding that ever went through a double would show
+    // up here.
+    for (const std::int64_t raw :
+         {std::int64_t{1}, std::int64_t{7}, std::int64_t{4294967297}, std::int64_t{9007199254740993}}) {
+        const lims::OpenSample openSample{.sampleId = lims::SampleId{raw}};
+        CHECK(morph::model::ActionKeyTraits<lims::OpenSample>::key(openSample) ==
+              morph::model::keyToString(*openSample.sampleId));
+        CHECK(morph::model::ActionKeyTraits<lims::OpenSample>::key(openSample) == std::to_string(raw));
+
+        lims::QueuedCapture queued;
+        queued.sampleId = lims::SampleId{raw};
+        CHECK(morph::model::ActionKeyTraits<lims::QueuedCapture>::key(queued) ==
+              morph::model::keyToString(*queued.sampleId));
+
+        // The result-keyed action: `RegisterSample` generates the id, so its
+        // key comes off the `SampleView` it returns.
+        lims::SampleView view;
+        view.id = lims::SampleId{raw};
+        CHECK(morph::model::ActionKeyTraits<lims::RegisterSample>::keyOfResult(view) ==
+              morph::model::keyToString(*view.id));
+
+        // `primary()`/`instances()` decode with
+        // `keyFromString<PrimaryKeyOf<M>>`, so the encoding has to round-trip
+        // back into the strong id it came from.
+        CHECK(morph::model::keyFromString<lims::SampleId>(
+                  morph::model::ActionKeyTraits<lims::OpenSample>::key(openSample)) == lims::SampleId{raw});
+    }
+}
+
+TEST_CASE("An empty sampleId fails key extraction instead of routing to a garbage instance", "[lims][sample][key]") {
+    // The failure morph#183 calls out by name. The hand-written bodies were
+    // `keyToString(*action.sampleId)`, and `SampleId::operator*` is
+    // `return *value;` on a `std::optional` (lims/core/types.hpp) --
+    // undefined behaviour for a disengaged id, which on a plain libc++ hands
+    // back whatever the union held and attaches the caller to an arbitrary
+    // instance. `morph::model::keyToString` refuses an empty strong id
+    // instead, and `BridgeHandler::execute()`'s `catch (...)` around key
+    // extraction turns the throw into a rejected `Completion`.
+    CHECK_THROWS_AS(morph::model::ActionKeyTraits<lims::OpenSample>::key(lims::OpenSample{}), std::runtime_error);
+    CHECK_THROWS_AS(morph::model::ActionKeyTraits<lims::QueuedCapture>::key(lims::QueuedCapture{}),
+                    std::runtime_error);
+    CHECK_THROWS_AS(morph::model::ActionKeyTraits<lims::RegisterSample>::keyOfResult(lims::SampleView{}),
+                    std::runtime_error);
 }

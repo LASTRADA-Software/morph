@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <concepts>
+#include <cstdint>
 #include <memory>
+#include <morph/core/model_key.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
+#include <stdexcept>
+#include <string>
 
 #include "kanban/models/board_model.hpp"
 #include "kanban/models/project_admin_model.hpp"
@@ -965,5 +970,61 @@ TEST_CASE("ActionKeyTraits<OpenBoard>::key() rejects a disengaged projectId inst
     CHECK(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(withValidId) == "1");
 
     kanban::OpenBoard disengaged{.projectId = {}};
-    CHECK_THROWS_AS(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(disengaged), kanban::ValidationError);
+    CHECK_THROWS_AS(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(disengaged), std::runtime_error);
+
+    // The refusal is now `morph::model::keyToString`'s own, not this rung's:
+    // BRIDGE_MODEL_KEY generates the specialisation (morph#183), so the
+    // hand-written `throw kanban::ValidationError` is gone and the escaping
+    // type is morph's plain `std::runtime_error`. Pinned as a negative
+    // because it is the one caller-visible difference the migration makes.
+    // Nothing in the rung catches this by type -- `BoardBridge` routes it
+    // through `morph::ladder::gui::errorText()`, which reads `what()` off any
+    // `std::exception` -- but a change that quietly reintroduced a rung-local
+    // `key()` would show up right here.
+    bool refusedByTheRung = false;
+    try {
+        (void)morph::model::ActionKeyTraits<kanban::OpenBoard>::key(disengaged);
+        FAIL("key() accepted a disengaged projectId");
+    } catch (const kanban::KanbanError&) {
+        refusedByTheRung = true;
+    } catch (const std::runtime_error&) {  // NOLINT(bugprone-empty-catch) -- the expected path
+    }
+    CHECK_FALSE(refusedByTheRung);
+}
+
+// Equivalence pin for morph#183's migration, and a regression guard after it:
+// the two hand-written specialisations were replaced by one
+// `BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)`, and the
+// only way that is safe is if the generated key is the same bytes the
+// hand-written `key()` produced, for every id it accepted.
+TEST_CASE("BoardModel's deduced key is the ProjectId itself and encodes exactly as the hand-written key() did",
+          "[kanban][model][key]") {
+    // The macro deduces `PrimaryKey` from the *member* it is handed, so the
+    // model's key type is the strong id (examples/IMPLEMENTATION.md rule 3),
+    // not the unwrapped `std::int64_t` the hand-written
+    // `ModelKeyTraits<BoardModel>` declared. Checked at run time rather than
+    // with `STATIC_REQUIRE` deliberately: this way the assertion *fails*
+    // against the pre-migration header instead of refusing to compile it, so
+    // it is a test that can be seen to fail.
+    CHECK((std::same_as<morph::model::PrimaryKeyOf<kanban::BoardModel>, kanban::ProjectId>));
+
+    // The right-hand side is literally the body the hand-written
+    // specialisation had (`morph::model::keyToString(*action.projectId)`), so
+    // this compares generated against hand-written directly rather than
+    // against a re-derived expectation. `9007199254740993` is past 2^53 --
+    // the range morph#286 had to fix elsewhere in this rung -- so a key
+    // encoding that ever went through a double would show up here.
+    for (const std::int64_t raw :
+         {std::int64_t{1}, std::int64_t{7}, std::int64_t{4294967297}, std::int64_t{9007199254740993}}) {
+        const kanban::OpenBoard action{.projectId = kanban::ProjectId{raw}};
+        CHECK(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(action) ==
+              morph::model::keyToString(*action.projectId));
+        CHECK(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(action) == std::to_string(raw));
+    }
+
+    // `primary()`/`instances()` decode with `keyFromString<PrimaryKeyOf<M>>`,
+    // so the key has to round-trip back into the strong id it came from.
+    CHECK(morph::model::keyFromString<kanban::ProjectId>(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(
+              kanban::OpenBoard{.projectId = kanban::ProjectId{9007199254740993}})) ==
+          kanban::ProjectId{9007199254740993});
 }
