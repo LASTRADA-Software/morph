@@ -86,6 +86,7 @@ add_executable(morph_tests
     test_views.cpp
     test_computed_fields.cpp
     test_forms_rules.cpp
+    test_forms_rule_agreement.cpp
     test_forms_layout.cpp
     test_forms_instance_constraints.cpp
     test_widget_hints.cpp

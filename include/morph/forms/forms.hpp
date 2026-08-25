@@ -965,6 +965,15 @@ concept RuleLiteral = std::same_as<T, std::int64_t> || std::same_as<T, bool> || 
 /// comparison kinds) — a field with no value cannot equal anything, so
 /// `equals` returns `false` while the field is unengaged.
 /// @tparam V Field member type.
+/// @brief Largest magnitude an IEEE-754 double holds exactly: 2^53.
+///
+/// A JSON number beyond this cannot survive `JSON.parse` intact, so a bound
+/// above it needs an exact companion the renderer can read instead.
+inline constexpr std::uint64_t kExactDoubleLimit = 9007199254740992ULL;
+
+/// @brief Signed spelling of `kExactDoubleLimit`, for the negative bound.
+inline constexpr std::int64_t kExactDoubleLimitSigned = 9007199254740992LL;
+
 /// @tparam A Action type the field belongs to.
 /// @tparam L Literal type (must satisfy `RuleLiteral`).
 template <typename V, typename A, typename L>
@@ -1015,6 +1024,20 @@ struct Equals {
             node["value"] = std::string{literal.view()};
         } else {
             node["value"] = literal;
+            // An integral literal beyond 2^53 does not survive the renderer's
+            // JSON.parse: it arrives rounded, and an `equals` against it then
+            // compares two values the schema kept distinct (morph#176). Carry
+            // the exact digits alongside, as `x-exactMinimum`/`x-exactMaximum`
+            // already do for bounds (morph#213); a renderer that ignores
+            // `valueText` behaves exactly as before.
+            if constexpr (std::is_integral_v<L> && !std::is_same_v<L, bool>) {
+                if (std::cmp_greater(literal, kExactDoubleLimit) ||
+                    std::cmp_less(literal, -kExactDoubleLimitSigned)) {
+                    // Glaze DOM builder — same shape as every sibling assignment here.
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+                    node["valueText"] = std::to_string(literal);
+                }
+            }
         }
         return node;
     }
@@ -2134,15 +2157,6 @@ void rejectUnsatisfiableRules(const glz::generic_u64::array_t& xRules,
         }
     }
 }
-
-/// @brief Largest magnitude an IEEE-754 double holds exactly: 2^53.
-///
-/// A JSON number beyond this cannot survive `JSON.parse` intact, so a bound
-/// above it needs an exact companion the renderer can read instead.
-inline constexpr std::uint64_t kExactDoubleLimit = 9007199254740992ULL;
-
-/// @brief Signed spelling of `kExactDoubleLimit`, for the negative bound.
-inline constexpr std::int64_t kExactDoubleLimitSigned = 9007199254740992LL;
 
 /// @brief Adds an exact decimal-string companion for one numeric bound, when
 ///        the bound is too large for a double to hold exactly.
