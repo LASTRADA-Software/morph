@@ -134,18 +134,39 @@ CHECK(findings.isEmpty());
 property-bag keys inside an emitted `QVariantMap` (no metaobject exists for
 them — the per-rung "bag shape" cases remain the only guard); QML the rung
 does not own, such as the shipped `MorphForms` renderer's; dynamic member
-access; and whether the shell wires an alias to the class the test bound.
+access (`bank`'s `AppShell.qml` calls `controllers[current].refresh()`
+through a `var` array, so five reachable invokables sweep as unreferenced);
+inherited members, in the sweep direction only; and whether the shell wires
+an alias to the class the test bound.
 
 `allowUnbound(alias, member, reason)` exempts one member, with a required
 reason. The exemption list is itself audited — a member that has since been
 deleted, an alias nobody bound, or a member QML does bind is a finding — so it
 can only shrink deliberately.
 
-Adopted by `bookmarks`, `pastebin`, `polls` and `ledger`; `lims`, `kanban`
-and `bank` are tracked in morph#240. The audit's own
-mutation suite is `examples/common/testkit/test_qml_surface.cpp`: every case
-there drives it against a deliberately broken pair and asserts the specific
-finding.
+Adopted by every rung that has QML — `bookmarks`, `pastebin`, `polls`,
+`ledger`, `lims` and `kanban` — and by `examples/bank`, which is not a rung
+(morph#240). The audit's own mutation suite is
+`examples/common/testkit/test_qml_surface.cpp`: every case there drives it
+against a deliberately broken pair and asserts the specific finding.
+
+`bank` is where the two shell shapes diverge, and its adoption is worth
+reading before adding a seventh. It publishes its controllers with
+`QQmlContext::setContextProperty` rather than `setInitialProperties`, so its
+aliases are root-context names: one `bind()` per controller covers all
+thirteen files, no `bindIn()` is needed, and its `Connections` blocks name
+their target as a bare identifier (`target: app`). A bare target counts only
+when it is an alias the audit was handed — an identifier that is not is far
+more often a local `id`, and nothing distinguishes the two — so the
+unbound-bridge check does not reach this shape. `bank` also has a shared
+controller base: a reference written in QML resolves against everything the
+bridge can reach, inherited members included, while the unreferenced-member
+sweep covers only what the bound class declares itself.
+
+`bank` is not built by CI at all today (only its WebAssembly GUI is, in
+`wasm-demo.yml`), so `bank_gui_tests` — like `bank_tests` beside it — runs
+only locally, in a `-DMORPH_BUILD_BANK_EXAMPLE=ON -DMORPH_BUILD_BANK_GUI=ON`
+configure.
 
 ## The dual-mode fixture
 

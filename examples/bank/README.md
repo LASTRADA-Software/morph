@@ -171,6 +171,10 @@ cmake --build build --target bank_gui
 
 Structure:
 
+- **`gui/bank_gui_lib`** — a static library holding `BankClient` and every
+  controller, linking `Qt6::Core` only (no Quick, no Qml). `bank_gui` is
+  `main.cpp` plus the QML module on top of it; `bank_gui_tests` (see
+  [Tests](#tests)) is the other consumer.
 - **`gui/BankClient`** — owns the worker pool, a `morph::qt::QtExecutor`, the
   `Bridge` (local backend), DB setup, and the session. UI-toolkit-agnostic.
 - **`gui/controllers/`** — one QObject controller per domain (`AppController`,
@@ -239,6 +243,21 @@ shared on-disk test database. Notable cross-cutting tests:
   custom `IAuthorizer` rejecting an action.
 - `test_offline.cpp` — parks deposits in an `InMemoryOfflineQueue` while "offline" and
   replays them via `SyncWorker` on "reconnect".
+
+`tests/gui/` is a second binary, `bank_gui_tests`, built only when
+`-DMORPH_BUILD_BANK_GUI=ON` is also set — `bank_tests` links no Qt at all and
+is built in configures that have none. It holds `test_bank_qml_surface.cpp`,
+which points the ladder testkit's `QmlSurfaceAudit`
+(`examples/common/testkit/qml_surface.hpp`, `examples/TESTING.md`) at the six
+controllers and the thirteen `.qml` files, and fails on any name that exists on
+one side only: a renamed `Q_INVOKABLE`, a `Connections` handler for a signal
+that is gone, a property read that would resolve to `undefined`. None of those
+is a compile error or a QML warning; the pane just stays empty.
+
+```sh
+cmake --build build --target bank_gui_tests
+./build/examples/bank/bank_gui_tests
+```
 
 ## Status
 
