@@ -2,6 +2,7 @@
 
 #include <sqlite3.h>
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -286,5 +287,70 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: the idempotency-key contract surv
     morph::test::checkIdempotencyKeyContractAcrossReopen(
         "SqliteOfflineQueue", morph::test::KeyDedup::onPendingItems,
         [&dbPath] { return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath); });
+    removeDbFiles(dbPath);
+}
+
+// ── setIdempotencyKey on a conflicting key (morph#249) ───────────────────────
+//
+// The protected hook is reached only through the *base* default
+// `IOfflineQueue::enqueue(payload, key)`, which inserts first and stamps
+// second. On a key a pending row already holds, the partial unique index
+// rejects the stamp. It used to throw, while this same class's own
+// `enqueue(payload, key)` resolved the identical conflict silently by keeping
+// the existing row — one conflict, two answers.
+//
+// The scope-qualified call below is how the base default is reached; it mirrors
+// tests/test_file_offline_queue.cpp's existing scope-qualified case for the
+// sibling implementation.
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("morph::offline::SqliteOfflineQueue: a conflicting setIdempotencyKey does not throw", "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath};
+        auto const first = queue.enqueue("payload-A", "K1");
+
+        // Base-qualified: insert, then stamp a key "K1" already holds.
+        std::uint64_t viaBase = 0;
+        CHECK_NOTHROW(viaBase = queue.morph::offline::IOfflineQueue::enqueue("payload-B", "K1"));
+
+        // The row the base default inserted exists either way — the stamp is
+        // what conflicts, and it is skipped rather than raised. The pre-existing
+        // keyed row keeps both its key and its payload.
+        auto const items = queue.drain();
+        REQUIRE(items.size() == 2);
+
+        auto const firstItem = std::ranges::find_if(items, [first](auto const& i) { return i.id == first; });
+        REQUIRE(firstItem != items.end());
+        CHECK(firstItem->payload == "payload-A");
+        CHECK(firstItem->idempotencyKey == "K1");
+
+        // The newly-inserted row is present and unkeyed: the conflict cost it
+        // its key, not its existence. It is *not* a dedup hit — the base path
+        // cannot produce one, since it has already inserted by the time it
+        // stamps. Callers wanting dedup use the virtual two-arg enqueue.
+        auto const secondItem = std::ranges::find_if(items, [viaBase](auto const& i) { return i.id == viaBase; });
+        REQUIRE(secondItem != items.end());
+        CHECK(secondItem->payload == "payload-B");
+        CHECK(secondItem->idempotencyKey.empty());
+    }
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: a non-conflicting setIdempotencyKey still stamps", "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath};
+        queue.enqueue("payload-A", "K1");
+        // Control: without it, the case above would pass against a hook that
+        // silently stamped nothing at all.
+        auto const fresh = queue.morph::offline::IOfflineQueue::enqueue("payload-B", "K2");
+        auto const items = queue.drain();
+        auto const item = std::ranges::find_if(items, [fresh](auto const& i) { return i.id == fresh; });
+        REQUIRE(item != items.end());
+        CHECK(item->idempotencyKey == "K2");
+    }
     removeDbFiles(dbPath);
 }
