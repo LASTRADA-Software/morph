@@ -2,8 +2,8 @@
 #pragma once
 
 #include <QMap>
-#include <QSet>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVector>

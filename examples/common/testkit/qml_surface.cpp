@@ -241,12 +241,11 @@ QmlScanResult scanQml(const QString& source, const QString& fileName, const QStr
             {
                 const QString tail = text.mid(after, 20);
                 const bool comparedToUndefined =
-                    (tail.startsWith(QStringLiteral("!==")) || tail.startsWith(QStringLiteral("==="))
-                     || tail.startsWith(QStringLiteral("!=")) || tail.startsWith(QStringLiteral("==")))
-                    && tail.contains(QStringLiteral("undefined"));
+                    (tail.startsWith(QStringLiteral("!==")) || tail.startsWith(QStringLiteral("===")) ||
+                     tail.startsWith(QStringLiteral("!=")) || tail.startsWith(QStringLiteral("=="))) &&
+                    tail.contains(QStringLiteral("undefined"));
                 const qsizetype before = match.capturedStart(0);
-                const bool typeofApplied =
-                    before >= 7 && text.mid(before - 7, 7) == QStringLiteral("typeof ");
+                const bool typeofApplied = before >= 7 && text.mid(before - 7, 7) == QStringLiteral("typeof ");
                 if (comparedToUndefined || typeofApplied) {
                     result.optionalProbes.insert(alias + QLatin1Char('.') + reference.member);
                 }
