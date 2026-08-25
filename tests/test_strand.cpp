@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/strand.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/strand.hpp>
 #include <thread>
 #include <vector>
-
 
 TEST_CASE("morph::exec::detail::StrandExecutor serialises tasks for the same key", "[strand]") {
     morph::exec::ThreadPoolExecutor pool{4};

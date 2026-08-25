@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/executor.hpp>
-#include <morph/core/strand.hpp>
-
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/executor.hpp>
+#include <morph/core/strand.hpp>
 #include <thread>
 #include <vector>
 
@@ -24,8 +23,7 @@
 // per-key in-flight counter on entry and drops it on exit; if two tasks for the
 // same key ever run concurrently the counter exceeds 1 and the test fails. Very
 // short tasks maximise the drain/re-arm interleaving that triggered the bug.
-TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under contention",
-          "[strand][race]") {
+TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under contention", "[strand][race]") {
     constexpr int kThreads = 8;
     constexpr int kPostsPerThread = 400;
     constexpr int kIterations = 20;

@@ -24,9 +24,9 @@ struct StatementLine {
 
 /// @brief Generate a statement for the owner over a time range.
 struct GenerateStatement {
-    std::string owner;           ///< empty => session principal
-    std::int64_t fromMs = 0;     ///< inclusive lower bound (epoch ms)
-    std::int64_t toMs = 0;       ///< inclusive upper bound; 0 => no upper bound
+    std::string owner;        ///< empty => session principal
+    std::int64_t fromMs = 0;  ///< inclusive lower bound (epoch ms)
+    std::int64_t toMs = 0;    ///< inclusive upper bound; 0 => no upper bound
 };
 
 /// @brief Result of `GenerateStatement`.

@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "kanban/models/project_admin_model.hpp"
-#include "testkit/db_fixture.hpp"
-
-#include "kanban/auth/kanban_authorizer.hpp"
-
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <morph/session/session.hpp>
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <algorithm>
+#include "kanban/auth/kanban_authorizer.hpp"
+#include "kanban/models/project_admin_model.hpp"
+#include "testkit/db_fixture.hpp"
 
 using morph::ladder::testkit::DbFixture;
 
@@ -25,10 +22,10 @@ namespace {
 }
 
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -59,10 +56,9 @@ TEST_CASE("SetMemberRole requires Manager; a Member cannot promote themselves", 
     }
     {
         const ScopedPrincipal bob{"bob"};
-        CHECK_THROWS_AS(
-            model.execute(
-                kanban::SetMemberRole{.projectId = projectId, .principal = "bob", .role = kanban::Role::Manager}),
-            kanban::Forbidden);
+        CHECK_THROWS_AS(model.execute(kanban::SetMemberRole{
+                            .projectId = projectId, .principal = "bob", .role = kanban::Role::Manager}),
+                        kanban::Forbidden);
     }
 }
 
@@ -95,9 +91,9 @@ TEST_CASE("SetMemberRole rejects a principal over auth::kMaxPrincipalBytes rathe
     const auto projectId = model.execute(kanban::CreateProject{.name = "Sprint Board"}).id;
 
     const std::string overLong(kanban::auth::kMaxPrincipalBytes + 1, 'b');
-    CHECK_THROWS_AS(
-        model.execute(kanban::SetMemberRole{.projectId = projectId, .principal = overLong, .role = kanban::Role::Member}),
-        kanban::ValidationError);
+    CHECK_THROWS_AS(model.execute(kanban::SetMemberRole{
+                        .projectId = projectId, .principal = overLong, .role = kanban::Role::Member}),
+                    kanban::ValidationError);
 
     const auto roles = model.execute(kanban::GetProjectRoles{.projectId = projectId});
     REQUIRE(roles.roles.size() == 1);
@@ -112,11 +108,10 @@ TEST_CASE("RemoveMember rejects a principal over auth::kMaxPrincipalBytes", "[ka
 
     const std::string overLong(kanban::auth::kMaxPrincipalBytes + 1, 'b');
     CHECK_THROWS_AS(model.execute(kanban::RemoveMember{.projectId = projectId, .principal = overLong}),
-                     kanban::ValidationError);
+                    kanban::ValidationError);
 }
 
-TEST_CASE("GetMyProjects lists every project the caller has a role on, with their own role",
-          "[kanban][model]") {
+TEST_CASE("GetMyProjects lists every project the caller has a role on, with their own role", "[kanban][model]") {
     DbFixture fixture;
     kanban::ProjectAdminModel model;
 

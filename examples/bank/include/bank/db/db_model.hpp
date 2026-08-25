@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
-
 #include <optional>
 
 /// @file

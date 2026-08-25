@@ -10,21 +10,19 @@
 // fetchMetadataOnce()/relayOutboxOnce() equivalent to test here, so this
 // file has exactly the one case the brief calls for.
 
-#include "polls/app/app.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <filesystem>
+#include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/qt/qt_executor.hpp>
+#include <string>
 
+#include "polls/app/app.hpp"
 #include "polls/dto/poll_dto.hpp"
 #include "polls/models/poll_model.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/qt/qt_executor.hpp>
-
-#include <filesystem>
-#include <memory>
-#include <string>
 
 using morph::bridge::AllowShared;
 using morph::bridge::Bridge;

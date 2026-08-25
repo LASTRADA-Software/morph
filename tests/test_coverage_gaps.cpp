@@ -4,11 +4,10 @@
 // case names the file:line range it is meant to cover so future readers can
 // understand why an unusual edge case is being exercised here.
 
+#include <any>
 #include <array>
 #include <atomic>
-#include <any>
 #include <catch2/catch_test_macros.hpp>
-#include <typeindex>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -25,6 +24,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <typeindex>
 #include <variant>
 
 #include "test_support.hpp"
@@ -441,10 +441,9 @@ TEST_CASE("morph::bridge::Bridge: publishResult with no subscribers is a no-op",
     morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
 
     // Nothing is subscribed, so the fan-out loop finds no matching entry.
-    REQUIRE_NOTHROW(bridge.publishResult(::morph::exec::detail::ModelId{1}, std::type_index{typeid(int)},
-                                         std::any{int{0}}));
+    REQUIRE_NOTHROW(
+        bridge.publishResult(::morph::exec::detail::ModelId{1}, std::type_index{typeid(int)}, std::any{int{0}}));
 }
-
 
 TEST_CASE("morph::bridge::Bridge: deregisterHandler skips other bindings", "[coverage][bridge]") {
     // With two live handlers, deregistering one walks past the other in the

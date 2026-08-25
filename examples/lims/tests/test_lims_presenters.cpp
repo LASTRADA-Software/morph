@@ -13,18 +13,16 @@
 // actually change an outcome; running every presenter case three times over
 // would triple the CI cost to re-prove the same routing.
 
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "result_presenter.hpp"
 #include "sample_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-
-#include <memory>
-#include <string>
 
 namespace {
 
@@ -74,11 +72,11 @@ lims::SampleView registerSampleVia(lims::gui::SamplePresenter& presenter) {
 
     lims::SampleView sample;
     bool gotSample = false;
-    auto sampleConn = QObject::connect(&presenter, &lims::gui::SamplePresenter::sampleChanged,
-                                       [&](lims::SampleView view) {
-                                           sample = std::move(view);
-                                           gotSample = true;
-                                       });
+    auto sampleConn =
+        QObject::connect(&presenter, &lims::gui::SamplePresenter::sampleChanged, [&](lims::SampleView view) {
+            sample = std::move(view);
+            gotSample = true;
+        });
     presenter.registerSample(client.clientId, QStringLiteral("WW-1"));
     REQUIRE(pumpUntil([&] { return gotSample; }));
     QObject::disconnect(sampleConn);
@@ -176,9 +174,8 @@ TEST_CASE("ResultPresenter routes the catalogue, capture and listing", "[lims][g
     // A sample at InProgress, which is the only state results may be captured in.
     const auto sample = registerSampleVia(samplePresenter);
     int changes = 0;
-    QObject::connect(&samplePresenter, &lims::gui::SamplePresenter::sampleChanged, [&](lims::SampleView) {
-        ++changes;
-    });
+    QObject::connect(&samplePresenter, &lims::gui::SamplePresenter::sampleChanged,
+                     [&](lims::SampleView) { ++changes; });
     samplePresenter.receiveSample();
     REQUIRE(pumpUntil([&] { return changes == 1; }));
     samplePresenter.startWork();

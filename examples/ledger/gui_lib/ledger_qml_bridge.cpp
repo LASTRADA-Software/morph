@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger_qml_bridge.hpp"
-#include "gui/id_qml.hpp"
-
-#include "ledger/core/units.hpp"
 
 #include <QUuid>
-
 #include <string>
 #include <utility>
+
+#include "gui/id_qml.hpp"
+#include "ledger/core/units.hpp"
 
 namespace ledger::gui {
 
@@ -81,8 +80,7 @@ using ::morph::ladder::gui::idNumber;
 
 }  // namespace
 
-LedgerQmlBridge::LedgerQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                                 QObject* parent)
+LedgerQmlBridge::LedgerQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
     : QObject{parent}, _presenter{bridge, executor} {
     connect(&_presenter, &LedgerPresenter::ledgerListed, this,
             [this](const GetLedgerResult& result) { publishLedger(result); });
@@ -94,14 +92,11 @@ LedgerQmlBridge::LedgerQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec:
     // than append: the balances of *other* accounts are unaffected, but the
     // model is the authority on the list's order and contents.
     connect(&_presenter, &LedgerPresenter::accountOpened, this, [this](const AccountInfo&) { refresh(); });
-    connect(&_presenter, &LedgerPresenter::failed, this,
-            [this](const QString& message) { publishError(message); });
+    connect(&_presenter, &LedgerPresenter::failed, this, [this](const QString& message) { publishError(message); });
     connect(&_presenter, &LedgerPresenter::idle, this, &LedgerQmlBridge::busyChanged);
 }
 
-bool LedgerQmlBridge::busy() const {
-    return _presenter.busy();
-}
+bool LedgerQmlBridge::busy() const { return _presenter.busy(); }
 
 void LedgerQmlBridge::publishLedger(const GetLedgerResult& result) {
     QVariantList accounts;
@@ -130,13 +125,12 @@ void LedgerQmlBridge::refresh() {
 }
 
 void LedgerQmlBridge::openAccount(const QString& name, const QString& kind, const QString& currency) {
-    _presenter.openAccount(_ledgerId, name, kindFromText(kind),
-                           codeToCurrency(currency.toStdString()));
+    _presenter.openAccount(_ledgerId, name, kindFromText(kind), codeToCurrency(currency.toStdString()));
     emit busyChanged();
 }
 
-void LedgerQmlBridge::storeTransaction(const QString& fromAccountId, const QString& toAccountId,
-                                       qlonglong amountMinor, const QString& description) {
+void LedgerQmlBridge::storeTransaction(const QString& fromAccountId, const QString& toAccountId, qlonglong amountMinor,
+                                       const QString& description) {
     using morph::math::DecimalPlaces;
     using morph::math::Denominator;
     using morph::math::Numerator;
@@ -155,10 +149,9 @@ void LedgerQmlBridge::storeTransaction(const QString& fromAccountId, const QStri
     // One key per gesture, minted here and passed down -- see this class's
     // own doc comment for why the presenter never mints one.
     const ImportOpId opId{QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString()};
-    _presenter.storeTransaction(_ledgerId, description, morph::time::Timestamp::now(),
-                                {TransactionLeg{.accountId = from, .amount = debit},
-                                 TransactionLeg{.accountId = to, .amount = credit}},
-                                opId);
+    _presenter.storeTransaction(
+        _ledgerId, description, morph::time::Timestamp::now(),
+        {TransactionLeg{.accountId = from, .amount = debit}, TransactionLeg{.accountId = to, .amount = credit}}, opId);
     emit busyChanged();
 }
 

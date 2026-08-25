@@ -4,7 +4,6 @@
 
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlTransaction.hpp>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -119,10 +118,8 @@ dto::LoanList LoanModel::execute(const dto::ListLoans& action) {
         throw Unauthorized{"no session principal"};
     }
     const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::LoanRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::LoanRecord::user>, "=", userId)
-                    .All();
+    auto rows =
+        mapper().Query<db::LoanRecord>().Where(Lightweight::FieldNameOf<&db::LoanRecord::user>, "=", userId).All();
     dto::LoanList out;
     out.loans.reserve(rows.size());
     for (const auto& rec : rows) {

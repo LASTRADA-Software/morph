@@ -52,11 +52,10 @@
 #include <QString>
 #include <QUrl>
 #include <QVariant>
+#include <memory>
 
 #include "gui/app_context.hpp"
 #include "paste_qml_bridges.hpp"
-
-#include <memory>
 
 int main(int argc, char** argv) {
     QGuiApplication qtApp{argc, argv};
@@ -65,8 +64,8 @@ int main(int argc, char** argv) {
     // QtWebSocketBackend with asyncRegistrationEnabled=true, which is what
     // makes registration WASM-safe at all (the synchronous path nests a
     // QEventLoop and aborts the page — examples/TESTING.md, "WASM reality").
-    ::morph::ladder::gui::AppContext ctx{::morph::ladder::gui::Remote{
-        .url = QUrl{QString::fromUtf8(MORPH_LADDER_PASTEBIN_WASM_SERVER_URL)}}};
+    ::morph::ladder::gui::AppContext ctx{
+        ::morph::ladder::gui::Remote{.url = QUrl{QString::fromUtf8(MORPH_LADDER_PASTEBIN_WASM_SERVER_URL)}}};
 
     QQmlApplicationEngine engine;
     std::unique_ptr<pastebin::gui::FormsBridge> formsBridge;

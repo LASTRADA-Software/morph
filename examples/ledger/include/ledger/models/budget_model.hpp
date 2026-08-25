@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "ledger/dto/budget_dto.hpp"
-
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
-
-#include <memory>
 #include <optional>
 #include <string>
+
+#include "ledger/dto/budget_dto.hpp"
 
 namespace ledger {
 
@@ -18,7 +17,7 @@ namespace ledger {
 ///        spec §3). Plain default-constructible, per LedgerModel's own
 ///        corrected shape (Task 7) -- every action carries its own key.
 class BudgetModel {
-  public:
+public:
     CategoryId execute(const CreateCategory& action);
     AccountId execute(const LinkAccountToCategory& action);
     BudgetId execute(const CreateBudget& action);
@@ -39,7 +38,7 @@ class BudgetModel {
     ///        instance produces (this rung's ledger id, as a string).
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
-  private:
+private:
     /// @brief Records @p action/@p result as a LogEntry if a log is
     ///        attached; no-op otherwise.
     /// @tparam Action Concrete action type.
@@ -103,9 +102,7 @@ template <>
 struct morph::model::ActionKeyTraits<ledger::CreateBudget> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
-    static std::string key(const ledger::CreateBudget& action) {
-        return morph::model::keyToString(*action.ledgerId);
-    }
+    static std::string key(const ledger::CreateBudget& action) { return morph::model::keyToString(*action.ledgerId); }
 };
 template <>
 struct morph::model::ActionKeyTraits<ledger::SetBudgetLimit> {

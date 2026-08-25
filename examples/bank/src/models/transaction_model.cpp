@@ -4,7 +4,6 @@
 
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlTransaction.hpp>
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -75,10 +74,8 @@ dto::TransferResult TransactionModel::execute(const dto::Transfer& action) {
     }
 
     Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    db::applyDebit(dm, source, action.amountMinor, TxnKind::TransferOut, action.toAccountId,
-                   action.description);
-    db::applyCredit(dm, dest, action.amountMinor, TxnKind::TransferIn, action.fromAccountId,
-                    action.description);
+    db::applyDebit(dm, source, action.amountMinor, TxnKind::TransferOut, action.toAccountId, action.description);
+    db::applyCredit(dm, dest, action.amountMinor, TxnKind::TransferIn, action.fromAccountId, action.description);
     tx.Commit();
 
     return dto::TransferResult{.fromBalanceMinor = source.balanceMinor.Value(),
@@ -99,8 +96,7 @@ dto::HistoryPage TransactionModel::execute(const dto::History& action) {
     auto rows = mapper()
                     .Query<db::TxnRecord>()
                     .Where(Lightweight::FieldNameOf<&db::TxnRecord::account>, "=", action.accountId)
-                    .OrderBy(Lightweight::FieldNameOf<&db::TxnRecord::id>,
-                             Lightweight::SqlResultOrdering::DESCENDING)
+                    .OrderBy(Lightweight::FieldNameOf<&db::TxnRecord::id>, Lightweight::SqlResultOrdering::DESCENDING)
                     .Range(offset, limit);
 
     page.entries.reserve(rows.size());

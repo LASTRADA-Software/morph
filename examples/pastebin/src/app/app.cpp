@@ -5,16 +5,14 @@
 // examples/common/CMakeLists.txt's target_include_directories), so the
 // ladder clock is "clock.hpp" -- the same spelling paste_model.cpp and
 // testkit/test_clock.cpp use.
+#include <Lightweight/SqlStatement.hpp>
+#include <cstdint>
+#include <morph/core/logger.hpp>
+#include <vector>
+
 #include "clock.hpp"
 #include "pastebin/dto/paste_dto.hpp"
 #include "pastebin/models/paste_model.hpp"
-
-#include <morph/core/logger.hpp>
-
-#include <Lightweight/SqlStatement.hpp>
-
-#include <cstdint>
-#include <vector>
 
 namespace pastebin::app {
 

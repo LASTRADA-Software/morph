@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "ledger/core/types.hpp"
-#include "ledger/core/units.hpp"
-
 #include <morph/forms/forms.hpp>
 #include <morph/util/rational.hpp>
-
 #include <string>
 #include <vector>
+
+#include "ledger/core/types.hpp"
+#include "ledger/core/units.hpp"
 
 namespace ledger {
 
@@ -33,7 +32,7 @@ struct AccountInfo {
     AccountKind kind;
     Currency currency;
     morph::math::Rational balance;  // plain Rational -- real currency is the sibling `currency` field above,
-                                     // never a Quantity's compile-time unit parameter (design spec §2)
+                                    // never a Quantity's compile-time unit parameter (design spec §2)
 };
 
 struct GetLedgerResult {

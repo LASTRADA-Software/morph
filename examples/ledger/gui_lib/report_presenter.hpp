@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "gui/presenter.hpp"
-#include "ledger/dto/report_dto.hpp"
-
 #include <QObject>
 #include <QString>
-
 #include <exception>
 #include <memory>
 
-#ifndef Q_MOC_RUN
-#include "ledger/models/ledger_model.hpp"
-#include "report_job_poller.hpp"
+#include "gui/presenter.hpp"
+#include "ledger/dto/report_dto.hpp"
 
+#ifndef Q_MOC_RUN
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "ledger/models/ledger_model.hpp"
+#include "report_job_poller.hpp"
 #endif
 
 /// @file
@@ -31,12 +30,11 @@ namespace ledger::gui {
 /// for one without blocking. This class owns that waiting.
 class ReportPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
-    ReportPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                    QObject* parent = nullptr);
+    ReportPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent = nullptr);
 
     /// @brief Submits a monthly statement and begins polling it. Emits
     ///        `submitted` with the job id, then exactly one of
@@ -48,7 +46,7 @@ class ReportPresenter : public ::morph::ladder::gui::Presenter {
     ///        decides which transactions fall inside the month (Task 17).
     void submitMonthlyStatement(LedgerId ledgerId, int year, unsigned month, int timezoneOffsetMinutes);
 
-  signals:
+signals:
     /// @brief The job was accepted; polling has begun.
     /// @param jobId The job's id.
     void submitted(ledger::ReportJobId jobId);
@@ -62,7 +60,7 @@ class ReportPresenter : public ::morph::ladder::gui::Presenter {
     /// @param message The failure text.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Re-emits @p err as `failed` carrying its `what()`.
     /// @param err The exception the completion carried.
     void reportError(const std::exception_ptr& err);

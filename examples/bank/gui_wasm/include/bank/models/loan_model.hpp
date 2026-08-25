@@ -3,8 +3,8 @@
 
 // WASM shadow of include/bank/models/loan_model.hpp (in-memory backend).
 
-#include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
+#include <morph/core/registry.hpp>
 
 #include "bank/dto/loan_dto.hpp"
 

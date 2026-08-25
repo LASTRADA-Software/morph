@@ -3,8 +3,6 @@
 // In-memory implementation of AuthModel for the WASM build. Mirrors
 // src/models/auth_model.cpp but persists to bank::wasm::Db.
 
-#include "bank/models/auth_model.hpp"
-
 #include <optional>
 #include <string>
 #include <string_view>
@@ -12,6 +10,7 @@
 #include "bank/core/demo_hash.hpp"
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
+#include "bank/models/auth_model.hpp"
 #include "bank/wasm/store.hpp"
 #include "bank/wasm/store_ops.hpp"
 
@@ -47,10 +46,8 @@ dto::AuthResult AuthModel::execute(const dto::RegisterUser& action) {
     rec.displayName = action.displayName.empty() ? action.username : action.displayName;
     rec.status = 0;
     db.users.insert(rec);
-    return dto::AuthResult{.ok = true,
-                           .principal = action.username,
-                           .displayName = rec.displayName,
-                           .message = "registered"};
+    return dto::AuthResult{
+        .ok = true, .principal = action.username, .displayName = rec.displayName, .message = "registered"};
 }
 
 dto::AuthResult AuthModel::execute(const dto::LoginRequest& action) {
@@ -65,10 +62,8 @@ dto::AuthResult AuthModel::execute(const dto::LoginRequest& action) {
     if (user->passwordHash != hashPassword(action.username, action.password)) {
         return dto::AuthResult{.ok = false, .message = "invalid credentials"};
     }
-    return dto::AuthResult{.ok = true,
-                           .principal = action.username,
-                           .displayName = user->displayName,
-                           .message = "welcome"};
+    return dto::AuthResult{
+        .ok = true, .principal = action.username, .displayName = user->displayName, .message = "welcome"};
 }
 
 dto::CommandResult AuthModel::execute(const dto::ChangePassword& action) {

@@ -171,14 +171,14 @@ struct EquationRenderer {
         if (isConversionNode(*node)) {
             return Rendered{formatOptional(node->current.result), 100};
         }
-        Rendered const left = node->left ? renderSymbolic(node->left.get(), false)
-                                         : Rendered{formatOptional(node->current.lhs), 100};
+        Rendered const left =
+            node->left ? renderSymbolic(node->left.get(), false) : Rendered{formatOptional(node->current.lhs), 100};
         bool const hasRight = node->right || node->current.rhs.has_value();
         if (!hasRight) {
             return combineUnary(left);
         }
-        Rendered const right = node->right ? renderSymbolic(node->right.get(), false)
-                                           : Rendered{formatOptional(node->current.rhs), 100};
+        Rendered const right =
+            node->right ? renderSymbolic(node->right.get(), false) : Rendered{formatOptional(node->current.rhs), 100};
         return combine(node->current.operation, left, right);
     }
 
@@ -196,8 +196,8 @@ struct EquationRenderer {
         if (isConversionNode(*node)) {
             return Rendered{formatOptional(node->current.result), 100};
         }
-        Rendered const left = node->left ? renderSubstituted(node->left.get(), false)
-                                         : Rendered{formatOptional(node->current.lhs), 100};
+        Rendered const left =
+            node->left ? renderSubstituted(node->left.get(), false) : Rendered{formatOptional(node->current.lhs), 100};
         bool const hasRight = node->right || node->current.rhs.has_value();
         if (!hasRight) {
             return combineUnary(left);

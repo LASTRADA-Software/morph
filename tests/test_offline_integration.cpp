@@ -14,16 +14,16 @@
 //   6. All queue items were replayed and removed.
 //   7. Execute on the handler still works, confirming the new backend is live.
 
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/offline/network_monitor.hpp>
-#include <morph/offline/offline_queue.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/offline/sync_worker.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/offline/network_monitor.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/offline/sync_worker.hpp>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -83,21 +83,22 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     std::mutex replayMtx;
 
     morph::offline::SyncWorker syncWorker{queue, [&](const std::string& payload) {
-                              std::scoped_lock lock{replayMtx};
-                              replayed.push_back(payload);
-                              return true;
-                          }};
+                                              std::scoped_lock lock{replayMtx};
+                                              replayed.push_back(payload);
+                                              return true;
+                                          }};
 
     // Monitor: failureThreshold=1, onlineThreshold=1, probeInterval=30ms.
     // With networkOnline=false the monitor goes offline after ~30ms.
     // When networkOnline becomes true the monitor recovers after a further ~30ms.
-    morph::offline::NetworkMonitor monitor{[&] { return networkOnline.load(); }, [] {},  // onOffline — not exercised here
-                           [&] {
-                               // onOnline fires on the probe thread — replay then switch backend.
-                               syncWorker.run();
-                               bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
-                           },
-                           morph::offline::NetworkMonitor::Config{.probeInterval = 30ms, .failureThreshold = 1, .onlineThreshold = 1}};
+    morph::offline::NetworkMonitor monitor{
+        [&] { return networkOnline.load(); }, [] {},  // onOffline — not exercised here
+        [&] {
+            // onOnline fires on the probe thread — replay then switch backend.
+            syncWorker.run();
+            bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
+        },
+        morph::offline::NetworkMonitor::Config{.probeInterval = 30ms, .failureThreshold = 1, .onlineThreshold = 1}};
 
     // Wait for monitor to detect offline (one probe interval + margin).
     std::this_thread::sleep_for(80ms);

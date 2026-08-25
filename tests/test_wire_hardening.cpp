@@ -320,8 +320,7 @@ TEST_CASE("wire::detail::peekCallId cannot be spoofed from an earlier string fie
     CHECK(morph::wire::detail::peekCallId(encode(env)) == 5U);
 }
 
-TEST_CASE("wire::detail::peekCallId skips whitespace between the colon and the digits",
-          "[wire][hardening]") {
+TEST_CASE("wire::detail::peekCallId skips whitespace between the colon and the digits", "[wire][hardening]") {
     // encode() never emits whitespace after the colon, so every case above
     // only ever falls straight through the skip-loop's condition without
     // taking its body. Hand-built JSON (mirroring a hand-crafted or
@@ -332,8 +331,7 @@ TEST_CASE("wire::detail::peekCallId skips whitespace between the colon and the d
     CHECK(morph::wire::detail::peekCallId("{\"callId\": \t 123}") == 123U);
 }
 
-TEST_CASE("wire::detail::peekCallId degrades to 0 when only whitespace fills the scan window",
-          "[wire][hardening]") {
+TEST_CASE("wire::detail::peekCallId degrades to 0 when only whitespace fills the scan window", "[wire][hardening]") {
     // The skip-loop's own bound (`idx < window.size()`) must stop the scan
     // when nothing but whitespace follows the colon within the window,
     // rather than reading past it looking for a digit that never comes.
@@ -341,8 +339,7 @@ TEST_CASE("wire::detail::peekCallId degrades to 0 when only whitespace fills the
     CHECK(morph::wire::detail::peekCallId(json, /*maxScanBytes=*/json.size()) == 0U);
 }
 
-TEST_CASE("wire::detail::peekCallId reads a digit run that ends exactly at the scan window",
-          "[wire][hardening]") {
+TEST_CASE("wire::detail::peekCallId reads a digit run that ends exactly at the scan window", "[wire][hardening]") {
     // Every other case terminates the digit loop by hitting a non-digit
     // character (`}`, `"`, end of a short literal). Here the digits run all
     // the way to the last byte the function is willing to look at, so the
@@ -395,8 +392,7 @@ TEST_CASE("ActionTraits::toJson escapes control bytes so the action body re-deco
     CHECK(morph::model::ActionTraits<WireCtlAction>::fromJson(json).text == payload);
 }
 
-TEST_CASE("ActionTraits::resultToJson escapes control bytes so the result body re-decodes",
-          "[wire][hardening]") {
+TEST_CASE("ActionTraits::resultToJson escapes control bytes so the result body re-decodes", "[wire][hardening]") {
     const std::string payload = ctl();
     const auto json = morph::model::ActionTraits<WireCtlAction>::resultToJson(WireCtlResult{.text = payload});
     CHECK(morph::model::ActionTraits<WireCtlAction>::resultFromJson(json).text == payload);

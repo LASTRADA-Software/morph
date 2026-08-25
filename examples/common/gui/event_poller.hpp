@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/logger.hpp>
-
 #include <QObject>
 #include <QString>
 #include <QTimer>
-
 #include <chrono>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/logger.hpp>
 #include <utility>
 #include <vector>
 
@@ -210,7 +208,7 @@ namespace detail {
 ///         `Dispatch` closure's job (it reports back the new value).
 template <typename EventT, typename EventIdT>
 class EventPoller {
-  public:
+public:
     /// @brief Applies one event, in the order `Dispatch` returned it.
     ///
     /// @warning Must not destroy the `EventPoller` it belongs to. It is
@@ -323,8 +321,7 @@ class EventPoller {
         _requestInFlight = true;
         _dispatch(
             _lastEventId,
-            [this, alive = std::weak_ptr<const void>{_liveness}](std::vector<EventT> events,
-                                                                 EventIdT newLastEventId) {
+            [this, alive = std::weak_ptr<const void>{_liveness}](std::vector<EventT> events, EventIdT newLastEventId) {
                 // Liveness check first, before touching any member: this
                 // callback outlives `this` whenever the poller is destroyed
                 // with a tick in flight. See `_liveness`'s declaration.
@@ -446,7 +443,7 @@ class EventPoller {
     ///         outright.
     [[nodiscard]] const EventIdT& lastEventId() const noexcept { return _lastEventId; }
 
-  private:
+private:
     /// @brief Routes one tick's failure: retry (log, stay armed) for
     ///        `ClientTimeoutError`, stop-and-report-once for anything else.
     /// @param err The exception a `Dispatch` call's `onError` reported.
@@ -474,7 +471,7 @@ class EventPoller {
         _timer.stop();
         const QString message = detail::describeFailure(err);
         ::morph::log::logError("EventPoller: dispatch failed non-recoverably, polling stopped: " +
-                                message.toStdString());
+                               message.toStdString());
         if (_onFatalError) {
             // Deliberately the last statement of this function, and it must
             // stay that way: `onFatalError` destroying the `EventPoller` is a

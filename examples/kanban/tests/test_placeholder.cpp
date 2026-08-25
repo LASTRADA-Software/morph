@@ -3,8 +3,6 @@
 
 namespace kanban::tests {
 
-TEST_CASE("Placeholder test for Task 1 scaffolding", "[kanban][placeholder]") {
-    CHECK(true);
-}
+TEST_CASE("Placeholder test for Task 1 scaffolding", "[kanban][placeholder]") { CHECK(true); }
 
 }  // namespace kanban::tests

@@ -16,19 +16,17 @@
 // presenter rule 6) is deliberately not attempted here: it needs Task 12's
 // Main.qml to exist first, per the plan.
 
+#include <Lightweight/SqlStatement.hpp>
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <string>
+#include <vector>
 
 #include "paste_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <Lightweight/SqlStatement.hpp>
-
-#include <algorithm>
-#include <string>
-#include <vector>
 
 namespace {
 
@@ -46,8 +44,7 @@ using morph::ladder::testkit::pumpUntil;
 
 }  // namespace
 
-TEST_CASE("PastePresenter::create then get round-trips a paste, all three backend modes",
-          "[pastebin][presenter]") {
+TEST_CASE("PastePresenter::create then get round-trips a paste, all three backend modes", "[pastebin][presenter]") {
     auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     DbFixture fixture;
     BackendRig rig{mode, 1};
@@ -55,11 +52,10 @@ TEST_CASE("PastePresenter::create then get round-trips a paste, all three backen
 
     pastebin::PasteId createdId;
     bool created = false;
-    QObject::connect(&presenter, &pastebin::gui::PastePresenter::created,
-                      [&](pastebin::CreatePasteResult result) {
-                          createdId = result.id;
-                          created = true;
-                      });
+    QObject::connect(&presenter, &pastebin::gui::PastePresenter::created, [&](pastebin::CreatePasteResult result) {
+        createdId = result.id;
+        created = true;
+    });
     presenter.create(makeCreate("presenter round-trip"));
     REQUIRE(pumpUntil([&] { return created; }));
     REQUIRE_FALSE(presenter.busy());
@@ -88,11 +84,10 @@ TEST_CASE("PastePresenter::edit replaces an editable paste's content and syntax,
 
     pastebin::PasteId createdId;
     bool created = false;
-    QObject::connect(&presenter, &pastebin::gui::PastePresenter::created,
-                      [&](pastebin::CreatePasteResult result) {
-                          createdId = result.id;
-                          created = true;
-                      });
+    QObject::connect(&presenter, &pastebin::gui::PastePresenter::created, [&](pastebin::CreatePasteResult result) {
+        createdId = result.id;
+        created = true;
+    });
     auto create = makeCreate("before edit");
     create.editability = pastebin::Editability::Editable;
     presenter.create(create);
@@ -133,11 +128,10 @@ TEST_CASE("PastePresenter::remove deletes a paste, and a follow-up get fails, al
 
     pastebin::PasteId createdId;
     bool created = false;
-    QObject::connect(&presenter, &pastebin::gui::PastePresenter::created,
-                      [&](pastebin::CreatePasteResult result) {
-                          createdId = result.id;
-                          created = true;
-                      });
+    QObject::connect(&presenter, &pastebin::gui::PastePresenter::created, [&](pastebin::CreatePasteResult result) {
+        createdId = result.id;
+        created = true;
+    });
     presenter.create(makeCreate("doomed"));
     REQUIRE(pumpUntil([&] { return created; }));
 
@@ -159,8 +153,7 @@ TEST_CASE("PastePresenter::remove deletes a paste, and a follow-up get fails, al
     REQUIRE_FALSE(presenter.busy());
 }
 
-TEST_CASE("PastePresenter::list returns the pastes just created, all three backend modes",
-          "[pastebin][presenter]") {
+TEST_CASE("PastePresenter::list returns the pastes just created, all three backend modes", "[pastebin][presenter]") {
     auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     DbFixture fixture;
     BackendRig rig{mode, 1};
@@ -168,7 +161,7 @@ TEST_CASE("PastePresenter::list returns the pastes just created, all three backe
 
     std::vector<pastebin::PasteId> createdIds;
     QObject::connect(&presenter, &pastebin::gui::PastePresenter::created,
-                      [&](pastebin::CreatePasteResult result) { createdIds.push_back(result.id); });
+                     [&](pastebin::CreatePasteResult result) { createdIds.push_back(result.id); });
 
     constexpr int kCount = 3;
     for (int i = 0; i < kCount; ++i) {
@@ -195,8 +188,7 @@ TEST_CASE("PastePresenter::list returns the pastes just created, all three backe
     }
 }
 
-TEST_CASE("Every PastePresenter action routes its failure to failed(), not just get()",
-          "[pastebin][presenter]") {
+TEST_CASE("Every PastePresenter action routes its failure to failed(), not just get()", "[pastebin][presenter]") {
     // `get`'s error path has its own case below; this covers the other four.
     // Not a completeness ritual: each action's `reportError` is wired
     // independently at its own `track()` call site (`paste_presenter.cpp`),
@@ -243,7 +235,7 @@ TEST_CASE("Every PastePresenter action routes its failure to failed(), not just 
     // the next test case, so this is contained.
     {
         ::Lightweight::SqlStatement stmt;
-        (void) stmt.ExecuteDirect("DROP TABLE pastes");
+        (void)stmt.ExecuteDirect("DROP TABLE pastes");
     }
     presenter.list(pastebin::ListPastes{});
     REQUIRE(pumpUntil([&] { return failures == 4; }));

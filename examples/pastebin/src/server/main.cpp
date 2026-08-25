@@ -20,26 +20,24 @@
 // ladder clock is "clock.hpp" — the same spelling paste_model.cpp and app.cpp
 // use. Seeding reads the *same* injectable clock the model does, so a seeded
 // expiry and the model's own expiry check can never disagree.
-#include "clock.hpp"
-#include "pastebin/app/app.hpp"
-#include "pastebin/db/database.hpp"
-#include "pastebin/dto/paste_dto.hpp"
-#include "pastebin/models/paste_model.hpp"
-
-#include <morph/qt/qt_websocket_server.hpp>
-#include <morph/util/datetime.hpp>
-
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QTimer>
-
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <morph/qt/qt_websocket_server.hpp>
+#include <morph/util/datetime.hpp>
 #include <string>
+
+#include "clock.hpp"
+#include "pastebin/app/app.hpp"
+#include "pastebin/db/database.hpp"
+#include "pastebin/dto/paste_dto.hpp"
+#include "pastebin/models/paste_model.hpp"
 
 namespace {
 
@@ -63,11 +61,10 @@ extern "C" void onStopSignal(int /*signum*/) { gStopRequested = 1; }
 /// destroying the bridge they complete against. Such a callback is not
 /// delivered at all — `~App` destroys the `QtExecutor` it was queued on, and a
 /// queued task whose executor is gone is dropped — so this is not a
-/// use-after-free; it is a sweep whose result is silently never observed. The header states the contract — "pump on this
-/// until it is `false`, then destroy" — and this is the production consumer
-/// honouring it. Bounded by @p budget so a wedged dispatch cannot hang
-/// shutdown forever; overrunning it is strictly better than the alternative of
-/// not draining at all, and is reported.
+/// use-after-free; it is a sweep whose result is silently never observed. The header states the contract — "pump on
+/// this until it is `false`, then destroy" — and this is the production consumer honouring it. Bounded by @p budget so
+/// a wedged dispatch cannot hang shutdown forever; overrunning it is strictly better than the alternative of not
+/// draining at all, and is reported.
 ///
 /// @param app    The app whose sweep dispatches must settle.
 /// @param budget Maximum time to wait.

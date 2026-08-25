@@ -93,7 +93,8 @@ public:
     template <typename Sharing>
     [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string_view modelId, std::string_view actionId,
                                                                   void* handler, std::string_view bodyJson) const {
-        auto iter = _executors.find(Key{std::string{modelId}, std::string{actionId}, std::type_index{typeid(Sharing)}});
+        auto iter =
+            _executors.find(Key{std::string{modelId}, std::string{actionId}, std::type_index{typeid(Sharing)}});
         if (iter == _executors.end()) {
             throw std::runtime_error("unknown action for executeJson: " + std::string{modelId} + "/" +
                                      std::string{actionId});
@@ -114,8 +115,7 @@ private:
     };
     struct KeyHash {
         std::size_t operator()(const Key& key) const noexcept {
-            std::size_t const modelHash = ::morph::model::detail::PairKeyHash{}(
-                {key.modelId, key.actionId});
+            std::size_t const modelHash = ::morph::model::detail::PairKeyHash{}({key.modelId, key.actionId});
             return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));
         }
     };
@@ -526,10 +526,9 @@ public:
         bool started = false;
         try {
             started = backend->attachModelAsync(
-                binding->typeId, binding->modelFactory, {.contextKey = primaryCopy, .primary = primaryCopy},
-                previous,
-                [this, weakBackend, weakLiveness, weakBinding, primaryCopy,
-                 onDone, handoff](::morph::exec::detail::ModelId newId) {
+                binding->typeId, binding->modelFactory, {.contextKey = primaryCopy, .primary = primaryCopy}, previous,
+                [this, weakBackend, weakLiveness, weakBinding, primaryCopy, onDone,
+                 handoff](::morph::exec::detail::ModelId newId) {
                     if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
                         return;  // Completed inline: the dispatching frame will finish this.
                     }
@@ -678,8 +677,7 @@ public:
         try {
             started = backend->registerModelSharedAsync(
                 binding->typeId, binding->modelFactory, {.contextKey = binding->contextKey, .primary = {}},
-                [this, weakBackend, weakLiveness, weakBinding, onDone,
-                 handoff](::morph::exec::detail::ModelId newId) {
+                [this, weakBackend, weakLiveness, weakBinding, onDone, handoff](::morph::exec::detail::ModelId newId) {
                     if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
                         return;  // Completed inline: the dispatching frame will finish this.
                     }
@@ -909,7 +907,7 @@ public:
     /// @return `Completion<bool>` resolving `true` once bound, `false` if
     ///         nothing is in flight, or an error if registration failed.
     [[nodiscard]] ::morph::async::Completion<bool> whenBound(const std::shared_ptr<detail::HandlerBinding>& binding,
-                                                              ::morph::exec::IExecutor* cbExec) {
+                                                             ::morph::exec::IExecutor* cbExec) {
         auto state = std::make_shared<::morph::async::detail::CompletionState<bool>>();
         ::morph::async::Completion<bool> comp{state, cbExec};
         if (isBound(binding)) {
@@ -931,9 +929,8 @@ public:
             state->setValue(false);
             return comp;
         }
-        binding->registrationWaiters.emplace_back(
-            [state](bool ok) { state->setValue(ok); },
-            [state](std::exception_ptr err) { state->setException(err); });
+        binding->registrationWaiters.emplace_back([state](bool ok) { state->setValue(ok); },
+                                                  [state](std::exception_ptr err) { state->setException(err); });
         return comp;
     }
 
@@ -1588,30 +1585,30 @@ public:
                     typedState->setException(std::current_exception());
                 }
             })
-            .onError([typedState, this, deadlineHandle, schedulerRef,
-                     alive = liveness()](const std::exception_ptr& err) {
-                // Same disarm-first reasoning (and the same schedulerRef-based
-                // safety, not a liveness-then-use race) as the success branch
-                // above: a real error reply settles the completion, so the
-                // deadline must not also fire.
-                if (deadlineHandle && schedulerRef) {
-                    try {
-                        schedulerRef->cancel(*deadlineHandle);
-                    } catch (...) {
-                        // Best-effort: a failed cancel leaves the deadline's own
-                        // entry to fire later and find nothing (setValue/
-                        // setException below are idempotent), which is exactly
-                        // what an uncancelled entry already does.
+            .onError(
+                [typedState, this, deadlineHandle, schedulerRef, alive = liveness()](const std::exception_ptr& err) {
+                    // Same disarm-first reasoning (and the same schedulerRef-based
+                    // safety, not a liveness-then-use race) as the success branch
+                    // above: a real error reply settles the completion, so the
+                    // deadline must not also fire.
+                    if (deadlineHandle && schedulerRef) {
+                        try {
+                            schedulerRef->cancel(*deadlineHandle);
+                        } catch (...) {
+                            // Best-effort: a failed cancel leaves the deadline's own
+                            // entry to fire later and find nothing (setValue/
+                            // setException below are idempotent), which is exactly
+                            // what an uncancelled entry already does.
+                        }
                     }
-                }
-                // The other of the two mutually-exclusive resolution paths --
-                // see the .then continuation above. Same liveness guard: this
-                // touches `this` and must not run once the Bridge might be gone.
-                if (alive.active()) {
-                    this->_pendingCalls.fetch_sub(1, std::memory_order_relaxed);
-                }
-                typedState->setException(err);
-            });
+                    // The other of the two mutually-exclusive resolution paths --
+                    // see the .then continuation above. Same liveness guard: this
+                    // touches `this` and must not run once the Bridge might be gone.
+                    if (alive.active()) {
+                        this->_pendingCalls.fetch_sub(1, std::memory_order_relaxed);
+                    }
+                    typedState->setException(err);
+                });
         return typed;
     }
 
@@ -1709,8 +1706,7 @@ private:
                 }
             },
             [weakBinding, typeId = binding->typeId](const std::string& message) {
-                ::morph::log::logError("[registerHandler] async registration of '" + typeId +
-                                       "' failed: " + message);
+                ::morph::log::logError("[registerHandler] async registration of '" + typeId + "' failed: " + message);
                 if (auto strongBinding = weakBinding.lock()) {
                     resolveRegistrationWaiters(
                         *strongBinding, /*ok=*/false,
@@ -1909,10 +1905,7 @@ public:
     /// @param bridge   The bridge to register on.
     /// @param guiExec  Executor used to deliver `Completion` callbacks (e.g. the GUI thread).
     BridgeHandler(Bridge& bridge, ::morph::exec::IExecutor* guiExec)
-        : _bridge{bridge},
-          _bridgeAlive{bridge.liveness()},
-          _guiExec{guiExec},
-          _binding{makeBinding(bridge)} {
+        : _bridge{bridge}, _bridgeAlive{bridge.liveness()}, _guiExec{guiExec}, _binding{makeBinding(bridge)} {
         static_assert(!kShared || ::morph::model::KeyedModel<Model>,
                       "BridgeHandler<Model, AllowShared> requires Model to declare a PrimaryKey alias");
     }
@@ -1923,10 +1916,7 @@ public:
     /// @param guiExec  Executor for callback delivery.
     /// @param binding  Pre-built binding whose factory captures injected dependencies.
     BridgeHandler(Bridge& bridge, ::morph::exec::IExecutor* guiExec, std::shared_ptr<detail::HandlerBinding> binding)
-        : _bridge{bridge},
-          _bridgeAlive{bridge.liveness()},
-          _guiExec{guiExec},
-          _binding{std::move(binding)} {
+        : _bridge{bridge}, _bridgeAlive{bridge.liveness()}, _guiExec{guiExec}, _binding{std::move(binding)} {
         _bridge.registerHandler(_binding);
     }
 
@@ -2253,7 +2243,6 @@ public:
     void unsubscribe() {
         _bridge.removeSubscription(_binding, std::type_index{typeid(R)});
     }
-
 
     /// @brief Returns the underlying `HandlerBinding`.
     ///

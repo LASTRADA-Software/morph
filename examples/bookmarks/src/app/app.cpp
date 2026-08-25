@@ -13,24 +13,22 @@
 // static library for a binary (a server `main()`) whose own code names
 // nothing but `App`. Without this, such a binary would either fail to link or
 // come up serving no models at all.
-#include "bookmarks/models/auth_model.hpp"
-#include "bookmarks/models/bookmark_model.hpp"
-#include "bookmarks/models/shared_feed_model.hpp"
-#include "bookmarks/models/tag_model.hpp"
-
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlStatement.hpp>
+#include <cstdint>
+#include <exception>
 #include <morph/core/logger.hpp>
 #include <morph/journal/outbox.hpp>
 #include <morph/session/session_auth.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <Lightweight/SqlStatement.hpp>
-
-#include <cstdint>
-#include <exception>
 #include <span>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "bookmarks/models/auth_model.hpp"
+#include "bookmarks/models/bookmark_model.hpp"
+#include "bookmarks/models/shared_feed_model.hpp"
+#include "bookmarks/models/tag_model.hpp"
 
 namespace bookmarks::app {
 
@@ -94,8 +92,7 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
     // under MORPH_REQUIRE_VETTED_HMAC -- which drops the default entirely,
     // by design (see TokenIssuer's own doc comment) -- this call site must
     // still compile with the identical MAC it always used.
-    auth::setTokenIssuer(
-        std::make_shared<::morph::session::TokenIssuer>(tokenSecret, ::morph::session::hmacSha256));
+    auth::setTokenIssuer(std::make_shared<::morph::session::TokenIssuer>(tokenSecret, ::morph::session::hmacSha256));
 
     ::morph::backend::LimitPolicy limits;
     limits.maxLiveModels = kMaxLiveModels;
@@ -151,7 +148,7 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
     _fetchTimer.start(fetchInterval);
     connect(&_relayTimer, &QTimer::timeout, this, [this] {
         try {
-            (void) relayOutboxOnce();
+            (void)relayOutboxOnce();
         } catch (const std::exception& e) {
             ::morph::log::logError(std::string{"[bookmarks::App] outbox-relay pass threw, pass abandoned: "} +
                                    e.what());
@@ -241,9 +238,8 @@ void App::fetchMetadataOnce() {
         inFlight->fetch_add(1);
         try {
             handler
-                ->execute(RecordMetadata{.id = BookmarkId{id},
-                                         .title = metadata.title,
-                                         .faviconPath = metadata.faviconPath})
+                ->execute(
+                    RecordMetadata{.id = BookmarkId{id}, .title = metadata.title, .faviconPath = metadata.faviconPath})
                 .then([handler, inFlight](Ack) { inFlight->fetch_sub(1); })
                 .onError([handler, inFlight, id](const std::exception_ptr&) {
                     inFlight->fetch_sub(1);
@@ -306,7 +302,7 @@ std::size_t App::relayOutboxOnce() {
         for (const auto& row : rows) {
             ::Lightweight::SqlStatement stmt{mapper.Connection()};
             stmt.Prepare("DELETE FROM bookmark_outbox WHERE idempotency_key = ?");
-            (void) stmt.Execute(row.idempotencyKey);
+            (void)stmt.Execute(row.idempotencyKey);
         }
     };
     relay.sink = _actionLog;

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "ledger/core/errors.hpp"
-#include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/rule_model.hpp"
-
-#include "clock.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
+
+#include "clock.hpp"
+#include "ledger/core/errors.hpp"
+#include "ledger/db/ledger_entity.hpp"
 
 namespace ledger {
 
@@ -32,9 +32,9 @@ void RuleModel::logAction(const Action& action, const Result& result, std::strin
         entry.principal = ctx->principal;
     }
     entry.timestampMs = (*morph::ladder::now().value).value.time_since_epoch().count();  // server-stamped audit
-                                                                                            // timestamp -- see
-                                                                                            // LedgerModel::logAction's
-                                                                                            // identical comment
+                                                                                         // timestamp -- see
+                                                                                         // LedgerModel::logAction's
+                                                                                         // identical comment
     entry.causalParentId = std::move(causalParentId);
     _log->append(std::move(entry));
     // See LedgerModel::logAction's identical comment for why this flush is
@@ -52,8 +52,8 @@ RuleId RuleModel::execute(const CreateRule& action) {
     }
     Lightweight::DataMapper mapper;
     auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                           .All();
+                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                          .All();
     if (ledgerRows.empty()) {
         throw NotFound{"CreateRule: no such ledger"};
     }
@@ -80,8 +80,8 @@ RuleInfo RuleModel::execute(const UpdateRule& action) {
     }
     Lightweight::DataMapper mapper;
     auto ruleRows = mapper.Query<db::RuleRecord>()
-                         .Where(::Lightweight::FieldNameOf<&db::RuleRecord::id>, "=", *action.ruleId)
-                         .All();
+                        .Where(::Lightweight::FieldNameOf<&db::RuleRecord::id>, "=", *action.ruleId)
+                        .All();
     if (ruleRows.empty()) {
         throw NotFound{"UpdateRule: no such rule"};
     }
@@ -99,11 +99,11 @@ RuleInfo RuleModel::execute(const UpdateRule& action) {
     ruleRow.version = ruleRow.version.Value() + 1;
     mapper.Update(ruleRow);
     RuleInfo result{.id = action.ruleId,
-                     .trigger = static_cast<RuleTrigger>(ruleRow.trigger.Value()),
-                     .matchText = std::string{ruleRow.matchText.Value().ToStringView()},
-                     .action = static_cast<RuleAction>(ruleRow.action.Value()),
-                     .actionValue = std::string{ruleRow.actionValue.Value().ToStringView()},
-                     .version = ruleRow.version.Value()};
+                    .trigger = static_cast<RuleTrigger>(ruleRow.trigger.Value()),
+                    .matchText = std::string{ruleRow.matchText.Value().ToStringView()},
+                    .action = static_cast<RuleAction>(ruleRow.action.Value()),
+                    .actionValue = std::string{ruleRow.actionValue.Value().ToStringView()},
+                    .version = ruleRow.version.Value()};
     logAction(action, result);
     return result;
 }

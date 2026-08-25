@@ -5,10 +5,9 @@
 #include <concepts>
 #include <cstdint>
 #include <functional>
-#include <morph/util/rational.hpp>
-
 #include <glaze/glaze.hpp>
 #include <memory>
+#include <morph/util/rational.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -503,9 +502,9 @@ public:
     void registerModel(std::string_view modelId, Factory factory) {
         _factories.insert_or_assign(std::string{modelId}, [factory = std::move(factory)]() mutable {
             std::unique_ptr<IModelHolder> holder{factory()};
-            assert(!holder
-                   || (holder->type() == std::type_index(typeid(Model))
-                       && "registerModel<Model>(modelId, factory): factory returned a holder for a different type"));
+            assert(!holder ||
+                   (holder->type() == std::type_index(typeid(Model)) &&
+                    "registerModel<Model>(modelId, factory): factory returned a holder for a different type"));
             return holder;
         });
     }
@@ -617,6 +616,11 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 #define MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
 #define MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)
 #else
+// clang-format off
+// Hand-aligned: clang-format pulls the short registerModelOnce() call up onto the
+// BRIDGE_DETAIL_CAT line and then breaks *inside* the token-paste invocation, which
+// also splits the pair apart visually -- MORPH_DETAIL_REGISTER_ACTION_LOCAL has a
+// longer right-hand side and so survives untouched. Keep the two parallel by hand.
 #define MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)                                                       \
     namespace {                                                                                          \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_model_reg_, __COUNTER__) =                      \
@@ -627,6 +631,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __COUNTER__) =                     \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
     }
+// clang-format on
 #endif
 
 /// @brief Registers model type @p M with the string id @p NAME.
@@ -638,12 +643,19 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 ///
 /// @param M    Concrete model type.
 /// @param NAME String literal used as the type-id.
-#define BRIDGE_REGISTER_MODEL(M, NAME)                        \
-    template <>                                                \
-    struct morph::model::ModelTraits<M> {                      \
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
+#define BRIDGE_REGISTER_MODEL(M, NAME)                                       \
+    template <>                                                              \
+    struct morph::model::ModelTraits<M> {                                    \
         static constexpr std::string_view typeId() noexcept { return NAME; } \
-    };                                                          \
+    };                                                                       \
     MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
+// clang-format on
 
 /// @brief Registers action type @p A (for model @p M) with the string id @p NAME.
 ///
@@ -672,9 +684,16 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param NAME String literal used as the action type-id.
 /// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
 // NOLINTBEGIN(cppcoreguidelines-macro-usage) — registration macros are the intended public API
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_REGISTER_ACTION(...)                                                              \
     BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3) \
     (__VA_ARGS__)
+// clang-format on
 
 /// @brief Registers action type @p A (for model @p M) the same way
 ///        `BRIDGE_REGISTER_ACTION` does, but names the action's result type
@@ -725,17 +744,37 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param RESULT The action's result type, named explicitly.
 /// @param NAME   String literal used as the action type-id.
 /// @param ...    Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
-#define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                                                     \
-    BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5,                       \
-                                            BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)                                   \
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
+#define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                               \
+    BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5, \
+                                           BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)              \
     (__VA_ARGS__)
+// clang-format on
 
 /// @cond detail
 #define BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(_1, _2, _3, _4, _5, NAME, ...) NAME
 
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_REGISTER_ACTION_FOR_CLIENT_4(M, A, RESULT, NAME) \
     BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, ::morph::model::Loggable::Yes)
+// clang-format on
 
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, LOGGABLE)                                      \
     template <>                                                                                                \
     struct morph::model::ActionTraits<A> {                                                                     \
@@ -763,21 +802,21 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
             /* guaranteed trailing '\0' (e.g. an execute envelope's `body`) — see    */                        \
             /* the identical fix + rationale on morph::wire::decode (wire.hpp).      */                        \
             static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
-            /* The codec boundary for an action payload: morph::wire carries `body` as                \
-               an opaque string and never parses it, so this is the first and only                    \
-               place a Rational inside it is decoded. A Rational decode cannot fail --                \
-               it clamps what it cannot represent -- so {"num":5,"den":0,"dp":2} would                \
-               otherwise arrive as a plausible 5/1 that no model-level validate() could               \
-               recognise as altered. Deciding that a silently-altered payload is a                    \
-               protocol violation belongs here, where we know the bytes came off a wire. */           \
-            ::morph::math::WireClampScope clampedRationals;                                           \
+            /* The codec boundary for an action payload: morph::wire carries `body` as                         \
+               an opaque string and never parses it, so this is the first and only                             \
+               place a Rational inside it is decoded. A Rational decode cannot fail --                         \
+               it clamps what it cannot represent -- so {"num":5,"den":0,"dp":2} would                         \
+               otherwise arrive as a plausible 5/1 that no model-level validate() could                        \
+               recognise as altered. Deciding that a silently-altered payload is a                             \
+               protocol violation belongs here, where we know the bytes came off a wire. */                    \
+            ::morph::math::WireClampScope clampedRationals;                                                    \
             if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                     \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
             }                                                                                                  \
-            if (clampedRationals.clamped() != 0) {                                                    \
-                throw morph::model::detail::ParseError{                                               \
-                    "action body contains a Rational that cannot be represented exactly"};            \
-            }                                                                                         \
+            if (clampedRationals.clamped() != 0) {                                                             \
+                throw morph::model::detail::ParseError{                                                        \
+                    "action body contains a Rational that cannot be represented exactly"};                     \
+            }                                                                                                  \
             return action;                                                                                     \
         }                                                                                                      \
         static std::string resultToJson(const Result& result) {                                                \
@@ -805,6 +844,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                      \
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
     }
+// clang-format on
 /// @endcond
 
 /// @cond detail
@@ -812,6 +852,12 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 
 #define BRIDGE_REGISTER_ACTION_3(M, A, NAME) BRIDGE_REGISTER_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)
 
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE)                                                         \
     template <>                                                                                                \
     struct morph::model::ActionTraits<A> {                                                                     \
@@ -839,21 +885,21 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
             /* guaranteed trailing '\0' (e.g. an execute envelope's `body`) — see    */                        \
             /* the identical fix + rationale on morph::wire::decode (wire.hpp).      */                        \
             static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
-            /* The codec boundary for an action payload: morph::wire carries `body` as                \
-               an opaque string and never parses it, so this is the first and only                    \
-               place a Rational inside it is decoded. A Rational decode cannot fail --                \
-               it clamps what it cannot represent -- so {"num":5,"den":0,"dp":2} would                \
-               otherwise arrive as a plausible 5/1 that no model-level validate() could               \
-               recognise as altered. Deciding that a silently-altered payload is a                    \
-               protocol violation belongs here, where we know the bytes came off a wire. */           \
-            ::morph::math::WireClampScope clampedRationals;                                           \
+            /* The codec boundary for an action payload: morph::wire carries `body` as                         \
+               an opaque string and never parses it, so this is the first and only                             \
+               place a Rational inside it is decoded. A Rational decode cannot fail --                         \
+               it clamps what it cannot represent -- so {"num":5,"den":0,"dp":2} would                         \
+               otherwise arrive as a plausible 5/1 that no model-level validate() could                        \
+               recognise as altered. Deciding that a silently-altered payload is a                             \
+               protocol violation belongs here, where we know the bytes came off a wire. */                    \
+            ::morph::math::WireClampScope clampedRationals;                                                    \
             if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                     \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
             }                                                                                                  \
-            if (clampedRationals.clamped() != 0) {                                                    \
-                throw morph::model::detail::ParseError{                                               \
-                    "action body contains a Rational that cannot be represented exactly"};            \
-            }                                                                                         \
+            if (clampedRationals.clamped() != 0) {                                                             \
+                throw morph::model::detail::ParseError{                                                        \
+                    "action body contains a Rational that cannot be represented exactly"};                     \
+            }                                                                                                  \
             return action;                                                                                     \
         }                                                                                                      \
         static std::string resultToJson(const Result& result) {                                                \
@@ -881,6 +927,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                      \
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
     }
+// clang-format on
 /// @endcond
 
 /// @brief Registers a readiness predicate for action @p A.
@@ -890,10 +937,17 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 ///
 /// @param A  Concrete action type.
 /// @param FN Callable `bool(const A&)`.
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_REGISTER_VALIDATOR(A, FN)                            \
     template <>                                                     \
     struct morph::model::ActionValidator<A> {                       \
         static bool ready(const A& action) { return (FN)(action); } \
     };
+// clang-format on
 // NOLINTEND(cppcoreguidelines-macro-usage)
 // NOLINTEND(bugprone-macro-parentheses)

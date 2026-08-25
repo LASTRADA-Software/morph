@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/core/wire.hpp>
-
 #include <QObject>
 #include <QString>
 #include <QUrl>
 #include <QWebSocket>
 #include <QWebSocketServer>
-
 #include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <morph/core/wire.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -63,9 +61,7 @@ inline void throwIfFaultProxyListenFailed(bool listenSucceeded) {
 /// race a `QWebSocketServer` into returning a spent connection.
 /// @param incoming The result of `_listener->nextPendingConnection()`.
 /// @return `true` if @p incoming is non-null.
-[[nodiscard]] inline bool isValidIncomingConnection(QWebSocket* incoming) noexcept {
-    return incoming != nullptr;
-}
+[[nodiscard]] inline bool isValidIncomingConnection(QWebSocket* incoming) noexcept { return incoming != nullptr; }
 
 /// @brief Decodes a wire frame's `callId`, or `0` if it doesn't decode.
 ///
@@ -116,7 +112,7 @@ inline void throwIfFaultProxyListenFailed(bool listenSucceeded) {
 class FaultProxy : public QObject {
     Q_OBJECT
 
-  public:
+public:
     /// @brief Constructs a proxy that will relay to @p upstreamUrl.
     /// @param upstreamUrl The real `QtWebSocketServer`'s URL (e.g.
     ///        `ws://127.0.0.1:<wsServer.port()>`).
@@ -199,7 +195,7 @@ class FaultProxy : public QObject {
     ///        clear.
     void setRequestObserver(std::function<void(std::uint64_t callId, FaultProxy& self)> observer);
 
-  private slots:
+private slots:
     /// @brief Accepts the pending client connection and opens the upstream leg.
     void onClientConnection();
 
@@ -214,7 +210,7 @@ class FaultProxy : public QObject {
     /// @param message The raw frame text.
     void onUpstreamTextMessage(const QString& message);
 
-  private:
+private:
     /// @brief The scripted faults armed for one `callId`.
     struct Rule {
         /// @brief Never forward the reply.

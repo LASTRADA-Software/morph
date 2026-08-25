@@ -15,15 +15,15 @@
 // prove that throw actually fires, with the process's exit code as the
 // observable result try_run() checks.
 
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/registry.hpp>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>

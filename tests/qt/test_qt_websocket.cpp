@@ -27,11 +27,11 @@
 #include <morph/qt/qt_tls.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
-#include <mutex>
 #include <vector>
 
 // ── Shared QCoreApplication ──────────────────────────────────────────────────
@@ -589,7 +589,8 @@ TEST_CASE(
     REQUIRE(backend.waitForConnected());
 
     // First instance to be deregistered fire-and-forget.
-    auto firstId = backend.registerModel("WsEchoModel", [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); });
+    auto firstId =
+        backend.registerModel("WsEchoModel", [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); });
     REQUIRE(firstId.v != 0U);
 
     constexpr int iterations = 40;
@@ -598,8 +599,8 @@ TEST_CASE(
         // Immediately issue a synchronous register on the same connection --
         // the exact adjacency the issue describes. Its reply must be the
         // real "ok" with a fresh modelId, never the deregister's stray ack.
-        auto newId =
-            backend.registerModel("WsEchoModel", [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); });
+        auto newId = backend.registerModel("WsEchoModel",
+                                           [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); });
         REQUIRE(newId.v != 0U);
         firstId = newId;
     }
@@ -765,9 +766,8 @@ TEST_CASE("morph::qt::QtWebSocketBackend connecting to closed port fails to conn
     REQUIRE_FALSE(backendPtr->waitForConnected(200));
 }
 
-TEST_CASE(
-    "morph::qt::QtWebSocketBackend: setConnectHandler fires on the first connect (unlike setReconnectHandler)",
-    "[qt][ws][issue29]") {
+TEST_CASE("morph::qt::QtWebSocketBackend: setConnectHandler fires on the first connect (unlike setReconnectHandler)",
+          "[qt][ws][issue29]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -789,7 +789,7 @@ TEST_CASE(
 }
 
 TEST_CASE("morph::qt::QtWebSocketBackend: setDisconnectHandler fires when the socket drops, before reconnect",
-         "[qt][ws][issue29]") {
+          "[qt][ws][issue29]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -818,9 +818,8 @@ TEST_CASE("morph::qt::QtWebSocketBackend: setDisconnectHandler fires when the so
     CHECK(disconnected.load());
 }
 
-TEST_CASE(
-    "morph::qt::QtWebSocketBackend: setDisconnectHandler fires strictly before any reconnect activity",
-    "[qt][ws][issue29]") {
+TEST_CASE("morph::qt::QtWebSocketBackend: setDisconnectHandler fires strictly before any reconnect activity",
+          "[qt][ws][issue29]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -1371,7 +1370,7 @@ TEST_CASE("morph::qt::QtWebSocketServer: maxConnections rejects connections beyo
 }
 
 TEST_CASE("morph::qt::QtWebSocketServer: maxConnections refusal is logged at warn, naming the cap",
-         "[qt][ws][limits][issue30]") {
+          "[qt][ws][limits][issue30]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -1413,7 +1412,7 @@ TEST_CASE("morph::qt::QtWebSocketServer: maxConnections refusal is logged at war
 }
 
 TEST_CASE("morph::qt::QtWebSocketServer: connect/disconnect are logged at info, with the live count",
-         "[qt][ws][issue30]") {
+          "[qt][ws][issue30]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);

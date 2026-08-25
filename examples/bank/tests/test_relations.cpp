@@ -11,12 +11,10 @@
 // use); the relations are then read back directly through a DataMapper so the
 // assertions are about what actually persisted.
 
-#include <catch2/catch_test_macros.hpp>
-
 #include <Lightweight/Lightweight.hpp>
-#include <morph/core/bridge.hpp>
-
+#include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/core/bridge.hpp>
 #include <string>
 
 #include "bank/app/app.hpp"
@@ -28,8 +26,8 @@
 #include "bank/dto/payee_dto.hpp"
 #include "bank/dto/payment_dto.hpp"
 #include "bank/dto/transaction_dto.hpp"
-#include "bank/models/customer_model.hpp"
 #include "bank/models/card_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/payee_model.hpp"
 #include "bank/models/payment_model.hpp"
 #include "bank/models/transaction_model.hpp"
@@ -41,8 +39,7 @@ namespace {
 
 std::string dbConnectionForTests() {
     bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" +
-           (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
+    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
 }
 
 }  // namespace
@@ -60,28 +57,24 @@ TEST_CASE("ORM relations: BelongsTo navigation and HasMany inverses", "[relation
 
     // Build a small graph: two accounts, a card, a payee, a one-off payment, a
     // deposit, and a transfer between the accounts.
-    auto checking = await(accounts.execute(bank::dto::OpenAccount{
-                              .kind = static_cast<int>(bank::AccountKind::Checking),
-                              .currency = static_cast<int>(bank::Currency::EUR)}),
-                          app.guiLoop());
-    auto savings = await(accounts.execute(bank::dto::OpenAccount{
-                             .kind = static_cast<int>(bank::AccountKind::Savings),
-                             .currency = static_cast<int>(bank::Currency::EUR)}),
+    auto checking =
+        await(accounts.execute(bank::dto::OpenAccount{.kind = static_cast<int>(bank::AccountKind::Checking),
+                                                      .currency = static_cast<int>(bank::Currency::EUR)}),
+              app.guiLoop());
+    auto savings = await(accounts.execute(bank::dto::OpenAccount{.kind = static_cast<int>(bank::AccountKind::Savings),
+                                                                 .currency = static_cast<int>(bank::Currency::EUR)}),
                          app.guiLoop());
-    auto card = await(cards.execute(bank::dto::IssueCard{.accountId = checking.id, .kind = 0}),
-                      app.guiLoop());
-    auto payee = await(payees.execute(bank::dto::AddPayee{
-                           .name = "Landlord", .iban = "DE89370400440532013000", .bankName = "ACME"}),
-                       app.guiLoop());
+    auto card = await(cards.execute(bank::dto::IssueCard{.accountId = checking.id, .kind = 0}), app.guiLoop());
+    auto payee = await(
+        payees.execute(bank::dto::AddPayee{.name = "Landlord", .iban = "DE89370400440532013000", .bankName = "ACME"}),
+        app.guiLoop());
     await(txns.execute(bank::dto::Deposit{.accountId = checking.id, .amountMinor = 100000}), app.guiLoop());
-    auto payment = await(payments.execute(bank::dto::PayBill{.fromAccountId = checking.id,
-                                                            .payeeId = payee.id,
-                                                            .amountMinor = 5000,
-                                                            .description = "rent"}),
-                         app.guiLoop());
-    await(txns.execute(bank::dto::Transfer{.fromAccountId = checking.id,
-                                           .toAccountId = savings.id,
-                                           .amountMinor = 30000}),
+    auto payment =
+        await(payments.execute(bank::dto::PayBill{
+                  .fromAccountId = checking.id, .payeeId = payee.id, .amountMinor = 5000, .description = "rent"}),
+              app.guiLoop());
+    await(txns.execute(
+              bank::dto::Transfer{.fromAccountId = checking.id, .toAccountId = savings.id, .amountMinor = 30000}),
           app.guiLoop());
 
     // Read the persisted graph back through the relation API.

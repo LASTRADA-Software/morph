@@ -3,7 +3,6 @@
 #include "bank/models/payee_model.hpp"
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstdint>
 #include <string>
 
@@ -63,10 +62,7 @@ dto::PayeeList PayeeModel::execute(const dto::ListPayees& action) {
     // Fluent list query uses the relation-free `PayeeRow` projection (the
     // `PayeeRecord` aggregate carries a `HasMany` the fluent builder can't select).
     const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::PayeeRow>()
-                    .Where(Lightweight::FieldNameOf<&db::PayeeRow::user>, "=", userId)
-                    .All();
+    auto rows = mapper().Query<db::PayeeRow>().Where(Lightweight::FieldNameOf<&db::PayeeRow::user>, "=", userId).All();
     dto::PayeeList out;
     out.payees.reserve(rows.size());
     for (const auto& rec : rows) {

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "kanban/core/types.hpp"
-
 #include <string>
 #include <vector>
+
+#include "kanban/core/types.hpp"
 
 namespace kanban {
 

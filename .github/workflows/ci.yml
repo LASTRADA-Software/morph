@@ -1272,8 +1272,6 @@ jobs:
           done
           exit "$status"
 
-  # ── clang-tidy-diff (changed lines only) ──────────────────────────────
-
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
@@ -1296,6 +1294,64 @@ jobs:
         with:
           path: /home/runner/.cache/sccache
           key: sccache-gcc-debug-${{ github.sha }}
+
+  # ── clang-format (whole tree) ─────────────────────────────────────────
+  #
+  # .clang-format has always been in the tree, and nothing enforced it: 471 of
+  # 677 tracked .hpp/.cpp files did not match it (morph#210). An unenforced
+  # config is worse than none, because every editor with format-on-save obeys it
+  # faithfully -- so touching one file rewrites parts the author never meant to
+  # change, and the reviewer's job becomes separating intent from churn.
+  #
+  # Whole tree, not changed lines. A changed-lines check passes as long as
+  # nobody touches the non-conforming lines, so it would have reported success
+  # over a tree that was 70% non-conforming -- a control that measures almost
+  # nothing. The tree was reformatted wholesale first (see
+  # .git-blame-ignore-revs), which is what makes the wider check possible.
+  #
+  # Pinned to the same CLANG_VERSION as clang-tidy-diff: clang-format output is
+  # not stable across major versions, so an unpinned check would disagree with
+  # itself between runners.
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format ${{ env.CLANG_VERSION }}
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          sudo apt-get install -y clang-format-${{ env.CLANG_VERSION }}
+
+      - name: Check every tracked C++ file against .clang-format
+        run: |
+          git ls-files -z '*.hpp' '*.cpp' > cpp-files.z
+          COUNT=$(tr -cd '\0' < cpp-files.z | wc -c)
+          # An empty or truncated file list would make this job pass while
+          # checking nothing, which is the exact failure it exists to prevent.
+          # Refuse rather than report a vacuous success.
+          if [ "$COUNT" -lt 100 ]; then
+            echo "::error::only $COUNT C++ files matched -- the check would be vacuous"
+            exit 1
+          fi
+          echo "Checking $COUNT files"
+          xargs -0 clang-format-${{ env.CLANG_VERSION }} --dry-run -Werror \
+            < cpp-files.z 2> clang-format-report.txt || true
+          if [ -s clang-format-report.txt ]; then
+            cat clang-format-report.txt
+            echo "::error::tree does not match .clang-format -- run: git ls-files -z '*.hpp' '*.cpp' | xargs -0 clang-format -i"
+            exit 1
+          fi
+
+      - name: Upload clang-format report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-format-report
+          path: clang-format-report.txt
+          if-no-files-found: ignore
+
+  # ── clang-tidy-diff (changed lines only) ──────────────────────────────
 
   clang-tidy:
     name: clang-tidy-diff

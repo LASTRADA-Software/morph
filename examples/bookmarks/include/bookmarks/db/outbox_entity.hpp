@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
-
 #include <cstdint>
 #include <string_view>
 
@@ -34,14 +33,14 @@ struct BookmarkOutboxRecord {
     static constexpr std::string_view TableName = "bookmark_outbox";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"model_type"}> modelType;  // 1
-    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"entity_key"}> entityKey;  // 2
-    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"action_type"}> actionType;  // 3
-    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"payload"}> payload;  // 4
-    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"result"}> result;  // 5
-    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"principal"}> principal;  // 6
-    Light::Field<std::int64_t, Light::SqlRealName{"timestamp_ms"}> timestampMs{0};  // 7
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"idempotency_key"}> idempotencyKey;  // 8
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"model_type"}> modelType;                    // 1
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"entity_key"}> entityKey;                    // 2
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"action_type"}> actionType;                  // 3
+    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"payload"}> payload;                   // 4
+    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"result"}> result;                     // 5
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"principal"}> principal;                     // 6
+    Light::Field<std::int64_t, Light::SqlRealName{"timestamp_ms"}> timestampMs{0};                         // 7
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"idempotency_key"}> idempotencyKey;         // 8
 };
 
 }  // namespace bookmarks::db

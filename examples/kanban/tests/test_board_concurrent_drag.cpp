@@ -37,26 +37,22 @@
 // bridge's whole schedule before awaiting any of it already provides, the
 // same "fire all before awaiting" shape test_kanban_stress.cpp itself uses.
 
-#include "board_qml_bridge.hpp"
+#include <algorithm>
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <string>
+#include <vector>
 
+#include "board_qml_bridge.hpp"
 #include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban/models/project_admin_model.hpp"
-
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <algorithm>
-#include <atomic>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <vector>
 
 using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
@@ -74,7 +70,7 @@ namespace {
 /// @param principal The identity to build a session for.
 /// @return The signed session context.
 [[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
-                                                       std::string principal) {
+                                                      std::string principal) {
     morph::session::Context ctx;
     ctx.principal = principal;
     ctx.token = issuer.issue(morph::session::SessionToken{
@@ -114,8 +110,7 @@ namespace {
 
 }  // namespace
 
-TEST_CASE("Concurrent BoardBridge::moveTask calls (N=4) never desync positions",
-          "[kanban][gui][stress]") {
+TEST_CASE("Concurrent BoardBridge::moveTask calls (N=4) never desync positions", "[kanban][gui][stress]") {
     // Local rig mode on ThreadPoolExecutor only — mirrors
     // test_kanban_stress.cpp's own kanban-specific TSan/CI note
     // (examples/TESTING.md).
@@ -178,18 +173,30 @@ TEST_CASE("Concurrent BoardBridge::moveTask calls (N=4) never desync positions",
     changed = false;
     seeder.createColumn(QStringLiteral("To Do"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString col1 = seeder.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString col1 = seeder.board()
+                             .value(QStringLiteral("columns"))
+                             .toList()
+                             .front()
+                             .toMap()
+                             .value(QStringLiteral("id"))
+                             .toString();
 
     changed = false;
     seeder.createColumn(QStringLiteral("Done"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString col2 = seeder.board().value(QStringLiteral("columns")).toList().back().toMap().value(QStringLiteral("id")).toString();
+    const QString col2 =
+        seeder.board().value(QStringLiteral("columns")).toList().back().toMap().value(QStringLiteral("id")).toString();
 
     changed = false;
     seeder.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString swimlaneId =
-        seeder.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString swimlaneId = seeder.board()
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     std::vector<QString> taskIds;
     for (std::size_t i = 0; i < kClients; ++i) {
@@ -197,8 +204,13 @@ TEST_CASE("Concurrent BoardBridge::moveTask calls (N=4) never desync positions",
         const QString columnId = (i % 2 == 0) ? col1 : col2;
         seeder.createTask(columnId, swimlaneId, QStringLiteral("Task %1").arg(static_cast<int>(i)));
         REQUIRE(pumpUntil([&] { return changed; }));
-        taskIds.push_back(
-            seeder.board().value(QStringLiteral("tasks")).toList().back().toMap().value(QStringLiteral("id")).toString());
+        taskIds.push_back(seeder.board()
+                              .value(QStringLiteral("tasks"))
+                              .toList()
+                              .back()
+                              .toMap()
+                              .value(QStringLiteral("id"))
+                              .toString());
     }
     REQUIRE(taskIds.size() == kClients);
     QObject::disconnect(seedConnection);
@@ -235,22 +247,22 @@ TEST_CASE("Concurrent BoardBridge::moveTask calls (N=4) never desync positions",
     std::atomic<int> failures{0};
     for (std::size_t i = 0; i < kClients; ++i) {
         auto& bridge = *bridges[i];
-        const auto failedConnection = QObject::connect(&bridge, &kanban::gui::BoardBridge::failed,
-                                                          [&outstanding, &failures](const QString&) {
-                                                              // A move landing on an already-occupied slot
-                                                              // mid-shuffle is an expected, benign outcome of
-                                                              // firing concurrent moves — see
-                                                              // test_kanban_stress.cpp's identical rationale.
-                                                              // What must never happen is a crash, a hang, or
-                                                              // the invariant below failing once the dust
-                                                              // settles.
-                                                              --outstanding;
-                                                              ++failures;
-                                                          });
+        const auto failedConnection =
+            QObject::connect(&bridge, &kanban::gui::BoardBridge::failed, [&outstanding, &failures](const QString&) {
+                // A move landing on an already-occupied slot
+                // mid-shuffle is an expected, benign outcome of
+                // firing concurrent moves — see
+                // test_kanban_stress.cpp's identical rationale.
+                // What must never happen is a crash, a hang, or
+                // the invariant below failing once the dust
+                // settles.
+                --outstanding;
+                ++failures;
+            });
         const auto movedConnection = QObject::connect(&bridge, &kanban::gui::BoardBridge::taskMoved,
-                                                        [&outstanding](const QString&) { --outstanding; });
-        (void) failedConnection;
-        (void) movedConnection;
+                                                      [&outstanding](const QString&) { --outstanding; });
+        (void)failedConnection;
+        (void)movedConnection;
 
         for (int a = 0; a < kMovesPerBridge; ++a) {
             const QString destColumn = columns[static_cast<std::size_t>(a) % columns.size()];
@@ -286,7 +298,8 @@ TEST_CASE("Concurrent BoardBridge::moveTask calls (N=4) never desync positions",
             std::string line = "column " + column.value(QStringLiteral("id")).toString().toStdString() + ":";
             for (const QVariant& taskEntry : finalBoard.value(QStringLiteral("tasks")).toList()) {
                 const QVariantMap task = taskEntry.toMap();
-                if (task.value(QStringLiteral("columnId")).toString() == column.value(QStringLiteral("id")).toString()) {
+                if (task.value(QStringLiteral("columnId")).toString() ==
+                    column.value(QStringLiteral("id")).toString()) {
                     line += " [task " + task.value(QStringLiteral("id")).toString().toStdString() + " pos " +
                             std::to_string(task.value(QStringLiteral("position")).toLongLong()) + "]";
                 }

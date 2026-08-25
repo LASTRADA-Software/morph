@@ -5,21 +5,17 @@
 // domain rules in test_ledger_model.cpp; this file proves the bridge
 // publishes what QML binds to, and that money survives the boundary exactly.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <ledger/db/ledger_entity.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "ledger_qml_bridge.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-
-#include <ledger/db/ledger_entity.hpp>
-
-#include <memory>
-#include <string>
 
 namespace {
 

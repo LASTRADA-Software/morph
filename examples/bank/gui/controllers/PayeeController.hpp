@@ -2,7 +2,6 @@
 #pragma once
 
 #include <QVariantList>
-
 #include <cstdint>
 
 #include "BankController.hpp"

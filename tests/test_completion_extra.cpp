@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/completion.hpp>
-#include <morph/core/logger.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/core/completion.hpp>
+#include <morph/core/logger.hpp>
 #include <stdexcept>
 #include <string>
 
@@ -302,9 +302,7 @@ template <typename T>
 void exerciseThrowingSinkOrphanBranches() {
     using namespace morph::async;
     LogGuard guard;
-    morph::log::setLogger([](morph::log::LogLevel, std::string_view) {
-        throw std::runtime_error{"sink-fail"};
-    });
+    morph::log::setLogger([](morph::log::LogLevel, std::string_view) { throw std::runtime_error{"sink-fail"}; });
 
     // Inner catch (...) {} after the std::exception branch (lines 104-105).
     auto stateStd = std::make_shared<detail::CompletionState<T>>();
@@ -339,9 +337,7 @@ void exerciseAllBranches(const T& sampleValue) {
 
 }  // namespace
 
-TEST_CASE("CompletionState<int>: every branch and orphan path", "[completion]") {
-    exerciseAllBranches<int>(123);
-}
+TEST_CASE("CompletionState<int>: every branch and orphan path", "[completion]") { exerciseAllBranches<int>(123); }
 
 TEST_CASE("CompletionState<string>: every branch and orphan path", "[completion]") {
     exerciseAllBranches<std::string>("hello");

@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger_presenter.hpp"
-#include "gui/error_text.hpp"
 
 #include <utility>
 
+#include "gui/error_text.hpp"
+
 namespace ledger::gui {
 
-LedgerPresenter::LedgerPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                                 QObject* parent)
+LedgerPresenter::LedgerPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
     : Presenter{parent}, _handler{bridge, executor} {
     trackBound(_handler.whenBound());
 }
 
-void LedgerPresenter::reportError(const std::exception_ptr& err) {
-    emit failed(::morph::ladder::gui::errorText(err));
-}
+void LedgerPresenter::reportError(const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); }
 
 void LedgerPresenter::refreshLedger(LedgerId ledgerId) {
     track<GetLedgerResult>(
@@ -25,8 +23,8 @@ void LedgerPresenter::refreshLedger(LedgerId ledgerId) {
 
 void LedgerPresenter::openAccount(LedgerId ledgerId, const QString& name, AccountKind kind, Currency currency) {
     track<AccountInfo>(
-        _handler.execute(OpenAccount{
-            .ledgerId = ledgerId, .name = name.toStdString(), .kind = kind, .currency = currency}),
+        _handler.execute(
+            OpenAccount{.ledgerId = ledgerId, .name = name.toStdString(), .kind = kind, .currency = currency}),
         [this](AccountInfo account) { emit accountOpened(std::move(account)); },
         [this](const std::exception_ptr& err) { reportError(err); });
 }

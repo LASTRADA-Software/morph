@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "polls/models/poll_model.hpp"
-
+#include <algorithm>
+#include <array>
+#include <exception>
 #include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
-
-#include <array>
-#include <algorithm>
-#include <exception>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+
+#include "polls/models/poll_model.hpp"
 
 namespace polls::gui {
 
@@ -89,7 +88,7 @@ namespace polls::gui {
 /// tool for `PollBridge::createPoll` (a `NoSharing` handler, no attachment
 /// story to preserve), which is the one thing this class does not cover.
 class PollFormsController {
-  public:
+public:
     /// @param bridge      The shared `Bridge` `AppContext` owns.
     /// @param executor    The executor `Completion` callbacks land on.
     /// @param schemasJson Pre-assembled `{actionType: schemaJson<A>()}` map
@@ -169,9 +168,9 @@ class PollFormsController {
     /// @brief The three action-type ids `submitIfValid` accepts, matching
     ///        `poll_schemas.hpp`'s document exactly.
     static constexpr std::array<std::string_view, 3> kSchemaActions{"AddComment", "FinalizePoll",
-                                                                     "UndoLastVoteChange"};
+                                                                    "UndoLastVoteChange"};
 
-  private:
+private:
     ::morph::bridge::BridgeHandler<PollModel, ::morph::bridge::AllowShared> _handler;
     std::string _schemasJson;
 };

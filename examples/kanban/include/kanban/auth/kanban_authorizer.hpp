@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/session/session_auth.hpp>
-
 #include <cstddef>
 #include <memory>
+#include <morph/session/session_auth.hpp>
 #include <string_view>
 
 /// @file
@@ -53,9 +52,8 @@ inline constexpr std::size_t kMaxPrincipalBytes = 64;
     }
     for (const char ch : principal) {
         const auto byte = static_cast<unsigned char>(ch);
-        const bool ok = (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') ||
-                       (byte >= '0' && byte <= '9') || byte == '.' || byte == '_' || byte == '-' ||
-                       byte == ':';
+        const bool ok = (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') || (byte >= '0' && byte <= '9') ||
+                        byte == '.' || byte == '_' || byte == '-' || byte == ':';
         if (!ok) {
             return false;
         }
@@ -76,7 +74,7 @@ inline constexpr std::size_t kMaxPrincipalBytes = 64;
 ///        (inherited `SigningAuthorizer::authorize`/`authenticate`), stays
 ///        permissive on register/instance admission.
 class KanbanAuthorizer : public ::morph::session::SigningAuthorizer {
-  public:
+public:
     using SigningAuthorizer::SigningAuthorizer;
 };
 

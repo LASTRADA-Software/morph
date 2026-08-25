@@ -33,9 +33,7 @@ struct PayBill {
     std::int64_t amountMinor = 0;
     std::string description;
 
-    [[nodiscard]] bool validate() const {
-        return fromAccountId > 0 && payeeId > 0 && amountMinor > 0;
-    }
+    [[nodiscard]] bool validate() const { return fromAccountId > 0 && payeeId > 0 && amountMinor > 0; }
 };
 
 /// @brief Schedule a one-time future payment.
@@ -46,9 +44,7 @@ struct SchedulePayment {
     std::int64_t dueAtMs = 0;
     std::string description;
 
-    [[nodiscard]] bool validate() const {
-        return fromAccountId > 0 && payeeId > 0 && amountMinor > 0 && dueAtMs > 0;
-    }
+    [[nodiscard]] bool validate() const { return fromAccountId > 0 && payeeId > 0 && amountMinor > 0 && dueAtMs > 0; }
 };
 
 /// @brief Create a recurring standing order.

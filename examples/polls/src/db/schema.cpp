@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "polls/db/database.hpp"
-
 #include <Lightweight/SqlConnection.hpp>
 #include <Lightweight/SqlMigration.hpp>
 #include <Lightweight/SqlQuery/Migrate.hpp>
+
+#include "polls/db/database.hpp"
 
 namespace polls::db {
 
@@ -49,7 +49,8 @@ LIGHTWEIGHT_SQL_MIGRATION(20260808000001, "Create polls tables") {
     // GetPollState (Task 5) lists every option for a poll.
     plan.CreateIndex("idx_poll_options_poll", "poll_options", {"poll_id"});
 
-    const auto optionsRef = Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "poll_options", .columnName = "id"};
+    const auto optionsRef =
+        Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "poll_options", .columnName = "id"};
 
     plan.CreateTableIfNotExists("votes")
         .PrimaryKeyWithAutoIncrement("id", Bigint())

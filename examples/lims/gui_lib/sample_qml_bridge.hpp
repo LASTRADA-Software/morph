@@ -9,10 +9,10 @@
 // reason: AUTOMOC runs moc over this header and moc must not be pointed at
 // morph's template-heavy bridge header.
 #ifndef Q_MOC_RUN
-#include "sample_presenter.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "sample_presenter.hpp"
 #endif
 
 namespace lims::gui {
@@ -41,7 +41,7 @@ class SampleBridge : public QObject {
     ///        renders this surface's forms from.
     Q_PROPERTY(QString schemasJson READ schemasJson CONSTANT)
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -107,7 +107,7 @@ class SampleBridge : public QObject {
     /// @param reason Why the container is refused.
     Q_INVOKABLE void rejectSample(const QString& reason);
 
-  signals:
+signals:
     /// @brief Emitted once the wrapped presenter's registration round trip
     ///        settles, successfully or not (`Presenter::bound()`).
     void bound();
@@ -126,7 +126,7 @@ class SampleBridge : public QObject {
     /// @param message The model's own `what()`.
     void failed(const QString& message);
 
-  private:
+private:
 #ifndef Q_MOC_RUN
     SamplePresenter _presenter;
 #endif

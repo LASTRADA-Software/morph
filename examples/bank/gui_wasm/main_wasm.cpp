@@ -11,7 +11,6 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QVariantMap>
-
 #include <string>
 
 #include "BankClient.hpp"

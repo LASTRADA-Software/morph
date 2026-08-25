@@ -12,9 +12,9 @@
 // all -- identical rationale to `bookmarks::app::App`'s own model includes
 // (`examples/bookmarks/src/app/app.cpp`), just for one model instead of
 // four.
-#include "polls/models/poll_model.hpp"
-
 #include <utility>
+
+#include "polls/models/poll_model.hpp"
 
 namespace polls::app {
 

@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <QTcpServer>
 #include <catch2/catch_test_macros.hpp>
-
-#include "testkit/offline_rig.hpp"
-
+#include <chrono>
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 
-#include <QTcpServer>
-
-#include <chrono>
+#include "testkit/offline_rig.hpp"
 
 // No local QCoreApplication here: ladder_common_tests' own main()
 // (testkit_main.cpp) already constructs the one QCoreApplication this whole

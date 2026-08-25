@@ -6,21 +6,17 @@
 // each action to the right signal and neither crashes nor hangs -- the same
 // split every other rung's presenter suite makes.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <ledger/db/ledger_entity.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "ledger_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-
-#include <ledger/db/ledger_entity.hpp>
-
-#include <memory>
-#include <string>
 
 namespace {
 
@@ -82,11 +78,10 @@ TEST_CASE("LedgerPresenter emits accountOpened carrying the new account", "[ledg
     ledger::AccountInfo opened;
     bool got = false;
     bool failed = false;
-    QObject::connect(&presenter, &ledger::gui::LedgerPresenter::accountOpened,
-                     [&](ledger::AccountInfo account) {
-                         opened = std::move(account);
-                         got = true;
-                     });
+    QObject::connect(&presenter, &ledger::gui::LedgerPresenter::accountOpened, [&](ledger::AccountInfo account) {
+        opened = std::move(account);
+        got = true;
+    });
     QObject::connect(&presenter, &ledger::gui::LedgerPresenter::failed, [&] { failed = true; });
 
     presenter.openAccount(ledgerId, "Checking", ledger::AccountKind::Asset, ledger::Currency::USD);
@@ -108,11 +103,10 @@ TEST_CASE("LedgerPresenter relays a model refusal as failed rather than throwing
 
     ledger::AccountInfo checking;
     bool opened = false;
-    QObject::connect(&presenter, &ledger::gui::LedgerPresenter::accountOpened,
-                     [&](ledger::AccountInfo account) {
-                         checking = std::move(account);
-                         opened = true;
-                     });
+    QObject::connect(&presenter, &ledger::gui::LedgerPresenter::accountOpened, [&](ledger::AccountInfo account) {
+        checking = std::move(account);
+        opened = true;
+    });
     presenter.openAccount(ledgerId, "Checking", ledger::AccountKind::Asset, ledger::Currency::USD);
     REQUIRE(pumpUntil([&] { return opened; }));
 
@@ -131,8 +125,7 @@ TEST_CASE("LedgerPresenter relays a model refusal as failed rather than throwing
     presenter.storeTransaction(
         ledgerId, "unbalanced", morph::time::Timestamp::now(),
         {ledger::TransactionLeg{.accountId = checking.id,
-                                .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
-                                                                DecimalPlaces{2}}}},
+                                .amount = morph::math::Rational{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}}}},
         ledger::ImportOpId{});
 
     REQUIRE(pumpUntil([&] { return failed || stored; }));

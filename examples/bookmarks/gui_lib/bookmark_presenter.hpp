@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "gui/presenter.hpp"
+#include <exception>
+
 #include "bookmarks/dto/bookmark_dto.hpp"
 #include "bookmarks/dto/bulk_dto.hpp"
 #include "bookmarks/dto/import_export_dto.hpp"
-
-#include <exception>
+#include "gui/presenter.hpp"
 
 // See pastebin::gui::PastePresenter's identical guard and doc comment
 // (examples/pastebin/gui_lib/paste_presenter.hpp) for why moc must never see
@@ -18,10 +18,10 @@
 // connection per execute() call from Lightweight::GlobalDataMapperPool()
 // instead of owning one, but this guard stays for bridge.hpp's own sake.
 #ifndef Q_MOC_RUN
-#include "bookmarks/models/bookmark_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "bookmarks/models/bookmark_model.hpp"
 #endif
 
 namespace bookmarks::gui {
@@ -38,7 +38,7 @@ namespace bookmarks::gui {
 /// exclusion.
 class BookmarkPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -94,7 +94,7 @@ class BookmarkPresenter : public ::morph::ladder::gui::Presenter {
     /// @param action The export request.
     void exportAll(ExportBookmarks action);
 
-  signals:
+signals:
     void created(CreateBookmarkResult result);
     void edited(BookmarkView view);
     void archived();
@@ -110,7 +110,7 @@ class BookmarkPresenter : public ::morph::ladder::gui::Presenter {
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Shared error-display body passed as every `track()` call's
     ///        third argument below — see `Presenter::track()`'s doc comment
     ///        (`examples/common/gui/presenter.hpp`) for why it is passed as

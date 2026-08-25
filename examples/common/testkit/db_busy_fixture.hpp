@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "db_fixture.hpp"
-
 #include <Lightweight/Lightweight.hpp>
-
 #include <format>
 #include <string>
+
+#include "db_fixture.hpp"
 
 /// @file
 /// The SQLITE_BUSY-provoking counterpart to `db_fault_fixture.hpp`'s
@@ -90,24 +89,22 @@ namespace morph::ladder::testkit {
 /// shape; reuse it for any future rung's equivalent test rather than relying
 /// on test ordering or a freshly-started process.
 class DbBusyFixture {
-  public:
+public:
     /// @param tableName Table to lock — must already exist (construct this
     ///        fixture after a `DbFixture` has applied migrations) and must
     ///        have an `id` column (every ladder entity to date does).
-    explicit DbBusyFixture(std::string tableName): _tableName{ std::move(tableName) }, _lockingConnection{}
-    {
-        ::Lightweight::SqlStatement stmt{ _lockingConnection };
-        (void) stmt.ExecuteDirect("BEGIN IMMEDIATE");
-        (void) stmt.ExecuteDirect(std::format("UPDATE \"{}\" SET id = id", _tableName));
+    explicit DbBusyFixture(std::string tableName) : _tableName{std::move(tableName)}, _lockingConnection{} {
+        ::Lightweight::SqlStatement stmt{_lockingConnection};
+        (void)stmt.ExecuteDirect("BEGIN IMMEDIATE");
+        (void)stmt.ExecuteDirect(std::format("UPDATE \"{}\" SET id = id", _tableName));
     }
 
     /// @brief Rolls back the held transaction explicitly — see the class
     ///        doc comment for why this doesn't rely on the connection's own
     ///        destructor instead.
-    ~DbBusyFixture()
-    {
-        ::Lightweight::SqlStatement stmt{ _lockingConnection };
-        (void) stmt.ExecuteDirect("ROLLBACK");
+    ~DbBusyFixture() {
+        ::Lightweight::SqlStatement stmt{_lockingConnection};
+        (void)stmt.ExecuteDirect("ROLLBACK");
     }
 
     DbBusyFixture(const DbBusyFixture&) = delete;
@@ -115,7 +112,7 @@ class DbBusyFixture {
     DbBusyFixture(DbBusyFixture&&) = delete;
     DbBusyFixture& operator=(DbBusyFixture&&) = delete;
 
-  private:
+private:
     std::string _tableName;
     ::Lightweight::SqlConnection _lockingConnection;
 };

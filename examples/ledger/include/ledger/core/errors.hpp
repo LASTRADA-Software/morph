@@ -8,22 +8,22 @@
 namespace ledger {
 
 class LedgerError : public std::runtime_error {
-  public:
+public:
     explicit LedgerError(std::string message) : std::runtime_error{std::move(message)} {}
 };
 
 class ValidationError : public LedgerError {
-  public:
+public:
     explicit ValidationError(std::string message) : LedgerError{std::move(message)} {}
 };
 
 class NotFound : public LedgerError {
-  public:
+public:
     explicit NotFound(std::string message) : LedgerError{std::move(message)} {}
 };
 
 class Forbidden : public LedgerError {
-  public:
+public:
     explicit Forbidden(std::string message) : LedgerError{std::move(message)} {}
 };
 
@@ -31,7 +31,7 @@ class Forbidden : public LedgerError {
 ///        do not sum to canonical zero for at least one partition. Never
 ///        thrown for rounding — the model never rounds (design spec §1).
 class ZeroSumViolation : public LedgerError {
-  public:
+public:
     ZeroSumViolation(std::string currency, std::string message)
         : LedgerError{"zero-sum violation in " + currency + ": " + message}, currencyCode{std::move(currency)} {}
     std::string currencyCode;
@@ -47,9 +47,8 @@ class ZeroSumViolation : public LedgerError {
 ///        spec §10's Scenario B: rejected outright, never merged and never
 ///        silently overwritten.
 class VersionConflict : public LedgerError {
-  public:
-    VersionConflict()
-        : LedgerError{"update rejected: the record changed since it was read"} {}
+public:
+    VersionConflict() : LedgerError{"update rejected: the record changed since it was read"} {}
 };
 
 /// @brief Thrown when `UndoTransaction` names a journal that some other
@@ -66,15 +65,14 @@ class VersionConflict : public LedgerError {
 ///        `VersionConflict` and design spec §10, the second one is rejected
 ///        outright rather than silently applied.
 class AlreadyReversed : public LedgerError {
-  public:
-    AlreadyReversed()
-        : LedgerError{"undo rejected: this transaction has already been reversed"} {}
+public:
+    AlreadyReversed() : LedgerError{"undo rejected: this transaction has already been reversed"} {}
 };
 
 /// @brief Thrown when a mutating action dispatches with an empty principal
 ///        (design spec §11) — never silently proceeds.
 class EmptyPrincipalError : public LedgerError {
-  public:
+public:
     EmptyPrincipalError() : LedgerError{"mutating action dispatched with an empty principal"} {}
 };
 

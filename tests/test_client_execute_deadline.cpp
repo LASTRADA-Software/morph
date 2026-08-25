@@ -118,9 +118,10 @@ struct morph::model::ModelTraits<DeadlineModel> {
     static constexpr std::string_view typeId() { return "Deadline_Model"; }
 };
 
-TEST_CASE("Bridge::setExecuteDeadline(0) (the default) never fires -- a call that never replies "
-          "stays pending, matching pre-existing behavior",
-          "[core][bridge][client-deadline]") {
+TEST_CASE(
+    "Bridge::setExecuteDeadline(0) (the default) never fires -- a call that never replies "
+    "stays pending, matching pre-existing behavior",
+    "[core][bridge][client-deadline]") {
     morph::exec::MainThreadExecutor exec;
     morph::bridge::Bridge bridge{std::make_unique<NeverRepliesBackend>()};
     CHECK(bridge.executeDeadline() == std::chrono::milliseconds{0});
@@ -207,7 +208,7 @@ TEST_CASE("An on-time reply releases the deadline's scheduler entry (and the sta
     morph::exec::ThreadPoolExecutor workerPool{2};
     morph::exec::MainThreadExecutor guiExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
-    bridge.setExecuteDeadline(std::chrono::milliseconds{5000});  // long enough that only
+    bridge.setExecuteDeadline(std::chrono::milliseconds{5000});             // long enough that only
     morph::bridge::BridgeHandler<DeadlineModel> handler{bridge, &guiExec};  // an actual cancel frees it
 
     int result = -1;

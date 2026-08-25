@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <morph/session/session.hpp>
+#include <vector>
+
+#include "bookmarks/db/outbox_entity.hpp"
 #include "bookmarks/models/bookmark_model.hpp"
 #include "bookmarks/models/tag_model.hpp"
 #include "testkit/db_fixture.hpp"
-
-#include "bookmarks/db/outbox_entity.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <morph/session/session.hpp>
-
-#include <algorithm>
-#include <vector>
 
 using morph::ladder::testkit::DbFixture;
 
@@ -31,10 +29,10 @@ namespace {
 }
 
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -132,9 +130,10 @@ TEST_CASE("MergeTags writes exactly one outbox row", "[bookmarks][model]") {
     CHECK(rows.front().actionType.Value() == "MergeTags");
 }
 
-TEST_CASE("Cross-model race: TagModel renames a tag while BookmarkModel's BulkEdit adds the old "
-          "name -- documents where consistency becomes app responsibility, per the README",
-          "[bookmarks][model]") {
+TEST_CASE(
+    "Cross-model race: TagModel renames a tag while BookmarkModel's BulkEdit adds the old "
+    "name -- documents where consistency becomes app responsibility, per the README",
+    "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel bookmarkModel;
     bookmarks::TagModel tagModel;

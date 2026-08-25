@@ -3,8 +3,6 @@
 // In-memory implementation of TransactionModel for the WASM build. Mirrors
 // src/models/transaction_model.cpp (single-threaded, so no SqlTransaction).
 
-#include "bank/models/transaction_model.hpp"
-
 #include <algorithm>
 #include <cstddef>
 #include <string>
@@ -13,6 +11,7 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
+#include "bank/models/transaction_model.hpp"
 #include "bank/wasm/store.hpp"
 #include "bank/wasm/store_ops.hpp"
 
@@ -42,10 +41,8 @@ dto::TxnInfo TransactionModel::execute(const dto::Deposit& action) {
         throw ValidationError{"deposit amount must be positive"};
     }
     auto& db = wasm::sharedDb();
-    auto account = wasm::loadOwnedOpenAccount(db, action.accountId,
-                                              wasm::requireUserId(db, sessionPrincipal()));
-    return toTxnInfo(
-        wasm::applyCredit(db, account, action.amountMinor, TxnKind::Deposit, 0, action.description));
+    auto account = wasm::loadOwnedOpenAccount(db, action.accountId, wasm::requireUserId(db, sessionPrincipal()));
+    return toTxnInfo(wasm::applyCredit(db, account, action.amountMinor, TxnKind::Deposit, 0, action.description));
 }
 
 dto::TxnInfo TransactionModel::execute(const dto::Withdraw& action) {
@@ -53,10 +50,8 @@ dto::TxnInfo TransactionModel::execute(const dto::Withdraw& action) {
         throw ValidationError{"withdrawal amount must be positive"};
     }
     auto& db = wasm::sharedDb();
-    auto account = wasm::loadOwnedOpenAccount(db, action.accountId,
-                                              wasm::requireUserId(db, sessionPrincipal()));
-    return toTxnInfo(
-        wasm::applyDebit(db, account, action.amountMinor, TxnKind::Withdrawal, 0, action.description));
+    auto account = wasm::loadOwnedOpenAccount(db, action.accountId, wasm::requireUserId(db, sessionPrincipal()));
+    return toTxnInfo(wasm::applyDebit(db, account, action.amountMinor, TxnKind::Withdrawal, 0, action.description));
 }
 
 dto::TransferResult TransactionModel::execute(const dto::Transfer& action) {
@@ -70,12 +65,9 @@ dto::TransferResult TransactionModel::execute(const dto::Transfer& action) {
     if (source.currency != dest.currency) {
         throw ValidationError{"cross-currency transfers are not supported"};
     }
-    wasm::applyDebit(db, source, action.amountMinor, TxnKind::TransferOut, action.toAccountId,
-                     action.description);
-    wasm::applyCredit(db, dest, action.amountMinor, TxnKind::TransferIn, action.fromAccountId,
-                      action.description);
-    return dto::TransferResult{.fromBalanceMinor = source.balanceMinor,
-                               .toBalanceMinor = dest.balanceMinor};
+    wasm::applyDebit(db, source, action.amountMinor, TxnKind::TransferOut, action.toAccountId, action.description);
+    wasm::applyCredit(db, dest, action.amountMinor, TxnKind::TransferIn, action.fromAccountId, action.description);
+    return dto::TransferResult{.fromBalanceMinor = source.balanceMinor, .toBalanceMinor = dest.balanceMinor};
 }
 
 dto::HistoryPage TransactionModel::execute(const dto::History& action) {

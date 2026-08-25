@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/util/datetime.hpp>
-
 #include <catch2/catch_test_macros.hpp>
-
 #include <chrono>
 #include <compare>
 #include <format>
+#include <morph/util/datetime.hpp>
 #include <optional>
 #include <string>
 
@@ -16,8 +14,8 @@ using morph::time::Timestamp;
 namespace {
 
 [[nodiscard]] DateTime sample() {
-    return DateTime{std::chrono::year{2026},   std::chrono::month{7},    std::chrono::day{5},
-                    std::chrono::hours{14},    std::chrono::minutes{30}, std::chrono::seconds{15},
+    return DateTime{std::chrono::year{2026},       std::chrono::month{7},    std::chrono::day{5},
+                    std::chrono::hours{14},        std::chrono::minutes{30}, std::chrono::seconds{15},
                     std::chrono::milliseconds{250}};
 }
 
@@ -37,10 +35,10 @@ TEST_CASE("DateTime::Iso8601::RoundTrip", "[datetime]") {
     CHECK(parsed.value_or(DateTime{}) == instant);
 
     // The fraction and the trailing Z are optional on input.
-    CHECK(DateTime::fromIso8601("2026-07-05T14:30:15") ==
-          std::optional<DateTime>{DateTime{std::chrono::year{2026}, std::chrono::month{7}, std::chrono::day{5},
-                                           std::chrono::hours{14}, std::chrono::minutes{30},
-                                           std::chrono::seconds{15}}});
+    CHECK(
+        DateTime::fromIso8601("2026-07-05T14:30:15") ==
+        std::optional<DateTime>{DateTime{std::chrono::year{2026}, std::chrono::month{7}, std::chrono::day{5},
+                                         std::chrono::hours{14}, std::chrono::minutes{30}, std::chrono::seconds{15}}});
     CHECK(DateTime::fromIso8601("2026-07-05T14:30:15Z") == DateTime::fromIso8601("2026-07-05T14:30:15"));
 
     // Short fractions are padded: .5 == 500 ms, .25 == 250 ms.
@@ -129,10 +127,10 @@ TEST_CASE("DateTime::Iso8601::NegativeYearRoundTrip", "[datetime]") {
     CHECK(roundTrip(std::chrono::year{-1}));
     CHECK(roundTrip(std::chrono::year{-999}));
     CHECK(roundTrip(std::chrono::year{-123}));
-    CHECK(DateTime::fromIso8601("-123-07-05T14:30:15") ==
-          std::optional<DateTime>{DateTime{std::chrono::year{-123}, std::chrono::month{7}, std::chrono::day{5},
-                                           std::chrono::hours{14}, std::chrono::minutes{30},
-                                           std::chrono::seconds{15}}});
+    CHECK(
+        DateTime::fromIso8601("-123-07-05T14:30:15") ==
+        std::optional<DateTime>{DateTime{std::chrono::year{-123}, std::chrono::month{7}, std::chrono::day{5},
+                                         std::chrono::hours{14}, std::chrono::minutes{30}, std::chrono::seconds{15}}});
 
     // Just past the boundary: year -1000 emits a FIVE-character field
     // ("-1000-…"), which shifts the '-' separator past offset 4, so it does not

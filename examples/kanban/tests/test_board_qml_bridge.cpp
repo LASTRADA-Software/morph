@@ -8,20 +8,6 @@
 // binds by *string*, so every assertion below pins a real string a future
 // `BoardView.qml` will bind against.
 
-#include "board_qml_bridge.hpp"
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
-
-#include <kanban/http/attachment_server.hpp>
-#include <kanban/models/board_model.hpp>
-#include <kanban/models/project_admin_model.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-
 #include <QMetaMethod>
 #include <QMetaObject>
 #include <QMetaProperty>
@@ -31,13 +17,23 @@
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
-
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <kanban/http/attachment_server.hpp>
+#include <kanban/models/board_model.hpp>
+#include <kanban/models/project_admin_model.hpp>
 #include <memory>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
 #include <string>
 #include <string_view>
+
+#include "board_qml_bridge.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
 
 namespace {
 
@@ -65,8 +61,7 @@ using morph::ladder::testkit::pumpUntil;
 /// @return The new project's id, as its plain number.
 [[nodiscard]] qlonglong seedProject(BackendRig& rig) {
     morph::bridge::BridgeHandler<kanban::ProjectAdminModel> creator{rig.bridge(0), rig.executor()};
-    const auto id =
-        morph::ladder::testkit::awaitQt(creator.execute(kanban::CreateProject{.name = "Sprint Board"})).id;
+    const auto id = morph::ladder::testkit::awaitQt(creator.execute(kanban::CreateProject{.name = "Sprint Board"})).id;
     return id.hasValue() ? static_cast<qlonglong>(*id) : -1;
 }
 
@@ -103,7 +98,7 @@ constexpr std::string_view kAttachmentTestSecret = "board-qml-bridge-attachment-
 /// @param principal The identity to install.
 /// @return The rig, owning the bridge and executor the adapter takes.
 [[nodiscard]] std::unique_ptr<BackendRig> makeAuthedRigWithToken(const morph::session::TokenIssuer& issuer,
-                                                                  std::string principal) {
+                                                                 std::string principal) {
     auto rig = std::make_unique<BackendRig>(Mode::Local, 1);
     morph::session::Context ctx;
     ctx.token = issuer.issue(morph::session::SessionToken{
@@ -241,18 +236,30 @@ TEST_CASE("BoardBridge exposes the expected surface and moveTask generates a fre
     changed = false;
     bridge.createColumn(QStringLiteral("To Do"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString col1 = bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString col1 = bridge.board()
+                             .value(QStringLiteral("columns"))
+                             .toList()
+                             .front()
+                             .toMap()
+                             .value(QStringLiteral("id"))
+                             .toString();
 
     changed = false;
     bridge.createColumn(QStringLiteral("Done"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString col2 = bridge.board().value(QStringLiteral("columns")).toList().back().toMap().value(QStringLiteral("id")).toString();
+    const QString col2 =
+        bridge.board().value(QStringLiteral("columns")).toList().back().toMap().value(QStringLiteral("id")).toString();
 
     changed = false;
     bridge.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString swimlaneId =
-        bridge.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString swimlaneId = bridge.board()
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     bridge.createTask(col1, swimlaneId, QStringLiteral("Fix bug"));
@@ -293,14 +300,24 @@ TEST_CASE("BoardBridge::addComment reports the commented task", "[kanban][gui][q
     changed = false;
     bridge.createColumn(QStringLiteral("To Do"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString columnId =
-        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString columnId = bridge.board()
+                                 .value(QStringLiteral("columns"))
+                                 .toList()
+                                 .front()
+                                 .toMap()
+                                 .value(QStringLiteral("id"))
+                                 .toString();
 
     changed = false;
     bridge.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString swimlaneId =
-        bridge.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString swimlaneId = bridge.board()
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     bridge.createTask(columnId, swimlaneId, QStringLiteral("Fix bug"));
@@ -347,8 +364,13 @@ TEST_CASE("BoardBridge::createRule/getRules/deleteRule round-trip a rule, updati
     changed = false;
     bridge.createColumn(QStringLiteral("Done"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString columnId =
-        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString columnId = bridge.board()
+                                 .value(QStringLiteral("columns"))
+                                 .toList()
+                                 .front()
+                                 .toMap()
+                                 .value(QStringLiteral("id"))
+                                 .toString();
 
     bool ruleCreated = false;
     QObject::connect(&bridge, &kanban::gui::BoardBridge::ruleCreated, [&] { ruleCreated = true; });
@@ -356,7 +378,8 @@ TEST_CASE("BoardBridge::createRule/getRules/deleteRule round-trip a rule, updati
     REQUIRE(pumpUntil([&] { return ruleCreated; }));
 
     bool rulesListed = false;
-    QObject::connect(&bridge, &kanban::gui::BoardBridge::rulesListed, [&](const QVariantList&) { rulesListed = true; });
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::rulesListed,
+                     [&](const QVariantList&) { rulesListed = true; });
     bridge.getRules();
     REQUIRE(pumpUntil([&] { return rulesListed; }));
     REQUIRE(bridge.rules().size() == 1);
@@ -432,8 +455,13 @@ TEST_CASE("BoardBridge's EventPoller applies another client's move and refreshes
     changed = false;
     bridge.createColumn(QStringLiteral("To Do"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString col1 =
-        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString col1 = bridge.board()
+                             .value(QStringLiteral("columns"))
+                             .toList()
+                             .front()
+                             .toMap()
+                             .value(QStringLiteral("id"))
+                             .toString();
 
     changed = false;
     bridge.createColumn(QStringLiteral("Done"), 0);
@@ -444,8 +472,13 @@ TEST_CASE("BoardBridge's EventPoller applies another client's move and refreshes
     changed = false;
     bridge.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString swimlaneId =
-        bridge.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString swimlaneId = bridge.board()
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     bridge.createTask(col1, swimlaneId, QStringLiteral("Fix bug"));
@@ -468,14 +501,14 @@ TEST_CASE("BoardBridge's EventPoller applies another client's move and refreshes
     // action-log attachment, so this is a real event the poller's own
     // GetEventsSince tick will observe.
     morph::bridge::BridgeHandler<kanban::BoardModel, morph::bridge::AllowShared> otherClient{rig->bridge(0),
-                                                                                              rig->executor()};
+                                                                                             rig->executor()};
     morph::ladder::testkit::awaitQt(otherClient.execute(kanban::OpenBoard{.projectId = kanban::ProjectId{projectId}}));
-    morph::ladder::testkit::awaitQt(otherClient.execute(kanban::MoveTaskPosition{
-        .taskId = parseId<kanban::TaskId>(taskId),
-        .columnId = parseId<kanban::ColumnId>(col2),
-        .swimlaneId = parseId<kanban::SwimlaneId>(swimlaneId),
-        .position = 0,
-        .opId = "other-client-move"}));
+    morph::ladder::testkit::awaitQt(
+        otherClient.execute(kanban::MoveTaskPosition{.taskId = parseId<kanban::TaskId>(taskId),
+                                                     .columnId = parseId<kanban::ColumnId>(col2),
+                                                     .swimlaneId = parseId<kanban::SwimlaneId>(swimlaneId),
+                                                     .position = 0,
+                                                     .opId = "other-client-move"}));
 
     // The bridge under test never itself called moveTask() — its own
     // taskMoved never fires for this move. What must happen instead is its
@@ -486,8 +519,8 @@ TEST_CASE("BoardBridge's EventPoller applies another client's move and refreshes
     bool activityRefreshed = false;
     const auto onBoardChanged =
         QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&] { boardRefreshedAfterMove = true; });
-    const auto onActivityChanged = QObject::connect(&bridge, &kanban::gui::BoardBridge::activityChanged,
-                                                     [&] { activityRefreshed = true; });
+    const auto onActivityChanged =
+        QObject::connect(&bridge, &kanban::gui::BoardBridge::activityChanged, [&] { activityRefreshed = true; });
 
     // kDefaultInterval is 3000ms; a 6s budget comfortably covers one real
     // tick plus dispatch/round-trip overhead without hardcoding a tighter
@@ -512,7 +545,8 @@ TEST_CASE("BoardBridge's EventPoller applies another client's move and refreshes
 // Task 18 — attachment upload/download
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("BoardBridge uploads a file and records its metadata, then downloads it back", "[kanban][gui][attachments]") {
+TEST_CASE("BoardBridge uploads a file and records its metadata, then downloads it back",
+          "[kanban][gui][attachments]") {
     DbFixture fixture;
     const morph::session::TokenIssuer issuer{std::string{kAttachmentTestSecret}, morph::session::hmacSha256};
     const morph::session::TokenVerifier verifier{std::string{kAttachmentTestSecret}, morph::session::hmacSha256};
@@ -534,14 +568,24 @@ TEST_CASE("BoardBridge uploads a file and records its metadata, then downloads i
     changed = false;
     bridge.createColumn(QStringLiteral("To Do"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString columnId =
-        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString columnId = bridge.board()
+                                 .value(QStringLiteral("columns"))
+                                 .toList()
+                                 .front()
+                                 .toMap()
+                                 .value(QStringLiteral("id"))
+                                 .toString();
 
     changed = false;
     bridge.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString swimlaneId =
-        bridge.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString swimlaneId = bridge.board()
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     bridge.createTask(columnId, swimlaneId, QStringLiteral("Fix bug"));
@@ -561,7 +605,7 @@ TEST_CASE("BoardBridge uploads a file and records its metadata, then downloads i
 
     QString failureMessage;
     QObject::connect(&bridge, &kanban::gui::BoardBridge::failed,
-                      [&](const QString& message) { failureMessage = message; });
+                     [&](const QString& message) { failureMessage = message; });
 
     bool uploaded = false;
     QString uploadedTaskId;
@@ -581,7 +625,8 @@ TEST_CASE("BoardBridge uploads a file and records its metadata, then downloads i
     // time attachmentUploaded() fired.
     REQUIRE(pumpUntil([&] { return bridge.attachments().size() == 1; }));
     const QVariantMap attachmentRow = bridge.attachments().front().toMap();
-    for (const char* key : {"id", "taskId", "filename", "contentType", "sizeBytes", "storageKey", "uploadedBy", "uploadedAtMs"}) {
+    for (const char* key :
+         {"id", "taskId", "filename", "contentType", "sizeBytes", "storageKey", "uploadedBy", "uploadedAtMs"}) {
         INFO("missing key: " << key);
         REQUIRE(attachmentRow.contains(QString::fromLatin1(key)));
     }
@@ -597,7 +642,7 @@ TEST_CASE("BoardBridge uploads a file and records its metadata, then downloads i
     // this bridge from the upload's own response.
     bool attachmentsListedFired = false;
     QObject::connect(&bridge, &kanban::gui::BoardBridge::attachmentsListed,
-                      [&](const QVariantList&) { attachmentsListedFired = true; });
+                     [&](const QVariantList&) { attachmentsListedFired = true; });
     bridge.getAttachments(taskId);
     REQUIRE(pumpUntil([&] { return attachmentsListedFired; }));
     REQUIRE(bridge.attachments().size() == 1);
@@ -622,9 +667,10 @@ TEST_CASE("BoardBridge uploads a file and records its metadata, then downloads i
     std::filesystem::remove_all(storageDir);
 }
 
-TEST_CASE("BoardBridge::downloadAttachment reports failed() for a storageKey that was never uploaded "
-          "(a real 404 from a real AttachmentServer)",
-          "[kanban][gui][attachments]") {
+TEST_CASE(
+    "BoardBridge::downloadAttachment reports failed() for a storageKey that was never uploaded "
+    "(a real 404 from a real AttachmentServer)",
+    "[kanban][gui][attachments]") {
     // The review finding this test closes: uploadAttachment's own
     // "no server configured" failed() test never issues an HTTP request at
     // all (it's a pure pre-flight guard). This test is the first one in this
@@ -662,7 +708,7 @@ TEST_CASE("BoardBridge::downloadAttachment reports failed() for a storageKey tha
     });
     bool downloaded = false;
     QObject::connect(&bridge, &kanban::gui::BoardBridge::attachmentDownloaded,
-                      [&](const QString&) { downloaded = true; });
+                     [&](const QString&) { downloaded = true; });
 
     bridge.downloadAttachment(neverUploadedKey, localFilePath);
     REQUIRE(pumpUntil([&] { return failed || downloaded; }));
@@ -678,9 +724,10 @@ TEST_CASE("BoardBridge::downloadAttachment reports failed() for a storageKey tha
     std::filesystem::remove_all(storageDir);
 }
 
-TEST_CASE("BoardBridge::downloadAttachment reports failed() the same way for a storageKey that belongs to "
-          "a DIFFERENT project the caller has no role on (authenticated, not authorized)",
-          "[kanban][gui][attachments]") {
+TEST_CASE(
+    "BoardBridge::downloadAttachment reports failed() the same way for a storageKey that belongs to "
+    "a DIFFERENT project the caller has no role on (authenticated, not authorized)",
+    "[kanban][gui][attachments]") {
     // The stronger, security-relevant half of the same review finding:
     // mirrors test_attachment_server.cpp's own "AttachmentServer returns 404
     // (not 200) for a GET whose bearer token is validly signed for a
@@ -715,20 +762,35 @@ TEST_CASE("BoardBridge::downloadAttachment reports failed() the same way for a s
     changed = false;
     aliceBridge.createColumn(QStringLiteral("To Do"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString columnId =
-        aliceBridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString columnId = aliceBridge.board()
+                                 .value(QStringLiteral("columns"))
+                                 .toList()
+                                 .front()
+                                 .toMap()
+                                 .value(QStringLiteral("id"))
+                                 .toString();
 
     changed = false;
     aliceBridge.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString swimlaneId =
-        aliceBridge.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString swimlaneId = aliceBridge.board()
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     aliceBridge.createTask(columnId, swimlaneId, QStringLiteral("Secret task"));
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString taskId =
-        aliceBridge.board().value(QStringLiteral("tasks")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString taskId = aliceBridge.board()
+                               .value(QStringLiteral("tasks"))
+                               .toList()
+                               .front()
+                               .toMap()
+                               .value(QStringLiteral("id"))
+                               .toString();
 
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -740,7 +802,8 @@ TEST_CASE("BoardBridge::downloadAttachment reports failed() the same way for a s
     }
 
     bool uploaded = false;
-    QObject::connect(&aliceBridge, &kanban::gui::BoardBridge::attachmentUploaded, [&](const QString&) { uploaded = true; });
+    QObject::connect(&aliceBridge, &kanban::gui::BoardBridge::attachmentUploaded,
+                     [&](const QString&) { uploaded = true; });
     aliceBridge.uploadAttachment(taskId, uploadFilePath);
     REQUIRE(pumpUntil([&] { return uploaded; }));
     REQUIRE(pumpUntil([&] { return aliceBridge.attachments().size() == 1; }));
@@ -764,7 +827,7 @@ TEST_CASE("BoardBridge::downloadAttachment reports failed() the same way for a s
     });
     bool downloaded = false;
     QObject::connect(&malloryBridge, &kanban::gui::BoardBridge::attachmentDownloaded,
-                      [&](const QString&) { downloaded = true; });
+                     [&](const QString&) { downloaded = true; });
 
     const QString downloadPath = tempDir.filePath(QStringLiteral("mallory-should-not-get-this.txt"));
     malloryBridge.downloadAttachment(storageKey, downloadPath);
@@ -793,14 +856,24 @@ TEST_CASE("BoardBridge::uploadAttachment reports failed() when no attachment ser
     changed = false;
     bridge.createColumn(QStringLiteral("To Do"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString columnId =
-        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString columnId = bridge.board()
+                                 .value(QStringLiteral("columns"))
+                                 .toList()
+                                 .front()
+                                 .toMap()
+                                 .value(QStringLiteral("id"))
+                                 .toString();
 
     changed = false;
     bridge.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString swimlaneId =
-        bridge.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString swimlaneId = bridge.board()
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     bridge.createTask(columnId, swimlaneId, QStringLiteral("Fix bug"));

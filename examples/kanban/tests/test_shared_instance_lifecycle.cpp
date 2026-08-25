@@ -45,25 +45,28 @@
 // A bare ScopedPrincipal (test_board_model.cpp's in-process helper) has no
 // wire representation at all and cannot be used here.
 
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+#include <vector>
 
 #include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban/dto/board_dto.hpp"
 #include "kanban/dto/project_dto.hpp"
 #include "kanban/models/board_model.hpp"
 #include "kanban/models/project_admin_model.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
 
-#include <morph/session/session.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <memory>
-#include <string>
-#include <vector>
-
+using kanban::BoardModel;
+using kanban::CreateColumn;
+using kanban::CreateProject;
+using kanban::OpenBoard;
+using kanban::ProjectAdminModel;
+using kanban::ProjectId;
 using morph::bridge::AllowShared;
 using morph::bridge::BridgeHandler;
 using morph::ladder::testkit::awaitQt;
@@ -71,12 +74,6 @@ using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
 using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::pumpUntil;
-using kanban::BoardModel;
-using kanban::CreateColumn;
-using kanban::CreateProject;
-using kanban::OpenBoard;
-using kanban::ProjectAdminModel;
-using kanban::ProjectId;
 
 namespace {
 
@@ -84,7 +81,7 @@ namespace {
 ///        @p issuer. Mirrors test_bookmark_model.cpp's identical inline
 ///        pattern for BookmarksAuthorizer.
 [[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
-                                                       std::string principal) {
+                                                      std::string principal) {
     morph::session::Context ctx;
     ctx.principal = principal;
     ctx.token = issuer.issue(morph::session::SessionToken{
@@ -133,9 +130,10 @@ TEST_CASE("BoardModel over the full backend-mode matrix: create -> keyed-attach 
     CHECK(state.columns.front().name == "To Do");
 }
 
-TEST_CASE("N shared handlers on one projectId observe each other's writes, and instances() reflects "
-          "the instance's real lifetime",
-          "[kanban][model][shared-instances]") {
+TEST_CASE(
+    "N shared handlers on one projectId observe each other's writes, and instances() reflects "
+    "the instance's real lifetime",
+    "[kanban][model][shared-instances]") {
     // 5 clients, not 4: the fifth connection is reserved for the fresh
     // "prober" handler below. Reusing one of the four attached connections
     // for it would race a fire-and-forget deregister's unsolicited (callId
@@ -181,7 +179,7 @@ TEST_CASE("N shared handlers on one projectId observe each other's writes, and i
     // One handler creates a column; the other three see it on their next
     // GetBoardState, proving they share one instance's state, not four
     // divergent copies.
-    (void) awaitQt(handlers[0]->execute(CreateColumn{.name = "In Progress", .wipLimit = 0}));
+    (void)awaitQt(handlers[0]->execute(CreateColumn{.name = "In Progress", .wipLimit = 0}));
     for (std::size_t i = 1; i < handlers.size(); ++i) {
         const auto state = awaitQt(handlers[i]->execute(kanban::GetBoardState{}));
         REQUIRE(state.columns.size() == 1);
@@ -215,9 +213,10 @@ TEST_CASE("N shared handlers on one projectId observe each other's writes, and i
     CHECK(remaining.empty());
 }
 
-TEST_CASE("Opening a stale projectId is NotFound through .onError(), not a crash, and a second attempt "
-          "to the same bad key gets a fresh (still-failing) instance, not stale poisoned state",
-          "[kanban][model][shared-instances]") {
+TEST_CASE(
+    "Opening a stale projectId is NotFound through .onError(), not a crash, and a second attempt "
+    "to the same bad key gets a fresh (still-failing) instance, not stale poisoned state",
+    "[kanban][model][shared-instances]") {
     // Per docs/spec/core/shared_instances.md's "Failure modes" section: this
     // handler's primary is set to the poisoned key on the very first
     // execute() (attachHandler records the primary before dispatch), so its
@@ -261,7 +260,7 @@ TEST_CASE("Opening a stale projectId is NotFound through .onError(), not a crash
     // carrying the same message (morph/qt/qt_websocket_backend.cpp's
     // execute-reply handling).
     try {
-        (void) awaitQt(handler.execute(OpenBoard{.projectId = badProjectId}));
+        (void)awaitQt(handler.execute(OpenBoard{.projectId = badProjectId}));
         FAIL("expected a third attempt against the same poisoned handler to fail identically");
     } catch (const std::exception& exc) {
         CHECK(std::string{exc.what()}.find("project not found") != std::string::npos);
@@ -292,8 +291,8 @@ TEST_CASE("A Viewer's role on one project does not grant Member-level access on 
     auto adminAlice = rig.client<ProjectAdminModel>(0);
     const auto projectA = awaitQt(adminAlice.execute(CreateProject{.name = "Alice's board"}));
     // alice makes bob a Member on project A only.
-    awaitQt(adminAlice.execute(kanban::SetMemberRole{
-        .projectId = projectA.id, .principal = "bob", .role = kanban::Role::Member}));
+    awaitQt(adminAlice.execute(
+        kanban::SetMemberRole{.projectId = projectA.id, .principal = "bob", .role = kanban::Role::Member}));
 
     auto adminBob = rig.client<ProjectAdminModel>(1);
     const auto projectB = awaitQt(adminBob.execute(CreateProject{.name = "Bob's own board"}));
@@ -323,8 +322,9 @@ TEST_CASE("A Viewer's role on one project does not grant Member-level access on 
     // handler whose attach failed must not somehow still permit a write
     // through the same primary.
     bool failed = false;
-    aliceOnB.execute(CreateColumn{.name = "Should be forbidden", .wipLimit = 0})
-        .onError([&failed](auto) { failed = true; });
+    aliceOnB.execute(CreateColumn{.name = "Should be forbidden", .wipLimit = 0}).onError([&failed](auto) {
+        failed = true;
+    });
     REQUIRE(pumpUntil([&failed] { return failed; }));
 }
 
@@ -385,9 +385,8 @@ TEST_CASE("A member demoted mid-session has their next move rejected and reads c
     awaitQt(managerBoard.execute(OpenBoard{.projectId = project.id}));
     const auto column = awaitQt(managerBoard.execute(CreateColumn{.name = "Todo", .wipLimit = 0}));
     const auto swimlane = awaitQt(managerBoard.execute(kanban::CreateSwimlane{.name = "Default"}));
-    const auto afterTask = awaitQt(managerBoard.execute(
-        kanban::CreateTask{.columnId = column.columns.front().id, .swimlaneId = swimlane.swimlanes.front().id,
-                            .title = "T1"}));
+    const auto afterTask = awaitQt(managerBoard.execute(kanban::CreateTask{
+        .columnId = column.columns.front().id, .swimlaneId = swimlane.swimlanes.front().id, .title = "T1"}));
     const auto taskId = afterTask.tasks.back().id;
 
     // Manager demotes member to Viewer mid-session (member's attached
@@ -401,13 +400,12 @@ TEST_CASE("A member demoted mid-session has their next move rejected and reads c
     // Next write from member (a Member-or-above-required action) is
     // rejected on the very same, still-attached instance.
     asMember();
-    CHECK_THROWS_AS(
-        awaitQt(memberBoard.execute(kanban::MoveTaskPosition{.taskId = taskId,
-                                                              .columnId = column.columns.front().id,
-                                                              .swimlaneId = swimlane.swimlanes.front().id,
-                                                              .position = 0,
-                                                              .opId = "demotion-test-1"})),
-        kanban::Forbidden);
+    CHECK_THROWS_AS(awaitQt(memberBoard.execute(kanban::MoveTaskPosition{.taskId = taskId,
+                                                                         .columnId = column.columns.front().id,
+                                                                         .swimlaneId = swimlane.swimlanes.front().id,
+                                                                         .position = 0,
+                                                                         .opId = "demotion-test-1"})),
+                    kanban::Forbidden);
 
     // Viewer is still >= the Viewer minimum GetBoardState/GetEventsSince
     // require, so reads correctly still succeed at this point -- demoting

@@ -3,7 +3,6 @@
 
 #ifndef __EMSCRIPTEN__
 #include <Lightweight/DataMapper/DataMapper.hpp>
-
 #include <optional>
 #endif
 
@@ -20,7 +19,7 @@ namespace kanban::db {
 
 /// @brief Base providing `mapper()` — one lazily-constructed DataMapper per model.
 class WithMapper {
-  protected:
+protected:
     WithMapper() = default;
 
     /// @brief Returns this model's DataMapper, opening it on first use.
@@ -31,7 +30,7 @@ class WithMapper {
         return *_mapper;
     }
 
-  private:
+private:
     std::optional<Lightweight::DataMapper> _mapper;
 };
 
@@ -39,7 +38,7 @@ class WithMapper {
 
 /// @brief Persistence-free base for the browser build. No `mapper()`.
 class WithMapper {
-  protected:
+protected:
     WithMapper() = default;
 };
 

@@ -3,8 +3,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <string_view>
-#include <vector>
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
@@ -12,12 +10,14 @@
 #include <morph/offline/offline_queue.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "lims/core/self_journal.hpp"
 #include "lims/dto/offline_dto.hpp"
 #include "lims/dto/result_dto.hpp"
-#include "lims/dto/verification_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
+#include "lims/dto/verification_dto.hpp"
 
 /// @file
 /// `SampleModel` — the sample lifecycle (README build order §2), keyed by
@@ -370,15 +370,13 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::CaptureConcentration, "CaptureCo
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResults, "ListResults", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResultQualifiers, "ListResultQualifiers",
                        ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListDilutionModes, "ListDilutionModes",
-                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListDilutionModes, "ListDilutionModes", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::QueuedCapture, "QueuedCapture")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListConflicts, "ListConflicts", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ResolveConflict, "ResolveConflict")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GrantRole, "GrantRole")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::VerifyResult, "VerifyResult")
-BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListVerifications, "ListVerifications",
-                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListVerifications, "ListVerifications", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetAuditTrail, "GetAuditTrail", ::morph::model::Loggable::No)
 
 // Hand-written ModelKeyTraits/ActionKeyTraits rather than
@@ -437,9 +435,7 @@ struct morph::model::ActionKeyTraits<lims::QueuedCapture> {
     /// @throws std::bad_optional_access if the id is disengaged — see
     ///         `ActionKeyTraits<lims::OpenSample>` for why throwing here is the
     ///         sanctioned rejection point.
-    static std::string key(const lims::QueuedCapture& action) {
-        return morph::model::keyToString(*action.sampleId);
-    }
+    static std::string key(const lims::QueuedCapture& action) { return morph::model::keyToString(*action.sampleId); }
 };
 
 template <>

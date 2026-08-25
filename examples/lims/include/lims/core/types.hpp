@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/util/quantity.hpp>
-#include <morph/util/rational.hpp>
-
 #include <array>
 #include <compare>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <string_view>
 
@@ -17,19 +16,19 @@ namespace lims {
 ///        identical shape to `ledger::LedgerId` and kanban's `ProjectId`
 ///        (`std::optional<std::int64_t>` payload, `hasValue()`,
 ///        `fromOptional()`, `operator*()`, total ordering).
-#define LIMS_DEFINE_STRONG_ID(Name)                                                              \
-    struct Name {                                                                                \
-        std::optional<std::int64_t> value{};                                                     \
-        Name() = default;                                                                        \
-        explicit Name(std::int64_t v) : value{v} {}                                              \
-        [[nodiscard]] bool hasValue() const noexcept { return value.has_value(); }               \
-        [[nodiscard]] std::int64_t operator*() const { return *value; }                          \
-        static Name fromOptional(std::optional<std::int64_t> v) {                                \
-            Name id;                                                                             \
-            id.value = v;                                                                        \
-            return id;                                                                           \
-        }                                                                                        \
-        auto operator<=>(const Name&) const = default;                                           \
+#define LIMS_DEFINE_STRONG_ID(Name)                                                \
+    struct Name {                                                                  \
+        std::optional<std::int64_t> value{};                                       \
+        Name() = default;                                                          \
+        explicit Name(std::int64_t v) : value{v} {}                                \
+        [[nodiscard]] bool hasValue() const noexcept { return value.has_value(); } \
+        [[nodiscard]] std::int64_t operator*() const { return *value; }            \
+        static Name fromOptional(std::optional<std::int64_t> v) {                  \
+            Name id;                                                               \
+            id.value = v;                                                          \
+            return id;                                                             \
+        }                                                                          \
+        auto operator<=>(const Name&) const = default;                             \
     }
 
 LIMS_DEFINE_STRONG_ID(ClientId);
@@ -49,12 +48,12 @@ LIMS_DEFINE_STRONG_ID(ConflictId);
 /// the state machine's legal edges live in `sample_dto.hpp`'s
 /// `isLegalTransition`, not here, so this enum stays a plain tag.
 enum class SampleState : std::uint8_t {
-    Registered,     ///< Logged by the office; not yet physically received.
-    Received,       ///< Physically in the lab.
-    InProgress,     ///< At least one analysis assigned and being worked.
-    ToBeVerified,   ///< All assigned results captured, awaiting four-eyes verification.
-    Published,      ///< Verified and released to the client. Terminal.
-    Rejected,       ///< Rejected at receipt (broken container, wrong preservative). Terminal.
+    Registered,    ///< Logged by the office; not yet physically received.
+    Received,      ///< Physically in the lab.
+    InProgress,    ///< At least one analysis assigned and being worked.
+    ToBeVerified,  ///< All assigned results captured, awaiting four-eyes verification.
+    Published,     ///< Verified and released to the client. Terminal.
+    Rejected,      ///< Rejected at receipt (broken container, wrong preservative). Terminal.
 };
 
 /// @brief What a captured result actually says.
@@ -78,13 +77,13 @@ enum class ResultQualifier : std::uint8_t {
 /// both the QML converter's 1e12 divisor limit and `x-unitAlternatives`'
 /// direct-edge-only behaviour.
 enum class LimsUnit : std::uint8_t {
-    scalar,      ///< Dimensionless (pH, absorbance).
-    mg_per_L,    ///< Milligrams per litre — the canonical concentration unit here.
-    ug_per_L,    ///< Micrograms per litre.
-    ng_per_L,    ///< Nanograms per litre.
-    celsius,     ///< Temperature.
-    mA,          ///< Milliamps — the InvenTree "1500 mA vs A" flow.
-    A,           ///< Amps.
+    scalar,    ///< Dimensionless (pH, absorbance).
+    mg_per_L,  ///< Milligrams per litre — the canonical concentration unit here.
+    ug_per_L,  ///< Micrograms per litre.
+    ng_per_L,  ///< Nanograms per litre.
+    celsius,   ///< Temperature.
+    mA,        ///< Milliamps — the InvenTree "1500 mA vs A" flow.
+    A,         ///< Amps.
 };
 
 }  // namespace lims
@@ -94,9 +93,9 @@ enum class LimsUnit : std::uint8_t {
 ///        reflection for a non-aggregate whose only member is an optional,
 ///        so every DTO carrying one would fail to compile inside glaze's
 ///        `to`/`from` templates without this.
-#define LIMS_DEFINE_STRONG_ID_WIRE(Name)                \
-    template <>                                         \
-    struct glz::meta<lims::Name> {                      \
+#define LIMS_DEFINE_STRONG_ID_WIRE(Name)                  \
+    template <>                                           \
+    struct glz::meta<lims::Name> {                        \
         static constexpr auto value = &lims::Name::value; \
         static constexpr std::string_view name = #Name;   \
     }

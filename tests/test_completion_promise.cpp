@@ -4,8 +4,8 @@
 // (issue #55, use case 1): a test-facing way to construct a `Completion<T>` it
 // can resolve on demand, without reaching into `morph::async::detail::CompletionState<T>`.
 
-#include <morph/core/completion.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/core/completion.hpp>
 #include <stdexcept>
 #include <string>
 

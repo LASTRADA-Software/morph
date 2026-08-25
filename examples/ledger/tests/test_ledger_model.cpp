@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "ledger/core/errors.hpp"
-#include "ledger/db/ledger_entity.hpp"
-#include "ledger/models/budget_model.hpp"
-#include "ledger/models/ledger_model.hpp"
-#include "ledger/models/rule_model.hpp"
-#include "testkit/db_fixture.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <glaze/glaze.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 
-#include <algorithm>
+#include "ledger/core/errors.hpp"
+#include "ledger/db/ledger_entity.hpp"
+#include "ledger/models/budget_model.hpp"
+#include "ledger/models/ledger_model.hpp"
+#include "ledger/models/rule_model.hpp"
+#include "testkit/db_fixture.hpp"
 
 namespace {
 
@@ -28,10 +27,10 @@ namespace {
 }
 
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -51,9 +50,10 @@ TEST_CASE("OpenAccount creates an account visible in GetLedger", "[ledger][model
 
     ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
-    auto created = model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                                       .kind = ledger::AccountKind::Asset,
-                                                       .currency = ledger::Currency::USD});
+    auto created = model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                                     .name = "Checking",
+                                                     .kind = ledger::AccountKind::Asset,
+                                                     .currency = ledger::Currency::USD});
     CHECK(created.id.hasValue());
 
     auto result = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
@@ -71,10 +71,14 @@ TEST_CASE("StoreTransaction with two balanced USD legs commits", "[ledger][model
 
     ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
-                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
     auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
     auto checkingId = ledgerState.accounts[0].id;
     auto groceriesId = ledgerState.accounts[1].id;
@@ -87,12 +91,12 @@ TEST_CASE("StoreTransaction with two balanced USD legs commits", "[ledger][model
         .ledgerId = ledgerId,
         .description = "Weekly shop",
         .date = morph::time::Timestamp::now(),
-        .legs = {ledger::TransactionLeg{.accountId = checkingId,
-                                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
-                                                                          DecimalPlaces{2}}},
-                 ledger::TransactionLeg{.accountId = groceriesId,
-                                        .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
-                                                                         DecimalPlaces{2}}}}});
+        .legs = {ledger::TransactionLeg{
+                     .accountId = checkingId,
+                     .amount = morph::math::Rational{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}}},
+                 ledger::TransactionLeg{
+                     .accountId = groceriesId,
+                     .amount = morph::math::Rational{Numerator{5000}, Denominator{1}, DecimalPlaces{2}}}}});
 
     REQUIRE(result.accounts.size() == 2);
     auto checking = std::ranges::find_if(result.accounts, [&](const auto& a) { return a.id == checkingId; });
@@ -113,10 +117,14 @@ TEST_CASE("StoreTransaction with unbalanced USD legs throws ZeroSumViolation", "
 
     ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
-                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
     auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
 
     using morph::math::DecimalPlaces;
@@ -127,12 +135,12 @@ TEST_CASE("StoreTransaction with unbalanced USD legs throws ZeroSumViolation", "
             .ledgerId = ledgerId,
             .description = "Bad txn",
             .date = morph::time::Timestamp::now(),
-            .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
-                                             .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
-                                                                              DecimalPlaces{2}}},
-                     ledger::TransactionLeg{.accountId = ledgerState.accounts[1].id,
-                                            .amount = morph::math::Rational{Numerator{4000}, Denominator{1},
-                                                                             DecimalPlaces{2}}}}}),
+            .legs = {ledger::TransactionLeg{
+                         .accountId = ledgerState.accounts[0].id,
+                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}}},
+                     ledger::TransactionLeg{
+                         .accountId = ledgerState.accounts[1].id,
+                         .amount = morph::math::Rational{Numerator{4000}, Denominator{1}, DecimalPlaces{2}}}}}),
         ledger::ZeroSumViolation);
 }
 
@@ -146,14 +154,22 @@ TEST_CASE("A foreign-amount pair balances USD and EUR partitions independently",
 
     ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "USD Checking",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "USD Travel Expense",
-                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "EUR Wallet",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::EUR});
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "EUR Merchant Payable",
-                                       .kind = ledger::AccountKind::Liability, .currency = ledger::Currency::EUR});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "USD Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "USD Travel Expense",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "EUR Wallet",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::EUR});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "EUR Merchant Payable",
+                                      .kind = ledger::AccountKind::Liability,
+                                      .currency = ledger::Currency::EUR});
     auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
     auto usdChecking = ledgerState.accounts[0].id;
     auto usdExpense = ledgerState.accounts[1].id;
@@ -172,21 +188,20 @@ TEST_CASE("A foreign-amount pair balances USD and EUR partitions independently",
         .ledgerId = ledgerId,
         .description = "Travel expense with EUR receipt",
         .date = morph::time::Timestamp::now(),
-        .legs = {ledger::TransactionLeg{.accountId = usdChecking,
-                                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
-                                                                          DecimalPlaces{2}},
-                                         .foreignAmount = morph::math::Rational{Numerator{4523}, Denominator{1},
-                                                                                 DecimalPlaces{2}},
-                                         .foreignCurrency = ledger::Currency::EUR},
-                 ledger::TransactionLeg{.accountId = usdExpense,
-                                        .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
-                                                                         DecimalPlaces{2}}},
-                 ledger::TransactionLeg{.accountId = eurWallet,
-                                        .amount = morph::math::Rational{Numerator{-4523}, Denominator{1},
-                                                                         DecimalPlaces{2}}},
-                 ledger::TransactionLeg{.accountId = eurPayable,
-                                        .amount = morph::math::Rational{Numerator{4523}, Denominator{1},
-                                                                         DecimalPlaces{2}}}}});
+        .legs = {
+            ledger::TransactionLeg{
+                .accountId = usdChecking,
+                .amount = morph::math::Rational{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}},
+                .foreignAmount = morph::math::Rational{Numerator{4523}, Denominator{1}, DecimalPlaces{2}},
+                .foreignCurrency = ledger::Currency::EUR},
+            ledger::TransactionLeg{.accountId = usdExpense,
+                                   .amount = morph::math::Rational{Numerator{5000}, Denominator{1}, DecimalPlaces{2}}},
+            ledger::TransactionLeg{
+                .accountId = eurWallet,
+                .amount = morph::math::Rational{Numerator{-4523}, Denominator{1}, DecimalPlaces{2}}},
+            ledger::TransactionLeg{
+                .accountId = eurPayable,
+                .amount = morph::math::Rational{Numerator{4523}, Denominator{1}, DecimalPlaces{2}}}}});
 
     // No ZeroSumViolation thrown (implicit -- the call above would have
     // thrown otherwise); assert both currencies' balances landed correctly.
@@ -209,10 +224,11 @@ TEST_CASE("StoreTransaction refuses an empty principal", "[ledger][model][securi
 
     ledger::LedgerModel model;
     ScopedPrincipal empty{""};  // installs a Context with an empty principal for this scope
-    CHECK_THROWS_AS(
-        model.execute(ledger::StoreTransaction{.ledgerId = ledgerId, .description = "Should be refused",
-                                                 .date = morph::time::Timestamp::now(), .legs = {}}),
-        ledger::EmptyPrincipalError);
+    CHECK_THROWS_AS(model.execute(ledger::StoreTransaction{.ledgerId = ledgerId,
+                                                           .description = "Should be refused",
+                                                           .date = morph::time::Timestamp::now(),
+                                                           .legs = {}}),
+                    ledger::EmptyPrincipalError);
 }
 
 TEST_CASE("OpenAccount records a LogEntry once a log is attached, and is a no-op without one",
@@ -230,14 +246,18 @@ TEST_CASE("OpenAccount records a LogEntry once a log is attached, and is a no-op
     // No log attached: succeeds, no crash, nothing recorded anywhere to
     // check against -- this half of the test exists to prove the no-op
     // path doesn't throw or misbehave when _log is null.
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
 
     // Attach a log, then repeat -- this call must be recorded.
     auto log = std::make_shared<morph::journal::InMemoryActionLog>();
     model.attachActionLog(log, std::to_string(*ledgerId));
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Savings",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Savings",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
 
     auto entries = log->entries();
     REQUIRE(entries.size() == 1);  // only the second call was journaled -- the first ran before attachActionLog
@@ -246,7 +266,8 @@ TEST_CASE("OpenAccount records a LogEntry once a log is attached, and is a no-op
     CHECK(entries[0].entityKey == std::to_string(*ledgerId));
 }
 
-TEST_CASE("StoreTransaction with a repeated opId is a safe no-op, not a second insert", "[ledger][model][exactly-once]") {
+TEST_CASE("StoreTransaction with a repeated opId is a safe no-op, not a second insert",
+          "[ledger][model][exactly-once]") {
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     ledger::db::LedgerRecord ledgerRow;
@@ -256,10 +277,14 @@ TEST_CASE("StoreTransaction with a repeated opId is a safe no-op, not a second i
 
     ScopedPrincipal principal{"alice"};
     ledger::LedgerModel model;
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
-                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
     auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
 
     using morph::math::DecimalPlaces;
@@ -267,13 +292,15 @@ TEST_CASE("StoreTransaction with a repeated opId is a safe no-op, not a second i
     using morph::math::Numerator;
     const auto opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"txn-op-1"});
     const auto txn = ledger::StoreTransaction{
-        .ledgerId = ledgerId, .description = "Groceries", .date = morph::time::Timestamp::now(),
-        .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
-                                         .amount = morph::math::Rational{Numerator{-3000}, Denominator{1},
-                                                                          DecimalPlaces{2}}},
-                 ledger::TransactionLeg{.accountId = ledgerState.accounts[1].id,
-                                        .amount = morph::math::Rational{Numerator{3000}, Denominator{1},
-                                                                         DecimalPlaces{2}}}},
+        .ledgerId = ledgerId,
+        .description = "Groceries",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{
+                     .accountId = ledgerState.accounts[0].id,
+                     .amount = morph::math::Rational{Numerator{-3000}, Denominator{1}, DecimalPlaces{2}}},
+                 ledger::TransactionLeg{
+                     .accountId = ledgerState.accounts[1].id,
+                     .amount = morph::math::Rational{Numerator{3000}, Denominator{1}, DecimalPlaces{2}}}},
         .opId = opId};
 
     auto first = model.execute(txn);
@@ -296,19 +323,24 @@ TEST_CASE("A matching rule cascades SetCategory with a causalParentId, not LogEn
 
     ScopedPrincipal principal{"alice"};
     ledger::RuleModel ruleModel;
-    ruleModel.execute(ledger::CreateRule{.ledgerId = ledgerId, .trigger = ledger::RuleTrigger::DescriptionContains,
-                                          .matchText = "Coffee", .action = ledger::RuleAction::SetCategory,
-                                          .actionValue = "Dining"});
+    ruleModel.execute(ledger::CreateRule{.ledgerId = ledgerId,
+                                         .trigger = ledger::RuleTrigger::DescriptionContains,
+                                         .matchText = "Coffee",
+                                         .action = ledger::RuleAction::SetCategory,
+                                         .actionValue = "Dining"});
 
     ledger::BudgetModel budgetModel;
     budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Dining"});
 
     ledger::LedgerModel ledgerModel;
-    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                             .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Dining",
-                                             .kind = ledger::AccountKind::Expense,
-                                             .currency = ledger::Currency::USD});
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                            .name = "Checking",
+                                            .kind = ledger::AccountKind::Asset,
+                                            .currency = ledger::Currency::USD});
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                            .name = "Dining",
+                                            .kind = ledger::AccountKind::Expense,
+                                            .currency = ledger::Currency::USD});
     auto ledgerState = ledgerModel.execute(ledger::GetLedger{.ledgerId = ledgerId});
 
     auto log = std::make_shared<morph::journal::InMemoryActionLog>();
@@ -321,12 +353,12 @@ TEST_CASE("A matching rule cascades SetCategory with a causalParentId, not LogEn
         .ledgerId = ledgerId,
         .description = "Coffee at the cafe",
         .date = morph::time::Timestamp::now(),
-        .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
-                                         .amount = morph::math::Rational{Numerator{-450}, Denominator{1},
-                                                                          DecimalPlaces{2}}},
-                 ledger::TransactionLeg{.accountId = ledgerState.accounts[1].id,
-                                        .amount = morph::math::Rational{Numerator{450}, Denominator{1},
-                                                                         DecimalPlaces{2}}}}});
+        .legs = {
+            ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
+                                   .amount = morph::math::Rational{Numerator{-450}, Denominator{1}, DecimalPlaces{2}}},
+            ledger::TransactionLeg{
+                .accountId = ledgerState.accounts[1].id,
+                .amount = morph::math::Rational{Numerator{450}, Denominator{1}, DecimalPlaces{2}}}}});
 
     auto entries = log->entries();
     REQUIRE(entries.size() == 2);  // trigger + cascade
@@ -339,7 +371,8 @@ TEST_CASE("A matching rule cascades SetCategory with a causalParentId, not LogEn
     CHECK(entries[1].payload.find("ruleVersion") != std::string::npos);
 }
 
-TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 outcome", "[ledger][rule][journal][divergence]") {
+TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 outcome",
+          "[ledger][rule][journal][divergence]") {
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     ledger::db::LedgerRecord ledgerRow;
@@ -354,16 +387,20 @@ TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 o
 
     ledger::RuleModel ruleModel;
     auto ruleId = ruleModel.execute(ledger::CreateRule{.ledgerId = ledgerId,
-                                                        .trigger = ledger::RuleTrigger::DescriptionContains,
-                                                        .matchText = "Coffee", .action = ledger::RuleAction::SetCategory,
-                                                        .actionValue = "Dining"});  // v1: sets Dining
+                                                       .trigger = ledger::RuleTrigger::DescriptionContains,
+                                                       .matchText = "Coffee",
+                                                       .action = ledger::RuleAction::SetCategory,
+                                                       .actionValue = "Dining"});  // v1: sets Dining
 
     ledger::LedgerModel ledgerModel;
-    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                             .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Dining Out",
-                                             .kind = ledger::AccountKind::Expense,
-                                             .currency = ledger::Currency::USD});
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                            .name = "Checking",
+                                            .kind = ledger::AccountKind::Asset,
+                                            .currency = ledger::Currency::USD});
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                            .name = "Dining Out",
+                                            .kind = ledger::AccountKind::Expense,
+                                            .currency = ledger::Currency::USD});
     auto ledgerState = ledgerModel.execute(ledger::GetLedger{.ledgerId = ledgerId});
     const auto expenseAccountId = ledgerState.accounts[1].id;
 
@@ -377,20 +414,20 @@ TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 o
         .ledgerId = ledgerId,
         .description = "Coffee run",
         .date = morph::time::Timestamp::now(),
-        .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
-                                         .amount = morph::math::Rational{Numerator{-450}, Denominator{1},
-                                                                          DecimalPlaces{2}}},
-                 ledger::TransactionLeg{.accountId = expenseAccountId,
-                                        .amount = morph::math::Rational{Numerator{450}, Denominator{1},
-                                                                         DecimalPlaces{2}}}}});
+        .legs = {
+            ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
+                                   .amount = morph::math::Rational{Numerator{-450}, Denominator{1}, DecimalPlaces{2}}},
+            ledger::TransactionLeg{
+                .accountId = expenseAccountId,
+                .amount = morph::math::Rational{Numerator{450}, Denominator{1}, DecimalPlaces{2}}}}});
 
     // The expense account is now linked to category A (Dining) -- confirm
     // this directly before editing the rule, so the assertion after replay
     // is a genuine "still A, never B" check, not a vacuous one.
-    auto accountRowsBefore = mapper.Query<ledger::db::AccountRecord>()
-                                  .Where(::Lightweight::FieldNameOf<&ledger::db::AccountRecord::id>, "=",
-                                         *expenseAccountId)
-                                  .All();
+    auto accountRowsBefore =
+        mapper.Query<ledger::db::AccountRecord>()
+            .Where(::Lightweight::FieldNameOf<&ledger::db::AccountRecord::id>, "=", *expenseAccountId)
+            .All();
     REQUIRE(accountRowsBefore.front().category.Value().has_value());
     CHECK(static_cast<std::int64_t>(accountRowsBefore.front().category.Value().value()) == *categoryA);
 
@@ -411,16 +448,17 @@ TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 o
     // the cascade's own recorded entry (payload includes ruleVersion=1)
     // pins the v1 outcome; replay's isReplaying()-gated rule suppression
     // means the trigger entry never re-evaluates against the now-v2 rule.
-    auto accountRowsAfter = mapper.Query<ledger::db::AccountRecord>()
-                                 .Where(::Lightweight::FieldNameOf<&ledger::db::AccountRecord::id>, "=",
-                                        *expenseAccountId)
-                                 .All();
+    auto accountRowsAfter =
+        mapper.Query<ledger::db::AccountRecord>()
+            .Where(::Lightweight::FieldNameOf<&ledger::db::AccountRecord::id>, "=", *expenseAccountId)
+            .All();
     REQUIRE(accountRowsAfter.front().category.Value().has_value());
     CHECK(static_cast<std::int64_t>(accountRowsAfter.front().category.Value().value()) == *categoryA);
     CHECK(static_cast<std::int64_t>(accountRowsAfter.front().category.Value().value()) != *categoryB);
 }
 
-TEST_CASE("A clamped Rational leg is caught incidentally by the zero-sum check, not by validate()", "[ledger][rational][security]") {
+TEST_CASE("A clamped Rational leg is caught incidentally by the zero-sum check, not by validate()",
+          "[ledger][rational][security]") {
     // Decode the raw wire JSON {"num":5,"den":0,"dp":2} through glaze's
     // real JSON codec (glz::read_json), which reaches Rational::setWire
     // (the glz::meta<Rational> specialization in
@@ -441,10 +479,14 @@ TEST_CASE("A clamped Rational leg is caught incidentally by the zero-sum check, 
 
     ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Expenses",
-                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Expenses",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
     auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
     auto checkingId = ledgerState.accounts[0].id;
     auto expensesId = ledgerState.accounts[1].id;
@@ -465,15 +507,16 @@ TEST_CASE("A clamped Rational leg is caught incidentally by the zero-sum check, 
     REQUIRE_FALSE(err);  // decode succeeds -- clamping is silent, not a decode failure
 
     CHECK_THROWS_AS(model.execute(ledger::StoreTransaction{
-        .ledgerId = ledgerId,
-        .description = "Unbalanced with clamped leg",
-        .date = morph::time::Timestamp::now(),
-        .legs = {ledger::TransactionLeg{.accountId = checkingId, .amount = normalLeg},
-                 ledger::TransactionLeg{.accountId = expensesId, .amount = clampedLeg}}}),
-        ledger::ZeroSumViolation);
+                        .ledgerId = ledgerId,
+                        .description = "Unbalanced with clamped leg",
+                        .date = morph::time::Timestamp::now(),
+                        .legs = {ledger::TransactionLeg{.accountId = checkingId, .amount = normalLeg},
+                                 ledger::TransactionLeg{.accountId = expensesId, .amount = clampedLeg}}}),
+                    ledger::ZeroSumViolation);
 }
 
-TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum and restores balances", "[ledger][undo]") {
+TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum and restores balances",
+          "[ledger][undo]") {
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     ledger::db::LedgerRecord ledgerRow;
@@ -483,10 +526,14 @@ TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum an
 
     ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
-                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
     auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
     auto checkingId = ledgerState.accounts[0].id;
     auto groceriesId = ledgerState.accounts[1].id;
@@ -500,12 +547,12 @@ TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum an
         .ledgerId = ledgerId,
         .description = "Weekly shop",
         .date = morph::time::Timestamp::now(),
-        .legs = {ledger::TransactionLeg{.accountId = checkingId,
-                                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
-                                                                          DecimalPlaces{2}}},
-                 ledger::TransactionLeg{.accountId = groceriesId,
-                                        .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
-                                                                         DecimalPlaces{2}}}}});
+        .legs = {ledger::TransactionLeg{
+                     .accountId = checkingId,
+                     .amount = morph::math::Rational{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}}},
+                 ledger::TransactionLeg{
+                     .accountId = groceriesId,
+                     .amount = morph::math::Rational{Numerator{5000}, Denominator{1}, DecimalPlaces{2}}}}});
 
     // GetLedgerResult/StoreTransaction's own return value never exposes a
     // journal id (design spec's own account_dto.hpp shape) -- the only way
@@ -513,9 +560,9 @@ TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum an
     // any other test in this file that needs a DB-assigned id its DTOs
     // don't surface.
     auto journalRows = mapper.Query<ledger::db::TransactionJournalRecord>()
-                            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::description>, "=",
-                                   Lightweight::SqlAnsiString<256>{"Weekly shop"})
-                            .All();
+                           .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::description>, "=",
+                                  Lightweight::SqlAnsiString<256>{"Weekly shop"})
+                           .All();
     REQUIRE(journalRows.size() == 1);
     const auto journalId = ledger::JournalId{static_cast<std::int64_t>(journalRows.front().id.Value())};
 
@@ -538,11 +585,10 @@ TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum an
             .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::id>, "!=", *journalId)
             .All();
     REQUIRE(reversalJournalRows.size() == 1);
-    auto reversalLegRows =
-        mapper.Query<ledger::db::TransactionLegRecord>()
-            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionLegRecord::journal>, "=",
-                   reversalJournalRows.front().id.Value())
-            .All();
+    auto reversalLegRows = mapper.Query<ledger::db::TransactionLegRecord>()
+                               .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionLegRecord::journal>, "=",
+                                      reversalJournalRows.front().id.Value())
+                               .All();
     REQUIRE(reversalLegRows.size() == 2);
     for (const auto& legRow : reversalLegRows) {
         if (legRow.account.Value() == static_cast<std::uint64_t>(*checkingId)) {

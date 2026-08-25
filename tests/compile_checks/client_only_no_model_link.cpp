@@ -28,13 +28,11 @@ struct ClientOnlyAction {
 };
 
 struct ClientOnlyModel {
-    ClientOnlyModel();                             // declared, deliberately never defined
-    int execute(const ClientOnlyAction& action);   // declared, deliberately never defined
+    ClientOnlyModel();                            // declared, deliberately never defined
+    int execute(const ClientOnlyAction& action);  // declared, deliberately never defined
 };
 
 BRIDGE_REGISTER_MODEL(ClientOnlyModel, "ClientOnlyModel")
 BRIDGE_REGISTER_ACTION_4(ClientOnlyModel, ClientOnlyAction, "ClientOnlyAction", ::morph::model::Loggable::Yes)
 
-int main() {
-    return 0;
-}
+int main() { return 0; }

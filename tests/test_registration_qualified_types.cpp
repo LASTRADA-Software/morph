@@ -8,10 +8,9 @@
 // model and action exactly as the issue describes; it must compile (and the runtime dispatch
 // below must succeed) for the fix to be verified.
 
+#include <catch2/catch_test_macros.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
-
-#include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <string_view>
 
@@ -45,6 +44,6 @@ TEST_CASE("BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION compile and register nam
     REQUIRE(holder != nullptr);
 
     auto result = morph::model::detail::ActionDispatcher::instance().dispatch("Issue21_Report", "Issue21_Create",
-                                                                               *holder, R"({"id":5})");
+                                                                              *holder, R"({"id":5})");
     REQUIRE(result == R"({"ok":true})");
 }

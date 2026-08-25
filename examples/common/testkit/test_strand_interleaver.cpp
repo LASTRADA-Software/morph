@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-#include <catch2/catch_test_macros.hpp>
-
-#include "testkit/strand_interleaver.hpp"
-
-#include <morph/core/strand.hpp>
-
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <morph/core/strand.hpp>
 #include <stdexcept>
 #include <vector>
+
+#include "testkit/strand_interleaver.hpp"
 
 TEST_CASE("DeterministicExecutor runs same-key strand tasks in FIFO order under a scripted interleaving",
           "[ladder][testkit][strand-interleaver]") {
@@ -54,8 +52,8 @@ TEST_CASE("DeterministicExecutor::runSchedule executes queued tasks in the calle
     // queue: to run "3" (index 2) first, then "1" (index 0), then "2", the
     // third index is 0 — not 1 — because once "3" and "1" are gone, "2" is
     // the only element left and sits at index 0.
-    det.runSchedule({ 2, 0, 0 });  // run "3" first, then "1", then "2"
-    REQUIRE(order == std::vector<int>{ 3, 1, 2 });
+    det.runSchedule({2, 0, 0});  // run "3" first, then "1", then "2"
+    REQUIRE(order == std::vector<int>{3, 1, 2});
 }
 
 TEST_CASE("DeterministicExecutor::runSchedule forces a non-default interleaving across two StrandExecutor keys",
@@ -105,9 +103,9 @@ TEST_CASE("DeterministicExecutor::runSchedule forces a non-default interleaving 
     // deliberately keeping key's two tasks contiguous.
     //
     // Step 3: only otherKey's dispatch is left, at index 0.
-    det.runSchedule({ 0, 1, 0 });
+    det.runSchedule({0, 1, 0});
 
-    REQUIRE(order == std::vector<int>{ 1, 2, 100 });
+    REQUIRE(order == std::vector<int>{1, 2, 100});
 }
 
 TEST_CASE("DeterministicExecutor::step throws when the queue is empty", "[ladder][testkit][strand-interleaver]") {
@@ -120,5 +118,5 @@ TEST_CASE("DeterministicExecutor::runSchedule throws on an out-of-range index",
           "[ladder][testkit][strand-interleaver]") {
     morph::ladder::testkit::DeterministicExecutor det;
     det.post([] {});
-    REQUIRE_THROWS_AS(det.runSchedule({ 1 }), std::runtime_error);
+    REQUIRE_THROWS_AS(det.runSchedule({1}), std::runtime_error);
 }

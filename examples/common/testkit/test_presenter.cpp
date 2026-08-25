@@ -1,23 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <QUrl>
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/qt/qt_executor.hpp>
+#include <morph/qt/qt_websocket_backend.hpp>
+#include <stdexcept>
+#include <vector>
 
 #include "gui/app_context.hpp"
 #include "gui/presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/pump.hpp"
 #include "testkit/strand_interleaver.hpp"
-
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/qt/qt_executor.hpp>
-#include <morph/qt/qt_websocket_backend.hpp>
-
-#include <QUrl>
-
-#include <memory>
-#include <stdexcept>
-#include <vector>
 
 // Deliberately at namespace scope, not inside an anonymous namespace: glz's
 // reflection (which BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION rely on to
@@ -51,7 +48,7 @@ BRIDGE_REGISTER_ACTION(PresenterProbeFailModel, PresenterProbeFailAction, "Prese
 namespace {
 
 class ProbePresenter : public morph::ladder::gui::Presenter {
-  public:
+public:
     ProbePresenter(morph::bridge::Bridge& bridge, morph::exec::IExecutor* exec)
         : _handler{bridge, exec}, _failHandler{bridge, exec} {}
 
@@ -69,9 +66,8 @@ class ProbePresenter : public morph::ladder::gui::Presenter {
     ///        branch (and therefore finishOne() called from there) actually
     ///        runs — the plain success path above never reaches it.
     void bumpAndFail() {
-        track<int>(_failHandler.execute(PresenterProbeFailAction{}), [](int) {
-            FAIL("onOk must not run for a failed action");
-        });
+        track<int>(_failHandler.execute(PresenterProbeFailAction{}),
+                   [](int) { FAIL("onOk must not run for a failed action"); });
     }
 
     /// @brief Drives the (successful) probe action, but with an onOk callback
@@ -174,7 +170,7 @@ class ProbePresenter : public morph::ladder::gui::Presenter {
     bool errorHandlerFired = false;
     std::vector<int> settledOrder;
 
-  private:
+private:
     morph::bridge::BridgeHandler<PresenterProbeModel> _handler;
     morph::bridge::BridgeHandler<PresenterProbeFailModel> _failHandler;
 };
@@ -205,8 +201,7 @@ TEST_CASE("Presenter::track() calls finishOne() on the error path, not just succ
     REQUIRE_FALSE(presenter.busy());  // .onError's finishOne() ran — the counter didn't leak
 }
 
-TEST_CASE("Presenter::track() calls finishOne() even when onOk itself throws",
-          "[ladder][testkit][gui][presenter]") {
+TEST_CASE("Presenter::track() calls finishOne() even when onOk itself throws", "[ladder][testkit][gui][presenter]") {
     morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
     ProbePresenter presenter{ctx.bridge(), ctx.executor()};
 
@@ -244,8 +239,7 @@ TEST_CASE("Presenter::track()'s three-argument overload invokes onErr on the err
     REQUIRE_FALSE(presenter.busy());  // both onErr and finishOne() ran
 }
 
-TEST_CASE("Presenter::track() calls finishOne() even when onErr itself throws",
-          "[ladder][testkit][gui][presenter]") {
+TEST_CASE("Presenter::track() calls finishOne() even when onErr itself throws", "[ladder][testkit][gui][presenter]") {
     // The `.onError` branch's half of the exception-safety contract the
     // "...even when onOk itself throws" case above pins for `.then`. Same
     // mechanism (finishOne() runs from the catch-block before the rethrow),
@@ -521,7 +515,7 @@ TEST_CASE("Presenter::busy() stays true while a second tracked completion is sti
         clientExec.step();
     }
     REQUIRE(presenter.settledOrder.size() == 1);
-    REQUIRE(presenter.busy());   // one completion settled, one still in flight -- idle() must not fire
+    REQUIRE(presenter.busy());  // one completion settled, one still in flight -- idle() must not fire
     REQUIRE(idleCount == 0);
 
     while (presenter.busy()) {

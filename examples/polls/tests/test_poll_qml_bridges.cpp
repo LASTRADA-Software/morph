@@ -22,16 +22,6 @@
 // happens here (see poll_forms_controller.hpp's own doc comment for the full
 // design rationale).
 
-#include "poll_qml_bridges.hpp"
-#include "poll_schemas.hpp"
-#include "polls/auth/polls_authorizer.hpp"
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
-#include "testkit/qml_surface.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaObject>
@@ -42,11 +32,19 @@
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
-
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
+
+#include "poll_qml_bridges.hpp"
+#include "poll_schemas.hpp"
+#include "polls/auth/polls_authorizer.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
+#include "testkit/qml_surface.hpp"
 
 namespace {
 
@@ -217,9 +215,8 @@ TEST_CASE("PollBridge exposes exactly the surface Main.qml/CreatePollView.qml/Vo
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());
     CHECK(findings.isEmpty());
-    CHECK(audit.scannedFiles()
-          == QStringList{QStringLiteral("CreatePollView.qml"), QStringLiteral("Main.qml"),
-                         QStringLiteral("VoteView.qml")});
+    CHECK(audit.scannedFiles() == QStringList{QStringLiteral("CreatePollView.qml"), QStringLiteral("Main.qml"),
+                                              QStringLiteral("VoteView.qml")});
 
     // What the audit cannot see, because QML's text does not record it:
     // `schemasJson` is CONSTANT, which is why Main.qml parses it exactly once
@@ -252,8 +249,8 @@ TEST_CASE("PollBridge::createPoll emits a {pollId, adminToken, participantToken}
     auto rig = makeRig();
     polls::gui::PollBridge bridge{rig->bridge(0), rig->executor()};
 
-    const auto [ok, bag] =
-        createVia(bridge, QStringLiteral("Team offsite"), QVariantList{QStringLiteral("2026-09-01"), QStringLiteral("2026-09-02")});
+    const auto [ok, bag] = createVia(bridge, QStringLiteral("Team offsite"),
+                                     QVariantList{QStringLiteral("2026-09-01"), QStringLiteral("2026-09-02")});
     REQUIRE(ok);
     for (const char* key : {"pollId", "adminToken", "participantToken"}) {
         INFO("missing key: " << key);
@@ -289,8 +286,8 @@ TEST_CASE("PollBridge::openPoll emits the poll's full state, and a bad pollId em
 
     const auto [ok, state] = openVia(bridge, pollId);
     REQUIRE(ok);
-    for (const char* key : {"pollId", "title", "finalized", "finalizedOptionId", "options", "votes", "comments",
-                            "lastEventId"}) {
+    for (const char* key :
+         {"pollId", "title", "finalized", "finalizedOptionId", "options", "votes", "comments", "lastEventId"}) {
         INFO("missing key: " << key);
         REQUIRE(state.contains(QString::fromLatin1(key)));
     }
@@ -355,9 +352,8 @@ TEST_CASE("PollBridge threads openPoll's attach through every later action on th
     CHECK(updatedOptions.front().toMap().value(QStringLiteral("noCount")).toString() == QStringLiteral("1"));
 
     // AddComment -- schema-driven, via submitIfValid.
-    const auto [commentOk, commentPayload] =
-        submitVia(bridge, QStringLiteral("AddComment"),
-                 QStringLiteral(R"({"participantName":"alice","body":"works for me"})"));
+    const auto [commentOk, commentPayload] = submitVia(
+        bridge, QStringLiteral("AddComment"), QStringLiteral(R"({"participantName":"alice","body":"works for me"})"));
     REQUIRE(commentOk);
     CHECK(commentPayload.contains(QStringLiteral("works for me")));
 
@@ -462,16 +458,14 @@ TEST_CASE("PollBridge's EventPoller applies a live event and refreshes state, en
     bool eventSeen = false;
     QVariantMap resynced;
     bool resyncSeen = false;
-    const auto onEvent =
-        QObject::connect(&bridge, &polls::gui::PollBridge::eventReceived, [&](const QVariantMap& e) {
-            event = e;
-            eventSeen = true;
-        });
-    const auto onResync =
-        QObject::connect(&bridge, &polls::gui::PollBridge::stateChanged, [&](const QVariantMap& s) {
-            resynced = s;
-            resyncSeen = true;
-        });
+    const auto onEvent = QObject::connect(&bridge, &polls::gui::PollBridge::eventReceived, [&](const QVariantMap& e) {
+        event = e;
+        eventSeen = true;
+    });
+    const auto onResync = QObject::connect(&bridge, &polls::gui::PollBridge::stateChanged, [&](const QVariantMap& s) {
+        resynced = s;
+        resyncSeen = true;
+    });
 
     // kDefaultInterval is 3000ms; a 6s budget comfortably covers one real
     // tick plus dispatch/round-trip overhead without hardcoding a tighter
@@ -489,4 +483,3 @@ TEST_CASE("PollBridge's EventPoller applies a live event and refreshes state, en
     QObject::disconnect(onResync);
     CHECK(resynced.value(QStringLiteral("pollId")).toString() == pollId);
 }
-

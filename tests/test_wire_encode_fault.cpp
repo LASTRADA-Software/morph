@@ -2,10 +2,8 @@
 //
 // wire::encode's write-failure arm, reachable only through WireCodecOps.
 
-#include <morph/core/wire.hpp>
-
 #include <catch2/catch_test_macros.hpp>
-
+#include <morph/core/wire.hpp>
 #include <string>
 
 using morph::wire::Envelope;

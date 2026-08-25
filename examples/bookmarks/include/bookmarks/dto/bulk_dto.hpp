@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "bookmarks/core/types.hpp"
-#include "bookmarks/units.hpp"
-
 #include <array>
 #include <glaze/glaze.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "bookmarks/core/types.hpp"
+#include "bookmarks/units.hpp"
 
 namespace bookmarks {
 

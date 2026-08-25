@@ -2,7 +2,6 @@
 #include "result_presenter.hpp"
 
 #include <QStringList>
-
 #include <string>
 #include <utility>
 
@@ -93,14 +92,13 @@ void ResultPresenter::captureReading(AnalysisVersionId versionId, double reading
 }
 
 void ResultPresenter::captureQualifier(AnalysisVersionId versionId, const QString& code) {
-    dispatchCapture(CaptureConcentration{.analysisVersionId = versionId,
-                                         .qualifier = QualifierChoice{code.toStdString()}});
+    dispatchCapture(
+        CaptureConcentration{.analysisVersionId = versionId, .qualifier = QualifierChoice{code.toStdString()}});
 }
 
 void ResultPresenter::refreshResults() {
     track<ListResultsResult>(
-        _sample.execute(ListResults{}),
-        [this](ListResultsResult result) { emit resultsListed(std::move(result)); },
+        _sample.execute(ListResults{}), [this](ListResultsResult result) { emit resultsListed(std::move(result)); },
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 
@@ -126,8 +124,7 @@ void ResultPresenter::resolveConflict(ConflictId conflictId, const QString& reso
     const auto decision =
         resolution == QStringLiteral("apply") ? ConflictResolution::ApplyAnyway : ConflictResolution::DiscardStale;
     track<ConflictView>(
-        _sample.execute(
-            ResolveConflict{.conflictId = conflictId, .resolution = decision, .note = note.toStdString()}),
+        _sample.execute(ResolveConflict{.conflictId = conflictId, .resolution = decision, .note = note.toStdString()}),
         [this](ConflictView view) { emit conflictResolved(std::move(view)); },
         [this](const std::exception_ptr& err) { reportError(err); });
 }

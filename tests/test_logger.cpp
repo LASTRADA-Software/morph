@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/logger.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <format>
+#include <morph/core/logger.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -46,7 +46,9 @@ struct LogEntry {
 };
 struct SpySink {
     std::vector<LogEntry> entries;
-    void write(morph::log::LogLevel lvl, std::string_view msg) { entries.push_back({.level = lvl, .msg = std::string{msg}}); }
+    void write(morph::log::LogLevel lvl, std::string_view msg) {
+        entries.push_back({.level = lvl, .msg = std::string{msg}});
+    }
 };
 }  // namespace
 
@@ -196,7 +198,8 @@ TEST_CASE("morph::log::logWarn(fmt, args...): suppressed below threshold without
 TEST_CASE("concurrent log calls are thread-safe", "[logger]") {
     LogGuard guard;
     std::atomic<int> count{0};
-    morph::log::setLogger([&](morph::log::LogLevel, std::string_view) { count.fetch_add(1, std::memory_order_relaxed); });
+    morph::log::setLogger(
+        [&](morph::log::LogLevel, std::string_view) { count.fetch_add(1, std::memory_order_relaxed); });
     morph::log::setLogLevel(morph::log::LogLevel::debug);
 
     constexpr int numThreads = 8;

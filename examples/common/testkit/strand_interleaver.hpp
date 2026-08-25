@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/core/executor.hpp>
-
 #include <cstddef>
 #include <deque>
 #include <functional>
+#include <morph/core/executor.hpp>
 #include <mutex>
 #include <stdexcept>
 #include <vector>
@@ -46,7 +45,7 @@ namespace morph::ladder::testkit {
 /// and the exception is often a `REQUIRE` failure the test needs to see
 /// rather than have silently swallowed.
 class DeterministicExecutor : public ::morph::exec::IExecutor {
-  public:
+public:
     void post(std::function<void()> task) override {
         std::lock_guard lock{_mtx};
         _queue.push_back(std::move(task));
@@ -99,7 +98,7 @@ class DeterministicExecutor : public ::morph::exec::IExecutor {
         }
     }
 
-  private:
+private:
     mutable std::mutex _mtx;
     std::deque<std::function<void()>> _queue;
 };

@@ -17,11 +17,6 @@
 // suites (examples/bookmarks/tests/test_bookmark_qml_bridges.cpp and its
 // siblings) point the same audit at real QML and real bridges.
 
-#include "testkit/qml_surface.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
-
 #include <QDir>
 #include <QFile>
 #include <QObject>
@@ -30,8 +25,11 @@
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QVariantList>
-
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <string>
+
+#include "testkit/qml_surface.hpp"
 
 namespace {
 
@@ -45,7 +43,7 @@ class SurfaceFixtureBridge : public QObject {
     Q_PROPERTY(QString title READ title CONSTANT)
     Q_PROPERTY(int depth READ depth NOTIFY depthChanged)
 
-  public:
+public:
     /// @brief A `CONSTANT` property, the shape every rung's `schemasJson` has.
     /// @return An empty string; no test reads the value.
     [[nodiscard]] QString title() const { return {}; }
@@ -76,7 +74,7 @@ signals:
 class OtherFixtureBridge : public QObject {
     Q_OBJECT
 
-  public:
+public:
     /// @brief The only member; nothing else is needed of it.
     Q_INVOKABLE void ping() {}
 };
@@ -500,8 +498,7 @@ TEST_CASE("QmlSurfaceAudit: one object reached through two aliases has its cover
     // reported.
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
-    writeQml(dir, QStringLiteral("Shell.qml"),
-             QStringLiteral(R"(
+    writeQml(dir, QStringLiteral("Shell.qml"), QStringLiteral(R"(
 import QtQuick
 Item {
     id: root
@@ -514,8 +511,7 @@ Item {
     }
 }
 )"));
-    writeQml(dir, QStringLiteral("Pane.qml"),
-             QStringLiteral(R"(
+    writeQml(dir, QStringLiteral("Pane.qml"), QStringLiteral(R"(
 import QtQuick
 Item {
     id: pane
@@ -558,8 +554,7 @@ TEST_CASE("QmlSurfaceAudit: an exemption that no longer suppresses anything is i
         audit.bind(QStringLiteral("fixture"), bridge);
         audit.allowUnbound(QStringLiteral("someOtherAlias"), QStringLiteral("refresh"),
                            QStringLiteral("bound from somewhere else"));
-        CHECK_THAT(describe(audit.run()),
-                   Catch::Matchers::ContainsSubstring("no bridge is bound to that alias"));
+        CHECK_THAT(describe(audit.run()), Catch::Matchers::ContainsSubstring("no bridge is bound to that alias"));
     }
 
     SECTION("a member the QML does bind after all") {

@@ -4,13 +4,10 @@
 // decoding. Deciding what a clamp *means* is the decoding layer's job, not
 // this type's -- see test_action_wire_rejection.cpp for that half.
 
-#include <morph/util/rational.hpp>
-
 #include <catch2/catch_test_macros.hpp>
-
 #include <glaze/glaze.hpp>
-
 #include <limits>
+#include <morph/util/rational.hpp>
 #include <string>
 
 using morph::math::DecimalPlaces;
@@ -37,8 +34,7 @@ constexpr auto kMax = std::numeric_limits<std::int64_t>::max();
 
 }  // namespace
 
-TEST_CASE("A valid Rational round-trips through its own formatter unchanged",
-          "[rational][wire]") {
+TEST_CASE("A valid Rational round-trips through its own formatter unchanged", "[rational][wire]") {
     // The property the type owes on its own: whatever it can represent, it can
     // write and read back identically.
     const Rational values[] = {
@@ -73,8 +69,7 @@ TEST_CASE("Round-tripping a valid value reports no clamp", "[rational][wire]") {
     CHECK(clamps.clamped() == 0);
 }
 
-TEST_CASE("Wire::validate names exactly the values that cannot be represented",
-          "[rational][wire]") {
+TEST_CASE("Wire::validate names exactly the values that cannot be represented", "[rational][wire]") {
     constexpr auto int64Min = std::numeric_limits<std::int64_t>::min();
 
     CHECK(Rational::Wire{.num = 5, .den = 2, .dp = 2}.validate());

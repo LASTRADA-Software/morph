@@ -13,34 +13,30 @@
 // to an empty translation unit rather than failing to build.
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
 
-#include "board_qml_bridge.hpp"
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
-
-#include <kanban/models/board_model.hpp>
-#include <kanban/models/project_admin_model.hpp>
-
-#include <morph/core/observability.hpp>
-#include <morph/offline/network_monitor.hpp>
-#include <morph/session/session.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
 #include <QString>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
-
 #include <algorithm>
 #include <atomic>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <kanban/models/board_model.hpp>
+#include <kanban/models/project_admin_model.hpp>
 #include <memory>
+#include <morph/core/observability.hpp>
+#include <morph/offline/network_monitor.hpp>
+#include <morph/session/session.hpp>
 #include <mutex>
 #include <string>
 #include <vector>
+
+#include "board_qml_bridge.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
 
 namespace {
 
@@ -107,7 +103,7 @@ void removeQueueFiles(const std::filesystem::path& path) {
 /// `BoardBridge` that uses its path (reverse destruction then closes the
 /// bridge's queue before this destructor ever deletes the file).
 class ScopedQueueFile {
-  public:
+public:
     explicit ScopedQueueFile(std::filesystem::path path) : _path{std::move(path)} { removeQueueFiles(_path); }
     ~ScopedQueueFile() { removeQueueFiles(_path); }
 
@@ -118,14 +114,13 @@ class ScopedQueueFile {
 
     [[nodiscard]] const std::filesystem::path& path() const { return _path; }
 
-  private:
+private:
     std::filesystem::path _path;
 };
 
 }  // namespace
 
-TEST_CASE("BoardBridge queues a move made while offline and replays it on reconnect",
-          "[kanban][gui][offline]") {
+TEST_CASE("BoardBridge queues a move made while offline and replays it on reconnect", "[kanban][gui][offline]") {
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     const auto projectId = seedProject(*rig);
@@ -156,8 +151,13 @@ TEST_CASE("BoardBridge queues a move made while offline and replays it on reconn
     changed = false;
     bridge.createColumn(QStringLiteral("To Do"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString col1 =
-        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString col1 = bridge.board()
+                             .value(QStringLiteral("columns"))
+                             .toList()
+                             .front()
+                             .toMap()
+                             .value(QStringLiteral("id"))
+                             .toString();
 
     changed = false;
     bridge.createColumn(QStringLiteral("Done"), 0);
@@ -169,12 +169,12 @@ TEST_CASE("BoardBridge queues a move made while offline and replays it on reconn
     bridge.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
     const QString swimlaneId = bridge.board()
-                                    .value(QStringLiteral("swimlanes"))
-                                    .toList()
-                                    .front()
-                                    .toMap()
-                                    .value(QStringLiteral("id"))
-                                    .toString();
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     bridge.createTask(col1, swimlaneId, QStringLiteral("Fix bug"));
@@ -290,8 +290,13 @@ TEST_CASE("BoardBridge's deadLetterCount property reflects dead-lettered moves",
     changed = false;
     bridge.createColumn(QStringLiteral("Backlog"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString backlogCol =
-        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString backlogCol = bridge.board()
+                                   .value(QStringLiteral("columns"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     bridge.createColumn(QStringLiteral("To Do"), 1);
@@ -303,12 +308,12 @@ TEST_CASE("BoardBridge's deadLetterCount property reflects dead-lettered moves",
     bridge.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
     const QString swimlaneId = bridge.board()
-                                    .value(QStringLiteral("swimlanes"))
-                                    .toList()
-                                    .front()
-                                    .toMap()
-                                    .value(QStringLiteral("id"))
-                                    .toString();
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     bridge.createTask(toDoCol, swimlaneId, QStringLiteral("Blocker"));
@@ -389,7 +394,7 @@ TEST_CASE("BoardBridge's offline queue/reconnect path emits the framework's own 
     QObject::connect(&bridge, &kanban::gui::BoardBridge::taskMoved, [&](const QString&) { moved = true; });
     int lastQueueDepth = -1;
     QObject::connect(&bridge, &kanban::gui::BoardBridge::syncStatusChanged,
-                      [&](int depth, int /*deadLettered*/) { lastQueueDepth = depth; });
+                     [&](int depth, int /*deadLettered*/) { lastQueueDepth = depth; });
 
     // ── Snapshot/restore the process-global metric sink around this test
     //    only -- ScopedObserveOverride is the framework's own RAII idiom for
@@ -420,8 +425,13 @@ TEST_CASE("BoardBridge's offline queue/reconnect path emits the framework's own 
     changed = false;
     bridge.createColumn(QStringLiteral("To Do"), 0);
     REQUIRE(pumpUntil([&] { return changed; }));
-    const QString col1 =
-        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+    const QString col1 = bridge.board()
+                             .value(QStringLiteral("columns"))
+                             .toList()
+                             .front()
+                             .toMap()
+                             .value(QStringLiteral("id"))
+                             .toString();
 
     changed = false;
     bridge.createColumn(QStringLiteral("Done"), 0);
@@ -433,12 +443,12 @@ TEST_CASE("BoardBridge's offline queue/reconnect path emits the framework's own 
     bridge.createSwimlane(QStringLiteral("Default"));
     REQUIRE(pumpUntil([&] { return changed; }));
     const QString swimlaneId = bridge.board()
-                                    .value(QStringLiteral("swimlanes"))
-                                    .toList()
-                                    .front()
-                                    .toMap()
-                                    .value(QStringLiteral("id"))
-                                    .toString();
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
 
     changed = false;
     bridge.createTask(col1, swimlaneId, QStringLiteral("Fix bug"));

@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <QUrl>
+#include <cstddef>
+#include <functional>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
-
-#include <QUrl>
-
-#include <cstddef>
-#include <functional>
-#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
@@ -81,7 +79,7 @@ struct Remote {
 /// about than relying on the pre-connect queue, not a requirement for
 /// correctness.
 class AppContext {
-  public:
+public:
     using Mode = std::variant<Local, Remote>;
 
     /// @brief Builds the backend/bridge/executor set for @p mode.
@@ -130,7 +128,7 @@ class AppContext {
     ///        (see `include/morph/session/session.hpp`).
     void login(const std::string& principal);
 
-  private:
+private:
     /// @brief Flips `ready()` and drains the queued `onReady()` callbacks.
     void markReady();
 

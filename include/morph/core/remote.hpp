@@ -282,7 +282,7 @@ public:
         return reply;
     }
 
-  private:
+private:
     /// @brief Shared body of both `handle()` overloads.
     ///
     /// Finding 035: peeks at @p msg's `kind`/`modelId` — a cheap, best-effort
@@ -321,7 +321,7 @@ public:
         });
     }
 
-  public:
+public:
     /// @brief Opens a new connection scope and returns its id.
     ///
     /// Call once per accepted transport connection (e.g. from a WebSocket
@@ -818,10 +818,10 @@ private:
             constexpr std::size_t kLogPayloadPreviewBytes = 256;
             std::string_view const preview =
                 std::string_view{msg}.substr(0, std::min(msg.size(), kLogPayloadPreviewBytes));
-            ::morph::log::logError("[dispatchMessage] undecodable envelope from connection {}: {} ({} bytes, "
-                                   "payload prefix: {}{})",
-                                   cid, exc.what(), msg.size(), preview,
-                                   msg.size() > kLogPayloadPreviewBytes ? "..." : "");
+            ::morph::log::logError(
+                "[dispatchMessage] undecodable envelope from connection {}: {} ({} bytes, "
+                "payload prefix: {}{})",
+                cid, exc.what(), msg.size(), preview, msg.size() > kLogPayloadPreviewBytes ? "..." : "");
             reply(::morph::wire::encode(::morph::wire::makeErr(exc.what())));
             return;
         }
@@ -834,10 +834,10 @@ private:
         // logging every successful body by default would be far higher volume
         // and duplicate what dispatch already records via the action log for
         // execute).
-        ::morph::log::logDebug("[dispatchMessage] connection {}: kind={} callId={} typeId={} modelId={} "
-                               "modelType={} actionType={} bodyBytes={}",
-                               cid, env.kind, env.callId, env.typeId, env.modelId, env.modelType, env.actionType,
-                               env.body.size());
+        ::morph::log::logDebug(
+            "[dispatchMessage] connection {}: kind={} callId={} typeId={} modelId={} "
+            "modelType={} actionType={} bodyBytes={}",
+            cid, env.kind, env.callId, env.typeId, env.modelId, env.modelType, env.actionType, env.body.size());
         // Once shutdown has begun, new work is rejected fast — before any of
         // the existing register/execute validation runs — while `deregister`
         // (and any other kind) still flows through unchanged, so a client can
@@ -1102,7 +1102,7 @@ private:
     // design (finding 035).
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply,
-                        std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> executeTicket = {}) {
+                         std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> executeTicket = {}) {
         // Releases executeTicket (if engaged) exactly once, then calls reply
         // with an error envelope. Used by every early-return branch below so
         // the "always release what you took" rule can't be missed at a call
@@ -1431,7 +1431,8 @@ private:
         std::condition_variable cv;
     };
     std::mutex _executeGateMtx;
-    std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<ExecuteGate>, ::morph::exec::detail::ModelIdHash>
+    std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<ExecuteGate>,
+                       ::morph::exec::detail::ModelIdHash>
         _executeGates;
 
     /// @brief Hands out the next ticket for @p mid, in call order.
@@ -1674,8 +1675,8 @@ public:
         if (identity.primary.empty()) {
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        auto env = ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary},
-                                                       std::string{identity.contextKey});
+        auto env =
+            ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
         env.session = currentSession();
         auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
         if (reply.kind == "ok") {
@@ -1705,7 +1706,7 @@ public:
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
         auto env = ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
-                                              std::string{identity.contextKey});
+                                             std::string{identity.contextKey});
         env.session = currentSession();
         auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
         if (reply.kind == "ok") {

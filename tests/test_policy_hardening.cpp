@@ -9,23 +9,21 @@
 //   6. UnitRelation positivity guard (compile-time; witnessed here at runtime).
 //   7. Log-injection sanitisation in the default sink.
 
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
-#include <morph/offline/offline_queue.hpp>
-#include <morph/util/quantity.hpp>
-#include <morph/util/rational.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/offline/offline_queue.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
-#include <morph/core/wire.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <algorithm>
-#include <cstdint>
-#include <memory>
+#include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -163,8 +161,7 @@ struct OwnershipAuthorizer : morph::session::IAuthorizer {
     [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
         return true;  // type-level: allow; ownership is enforced per instance
     }
-    [[nodiscard]] std::optional<std::string> authenticate(
-        const morph::session::Context& ctx) const override {
+    [[nodiscard]] std::optional<std::string> authenticate(const morph::session::Context& ctx) const override {
         if (ctx.principal.empty()) {
             return std::nullopt;
         }
@@ -377,8 +374,8 @@ TEST_CASE("an idempotency key survives drain and can dedup a replay", "[policy][
 // ── Item 6: UnitRelation positivity guard (compile-time) ─────────────────────
 
 TEST_CASE("requirePositiveRatio accepts a strictly-positive ratio at compile time", "[policy][quantity]") {
-    using morph::math::Denominator;
     using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
     using morph::math::Numerator;
     using morph::math::Rational;
     // Consteval evaluation: a strictly-positive ratio compiles and returns true.

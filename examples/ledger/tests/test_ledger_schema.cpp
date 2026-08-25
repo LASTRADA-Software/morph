@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "ledger/db/database.hpp"  // pulls in schema.cpp's registrations via linkage
-#include "ledger/db/ledger_entity.hpp"
-
-#include "testkit/db_fixture.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlSchema.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include "ledger/db/database.hpp"  // pulls in schema.cpp's registrations via linkage
+#include "ledger/db/ledger_entity.hpp"
+#include "testkit/db_fixture.hpp"
 
 TEST_CASE("ledger schema migrations create every expected table", "[ledger][db]") {
     morph::ladder::testkit::DbFixture fixture;  // configures the connection + applies migrations
@@ -41,8 +40,8 @@ TEST_CASE("AccountRecord round-trips through the ledgers/accounts tables", "[led
 
     ledger::db::AccountRecord accountRow;
     accountRow.ledger = ledgerRow;  // BelongsTo assignment: the whole parent record, per
-                                     // polls::db::OptionRecord's real usage (opt.poll = poll;),
-                                     // never a raw .SetKey(...) call
+                                    // polls::db::OptionRecord's real usage (opt.poll = poll;),
+                                    // never a raw .SetKey(...) call
     accountRow.name = "Checking";
     accountRow.kind = 0;  // AccountKind::Asset
     accountRow.currencyCode = "USD";

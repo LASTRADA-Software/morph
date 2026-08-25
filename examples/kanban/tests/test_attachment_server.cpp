@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <QByteArray>
+#include <QTcpSocket>
 #include <catch2/catch_test_macros.hpp>
+#include <filesystem>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <string>
 
 #include "kanban/http/attachment_server.hpp"
 #include "kanban/models/board_model.hpp"
 #include "kanban/models/project_admin_model.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-
-#include <QByteArray>
-#include <QTcpSocket>
-
-#include <filesystem>
-#include <string>
 
 using kanban::http::AttachmentServer;
 using morph::ladder::testkit::DbFixture;
@@ -37,10 +34,10 @@ constexpr std::string_view kSecret = "attachment-server-test-secret-32bytes";
 }
 
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -87,7 +84,8 @@ class ScopedPrincipal {
 
 }  // namespace
 
-TEST_CASE("AttachmentServer accepts a valid upload and returns a storageKey; bytes land on disk", "[kanban][attachments][http]") {
+TEST_CASE("AttachmentServer accepts a valid upload and returns a storageKey; bytes land on disk",
+          "[kanban][attachments][http]") {
     const auto storageDir = freshStorageDir("valid_upload");
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     const morph::session::TokenVerifier verifier{std::string{kSecret}, morph::session::hmacSha256};
@@ -100,11 +98,16 @@ TEST_CASE("AttachmentServer accepts a valid upload and returns a storageKey; byt
     const QByteArray request = QByteArray::fromStdString(
         "POST /attachments HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
+        "Authorization: Bearer " +
+        token +
+        "\r\n"
         "X-Attachment-Filename: hello.txt\r\n"
         "X-Attachment-Content-Type: text/plain\r\n"
-        "Content-Length: " + std::to_string(body.size()) + "\r\n"
-        "\r\n" + body);
+        "Content-Length: " +
+        std::to_string(body.size()) +
+        "\r\n"
+        "\r\n" +
+        body);
 
     const QByteArray response = sendRawRequest(server.port(), request);
     const std::string responseText = response.toStdString();
@@ -128,9 +131,10 @@ TEST_CASE("AttachmentServer accepts a valid upload and returns a storageKey; byt
     std::filesystem::remove_all(storageDir);
 }
 
-TEST_CASE("AttachmentServer downloads an existing storageKey's bytes with the recorded content type "
-          "for a principal with Viewer-or-above role on the owning project",
-          "[kanban][attachments][http]") {
+TEST_CASE(
+    "AttachmentServer downloads an existing storageKey's bytes with the recorded content type "
+    "for a principal with Viewer-or-above role on the owning project",
+    "[kanban][attachments][http]") {
     // Positive control for the ownership-authorization gate below: uploading
     // bytes alone is not enough to authorize a GET any more -- the storageKey
     // must actually be committed to a task (via AddAttachment, exactly like a
@@ -162,11 +166,16 @@ TEST_CASE("AttachmentServer downloads an existing storageKey's bytes with the re
     const QByteArray uploadRequest = QByteArray::fromStdString(
         "POST /attachments HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
+        "Authorization: Bearer " +
+        token +
+        "\r\n"
         "X-Attachment-Filename: dl.txt\r\n"
         "X-Attachment-Content-Type: text/plain\r\n"
-        "Content-Length: " + std::to_string(body.size()) + "\r\n"
-        "\r\n" + body);
+        "Content-Length: " +
+        std::to_string(body.size()) +
+        "\r\n"
+        "\r\n" +
+        body);
     const std::string uploadResponse = sendRawRequest(server.port(), uploadRequest).toStdString();
     REQUIRE(uploadResponse.starts_with("HTTP/1.1 200"));
     const auto keyPos = uploadResponse.find("\"storageKey\"");
@@ -178,15 +187,19 @@ TEST_CASE("AttachmentServer downloads an existing storageKey's bytes with the re
     // Commit the metadata row, exactly as a real client's follow-up
     // AddAttachment call would -- this is what makes the storageKey resolve
     // to a project the GET-time authorization check can find.
-    model.execute(kanban::AddAttachment{
-        .taskId = taskId, .filename = "dl.txt", .contentType = "text/plain", .sizeBytes = static_cast<std::int64_t>(body.size()),
-        .storageKey = storageKey});
+    model.execute(kanban::AddAttachment{.taskId = taskId,
+                                        .filename = "dl.txt",
+                                        .contentType = "text/plain",
+                                        .sizeBytes = static_cast<std::int64_t>(body.size()),
+                                        .storageKey = storageKey});
 
-    const QByteArray getRequest = QByteArray::fromStdString(
-        "GET /attachments/" + storageKey + " HTTP/1.1\r\n"
-        "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
-        "\r\n");
+    const QByteArray getRequest = QByteArray::fromStdString("GET /attachments/" + storageKey +
+                                                            " HTTP/1.1\r\n"
+                                                            "Host: 127.0.0.1\r\n"
+                                                            "Authorization: Bearer " +
+                                                            token +
+                                                            "\r\n"
+                                                            "\r\n");
     const std::string getResponse = sendRawRequest(server.port(), getRequest).toStdString();
 
     REQUIRE(getResponse.starts_with("HTTP/1.1 200"));
@@ -196,9 +209,10 @@ TEST_CASE("AttachmentServer downloads an existing storageKey's bytes with the re
     std::filesystem::remove_all(storageDir);
 }
 
-TEST_CASE("AttachmentServer returns 404 (not 200) for a GET whose bearer token is validly signed for a "
-          "DIFFERENT project the principal has no role on -- authentication alone is not authorization",
-          "[kanban][attachments][http]") {
+TEST_CASE(
+    "AttachmentServer returns 404 (not 200) for a GET whose bearer token is validly signed for a "
+    "DIFFERENT project the principal has no role on -- authentication alone is not authorization",
+    "[kanban][attachments][http]") {
     // The Critical-finding regression test: `mallory` holds a validly-signed
     // token (real signature, unexpired) but has NO role on the project that
     // owns this attachment -- she is authenticated, not authorized. Before
@@ -222,10 +236,12 @@ TEST_CASE("AttachmentServer returns 404 (not 200) for a GET whose bearer token i
     {
         const ScopedPrincipal alice{"alice"};
         aliceModel.execute(kanban::OpenBoard{.projectId = aliceProjectId});
-        const auto columnId = aliceModel.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+        const auto columnId =
+            aliceModel.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
         const auto swimlaneId = aliceModel.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
         aliceTaskId =
-            aliceModel.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Secret task"})
+            aliceModel
+                .execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Secret task"})
                 .tasks.front()
                 .id;
     }
@@ -241,10 +257,15 @@ TEST_CASE("AttachmentServer returns 404 (not 200) for a GET whose bearer token i
     const QByteArray uploadRequest = QByteArray::fromStdString(
         "POST /attachments HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + aliceToken + "\r\n"
+        "Authorization: Bearer " +
+        aliceToken +
+        "\r\n"
         "X-Attachment-Content-Type: text/plain\r\n"
-        "Content-Length: " + std::to_string(body.size()) + "\r\n"
-        "\r\n" + body);
+        "Content-Length: " +
+        std::to_string(body.size()) +
+        "\r\n"
+        "\r\n" +
+        body);
     const std::string uploadResponse = sendRawRequest(server.port(), uploadRequest).toStdString();
     REQUIRE(uploadResponse.starts_with("HTTP/1.1 200"));
     const auto keyPos = uploadResponse.find("\"storageKey\"");
@@ -256,20 +277,22 @@ TEST_CASE("AttachmentServer returns 404 (not 200) for a GET whose bearer token i
     {
         const ScopedPrincipal alice{"alice"};
         aliceModel.execute(kanban::AddAttachment{.taskId = aliceTaskId,
-                                                  .filename = "secret.txt",
-                                                  .contentType = "text/plain",
-                                                  .sizeBytes = static_cast<std::int64_t>(body.size()),
-                                                  .storageKey = storageKey});
+                                                 .filename = "secret.txt",
+                                                 .contentType = "text/plain",
+                                                 .sizeBytes = static_cast<std::int64_t>(body.size()),
+                                                 .storageKey = storageKey});
     }
 
     // mallory presents her own validly-signed token (real signature, real
     // principal, unexpired) against alice's storageKey.
     const std::string malloryToken = validToken(issuer, "mallory");
-    const QByteArray getRequest = QByteArray::fromStdString(
-        "GET /attachments/" + storageKey + " HTTP/1.1\r\n"
-        "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + malloryToken + "\r\n"
-        "\r\n");
+    const QByteArray getRequest = QByteArray::fromStdString("GET /attachments/" + storageKey +
+                                                            " HTTP/1.1\r\n"
+                                                            "Host: 127.0.0.1\r\n"
+                                                            "Authorization: Bearer " +
+                                                            malloryToken +
+                                                            "\r\n"
+                                                            "\r\n");
     const std::string getResponse = sendRawRequest(server.port(), getRequest).toStdString();
 
     REQUIRE(getResponse.starts_with("HTTP/1.1 404"));
@@ -294,11 +317,13 @@ TEST_CASE("AttachmentServer returns 404 for a GET naming a storageKey that was n
 
     const std::string token = validToken(issuer, "alice");
     const std::string fakeKey(64, 'a');  // well-formed shape, never actually uploaded
-    const QByteArray getRequest = QByteArray::fromStdString(
-        "GET /attachments/" + fakeKey + " HTTP/1.1\r\n"
-        "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
-        "\r\n");
+    const QByteArray getRequest = QByteArray::fromStdString("GET /attachments/" + fakeKey +
+                                                            " HTTP/1.1\r\n"
+                                                            "Host: 127.0.0.1\r\n"
+                                                            "Authorization: Bearer " +
+                                                            token +
+                                                            "\r\n"
+                                                            "\r\n");
     const std::string getResponse = sendRawRequest(server.port(), getRequest).toStdString();
 
     REQUIRE(getResponse.starts_with("HTTP/1.1 404"));
@@ -321,13 +346,13 @@ TEST_CASE("AttachmentServer's parser does not crash or hang on malformed/garbage
     const std::vector<QByteArray> garbageInputs = {
         QByteArray{"\x00\x01\x02\x03\xff\xfe\xfd\xfc", 8},
         QByteArray{"not even close to an http request"},
-        QByteArray{"GET"},                                     // no path/version at all
-        QByteArray{"GET /attachments/x"},                      // no version, no headers, no terminator
-        QByteArray{"POST /attachments HTTP/1.1\r\n"},           // headers never terminate
+        QByteArray{"GET"},                             // no path/version at all
+        QByteArray{"GET /attachments/x"},              // no version, no headers, no terminator
+        QByteArray{"POST /attachments HTTP/1.1\r\n"},  // headers never terminate
         QByteArray{"POST /attachments HTTP/1.1\r\nContent-Length: notanumber\r\n\r\n"},
         QByteArray{"POST /attachments HTTP/1.1\r\nContent-Length: -5\r\n\r\n"},
-        QByteArray{"\r\n\r\n"},                                 // headers end with nothing before it
-        QByteArray(20000, 'a'),                                 // header block far past the 16KiB guard, no terminator
+        QByteArray{"\r\n\r\n"},  // headers end with nothing before it
+        QByteArray(20000, 'a'),  // header block far past the 16KiB guard, no terminator
     };
 
     for (const auto& garbage : garbageInputs) {
@@ -341,7 +366,7 @@ TEST_CASE("AttachmentServer's parser does not crash or hang on malformed/garbage
         // it does not require the server to ever respond to an incomplete
         // request.
         static_cast<void>(pumpUntil([&] { return socket.state() == QAbstractSocket::UnconnectedState; },
-                                     std::chrono::milliseconds{500}));
+                                    std::chrono::milliseconds{500}));
         socket.abort();
     }
 
@@ -352,16 +377,22 @@ TEST_CASE("AttachmentServer's parser does not crash or hang on malformed/garbage
     const QByteArray request = QByteArray::fromStdString(
         "POST /attachments HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
-        "Content-Length: " + std::to_string(body.size()) + "\r\n"
-        "\r\n" + body);
+        "Authorization: Bearer " +
+        token +
+        "\r\n"
+        "Content-Length: " +
+        std::to_string(body.size()) +
+        "\r\n"
+        "\r\n" +
+        body);
     const std::string response = sendRawRequest(server.port(), request).toStdString();
     CHECK(response.starts_with("HTTP/1.1 200"));
 
     std::filesystem::remove_all(storageDir);
 }
 
-TEST_CASE("AttachmentServer rejects an oversized upload with 413 before writing anything to disk", "[kanban][attachments][http]") {
+TEST_CASE("AttachmentServer rejects an oversized upload with 413 before writing anything to disk",
+          "[kanban][attachments][http]") {
     const auto storageDir = freshStorageDir("oversized_upload");
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     const morph::session::TokenVerifier verifier{std::string{kSecret}, morph::session::hmacSha256};
@@ -376,11 +407,16 @@ TEST_CASE("AttachmentServer rejects an oversized upload with 413 before writing 
     const QByteArray request = QByteArray::fromStdString(
         "POST /attachments HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
+        "Authorization: Bearer " +
+        token +
+        "\r\n"
         "X-Attachment-Filename: big.bin\r\n"
         "X-Attachment-Content-Type: application/octet-stream\r\n"
-        "Content-Length: " + std::to_string(body.size()) + "\r\n"
-        "\r\n" + body);
+        "Content-Length: " +
+        std::to_string(body.size()) +
+        "\r\n"
+        "\r\n" +
+        body);
 
     const QByteArray response = sendRawRequest(server.port(), request);
     const std::string responseText = response.toStdString();
@@ -391,9 +427,10 @@ TEST_CASE("AttachmentServer rejects an oversized upload with 413 before writing 
     std::filesystem::remove_all(storageDir);
 }
 
-TEST_CASE("A dangling metadata row -- AddAttachment committed for a storageKey no upload ever produced -- "
-          "downloads as a clean 404, not a crash",
-          "[kanban][attachments][http]") {
+TEST_CASE(
+    "A dangling metadata row -- AddAttachment committed for a storageKey no upload ever produced -- "
+    "downloads as a clean 404, not a crash",
+    "[kanban][attachments][http]") {
     DbFixture fixture;
     const auto storageDir = freshStorageDir("dangling_row");
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
@@ -422,10 +459,10 @@ TEST_CASE("A dangling metadata row -- AddAttachment committed for a storageKey n
     // the same BoardModel action Task 16 added.
     const std::string danglingKey(64, 'd');
     model.execute(kanban::AddAttachment{.taskId = taskId,
-                                         .filename = "ghost.pdf",
-                                         .contentType = "application/pdf",
-                                         .sizeBytes = 4096,
-                                         .storageKey = danglingKey});
+                                        .filename = "ghost.pdf",
+                                        .contentType = "application/pdf",
+                                        .sizeBytes = 4096,
+                                        .storageKey = danglingKey});
     const auto attachments = model.execute(kanban::GetAttachments{.taskId = taskId});
     REQUIRE(attachments.attachments.size() == 1);
     CHECK(attachments.attachments.front().storageKey == danglingKey);
@@ -434,11 +471,13 @@ TEST_CASE("A dangling metadata row -- AddAttachment committed for a storageKey n
     // return a clean 404 -- not a crash, not a hang, not a 200 with garbage
     // bytes.
     const std::string token = validToken(issuer, "alice");
-    const QByteArray getRequest = QByteArray::fromStdString(
-        "GET /attachments/" + danglingKey + " HTTP/1.1\r\n"
-        "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
-        "\r\n");
+    const QByteArray getRequest = QByteArray::fromStdString("GET /attachments/" + danglingKey +
+                                                            " HTTP/1.1\r\n"
+                                                            "Host: 127.0.0.1\r\n"
+                                                            "Authorization: Bearer " +
+                                                            token +
+                                                            "\r\n"
+                                                            "\r\n");
     const std::string getResponse = sendRawRequest(server.port(), getRequest).toStdString();
     REQUIRE(getResponse.starts_with("HTTP/1.1 404"));
 
@@ -459,8 +498,11 @@ TEST_CASE("AttachmentServer rejects an upload with no bearer token before writin
         "Host: 127.0.0.1\r\n"
         "X-Attachment-Filename: sneaky.txt\r\n"
         "X-Attachment-Content-Type: text/plain\r\n"
-        "Content-Length: " + std::to_string(body.size()) + "\r\n"
-        "\r\n" + body);
+        "Content-Length: " +
+        std::to_string(body.size()) +
+        "\r\n"
+        "\r\n" +
+        body);
 
     const QByteArray response = sendRawRequest(server.port(), request);
     const std::string responseText = response.toStdString();
@@ -485,9 +527,14 @@ TEST_CASE("AttachmentServer rejects an upload carrying a bearer token with a bad
     const QByteArray request = QByteArray::fromStdString(
         "POST /attachments HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + forgedToken + "\r\n"
-        "Content-Length: " + std::to_string(body.size()) + "\r\n"
-        "\r\n" + body);
+        "Authorization: Bearer " +
+        forgedToken +
+        "\r\n"
+        "Content-Length: " +
+        std::to_string(body.size()) +
+        "\r\n"
+        "\r\n" +
+        body);
 
     const QByteArray response = sendRawRequest(server.port(), request);
     const std::string responseText = response.toStdString();
@@ -514,9 +561,14 @@ TEST_CASE("AttachmentServer rejects a GET download with no bearer token", "[kanb
     const QByteArray uploadRequest = QByteArray::fromStdString(
         "POST /attachments HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
-        "Content-Length: " + std::to_string(body.size()) + "\r\n"
-        "\r\n" + body);
+        "Authorization: Bearer " +
+        token +
+        "\r\n"
+        "Content-Length: " +
+        std::to_string(body.size()) +
+        "\r\n"
+        "\r\n" +
+        body);
     const std::string uploadResponse = sendRawRequest(server.port(), uploadRequest).toStdString();
     REQUIRE(uploadResponse.starts_with("HTTP/1.1 200"));
     const auto keyPos = uploadResponse.find("\"storageKey\"");
@@ -525,19 +577,20 @@ TEST_CASE("AttachmentServer rejects a GET download with no bearer token", "[kanb
     const auto secondQuote = uploadResponse.find('"', firstQuote + 1);
     const std::string storageKey = uploadResponse.substr(firstQuote + 1, secondQuote - firstQuote - 1);
 
-    const QByteArray getRequest = QByteArray::fromStdString(
-        "GET /attachments/" + storageKey + " HTTP/1.1\r\n"
-        "Host: 127.0.0.1\r\n"
-        "\r\n");
+    const QByteArray getRequest = QByteArray::fromStdString("GET /attachments/" + storageKey +
+                                                            " HTTP/1.1\r\n"
+                                                            "Host: 127.0.0.1\r\n"
+                                                            "\r\n");
     const std::string getResponse = sendRawRequest(server.port(), getRequest).toStdString();
     REQUIRE(getResponse.starts_with("HTTP/1.1 401"));
 
     std::filesystem::remove_all(storageDir);
 }
 
-TEST_CASE("AttachmentServer rejects a stream that keeps sending bytes past the size bound even though "
-          "its own Content-Length header understated the body",
-          "[kanban][attachments][http]") {
+TEST_CASE(
+    "AttachmentServer rejects a stream that keeps sending bytes past the size bound even though "
+    "its own Content-Length header understated the body",
+    "[kanban][attachments][http]") {
     const auto storageDir = freshStorageDir("dishonest_content_length");
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     const morph::session::TokenVerifier verifier{std::string{kSecret}, morph::session::hmacSha256};
@@ -553,7 +606,9 @@ TEST_CASE("AttachmentServer rejects a stream that keeps sending bytes past the s
     const QByteArray headers = QByteArray::fromStdString(
         "POST /attachments HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
+        "Authorization: Bearer " +
+        token +
+        "\r\n"
         "Content-Length: 4\r\n"
         "\r\n");
     const std::string overflow(4096, 'x');
@@ -572,9 +627,10 @@ TEST_CASE("AttachmentServer rejects a stream that keeps sending bytes past the s
     std::filesystem::remove_all(storageDir);
 }
 
-TEST_CASE("AttachmentServer never lets a bare-LF-bearing X-Attachment-Content-Type header value inject an "
-          "extra header line into a later GET response",
-          "[kanban][attachments][http][security]") {
+TEST_CASE(
+    "AttachmentServer never lets a bare-LF-bearing X-Attachment-Content-Type header value inject an "
+    "extra header line into a later GET response",
+    "[kanban][attachments][http][security]") {
     // The response-header-injection finding: parseHeaders only splits on
     // "\r\n", so a header *value* containing a bare "\n" (no preceding "\r")
     // survives parsing intact as part of the value -- but a lenient
@@ -612,11 +668,16 @@ TEST_CASE("AttachmentServer never lets a bare-LF-bearing X-Attachment-Content-Ty
     const QByteArray uploadRequest = QByteArray::fromStdString(
         "POST /attachments HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
+        "Authorization: Bearer " +
+        token +
+        "\r\n"
         "X-Attachment-Filename: evil.txt\r\n"
         "X-Attachment-Content-Type: text/plain\nX-Injected: evil\r\n"
-        "Content-Length: " + std::to_string(body.size()) + "\r\n"
-        "\r\n" + body);
+        "Content-Length: " +
+        std::to_string(body.size()) +
+        "\r\n"
+        "\r\n" +
+        body);
     const std::string uploadResponse = sendRawRequest(server.port(), uploadRequest).toStdString();
     REQUIRE(uploadResponse.starts_with("HTTP/1.1 200"));
     const auto keyPos = uploadResponse.find("\"storageKey\"");
@@ -627,16 +688,18 @@ TEST_CASE("AttachmentServer never lets a bare-LF-bearing X-Attachment-Content-Ty
     REQUIRE_FALSE(storageKey.empty());
 
     model.execute(kanban::AddAttachment{.taskId = taskId,
-                                         .filename = "evil.txt",
-                                         .contentType = "text/plain",
-                                         .sizeBytes = static_cast<std::int64_t>(body.size()),
-                                         .storageKey = storageKey});
+                                        .filename = "evil.txt",
+                                        .contentType = "text/plain",
+                                        .sizeBytes = static_cast<std::int64_t>(body.size()),
+                                        .storageKey = storageKey});
 
-    const QByteArray getRequest = QByteArray::fromStdString(
-        "GET /attachments/" + storageKey + " HTTP/1.1\r\n"
-        "Host: 127.0.0.1\r\n"
-        "Authorization: Bearer " + token + "\r\n"
-        "\r\n");
+    const QByteArray getRequest = QByteArray::fromStdString("GET /attachments/" + storageKey +
+                                                            " HTTP/1.1\r\n"
+                                                            "Host: 127.0.0.1\r\n"
+                                                            "Authorization: Bearer " +
+                                                            token +
+                                                            "\r\n"
+                                                            "\r\n");
     const std::string getResponse = sendRawRequest(server.port(), getRequest).toStdString();
 
     REQUIRE(getResponse.starts_with("HTTP/1.1 200"));

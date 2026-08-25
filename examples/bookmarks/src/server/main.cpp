@@ -34,15 +34,9 @@
 /// `action_driver` generators. Demo data is therefore created through the
 /// client, which also exercises the path a user actually takes.
 
-#include "bookmarks/app/app.hpp"
-#include "bookmarks/db/database.hpp"
-
-#include <morph/qt/qt_websocket_server.hpp>
-
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QTimer>
-
 #include <charconv>
 #include <chrono>
 #include <csignal>
@@ -50,9 +44,13 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <morph/qt/qt_websocket_server.hpp>
 #include <string>
 #include <string_view>
 #include <system_error>
+
+#include "bookmarks/app/app.hpp"
+#include "bookmarks/db/database.hpp"
 
 // `unsetenv` is POSIX, not <cstdlib>. This server target is only built for
 // desktop platforms (morph_add_rung() does not emit it for WASM), all of
@@ -168,8 +166,7 @@ int main(int argc, char** argv) {
         std::uint16_t parsed = 0;
         const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), parsed);
         if (ec != std::errc{} || end != text.data() + text.size()) {
-            std::cerr << "bookmarks-server: BOOKMARKS_PORT='" << portEnv
-                      << "' is not a valid port number (0-65535)\n";
+            std::cerr << "bookmarks-server: BOOKMARKS_PORT='" << portEnv << "' is not a valid port number (0-65535)\n";
             return 2;
         }
         port = parsed;

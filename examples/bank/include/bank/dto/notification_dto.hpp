@@ -30,7 +30,7 @@ struct Notify {
 
 /// @brief List the current owner's notifications.
 struct ListNotifications {
-    std::string owner;        ///< empty => session principal
+    std::string owner;  ///< empty => session principal
     bool unreadOnly = false;
 };
 

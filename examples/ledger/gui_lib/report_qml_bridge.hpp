@@ -34,12 +34,11 @@ class ReportQmlBridge : public QObject {
     /// @brief The last error surfaced, or empty.
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
-    ReportQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                    QObject* parent = nullptr);
+    ReportQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent = nullptr);
 
     /// @return The current status token.
     [[nodiscard]] QString status() const { return _status; }
@@ -61,7 +60,7 @@ class ReportQmlBridge : public QObject {
     ///        decides whether a 23:30-local transaction counts (Task 17).
     Q_INVOKABLE void requestMonthlyStatement(int year, int month, int timezoneOffsetMinutes);
 
-  signals:
+signals:
     /// @brief `status()` changed.
     void statusChanged();
 
@@ -71,7 +70,7 @@ class ReportQmlBridge : public QObject {
     /// @brief `lastError()` changed.
     void lastErrorChanged();
 
-  private:
+private:
     /// @brief Sets `status` and notifies QML.
     /// @param status The new status token.
     void setStatus(QString status);

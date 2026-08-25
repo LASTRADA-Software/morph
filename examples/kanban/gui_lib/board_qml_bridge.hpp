@@ -5,7 +5,6 @@
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
-
 #include <memory>
 #include <string>
 
@@ -21,13 +20,12 @@
 // existing convention rather than adding a second, narrower guard just for
 // this one include.
 #ifndef Q_MOC_RUN
-#include "board_presenter.hpp"
-#include "gui/event_poller.hpp"
-
 #include <QNetworkAccessManager>
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "board_presenter.hpp"
+#include "gui/event_poller.hpp"
 
 // The offline stack is optional (MORPH_BUILD_OFFLINE_SQLITE, needs SQLite3 —
 // see CMakeLists.txt's own "SQLite-backed durable offline queue" block) and
@@ -144,7 +142,7 @@ class BoardBridge : public QObject {
     Q_PROPERTY(int deadLetterCount READ deadLetterCount NOTIFY syncStatusChanged)
 #endif
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -217,8 +215,7 @@ class BoardBridge : public QObject {
     /// @param columnId   The destination column, as its plain number.
     /// @param swimlaneId The destination swimlane, as its plain number.
     /// @param position   The destination position within `(columnId, swimlaneId)`.
-    Q_INVOKABLE void moveTask(const QString& taskId, const QString& columnId, const QString& swimlaneId,
-                               int position);
+    Q_INVOKABLE void moveTask(const QString& taskId, const QString& columnId, const QString& swimlaneId, int position);
 
     /// @brief Appends a comment to a task. Emits `commentAdded`, or `failed`.
     /// @param taskId The task to comment on, as its plain number.
@@ -367,9 +364,9 @@ class BoardBridge : public QObject {
     /// @param monitorConfig Tuning passed straight to `NetworkMonitor` --
     ///        a test shortens `probeInterval`/`failureThreshold`/
     ///        `onlineThreshold` for fast, deterministic convergence.
-    void enableOfflineQueue(const QString& queuePath,
-                            ::morph::offline::NetworkMonitor::ProbeFunction probe = [] { return true; },
-                            ::morph::offline::NetworkMonitor::Config monitorConfig = {});
+    void enableOfflineQueue(
+        const QString& queuePath, ::morph::offline::NetworkMonitor::ProbeFunction probe = [] { return true; },
+        ::morph::offline::NetworkMonitor::Config monitorConfig = {});
 
     /// @brief Test-only accessor: whether `_networkMonitor` currently
     ///        reports the network online. Exists solely so
@@ -385,7 +382,7 @@ class BoardBridge : public QObject {
 #endif
 #endif
 
-  signals:
+signals:
     /// @brief Emitted once the wrapped presenter's registration round trip
     ///        settles — see `ProjectAdminBridge::bound`'s identical doc
     ///        comment.
@@ -443,7 +440,7 @@ class BoardBridge : public QObject {
     ///        `SyncWorker`'s retry budget, this bridge's lifetime.
     void syncStatusChanged(int queueDepth, int deadLettered);
 
-  private:
+private:
     /// @brief Installs a `board` value and emits `boardChanged`. If this
     ///        result came from `openBoard()` (tracked via `_openPending`),
     ///        also (re)starts `_poller` — the equivalent trigger point to

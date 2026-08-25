@@ -5,13 +5,11 @@
 #include <QObject>
 #include <QTcpServer>
 #include <QTcpSocket>
-
-#include <morph/session/session_auth.hpp>
-
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <morph/session/session_auth.hpp>
 #include <string>
 #include <unordered_map>
 
@@ -140,7 +138,7 @@ struct AttachmentServerConfig {
 class AttachmentServer : public QObject {
     Q_OBJECT
 
-  public:
+public:
     /// @brief Alias for the configuration struct.
     using Config = AttachmentServerConfig;
 
@@ -173,7 +171,7 @@ class AttachmentServer : public QObject {
     /// @brief Stops accepting new connections and closes the listening socket.
     void close();
 
-  private:
+private:
     /// @brief Per-connection accumulation state while a request is being read.
     struct ConnectionState {
         /// @brief Raw bytes received so far (headers, then body).

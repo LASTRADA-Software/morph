@@ -1,32 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "bookmarks/models/bookmark_model.hpp"
-#include "testkit/db_fixture.hpp"
-
-#include "bookmarks/auth/bookmarks_authorizer.hpp"
-#include "bookmarks/db/outbox_entity.hpp"
-
-#include "clock.hpp"
-#include "testkit/backend_rig.hpp"
-#include "testkit/db_busy_fixture.hpp"
-#include "testkit/db_pool_drain.hpp"
-#include "testkit/pump.hpp"
-
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-#include <morph/session/session.hpp>
-
-#include <algorithm>
 #include <chrono>
 #include <memory>
+#include <morph/session/session.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "bookmarks/auth/bookmarks_authorizer.hpp"
+#include "bookmarks/db/outbox_entity.hpp"
+#include "bookmarks/models/bookmark_model.hpp"
+#include "clock.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_busy_fixture.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/db_pool_drain.hpp"
+#include "testkit/pump.hpp"
+
 using morph::ladder::testkit::awaitQt;
 using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
-using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::drainPoolIdleMappers;
+using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::pumpUntil;
 
 namespace {
@@ -47,10 +44,10 @@ namespace {
 }
 
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -58,7 +55,7 @@ class ScopedPrincipal {
 /// @brief A `CreateBookmark` for @p url, optionally titled and/or tagged.
 ///        See `contextFor` for why this is not a designated initializer.
 [[nodiscard]] bookmarks::CreateBookmark makeCreate(std::string url, std::string title = {},
-                                                    std::vector<std::string> tags = {}) {
+                                                   std::vector<std::string> tags = {}) {
     bookmarks::CreateBookmark action;
     action.url = std::move(url);
     action.title = std::move(title);
@@ -68,8 +65,7 @@ class ScopedPrincipal {
 
 }  // namespace
 
-TEST_CASE("CreateBookmark stores a bookmark owned by the authenticated principal",
-          "[bookmarks][model]") {
+TEST_CASE("CreateBookmark stores a bookmark owned by the authenticated principal", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal principal{"alice"};
@@ -98,8 +94,7 @@ TEST_CASE("CreateBookmark without a principal is Forbidden", "[bookmarks][model]
     REQUIRE_THROWS_AS(model.execute(action), bookmarks::Forbidden);
 }
 
-TEST_CASE("GetBookmark refuses a different principal's bookmark with Forbidden, not NotFound",
-          "[bookmarks][model]") {
+TEST_CASE("GetBookmark refuses a different principal's bookmark with Forbidden, not NotFound", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     bookmarks::BookmarkId id;
@@ -130,8 +125,7 @@ TEST_CASE("EditBookmark replaces the tag set: adds new tags, drops removed ones,
     CHECK(tags == std::vector<std::string>{"b", "c"});  // "a" dropped, "b" kept, "c" auto-created
 }
 
-TEST_CASE("ArchiveBookmark/UnarchiveBookmark flip archiveState and nothing else",
-          "[bookmarks][model]") {
+TEST_CASE("ArchiveBookmark/UnarchiveBookmark flip archiveState and nothing else", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal alice{"alice"};
@@ -158,13 +152,11 @@ TEST_CASE("GetBookmark against an unknown id throws NotFound, and an empty id is
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal alice{"alice"};
-    REQUIRE_THROWS_AS(model.execute(bookmarks::GetBookmark{.id = bookmarks::BookmarkId{99999}}),
-                      bookmarks::NotFound);
+    REQUIRE_THROWS_AS(model.execute(bookmarks::GetBookmark{.id = bookmarks::BookmarkId{99999}}), bookmarks::NotFound);
     REQUIRE_THROWS_AS(model.execute(bookmarks::GetBookmark{}), bookmarks::ValidationError);
 }
 
-TEST_CASE("ListBookmarks filters by archive state and hides archived bookmarks by default",
-          "[bookmarks][model]") {
+TEST_CASE("ListBookmarks filters by archive state and hides archived bookmarks by default", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal alice{"alice"};
@@ -183,8 +175,7 @@ TEST_CASE("ListBookmarks filters by archive state and hides archived bookmarks b
     CHECK(*archivedPage.bookmarks.front().id == *archivedId);
 }
 
-TEST_CASE("ListBookmarks only ever returns the calling principal's own bookmarks",
-          "[bookmarks][model]") {
+TEST_CASE("ListBookmarks only ever returns the calling principal's own bookmarks", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     {
@@ -198,9 +189,10 @@ TEST_CASE("ListBookmarks only ever returns the calling principal's own bookmarks
     CHECK(page.bookmarks.front().url == "https://mallory.example");
 }
 
-TEST_CASE("ListBookmarks sets nextCursor even when a filtered page's matches are empty, "
-          "so a tag/text search doesn't silently truncate",
-          "[bookmarks][model]") {
+TEST_CASE(
+    "ListBookmarks sets nextCursor even when a filtered page's matches are empty, "
+    "so a tag/text search doesn't silently truncate",
+    "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal alice{"alice"};
@@ -208,8 +200,7 @@ TEST_CASE("ListBookmarks sets nextCursor even when a filtered page's matches are
     // Created first, so it has the lowest id and therefore sorts last in the
     // DESCENDING-by-id keyset pagination below -- i.e. it lands beyond the
     // first raw SQL page.
-    const auto targetId =
-        model.execute(makeCreate("https://target.example", {}, {"target"})).id;
+    const auto targetId = model.execute(makeCreate("https://target.example", {}, {"target"})).id;
     for (int i = 0; i < 25; ++i) {
         model.execute(makeCreate("https://filler" + std::to_string(i) + ".example"));
     }
@@ -229,8 +220,7 @@ TEST_CASE("ListBookmarks sets nextCursor even when a filtered page's matches are
     CHECK(*secondPage.bookmarks.front().id == *targetId);
 }
 
-TEST_CASE("GetChangesSince returns only bookmarks touched after the given instant",
-          "[bookmarks][model]") {
+TEST_CASE("GetChangesSince returns only bookmarks touched after the given instant", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal alice{"alice"};
@@ -247,7 +237,7 @@ TEST_CASE("GetChangesSince returns only bookmarks touched after the given instan
     const auto changes = model.execute(bookmarks::GetChangesSince{.since = cursor});
     REQUIRE(changes.changed.size() == 1);
     CHECK(*changes.changed.front().id == *id2);
-    (void) id1;
+    (void)id1;
 }
 
 TEST_CASE("GetChangesSince does not miss a write landing in the same millisecond as the cursor",
@@ -295,7 +285,7 @@ TEST_CASE("GetChangesSince's same-millisecond tie-break never re-delivers an alr
     const auto frozenAt = *morph::ladder::now();
     const morph::ladder::ScopedClockOverride clock{frozenAt};
 
-    (void) model.execute(makeCreate("https://first.example"));
+    (void)model.execute(makeCreate("https://first.example"));
     const auto cursor = model.execute(bookmarks::GetChangesSince{}).asOf;
 
     // No further writes -- polling again with the cursor that already
@@ -304,8 +294,7 @@ TEST_CASE("GetChangesSince's same-millisecond tie-break never re-delivers an alr
     CHECK(changes.changed.empty());
 }
 
-TEST_CASE("BulkEdit archives every listed bookmark and adds/removes tags atomically",
-          "[bookmarks][model]") {
+TEST_CASE("BulkEdit archives every listed bookmark and adds/removes tags atomically", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal alice{"alice"};
@@ -328,8 +317,7 @@ TEST_CASE("BulkEdit archives every listed bookmark and adds/removes tags atomica
     }
 }
 
-TEST_CASE("BulkEdit rejects the whole batch if any id is not owned by the caller",
-          "[bookmarks][model]") {
+TEST_CASE("BulkEdit rejects the whole batch if any id is not owned by the caller", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     bookmarks::BookmarkId aliceId;
@@ -349,8 +337,7 @@ TEST_CASE("BulkEdit rejects the whole batch if any id is not owned by the caller
     CHECK(model.execute(bookmarks::GetBookmark{.id = malloryId}).archiveState == bookmarks::ArchiveState::Active);
 }
 
-TEST_CASE("BulkEdit writes exactly one outbox row per call, consumed by an OutboxRelay",
-          "[bookmarks][model]") {
+TEST_CASE("BulkEdit writes exactly one outbox row per call, consumed by an OutboxRelay", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal alice{"alice"};
@@ -368,9 +355,10 @@ TEST_CASE("BulkEdit writes exactly one outbox row per call, consumed by an Outbo
     CHECK(rows.front().principal.Value() == "alice");
 }
 
-TEST_CASE("BulkEdit from the same principal in the same millisecond both succeed, "
-          "each with its own outbox row",
-          "[bookmarks][model]") {
+TEST_CASE(
+    "BulkEdit from the same principal in the same millisecond both succeed, "
+    "each with its own outbox row",
+    "[bookmarks][model]") {
     // Regression test: the outbox idempotency key used to be
     // owner + "-bulkedit-" + nowMs() alone, which collides across two
     // BulkEdit calls from the same principal landing in the same
@@ -450,8 +438,7 @@ TEST_CASE("RecordMetadata refuses any principal other than the metadata-fetch se
     }
 }
 
-TEST_CASE("RecordMetadata against an already-deleted bookmark is a benign no-op",
-          "[bookmarks][model]") {
+TEST_CASE("RecordMetadata against an already-deleted bookmark is a benign no-op", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal alice{"alice"};
@@ -479,8 +466,7 @@ TEST_CASE("ImportBookmarks stores every well-formed entry in one chunk", "[bookm
     CHECK(page.bookmarks.size() == 2);
 }
 
-TEST_CASE("ImportBookmarks skips an entry whose url or title exceeds this rung's field bounds",
-          "[bookmarks][model]") {
+TEST_CASE("ImportBookmarks skips an entry whose url or title exceeds this rung's field bounds", "[bookmarks][model]") {
     // The Netscape parser applies no field bounds of its own, so without an
     // explicit check here an import would happily write a row that
     // `EditBookmark::validate()` then refuses -- a bookmark the owner can see
@@ -544,9 +530,10 @@ TEST_CASE("An ImportBookmarks chunk over kMaxImportChunkBytes throws TooLarge, n
     CHECK_THROWS_AS(model.execute(noOpId), bookmarks::ValidationError);
 }
 
-TEST_CASE("An oversized ImportBookmarks chunk reaches TooLarge through the real Bridge dispatch path, "
-          "not just a bare model.execute() call",
-          "[bookmarks][model]") {
+TEST_CASE(
+    "An oversized ImportBookmarks chunk reaches TooLarge through the real Bridge dispatch path, "
+    "not just a bare model.execute() call",
+    "[bookmarks][model]") {
     // The case above proves execute() throws the right type; it calls
     // execute() directly, bypassing ActionValidator/Bridge::executeVia
     // entirely, so it cannot by itself prove the fix above (validate() not
@@ -593,8 +580,7 @@ TEST_CASE("ImportBookmarks is idempotent on a retried opId", "[bookmarks][model]
     CHECK(page.bookmarks.size() == 1);  // not duplicated
 }
 
-TEST_CASE("ExportBookmarks emits every owned bookmark as a Netscape file, and it re-imports",
-          "[bookmarks][model]") {
+TEST_CASE("ExportBookmarks emits every owned bookmark as a Netscape file, and it re-imports", "[bookmarks][model]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     {
@@ -653,8 +639,7 @@ TEST_CASE("A URL containing '&' survives an ExportBookmarks/ImportBookmarks roun
     CHECK(page.bookmarks[0].url == originalUrl);  // decoded back to the original, not "&amp;"
 }
 
-TEST_CASE("BookmarkModel over the full backend-mode matrix: create, list, get round-trip",
-          "[bookmarks][model]") {
+TEST_CASE("BookmarkModel over the full backend-mode matrix: create, list, get round-trip", "[bookmarks][model]") {
     // Every case above dispatches model.execute(action) directly, C++-to-C++,
     // with ScopedPrincipal standing in for a real dispatch's Context -- it
     // never exercises the dispatch machinery itself. This case drives the
@@ -683,8 +668,8 @@ TEST_CASE("BookmarkModel over the full backend-mode matrix: create, list, get ro
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     morph::session::Context ctx;
     ctx.principal = "alice";
-    ctx.token = issuer.issue(morph::session::SessionToken{
-        .principal = "alice", .expiresAtMs = 4102444800000, .roles = {}});
+    ctx.token =
+        issuer.issue(morph::session::SessionToken{.principal = "alice", .expiresAtMs = 4102444800000, .roles = {}});
     rig.bridge(0).setDefaultSession(ctx);
 
     auto handler = rig.client<bookmarks::BookmarkModel>(0);
@@ -722,11 +707,11 @@ namespace {
 /// otherwise make a contended write block for a real minute before this test
 /// observed `SQLITE_BUSY`.
 class ScopedShortBusyTimeout {
-  public:
+public:
     explicit ScopedShortBusyTimeout(int milliseconds) {
         ::Lightweight::SqlConnection::SetPostConnectedHook([milliseconds](::Lightweight::SqlConnection& connection) {
             ::Lightweight::SqlStatement stmt{connection};
-            (void) stmt.ExecuteDirect("PRAGMA busy_timeout = " + std::to_string(milliseconds));
+            (void)stmt.ExecuteDirect("PRAGMA busy_timeout = " + std::to_string(milliseconds));
         });
     }
     ~ScopedShortBusyTimeout() { ::Lightweight::SqlConnection::ResetPostConnectedHook(); }
@@ -739,8 +724,7 @@ class ScopedShortBusyTimeout {
 
 }  // namespace
 
-TEST_CASE("BulkEdit rolls back entirely when a genuine SQLITE_BUSY interrupts the batch",
-          "[bookmarks][model]") {
+TEST_CASE("BulkEdit rolls back entirely when a genuine SQLITE_BUSY interrupts the batch", "[bookmarks][model]") {
     // DoD: "Bulk edit is atomic under injected mid-batch failure." A real
     // mid-transaction failure, not a mock -- mirrors test_paste_model.cpp's
     // proven DbBusyFixture/ScopedShortBusyTimeout recipe exactly (finding
@@ -786,9 +770,10 @@ TEST_CASE("BulkEdit rolls back entirely when a genuine SQLITE_BUSY interrupts th
     CHECK(mapper.Query<bookmarks::db::BookmarkOutboxRecord>().All().empty());
 }
 
-TEST_CASE("BackendRig::Socket: a second principal's GetBookmark is denied by the model's own "
-          "ownership re-check over a real wire transport, not by authorizeInstance",
-          "[bookmarks][model][socket-only]") {
+TEST_CASE(
+    "BackendRig::Socket: a second principal's GetBookmark is denied by the model's own "
+    "ownership re-check over a real wire transport, not by authorizeInstance",
+    "[bookmarks][model][socket-only]") {
     // DoD: "authorization enforced server-side, not by the client." Two real
     // sockets, two real signed tokens, one tries to GetBookmark an id it
     // does not own.
@@ -848,9 +833,10 @@ TEST_CASE("BackendRig::Socket: a second principal's GetBookmark is denied by the
     REQUIRE(pumpUntil([&malloryFailed] { return malloryFailed; }));
 }
 
-TEST_CASE("BackendRig::Socket: a token signed with a different secret is rejected by "
-          "SigningAuthorizer::authorize(), not merely by the client",
-          "[bookmarks][model][socket-only]") {
+TEST_CASE(
+    "BackendRig::Socket: a token signed with a different secret is rejected by "
+    "SigningAuthorizer::authorize(), not merely by the client",
+    "[bookmarks][model][socket-only]") {
     // Closes a gap Task 14's review flagged as parked, not blocking: a
     // Socket-mode negative-auth case (wrong-secret token rejected over the
     // real wire transport) was manually fault-injection-verified during
@@ -871,8 +857,8 @@ TEST_CASE("BackendRig::Socket: a token signed with a different secret is rejecte
     DbFixture fixture;
     constexpr std::string_view kServerSecret = "socket-negauth-server-secret";
     constexpr std::string_view kWrongSecret = "socket-negauth-wrong-secret";
-    const auto authorizer = std::make_shared<bookmarks::auth::BookmarksAuthorizer>(std::string{kServerSecret},
-                                                                                    morph::session::hmacSha256);
+    const auto authorizer =
+        std::make_shared<bookmarks::auth::BookmarksAuthorizer>(std::string{kServerSecret}, morph::session::hmacSha256);
     BackendRig rig{Mode::Socket, 1, authorizer};
     const morph::session::TokenIssuer wrongIssuer{std::string{kWrongSecret}, morph::session::hmacSha256};
 

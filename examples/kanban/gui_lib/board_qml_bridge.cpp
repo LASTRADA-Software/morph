@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "board_qml_bridge.hpp"
-#include "gui/error_text.hpp"
-#include "gui/id_qml.hpp"
 
 #include <QByteArray>
 #include <QFile>
@@ -15,15 +13,15 @@
 #include <QUrl>
 #include <QUuid>
 #include <QVariant>
-
 #include <glaze/glaze.hpp>
-
 #include <optional>
 #include <utility>
 
+#include "gui/error_text.hpp"
+#include "gui/id_qml.hpp"
+
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
 #include <QEventLoop>
-
 #include <chrono>
 #include <thread>
 #endif
@@ -186,12 +184,9 @@ template <typename Rows>
 ///        design spec §4.3.
 [[nodiscard]] QVariantMap toVariantMap(const GetBoardResult& state) {
     return QVariantMap{
-        {"projectId", idNumber(state.projectId)},
-        {"name", QString::fromStdString(state.name)},
-        {"columns", toVariantList(state.columns)},
-        {"swimlanes", toVariantList(state.swimlanes)},
-        {"tasks", toVariantList(state.tasks)},
-        {"comments", toVariantList(state.comments)},
+        {"projectId", idNumber(state.projectId)},  {"name", QString::fromStdString(state.name)},
+        {"columns", toVariantList(state.columns)}, {"swimlanes", toVariantList(state.swimlanes)},
+        {"tasks", toVariantList(state.tasks)},     {"comments", toVariantList(state.comments)},
     };
 }
 
@@ -235,8 +230,7 @@ BoardBridge::BoardBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
     // registration needed" note as ProjectAdminBridge's identical
     // constructor comment.
     connect(&_presenter, &BoardPresenter::bound, this, &BoardBridge::bound);
-    connect(&_presenter, &BoardPresenter::boardOpened, this,
-            [this](GetBoardResult result) { applyBoard(result); });
+    connect(&_presenter, &BoardPresenter::boardOpened, this, [this](GetBoardResult result) { applyBoard(result); });
     connect(&_presenter, &BoardPresenter::taskMoved, this, &BoardBridge::taskMoved);
     connect(&_presenter, &BoardPresenter::commentAdded, this, &BoardBridge::commentAdded);
     connect(&_presenter, &BoardPresenter::activityUpdated, this, [this](GetActivityResult result) {
@@ -272,17 +266,13 @@ void BoardBridge::openBoard(const QString& projectId) {
     _presenter.openBoard(parseId<ProjectId>(projectId));
 }
 
-void BoardBridge::refresh() {
-    _presenter.getBoardState();
-}
+void BoardBridge::refresh() { _presenter.getBoardState(); }
 
 void BoardBridge::createColumn(const QString& name, int wipLimit) {
     _presenter.createColumn(name, static_cast<std::int64_t>(wipLimit));
 }
 
-void BoardBridge::createSwimlane(const QString& name) {
-    _presenter.createSwimlane(name);
-}
+void BoardBridge::createSwimlane(const QString& name) { _presenter.createSwimlane(name); }
 
 void BoardBridge::createTask(const QString& columnId, const QString& swimlaneId, const QString& title) {
     _presenter.createTask(parseId<ColumnId>(columnId), parseId<SwimlaneId>(swimlaneId), title);
@@ -313,10 +303,10 @@ void BoardBridge::moveTask(const QString& taskId, const QString& columnId, const
         // costs nothing and keeps the contract available to a future replay
         // consumer that isn't this bridge.
         const MoveTaskPosition action{.taskId = parseId<TaskId>(taskId),
-                                       .columnId = parseId<ColumnId>(columnId),
-                                       .swimlaneId = parseId<SwimlaneId>(swimlaneId),
-                                       .position = static_cast<std::int64_t>(position),
-                                       .opId = opId.toStdString()};
+                                      .columnId = parseId<ColumnId>(columnId),
+                                      .swimlaneId = parseId<SwimlaneId>(swimlaneId),
+                                      .position = static_cast<std::int64_t>(position),
+                                      .opId = opId.toStdString()};
         _offlineQueue->enqueue(serializeMoveTaskPosition(action), action.opId);
         _queueDepth = static_cast<int>(_offlineQueue->size());
         emit syncStatusChanged(_queueDepth, _deadLetteredCount);
@@ -338,30 +328,23 @@ void BoardBridge::setMyRole(const QString& role) {
 }
 
 void BoardBridge::createRule(const QString& triggerColumnId, const QString& mutationType,
-                              const QString& mutationValue) {
+                             const QString& mutationValue) {
     _presenter.createRule(parseId<ColumnId>(triggerColumnId), mutationType, mutationValue);
 }
 
-void BoardBridge::getRules() {
-    _presenter.getRules();
-}
+void BoardBridge::getRules() { _presenter.getRules(); }
 
-void BoardBridge::deleteRule(const QString& ruleId) {
-    _presenter.deleteRule(parseId<RuleId>(ruleId));
-}
+void BoardBridge::deleteRule(const QString& ruleId) { _presenter.deleteRule(parseId<RuleId>(ruleId)); }
 
-void BoardBridge::setAttachmentServerUrl(const QString& baseUrl) {
-    _attachmentServerUrl = baseUrl;
-}
+void BoardBridge::setAttachmentServerUrl(const QString& baseUrl) { _attachmentServerUrl = baseUrl; }
 
-void BoardBridge::getAttachments(const QString& taskId) {
-    _presenter.getAttachments(parseId<TaskId>(taskId));
-}
+void BoardBridge::getAttachments(const QString& taskId) { _presenter.getAttachments(parseId<TaskId>(taskId)); }
 
 void BoardBridge::uploadAttachment(const QString& taskId, const QString& localFilePath) {
     if (_attachmentServerUrl.isEmpty()) {
-        emit failed(QStringLiteral("uploadAttachment: no attachment server configured (call "
-                                    "setAttachmentServerUrl() first)"));
+        emit failed(
+            QStringLiteral("uploadAttachment: no attachment server configured (call "
+                           "setAttachmentServerUrl() first)"));
         return;
     }
     const TaskId parsedTaskId = parseId<TaskId>(taskId);
@@ -426,8 +409,8 @@ void BoardBridge::uploadAttachment(const QString& taskId, const QString& localFi
                 // Completion<Ack> (not a shared signal) for exactly this
                 // reason: this continuation is this call's, and only this
                 // call's.
-                _presenter.addAttachment(parsedTaskId, filename, contentType, static_cast<std::int64_t>(size),
-                                         storageKey)
+                _presenter
+                    .addAttachment(parsedTaskId, filename, contentType, static_cast<std::int64_t>(size), storageKey)
                     .then([this, taskId, parsedTaskId, alive](Ack) {
                         if (alive.expired()) {
                             return;
@@ -447,8 +430,9 @@ void BoardBridge::uploadAttachment(const QString& taskId, const QString& localFi
 
 void BoardBridge::downloadAttachment(const QString& storageKey, const QString& localFilePath) {
     if (_attachmentServerUrl.isEmpty()) {
-        emit failed(QStringLiteral("downloadAttachment: no attachment server configured (call "
-                                    "setAttachmentServerUrl() first)"));
+        emit failed(
+            QStringLiteral("downloadAttachment: no attachment server configured (call "
+                           "setAttachmentServerUrl() first)"));
         return;
     }
 
@@ -464,27 +448,26 @@ void BoardBridge::downloadAttachment(const QString& storageKey, const QString& l
     // -- see localFilePathFrom()'s own doc comment.
     const QString resolvedPath = localFilePathFrom(localFilePath);
     QNetworkReply* reply = _networkManager->get(request);
-    connect(reply, &QNetworkReply::finished, this,
-            [this, reply, resolvedPath, alive = std::weak_ptr<const void>{_liveness}] {
-                reply->deleteLater();
-                if (alive.expired()) {
-                    return;
-                }
-                if (reply->error() != QNetworkReply::NoError) {
-                    emit failed(
-                        QStringLiteral("downloadAttachment: HTTP request failed: %1").arg(reply->errorString()));
-                    return;
-                }
-                QFile file{resolvedPath};
-                if (!file.open(QIODevice::WriteOnly)) {
-                    emit failed(
-                        QStringLiteral("downloadAttachment: could not open '%1' for writing").arg(resolvedPath));
-                    return;
-                }
-                file.write(reply->readAll());
-                file.close();
-                emit attachmentDownloaded(resolvedPath);
-            });
+    connect(
+        reply, &QNetworkReply::finished, this,
+        [this, reply, resolvedPath, alive = std::weak_ptr<const void>{_liveness}] {
+            reply->deleteLater();
+            if (alive.expired()) {
+                return;
+            }
+            if (reply->error() != QNetworkReply::NoError) {
+                emit failed(QStringLiteral("downloadAttachment: HTTP request failed: %1").arg(reply->errorString()));
+                return;
+            }
+            QFile file{resolvedPath};
+            if (!file.open(QIODevice::WriteOnly)) {
+                emit failed(QStringLiteral("downloadAttachment: could not open '%1' for writing").arg(resolvedPath));
+                return;
+            }
+            file.write(reply->readAll());
+            file.close();
+            emit attachmentDownloaded(resolvedPath);
+        });
 }
 
 void BoardBridge::stopPolling() {
@@ -506,7 +489,7 @@ void BoardBridge::startPolling() {
     _poller = std::make_unique<Poller>(
         _bridge, BoardEventId{},
         [this, alive = std::weak_ptr<const void>{_liveness}](BoardEventId lastEventId, Poller::OnSuccess onSuccess,
-                                                              Poller::OnError onError) {
+                                                             Poller::OnError onError) {
             if (alive.expired()) {
                 return;
             }
@@ -522,8 +505,7 @@ void BoardBridge::startPolling() {
             // own lifetime, which the `alive` check above already covers.
             _presenter.getEventsSinceForPolling(lastEventId)
                 .then([lastEventId, onSuccess](GetEventsSinceResult result) {
-                    const BoardEventId newLastEventId =
-                        result.events.empty() ? lastEventId : result.events.back().id;
+                    const BoardEventId newLastEventId = result.events.empty() ? lastEventId : result.events.back().id;
                     onSuccess(std::move(result.events), newLastEventId);
                 })
                 .onError([onError](const std::exception_ptr& err) { onError(err); });
@@ -597,8 +579,9 @@ bool BoardBridge::replayMoveTaskPosition(const std::string& payload) {
     // verified `this` was alive is still on the stack, still holding `this`
     // alive, for every nanosecond this function runs -- there is no window in
     // which `this` could be destroyed out from under it.
-    _presenter.moveTaskForReplay(action.taskId, action.columnId, action.swimlaneId, action.position,
-                                  QString::fromStdString(action.opId))
+    _presenter
+        .moveTaskForReplay(action.taskId, action.columnId, action.swimlaneId, action.position,
+                           QString::fromStdString(action.opId))
         .then([&succeeded, &loop](GetBoardResult) {
             succeeded = true;
             loop.quit();
@@ -609,7 +592,7 @@ bool BoardBridge::replayMoveTaskPosition(const std::string& payload) {
 }
 
 void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline::NetworkMonitor::ProbeFunction probe,
-                                      ::morph::offline::NetworkMonitor::Config monitorConfig) {
+                                     ::morph::offline::NetworkMonitor::Config monitorConfig) {
     _offlineQueue = std::make_unique<::morph::offline::SqliteOfflineQueue>(queuePath.toStdString());
 
     _syncWorker = std::make_unique<::morph::offline::SyncWorker>(
@@ -634,8 +617,8 @@ void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline:
     // only the queue to replay. shouldContinue reads the monitor's own
     // current state (not a captured snapshot), matching the "went offline
     // again mid-retry" abort case the coordinator's doc comment describes.
-    _reconnectCoordinator = std::make_unique<::morph::offline::ReconnectCoordinator>(
-        ::morph::offline::ReconnectCoordinator::Deps{
+    _reconnectCoordinator =
+        std::make_unique<::morph::offline::ReconnectCoordinator>(::morph::offline::ReconnectCoordinator::Deps{
             .tryReconnect = [] { return true; },
             .activatePrimary = [] {},
             .activateLocal = [] {},

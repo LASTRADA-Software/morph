@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/util/quantity.hpp>
-
 #include <cstdint>
+#include <morph/util/quantity.hpp>
 #include <string_view>
 
 namespace ledger {

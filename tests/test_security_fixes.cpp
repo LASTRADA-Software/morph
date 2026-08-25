@@ -7,16 +7,15 @@
 //           unauthenticated identity is never presented to the model.
 // (FIX 2 / FIX 4 live in test_bridge_lifetime.cpp; FIX 3 is Qt-only.)
 
-#include <morph/core/executor.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-#include <morph/core/wire.hpp>
-
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -70,8 +69,7 @@ morph::model::detail::ActionDispatcher makeEchoDispatcher() {
 // Models the TOCTOU divergence and the authorize-only passthrough: authorize
 // admits the request but authenticate cannot vouch for the principal.
 struct AllowButNoAuthAuthorizer : morph::session::IAuthorizer {
-    [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view,
-                                 std::string_view) const override {
+    [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
         return true;
     }
     // authenticate() inherits the default nullopt.
@@ -81,9 +79,10 @@ struct AllowButNoAuthAuthorizer : morph::session::IAuthorizer {
 
 // ── FIX 1 — server stays alive until the async strand reply fires ────────────
 
-TEST_CASE("RemoteServer::dispatchExecute: reply is delivered after the last external "
-          "shared_ptr is dropped",
-          "[remote][lifetime]") {
+TEST_CASE(
+    "RemoteServer::dispatchExecute: reply is delivered after the last external "
+    "shared_ptr is dropped",
+    "[remote][lifetime]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto registry = makeEchoRegistry();
     auto dispatcher = makeEchoDispatcher();

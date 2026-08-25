@@ -10,21 +10,19 @@
 // the full rationale this mirrors, including why every mode needs a real
 // signed token.
 
+#include <bookmarks/auth/bookmarks_authorizer.hpp>
+#include <bookmarks/models/bookmark_model.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <memory>
+#include <morph/session/session_auth.hpp>
+#include <string>
+#include <string_view>
+
 #include "shared_feed_presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
-
-#include <bookmarks/auth/bookmarks_authorizer.hpp>
-#include <bookmarks/models/bookmark_model.hpp>
-#include <morph/session/session_auth.hpp>
-
-#include <memory>
-#include <string>
-#include <string_view>
 
 namespace {
 
@@ -66,18 +64,19 @@ using morph::ladder::testkit::pumpUntil;
 /// empirically, not just by inference: this file's own two-`seedBookmark`
 /// call sequence below hit it directly.
 void seedBookmark(::morph::bridge::BridgeHandler<bookmarks::BookmarkModel>& handler, std::string url,
-                   bookmarks::Visibility visibility) {
+                  bookmarks::Visibility visibility) {
     bookmarks::CreateBookmark create;
     create.url = std::move(url);
     create.visibility = visibility;
-    (void) awaitQt(handler.execute(create));
+    (void)awaitQt(handler.execute(create));
 }
 
 }  // namespace
 
-TEST_CASE("SharedFeedPresenter::list returns every shared bookmark, never a private one, "
-          "all three backend modes",
-          "[bookmarks][presenter]") {
+TEST_CASE(
+    "SharedFeedPresenter::list returns every shared bookmark, never a private one, "
+    "all three backend modes",
+    "[bookmarks][presenter]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -92,10 +91,10 @@ TEST_CASE("SharedFeedPresenter::list returns every shared bookmark, never a priv
     bookmarks::ListSharedFeedResult listed;
     bool gotListed = false;
     QObject::connect(&presenter, &bookmarks::gui::SharedFeedPresenter::listed,
-                      [&](bookmarks::ListSharedFeedResult result) {
-                          listed = std::move(result);
-                          gotListed = true;
-                      });
+                     [&](bookmarks::ListSharedFeedResult result) {
+                         listed = std::move(result);
+                         gotListed = true;
+                     });
     presenter.list(bookmarks::ListSharedFeed{});
     REQUIRE(pumpUntil([&] { return gotListed; }));
     REQUIRE_FALSE(presenter.busy());
@@ -103,8 +102,7 @@ TEST_CASE("SharedFeedPresenter::list returns every shared bookmark, never a priv
     CHECK(listed.bookmarks.front().url == "https://alice-shared.example");
 }
 
-TEST_CASE("SharedFeedPresenter::list with no session at all emits failed, not a crash",
-          "[bookmarks][presenter]") {
+TEST_CASE("SharedFeedPresenter::list with no session at all emits failed, not a crash", "[bookmarks][presenter]") {
     // SharedFeedModel::execute throws Forbidden with no session
     // (test_shared_feed_model.cpp's identical model-level case) -- proves the
     // presenter surfaces that as `failed()` rather than crashing, using a

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bookmark_presenter.hpp"
+
 #include "gui/error_text.hpp"
 
 namespace bookmarks::gui {

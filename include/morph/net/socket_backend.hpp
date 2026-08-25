@@ -162,8 +162,8 @@ public:
         if (identity.primary.empty()) {
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        auto env = ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary},
-                                                       std::string{identity.contextKey});
+        auto env =
+            ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
         env.session = currentSession();
         return sendControlForId(env, "register");
     }
@@ -185,7 +185,7 @@ public:
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
         auto env = ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
-                                              std::string{identity.contextKey});
+                                             std::string{identity.contextKey});
         env.session = currentSession();
         return sendControlForId(env, "attach");
     }

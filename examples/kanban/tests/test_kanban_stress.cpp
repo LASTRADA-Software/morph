@@ -84,29 +84,26 @@
 // Completion) with zero Qt frames anywhere in the call graph, making this
 // CI job's own "no Qt/GUI involvement" premise genuinely true rather than
 // merely claimed.
-#include "kanban/dto/project_dto.hpp"
-#include "kanban/models/board_model.hpp"
-#include "kanban/models/project_admin_model.hpp"
-
-#include "testkit/action_driver.hpp"
-#include "testkit/db_fixture.hpp"
-
+#include <algorithm>
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <cstdint>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdint>
-#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "kanban/dto/project_dto.hpp"
+#include "kanban/models/board_model.hpp"
+#include "kanban/models/project_admin_model.hpp"
+#include "testkit/action_driver.hpp"
+#include "testkit/db_fixture.hpp"
 
 using morph::bridge::AllowShared;
 using morph::bridge::Bridge;
@@ -138,7 +135,7 @@ struct InlineExecutor : morph::exec::IExecutor {
 ///        Qt event loop in the first place.
 template <typename Pred>
 [[nodiscard]] bool waitUntil(Pred pred, std::chrono::milliseconds budget = std::chrono::milliseconds{20000},
-                              std::chrono::milliseconds step = std::chrono::milliseconds{5}) {
+                             std::chrono::milliseconds step = std::chrono::milliseconds{5}) {
     const auto deadline = std::chrono::steady_clock::now() + budget;
     while (!pred()) {
         if (std::chrono::steady_clock::now() >= deadline) {
@@ -153,7 +150,7 @@ template <typename Pred>
 ///        @p issuer. Same pattern as test_shared_instance_lifecycle.cpp's
 ///        `tokenContextFor`.
 [[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
-                                                       std::string principal) {
+                                                      std::string principal) {
     morph::session::Context ctx;
     ctx.principal = principal;
     ctx.token = issuer.issue(morph::session::SessionToken{
@@ -284,7 +281,9 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
         const auto columnId = (i % 2 == 0) ? col1 : col2;
         std::atomic<bool> done{false};
         kanban::TaskId newTaskId;
-        seeder.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Task " + std::to_string(i)})
+        seeder
+            .execute(kanban::CreateTask{
+                .columnId = columnId, .swimlaneId = swimlaneId, .title = "Task " + std::to_string(i)})
             .then([&](const kanban::GetBoardResult& state) {
                 newTaskId = state.tasks.back().id;
                 done.store(true);
@@ -331,10 +330,10 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
                      const auto columnId = columns[static_cast<std::size_t>(c / 3) % columns.size()];
                      const auto position = static_cast<std::int64_t>((c * 7 + static_cast<int>(i)) % 8);
                      return kanban::MoveTaskPosition{.taskId = taskId,
-                                                      .columnId = columnId,
-                                                      .swimlaneId = swimlaneId,
-                                                      .position = position,
-                                                      .opId = ""};
+                                                     .columnId = columnId,
+                                                     .swimlaneId = swimlaneId,
+                                                     .position = position,
+                                                     .opId = ""};
                  }}},
             /*burstSize=*/kActionsPerClient + 1, /*onBurst=*/[](const std::vector<kanban::MoveTaskPosition>&) {}));
     }
@@ -427,7 +426,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
     REQUIRE(finalState.tasks.size() == taskIds.size());
     for (const auto& taskId : taskIds) {
         const auto count = std::count_if(finalState.tasks.begin(), finalState.tasks.end(),
-                                          [&taskId](const kanban::TaskView& task) { return task.id == taskId; });
+                                         [&taskId](const kanban::TaskView& task) { return task.id == taskId; });
         CHECK(count == 1);
     }
 }

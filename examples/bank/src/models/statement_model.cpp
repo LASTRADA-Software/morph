@@ -3,7 +3,6 @@
 #include "bank/models/statement_model.hpp"
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstddef>
 #include <cstdint>
 #include <map>

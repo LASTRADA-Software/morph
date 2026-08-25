@@ -168,15 +168,11 @@ inline void setLogger(std::function<void(LogLevel, std::string_view)> logger) {
 ///
 /// Messages below this level are silently dropped. Thread-safe.
 /// @param level Minimum level to emit.
-inline void setLogLevel(LogLevel level) {
-    detail::logState().minLevel.store(level, std::memory_order_relaxed);
-}
+inline void setLogLevel(LogLevel level) { detail::logState().minLevel.store(level, std::memory_order_relaxed); }
 
 /// @brief Returns the current minimum log level. Thread-safe.
 /// @return The active minimum level.
-inline LogLevel getLogLevel() {
-    return detail::logState().minLevel.load(std::memory_order_relaxed);
-}
+inline LogLevel getLogLevel() { return detail::logState().minLevel.load(std::memory_order_relaxed); }
 
 /// @brief Number of log records discarded because emitting them threw.
 ///

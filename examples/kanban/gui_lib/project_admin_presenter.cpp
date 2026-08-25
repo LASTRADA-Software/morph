@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "project_admin_presenter.hpp"
-#include "gui/error_text.hpp"
 
 #include <morph/session/session.hpp>
-
 #include <utility>
+
+#include "gui/error_text.hpp"
 
 namespace kanban::gui {
 

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "kanban/core/types.hpp"
-
 #include <cstddef>
 #include <glaze/glaze.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "kanban/core/types.hpp"
 
 /// @file
 /// `CreateRule`/`GetRules`/`DeleteRule` -- README build-order step 6's

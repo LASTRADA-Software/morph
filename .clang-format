@@ -17,3 +17,34 @@ SortIncludes: CaseSensitive
 SpaceBeforeParens: ControlStatements
 TabWidth: 4
 UseTab: Never
+
+# Never reflow clang-tidy suppressions or IWYU pragmas. A NOLINT/NOLINTBEGIN
+# directive wrapped onto a second line silently stops suppressing: clang-tidy
+# requires it on one line, so the reflow turns a working suppression into a
+# comment plus a newly-unsuppressed diagnostic. Observed on the whole-tree
+# reformat for morph#210, which split two NOLINTBEGIN/NOLINTEND pairs in
+# include/morph/util/datetime.hpp.
+CommentPragmas: '^ (IWYU pragma:|NOLINT)'
+
+# Macros whose arguments are not C++ and must not be re-spaced. EM_JS wraps a
+# JavaScript function body; clang-format lexes it as C++, and since `===` is not
+# a C++ token it split `value === null` into `value == = null` -- valid C++
+# spacing, invalid JavaScript. The WASM ladder build caught it as a SyntaxError
+# from emscripten's parser, which no C++ compiler or test could have surfaced.
+#
+# Naming this option replaces clang-format's default list rather than extending
+# it, so the defaults are repeated here.
+WhitespaceSensitiveMacros:
+  - EM_JS
+  - EM_ASM
+  - EM_ASM_INT
+  - EM_ASM_DOUBLE
+  - EM_ASM_PTR
+  - MAIN_THREAD_EM_ASM
+  - MAIN_THREAD_EM_ASM_INT
+  - MAIN_THREAD_EM_ASM_DOUBLE
+  - BOOST_PP_STRINGIZE
+  - CF_SWIFT_NAME
+  - NS_SWIFT_NAME
+  - PP_STRINGIZE
+  - STRINGIZE

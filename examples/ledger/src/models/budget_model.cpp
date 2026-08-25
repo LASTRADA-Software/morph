@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "ledger/core/errors.hpp"
-#include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/budget_model.hpp"
 
-#include "clock.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
-#include <morph/journal/action_log.hpp>
-#include <morph/session/session.hpp>
-
 #include <charconv>
 #include <chrono>
 #include <cstdint>
+#include <morph/journal/action_log.hpp>
+#include <morph/session/session.hpp>
 #include <vector>
+
+#include "clock.hpp"
+#include "ledger/core/errors.hpp"
+#include "ledger/db/ledger_entity.hpp"
 
 namespace ledger {
 
@@ -47,15 +46,15 @@ namespace {
         throw ValidationError{"monthRangeMs: \"" + month + "\" is not a well-formed YYYY-MM month"};
     }
 
-    const auto startDate = std::chrono::year_month_day{std::chrono::year{year},
-                                                        std::chrono::month{static_cast<unsigned>(monthNum)},
-                                                        std::chrono::day{1}};
+    const auto startDate = std::chrono::year_month_day{
+        std::chrono::year{year}, std::chrono::month{static_cast<unsigned>(monthNum)}, std::chrono::day{1}};
     if (!startDate.ok()) {
         throw ValidationError{"monthRangeMs: \"" + month + "\" is not a valid calendar month"};
     }
     const auto startSysDays = static_cast<std::chrono::sys_days>(startDate);
-    const auto endSysDays = static_cast<std::chrono::sys_days>(startDate.year() / startDate.month() / std::chrono::last) +
-                             std::chrono::days{1};
+    const auto endSysDays =
+        static_cast<std::chrono::sys_days>(startDate.year() / startDate.month() / std::chrono::last) +
+        std::chrono::days{1};
 
     const auto startMs =
         std::chrono::duration_cast<std::chrono::milliseconds>(startSysDays.time_since_epoch()).count();
@@ -86,9 +85,9 @@ void BudgetModel::logAction(const Action& action, const Result& result, std::str
         entry.principal = ctx->principal;
     }
     entry.timestampMs = (*morph::ladder::now().value).value.time_since_epoch().count();  // server-stamped audit
-                                                                                            // timestamp -- see
-                                                                                            // LedgerModel::logAction's
-                                                                                            // identical comment
+                                                                                         // timestamp -- see
+                                                                                         // LedgerModel::logAction's
+                                                                                         // identical comment
     entry.causalParentId = std::move(causalParentId);
     _log->append(std::move(entry));
     // See LedgerModel::logAction's identical comment for why this flush is
@@ -106,8 +105,8 @@ CategoryId BudgetModel::execute(const CreateCategory& action) {
     }
     Lightweight::DataMapper mapper;
     auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                           .All();
+                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                          .All();
     if (ledgerRows.empty()) {
         throw NotFound{"CreateCategory: no such ledger"};
     }
@@ -130,11 +129,11 @@ AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
     }
     Lightweight::DataMapper mapper;
     auto accountRows = mapper.Query<db::AccountRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.accountId)
-                            .All();
+                           .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.accountId)
+                           .All();
     auto categoryRows = mapper.Query<db::CategoryRecord>()
-                             .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
-                             .All();
+                            .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
+                            .All();
     if (accountRows.empty() || categoryRows.empty()) {
         throw NotFound{"LinkAccountToCategory: no such account or category"};
     }
@@ -155,11 +154,11 @@ BudgetId BudgetModel::execute(const CreateBudget& action) {
     }
     Lightweight::DataMapper mapper;
     auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                           .All();
+                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                          .All();
     auto categoryRows = mapper.Query<db::CategoryRecord>()
-                             .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
-                             .All();
+                            .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
+                            .All();
     if (ledgerRows.empty() || categoryRows.empty()) {
         throw NotFound{"CreateBudget: no such ledger or category"};
     }
@@ -183,8 +182,8 @@ BudgetId BudgetModel::execute(const SetBudgetLimit& action) {
     }
     Lightweight::DataMapper mapper;
     auto budgetRows = mapper.Query<db::BudgetRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::BudgetRecord::id>, "=", *action.budgetId)
-                           .All();
+                          .Where(::Lightweight::FieldNameOf<&db::BudgetRecord::id>, "=", *action.budgetId)
+                          .All();
     if (budgetRows.empty()) {
         throw NotFound{"SetBudgetLimit: no such budget"};
     }
@@ -206,15 +205,15 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     }
     Lightweight::DataMapper mapper;
     auto budgetRows = mapper.Query<db::BudgetRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::BudgetRecord::id>, "=", *action.budgetId)
-                           .All();
+                          .Where(::Lightweight::FieldNameOf<&db::BudgetRecord::id>, "=", *action.budgetId)
+                          .All();
     if (budgetRows.empty()) {
         throw NotFound{"GetBudgetReport: no such budget"};
     }
     auto limitRows = mapper.Query<db::BudgetLimitRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::BudgetLimitRecord::budget>, "=", *action.budgetId)
-                          .Where(::Lightweight::FieldNameOf<&db::BudgetLimitRecord::month>, "=", action.month)
-                          .All();
+                         .Where(::Lightweight::FieldNameOf<&db::BudgetLimitRecord::budget>, "=", *action.budgetId)
+                         .Where(::Lightweight::FieldNameOf<&db::BudgetLimitRecord::month>, "=", action.month)
+                         .All();
 
     // In-model summation, never a raw SQL SUM() over the Rational columns
     // (design spec §3 -- SQL cannot combine differing per-row denominators
@@ -238,8 +237,8 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     const auto categoryId = budgetRows.front().category.Value();
     const auto ledgerId = budgetRows.front().ledger.Value();
     auto categoryAccountRows = mapper.Query<db::AccountRecord>()
-                                    .Where(::Lightweight::FieldNameOf<&db::AccountRecord::category>, "=", categoryId)
-                                    .All();
+                                   .Where(::Lightweight::FieldNameOf<&db::AccountRecord::category>, "=", categoryId)
+                                   .All();
     std::vector<std::uint64_t> accountIds;
     accountIds.reserve(categoryAccountRows.size());
     for (const auto& accountRow : categoryAccountRows) {
@@ -249,14 +248,12 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     morph::math::Rational spent{morph::math::Numerator{0}, morph::math::Denominator{1}, morph::math::DecimalPlaces{2}};
     if (!accountIds.empty()) {
         const auto [monthStartMs, monthEndMs] = monthRangeMs(action.month);
-        auto journalRows = mapper.Query<db::TransactionJournalRecord>()
-                                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::ledger>, "=",
-                                       ledgerId)
-                                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::date>, ">=",
-                                       monthStartMs)
-                                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::date>, "<",
-                                       monthEndMs)
-                                .All();
+        auto journalRows =
+            mapper.Query<db::TransactionJournalRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::ledger>, "=", ledgerId)
+                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::date>, ">=", monthStartMs)
+                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::date>, "<", monthEndMs)
+                .All();
         std::vector<std::uint64_t> journalIds;
         journalIds.reserve(journalRows.size());
         for (const auto& journalRow : journalRows) {
@@ -265,14 +262,14 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
 
         if (!journalIds.empty()) {
             auto legRows = mapper.Query<db::TransactionLegRecord>()
-                                .WhereIn(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, accountIds)
-                                .WhereIn(::Lightweight::FieldNameOf<&db::TransactionLegRecord::journal>, journalIds)
-                                .All();
+                               .WhereIn(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, accountIds)
+                               .WhereIn(::Lightweight::FieldNameOf<&db::TransactionLegRecord::journal>, journalIds)
+                               .All();
             for (const auto& legRow : legRows) {
-                const auto legAmount =
-                    morph::math::Rational{morph::math::Numerator{legRow.amountNum.Value()},
-                                          morph::math::Denominator{legRow.amountDen.Value()},
-                                          morph::math::DecimalPlaces{static_cast<std::uint32_t>(legRow.amountDp.Value())}};
+                const auto legAmount = morph::math::Rational{
+                    morph::math::Numerator{legRow.amountNum.Value()},
+                    morph::math::Denominator{legRow.amountDen.Value()},
+                    morph::math::DecimalPlaces{static_cast<std::uint32_t>(legRow.amountDp.Value())}};
                 spent = spent + legAmount;
             }
         }
@@ -281,10 +278,10 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     Currency currency = Currency::USD;
     morph::math::Rational limit = spent;
     if (!limitRows.empty()) {
-        limit = morph::math::Rational{morph::math::Numerator{limitRows.front().limitNum.Value()},
-                                       morph::math::Denominator{limitRows.front().limitDen.Value()},
-                                       morph::math::DecimalPlaces{
-                                           static_cast<std::uint32_t>(limitRows.front().limitDp.Value())}};
+        limit = morph::math::Rational{
+            morph::math::Numerator{limitRows.front().limitNum.Value()},
+            morph::math::Denominator{limitRows.front().limitDen.Value()},
+            morph::math::DecimalPlaces{static_cast<std::uint32_t>(limitRows.front().limitDp.Value())}};
         currency = codeToCurrency(limitRows.front().currencyCode.Value().ToStringView());
     }
     return GetBudgetReportResult{.limit = limit, .spent = spent, .currency = currency};

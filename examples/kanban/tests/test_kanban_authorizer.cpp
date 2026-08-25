@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "kanban/auth/kanban_authorizer.hpp"
-
+#include <catch2/catch_test_macros.hpp>
 #include <morph/session/session_auth.hpp>
 
-#include <catch2/catch_test_macros.hpp>
+#include "kanban/auth/kanban_authorizer.hpp"
 
 namespace {
 constexpr std::string_view kSecret = "test-secret-at-least-32-bytes-long!!";

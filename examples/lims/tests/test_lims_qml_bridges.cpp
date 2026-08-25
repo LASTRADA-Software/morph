@@ -16,26 +16,22 @@
 // (exact decimal text, enum names, `-1` for an unengaged id) checked rather
 // than assumed.
 
+#include <QMetaMethod>
+#include <QMetaObject>
+#include <QVariantMap>
+#include <catch2/catch_test_macros.hpp>
+#include <glaze/glaze.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <morph/util/rational.hpp>
+#include <string>
+
 #include "lims_qml_conversions.hpp"
 #include "result_qml_bridge.hpp"
 #include "sample_qml_bridge.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <QMetaMethod>
-#include <QMetaObject>
-#include <QVariantMap>
-
-#include <glaze/glaze.hpp>
-
-#include <morph/session/session.hpp>
-#include <morph/util/rational.hpp>
-
-#include <memory>
-#include <string>
 
 namespace {
 
@@ -104,8 +100,7 @@ struct Emissions {
 
 }  // namespace
 
-TEST_CASE("Every signal the QML files connect to exists on the bridge that emits it",
-          "[lims][gui][qml-bridge]") {
+TEST_CASE("Every signal the QML files connect to exists on the bridge that emits it", "[lims][gui][qml-bridge]") {
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     lims::gui::SampleBridge sampleBridge{rig->bridge(0), rig->executor()};
@@ -180,7 +175,6 @@ TEST_CASE("A refusal reaches QML as a message, and lastError holds it", "[lims][
     // The property and the signal payload are the same string: a view may
     // bind to either without them ever disagreeing.
     CHECK(bridge.lastError() == emitted);
-    
 }
 
 TEST_CASE("A result row carries the exact decimal, not a rounded number", "[lims][gui][qml-bridge]") {
@@ -196,8 +190,8 @@ TEST_CASE("A result row carries the exact decimal, not a rounded number", "[lims
     morph::session::Context ctx;
     ctx.principal = "alice";
     const morph::session::detail::ScopedContext scope{ctx};
-    const auto nitrate = catalog.execute(
-        lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
+    const auto nitrate =
+        catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
 
     Emissions registered;
     QObject::connect(&sampleBridge, &lims::gui::SampleBridge::clientRegistered, [&registered] { ++registered.count; });
@@ -254,8 +248,7 @@ TEST_CASE("A result row carries the exact decimal, not a rounded number", "[lims
     CHECK_FALSE(row.value(QStringLiteral("outOfSpec")).toBool());
 }
 
-TEST_CASE("A no-number result names which claim it is, rather than showing a blank",
-          "[lims][gui][qml-bridge]") {
+TEST_CASE("A no-number result names which claim it is, rather than showing a blank", "[lims][gui][qml-bridge]") {
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     lims::gui::SampleBridge sampleBridge{rig->bridge(0), rig->executor()};
@@ -265,8 +258,8 @@ TEST_CASE("A no-number result names which claim it is, rather than showing a bla
     morph::session::Context ctx;
     ctx.principal = "alice";
     const morph::session::detail::ScopedContext scope{ctx};
-    const auto lead = catalog.execute(
-        lims::DefineAnalysis{.name = "Lead", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
+    const auto lead =
+        catalog.execute(lims::DefineAnalysis{.name = "Lead", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
 
     Emissions registered;
     QObject::connect(&sampleBridge, &lims::gui::SampleBridge::clientRegistered, [&registered] { ++registered.count; });
@@ -287,11 +280,10 @@ TEST_CASE("A no-number result names which claim it is, rather than showing a bla
     REQUIRE(pumpUntil([&] { return attached.count == 1; }));
 
     Emissions captured;
-    QObject::connect(&resultBridge, &lims::gui::ResultBridge::resultCaptured,
-                     [&captured](const QVariantMap& row) {
-                         ++captured.count;
-                         captured.last = row;
-                     });
+    QObject::connect(&resultBridge, &lims::gui::ResultBridge::resultCaptured, [&captured](const QVariantMap& row) {
+        ++captured.count;
+        captured.last = row;
+    });
     resultBridge.captureQualifier(*lead.versionId, QStringLiteral("belowLOD"));
     REQUIRE(pumpUntil([&] { return captured.count == 1; }));
 
@@ -321,8 +313,7 @@ TEST_CASE("Quantity text is exact and empty-safe", "[lims][gui][qml-bridge]") {
 
 // ── The schema-driven surface ──────────────────────────────────────────────
 
-TEST_CASE("The served schema document carries a form for every typed-field action",
-          "[lims][gui][qml-bridge][forms]") {
+TEST_CASE("The served schema document carries a form for every typed-field action", "[lims][gui][qml-bridge][forms]") {
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     lims::gui::SampleBridge sampleBridge{rig->bridge(0), rig->executor()};
@@ -358,8 +349,7 @@ TEST_CASE("The served schema document carries a form for every typed-field actio
     // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 }
 
-TEST_CASE("submitIfValid refuses an action its surface does not own, loudly",
-          "[lims][gui][qml-bridge][forms]") {
+TEST_CASE("submitIfValid refuses an action its surface does not own, loudly", "[lims][gui][qml-bridge][forms]") {
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     lims::gui::SampleBridge bridge{rig->bridge(0), rig->executor()};

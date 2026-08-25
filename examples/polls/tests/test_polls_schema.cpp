@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "polls/db/poll_entity.hpp"
-#include "testkit/db_fixture.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include "polls/db/poll_entity.hpp"
+#include "testkit/db_fixture.hpp"
 
 using morph::ladder::testkit::DbFixture;
 
@@ -28,8 +28,8 @@ TEST_CASE("The polls schema creates all six tables and a poll round-trips", "[po
     REQUIRE(opt.id.Value() != 0);
 
     auto loadedOptions = mapper.Query<polls::db::OptionRecord>()
-                              .Where(::Lightweight::FieldNameOf<&polls::db::OptionRecord::poll>, "=", poll.id.Value())
-                              .All();
+                             .Where(::Lightweight::FieldNameOf<&polls::db::OptionRecord::poll>, "=", poll.id.Value())
+                             .All();
     REQUIRE(loadedOptions.size() == 1);
     CHECK(loadedOptions.front().label.Value() == "2026-09-01");
 
@@ -76,8 +76,7 @@ TEST_CASE("The polls schema creates all six tables and a poll round-trips", "[po
     CHECK(loadedVotes.front().participantName.Value() == "alice");
 }
 
-TEST_CASE("Duplicate (pollId, participantName, optionId) votes are rejected by the unique index",
-          "[polls][db]") {
+TEST_CASE("Duplicate (pollId, participantName, optionId) votes are rejected by the unique index", "[polls][db]") {
     DbFixture fixture;
     Lightweight::DataMapper mapper;
 

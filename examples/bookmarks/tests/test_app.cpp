@@ -1,24 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "bookmarks/app/app.hpp"
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <filesystem>
+#include <memory>
+#include <morph/journal/file_action_log.hpp>
+#include <morph/session/session.hpp>
+#include <string>
+#include <vector>
 
+#include "bookmarks/app/app.hpp"
 #include "bookmarks/auth/bookmarks_authorizer.hpp"
 #include "bookmarks/db/outbox_entity.hpp"
 #include "bookmarks/models/auth_model.hpp"
 #include "bookmarks/models/bookmark_model.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-#include <morph/journal/file_action_log.hpp>
-#include <morph/session/session.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-
-#include <chrono>
-#include <filesystem>
-#include <memory>
-#include <string>
-#include <vector>
 
 using morph::ladder::testkit::DbFixture;
 using morph::ladder::testkit::pumpUntil;
@@ -40,10 +37,10 @@ namespace {
 }
 
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -61,7 +58,7 @@ class ScopedPrincipal {
 ///        title from the url, so a test can assert the exact value that came
 ///        back through the whole dispatch path.
 class StubFetcher : public bookmarks::app::IBookmarkMetadataFetcher {
-  public:
+public:
     bookmarks::app::FetchedMetadata fetch(const std::string& url) override {
         return {.title = "Fetched: " + url, .faviconPath = ""};
     }
@@ -96,7 +93,7 @@ constexpr std::chrono::milliseconds kFastFetchInterval{20};
 /// @brief Records every url it was asked about, so a test can assert a pass
 ///        ran — or, more to the point below, that none did.
 class RecordingFetcher : public bookmarks::app::IBookmarkMetadataFetcher {
-  public:
+public:
     bookmarks::app::FetchedMetadata fetch(const std::string& url) override {
         calls.push_back(url);
         return {.title = "Recorded", .faviconPath = ""};
@@ -106,8 +103,7 @@ class RecordingFetcher : public bookmarks::app::IBookmarkMetadataFetcher {
 
 }  // namespace
 
-TEST_CASE("App::fetchMetadataOnce records a fetched title for an empty-title bookmark",
-          "[bookmarks][app]") {
+TEST_CASE("App::fetchMetadataOnce records a fetched title for an empty-title bookmark", "[bookmarks][app]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     bookmarks::BookmarkId id;
@@ -154,8 +150,7 @@ TEST_CASE("App::fetchMetadataOnce leaves an already-titled bookmark untouched", 
     std::filesystem::remove(logPath);
 }
 
-TEST_CASE("App::fetchMetadataOnce updates a bookmark owned by someone else entirely",
-          "[bookmarks][app]") {
+TEST_CASE("App::fetchMetadataOnce updates a bookmark owned by someone else entirely", "[bookmarks][app]") {
     // The property the service principal exists for: the worker acts on
     // behalf of every owner, and is itself the owner of none of them.
     DbFixture fixture;
@@ -187,8 +182,7 @@ TEST_CASE("App::fetchMetadataOnce updates a bookmark owned by someone else entir
     std::filesystem::remove(logPath);
 }
 
-TEST_CASE("App::fetchMetadataOnce with the shipped NullMetadataFetcher dispatches nothing",
-          "[bookmarks][app]") {
+TEST_CASE("App::fetchMetadataOnce with the shipped NullMetadataFetcher dispatches nothing", "[bookmarks][app]") {
     // A fetch that found nothing must not turn into a write: RecordMetadata
     // ignores empty fields but still stamps updated_at_ms, which every
     // client's GetChangesSince poll would then see churn on every tick.
@@ -215,8 +209,7 @@ TEST_CASE("App::fetchMetadataOnce with the shipped NullMetadataFetcher dispatche
     std::filesystem::remove(logPath);
 }
 
-TEST_CASE("App::relayOutboxOnce drains a BulkEdit outbox row into the durable action log",
-          "[bookmarks][app]") {
+TEST_CASE("App::relayOutboxOnce drains a BulkEdit outbox row into the durable action log", "[bookmarks][app]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     const ScopedPrincipal alice{"alice"};
@@ -270,8 +263,7 @@ TEST_CASE("AuthModel::execute(Login) mints a token that verifies against the sam
 
         // Verified against a *separately constructed* authorizer holding the
         // same secret -- exactly what the App's own RemoteServer installed.
-        const bookmarks::auth::BookmarksAuthorizer authz{std::string{"login-test-secret"},
-                                                           morph::session::hmacSha256};
+        const bookmarks::auth::BookmarksAuthorizer authz{std::string{"login-test-secret"}, morph::session::hmacSha256};
         morph::session::Context ctx;
         ctx.token = *result.token;
         const auto principal = authz.authenticate(ctx);
@@ -281,14 +273,13 @@ TEST_CASE("AuthModel::execute(Login) mints a token that verifies against the sam
 
         // ...and does not verify against a different secret.
         const bookmarks::auth::BookmarksAuthorizer other{std::string{"a-different-secret"},
-                                                           morph::session::hmacSha256};
+                                                         morph::session::hmacSha256};
         CHECK_FALSE(other.authenticate(ctx).has_value());
     }
     std::filesystem::remove(logPath);
 }
 
-TEST_CASE("AuthModel::execute(Login) refuses to mint a token in the reserved system: namespace",
-          "[bookmarks][app]") {
+TEST_CASE("AuthModel::execute(Login) refuses to mint a token in the reserved system: namespace", "[bookmarks][app]") {
     // Otherwise any client could log in as the metadata worker and rewrite
     // every other user's titles through RecordMetadata.
     const auto logPath = freshLogPath("login_reserved");
@@ -304,8 +295,7 @@ TEST_CASE("AuthModel::execute(Login) refuses to mint a token in the reserved sys
     std::filesystem::remove(logPath);
 }
 
-TEST_CASE("AuthModel::execute(Login) throws when no App has installed a TokenIssuer",
-          "[bookmarks][app]") {
+TEST_CASE("AuthModel::execute(Login) throws when no App has installed a TokenIssuer", "[bookmarks][app]") {
     // Every other [bookmarks][app] case constructs its App as a scoped local,
     // and ~App clears the global issuer, so this case sees a clean nullptr
     // regardless of Catch2's run order.
@@ -322,8 +312,7 @@ TEST_CASE("Login rejects an invalid username via the shared principal charset", 
     CHECK(bookmarks::Login{.username = "alice"}.validate());
 }
 
-TEST_CASE("App's metadata-fetch worker dispatches through the real RemoteServer, not a shortcut",
-          "[bookmarks][app]") {
+TEST_CASE("App's metadata-fetch worker dispatches through the real RemoteServer, not a shortcut", "[bookmarks][app]") {
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     bookmarks::BookmarkId id;
@@ -435,8 +424,7 @@ TEST_CASE("App::stopBackgroundJobs disarms the fetch timer, so a drain loop cann
     std::filesystem::remove(logPath);
 }
 
-TEST_CASE("App::stopBackgroundJobs is idempotent, and ~App still stops the timers on its own",
-          "[bookmarks][app]") {
+TEST_CASE("App::stopBackgroundJobs is idempotent, and ~App still stops the timers on its own", "[bookmarks][app]") {
     // The refactor's two invariants: calling it twice is harmless (QTimer::stop
     // on a stopped timer is a no-op), and an owner that never calls it at all
     // — every test above, and any other consumer — still gets the destructor's

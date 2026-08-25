@@ -2,7 +2,6 @@
 #pragma once
 
 #include <QString>
-
 #include <exception>
 
 /// @file

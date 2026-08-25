@@ -15,7 +15,7 @@ struct CardInfo {
     std::int64_t id = 0;
     std::string owner;
     std::int64_t accountId = 0;
-    int kind = 0;    ///< bank::CardKind
+    int kind = 0;  ///< bank::CardKind
     std::string panLast4;
     int status = 0;  ///< bank::CardStatus
     std::int64_t dailyLimitMinor = 0;

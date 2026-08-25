@@ -3,20 +3,18 @@
 // The analysis catalogue: definitions, and the append-only versioning that
 // keeps an old result bound to the definition it was captured under.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <morph/journal/action_log.hpp>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "lims/core/errors.hpp"
 #include "lims/db/lims_entity.hpp"
 #include "lims/models/analysis_catalog_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <memory>
-
-#include <morph/journal/action_log.hpp>
-#include <morph/session/session.hpp>
-
-#include <string>
 
 using lims::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -58,8 +56,7 @@ TEST_CASE("DefineAnalysis creates the analysis and its version 1", "[lims][catal
     CHECK(view.limitOfDetection->denominator == 100);
 }
 
-TEST_CASE("ReviseAnalysis appends a version and leaves the previous one intact",
-          "[lims][catalog][versioning]") {
+TEST_CASE("ReviseAnalysis appends a version and leaves the previous one intact", "[lims][catalog][versioning]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel model;
@@ -144,9 +141,8 @@ TEST_CASE("Revising an unknown analysis is NotFound, not a silent insert", "[lim
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel model;
 
-    CHECK_THROWS_AS(model.execute(lims::ReviseAnalysis{.analysisId = lims::AnalysisId{999999},
-                                                        .canonicalUnit = "mg_per_L",
-                                                        .decimalPlaces = 3}),
+    CHECK_THROWS_AS(model.execute(lims::ReviseAnalysis{
+                        .analysisId = lims::AnalysisId{999999}, .canonicalUnit = "mg_per_L", .decimalPlaces = 3}),
                     lims::NotFound);
 }
 
@@ -158,12 +154,12 @@ TEST_CASE("Revising and fetching refuse malformed requests", "[lims][catalog]") 
     const auto v1 = model.execute(nitrate());
     // A zero-denominator bound on a revision is as unusable as on a
     // definition, and is refused by the same `validate()`.
-    CHECK_THROWS_AS(model.execute(lims::ReviseAnalysis{
-                        .analysisId = v1.analysisId,
-                        .canonicalUnit = "mg_per_L",
-                        .decimalPlaces = 3,
-                        .specHigh = lims::AnalysisBound{.numerator = 10, .denominator = 0}}),
-                    lims::ValidationError);
+    CHECK_THROWS_AS(
+        model.execute(lims::ReviseAnalysis{.analysisId = v1.analysisId,
+                                           .canonicalUnit = "mg_per_L",
+                                           .decimalPlaces = 3,
+                                           .specHigh = lims::AnalysisBound{.numerator = 10, .denominator = 0}}),
+        lims::ValidationError);
     CHECK_THROWS_AS(model.execute(lims::GetAnalysisVersion{}), lims::ValidationError);
 }
 
@@ -216,8 +212,7 @@ TEST_CASE("The catalogue journals its edits against the attached identity", "[li
     }
 }
 
-TEST_CASE("An analysis with no versions is skipped rather than listed half-formed",
-          "[lims][catalog]") {
+TEST_CASE("An analysis with no versions is skipped rather than listed half-formed", "[lims][catalog]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel model;

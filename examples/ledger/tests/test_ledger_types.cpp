@@ -1,9 +1,9 @@
 // examples/ledger/tests/test_ledger_types.cpp
 // SPDX-License-Identifier: Apache-2.0
-#include "ledger/core/types.hpp"
-#include "ledger/core/errors.hpp"
-
 #include <catch2/catch_test_macros.hpp>
+
+#include "ledger/core/errors.hpp"
+#include "ledger/core/types.hpp"
 
 TEST_CASE("AccountId default-constructs empty and engages via explicit int64_t", "[ledger][types]") {
     ledger::AccountId empty;

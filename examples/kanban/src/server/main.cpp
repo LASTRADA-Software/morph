@@ -20,26 +20,23 @@
 ///     KANBAN_ATTACHMENT_PORT=8769 ladder_kanban_server
 /// @endcode
 
-#include "kanban/app/app.hpp"
-#include "kanban/db/database.hpp"
-#include "kanban/http/attachment_server.hpp"
-
-#include <morph/qt/qt_websocket_server.hpp>
-#include <morph/session/session_auth.hpp>
-
 #include <QCoreApplication>
 #include <QTimer>
-
+#include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <morph/qt/qt_websocket_server.hpp>
+#include <morph/session/session_auth.hpp>
 #include <string_view>
 #include <system_error>
 
-#include <charconv>
+#include "kanban/app/app.hpp"
+#include "kanban/db/database.hpp"
+#include "kanban/http/attachment_server.hpp"
 
 namespace {
 
@@ -63,7 +60,8 @@ int main(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 
     for (int i = 1; i < argc; ++i) {
-        std::cerr << "kanban-server: unknown argument '" << argv[i] << "' (usage: KANBAN_TOKEN_SECRET=... ladder_kanban_server)\n";
+        std::cerr << "kanban-server: unknown argument '" << argv[i]
+                  << "' (usage: KANBAN_TOKEN_SECRET=... ladder_kanban_server)\n";
         return 2;
     }
 
@@ -148,14 +146,14 @@ int main(int argc, char** argv) {
         // avoids: a token minted for the WebSocket side must also verify here.
         const ::morph::session::TokenVerifier attachmentVerifier{tokenSecret, ::morph::session::hmacSha256};
         kanban::http::AttachmentServer attachmentServer{
-            attachmentVerifier,
-            kanban::http::AttachmentServer::Config{.storageDir = std::filesystem::current_path() / "kanban_attachments"}};
+            attachmentVerifier, kanban::http::AttachmentServer::Config{.storageDir = std::filesystem::current_path() /
+                                                                                     "kanban_attachments"}};
         if (!attachmentServer.listen(attachmentPort)) {
             std::cerr << "kanban-server: failed to listen on attachment port " << attachmentPort << "\n";
             return 1;
         }
         std::cout << "kanban-server: attachment side channel listening on http://127.0.0.1:" << attachmentServer.port()
-                   << std::endl;
+                  << std::endl;
 
         std::signal(SIGINT, onStopSignal);
         std::signal(SIGTERM, onStopSignal);

@@ -6,13 +6,11 @@
 // queue and replays each action through the live bridge handler.
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <morph/core/bridge.hpp>
-#include <morph/offline/offline_queue.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/offline/sync_worker.hpp>
-
 #include <filesystem>
+#include <morph/core/bridge.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/offline/sync_worker.hpp>
 #include <string>
 
 #include "bank/app/app.hpp"
@@ -29,8 +27,7 @@ namespace {
 
 std::string testConnection() {
     bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" +
-           (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
+    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
 }
 
 }  // namespace
@@ -42,8 +39,7 @@ TEST_CASE("Offline deposits are queued and replayed on reconnect", "[offline]") 
     morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::TransactionModel> txns{app.bridge(), app.gui()};
 
-    const auto acct =
-        await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
+    const auto acct = await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
 
     // --- While "offline": park deposits in the durable queue instead of sending.
     morph::offline::InMemoryOfflineQueue queue;

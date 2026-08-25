@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "bookmarks/dto/bookmark_dto.hpp"
-
-#include <morph/forms/forms.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <morph/forms/forms.hpp>
 #include <string>
 #include <string_view>
 
-TEST_CASE("CreateBookmark validate() requires a non-empty url within the length bound",
-          "[bookmarks][dto]") {
+#include "bookmarks/dto/bookmark_dto.hpp"
+
+TEST_CASE("CreateBookmark validate() requires a non-empty url within the length bound", "[bookmarks][dto]") {
     bookmarks::CreateBookmark action;
     CHECK_FALSE(action.validate());  // empty url
 
@@ -73,8 +70,7 @@ TEST_CASE("EditBookmark validate() requires an id and a non-empty url", "[bookma
     CHECK(action.validate());
 }
 
-TEST_CASE("GetBookmark/ArchiveBookmark/UnarchiveBookmark/DeleteBookmark all require an id",
-          "[bookmarks][dto]") {
+TEST_CASE("GetBookmark/ArchiveBookmark/UnarchiveBookmark/DeleteBookmark all require an id", "[bookmarks][dto]") {
     CHECK_FALSE(bookmarks::GetBookmark{}.validate());
     CHECK(bookmarks::GetBookmark{.id = bookmarks::BookmarkId{1}}.validate());
     CHECK_FALSE(bookmarks::ArchiveBookmark{}.validate());
@@ -86,8 +82,7 @@ TEST_CASE("GetBookmark/ArchiveBookmark/UnarchiveBookmark/DeleteBookmark all requ
 // discovered-name list on semicolons (CMake's own list separator), so a test
 // name containing one is parsed as two bogus names and the real test silently
 // receives none of the `ladder`/`ladder-bookmarks` labels CI filters by.
-TEST_CASE("RecordMetadata requires an id — title/faviconPath may be empty (a failed fetch)",
-          "[bookmarks][dto]") {
+TEST_CASE("RecordMetadata requires an id — title/faviconPath may be empty (a failed fetch)", "[bookmarks][dto]") {
     CHECK_FALSE(bookmarks::RecordMetadata{}.validate());
     // Every field named explicitly rather than a partial designated-initializer
     // list: -Weverything includes -Wmissing-designated-field-initializers, which

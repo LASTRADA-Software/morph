@@ -3,7 +3,6 @@
 #include "bank/models/card_model.hpp"
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstdint>
 #include <format>
 #include <random>
@@ -27,9 +26,7 @@ std::string randomLast4() {
     return std::format("{:04}", dist(rng));
 }
 
-std::string hashPin(std::string_view pin) {
-    return demoHash(std::string{pin} + ":pin");
-}
+std::string hashPin(std::string_view pin) { return demoHash(std::string{pin} + ":pin"); }
 
 dto::CardInfo toInfo(const db::CardRecord& rec, const std::string& owner) {
     return dto::CardInfo{
@@ -127,10 +124,8 @@ dto::CardList CardModel::execute(const dto::ListCards& action) {
         throw Unauthorized{"no session principal"};
     }
     const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::CardRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::CardRecord::user>, "=", userId)
-                    .All();
+    auto rows =
+        mapper().Query<db::CardRecord>().Where(Lightweight::FieldNameOf<&db::CardRecord::user>, "=", userId).All();
     dto::CardList out;
     out.cards.reserve(rows.size());
     for (const auto& rec : rows) {

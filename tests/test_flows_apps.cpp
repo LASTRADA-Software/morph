@@ -8,7 +8,6 @@
 #include <exception>
 #include <glaze/glaze.hpp>
 #include <memory>
-#include <mutex>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -16,6 +15,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/forms/app.hpp>
 #include <morph/forms/flows.hpp>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -91,9 +91,7 @@ struct FlowTestModel {
     FlowStepTwoResult execute(const FlowStepTwo& action) {
         return FlowStepTwoResult{.summary = std::to_string(action.refId) + ":" + action.note};
     }
-    static FlowStepExplodesResult execute(const FlowStepExplodes& /*action*/) {
-        throw std::runtime_error{"boom"};
-    }
+    static FlowStepExplodesResult execute(const FlowStepExplodes& /*action*/) { throw std::runtime_error{"boom"}; }
     static FlowStepExplodesNonStdResult execute(const FlowStepExplodesNonStd& /*action*/) {
         throw 42;  // NOLINT(hicpp-exception-baseclass) — exercises logUnhandledError's catch(...) arm
     }
@@ -416,24 +414,22 @@ TEST_CASE("FlowSession: a late reply for a step already left behind is dropped",
     CHECK(flow.resolved("FlowsTest_FlowStepOne.label") == capturedBeforeStaleReply);  // not overwritten
 }
 
-TEST_CASE("FlowSession: a late error for a step already left behind does not un-ready the new step",
-          "[flows]") {
+TEST_CASE("FlowSession: a late error for a step already left behind does not un-ready the new step", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::DeterministicExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     std::vector<std::string> errors;
-    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{
-        handler, [&](std::exception_ptr err) {
-            try {
-                std::rethrow_exception(err);
-            } catch (const std::exception& exc) {
-                errors.emplace_back(exc.what());
-            } catch (...) {
-                errors.emplace_back("unknown");
-            }
-        }};
+    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler, [&](std::exception_ptr err) {
+                                                                                try {
+                                                                                    std::rethrow_exception(err);
+                                                                                } catch (const std::exception& exc) {
+                                                                                    errors.emplace_back(exc.what());
+                                                                                } catch (...) {
+                                                                                    errors.emplace_back("unknown");
+                                                                                }
+                                                                            }};
 
     // A fire of step one that will fail (see FlowTestModel::execute's
     // "explode" sentinel), followed by a second fire of the same

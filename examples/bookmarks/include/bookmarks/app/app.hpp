@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "bookmarks/app/metadata_fetcher.hpp"
-
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/journal/file_action_log.hpp>
-#include <morph/qt/qt_executor.hpp>
-
 #include <QObject>
 #include <QTimer>
-
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/journal/file_action_log.hpp>
+#include <morph/qt/qt_executor.hpp>
 #include <string>
+
+#include "bookmarks/app/metadata_fetcher.hpp"
 
 namespace bookmarks::app {
 
@@ -60,7 +58,7 @@ namespace bookmarks::app {
 /// comment.
 class App : public QObject {
     Q_OBJECT
-  public:
+public:
     /// @brief Wires up the whole server side and starts both periodic timers.
     /// @param actionLogPath Where `FileActionLog` persists entries.
     /// @param tokenSecret   Shared secret for the `auth::BookmarksAuthorizer`
@@ -161,7 +159,7 @@ class App : public QObject {
     /// @return The number of outbox rows relayed in this pass.
     std::size_t relayOutboxOnce();
 
-  private:
+private:
     // Declaration order is load-bearing, and `_fetchExecutor` comes first on
     // purpose — the identical hazard pastebin::app::App documents at length.
     // Members are destroyed in reverse, so this is the *last* thing to go. A

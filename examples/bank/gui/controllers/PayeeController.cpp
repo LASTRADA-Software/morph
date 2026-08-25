@@ -59,9 +59,8 @@ void PayeeController::reloadPayees() {
 
 void PayeeController::addPayee(const QString& name, const QString& iban, const QString& bank) {
     _payeeModel
-        .execute(bank::dto::AddPayee{.name = name.toStdString(),
-                                     .iban = iban.trimmed().toStdString(),
-                                     .bankName = bank.toStdString()})
+        .execute(bank::dto::AddPayee{
+            .name = name.toStdString(), .iban = iban.trimmed().toStdString(), .bankName = bank.toStdString()})
         .then([this](bank::dto::PayeeInfo) { reloadPayees(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
@@ -78,8 +77,7 @@ void PayeeController::payBill(qlonglong accountId, qlonglong payeeId, const QStr
         emit error(QStringLiteral("Pick an account, payee, and amount."));
         return;
     }
-    _paymentModel
-        .execute(bank::dto::PayBill{.fromAccountId = accountId, .payeeId = payeeId, .amountMinor = *minor})
+    _paymentModel.execute(bank::dto::PayBill{.fromAccountId = accountId, .payeeId = payeeId, .amountMinor = *minor})
         .then([this](bank::dto::PaymentInfo) { emit paid(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }

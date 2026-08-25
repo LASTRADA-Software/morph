@@ -6,7 +6,6 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
-
 #include <cstdint>
 
 /// @file
@@ -166,7 +165,7 @@ struct QmlScanResult {
 /// `Qt6::Quick`, and runs in configures built without `MORPH_BUILD_FORMS_QML`
 /// where the engine-load smoke test compiles to nothing at all.
 class QmlSurfaceAudit {
-  public:
+public:
     /// @brief Audits against the `.qml` files under one directory.
     /// @param qmlDirectory Absolute path of a directory whose `*.qml` files
     ///        are the expectation. Searched recursively.
@@ -221,7 +220,7 @@ class QmlSurfaceAudit {
     ///         sorted.
     [[nodiscard]] QStringList scannedFiles() const;
 
-  private:
+private:
     struct Binding {
         QString alias;
         QString file;  ///< Empty when the binding applies to every file.

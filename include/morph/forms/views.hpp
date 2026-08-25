@@ -477,6 +477,12 @@ inline bool registerViewOnce(std::string_view viewId) noexcept {
 ///             `using ns::V;` first — this macro pastes `V` into an
 ///             identifier, so it cannot be namespace-qualified).
 /// @param NAME String literal used as the view's type-id.
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_REGISTER_VIEW(V, NAME)                                                                  \
     template <>                                                                                        \
     struct morph::views::ViewTraits<V> {                                                               \
@@ -485,6 +491,7 @@ inline bool registerViewOnce(std::string_view viewId) noexcept {
     namespace {                                                                                        \
     [[maybe_unused]] const bool bridge_view_reg_##V = morph::views::detail::registerViewOnce<V>(NAME); \
     }
+// clang-format on
 
 // NOLINTEND(bugprone-macro-parentheses)
 // NOLINTEND(cppcoreguidelines-macro-usage)

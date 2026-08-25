@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "polls/core/errors.hpp"
-#include "polls/core/types.hpp"
-
 #include <catch2/catch_test_macros.hpp>
 #include <string_view>
+
+#include "polls/core/errors.hpp"
+#include "polls/core/types.hpp"
 
 TEST_CASE("OptionId/PollEventId are independently hasValue()-capable", "[polls][types]") {
     CHECK_FALSE(polls::OptionId{}.hasValue());

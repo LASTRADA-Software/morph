@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "pastebin/models/paste_model.hpp"
-
+#include <exception>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
-
-#include <exception>
 #include <string>
 #include <utility>
+
+#include "pastebin/models/paste_model.hpp"
 
 namespace pastebin::gui {
 
@@ -35,7 +34,7 @@ namespace pastebin::gui {
 /// a stub with nothing to call it; omitted rather than speculatively
 /// implemented, per this task's own instruction.
 class PasteFormsController {
-  public:
+public:
     /// @param bridge      The shared `Bridge` `AppContext` owns.
     /// @param executor    The executor `Completion` callbacks land on.
     /// @param schemasJson Pre-assembled `{actionType: schemaJson<A>()}` map,
@@ -69,7 +68,7 @@ class PasteFormsController {
             .onError([onError = std::move(onError)](const std::exception_ptr& err) mutable { onError(err); });
     }
 
-  private:
+private:
     ::morph::bridge::BridgeHandler<PasteModel> _handler;
     std::string _schemasJson;
 };

@@ -3,7 +3,6 @@
 
 #include <QObject>
 #include <QString>
-
 #include <exception>
 
 namespace bankgui {
@@ -15,8 +14,7 @@ class BankClient;
 class BankController : public QObject {
     Q_OBJECT
 public:
-    explicit BankController(BankClient& client, QObject* parent = nullptr)
-        : QObject(parent), _client{client} {}
+    explicit BankController(BankClient& client, QObject* parent = nullptr) : QObject(parent), _client{client} {}
 
 signals:
     void error(const QString& message);

@@ -42,10 +42,11 @@
 #include <string_view>
 
 #if !defined(_WIN32)
-#include <csignal>
-#include <csetjmp>
 #include <sys/mman.h>
 #include <unistd.h>
+
+#include <csetjmp>
+#include <csignal>
 #endif
 
 #include "test_support.hpp"
@@ -461,7 +462,7 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
 
     REQUIRE(mprotect(region, pageSize, PROT_NONE) == 0);
 
-    struct sigaction sa {};
+    struct sigaction sa{};
     // glibc's <bits/sigaction.h> defines `sa_handler` as a macro
     // (`__sigaction_handler.sa_handler`) for POSIX compatibility; clang's
     // -Wdisabled-macro-expansion flags the resulting member-access expansion
@@ -479,8 +480,8 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
 #endif
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-    struct sigaction oldSegv {};
-    struct sigaction oldBus {};
+    struct sigaction oldSegv{};
+    struct sigaction oldBus{};
     REQUIRE(sigaction(SIGSEGV, &sa, &oldSegv) == 0);
     REQUIRE(sigaction(SIGBUS, &sa, &oldBus) == 0);
 
@@ -511,9 +512,10 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
         // (hasSubscribers() takes no locks), so nothing was left mid-mutation
         // for this best-effort cleanup to worry about disturbing.
         munmap(region, pageSize);
-        std::string const message = "hasSubscribers() touched the destroyed bridge after ~Bridge() ran "
-                                     "(caught signal " +
-                                     std::to_string(gGuardPageFaultSignal) + ")";
+        std::string const message =
+            "hasSubscribers() touched the destroyed bridge after ~Bridge() ran "
+            "(caught signal " +
+            std::to_string(gGuardPageFaultSignal) + ")";
         FAIL(message);
     }
 

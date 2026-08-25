@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "rule_qml_bridge.hpp"
-#include "gui/id_qml.hpp"
 
 #include <string>
 #include <utility>
+
+#include "gui/id_qml.hpp"
 
 namespace ledger::gui {
 
@@ -30,8 +31,7 @@ using ::morph::ladder::gui::idText;
 
 }  // namespace
 
-RuleQmlBridge::RuleQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                             QObject* parent)
+RuleQmlBridge::RuleQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
     : QObject{parent}, _presenter{bridge, executor} {
     connect(&_presenter, &RulePresenter::ruleCreated, this, [this](RuleId id) {
         // CreateRule returns only the id; the rest of the row is whatever was
@@ -46,27 +46,21 @@ RuleQmlBridge::RuleQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IEx
         emit lastRuleChanged();
         emit ruleUpdated();
     });
-    connect(&_presenter, &RulePresenter::failed, this,
-            [this](const QString& message) { publishError(message); });
+    connect(&_presenter, &RulePresenter::failed, this, [this](const QString& message) { publishError(message); });
     connect(&_presenter, &RulePresenter::idle, this, &RuleQmlBridge::busyChanged);
 }
 
-bool RuleQmlBridge::busy() const {
-    return _presenter.busy();
-}
+bool RuleQmlBridge::busy() const { return _presenter.busy(); }
 
 void RuleQmlBridge::publishError(const QString& message) {
     _lastError = message;
     emit lastErrorChanged();
 }
 
-void RuleQmlBridge::openLedger(const QString& ledgerId) {
-    _ledgerId = idFromText<LedgerId>(ledgerId);
-}
+void RuleQmlBridge::openLedger(const QString& ledgerId) { _ledgerId = idFromText<LedgerId>(ledgerId); }
 
 void RuleQmlBridge::createRule(const QString& matchText, const QString& categoryId) {
-    _presenter.createRule(_ledgerId, RuleTrigger::DescriptionContains, matchText, RuleAction::SetCategory,
-                          categoryId);
+    _presenter.createRule(_ledgerId, RuleTrigger::DescriptionContains, matchText, RuleAction::SetCategory, categoryId);
     emit busyChanged();
 }
 

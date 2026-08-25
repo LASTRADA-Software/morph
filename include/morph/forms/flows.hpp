@@ -227,9 +227,7 @@ public:
     /// that can pump an event loop (a `sendSync`-style blocking call) would
     /// otherwise deliver into a half-dead session. This is the "teardown that
     /// pumps" escape hatch docs/spec/core/callback_scope.md documents.
-    ~FlowSession() {
-        _callbacks.requestStop();
-    }
+    ~FlowSession() { _callbacks.requestStop(); }
 
     FlowSession(const FlowSession&) = delete;
     FlowSession& operator=(const FlowSession&) = delete;
@@ -485,8 +483,15 @@ private:
 /// docs/spec/forms/workflows_navigation.md).
 /// @param W    Concrete `morph::flows::Wizard<...>` type.
 /// @param NAME String literal used as the wizard's type-id.
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_REGISTER_WIZARD(W, NAME)                                      \
     template <>                                                              \
     struct morph::flows::WizardTraits<W> {                                   \
         static constexpr std::string_view typeId() noexcept { return NAME; } \
     };
+// clang-format on

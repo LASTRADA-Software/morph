@@ -2,7 +2,6 @@
 #pragma once
 
 #include <catch2/catch_test_macros.hpp>
-
 #include <cstddef>
 #include <cstdlib>
 #include <functional>
@@ -22,7 +21,7 @@ namespace morph::ladder::testkit {
 
 template <typename Action>
 class SeededScript {
-  public:
+public:
     using Generator = std::function<Action()>;
     struct WeightedGenerator {
         int weight;
@@ -98,7 +97,7 @@ class SeededScript {
     /// @return The seed this run used (for logging).
     [[nodiscard]] std::uint64_t seed() const noexcept { return _seed; }
 
-  private:
+private:
     [[nodiscard]] static std::uint64_t resolveSeed(std::uint64_t defaultSeed) {
         if (const char* env = std::getenv("MORPH_STRESS_SEED"); env != nullptr && *env != '\0') {
             return std::stoull(env);

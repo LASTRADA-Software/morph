@@ -61,7 +61,6 @@ struct SubExplode {
 };
 
 struct SubCounterModel {
-
     std::int64_t value = 0;
 
     SubCounterState execute(const SubBump& act) {

@@ -28,9 +28,8 @@ void TransactionController::refresh() {
                 }
                 QVariantMap map;
                 map[QStringLiteral("id")] = static_cast<qlonglong>(account.id);
-                map[QStringLiteral("label")] =
-                    fmt::last4(account.number) + QStringLiteral("  ·  ") +
-                    fmt::money(account.balanceMinor, account.currency);
+                map[QStringLiteral("label")] = fmt::last4(account.number) + QStringLiteral("  ·  ") +
+                                               fmt::money(account.balanceMinor, account.currency);
                 map[QStringLiteral("currency")] = account.currency;
                 _accounts.append(map);
                 if (account.id == _selected) {
@@ -79,9 +78,8 @@ void TransactionController::reloadHistory() {
                 const bool credit = entry.direction == static_cast<int>(bank::TxnDirection::Credit);
                 QVariantMap map;
                 map[QStringLiteral("kind")] = fmt::txnKind(entry.kind);
-                map[QStringLiteral("amountText")] =
-                    (credit ? QStringLiteral("+") : QStringLiteral("−")) +
-                    fmt::money(entry.amountMinor, entry.currency);
+                map[QStringLiteral("amountText")] = (credit ? QStringLiteral("+") : QStringLiteral("−")) +
+                                                    fmt::money(entry.amountMinor, entry.currency);
                 map[QStringLiteral("isCredit")] = credit;
                 map[QStringLiteral("balanceText")] = fmt::money(entry.balanceAfterMinor, entry.currency);
                 _history.append(map);
@@ -98,7 +96,10 @@ void TransactionController::deposit(const QString& amount) {
         return;
     }
     _txnModel.execute(bank::dto::Deposit{.accountId = _selected, .amountMinor = *minor})
-        .then([this](bank::dto::TxnInfo) { emit posted(); refresh(); })
+        .then([this](bank::dto::TxnInfo) {
+            emit posted();
+            refresh();
+        })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
 
@@ -109,7 +110,10 @@ void TransactionController::withdraw(const QString& amount) {
         return;
     }
     _txnModel.execute(bank::dto::Withdraw{.accountId = _selected, .amountMinor = *minor})
-        .then([this](bank::dto::TxnInfo) { emit posted(); refresh(); })
+        .then([this](bank::dto::TxnInfo) {
+            emit posted();
+            refresh();
+        })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
 
@@ -119,9 +123,11 @@ void TransactionController::transfer(qlonglong toId, const QString& amount) {
         emit error(QStringLiteral("Pick a target account and amount."));
         return;
     }
-    _txnModel
-        .execute(bank::dto::Transfer{.fromAccountId = _selected, .toAccountId = toId, .amountMinor = *minor})
-        .then([this](bank::dto::TransferResult) { emit posted(); refresh(); })
+    _txnModel.execute(bank::dto::Transfer{.fromAccountId = _selected, .toAccountId = toId, .amountMinor = *minor})
+        .then([this](bank::dto::TransferResult) {
+            emit posted();
+            refresh();
+        })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
 

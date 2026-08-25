@@ -24,9 +24,7 @@ enum class Currency : std::uint8_t {
 
 /// @brief Number of fractional digits a currency uses (minor units per major unit exponent).
 /// JPY has no minor unit; everything else here uses 2 decimal places.
-[[nodiscard]] constexpr int currencyDecimals(Currency c) noexcept {
-    return c == Currency::JPY ? 0 : 2;
-}
+[[nodiscard]] constexpr int currencyDecimals(Currency c) noexcept { return c == Currency::JPY ? 0 : 2; }
 
 /// @brief Integer 10^exponent. Single source of truth for the parse/format
 /// scale, so the hand-rolled `10^decimals` loops don't drift apart across the
@@ -40,18 +38,21 @@ enum class Currency : std::uint8_t {
 }
 
 /// @brief Number of minor units in one major unit of @p c, i.e. 10^decimals.
-[[nodiscard]] constexpr std::int64_t currencyScale(Currency c) noexcept {
-    return pow10i(currencyDecimals(c));
-}
+[[nodiscard]] constexpr std::int64_t currencyScale(Currency c) noexcept { return pow10i(currencyDecimals(c)); }
 
 /// @brief Three-letter code for a currency (for display / statements).
 [[nodiscard]] constexpr std::string_view currencyCode(Currency c) noexcept {
     switch (c) {
-        case Currency::USD: return "USD";
-        case Currency::EUR: return "EUR";
-        case Currency::GBP: return "GBP";
-        case Currency::CHF: return "CHF";
-        case Currency::JPY: return "JPY";
+        case Currency::USD:
+            return "USD";
+        case Currency::EUR:
+            return "EUR";
+        case Currency::GBP:
+            return "GBP";
+        case Currency::CHF:
+            return "CHF";
+        case Currency::JPY:
+            return "JPY";
     }
     return "???";
 }

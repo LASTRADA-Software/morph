@@ -2,13 +2,12 @@
 //
 // In-memory implementation of PaymentModel for the WASM build.
 
-#include "bank/models/payment_model.hpp"
-
 #include <string>
 
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
+#include "bank/models/payment_model.hpp"
 #include "bank/wasm/store.hpp"
 #include "bank/wasm/store_ops.hpp"
 
@@ -150,8 +149,7 @@ dto::PaymentList PaymentModel::execute(const dto::ListPayments& action) {
     auto& db = wasm::sharedDb();
     const auto ownerId = wasm::requireUserId(db, owner);
     dto::PaymentList out;
-    for (const auto& rec :
-         db.payments.where([&](const wasm::PaymentRow& p) { return p.userId == ownerId; })) {
+    for (const auto& rec : db.payments.where([&](const wasm::PaymentRow& p) { return p.userId == ownerId; })) {
         out.payments.push_back(toInfo(rec, owner));
     }
     return out;

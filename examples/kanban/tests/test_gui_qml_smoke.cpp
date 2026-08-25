@@ -61,13 +61,11 @@
 
 #ifdef MORPH_LADDER_QML_URI
 
-#include <catch2/catch_test_macros.hpp>
-
 #include <QList>
 #include <QQmlApplicationEngine>
 #include <QQmlError>
 #include <QString>
-
+#include <catch2/catch_test_macros.hpp>
 #include <string>
 
 namespace {
@@ -94,8 +92,7 @@ namespace {
 
 }  // namespace
 
-TEST_CASE("kanban's QML engine loads Main.qml and creates a root object with no errors",
-          "[kanban][gui][qml-smoke]") {
+TEST_CASE("kanban's QML engine loads Main.qml and creates a root object with no errors", "[kanban][gui][qml-smoke]") {
     bool created = false;
     // Reported through the message, not a bare boolean: a QML warning is
     // otherwise a failing assertion with nothing to act on.

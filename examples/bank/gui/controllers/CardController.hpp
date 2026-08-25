@@ -2,7 +2,6 @@
 #pragma once
 
 #include <QVariantList>
-
 #include <cstdint>
 
 #include "BankController.hpp"
@@ -10,8 +9,8 @@
 #ifndef Q_MOC_RUN
 #include <morph/core/bridge.hpp>
 
-#include "bank/models/customer_model.hpp"
 #include "bank/models/card_model.hpp"
+#include "bank/models/customer_model.hpp"
 #endif
 
 namespace bankgui {

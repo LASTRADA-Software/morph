@@ -6,23 +6,19 @@
 // real model, and -- crucially -- that Task 17's local-month boundary is
 // still visible by the time a report body reaches QML.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <ledger/db/ledger_entity.hpp>
+#include <ledger/models/ledger_model.hpp>
+#include <memory>
+#include <morph/session/session.hpp>
+#include <string>
+
 #include "report_qml_bridge.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <morph/session/session.hpp>
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-
-#include <ledger/db/ledger_entity.hpp>
-#include <ledger/models/ledger_model.hpp>
-
-#include <chrono>
-#include <memory>
-#include <string>
 
 namespace {
 
@@ -42,10 +38,10 @@ using namespace std::chrono_literals;
 ///        shape as test_ledger_reports.cpp's own helper, and the same hazard
 ///        as morph#137 -- a reference outliving what it refers to.
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{makeContext(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     [[nodiscard]] static morph::session::Context makeContext(std::string principal) {
         morph::session::Context ctx;
         ctx.principal = std::move(principal);
@@ -74,8 +70,7 @@ class ScopedPrincipal {
 
 }  // namespace
 
-TEST_CASE("ReportQmlBridge drives submit->poll to done and publishes exact lines",
-          "[ledger][gui][bridge][report]") {
+TEST_CASE("ReportQmlBridge drives submit->poll to done and publishes exact lines", "[ledger][gui][bridge][report]") {
     DbFixture fixture;
     const auto ledgerId = seedLedger("Personal");
 
@@ -105,12 +100,10 @@ TEST_CASE("ReportQmlBridge drives submit->poll to done and publishes exact lines
             .date = morph::time::Timestamp{*instant},
             .legs = {ledger::TransactionLeg{
                          .accountId = state.accounts[0].id,
-                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
-                                                         DecimalPlaces{2}}},
+                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}}},
                      ledger::TransactionLeg{
                          .accountId = state.accounts[1].id,
-                         .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
-                                                         DecimalPlaces{2}}}}});
+                         .amount = morph::math::Rational{Numerator{5000}, Denominator{1}, DecimalPlaces{2}}}}});
     }
 
     auto rig = makeAuthedRig("alice");

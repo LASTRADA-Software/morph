@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
-
 #include <cstdint>
 #include <string_view>
 
@@ -44,15 +43,15 @@ struct BookmarkRecord {
     /// Authenticated owner (`session::Context::principal`) — every query the
     /// model issues filters on this column; see Task 6's `execute()` bodies.
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"owner_principal"}> ownerPrincipal;  // 1
-    Light::Field<Light::SqlAnsiString<2048>, Light::SqlRealName{"url"}> url;  // 2
-    Light::Field<Light::SqlAnsiString<512>, Light::SqlRealName{"title"}> title;  // 3
-    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"description"}> description;  // 4
-    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"notes"}> notes;  // 5
-    Light::Field<bool, Light::SqlRealName{"is_unread"}> isUnread{true};  // 6
-    Light::Field<bool, Light::SqlRealName{"is_archived"}> isArchived{false};  // 7
-    Light::Field<bool, Light::SqlRealName{"is_shared"}> isShared{false};  // 8
-    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 9
-    Light::Field<std::int64_t, Light::SqlRealName{"updated_at_ms"}> updatedAtMs{0};  // 10
+    Light::Field<Light::SqlAnsiString<2048>, Light::SqlRealName{"url"}> url;                       // 2
+    Light::Field<Light::SqlAnsiString<512>, Light::SqlRealName{"title"}> title;                    // 3
+    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"description"}> description;   // 4
+    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"notes"}> notes;               // 5
+    Light::Field<bool, Light::SqlRealName{"is_unread"}> isUnread{true};                            // 6
+    Light::Field<bool, Light::SqlRealName{"is_archived"}> isArchived{false};                       // 7
+    Light::Field<bool, Light::SqlRealName{"is_shared"}> isShared{false};                           // 8
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};                // 9
+    Light::Field<std::int64_t, Light::SqlRealName{"updated_at_ms"}> updatedAtMs{0};                // 10
     /// Empty = no favicon fetched yet. Path, not bytes — the metadata
     /// worker's own doc comment (Task 12) explains why blobs never travel
     /// the action protocol. Bounded the same as `url` (`kMaxUrlBytes`) since

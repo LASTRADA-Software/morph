@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bookmarks/models/auth_model.hpp"
 
-#include "bookmarks/auth/bookmarks_authorizer.hpp"
-
+#include <cstdint>
 #include <morph/session/session_auth.hpp>
 
-#include <cstdint>
+#include "bookmarks/auth/bookmarks_authorizer.hpp"
 
 namespace bookmarks {
 

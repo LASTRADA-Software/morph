@@ -8,8 +8,6 @@
 // examples/common is on the include path as a root (see
 // examples/common/CMakeLists.txt's target_include_directories), so the ladder
 // clock is "clock.hpp" — the same spelling testkit/test_clock.cpp uses.
-#include "clock.hpp"
-
 #include <Lightweight/DataBinder/UnicodeConverter.hpp>
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
@@ -17,7 +15,6 @@
 #include <Lightweight/SqlErrorDetection.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -27,6 +24,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "clock.hpp"
 
 namespace pastebin {
 
@@ -61,9 +60,7 @@ namespace {
     return instant.value.time_since_epoch().count();
 }
 
-[[nodiscard]] std::int64_t nowMs() noexcept {
-    return toEpochMs(*::morph::ladder::now().value);
-}
+[[nodiscard]] std::int64_t nowMs() noexcept { return toEpochMs(*::morph::ladder::now().value); }
 
 [[nodiscard]] ::morph::time::Timestamp fromEpochMs(const std::optional<std::int64_t>& epochMs) noexcept {
     if (!epochMs) {
@@ -83,13 +80,9 @@ namespace {
 /// `math::floor` is exact on a `Rational` (integer division on the stored
 /// numerator/denominator) — no floating-point step. `Reads` only ever carries
 /// whole numbers here, so flooring and truncating agree.
-[[nodiscard]] std::int64_t countOf(const Reads& reads) noexcept {
-    return ::morph::math::floor(*reads);
-}
+[[nodiscard]] std::int64_t countOf(const Reads& reads) noexcept { return ::morph::math::floor(*reads); }
 
-[[nodiscard]] std::string textOf(const Light::SqlAnsiString<32>& stored) {
-    return std::string{stored.str()};
-}
+[[nodiscard]] std::string textOf(const Light::SqlAnsiString<32>& stored) { return std::string{stored.str()}; }
 
 // `content` is stored wide (Light::SqlMaxDynamicWideString — see
 // paste_entity.hpp's file comment for why); the DTO layer stays UTF-8
@@ -126,8 +119,7 @@ namespace {
 ///        which needs collisions to be reachable in a bounded number of
 ///        `CreatePaste` calls, not astronomically unlikely.
 constexpr std::array<std::string_view, 16> kAnimals = {
-    "cat", "dog", "fox", "owl", "bee", "ant", "elk", "ram",
-    "yak", "cod", "eel", "hen", "pig", "cow", "bat", "jay",
+    "cat", "dog", "fox", "owl", "bee", "ant", "elk", "ram", "yak", "cod", "eel", "hen", "pig", "cow", "bat", "jay",
 };
 constexpr std::array<std::string_view, 16> kAdjectives = {
     "red",  "blue", "gold", "dark", "swift", "calm",  "bold", "wild",
@@ -186,9 +178,10 @@ constexpr std::string_view kEditPasteSql = R"(UPDATE pastes
 
 CreatePasteResult PasteModel::execute(const CreatePaste& action) {
     if (!action.validate()) {
-        throw ValidationError{std::format("CreatePaste: content and syntax are required, syntax must be at most {} "
-                                          "bytes, and burnAfterReads (if given) must be a positive count",
-                                          kMaxSyntaxBytes)};
+        throw ValidationError{
+            std::format("CreatePaste: content and syntax are required, syntax must be at most {} "
+                        "bytes, and burnAfterReads (if given) must be a positive count",
+                        kMaxSyntaxBytes)};
     }
 
     // One connection for this call, acquired from the pool and returned when
@@ -259,8 +252,7 @@ PasteView PasteModel::execute(const GetPaste& action) {
     // between. It also makes the burn-delete below part of the same commit.
     std::optional<PasteView> view;
     {
-        ::Lightweight::SqlTransaction transaction{mapper->Connection(),
-                                                  ::Lightweight::SqlTransactionMode::ROLLBACK};
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
 
         std::size_t consumed = 0;
         {
@@ -280,8 +272,7 @@ PasteView PasteModel::execute(const GetPaste& action) {
         // having actually been consumed. This one comparison is the sole gate
         // on the burn-atomicity guarantee; it must not admit a sentinel.
         if (consumed == 1) {
-            auto rows = mapper
-                            ->Query<db::PasteRecord>()
+            auto rows = mapper->Query<db::PasteRecord>()
                             .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
                             .All();
             if (rows.empty()) {
@@ -299,7 +290,7 @@ PasteView PasteModel::execute(const GetPaste& action) {
             if (budget && rec.readCount.Value() >= *budget) {
                 ::Lightweight::SqlStatement burn{mapper->Connection()};
                 burn.Prepare("DELETE FROM pastes WHERE id = ?");
-                (void) burn.Execute(id);
+                (void)burn.Execute(id);
             }
             transaction.Commit();
         }
@@ -313,10 +304,8 @@ PasteView PasteModel::execute(const GetPaste& action) {
     // UPDATE closed: it decides only *which* error to throw and mutates
     // nothing. A row that changes underneath it can at worst turn one
     // truthful-a-moment-ago error into another.
-    auto existing = mapper
-                        ->Query<db::PasteRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
-                        .All();
+    auto existing =
+        mapper->Query<db::PasteRecord>().Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id).All();
     if (existing.empty()) {
         throw NotFound{"GetPaste: no such paste"};
     }
@@ -332,9 +321,10 @@ PasteView PasteModel::execute(const GetPaste& action) {
 
 PasteView PasteModel::execute(const EditPaste& action) {
     if (!action.validate()) {
-        throw ValidationError{std::format("EditPaste: id, content, and syntax are required, and syntax must be at "
-                                          "most {} bytes",
-                                          kMaxSyntaxBytes)};
+        throw ValidationError{
+            std::format("EditPaste: id, content, and syntax are required, and syntax must be at "
+                        "most {} bytes",
+                        kMaxSyntaxBytes)};
     }
     const std::string& id = *action.id;
 
@@ -347,10 +337,8 @@ PasteView PasteModel::execute(const EditPaste& action) {
     // "before" values for the atomic write below. A stale read here does not
     // reopen a race — it just means the guarded UPDATE below affects 0 rows,
     // which is classified as `Conflict`, never silently applied.
-    auto before = mapper
-                      ->Query<db::PasteRecord>()
-                      .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
-                      .All();
+    auto before =
+        mapper->Query<db::PasteRecord>().Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id).All();
     if (before.empty()) {
         throw NotFound{"EditPaste: no such paste"};
     }
@@ -369,8 +357,7 @@ PasteView PasteModel::execute(const EditPaste& action) {
     // discarded.
     std::optional<PasteView> view;
     {
-        ::Lightweight::SqlTransaction transaction{mapper->Connection(),
-                                                  ::Lightweight::SqlTransactionMode::ROLLBACK};
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
 
         std::size_t consumed = 0;
         {
@@ -385,8 +372,7 @@ PasteView PasteModel::execute(const EditPaste& action) {
         // and testing for exactly 1 closes the `NumRowsAffected()`
         // signed-to-unsigned `-1` -> `SIZE_MAX` hole.
         if (consumed == 1) {
-            auto rows = mapper
-                            ->Query<db::PasteRecord>()
+            auto rows = mapper->Query<db::PasteRecord>()
                             .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
                             .All();
             if (rows.empty()) {
@@ -404,10 +390,8 @@ PasteView PasteModel::execute(const EditPaste& action) {
     }
 
     // ── Zero rows matched: classify why ─────────────────────────────────────
-    auto existing = mapper
-                        ->Query<db::PasteRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
-                        .All();
+    auto existing =
+        mapper->Query<db::PasteRecord>().Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id).All();
     if (existing.empty()) {
         throw NotFound{"EditPaste: no such paste"};
     }
@@ -426,7 +410,7 @@ Ack PasteModel::execute(const DeletePaste& action) {
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     ::Lightweight::SqlStatement stmt{mapper->Connection()};
     stmt.Prepare("DELETE FROM pastes WHERE id = ?");
-    (void) stmt.Execute(*action.id);
+    (void)stmt.Execute(*action.id);
     return Ack{};
 }
 
@@ -440,15 +424,14 @@ ListPastesResult PasteModel::execute(const ListPastes& action) {
     // shift a later page's offset (the required "sweep fires between two pages"
     // test depends on exactly this).
     auto query = mapper->Query<db::PasteRecord>();
-    (void) query.Where(::Lightweight::FieldNameOf<&db::PasteRecord::isPrivate>, "=", false);
+    (void)query.Where(::Lightweight::FieldNameOf<&db::PasteRecord::isPrivate>, "=", false);
     if (action.cursor.hasValue()) {
-        (void) query.Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "<", *action.cursor);
+        (void)query.Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "<", *action.cursor);
     }
     // One row beyond the page is the has-more probe; it is never returned.
-    auto rows = query
-                    .OrderBy(::Lightweight::FieldNameOf<&db::PasteRecord::id>,
-                             ::Lightweight::SqlResultOrdering::DESCENDING)
-                    .First(kPageSize + 1);
+    auto rows =
+        query.OrderBy(::Lightweight::FieldNameOf<&db::PasteRecord::id>, ::Lightweight::SqlResultOrdering::DESCENDING)
+            .First(kPageSize + 1);
 
     const bool hasMore = rows.size() > kPageSize;
     if (hasMore) {
@@ -479,7 +462,7 @@ Ack PasteModel::execute(const ExpirePaste& action) {
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     ::Lightweight::SqlStatement stmt{mapper->Connection()};
     stmt.Prepare("DELETE FROM pastes WHERE id = ? AND expires_at_ms IS NOT NULL AND expires_at_ms <= ?");
-    (void) stmt.Execute(*action.id, nowMs());
+    (void)stmt.Execute(*action.id, nowMs());
     return Ack{};
 }
 

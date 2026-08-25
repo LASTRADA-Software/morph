@@ -162,9 +162,9 @@ BRIDGE_MODEL_KEY(SikRowModel, SikOpenRow, &SikOpenRow::id);
 
 namespace {
 
+using morph::bridge::AllowShared;
 using morph::bridge::Bridge;
 using morph::bridge::BridgeHandler;
-using morph::bridge::AllowShared;
 
 template <typename T>
 T settleSik(morph::async::Completion<T> comp) {

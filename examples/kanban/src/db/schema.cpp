@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "kanban/db/database.hpp"
-
 #include <Lightweight/SqlConnection.hpp>
 #include <Lightweight/SqlMigration.hpp>
 #include <Lightweight/SqlQuery/Migrate.hpp>
+
+#include "kanban/db/database.hpp"
 
 namespace kanban::db {
 
@@ -35,7 +35,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260817000001, "Create kanban tables") {
     plan.CreateTableIfNotExists("project_has_roles")
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("project_id", Bigint(),
-                             Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "projects", .columnName = "id"})
+                            Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "projects", .columnName = "id"})
         .RequiredColumn("principal", Varchar(64))
         .RequiredColumn("role", Varchar(16));
     // One role row per (project, principal) -- a re-grant overwrites, never
@@ -82,7 +82,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260817000001, "Create kanban tables") {
     plan.CreateTableIfNotExists("comments")
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("task_id", Bigint(),
-                             Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "tasks", .columnName = "id"})
+                            Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "tasks", .columnName = "id"})
         .RequiredColumn("principal", Varchar(64))
         .RequiredColumn("body", NVarchar(0))
         .RequiredColumn("created_at_ms", Bigint());
@@ -141,7 +141,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260818000002, "Create kanban task_tags table") {
     plan.CreateTableIfNotExists("task_tags")
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("task_id", Bigint(),
-                             Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "tasks", .columnName = "id"})
+                            Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "tasks", .columnName = "id"})
         .RequiredColumn("tag", Varchar(100));
     plan.CreateIndex("idx_task_tags_task", "task_tags", {"task_id"});
 }
@@ -154,7 +154,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260818000003, "Create kanban attachments table") {
     plan.CreateTableIfNotExists("attachments")
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("task_id", Bigint(),
-                             Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "tasks", .columnName = "id"})
+                            Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "tasks", .columnName = "id"})
         .RequiredColumn("filename", Varchar(255))
         .RequiredColumn("content_type", Varchar(127))
         .RequiredColumn("size_bytes", Bigint())

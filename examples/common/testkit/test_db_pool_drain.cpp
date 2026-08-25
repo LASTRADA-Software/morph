@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <Lightweight/SqlConnection.hpp>
+#include <Lightweight/SqlStatement.hpp>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 
 #include "testkit/db_fixture.hpp"
 #include "testkit/db_pool_drain.hpp"
-
-#include <Lightweight/SqlConnection.hpp>
-#include <Lightweight/SqlStatement.hpp>
-
-#include <atomic>
 
 // drainPoolIdleMappers()'s whole point is making the *next* Acquire()
 // trigger Lightweight::SqlConnection::PostConnect() -- there is no direct
@@ -18,14 +16,13 @@
 // via SetPostConnectedHook is the only observable morph itself has, and is
 // exactly the mechanism the busy-timeout tests this helper protects rely on.
 
-TEST_CASE("drainPoolIdleMappers makes the next Acquire() trigger PostConnect",
-          "[ladder][testkit][db][pool]") {
+TEST_CASE("drainPoolIdleMappers makes the next Acquire() trigger PostConnect", "[ladder][testkit][db][pool]") {
     morph::ladder::testkit::DbFixture fixture;
 
     // Warm the pool with at least one real, connected mapper first -- an
     // ordinary Acquire()+destroy, so a later Acquire() has something idle to
     // (wrongly) hand back if the drain below did not actually work.
-    (void) ::Lightweight::GlobalDataMapperPool().Acquire();
+    (void)::Lightweight::GlobalDataMapperPool().Acquire();
 
     // The drain itself acquires Config.maxSize mappers, and however many of
     // those the pool did not already have idle each connect for real (firing

@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "pastebin/core/types.hpp"
-#include "pastebin/units.hpp"
-
-#include <morph/util/datetime.hpp>
-
 #include <array>
 #include <cstddef>
+#include <morph/util/datetime.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "pastebin/core/types.hpp"
+#include "pastebin/units.hpp"
 
 /// @file
 /// Pastebin's one entity's wire DTOs. GetPaste is the one client-visible,
@@ -97,8 +96,7 @@ struct CreatePaste {
         // (`readCount >= *burnAfterReads`) is already true before the first
         // read ever happens, so the paste is born unreadable — accepted by
         // `validate()`, then permanently `Burned` on the very first `GetPaste`.
-        if (burnAfterReads.hasValue() &&
-            (burnAfterReads.value()->isZero() || burnAfterReads.value()->isNegative())) {
+        if (burnAfterReads.hasValue() && (burnAfterReads.value()->isZero() || burnAfterReads.value()->isNegative())) {
             return false;
         }
         return true;

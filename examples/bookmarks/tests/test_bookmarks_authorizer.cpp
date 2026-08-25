@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "bookmarks/auth/bookmarks_authorizer.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <string>
 
+#include "bookmarks/auth/bookmarks_authorizer.hpp"
 #include "bookmarks/models/auth_model.hpp"
 #include "bookmarks/models/bookmark_model.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <memory>
-#include <string>
 
 using bookmarks::auth::BookmarksAuthorizer;
 using bookmarks::auth::isValidPrincipal;
@@ -30,7 +28,7 @@ constexpr std::string_view kSecret = "test-only-shared-secret";
 ///        again on the way out, whether the scope exits normally or through a
 ///        failing Catch2 assertion.
 class ScopedTokenIssuer {
-  public:
+public:
     explicit ScopedTokenIssuer(std::shared_ptr<TokenIssuer> issuer) {
         bookmarks::auth::setTokenIssuer(std::move(issuer));
     }
@@ -42,16 +40,14 @@ class ScopedTokenIssuer {
 };
 }  // namespace
 
-TEST_CASE("isValidPrincipal accepts ordinary usernames and the service principal",
-          "[bookmarks][auth]") {
+TEST_CASE("isValidPrincipal accepts ordinary usernames and the service principal", "[bookmarks][auth]") {
     CHECK(isValidPrincipal("alice"));
     CHECK(isValidPrincipal("alice_2"));
     CHECK(isValidPrincipal("alice.smith-99"));
     CHECK(isValidPrincipal(kMetadataFetcherPrincipal));
 }
 
-TEST_CASE("isValidPrincipal rejects the empty string, control bytes, and overlong input",
-          "[bookmarks][auth]") {
+TEST_CASE("isValidPrincipal rejects the empty string, control bytes, and overlong input", "[bookmarks][auth]") {
     // Empty: never a valid identity to register as.
     CHECK_FALSE(isValidPrincipal(""));
     // A raw control byte -- the class of input TokenIssuer::issue()'s
@@ -61,9 +57,10 @@ TEST_CASE("isValidPrincipal rejects the empty string, control bytes, and overlon
     // every following hex digit, and `c`/`e` are valid hex digits, so an
     // unsplit "ali\x01ce" is parsed as the single out-of-range escape
     // `\x01ce` rather than `\x01` followed by literal "ce".
-    CHECK_FALSE(isValidPrincipal(std::string_view{"ali\x01"
-                                                   "ce",
-                                                   6}));
+    CHECK_FALSE(
+        isValidPrincipal(std::string_view{"ali\x01"
+                                          "ce",
+                                          6}));
     CHECK_FALSE(isValidPrincipal(std::string_view{"ali\nce", 6}));
     // 65 bytes -- one past the 64-byte bound.
     const std::string tooLong(65, 'a');
@@ -73,8 +70,7 @@ TEST_CASE("isValidPrincipal rejects the empty string, control bytes, and overlon
     CHECK(isValidPrincipal(atLimit));
 }
 
-TEST_CASE("BookmarksAuthorizer authenticates and authorizes a validly signed token",
-          "[bookmarks][auth]") {
+TEST_CASE("BookmarksAuthorizer authenticates and authorizes a validly signed token", "[bookmarks][auth]") {
     const BookmarksAuthorizer authz{std::string{kSecret}, morph::session::hmacSha256};
     const TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
 
@@ -122,9 +118,10 @@ TEST_CASE("BookmarksAuthorizer rejects a tampered or expired token", "[bookmarks
     CHECK_FALSE(authz.authorize(noTokenCtx, "BookmarkModel", "CreateBookmark"));
 }
 
-TEST_CASE("BookmarksAuthorizer::authorizeRegister admits an anonymous register, by choice "
-          "rather than necessity",
-          "[bookmarks][auth]") {
+TEST_CASE(
+    "BookmarksAuthorizer::authorizeRegister admits an anonymous register, by choice "
+    "rather than necessity",
+    "[bookmarks][auth]") {
     const BookmarksAuthorizer authz{std::string{kSecret}, morph::session::hmacSha256};
 
     // `anonymous` is a real, reachable input -- an unauthenticated client's
@@ -146,8 +143,7 @@ TEST_CASE("BookmarksAuthorizer::authorizeRegister admits an anonymous register, 
     CHECK(authz.authorizeRegister(authenticated, "BookmarkModel"));
 }
 
-TEST_CASE("Registering is not authorizing: an anonymous caller's execute is still refused",
-          "[bookmarks][auth]") {
+TEST_CASE("Registering is not authorizing: an anonymous caller's execute is still refused", "[bookmarks][auth]") {
     // The property that actually carries this rung's trust boundary now that
     // authorizeRegister admits everyone. `authorize()` is consulted on every
     // single execute (remote.hpp:1160), before authenticate() and before any
@@ -173,9 +169,10 @@ TEST_CASE("Registering is not authorizing: an anonymous caller's execute is stil
     CHECK_FALSE(authz.authenticate(forged).has_value());
 }
 
-TEST_CASE("BookmarksAuthorizer::authorizeInstance enforces real ownership for a "
-          "plain-registered instance, and passes through an ownerless (shared) one",
-          "[bookmarks][auth]") {
+TEST_CASE(
+    "BookmarksAuthorizer::authorizeInstance enforces real ownership for a "
+    "plain-registered instance, and passes through an ownerless (shared) one",
+    "[bookmarks][auth]") {
     // `register` envelopes now carry the caller's session, so RemoteServer
     // records a real, non-empty `ownerPrincipal` for a plain-registered
     // instance -- all three CHECKs below are reachable in production
@@ -212,8 +209,7 @@ TEST_CASE("setTokenIssuer/tokenIssuer share one process-global slot", "[bookmark
     CHECK(bookmarks::auth::tokenIssuer() == nullptr);
 }
 
-TEST_CASE("BookmarksAuthorizer::authorize admits Login without a token, and nothing else",
-          "[bookmarks][auth]") {
+TEST_CASE("BookmarksAuthorizer::authorize admits Login without a token, and nothing else", "[bookmarks][auth]") {
     // The carve-out that makes login possible at all. Without it
     // SigningAuthorizer::authorize() rejects every tokenless execute --
     // including the one action whose whole purpose is handing out the first
@@ -243,8 +239,7 @@ TEST_CASE("BookmarksAuthorizer::authorize admits Login without a token, and noth
     CHECK_FALSE(authz.authenticate(forged).has_value());
 }
 
-TEST_CASE("A tokenless client logs in over a real RemoteServer and its token unlocks the rest",
-          "[bookmarks][auth]") {
+TEST_CASE("A tokenless client logs in over a real RemoteServer and its token unlocks the rest", "[bookmarks][auth]") {
     // The end-to-end shape of the bug above, at the wire level: this is the
     // exact sequence a freshly launched desktop client performs, and the one
     // no test covered before task 18 drove the real client against the real

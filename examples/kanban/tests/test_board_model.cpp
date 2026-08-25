@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "kanban/models/board_model.hpp"
-#include "kanban/models/project_admin_model.hpp"
-#include "testkit/db_fixture.hpp"
-
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <algorithm>
-#include <memory>
+#include "kanban/models/board_model.hpp"
+#include "kanban/models/project_admin_model.hpp"
+#include "testkit/db_fixture.hpp"
 
 using morph::ladder::testkit::DbFixture;
 
@@ -27,10 +25,10 @@ namespace {
 }
 
 class ScopedPrincipal {
-  public:
+public:
     explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
 
-  private:
+private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
@@ -140,8 +138,8 @@ TEST_CASE("GetBoardState's comments each carry the taskId of the task they belon
 
     // What TaskDetailPopup.qml's own filter now expresses client-side: only
     // taskA's comments should survive a filter keyed on taskA's id.
-    const auto commentsForTaskA = std::ranges::count_if(
-        result.comments, [&](const auto& c) { return c.taskId == taskA; });
+    const auto commentsForTaskA =
+        std::ranges::count_if(result.comments, [&](const auto& c) { return c.taskId == taskA; });
     CHECK(commentsForTaskA == 1);
 }
 
@@ -224,8 +222,8 @@ TEST_CASE("MoveTaskPosition rejects a move that would exceed the target column's
         model.execute(kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "B"}).tasks.back().id;
 
     // Filling col2 (limit 1) to capacity first.
-    model.execute(
-        kanban::MoveTaskPosition{.taskId = taskA, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
+    model.execute(kanban::MoveTaskPosition{
+        .taskId = taskA, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
 
     CHECK_THROWS_AS(model.execute(kanban::MoveTaskPosition{
                         .taskId = taskB, .columnId = col2, .swimlaneId = swimlaneId, .position = 1, .opId = ""}),
@@ -278,12 +276,10 @@ TEST_CASE("MoveTaskPosition into a column deleted mid-drag throws NotFound, not 
     // catches a genuinely-deleted column once that action lands).
     const kanban::ColumnId neverExisted{99999};
 
-    CHECK_THROWS_AS(model.execute(kanban::MoveTaskPosition{.taskId = taskId,
-                                                            .columnId = neverExisted,
-                                                            .swimlaneId = swimlaneId,
-                                                            .position = 0,
-                                                            .opId = ""}),
-                    kanban::NotFound);
+    CHECK_THROWS_AS(
+        model.execute(kanban::MoveTaskPosition{
+            .taskId = taskId, .columnId = neverExisted, .swimlaneId = swimlaneId, .position = 0, .opId = ""}),
+        kanban::NotFound);
 }
 
 TEST_CASE("A Viewer cannot CreateTask or MoveTaskPosition -- Forbidden, not a silent write", "[kanban][model]") {
@@ -330,7 +326,7 @@ TEST_CASE("GetEventsSince returns every event after the cursor, oldest first", "
 
     const auto cursor = first.events.back().id;
     const auto colId = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.back().id;
-    (void) colId;
+    (void)colId;
 
     const auto second = model.execute(kanban::GetEventsSince{.lastEventId = cursor});
     REQUIRE(second.events.size() == 1);
@@ -460,7 +456,8 @@ TEST_CASE("CreateTask rejects a swimlaneId that belongs to a different project, 
     kanban::BoardModel modelA;
     const ScopedPrincipal bob{"bob"};
     modelA.execute(kanban::OpenBoard{.projectId = projectA});
-    const auto columnOnA = modelA.execute(kanban::CreateColumn{.name = "A's column", .wipLimit = 0}).columns.front().id;
+    const auto columnOnA =
+        modelA.execute(kanban::CreateColumn{.name = "A's column", .wipLimit = 0}).columns.front().id;
     CHECK_THROWS_AS(
         modelA.execute(kanban::CreateTask{.columnId = columnOnA, .swimlaneId = swimlaneOnB, .title = "Sneaky task"}),
         kanban::NotFound);
@@ -495,8 +492,7 @@ TEST_CASE("AddComment rejects a taskId that belongs to a different project", "[k
     kanban::BoardModel modelA;
     const ScopedPrincipal bob{"bob"};
     modelA.execute(kanban::OpenBoard{.projectId = projectA});
-    CHECK_THROWS_AS(modelA.execute(kanban::AddComment{.taskId = taskOnB, .body = "sneaky comment"}),
-                    kanban::NotFound);
+    CHECK_THROWS_AS(modelA.execute(kanban::AddComment{.taskId = taskOnB, .body = "sneaky comment"}), kanban::NotFound);
 
     // Confirm no injection happened: project B's own board still shows zero
     // comments.
@@ -573,11 +569,8 @@ TEST_CASE("MoveTaskPosition into a swimlane deleted mid-drag throws NotFound, no
     // above).
     const kanban::SwimlaneId neverExisted{99999};
 
-    CHECK_THROWS_AS(model.execute(kanban::MoveTaskPosition{.taskId = taskId,
-                                                            .columnId = col1,
-                                                            .swimlaneId = neverExisted,
-                                                            .position = 0,
-                                                            .opId = ""}),
+    CHECK_THROWS_AS(model.execute(kanban::MoveTaskPosition{
+                        .taskId = taskId, .columnId = col1, .swimlaneId = neverExisted, .position = 0, .opId = ""}),
                     kanban::NotFound);
 }
 
@@ -614,7 +607,7 @@ TEST_CASE("Replaying a cascaded journal entry does not re-fire the cascade", "[k
     // driver would need to seed regardless of the cascade question this
     // test is actually about.
     const auto opened = model.execute(kanban::OpenBoard{.projectId = projectId});
-    (void) opened;
+    (void)opened;
 
     const auto columnId = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.front().id;
     const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
@@ -671,7 +664,8 @@ TEST_CASE("Replaying a cascaded journal entry does not re-fire the cascade", "[k
         openBoardEntry.modelType = "BoardModel";
         openBoardEntry.entityKey = projectIdStr;
         openBoardEntry.actionType = std::string{::morph::model::ActionTraits<kanban::OpenBoard>::typeId()};
-        openBoardEntry.payload = ::morph::model::ActionTraits<kanban::OpenBoard>::toJson(kanban::OpenBoard{.projectId = projectId});
+        openBoardEntry.payload =
+            ::morph::model::ActionTraits<kanban::OpenBoard>::toJson(kanban::OpenBoard{.projectId = projectId});
         openBoardEntry.outcome = ::morph::journal::Outcome::Succeeded;
         replayEntries.push_back(std::move(openBoardEntry));
     }
@@ -720,11 +714,11 @@ TEST_CASE("A rule firing on move-to-column adds a tag, journaled with a causal p
             .id;
 
     const auto ruleId = model
-                             .execute(kanban::CreateRule{.projectId = projectId,
-                                                          .triggerColumnId = doneColumnId,
-                                                          .mutationType = kanban::RuleMutationType::AddTag,
-                                                          .mutationValue = "closed"})
-                             .ruleId;
+                            .execute(kanban::CreateRule{.projectId = projectId,
+                                                        .triggerColumnId = doneColumnId,
+                                                        .mutationType = kanban::RuleMutationType::AddTag,
+                                                        .mutationValue = "closed"})
+                            .ruleId;
     REQUIRE(ruleId.hasValue());
 
     const auto afterMove = model.execute(kanban::MoveTaskPosition{
@@ -774,9 +768,9 @@ TEST_CASE("Replaying a move-to-Done journal entry does not re-fire its rule", "[
             .tasks.front()
             .id;
     model.execute(kanban::CreateRule{.projectId = projectId,
-                                      .triggerColumnId = doneColumnId,
-                                      .mutationType = kanban::RuleMutationType::AddTag,
-                                      .mutationValue = "closed"});
+                                     .triggerColumnId = doneColumnId,
+                                     .mutationType = kanban::RuleMutationType::AddTag,
+                                     .mutationValue = "closed"});
 
     // Perform the move once -- the rule fires, the tag is added.
     model.execute(kanban::MoveTaskPosition{
@@ -833,10 +827,10 @@ TEST_CASE("AddAttachment records metadata for a task, GetAttachments lists it", 
             .id;
 
     model.execute(kanban::AddAttachment{.taskId = taskId,
-                                         .filename = "report.pdf",
-                                         .contentType = "application/pdf",
-                                         .sizeBytes = 1024,
-                                         .storageKey = "abc123"});
+                                        .filename = "report.pdf",
+                                        .contentType = "application/pdf",
+                                        .sizeBytes = 1024,
+                                        .storageKey = "abc123"});
 
     const auto result = model.execute(kanban::GetAttachments{.taskId = taskId});
     REQUIRE(result.attachments.size() == 1);
@@ -864,10 +858,10 @@ TEST_CASE("RemoveAttachment deletes the metadata row; GetAttachments no longer l
             .id;
 
     model.execute(kanban::AddAttachment{.taskId = taskId,
-                                         .filename = "report.pdf",
-                                         .contentType = "application/pdf",
-                                         .sizeBytes = 1024,
-                                         .storageKey = "abc123"});
+                                        .filename = "report.pdf",
+                                        .contentType = "application/pdf",
+                                        .sizeBytes = 1024,
+                                        .storageKey = "abc123"});
     const auto attachmentId = model.execute(kanban::GetAttachments{.taskId = taskId}).attachments.front().id;
 
     model.execute(kanban::RemoveAttachment{.attachmentId = attachmentId});
@@ -876,7 +870,8 @@ TEST_CASE("RemoveAttachment deletes the metadata row; GetAttachments no longer l
     CHECK(after.attachments.empty());
 }
 
-TEST_CASE("AddAttachment rejects a taskId that belongs to a different project", "[kanban][attachments][cross-tenant]") {
+TEST_CASE("AddAttachment rejects a taskId that belongs to a different project",
+          "[kanban][attachments][cross-tenant]") {
     DbFixture fixture;
     const auto projectA = createProjectAs("alice", "Board A");
     const auto projectB = createProjectAs("bob", "Board B");
@@ -901,10 +896,10 @@ TEST_CASE("AddAttachment rejects a taskId that belongs to a different project", 
     modelB.execute(kanban::OpenBoard{.projectId = projectB});
 
     CHECK_THROWS_AS(modelB.execute(kanban::AddAttachment{.taskId = taskOnA,
-                                                          .filename = "sneaky.pdf",
-                                                          .contentType = "application/pdf",
-                                                          .sizeBytes = 1,
-                                                          .storageKey = "sneaky"}),
+                                                         .filename = "sneaky.pdf",
+                                                         .contentType = "application/pdf",
+                                                         .sizeBytes = 1,
+                                                         .storageKey = "sneaky"}),
                     kanban::NotFound);
 }
 
@@ -925,7 +920,8 @@ TEST_CASE("A Viewer can GetAttachments but cannot AddAttachment -- Forbidden, no
                      .id;
 
         kanban::ProjectAdminModel admin;
-        admin.execute(kanban::SetMemberRole{.projectId = projectId, .principal = "carol", .role = kanban::Role::Viewer});
+        admin.execute(
+            kanban::SetMemberRole{.projectId = projectId, .principal = "carol", .role = kanban::Role::Viewer});
     }
 
     const ScopedPrincipal carol{"carol"};
@@ -933,10 +929,10 @@ TEST_CASE("A Viewer can GetAttachments but cannot AddAttachment -- Forbidden, no
     viewerModel.execute(kanban::OpenBoard{.projectId = projectId});
 
     CHECK_THROWS_AS(viewerModel.execute(kanban::AddAttachment{.taskId = taskId,
-                                                               .filename = "x.pdf",
-                                                               .contentType = "application/pdf",
-                                                               .sizeBytes = 1,
-                                                               .storageKey = "k"}),
+                                                              .filename = "x.pdf",
+                                                              .contentType = "application/pdf",
+                                                              .sizeBytes = 1,
+                                                              .storageKey = "k"}),
                     kanban::Forbidden);
     // Viewer-or-above may still read -- same bar GetBoardState/GetRules use.
     CHECK(viewerModel.execute(kanban::GetAttachments{.taskId = taskId}).attachments.empty());

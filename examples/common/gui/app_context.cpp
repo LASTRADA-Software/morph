@@ -2,7 +2,6 @@
 #include "gui/app_context.hpp"
 
 #include <morph/session/session.hpp>
-
 #include <optional>
 #include <utility>
 

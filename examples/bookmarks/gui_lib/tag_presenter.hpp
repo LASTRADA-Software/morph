@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "gui/presenter.hpp"
-#include "bookmarks/dto/tag_dto.hpp"
-
 #include <exception>
+
+#include "bookmarks/dto/tag_dto.hpp"
+#include "gui/presenter.hpp"
 
 // See pastebin::gui::PastePresenter's identical guard and doc comment
 // (examples/pastebin/gui_lib/paste_presenter.hpp) for why moc must never see
@@ -16,10 +16,10 @@
 // connection per execute() call from Lightweight::GlobalDataMapperPool()
 // instead of owning one, but this guard stays for bridge.hpp's own sake.
 #ifndef Q_MOC_RUN
-#include "bookmarks/models/tag_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "bookmarks/models/tag_model.hpp"
 #endif
 
 namespace bookmarks::gui {
@@ -29,7 +29,7 @@ namespace bookmarks::gui {
 ///        rule 2).
 class TagPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -49,7 +49,7 @@ class TagPresenter : public ::morph::ladder::gui::Presenter {
     /// @param action The list request.
     void list(ListTags action);
 
-  signals:
+signals:
     void renamed();
     void merged();
     void listed(ListTagsResult result);
@@ -57,7 +57,7 @@ class TagPresenter : public ::morph::ladder::gui::Presenter {
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Shared error-display body passed as every `track()` call's
     ///        third argument below — see `Presenter::track()`'s doc comment
     ///        (`examples/common/gui/presenter.hpp`) for why.

@@ -88,9 +88,7 @@ struct Principal {
     /// @brief Returns `true` if `roles` contains @p role.
     /// @param role Role name to look for.
     /// @return `true` if @p role is present in `roles`.
-    [[nodiscard]] bool hasRole(std::string_view role) const {
-        return std::ranges::find(roles, role) != roles.end();
-    }
+    [[nodiscard]] bool hasRole(std::string_view role) const { return std::ranges::find(roles, role) != roles.end(); }
 };
 
 /// @brief Authorizes incoming actions on a `RemoteServer`.

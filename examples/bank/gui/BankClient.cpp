@@ -2,10 +2,9 @@
 
 #include "BankClient.hpp"
 
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/session/session.hpp>
-
-#include <memory>
 #include <utility>
 
 #ifndef __EMSCRIPTEN__

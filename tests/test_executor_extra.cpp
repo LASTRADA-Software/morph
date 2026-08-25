@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/executor.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/executor.hpp>
 #include <stdexcept>
 #include <thread>
-
 
 TEST_CASE("morph::exec::MainThreadExecutor: callback that throws is swallowed and loop continues", "[executor]") {
     morph::exec::MainThreadExecutor exec;
@@ -64,8 +63,7 @@ TEST_CASE("morph::exec::ThreadPoolExecutor: exception in one task does not kill 
     REQUIRE(afterCount.load() == afterTasks);
 }
 
-TEST_CASE("morph::exec::ThreadPoolExecutor: non-std::exception throw in one task does not kill worker",
-          "[executor]") {
+TEST_CASE("morph::exec::ThreadPoolExecutor: non-std::exception throw in one task does not kill worker", "[executor]") {
     morph::exec::ThreadPoolExecutor pool{1};
     std::atomic<int> afterCount{0};
     constexpr int afterTasks = 5;

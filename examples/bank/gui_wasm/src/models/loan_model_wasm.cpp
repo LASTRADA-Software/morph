@@ -2,8 +2,6 @@
 //
 // In-memory implementation of LoanModel for the WASM build.
 
-#include "bank/models/loan_model.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -12,6 +10,7 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
+#include "bank/models/loan_model.hpp"
 #include "bank/wasm/store.hpp"
 #include "bank/wasm/store_ops.hpp"
 

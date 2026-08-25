@@ -1,21 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "kanban/models/board_model.hpp"
 
-#include "kanban/db/kanban_entity.hpp"
-#include "kanban/dto/project_dto.hpp"
-
-#include "clock.hpp"
-
-#include <morph/journal/journal.hpp>
-#include <morph/session/session.hpp>
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlTransaction.hpp>
-
-#include <glaze/glaze.hpp>
-
 #include <algorithm>
+#include <glaze/glaze.hpp>
+#include <morph/journal/journal.hpp>
+#include <morph/session/session.hpp>
+
+#include "clock.hpp"
+#include "kanban/db/kanban_entity.hpp"
+#include "kanban/dto/project_dto.hpp"
 
 namespace kanban {
 
@@ -72,7 +68,7 @@ namespace {
 ///        they have none. Mirrors `ProjectAdminModel`'s identical helper
 ///        (design spec §3: not shared code, each model gets its own copy).
 [[nodiscard]] std::optional<Role> loadCallerRole(::Lightweight::DataMapper& mapper, std::uint64_t projectDbId,
-                                                  const std::string& principal) {
+                                                 const std::string& principal) {
     auto rows = mapper.Query<db::ProjectRoleRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::project>, "=", projectDbId)
                     .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::principal>, "=", principal)
@@ -90,15 +86,15 @@ namespace {
 ///        `MoveTaskPosition` must surface as a typed error here, not a
 ///        silent write into an orphaned row.
 void requireColumnBelongsToProject(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project,
-                                    ColumnId columnId) {
+                                   ColumnId columnId) {
     if (!columnId.hasValue() || *columnId < 0) {
         throw NotFound{"column does not belong to this project"};
     }
-    auto rows = mapper.Query<db::ColumnRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::id>, "=",
-                           static_cast<std::uint64_t>(*columnId))
-                    .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::project>, "=", project.id.Value())
-                    .All();
+    auto rows =
+        mapper.Query<db::ColumnRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::id>, "=", static_cast<std::uint64_t>(*columnId))
+            .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::project>, "=", project.id.Value())
+            .All();
     if (rows.empty()) {
         throw NotFound{"column does not belong to this project"};
     }
@@ -109,15 +105,15 @@ void requireColumnBelongsToProject(::Lightweight::DataMapper& mapper, const db::
 ///        same design spec §2 "trust nothing read before this call,
 ///        re-check inside the transaction" discipline.
 void requireSwimlaneBelongsToProject(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project,
-                                      SwimlaneId swimlaneId) {
+                                     SwimlaneId swimlaneId) {
     if (!swimlaneId.hasValue() || *swimlaneId < 0) {
         throw NotFound{"swimlane does not belong to this project"};
     }
-    auto rows = mapper.Query<db::SwimlaneRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::id>, "=",
-                           static_cast<std::uint64_t>(*swimlaneId))
-                    .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::project>, "=", project.id.Value())
-                    .All();
+    auto rows =
+        mapper.Query<db::SwimlaneRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::id>, "=", static_cast<std::uint64_t>(*swimlaneId))
+            .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::project>, "=", project.id.Value())
+            .All();
     if (rows.empty()) {
         throw NotFound{"swimlane does not belong to this project"};
     }
@@ -130,14 +126,12 @@ void requireSwimlaneBelongsToProject(::Lightweight::DataMapper& mapper, const db
 ///        FK-enforced by SQLite, and a task from another project must
 ///        surface as a typed error here, not a silent cross-tenant read or
 ///        write into a foreign row.
-void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project,
-                                  TaskId taskId) {
+void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project, TaskId taskId) {
     if (!taskId.hasValue() || *taskId < 0) {
         throw NotFound{"task does not belong to this project"};
     }
     auto rows = mapper.Query<db::TaskRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=",
-                           static_cast<std::uint64_t>(*taskId))
+                    .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=", static_cast<std::uint64_t>(*taskId))
                     .Where(::Lightweight::FieldNameOf<&db::TaskRecord::project>, "=", project.id.Value())
                     .All();
     if (rows.empty()) {
@@ -172,9 +166,9 @@ void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::Pr
     }
 
     auto swimlanes = mapper.Query<db::SwimlaneRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::project>, "=", projectDbId)
-                          .OrderBy(::Lightweight::FieldNameOf<&db::SwimlaneRecord::sortOrder>)
-                          .All();
+                         .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::project>, "=", projectDbId)
+                         .OrderBy(::Lightweight::FieldNameOf<&db::SwimlaneRecord::sortOrder>)
+                         .All();
     for (const auto& sw : swimlanes) {
         result.swimlanes.push_back(
             {.id = SwimlaneId{static_cast<std::int64_t>(sw.id.Value())}, .name = std::string{sw.name.Value()}});
@@ -191,7 +185,9 @@ void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::Pr
     // shape a few lines down, rather than N per-task queries.
     std::vector<db::TaskTagRecord> allTags;
     if (!taskIds.empty()) {
-        allTags = mapper.Query<db::TaskTagRecord>().WhereIn(::Lightweight::FieldNameOf<&db::TaskTagRecord::task>, taskIds).All();
+        allTags = mapper.Query<db::TaskTagRecord>()
+                      .WhereIn(::Lightweight::FieldNameOf<&db::TaskTagRecord::task>, taskIds)
+                      .All();
     }
 
     for (const auto& t : tasks) {
@@ -209,12 +205,13 @@ void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::Pr
     }
 
     if (!taskIds.empty()) {
-        auto comments =
-            mapper.Query<db::CommentRecord>().WhereIn(::Lightweight::FieldNameOf<&db::CommentRecord::task>, taskIds).All();
+        auto comments = mapper.Query<db::CommentRecord>()
+                            .WhereIn(::Lightweight::FieldNameOf<&db::CommentRecord::task>, taskIds)
+                            .All();
         for (const auto& c : comments) {
             result.comments.push_back({.taskId = TaskId{static_cast<std::int64_t>(c.task.Value())},
-                                        .principal = std::string{c.principal.Value()},
-                                        .body = std::string{c.body.Value()}});
+                                       .principal = std::string{c.principal.Value()},
+                                       .body = std::string{c.body.Value()}});
         }
     }
     return result;
@@ -643,7 +640,7 @@ GetRulesResult BoardModel::execute(const GetRules& action) {
     // loadProjectById's only purpose here is the same NotFound-if-attached-
     // project-was-deleted check every other read in this file makes; its
     // return value itself is unused otherwise.
-    (void) loadProjectById(mapper.Get(), projectDbId);
+    (void)loadProjectById(mapper.Get(), projectDbId);
 
     auto rows = mapper->Query<db::RuleRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::RuleRecord::project>, "=", projectDbId)
@@ -679,11 +676,11 @@ Ack BoardModel::execute(const DeleteRule& action) {
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     auto project = loadProjectById(mapper.Get(), projectDbId);
 
-    auto rows = mapper->Query<db::RuleRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::RuleRecord::id>, "=",
-                           static_cast<std::uint64_t>(*action.ruleId))
-                    .Where(::Lightweight::FieldNameOf<&db::RuleRecord::project>, "=", project.id.Value())
-                    .All();
+    auto rows =
+        mapper->Query<db::RuleRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::RuleRecord::id>, "=", static_cast<std::uint64_t>(*action.ruleId))
+            .Where(::Lightweight::FieldNameOf<&db::RuleRecord::project>, "=", project.id.Value())
+            .All();
     if (rows.empty()) {
         throw NotFound{"rule does not belong to this project"};
     }
@@ -731,9 +728,9 @@ void BoardModel::applyTagMutationImpl(const ApplyTagMutation& action) {
 
     ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
     auto existingTags = mapper->Query<db::TaskTagRecord>()
-                             .Where(::Lightweight::FieldNameOf<&db::TaskTagRecord::task>, "=", taskDbId)
-                             .Where(::Lightweight::FieldNameOf<&db::TaskTagRecord::tag>, "=", action.tag)
-                             .All();
+                            .Where(::Lightweight::FieldNameOf<&db::TaskTagRecord::task>, "=", taskDbId)
+                            .Where(::Lightweight::FieldNameOf<&db::TaskTagRecord::tag>, "=", action.tag)
+                            .All();
 
     if (action.mutationType == RuleMutationType::AddTag) {
         // No-op (not an error) if the tag is already present -- AddTag is
@@ -759,8 +756,9 @@ void BoardModel::applyTagMutationImpl(const ApplyTagMutation& action) {
 
 GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     if (!action.validate()) {
-        throw ValidationError{"MoveTaskPosition: engaged taskId/columnId/swimlaneId and a non-negative position "
-                               "are required"};
+        throw ValidationError{
+            "MoveTaskPosition: engaged taskId/columnId/swimlaneId and a non-negative position "
+            "are required"};
     }
     if (!_projectIdStr.has_value()) {
         throw NotFound{"MoveTaskPosition: handler was never attached via OpenBoard"};
@@ -777,8 +775,7 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     // Design spec §1: ledger lookup, after the role gate above, before any
     // re-validation.
     if (!action.opId.empty()) {
-        auto existingOp = mapper
-                              ->Query<db::AppliedOpRecord>()
+        auto existingOp = mapper->Query<db::AppliedOpRecord>()
                               .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::project>, "=", projectDbId)
                               .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::opId>, "=", action.opId)
                               .All();
@@ -813,18 +810,17 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     // this task itself (a same-column reorder must not count against its
     // own limit).
     auto targetColumnRows = mapper->Query<db::ColumnRecord>()
-                                 .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::id>, "=",
-                                        static_cast<std::uint64_t>(*action.columnId))
-                                 .All();
+                                .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::id>, "=",
+                                       static_cast<std::uint64_t>(*action.columnId))
+                                .All();
     auto targetColumn = targetColumnRows.front();
     if (targetColumn.wipLimit.Value() > 0) {
-        auto currentInColumn =
-            mapper->Query<db::TaskRecord>()
-                .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=",
-                       static_cast<std::uint64_t>(*action.columnId))
-                .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "!=",
-                       static_cast<std::uint64_t>(*action.taskId))
-                .All();
+        auto currentInColumn = mapper->Query<db::TaskRecord>()
+                                   .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=",
+                                          static_cast<std::uint64_t>(*action.columnId))
+                                   .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>,
+                                          "!=", static_cast<std::uint64_t>(*action.taskId))
+                                   .All();
         if (static_cast<std::int64_t>(currentInColumn.size()) + 1 > targetColumn.wipLimit.Value()) {
             throw Conflict{"MoveTaskPosition: target column is at its WIP limit"};
         }
@@ -844,10 +840,10 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     }
     auto targetSwimlane = swimlaneRows.front();
 
-    auto taskRows = mapper->Query<db::TaskRecord>()
-                         .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=",
-                                static_cast<std::uint64_t>(*action.taskId))
-                         .All();
+    auto taskRows =
+        mapper->Query<db::TaskRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=", static_cast<std::uint64_t>(*action.taskId))
+            .All();
     if (taskRows.empty()) {
         throw NotFound{"MoveTaskPosition: task not found"};
     }
@@ -864,9 +860,8 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     // redundant, not incorrect, but is skipped entirely for clarity).
     const auto sourceColumnId = task.column.Value();
     const auto sourceSwimlaneId = task.swimlane.Value();
-    const bool movesAcrossColumnOrSwimlane =
-        sourceColumnId != static_cast<std::uint64_t>(*action.columnId) ||
-        sourceSwimlaneId != static_cast<std::uint64_t>(*action.swimlaneId);
+    const bool movesAcrossColumnOrSwimlane = sourceColumnId != static_cast<std::uint64_t>(*action.columnId) ||
+                                             sourceSwimlaneId != static_cast<std::uint64_t>(*action.swimlaneId);
 
     // Position renumbering (design spec §2): delete-then-recreate every task
     // in the destination (column, swimlane), never an in-place index shift
@@ -877,8 +872,7 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
                    static_cast<std::uint64_t>(*action.columnId))
             .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=",
                    static_cast<std::uint64_t>(*action.swimlaneId))
-            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "!=",
-                   static_cast<std::uint64_t>(*action.taskId))
+            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "!=", static_cast<std::uint64_t>(*action.taskId))
             .OrderBy(::Lightweight::FieldNameOf<&db::TaskRecord::position>)
             .All();
 
@@ -925,12 +919,12 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     // pass over the identical rows.
     if (movesAcrossColumnOrSwimlane) {
         auto sourceTasks = mapper->Query<db::TaskRecord>()
-                                .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=", sourceColumnId)
-                                .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=", sourceSwimlaneId)
-                                .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "!=",
-                                       static_cast<std::uint64_t>(*action.taskId))
-                                .OrderBy(::Lightweight::FieldNameOf<&db::TaskRecord::position>)
-                                .All();
+                               .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=", sourceColumnId)
+                               .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=", sourceSwimlaneId)
+                               .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>,
+                                      "!=", static_cast<std::uint64_t>(*action.taskId))
+                               .OrderBy(::Lightweight::FieldNameOf<&db::TaskRecord::position>)
+                               .All();
         std::int64_t sourcePos = 0;
         for (auto& t : sourceTasks) {
             t.position = sourcePos++;
@@ -1003,7 +997,8 @@ void BoardModel::evaluateRules(TaskId movedTask, ColumnId newColumn, const std::
         return;
     }
     if (!_projectIdStr.has_value()) {
-        return;  // Not attached -- nothing to evaluate against (should not happen: only called from execute(MoveTaskPosition), which already requires attach).
+        return;  // Not attached -- nothing to evaluate against (should not happen: only called from
+                 // execute(MoveTaskPosition), which already requires attach).
     }
 
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
@@ -1021,9 +1016,10 @@ void BoardModel::evaluateRules(TaskId movedTask, ColumnId newColumn, const std::
                      .All();
 
     for (const auto& rule : rules) {
-        const ApplyTagMutation cascadeAction{.taskId = movedTask,
-                                              .mutationType = ruleMutationTypeFromString(rule.mutationType.Value().str()),
-                                              .tag = std::string{rule.mutationValue.Value()}};
+        const ApplyTagMutation cascadeAction{
+            .taskId = movedTask,
+            .mutationType = ruleMutationTypeFromString(rule.mutationType.Value().str()),
+            .tag = std::string{rule.mutationValue.Value()}};
         // Calls applyTagMutationImpl directly, not execute(ApplyTagMutation)
         // -- that overload's own unconditional logAction call would record
         // this same fired mutation as a *second*, non-causal-linked
@@ -1048,8 +1044,7 @@ GetEventsSinceResult BoardModel::execute(const GetEventsSince& action) {
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
 
-    auto rows = mapper
-                    ->Query<db::BoardEventRecord>()
+    auto rows = mapper->Query<db::BoardEventRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::BoardEventRecord::project>, "=", projectDbId)
                     .Where(::Lightweight::FieldNameOf<&db::BoardEventRecord::id>, ">",
                            static_cast<std::uint64_t>(*action.lastEventId))
@@ -1082,9 +1077,9 @@ GetActivityResult BoardModel::execute(const GetActivity& /*action*/) {
     auto entries = _log->entries(*_projectIdStr);
     for (const auto& entry : entries) {
         result.events.push_back({.actionType = entry.actionType,
-                                  .principal = entry.principal,
-                                  .timestampMs = entry.timestampMs,
-                                  .summary = entry.actionType + " by " + entry.principal});
+                                 .principal = entry.principal,
+                                 .timestampMs = entry.timestampMs,
+                                 .summary = entry.actionType + " by " + entry.principal});
     }
     return result;
 }

@@ -5,7 +5,6 @@
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
-
 #include <optional>
 #include <string>
 
@@ -17,13 +16,13 @@
 // nothing from these headers: the macros, signals and `Q_INVOKABLE`
 // signatures below are all it reads.
 #ifndef Q_MOC_RUN
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+
 #include "bookmark_forms_controller.hpp"
 #include "bookmark_presenter.hpp"
 #include "shared_feed_presenter.hpp"
 #include "tag_presenter.hpp"
-
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
 #endif
 
 /// @file
@@ -95,7 +94,7 @@ class FormsBridge : public QObject {
     /// @brief `{actionType: schema}` JSON — everything the QML renderer needs.
     Q_PROPERTY(QString schemasJson READ schemasJson CONSTANT)
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -114,7 +113,7 @@ class FormsBridge : public QObject {
     /// @param bodyJson   Fully-assembled JSON body, as `DynamicForm` builds it.
     Q_INVOKABLE void submitIfValid(const QString& actionType, const QString& bodyJson);
 
-  signals:
+signals:
     /// @brief Emitted once per `submitIfValid`. @p payload is the result JSON
     ///        when @p ok, otherwise the error message.
     /// @param actionType The action the reply belongs to.
@@ -128,7 +127,7 @@ class FormsBridge : public QObject {
     /// @param principal The verified username the server echoed back.
     void loggedIn(const QString& principal);
 
-  private:
+private:
 #ifndef Q_MOC_RUN
     /// @brief Installs @p result's token as the shared `Bridge`'s default
     ///        session, so every subsequent action from every adapter carries
@@ -165,7 +164,7 @@ class FormsBridge : public QObject {
 class BookmarkBridge : public QObject {
     Q_OBJECT
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -204,7 +203,7 @@ class BookmarkBridge : public QObject {
     /// @param archive `true` to archive, `false` to unarchive.
     Q_INVOKABLE void bulkArchive(const QVariantList& ids, bool archive);
 
-  signals:
+signals:
     /// @brief Emitted once the wrapped presenter's registration round trip
     ///        settles — successfully or not (`Presenter::bound()`,
     ///        `morph/core/bridge.hpp`'s `whenBound()`). `BookmarkListView.qml`
@@ -233,7 +232,7 @@ class BookmarkBridge : public QObject {
     /// @param message The model's own `what()`.
     void failed(const QString& message);
 
-  private:
+private:
 #ifndef Q_MOC_RUN
     BookmarkPresenter _presenter;
 #endif
@@ -248,7 +247,7 @@ class BookmarkBridge : public QObject {
 class TagBridge : public QObject {
     Q_OBJECT
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -257,7 +256,7 @@ class TagBridge : public QObject {
     /// @brief Fetches every tag the caller owns, with bookmark counts.
     Q_INVOKABLE void refresh();
 
-  signals:
+signals:
     /// @brief Emitted once the wrapped presenter's registration round trip
     ///        settles — see `BookmarkBridge::bound`'s identical doc comment.
     void bound();
@@ -268,7 +267,7 @@ class TagBridge : public QObject {
     /// @param message The model's own `what()`.
     void failed(const QString& message);
 
-  private:
+private:
 #ifndef Q_MOC_RUN
     TagPresenter _presenter;
 #endif
@@ -283,7 +282,7 @@ class TagBridge : public QObject {
 class SharedFeedBridge : public QObject {
     Q_OBJECT
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -292,7 +291,7 @@ class SharedFeedBridge : public QObject {
     /// @brief Fetches the first page of the shared feed.
     Q_INVOKABLE void refresh();
 
-  signals:
+signals:
     /// @brief Emitted once the wrapped presenter's registration round trip
     ///        settles — see `BookmarkBridge::bound`'s identical doc comment.
     void bound();
@@ -303,7 +302,7 @@ class SharedFeedBridge : public QObject {
     /// @param message The model's own `what()`.
     void failed(const QString& message);
 
-  private:
+private:
 #ifndef Q_MOC_RUN
     SharedFeedPresenter _presenter;
 #endif

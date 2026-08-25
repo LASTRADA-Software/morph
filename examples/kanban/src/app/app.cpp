@@ -11,13 +11,12 @@
 // `App`. Without this, such a binary would either fail to link or come up
 // serving no models at all. Mirrors `bookmarks::app::app.cpp`'s identical
 // comment and reasoning.
-#include "kanban/models/board_model.hpp"
-#include "kanban/models/project_admin_model.hpp"
-
 #include <morph/session/session_auth.hpp>
-
 #include <string_view>
 #include <utility>
+
+#include "kanban/models/board_model.hpp"
+#include "kanban/models/project_admin_model.hpp"
 
 namespace kanban::app {
 
@@ -101,11 +100,8 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size
     // registered plain (no `contextKey`), so `attachLogIfConfigured` never
     // calls this provider for them (see that method's own early-return on
     // an empty `contextKey`, morph/core/remote.hpp).
-    _server->setLogProvider(
-        [log = _actionLog](std::string_view /*modelType*/,
-                            std::string_view /*contextKey*/) -> std::shared_ptr<::morph::journal::IActionLog> {
-            return log;
-        });
+    _server->setLogProvider([log = _actionLog](std::string_view /*modelType*/, std::string_view /*contextKey*/)
+                                -> std::shared_ptr<::morph::journal::IActionLog> { return log; });
 
     ::morph::backend::LimitPolicy limits;
     limits.maxLiveModels = kMaxLiveModels;

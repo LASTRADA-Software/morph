@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/util/datetime.hpp>
-
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <morph/util/datetime.hpp>
 
 /// @file
 /// The ladder-wide injectable "now" (examples/TESTING.md's framework-gaps
@@ -65,7 +64,7 @@ inline constexpr std::int64_t kOverrideDisabled = std::numeric_limits<std::int64
 /// test runs on its own strand/pool thread, not the test thread that
 /// constructs this guard.
 class ScopedClockOverride {
-  public:
+public:
     /// @param frozenAt The instant `now()` reads for the guard's lifetime.
     explicit ScopedClockOverride(::morph::time::DateTime frozenAt) noexcept
         : _previous{detail::overrideMillisSlot().exchange(frozenAt.value.time_since_epoch().count())} {}
@@ -77,7 +76,7 @@ class ScopedClockOverride {
     ScopedClockOverride(ScopedClockOverride&&) = delete;
     ScopedClockOverride& operator=(ScopedClockOverride&&) = delete;
 
-  private:
+private:
     std::int64_t _previous;
 };
 

@@ -6,9 +6,9 @@
 // every handler attached while the state is not yet ready runs when the outcome
 // arrives, in attachment order.
 
+#include <catch2/catch_test_macros.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/logger.hpp>
-#include <catch2/catch_test_macros.hpp>
 #include <stdexcept>
 #include <string>
 #include <vector>

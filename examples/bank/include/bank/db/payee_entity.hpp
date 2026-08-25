@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/Lightweight.hpp>
-
 #include <cstdint>
 #include <string_view>
 
@@ -28,9 +27,9 @@ struct PayeeRecord {
     static constexpr std::string_view TableName = "payees";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;       // 1
-    Light::Field<Light::SqlAnsiString<34>, Light::SqlRealName{"iban"}> iban;         // 2
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"bank_name"}> bankName;  // 3
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;                              // 1
+    Light::Field<Light::SqlAnsiString<34>, Light::SqlRealName{"iban"}> iban;                               // 2
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"bank_name"}> bankName;                     // 3
     /// Owning user.
     Light::BelongsTo<&UserRecord::id, Light::SqlRealName{"user_id"}> user;  // 4
     /// Payments addressed to this payee (inverse of `PaymentRecord::payee`).

@@ -4,7 +4,6 @@
 
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlTransaction.hpp>
-
 #include <cstdint>
 #include <string>
 
@@ -35,8 +34,7 @@ dto::PaymentInfo toInfo(const db::PaymentRecord& rec, const std::string& owner) 
 }
 
 /// Loads a payee, requiring it to exist and belong to @p owner.
-db::PayeeRecord requireOwnedPayee(Lightweight::DataMapper& mapper, std::int64_t payeeId,
-                                  const std::string& owner) {
+db::PayeeRecord requireOwnedPayee(Lightweight::DataMapper& mapper, std::int64_t payeeId, const std::string& owner) {
     return db::loadOwned<db::PayeeRecord>(mapper, payeeId, owner, "payee");
 }
 

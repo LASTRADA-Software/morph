@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
-
 #include <cstdint>
 #include <string_view>
 
@@ -23,9 +22,9 @@ struct ImportedOpRecord {
     static constexpr std::string_view TableName = "imported_ops";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"owner_principal"}> ownerPrincipal;  // 1
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"op_id"}> opId;  // 2
-    Light::Field<std::int64_t, Light::SqlRealName{"applied_at_ms"}> appliedAtMs{0};  // 3
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"owner_principal"}> ownerPrincipal;          // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"op_id"}> opId;                             // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"applied_at_ms"}> appliedAtMs{0};                        // 3
 };
 
 }  // namespace bookmarks::db

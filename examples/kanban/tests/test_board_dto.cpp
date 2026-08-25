@@ -32,9 +32,9 @@ TEST_CASE("CreateTask requires engaged columnId/swimlaneId and a bounded title",
 TEST_CASE("MoveTaskPosition requires an engaged taskId/columnId/swimlaneId and a non-negative position",
           "[kanban][dto]") {
     kanban::MoveTaskPosition valid{.taskId = kanban::TaskId{1},
-                                    .columnId = kanban::ColumnId{1},
-                                    .swimlaneId = kanban::SwimlaneId{1},
-                                    .position = 0};
+                                   .columnId = kanban::ColumnId{1},
+                                   .swimlaneId = kanban::SwimlaneId{1},
+                                   .position = 0};
     CHECK(valid.validate());
 
     kanban::MoveTaskPosition negative = valid;

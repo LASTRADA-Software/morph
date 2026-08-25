@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
-#include "lims/core/self_journal.hpp"
-#include "lims/dto/analysis_dto.hpp"
-
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
-
-#include <memory>
 #include <optional>
 #include <string>
+
+#include "lims/core/self_journal.hpp"
+#include "lims/dto/analysis_dto.hpp"
 
 namespace lims {
 
@@ -26,7 +25,7 @@ namespace lims {
 /// definition it was captured under" a property of the data rather than a
 /// convention the code has to keep remembering.
 class AnalysisCatalogModel {
-  public:
+public:
     DefineAnalysisResult execute(const DefineAnalysis& action);
     DefineAnalysisResult execute(const ReviseAnalysis& action);
     ListAnalysesResult execute(const ListAnalyses& action);
@@ -54,7 +53,7 @@ class AnalysisCatalogModel {
     /// @param entityKey Stable identity stamped onto every entry.
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
-  private:
+private:
     /// @brief This instance's own journal (inert until `attachActionLog`).
     ///
     /// A shared helper rather than a fourth hand-rolled copy of the
@@ -62,7 +61,6 @@ class AnalysisCatalogModel {
     /// `lims::SelfJournal`'s file comment for why models have to do this
     /// themselves at all.
     SelfJournal _journal;
-
 };
 
 }  // namespace lims

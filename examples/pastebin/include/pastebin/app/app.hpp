@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/journal/file_action_log.hpp>
-#include <morph/qt/qt_executor.hpp>
-
 #include <QObject>
 #include <QTimer>
-
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/journal/file_action_log.hpp>
+#include <morph/qt/qt_executor.hpp>
 
 namespace pastebin::app {
 
@@ -38,15 +36,16 @@ namespace pastebin::app {
 /// atomic update already excludes an expired row on its own).
 class App : public QObject {
     Q_OBJECT
-  public:
+public:
     /// @param actionLogPath Where `FileActionLog` persists entries.
     /// @param sweepInterval How often the expiry sweep runs. Tests pass a
     ///        long interval (effectively disabling the timer) and call
     ///        `sweepExpiredOnce()` directly instead, for determinism.
     /// @param workers        Size of the model worker pool.
     /// @param parent         Optional `QObject` parent.
-    explicit App(std::filesystem::path actionLogPath, std::chrono::milliseconds sweepInterval = std::chrono::seconds{5},
-                 std::size_t workers = 4, QObject* parent = nullptr);
+    explicit App(std::filesystem::path actionLogPath,
+                 std::chrono::milliseconds sweepInterval = std::chrono::seconds{5}, std::size_t workers = 4,
+                 QObject* parent = nullptr);
 
     /// @brief Detaches the process-wide default action log.
     ~App() override;
@@ -92,7 +91,7 @@ class App : public QObject {
     ///         outstanding.
     [[nodiscard]] bool sweepInFlight() const noexcept { return _sweepInFlight->load() != 0; }
 
-  private:
+private:
     // Declaration order is load-bearing, and `_sweepExecutor` comes first on
     // purpose: members are destroyed in reverse, so this is the *last* thing
     // to go. A sweep's `ExpirePaste` runs on `_pool`, and the worker thread

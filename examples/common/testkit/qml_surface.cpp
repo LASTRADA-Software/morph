@@ -12,7 +12,6 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QTextStream>
-
 #include <utility>
 
 namespace morph::ladder::testkit {
@@ -536,8 +535,7 @@ QStringList QmlSurfaceAudit::run() const {
             if (isCoveredNotify) {
                 continue;
             }
-            findings.append(
-                QStringLiteral("%1::%2 is a signal no scanned .qml handles (%3)").arg(cls, name, where));
+            findings.append(QStringLiteral("%1::%2 is a signal no scanned .qml handles (%3)").arg(cls, name, where));
         }
         for (auto it = surface.methodArities.constBegin(); it != surface.methodArities.constEnd(); ++it) {
             if (calledMethods.contains(it.key()) || exempt(it.key())) {

@@ -2,7 +2,6 @@
 #pragma once
 
 #include <catch2/catch_test_macros.hpp>
-
 #include <exception>
 #include <functional>
 #include <string>
@@ -42,7 +41,7 @@ namespace morph::ladder::testkit {
 /// message, rather than escaping to Catch2 as an unhandled exception naming
 /// only the test case.
 class Journey {
-  public:
+public:
     /// @param name Human name for the whole journey, used in failure output.
     explicit Journey(std::string name) : _name{std::move(name)} {}
 
@@ -74,7 +73,7 @@ class Journey {
         }
     }
 
-  private:
+private:
     struct Step {
         std::string title;
         std::function<void()> body;

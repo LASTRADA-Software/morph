@@ -11,15 +11,15 @@
 //   The conflict checker and resolver are injected at construction so each
 //   test can control the scenario without subclassing.
 
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/offline/offline_queue.hpp>
-#include <morph/core/registry.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <functional>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/offline/offline_queue.hpp>
 #include <string>
 #include <thread>
 #include <vector>
@@ -109,12 +109,14 @@ struct morph::model::ActionTraits<OrderQueryAction> {
 
 // queue must outlive the returned binding and all model instances created from it
 // (captured by reference in the factory lambda).
-static std::shared_ptr<morph::bridge::detail::HandlerBinding> makeOrderBinding(morph::offline::IOfflineQueue& queue, OrderModel::ConflictChecker check,
-                                                        OrderModel::ConflictResolver resolve) {
+static std::shared_ptr<morph::bridge::detail::HandlerBinding> makeOrderBinding(morph::offline::IOfflineQueue& queue,
+                                                                               OrderModel::ConflictChecker check,
+                                                                               OrderModel::ConflictResolver resolve) {
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = std::string{morph::model::ModelTraits<OrderModel>::typeId()};
     binding->modelFactory = [&queue, check = std::move(check),
-                             resolve = std::move(resolve)]() mutable -> std::unique_ptr<morph::model::detail::IModelHolder> {
+                             resolve =
+                                 std::move(resolve)]() mutable -> std::unique_ptr<morph::model::detail::IModelHolder> {
         return std::make_unique<morph::model::detail::ModelHolder<OrderModel>>(queue, check, resolve);
     };
     return binding;

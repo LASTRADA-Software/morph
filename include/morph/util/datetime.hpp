@@ -29,14 +29,13 @@
 /// "format": "date-time"}` — the standard JSON-Schema vocabulary form
 /// renderers key on (the demo clients render a date-time input for it).
 
-#include <glaze/glaze.hpp>
-
 #include <charconv>
 #include <chrono>
 #include <compare>
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <glaze/glaze.hpp>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -86,8 +85,8 @@ struct DateTime {
     /// @param minute      Minutes in [0, 59].
     /// @param second      Seconds in [0, 59].
     /// @param millisecond Milliseconds in [0, 999].
-    constexpr DateTime(std::chrono::year year, std::chrono::month month, std::chrono::day day,
-                       std::chrono::hours hour, std::chrono::minutes minute, std::chrono::seconds second,
+    constexpr DateTime(std::chrono::year year, std::chrono::month month, std::chrono::day day, std::chrono::hours hour,
+                       std::chrono::minutes minute, std::chrono::seconds second,
                        std::chrono::milliseconds millisecond = std::chrono::milliseconds{0}) noexcept
         : value{static_cast<std::chrono::sys_days>(std::chrono::year_month_day{year, month, day}) + hour + minute +
                 second + millisecond} {}
@@ -154,8 +153,7 @@ struct DateTime {
         // those callers reject it and the value is forced non-negative.
         auto const number = [&text](std::size_t offset, std::size_t count,
                                     bool allowSign) noexcept -> std::optional<int> {
-            if (!allowSign && count > 0 && offset < text.size() &&
-                (text[offset] == '-' || text[offset] == '+')) {
+            if (!allowSign && count > 0 && offset < text.size() && (text[offset] == '-' || text[offset] == '+')) {
                 return std::nullopt;
             }
             int parsed = 0;
@@ -210,9 +208,9 @@ struct DateTime {
             return std::nullopt;
         }
 
-        auto const calendar = std::chrono::year_month_day{std::chrono::year{*year},
-                                                          std::chrono::month{static_cast<unsigned>(*month)},
-                                                          std::chrono::day{static_cast<unsigned>(*day)}};
+        auto const calendar =
+            std::chrono::year_month_day{std::chrono::year{*year}, std::chrono::month{static_cast<unsigned>(*month)},
+                                        std::chrono::day{static_cast<unsigned>(*day)}};
         if (!calendar.ok() || *hour > 23 || *minute > 59 || *second > 59) {
             return std::nullopt;
         }
@@ -254,7 +252,8 @@ struct DateTime {
     /// @param delta Duration offset.
     /// @return The shifted instant.
     template <typename Rep, typename Period>
-    [[nodiscard]] friend constexpr DateTime operator+(DateTime lhs, std::chrono::duration<Rep, Period> delta) noexcept {
+    [[nodiscard]] friend constexpr DateTime operator+(DateTime lhs,
+                                                      std::chrono::duration<Rep, Period> delta) noexcept {
         lhs += delta;
         return lhs;
     }
@@ -264,7 +263,8 @@ struct DateTime {
     /// @param delta Duration offset.
     /// @return The shifted instant.
     template <typename Rep, typename Period>
-    [[nodiscard]] friend constexpr DateTime operator-(DateTime lhs, std::chrono::duration<Rep, Period> delta) noexcept {
+    [[nodiscard]] friend constexpr DateTime operator-(DateTime lhs,
+                                                      std::chrono::duration<Rep, Period> delta) noexcept {
         lhs -= delta;
         return lhs;
     }
@@ -411,7 +411,7 @@ struct Timestamp {
 /// @param rhs Subtrahend.
 /// @return `lhs - rhs` as a chrono duration, or `std::nullopt` if either is empty.
 [[nodiscard]] constexpr std::optional<std::chrono::milliseconds> operator-(const Timestamp& lhs,
-                                                                          const Timestamp& rhs) noexcept {
+                                                                           const Timestamp& rhs) noexcept {
     if (!lhs.value || !rhs.value) {
         return std::nullopt;
     }

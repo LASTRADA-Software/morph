@@ -19,7 +19,7 @@ namespace bank {
 
 /// @brief An amount of money: integer minor units tagged with a currency.
 struct Money {
-    std::int64_t minor = 0;            ///< amount in minor units (cents); may be negative
+    std::int64_t minor = 0;             ///< amount in minor units (cents); may be negative
     Currency currency = Currency::USD;  ///< currency the amount is denominated in
 };
 

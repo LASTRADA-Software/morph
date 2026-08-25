@@ -39,8 +39,7 @@ bool waitFor(Predicate predicate, std::chrono::milliseconds timeout = 2s) {
 
 }  // namespace
 
-TEST_CASE("TimeoutScheduler: a callback throwing std::exception is logged and swallowed",
-          "[timeout_scheduler]") {
+TEST_CASE("TimeoutScheduler: a callback throwing std::exception is logged and swallowed", "[timeout_scheduler]") {
     TimeoutScheduler scheduler;
     std::atomic<bool> fired{false};
 
@@ -87,8 +86,7 @@ TEST_CASE("TimeoutScheduler: cancel() on an unknown handle is a no-op", "[timeou
     SUCCEED("cancel() on an unknown handle returned without firing or throwing");
 }
 
-TEST_CASE("TimeoutScheduler: cancel() before the deadline prevents the callback from firing",
-          "[timeout_scheduler]") {
+TEST_CASE("TimeoutScheduler: cancel() before the deadline prevents the callback from firing", "[timeout_scheduler]") {
     TimeoutScheduler scheduler;
     std::atomic<bool> fired{false};
 

@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "kanban/app/app.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <filesystem>
+#include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/journal/file_action_log.hpp>
+#include <morph/qt/qt_executor.hpp>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <string>
 
+#include "kanban/app/app.hpp"
 #include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban/core/errors.hpp"
 #include "kanban/dto/activity_dto.hpp"
@@ -11,26 +21,13 @@
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
 
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/journal/file_action_log.hpp>
-#include <morph/qt/qt_executor.hpp>
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <filesystem>
-#include <memory>
-#include <string>
-
-using morph::ladder::testkit::awaitQt;
-using morph::ladder::testkit::DbFixture;
+using kanban::BoardModel;
+using kanban::ProjectAdminModel;
 using morph::bridge::AllowShared;
 using morph::bridge::Bridge;
 using morph::bridge::BridgeHandler;
-using kanban::BoardModel;
-using kanban::ProjectAdminModel;
+using morph::ladder::testkit::awaitQt;
+using morph::ladder::testkit::DbFixture;
 
 namespace {
 
@@ -48,7 +45,7 @@ namespace {
 ///        @p issuer -- identical shape to
 ///        `test_shared_instance_lifecycle.cpp`'s own `tokenContextFor`.
 [[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
-                                                       std::string principal) {
+                                                      std::string principal) {
     morph::session::Context ctx;
     ctx.principal = principal;
     ctx.token = issuer.issue(morph::session::SessionToken{
@@ -60,8 +57,7 @@ constexpr std::string_view kSecret = "app-test-secret-at-least-32-bytes-long";
 
 }  // namespace
 
-TEST_CASE("AuthModel::execute(Login) mints a token that verifies against the same App's authorizer",
-          "[kanban][app]") {
+TEST_CASE("AuthModel::execute(Login) mints a token that verifies against the same App's authorizer", "[kanban][app]") {
     const auto logPath = freshLogPath("login");
     {
         const kanban::app::App app{logPath, std::string{kSecret}};
@@ -87,8 +83,7 @@ TEST_CASE("AuthModel::execute(Login) mints a token that verifies against the sam
     std::filesystem::remove(logPath);
 }
 
-TEST_CASE("AuthModel::execute(Login) refuses to mint a token in the reserved system: namespace",
-          "[kanban][app]") {
+TEST_CASE("AuthModel::execute(Login) refuses to mint a token in the reserved system: namespace", "[kanban][app]") {
     const auto logPath = freshLogPath("login_reserved");
     {
         const kanban::app::App app{logPath, std::string{kSecret}};
@@ -131,9 +126,10 @@ TEST_CASE("AuthModel::execute(Login) throws when no App has installed a TokenIss
 // Before that fix, BoardModel::_log stayed null on this exact path and
 // GetActivity returned an empty stream silently -- the gap Task 13's
 // reviewer flagged.
-TEST_CASE("A registry-constructed BoardModel's GetActivity sees the entry auto-appended by the same "
-          "dispatch that created it, over the real RemoteServer -- not a direct BoardModel construction",
-          "[kanban][app][activity]") {
+TEST_CASE(
+    "A registry-constructed BoardModel's GetActivity sees the entry auto-appended by the same "
+    "dispatch that created it, over the real RemoteServer -- not a direct BoardModel construction",
+    "[kanban][app][activity]") {
     DbFixture fixture;
     const auto logPath = freshLogPath("activity_e2e");
     {
@@ -200,9 +196,10 @@ TEST_CASE("A registry-constructed BoardModel's GetActivity sees the entry auto-a
     std::filesystem::remove(logPath);
 }
 
-TEST_CASE("A plain (non-shared, non-keyed) BoardModel registration also sees its own GetActivity, via "
-          "App's process-wide default log, independently of the LogProvider/contextKey path",
-          "[kanban][app][activity]") {
+TEST_CASE(
+    "A plain (non-shared, non-keyed) BoardModel registration also sees its own GetActivity, via "
+    "App's process-wide default log, independently of the LogProvider/contextKey path",
+    "[kanban][app][activity]") {
     // Companion to the case above, verifying the *other* attach path App
     // wires: `_registry.create(env.typeId)` (the plain, non-keyed "register"
     // path -- morph/core/remote.hpp) calls `ModelFactory::create<BoardModel>()`

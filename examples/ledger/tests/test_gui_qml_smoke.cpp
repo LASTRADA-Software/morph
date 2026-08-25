@@ -13,13 +13,11 @@
 // file is deliberately inert there rather than failing.
 #ifdef MORPH_LADDER_QML_URI
 
-#include <catch2/catch_test_macros.hpp>
-
 #include <QList>
 #include <QQmlApplicationEngine>
 #include <QQmlError>
 #include <QString>
-
+#include <catch2/catch_test_macros.hpp>
 #include <string>
 
 namespace {
@@ -33,12 +31,11 @@ namespace {
     QQmlApplicationEngine engine;
 
     QString firstWarning;
-    QObject::connect(&engine, &QQmlApplicationEngine::warnings,
-                     [&firstWarning](const QList<QQmlError>& warnings) {
-                         if (firstWarning.isEmpty() && !warnings.isEmpty()) {
-                             firstWarning = warnings.front().toString();
-                         }
-                     });
+    QObject::connect(&engine, &QQmlApplicationEngine::warnings, [&firstWarning](const QList<QQmlError>& warnings) {
+        if (firstWarning.isEmpty() && !warnings.isEmpty()) {
+            firstWarning = warnings.front().toString();
+        }
+    });
 
     engine.loadFromModule(MORPH_LADDER_QML_URI, typeName);
     created = !engine.rootObjects().isEmpty();
@@ -47,8 +44,7 @@ namespace {
 
 }  // namespace
 
-TEST_CASE("ledger's QML engine loads Main.qml and creates a root object with no errors",
-          "[ledger][gui][qml-smoke]") {
+TEST_CASE("ledger's QML engine loads Main.qml and creates a root object with no errors", "[ledger][gui][qml-smoke]") {
     bool created = false;
     CHECK(firstWarningLoading("Main", created) == std::string{});
     REQUIRE(created);

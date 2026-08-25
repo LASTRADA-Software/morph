@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-#include <catch2/catch_test_macros.hpp>
-
-#include "testkit/pump.hpp"
-
-#include <morph/qt/qt_executor.hpp>
-
 #include <QCoreApplication>
 #include <QTimer>
-
+#include <catch2/catch_test_macros.hpp>
+#include <morph/qt/qt_executor.hpp>
 #include <stdexcept>
+
+#include "testkit/pump.hpp"
 
 TEST_CASE("pumpUntil returns true once the predicate flips", "[ladder][testkit][pump]") {
     REQUIRE(QCoreApplication::instance() != nullptr);
@@ -99,7 +96,7 @@ TEST_CASE("awaitQt timeout does not leave dangling references for a late-firing 
     // times out and throws while its then()/onError() handlers are still
     // attached to the shared state behind `sharedPromise`.
     REQUIRE_THROWS_AS(morph::ladder::testkit::awaitQt(std::move(completion), std::chrono::milliseconds{50}),
-                       std::runtime_error);
+                      std::runtime_error);
 
     // awaitQt's frame is gone, but `sharedPromise` (held here, as a backend's
     // pending-call map would hold the underlying state) is still alive and

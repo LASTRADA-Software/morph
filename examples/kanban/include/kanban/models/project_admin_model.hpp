@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <morph/core/bridge.hpp>
+#include <morph/core/registry.hpp>
+
 #include "kanban/core/errors.hpp"
 #include "kanban/dto/auth_dto.hpp"
 #include "kanban/dto/project_dto.hpp"
-
-#include <morph/core/bridge.hpp>
-#include <morph/core/registry.hpp>
 
 /// @file
 /// `ProjectAdminModel` -- project lifecycle and per-project RBAC (design
@@ -20,7 +20,7 @@ namespace kanban {
 ///        plain, not `AllowShared` -- each caller's own admin operations
 ///        need no cross-caller shared state (unlike `BoardModel`).
 class ProjectAdminModel {
-  public:
+public:
     /// @brief Creates a project; the caller becomes its first `Manager`
     ///        (design spec §3).
     CreateProjectResult execute(const CreateProject& action);
@@ -35,7 +35,7 @@ class ProjectAdminModel {
     ///        parameter -- the principal comes from `session::current()`.
     GetMyProjectsResult execute(const GetMyProjects& action);
 
-  private:
+private:
     /// @brief Throws `Forbidden` unless the calling principal's role on
     ///        `projectId` is at least `minimum`. Loads the project row
     ///        first (to confirm it exists at all) -- a caller naming a
@@ -47,7 +47,7 @@ class ProjectAdminModel {
 
 /// @brief Mints session tokens -- mirrors `bookmarks::AuthModel` exactly.
 class AuthModel {
-  public:
+public:
     /// @brief Mints a signed session token for @p action's username, with no
     ///        registration or membership check (design spec's own stated
     ///        scope cut, inherited from `bookmarks::AuthModel`: any
@@ -68,8 +68,7 @@ BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::SetMemberRole, "SetMem
 BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::RemoveMember, "RemoveMember")
 BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::GetProjectRoles, "GetProjectRoles",
                        ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::GetMyProjects, "GetMyProjects",
-                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::GetMyProjects, "GetMyProjects", ::morph::model::Loggable::No)
 
 BRIDGE_REGISTER_MODEL(kanban::AuthModel, "AuthModel")
 BRIDGE_REGISTER_ACTION(kanban::AuthModel, kanban::Login, "Login")

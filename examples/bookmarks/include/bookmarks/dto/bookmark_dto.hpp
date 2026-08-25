@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "bookmarks/core/types.hpp"
-
-#include <morph/util/datetime.hpp>
-
 #include <array>
 #include <cstddef>
+#include <morph/util/datetime.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "bookmarks/core/types.hpp"
 
 /// @file
 /// Bookmark wire DTOs. `RecordMetadata` is the one action a GUI client never
@@ -45,7 +44,7 @@ inline constexpr std::size_t kMaxTitleBytes = 512;
 
 struct CreateBookmark {
     std::string url;
-    std::string title;        // empty = not yet known; the metadata worker fills it in
+    std::string title;  // empty = not yet known; the metadata worker fills it in
     std::string description;
     std::string notes;
     std::vector<std::string> tags;  // tag names; auto-created on first use (Task 6)
@@ -64,7 +63,7 @@ struct CreateBookmark {
     /// the background metadata fetch exists to complete. Caught by driving
     /// the desktop client against a real server (task 18).
     static constexpr std::array<std::string_view, 5> optionalFields{"title", "description", "notes", "tags",
-                                                                     "visibility"};
+                                                                    "visibility"};
 
     [[nodiscard]] bool validate() const noexcept {
         return !url.empty() && url.size() <= kMaxUrlBytes && title.size() <= kMaxTitleBytes;
@@ -90,7 +89,7 @@ struct EditBookmark {
     /// @brief Same set as `CreateBookmark::optionalFields`, and `title` is in
     ///        it for the same reason — see that member's doc comment.
     static constexpr std::array<std::string_view, 5> optionalFields{"title", "description", "notes", "tags",
-                                                                     "visibility"};
+                                                                    "visibility"};
 
     [[nodiscard]] bool validate() const noexcept {
         return id.hasValue() && !url.empty() && url.size() <= kMaxUrlBytes && title.size() <= kMaxTitleBytes;
@@ -148,14 +147,14 @@ struct BookmarkSummary {
 };
 
 struct ListBookmarks {
-    Cursor cursor;             // empty = first page
+    Cursor cursor;  // empty = first page
     ReadFilter readFilter = ReadFilter::Any;
     ArchiveFilter archiveFilter = ArchiveFilter::ActiveOnly;  // archived hidden by default, linkding's own convention
-    std::string tag;           // empty = no tag filter
-    std::string searchText;    // empty = no text filter
+    std::string tag;                                          // empty = no tag filter
+    std::string searchText;                                   // empty = no text filter
 
     static constexpr std::array<std::string_view, 5> optionalFields{"cursor", "readFilter", "archiveFilter", "tag",
-                                                                     "searchText"};
+                                                                    "searchText"};
 
     [[nodiscard]] bool validate() const noexcept { return true; }  // every field is optional
 };

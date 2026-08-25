@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "budget_qml_bridge.hpp"
-#include "gui/id_qml.hpp"
-
-#include "ledger/core/units.hpp"
 
 #include <string>
 #include <utility>
+
+#include "gui/id_qml.hpp"
+#include "ledger/core/units.hpp"
 
 namespace ledger::gui {
 
@@ -30,8 +30,7 @@ void putRational(QVariantMap& out, const QString& prefix, const morph::math::Rat
 
 }  // namespace
 
-BudgetQmlBridge::BudgetQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                                 QObject* parent)
+BudgetQmlBridge::BudgetQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
     : QObject{parent}, _presenter{bridge, executor} {
     connect(&_presenter, &BudgetPresenter::categoryCreated, this, [this](CategoryId id) {
         _lastCategoryId = id;
@@ -47,36 +46,26 @@ BudgetQmlBridge::BudgetQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec:
         putRational(report, QStringLiteral("limit"), result.limit);
         putRational(report, QStringLiteral("spent"), result.spent);
         const auto code = currencyToCode(result.currency);
-        report.insert(QStringLiteral("currency"),
-                      QString::fromUtf8(code.data(), static_cast<qsizetype>(code.size())));
+        report.insert(QStringLiteral("currency"), QString::fromUtf8(code.data(), static_cast<qsizetype>(code.size())));
         _report = std::move(report);
         emit reportChanged();
     });
-    connect(&_presenter, &BudgetPresenter::failed, this,
-            [this](const QString& message) { publishError(message); });
+    connect(&_presenter, &BudgetPresenter::failed, this, [this](const QString& message) { publishError(message); });
     connect(&_presenter, &BudgetPresenter::idle, this, &BudgetQmlBridge::busyChanged);
 }
 
-bool BudgetQmlBridge::busy() const {
-    return _presenter.busy();
-}
+bool BudgetQmlBridge::busy() const { return _presenter.busy(); }
 
 void BudgetQmlBridge::publishError(const QString& message) {
     _lastError = message;
     emit lastErrorChanged();
 }
 
-QString BudgetQmlBridge::lastCategoryId() const {
-    return idText(_lastCategoryId);
-}
+QString BudgetQmlBridge::lastCategoryId() const { return idText(_lastCategoryId); }
 
-QString BudgetQmlBridge::lastBudgetId() const {
-    return idText(_lastBudgetId);
-}
+QString BudgetQmlBridge::lastBudgetId() const { return idText(_lastBudgetId); }
 
-void BudgetQmlBridge::openLedger(const QString& ledgerId) {
-    _ledgerId = idFromText<LedgerId>(ledgerId);
-}
+void BudgetQmlBridge::openLedger(const QString& ledgerId) { _ledgerId = idFromText<LedgerId>(ledgerId); }
 
 void BudgetQmlBridge::createCategory(const QString& name) {
     _presenter.createCategory(_ledgerId, name);
@@ -103,8 +92,7 @@ void BudgetQmlBridge::setBudgetLimit(const QString& budgetId, const QString& mon
     constexpr std::uint32_t kMinorUnitPlaces = 2;
     const auto limit = morph::math::Rational{Numerator{static_cast<std::int64_t>(limitMinor)}, Denominator{1},
                                              DecimalPlaces{kMinorUnitPlaces}};
-    _presenter.setBudgetLimit(idFromText<BudgetId>(budgetId), month, limit,
-                              codeToCurrency(currency.toStdString()));
+    _presenter.setBudgetLimit(idFromText<BudgetId>(budgetId), month, limit, codeToCurrency(currency.toStdString()));
     emit busyChanged();
 }
 

@@ -12,10 +12,10 @@
 // (and both models must be independently registered) for the fix (`__COUNTER__` instead of
 // `__LINE__`) to be verified.
 
+#include <catch2/catch_test_macros.hpp>
+
 #include "issue21_same_line_a.hpp"
 #include "issue21_same_line_b.hpp"
-
-#include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("BRIDGE_REGISTER_MODEL on the same line number in two different headers does not collide",
           "[registry][issue21]") {

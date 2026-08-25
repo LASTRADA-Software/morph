@@ -46,23 +46,20 @@ void CardController::reloadCards() {
             _cards.clear();
             for (const auto& card : list.cards) {
                 const auto status = static_cast<bank::CardStatus>(card.status);
-                const QString kind = card.kind == static_cast<int>(bank::CardKind::Credit)
-                                         ? QStringLiteral("Credit")
-                                         : QStringLiteral("Debit");
+                const QString kind = card.kind == static_cast<int>(bank::CardKind::Credit) ? QStringLiteral("Credit")
+                                                                                           : QStringLiteral("Debit");
                 QVariantMap map;
                 map[QStringLiteral("id")] = static_cast<qlonglong>(card.id);
                 map[QStringLiteral("title")] =
                     kind + QStringLiteral(" card  ••••") + QString::fromStdString(card.panLast4);
                 map[QStringLiteral("limitText")] =
                     QStringLiteral("Daily limit ") + fmt::money(card.dailyLimitMinor, 0);
-                map[QStringLiteral("statusText")] =
-                    status == bank::CardStatus::Active     ? QStringLiteral("Active")
-                    : status == bank::CardStatus::Frozen ? QStringLiteral("Frozen")
-                                                         : QStringLiteral("Cancelled");
-                map[QStringLiteral("statusKind")] =
-                    status == bank::CardStatus::Active     ? QStringLiteral("good")
-                    : status == bank::CardStatus::Frozen ? QStringLiteral("warn")
-                                                         : QStringLiteral("bad");
+                map[QStringLiteral("statusText")] = status == bank::CardStatus::Active   ? QStringLiteral("Active")
+                                                    : status == bank::CardStatus::Frozen ? QStringLiteral("Frozen")
+                                                                                         : QStringLiteral("Cancelled");
+                map[QStringLiteral("statusKind")] = status == bank::CardStatus::Active   ? QStringLiteral("good")
+                                                    : status == bank::CardStatus::Frozen ? QStringLiteral("warn")
+                                                                                         : QStringLiteral("bad");
                 map[QStringLiteral("active")] = status == bank::CardStatus::Active;
                 map[QStringLiteral("cancelled")] = status == bank::CardStatus::Cancelled;
                 _cards.append(map);
@@ -78,8 +75,7 @@ void CardController::issue(qlonglong accountId, int kind, const QString& limit) 
         return;
     }
     const auto minor = limit.trimmed().isEmpty() ? 0 : fmt::parseMinor(limit).value_or(0);
-    _cardModel
-        .execute(bank::dto::IssueCard{.accountId = accountId, .kind = kind, .dailyLimitMinor = minor})
+    _cardModel.execute(bank::dto::IssueCard{.accountId = accountId, .kind = kind, .dailyLimitMinor = minor})
         .then([this](bank::dto::CardInfo) { reloadCards(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }

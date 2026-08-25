@@ -10,7 +10,7 @@
 namespace pastebin::gui {
 
 PasteFormsController::PasteFormsController(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                                            std::string schemasJson)
+                                           std::string schemasJson)
     : _handler{bridge, executor}, _schemasJson{std::move(schemasJson)} {}
 
 }  // namespace pastebin::gui

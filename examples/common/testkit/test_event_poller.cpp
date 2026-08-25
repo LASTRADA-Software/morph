@@ -27,24 +27,22 @@
 // fire, deterministically and without any sleep_for (examples/TESTING.md,
 // "Pumping discipline -- no sleeps").
 
-#include <catch2/catch_test_macros.hpp>
-
-#include "gui/app_context.hpp"
-#include "gui/event_poller.hpp"
-#include "testkit/pump.hpp"
-
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-
 #include <atomic>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "gui/app_context.hpp"
+#include "gui/event_poller.hpp"
+#include "testkit/pump.hpp"
 
 // Deliberately at file scope, not inside an anonymous namespace: glz's
 // reflection (which BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION rely on to
@@ -199,10 +197,12 @@ TEST_CASE("EventPoller applies every event returned since the last tick and adva
     // test -- pollOnce() below drives every tick manually and
     // deterministically (examples/TESTING.md's "Pumping discipline"; the
     // task brief's own "drive the timer manually rather than sleeping").
-    Poller poller{
-        ctx.bridge(), /*startingCursor=*/0, makeDispatch(handler),
-        [&](const FeedEvent& event) { appliedIds.push_back(event.id); }, [&](const QString&) { fatal = true; },
-        std::chrono::hours{1}};
+    Poller poller{ctx.bridge(),
+                  /*startingCursor=*/0,
+                  makeDispatch(handler),
+                  [&](const FeedEvent& event) { appliedIds.push_back(event.id); },
+                  [&](const QString&) { fatal = true; },
+                  std::chrono::hours{1}};
 
     REQUIRE_FALSE(poller.busy());
     poller.pollOnce();
@@ -234,10 +234,13 @@ TEST_CASE("EventPoller survives a ClientTimeoutError -- retries on the next tick
     bool fatal = false;
     // A short executeDeadline keeps this test fast; the interval stays an
     // hour so only pollOnce() drives ticks.
-    Poller poller{
-        ctx.bridge(),           /*startingCursor=*/0,
-        makeDispatch(handler),  [&](const FeedEvent& event) { appliedIds.push_back(event.id); },
-        [&](const QString&) { fatal = true; }, std::chrono::hours{1}, std::chrono::milliseconds{100}};
+    Poller poller{ctx.bridge(),
+                  /*startingCursor=*/0,
+                  makeDispatch(handler),
+                  [&](const FeedEvent& event) { appliedIds.push_back(event.id); },
+                  [&](const QString&) { fatal = true; },
+                  std::chrono::hours{1},
+                  std::chrono::milliseconds{100}};
 
     poller.pollOnce();
     REQUIRE(poller.busy());
@@ -274,14 +277,15 @@ TEST_CASE("EventPoller stops and reports onFatalError exactly once on a non-time
 
     int fatalCount = 0;
     QString lastMessage;
-    Poller poller{
-        ctx.bridge(), /*startingCursor=*/0, makeDispatch(handler),
-        [](const FeedEvent&) { FAIL("onEvent must not run when the dispatch itself failed"); },
-        [&](const QString& message) {
-            ++fatalCount;
-            lastMessage = message;
-        },
-        std::chrono::hours{1}};
+    Poller poller{ctx.bridge(),
+                  /*startingCursor=*/0,
+                  makeDispatch(handler),
+                  [](const FeedEvent&) { FAIL("onEvent must not run when the dispatch itself failed"); },
+                  [&](const QString& message) {
+                      ++fatalCount;
+                      lastMessage = message;
+                  },
+                  std::chrono::hours{1}};
 
     poller.pollOnce();
     REQUIRE(morph::ladder::testkit::pumpUntil([&] { return !poller.busy(); }));
@@ -327,7 +331,7 @@ TEST_CASE("EventPoller destroyed with a tick in flight suppresses the orphaned c
     auto completionDelivered = std::make_shared<std::atomic<bool>>(false);
 
     Poller::Dispatch dispatch = [handler, completionDelivered](int lastEventId, Poller::OnSuccess onSuccess,
-                                                              Poller::OnError onError) {
+                                                               Poller::OnError onError) {
         handler->execute(GetFeedSince{.lastEventId = lastEventId})
             .then([handler, lastEventId, onSuccess, completionDelivered](GetFeedSinceResult result) {
                 completionDelivered->store(true);
@@ -345,8 +349,8 @@ TEST_CASE("EventPoller destroyed with a tick in flight suppresses the orphaned c
     // own -- the test controls exactly when the dispatch completes.
     auto poller = std::make_unique<Poller>(
         ctx.bridge(), /*startingCursor=*/0, dispatch, [applied](const FeedEvent&) { applied->store(true); },
-        [](const QString&) { FAIL("onFatalError must not run after the poller is destroyed"); },
-        std::chrono::hours{1}, std::chrono::hours{1});
+        [](const QString&) { FAIL("onFatalError must not run after the poller is destroyed"); }, std::chrono::hours{1},
+        std::chrono::hours{1});
 
     poller->pollOnce();
     REQUIRE(poller->busy());
@@ -386,7 +390,9 @@ TEST_CASE("EventPoller advances its cursor before applying events and stays busy
     std::vector<bool> busyInsideOnEvent;
     std::vector<int> appliedIds;
 
-    Poller poller{ctx.bridge(), /*startingCursor=*/0, makeDispatch(handler),
+    Poller poller{ctx.bridge(),
+                  /*startingCursor=*/0,
+                  makeDispatch(handler),
                   [&](const FeedEvent& event) {
                       appliedIds.push_back(event.id);
                       cursorInsideOnEvent.push_back(pollerPtr->lastEventId());
@@ -396,7 +402,8 @@ TEST_CASE("EventPoller advances its cursor before applying events and stays busy
                       // refused outright (see callCount below).
                       pollerPtr->pollOnce();
                   },
-                  [](const QString&) { FAIL("no fatal error expected"); }, std::chrono::hours{1}};
+                  [](const QString&) { FAIL("no fatal error expected"); },
+                  std::chrono::hours{1}};
     pollerPtr = &poller;
 
     poller.pollOnce();
@@ -433,7 +440,7 @@ TEST_CASE("EventPoller clears its in-flight flag even when onEvent throws", "[gu
     // std::terminate) -- the point under test is EventPoller's own state
     // after the throw, not the executor's throwing-callback policy.
     Poller::Dispatch dispatch = [handler, &onEventThrew](int lastEventId, Poller::OnSuccess onSuccess,
-                                                        Poller::OnError onError) {
+                                                         Poller::OnError onError) {
         handler->execute(GetFeedSince{.lastEventId = lastEventId})
             .then([handler, lastEventId, onSuccess, &onEventThrew](GetFeedSinceResult result) {
                 const int newLastEventId = result.events.empty() ? lastEventId : result.events.back().id;
@@ -446,9 +453,12 @@ TEST_CASE("EventPoller clears its in-flight flag even when onEvent throws", "[gu
             .onError([handler, onError](std::exception_ptr err) { onError(std::move(err)); });
     };
 
-    Poller poller{ctx.bridge(), /*startingCursor=*/0, dispatch,
+    Poller poller{ctx.bridge(),
+                  /*startingCursor=*/0,
+                  dispatch,
                   [](const FeedEvent&) -> void { throw std::runtime_error{"onEvent blew up"}; },
-                  [](const QString&) { FAIL("no fatal error expected"); }, std::chrono::hours{1}};
+                  [](const QString&) { FAIL("no fatal error expected"); },
+                  std::chrono::hours{1}};
 
     poller.pollOnce();
     REQUIRE(morph::ladder::testkit::pumpUntil([&] { return onEventThrew; }));
@@ -480,8 +490,10 @@ TEST_CASE("EventPoller::start rearms the timer, but refuses once a fatal error h
     auto handler = std::make_shared<morph::bridge::BridgeHandler<FeedModel>>(ctx.bridge(), ctx.executor());
 
     int fatalCount = 0;
-    Poller poller{ctx.bridge(), /*startingCursor=*/0, makeDispatch(handler), [](const FeedEvent&) {},
-                  [&](const QString&) { ++fatalCount; }, std::chrono::hours{1}};
+    Poller poller{
+        ctx.bridge(),
+        /*startingCursor=*/0, makeDispatch(handler), [](const FeedEvent&) {}, [&](const QString&) { ++fatalCount; },
+        std::chrono::hours{1}};
 
     REQUIRE(poller.running());
     poller.stop();
@@ -515,9 +527,12 @@ TEST_CASE("EventPoller::resume clears a fatal error and polls again from a new c
 
     int fatalCount = 0;
     std::vector<int> appliedIds;
-    Poller poller{ctx.bridge(), /*startingCursor=*/0, makeDispatch(handler),
+    Poller poller{ctx.bridge(),
+                  /*startingCursor=*/0,
+                  makeDispatch(handler),
                   [&](const FeedEvent& event) { appliedIds.push_back(event.id); },
-                  [&](const QString&) { ++fatalCount; }, std::chrono::hours{1}};
+                  [&](const QString&) { ++fatalCount; },
+                  std::chrono::hours{1}};
 
     poller.pollOnce();
     REQUIRE(morph::ladder::testkit::pumpUntil([&] { return !poller.busy(); }));
@@ -574,7 +589,7 @@ TEST_CASE("EventPoller destroyed with a tick in flight suppresses the orphaned e
     auto completionDelivered = std::make_shared<std::atomic<bool>>(false);
 
     Poller::Dispatch dispatch = [handler, completionDelivered](int lastEventId, Poller::OnSuccess onSuccess,
-                                                              Poller::OnError onError) {
+                                                               Poller::OnError onError) {
         handler->execute(GetFeedSince{.lastEventId = lastEventId})
             .then([handler, lastEventId, onSuccess, completionDelivered](GetFeedSinceResult result) {
                 completionDelivered->store(true);
@@ -592,8 +607,7 @@ TEST_CASE("EventPoller destroyed with a tick in flight suppresses the orphaned e
     // Bridge's own TimeoutScheduler.
     auto poller = std::make_unique<Poller>(
         ctx.bridge(), /*startingCursor=*/0, dispatch, [](const FeedEvent&) { FAIL("onEvent must not run"); },
-        [errorObserved](const QString&) { errorObserved->store(true); }, std::chrono::hours{1},
-        std::chrono::hours{1});
+        [errorObserved](const QString&) { errorObserved->store(true); }, std::chrono::hours{1}, std::chrono::hours{1});
 
     poller->pollOnce();
     REQUIRE(poller->busy());
@@ -637,7 +651,10 @@ TEST_CASE("EventPoller::handleError ignores a second failure once already fatal"
         onError(std::make_exception_ptr(std::runtime_error{"second failure, must be ignored"}));
     };
 
-    Poller poller{ctx.bridge(), /*startingCursor=*/0, dispatch, [](const FeedEvent&) { FAIL("onEvent must not run"); },
+    Poller poller{ctx.bridge(),
+                  /*startingCursor=*/0,
+                  dispatch,
+                  [](const FeedEvent&) { FAIL("onEvent must not run"); },
                   [&](const QString& message) {
                       ++fatalCount;
                       if (fatalCount == 1) {
@@ -669,10 +686,11 @@ TEST_CASE("EventPoller tolerates an empty onFatalError callback on a non-timeout
     morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
     auto handler = std::make_shared<morph::bridge::BridgeHandler<FeedModel>>(ctx.bridge(), ctx.executor());
 
-    Poller poller{ctx.bridge(), /*startingCursor=*/0, makeDispatch(handler),
-                  [](const FeedEvent&) { FAIL("onEvent must not run when the dispatch itself failed"); },
-                  Poller::OnFatalError{},  // deliberately empty
-                  std::chrono::hours{1}};
+    Poller poller{
+        ctx.bridge(),           /*startingCursor=*/0,
+        makeDispatch(handler),  [](const FeedEvent&) { FAIL("onEvent must not run when the dispatch itself failed"); },
+        Poller::OnFatalError{},  // deliberately empty
+        std::chrono::hours{1}};
 
     poller.pollOnce();
     // Must not crash calling an empty std::function, and must still record

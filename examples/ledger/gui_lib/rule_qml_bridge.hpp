@@ -33,12 +33,11 @@ class RuleQmlBridge : public QObject {
     /// @brief The last error surfaced by the presenter, or empty.
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
-    RuleQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                  QObject* parent = nullptr);
+    RuleQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent = nullptr);
 
     /// @return The last created or updated rule, as a QML-ready map.
     [[nodiscard]] QVariantMap lastRule() const { return _lastRule; }
@@ -71,7 +70,7 @@ class RuleQmlBridge : public QObject {
     /// @param categoryId The new category, as a plain-number string.
     Q_INVOKABLE void updateRule(const QString& ruleId, const QString& matchText, const QString& categoryId);
 
-  signals:
+signals:
     /// @brief `lastRule()` changed.
     void lastRuleChanged();
 
@@ -88,7 +87,7 @@ class RuleQmlBridge : public QObject {
     ///        bumped.
     void ruleUpdated();
 
-  private:
+private:
     /// @brief Records @p message as `lastError` and notifies QML.
     /// @param message The presenter's error text.
     void publishError(const QString& message);

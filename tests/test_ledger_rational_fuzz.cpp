@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-#include <morph/util/rational.hpp>
-
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-
 #include <cstdint>
+#include <morph/util/rational.hpp>
 #include <vector>
 
-TEST_CASE("Zero-sum check never false-positives across differing decimalPlaces in one currency", "[ledger][rational][fuzz]") {
+TEST_CASE("Zero-sum check never false-positives across differing decimalPlaces in one currency",
+          "[ledger][rational][fuzz]") {
     using morph::math::DecimalPlaces;
     using morph::math::Denominator;
     using morph::math::Numerator;
@@ -25,7 +24,8 @@ TEST_CASE("Zero-sum check never false-positives across differing decimalPlaces i
     CHECK(sum.denominator == 1);
 }
 
-TEST_CASE("Measure the row count at which partial-sum overflow occurs at ledger-realistic magnitudes", "[ledger][rational][fuzz]") {
+TEST_CASE("Measure the row count at which partial-sum overflow occurs at ledger-realistic magnitudes",
+          "[ledger][rational][fuzz]") {
     using morph::math::DecimalPlaces;
     using morph::math::Denominator;
     using morph::math::Numerator;

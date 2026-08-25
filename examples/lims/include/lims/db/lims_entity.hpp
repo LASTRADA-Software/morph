@@ -5,7 +5,6 @@
 // header: the narrower Field.hpp/BelongsTo.hpp pair does not transitively
 // provide Light::SqlAnsiString/SqlRealName/PrimaryKey.
 #include <Lightweight/DataMapper/DataMapper.hpp>
-
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -70,7 +69,7 @@ struct SampleRecord {
     ///
     /// This is what an offline update carries and what replay compares
     /// against to detect a stale base (README build order §7).
-    Light::Field<std::int32_t, Light::SqlRealName{"version"}> version{1};       // 4
+    Light::Field<std::int32_t, Light::SqlRealName{"version"}> version{1};             // 4
     Light::Field<std::int64_t, Light::SqlRealName{"registered_at"}> registeredAt{0};  // 5
 };
 
@@ -161,7 +160,7 @@ struct OperatorRecord {
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"principal"}> principal;                     // 1
     /// @brief `LimsRole` as its underlying integer.
-    Light::Field<int, Light::SqlRealName{"role"}> role{0};  // 2
+    Light::Field<int, Light::SqlRealName{"role"}> role{0};                               // 2
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"granted_by"}> grantedBy;  // 3
     Light::Field<std::int64_t, Light::SqlRealName{"granted_at"}> grantedAt{0};           // 4
 };

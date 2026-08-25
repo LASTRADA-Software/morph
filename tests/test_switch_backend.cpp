@@ -206,18 +206,17 @@ TEST_CASE("morph::bridge::Bridge::switchBackend(shared_ptr)  -  caller-owned ins
     REQUIRE_NOTHROW(bridge.switchBackend(backendA));
 
     std::atomic<int> res{-1};
-    handler.execute(CountAction{9})
-        .then([&](int val) { res.store(val); })
-        .onError([](const std::exception_ptr&) {});
+    handler.execute(CountAction{9}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
     for (int i = 0; i < 50 && res.load() == -1; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     REQUIRE(res.load() == 9);
 }
 
-TEST_CASE("morph::bridge::Bridge::switchBackend(unique_ptr) still transfers ownership (delegates to shared_ptr "
-          "overload)",
-          "[bridge][switch][shared_ptr]") {
+TEST_CASE(
+    "morph::bridge::Bridge::switchBackend(unique_ptr) still transfers ownership (delegates to shared_ptr "
+    "overload)",
+    "[bridge][switch][shared_ptr]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -227,9 +226,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend(unique_ptr) still transfers owne
     REQUIRE_NOTHROW(bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2)));
 
     std::atomic<int> res{-1};
-    handler.execute(CountAction{3})
-        .then([&](int val) { res.store(val); })
-        .onError([](const std::exception_ptr&) {});
+    handler.execute(CountAction{3}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
     for (int i = 0; i < 50 && res.load() == -1; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

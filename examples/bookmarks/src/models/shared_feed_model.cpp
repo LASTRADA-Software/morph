@@ -1,29 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bookmarks/models/shared_feed_model.hpp"
 
-#include "bookmarks/db/bookmark_entity.hpp"
-#include "bookmarks/db/bookmark_tag_entity.hpp"
-#include "bookmarks/db/tag_entity.hpp"
-
-#include "clock.hpp"
-
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
-
-#include <morph/session/session.hpp>
-
 #include <cstdint>
+#include <morph/session/session.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "bookmarks/db/bookmark_entity.hpp"
+#include "bookmarks/db/bookmark_tag_entity.hpp"
+#include "bookmarks/db/tag_entity.hpp"
+#include "clock.hpp"
 
 namespace bookmarks {
 
 namespace {
 
 [[nodiscard]] ::morph::time::Timestamp fromEpochMs(std::int64_t epochMs) noexcept {
-    return ::morph::time::Timestamp{::morph::time::DateTime{
-        std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{epochMs}}}};
+    return ::morph::time::Timestamp{
+        ::morph::time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{epochMs}}}};
 }
 
 /// @brief Requires *some* authenticated principal, but never filters on it
@@ -42,15 +39,17 @@ ListSharedFeedResult SharedFeedModel::execute(const ListSharedFeed& action) {
     requireAnyPrincipal();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     auto query = mapper->Query<db::BookmarkRecord>();
-    (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isShared>, "=", true);
-    (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isArchived>, "=", false);
+    (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isShared>, "=", true);
+    (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isArchived>, "=", false);
     if (action.cursor.hasValue()) {
-        (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, "<",
-                           static_cast<std::uint64_t>(*action.cursor));
+        (void)query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, "<",
+                          static_cast<std::uint64_t>(*action.cursor));
     }
     constexpr std::size_t kPageSize = 20;
-    auto rows = query.OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, ::Lightweight::SqlResultOrdering::DESCENDING)
-                    .First(kPageSize + 1);
+    auto rows =
+        query
+            .OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, ::Lightweight::SqlResultOrdering::DESCENDING)
+            .First(kPageSize + 1);
     const bool hasMore = rows.size() > kPageSize;
     if (hasMore) {
         rows.resize(kPageSize);
@@ -75,7 +74,8 @@ ListSharedFeedResult SharedFeedModel::execute(const ListSharedFeed& action) {
     for (const auto& jrow : junctionRows) {
         tagIds.push_back(jrow.tag.Value());
     }
-    auto tagRows = mapper->Query<db::TagRecord>().WhereIn(::Lightweight::FieldNameOf<&db::TagRecord::id>, tagIds).All();
+    auto tagRows =
+        mapper->Query<db::TagRecord>().WhereIn(::Lightweight::FieldNameOf<&db::TagRecord::id>, tagIds).All();
 
     std::unordered_map<std::uint64_t, std::string> tagNameById;
     tagNameById.reserve(tagRows.size());

@@ -47,12 +47,11 @@ class LedgerQmlBridge : public QObject {
     /// @brief The last error surfaced by the presenter, or empty.
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
-    LedgerQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
-                    QObject* parent = nullptr);
+    LedgerQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent = nullptr);
 
     /// @return The attached ledger's accounts as QML-ready maps.
     [[nodiscard]] QVariantList accounts() const { return _accounts; }
@@ -87,14 +86,14 @@ class LedgerQmlBridge : public QObject {
     /// @param amountMinor   The amount in minor units (cents), always exact --
     ///        never a float, per design spec §7's no-float rule.
     /// @param description   The transaction's description.
-    Q_INVOKABLE void storeTransaction(const QString& fromAccountId, const QString& toAccountId,
-                                      qlonglong amountMinor, const QString& description);
+    Q_INVOKABLE void storeTransaction(const QString& fromAccountId, const QString& toAccountId, qlonglong amountMinor,
+                                      const QString& description);
 
     /// @brief Reverses @p journalId with a compensating entry.
     /// @param journalId The journal to reverse, as a plain-number string.
     Q_INVOKABLE void undoTransaction(const QString& journalId);
 
-  signals:
+signals:
     /// @brief The account list changed.
     void accountsChanged();
 
@@ -104,7 +103,7 @@ class LedgerQmlBridge : public QObject {
     /// @brief `lastError()` changed.
     void lastErrorChanged();
 
-  private:
+private:
     /// @brief Replaces `_accounts` from @p result and notifies QML.
     /// @param result The ledger state to publish.
     void publishLedger(const GetLedgerResult& result);

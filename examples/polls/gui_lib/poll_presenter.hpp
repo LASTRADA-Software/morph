@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <exception>
+#include <string>
+
 #include "gui/presenter.hpp"
 #include "polls/dto/event_dto.hpp"
 #include "polls/dto/poll_dto.hpp"
 #include "polls/dto/vote_dto.hpp"
-
-#include <exception>
-#include <string>
 
 // See pastebin::gui::PastePresenter's identical guard and doc comment
 // (examples/pastebin/gui_lib/paste_presenter.hpp) for why moc must never see
@@ -19,10 +19,10 @@
 // connection per execute() call from Lightweight::GlobalDataMapperPool()
 // instead of owning one, but this guard stays for bridge.hpp's own sake.
 #ifndef Q_MOC_RUN
-#include "polls/models/poll_model.hpp"
-
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+#include "polls/models/poll_model.hpp"
 #endif
 
 namespace polls::gui {
@@ -60,7 +60,7 @@ namespace polls::gui {
 ///    create) the poll's shared instance at all.
 class PollPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
-  public:
+public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
@@ -130,7 +130,7 @@ class PollPresenter : public ::morph::ladder::gui::Presenter {
     /// @param action Carries `lastEventId`, the caller's cursor.
     void getEventsSince(GetEventsSince action);
 
-  signals:
+signals:
     void created(CreatePollResult result);
     void opened(GetPollStateResult result);
     void stateLoaded(GetPollStateResult result);
@@ -144,7 +144,7 @@ class PollPresenter : public ::morph::ladder::gui::Presenter {
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);
 
-  private:
+private:
     /// @brief Shared error-display body passed as every `track()` call's
     ///        third argument below — see `Presenter::track()`'s doc comment
     ///        (`examples/common/gui/presenter.hpp`) for why it is passed as

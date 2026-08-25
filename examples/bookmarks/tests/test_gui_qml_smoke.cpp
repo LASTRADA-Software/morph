@@ -53,13 +53,11 @@
 
 #ifdef MORPH_LADDER_QML_URI
 
-#include <catch2/catch_test_macros.hpp>
-
 #include <QList>
 #include <QQmlApplicationEngine>
 #include <QQmlError>
 #include <QString>
-
+#include <catch2/catch_test_macros.hpp>
 #include <string>
 
 namespace {

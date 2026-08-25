@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/registry.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/core/registry.hpp>
 #include <stdexcept>
 #include <string>
-
 
 // Local model + action — not registered via macros, no global state touched.
 struct DiAction {
@@ -14,7 +13,8 @@ struct DiModel {
     int execute(DiAction action) { return action.x * 3; }
 };
 
-// Manual morph::model::ActionTraits specialisation so morph::model::detail::ActionDispatcher::registerAction can use it.
+// Manual morph::model::ActionTraits specialisation so morph::model::detail::ActionDispatcher::registerAction can use
+// it.
 template <>
 struct morph::model::ActionTraits<DiAction> {
     using Result = int;

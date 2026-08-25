@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <Lightweight/Lightweight.hpp>
+#include <Lightweight/SqlScopedLock.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <stdexcept>
 
 #include "testkit/db_fault_fixture.hpp"
 #include "testkit/db_fixture.hpp"
-
-#include <Lightweight/Lightweight.hpp>
-#include <Lightweight/SqlScopedLock.hpp>
-
-#include <chrono>
-#include <stdexcept>
 
 // Mirrors Lightweight's own MigrationLockTests.cpp: two distinct
 // `SqlConnection` instances are required to prove genuine cross-session
@@ -20,14 +18,12 @@
 // `_lockingConnection` and each test's `secondConn`/`thirdConn` below are
 // always separate `SqlConnection` instances for exactly this reason.
 
-TEST_CASE("DbFaultFixture: a second session contending on the same lock name throws",
-          "[ladder][testkit][db][fault]") {
+TEST_CASE("DbFaultFixture: a second session contending on the same lock name throws", "[ladder][testkit][db][fault]") {
     morph::ladder::testkit::DbFaultFixture fault{"probe_lock"};
 
     Lightweight::SqlConnection secondConn;
-    REQUIRE_THROWS_AS(
-        (Lightweight::SqlScopedLock{secondConn, "probe_lock", std::chrono::milliseconds{50}}),
-        std::runtime_error);
+    REQUIRE_THROWS_AS((Lightweight::SqlScopedLock{secondConn, "probe_lock", std::chrono::milliseconds{50}}),
+                      std::runtime_error);
 }
 
 TEST_CASE("DbFaultFixture::lockName() reports the name it was constructed with", "[ladder][testkit][db][fault]") {
@@ -37,9 +33,8 @@ TEST_CASE("DbFaultFixture::lockName() reports the name it was constructed with",
     // A test can use lockName() to name the exact lock it holds when
     // contending against it, instead of hard-coding the string twice.
     Lightweight::SqlConnection secondConn;
-    REQUIRE_THROWS_AS(
-        (Lightweight::SqlScopedLock{secondConn, fault.lockName(), std::chrono::milliseconds{50}}),
-        std::runtime_error);
+    REQUIRE_THROWS_AS((Lightweight::SqlScopedLock{secondConn, fault.lockName(), std::chrono::milliseconds{50}}),
+                      std::runtime_error);
 }
 
 TEST_CASE("DbFaultFixture: a different lock name is unaffected", "[ladder][testkit][db][fault]") {
@@ -55,9 +50,8 @@ TEST_CASE("DbFaultFixture: releasing the fixture (going out of scope) lets a lat
     {
         morph::ladder::testkit::DbFaultFixture fault{"probe_lock_scoped"};
         Lightweight::SqlConnection secondConn;
-        REQUIRE_THROWS_AS(
-            (Lightweight::SqlScopedLock{secondConn, "probe_lock_scoped", std::chrono::milliseconds{50}}),
-            std::runtime_error);
+        REQUIRE_THROWS_AS((Lightweight::SqlScopedLock{secondConn, "probe_lock_scoped", std::chrono::milliseconds{50}}),
+                          std::runtime_error);
     }
     // fault is destroyed here — its SqlScopedLock releases.
     Lightweight::SqlConnection thirdConn;

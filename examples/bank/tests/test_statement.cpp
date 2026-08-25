@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <morph/core/bridge.hpp>
-
 #include <filesystem>
+#include <morph/core/bridge.hpp>
 #include <string>
 
 #include "bank/app/app.hpp"
@@ -22,8 +20,7 @@ namespace {
 
 std::string testConnection() {
     bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" +
-           (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
+    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
 }
 
 }  // namespace
@@ -35,10 +32,8 @@ TEST_CASE("StatementModel aggregates credits and debits across accounts", "[stat
     morph::bridge::BridgeHandler<bank::TransactionModel> txns{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::StatementModel> statements{app.bridge(), app.gui()};
 
-    const auto acctA =
-        await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
-    const auto acctB =
-        await(accounts.execute(bank::dto::OpenAccount{.kind = 1, .currency = 0}), app.guiLoop()).id;
+    const auto acctA = await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
+    const auto acctB = await(accounts.execute(bank::dto::OpenAccount{.kind = 1, .currency = 0}), app.guiLoop()).id;
 
     await(txns.execute(bank::dto::Deposit{.accountId = acctA, .amountMinor = 10000}), app.guiLoop());
     await(txns.execute(bank::dto::Withdraw{.accountId = acctA, .amountMinor = 2500}), app.guiLoop());

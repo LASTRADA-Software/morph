@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "poll_qml_bridges.hpp"
-#include "gui/error_text.hpp"
-#include "gui/id_qml.hpp"
-
-#include "poll_schemas.hpp"
-
-#include <morph/session/session.hpp>
 
 #include <QString>
 #include <QVariant>
-
 #include <cstdint>
 #include <exception>
+#include <morph/session/session.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "gui/error_text.hpp"
+#include "gui/id_qml.hpp"
+#include "poll_schemas.hpp"
 
 namespace polls::gui {
 
@@ -35,9 +33,7 @@ using ::morph::ladder::gui::idNumber;
 /// `pastebin::gui::readsText`'s identical note (`paste_qml_bridges.cpp`) —
 /// Emscripten's bundled libc++ fails to compile the `std::format` call for
 /// this `Quantity`-family type outright.
-[[nodiscard]] QString countText(const Count& count) {
-    return QString::fromStdString(morph::units::toString(count));
-}
+[[nodiscard]] QString countText(const Count& count) { return QString::fromStdString(morph::units::toString(count)); }
 
 [[nodiscard]] QString choiceText(VoteChoice choice) {
     switch (choice) {
@@ -165,7 +161,6 @@ template <typename TokenT>
     };
 }
 
-
 }  // namespace
 
 PollBridge::PollBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
@@ -183,9 +178,7 @@ PollBridge::PollBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor
     connect(&_refreshDebounce, &QTimer::timeout, this, &PollBridge::refresh);
 }
 
-QString PollBridge::schemasJson() const {
-    return QString::fromStdString(_forms.schemasJson());
-}
+QString PollBridge::schemasJson() const { return QString::fromStdString(_forms.schemasJson()); }
 
 void PollBridge::createPoll(const QString& title, const QVariantList& optionLabels) {
     CreatePoll action;
@@ -300,7 +293,7 @@ void PollBridge::startPolling(PollEventId cursor) {
     _poller = std::make_unique<Poller>(
         _bridge, cursor,
         [this, alive = std::weak_ptr<const void>{_liveness}](PollEventId lastEventId, Poller::OnSuccess onSuccess,
-                                                              Poller::OnError onError) {
+                                                             Poller::OnError onError) {
             if (alive.expired()) {
                 return;
             }
@@ -316,8 +309,7 @@ void PollBridge::startPolling(PollEventId cursor) {
             // lifetime, which the `alive` check above already covers.
             _forms.getEventsSince(GetEventsSince{.lastEventId = lastEventId})
                 .then([lastEventId, onSuccess](GetEventsSinceResult result) {
-                    const PollEventId newLastEventId =
-                        result.events.empty() ? lastEventId : result.events.back().id;
+                    const PollEventId newLastEventId = result.events.empty() ? lastEventId : result.events.back().id;
                     onSuccess(std::move(result.events), newLastEventId);
                 })
                 .onError([onError](const std::exception_ptr& err) { onError(err); });

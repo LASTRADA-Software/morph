@@ -44,13 +44,13 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
-#include <utility>
-#include <vector>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 // ── Test model ────────────────────────────────────────────────────────────────
 
@@ -224,9 +224,10 @@ TEST_CASE("Adversarial: duplicate-JSON-key envelope does not crash the server", 
     requireServerStillServesHonestClients(url);
 }
 
-TEST_CASE("Adversarial: an undecodable envelope is logged at error, with a truncated payload preview, and does "
-         "not take down the server",
-         "[qt][ws][adversarial][issue30]") {
+TEST_CASE(
+    "Adversarial: an undecodable envelope is logged at error, with a truncated payload preview, and does "
+    "not take down the server",
+    "[qt][ws][adversarial][issue30]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::qt::QtWebSocketServer wsServer{*server, 0};

@@ -19,20 +19,20 @@
 
 namespace kanban {
 
-#define KANBAN_DEFINE_STRONG_ID(Name)                                                                  \
-    struct Name {                                                                                      \
-        std::optional<std::int64_t> value;                                                             \
-        constexpr Name() noexcept = default;                                                            \
-        explicit Name(std::int64_t id) noexcept : value{id} {}                                           \
-        [[nodiscard]] static Name fromOptional(std::optional<std::int64_t> payload) noexcept {            \
-            Name result;                                                                                    \
-            result.value = payload;                                                                          \
-            return result;                                                                                     \
-        }                                                                                                       \
-        [[nodiscard]] bool hasValue() const noexcept { return value.has_value(); }                               \
-        /* NOLINTNEXTLINE(bugprone-unchecked-optional-access) */                                                  \
-        [[nodiscard]] std::int64_t operator*() const noexcept { return *value; }                                   \
-        [[nodiscard]] auto operator<=>(const Name&) const noexcept = default;                                       \
+#define KANBAN_DEFINE_STRONG_ID(Name)                                                          \
+    struct Name {                                                                              \
+        std::optional<std::int64_t> value;                                                     \
+        constexpr Name() noexcept = default;                                                   \
+        explicit Name(std::int64_t id) noexcept : value{id} {}                                 \
+        [[nodiscard]] static Name fromOptional(std::optional<std::int64_t> payload) noexcept { \
+            Name result;                                                                       \
+            result.value = payload;                                                            \
+            return result;                                                                     \
+        }                                                                                      \
+        [[nodiscard]] bool hasValue() const noexcept { return value.has_value(); }             \
+        /* NOLINTNEXTLINE(bugprone-unchecked-optional-access) */                               \
+        [[nodiscard]] std::int64_t operator*() const noexcept { return *value; }               \
+        [[nodiscard]] auto operator<=>(const Name&) const noexcept = default;                  \
     }
 
 /// @brief Strong id for a project (a `projects` table surrogate key).
