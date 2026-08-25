@@ -591,7 +591,7 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | ↳ `value` | `equals` condition object | scalar / `{num,den}` | The literal an `equals` condition compares against; a numeric literal is the exact `Rational` `{num, den}`, never a `double`. |
 | ↳ `conditions` | `and` / `or` condition object | array of condition objects | The nested conditions combined by boolean AND / OR, in declaration order; each element is itself a full condition/rule object (any `kind`, including a nested `and`/`or`/`not`) — see [Compound conditions](#compound-conditions--andof--orof--notof). |
 | ↳ `condition` | `not` condition object | condition object | The single nested condition negated by boolean NOT (singular key, since `not` wraps exactly one child). |
-| `x-submitMode` | top-level (object) | string | `"explicit"` opts a side-effectful (non-query) action out of the shipped renderer's default auto-submit-on-validity behavior — see [Explicit submit mode](#explicit-submit-mode--x-submitmode). Absent, or any value other than `"explicit"`, keeps the default. Not emitted by `schemaJson<A>()`; a schema author sets it by hand (or a hand-authored schema fixture/example does), the same way `x-layout`/`x-widget` overrides are authored today. |
+| `x-submitMode` | top-level (object) | string | `"explicit"` opts a side-effectful (non-query) action out of the shipped renderer's default auto-submit-on-validity behavior — see [Explicit submit mode](#explicit-submit-mode--x-submitmode). Absent, or any value other than `"explicit"`, keeps the default. Emitted by `schemaJson<A>()` when the action declares `static constexpr bool explicitSubmit = true`, the same way `x-layout` is emitted from `formLayout`. An action that declares nothing — or declares it `false` — emits no key at all. |
 
 ### Explicit submit mode — `x-submitMode`
 
@@ -621,6 +621,33 @@ Any schema describing a side-effectful action should carry this flag before
 being safely rendered by the shipped renderer; a schema that omits it (every
 existing schema, and any read-only query action) renders exactly as before —
 zero behavior change.
+
+#### Declaring it from C++
+
+An action opts in with a `static constexpr bool`:
+
+```cpp
+struct CreatePaste {
+    std::string title;
+    std::string body;
+
+    // Without this, the shipped renderer auto-submits on validity — which for
+    // a mutation means one stored paste per typed character.
+    static constexpr bool explicitSubmit = true;
+};
+```
+
+`schemaJson<A>()` then emits the top-level `"x-submitMode": "explicit"`. This
+is **opt-in**, exactly like `formLayout`, `fieldSpans`, and `formRules`: an
+action that says nothing keeps the auto-submit default and its generated schema
+is byte-for-byte unchanged, so adding the emitter changed no shipped schema.
+Declaring `explicitSubmit = false` is the same statement as not declaring it.
+
+Deriving the flag instead — from some "does this action mutate" predicate — is
+deliberately **not** done. No such predicate exists in `forms.hpp`, and adding
+one would flip the rendering of every existing generated form at once, which is
+a shipped-behavior change rather than an emitter addition. Opting in per action
+keeps the decision with the author who knows whether the action has effects.
 
 ### Array fields — `type: "array"`
 

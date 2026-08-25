@@ -261,3 +261,76 @@ TEST_CASE("Forms::SchemaJson::NoFieldSpansEmitsNoColspan", "[forms][layout]") {
     auto const schema = morph::forms::schemaJson<LayoutGrouped>();
     CHECK_FALSE(schema.contains("x-colspan"));
 }
+
+// ---------------------------------------------------------------------------
+// x-submitMode — the emitter half of explicit submit mode (morph#208)
+//
+// The renderer has consumed `x-submitMode` since it shipped, but nothing in
+// C++ emitted it, so no *generated* schema could carry it and ten call sites
+// hand-wrote `DynamicForm { controller: null }` plus an external Button
+// instead.
+//
+// These fixtures are deliberately driven through `schemaJson<A>()` rather than
+// a hand-written schema literal. `tst_DynamicFormSubmitMode.qml` already covers
+// the renderer against a literal, and would keep passing with the emitter
+// removed entirely — only a generated fixture can fail for that reason.
+// ---------------------------------------------------------------------------
+
+// NOLINTBEGIN(misc-use-internal-linkage) -- see below: an anonymous namespace
+// is exactly what these types cannot have.
+// Deliberately *not* anonymous-namespaced: glaze's reflection takes the address
+// of an `extern const T`, which a type with no linkage cannot have, so an
+// anonymous-namespace action fails to compile. The SM prefix keeps these unique
+// across translation units instead -- the repo has a CI check for file-scope
+// type-name collisions, which would otherwise be an ODR violation.
+struct SMExplicitAction {
+    std::string title;
+    static constexpr bool explicitSubmit = true;
+};
+
+struct SMDefaultAction {
+    std::string title;
+};
+
+// Declaring it false is the same statement as not declaring it at all.
+struct SMOptedOutAction {
+    std::string title;
+    static constexpr bool explicitSubmit = false;
+};
+// NOLINTEND(misc-use-internal-linkage)
+
+TEST_CASE("schemaJson emits x-submitMode:\"explicit\" for an action that declares explicitSubmit",
+          "[forms][submitmode]") {
+    auto const schema = morph::forms::schemaJson<SMExplicitAction>();
+    // Exact key/value text: a bare "explicit" substring would also match a
+    // description or a field named for it.
+    CHECK(schema.contains(R"("x-submitMode":"explicit")"));
+}
+
+TEST_CASE("schemaJson omits x-submitMode for an action that declares nothing", "[forms][submitmode]") {
+    // Zero behaviour change for every existing action: this is what makes the
+    // emitter safe to add without touching a single shipped schema.
+    auto const schema = morph::forms::schemaJson<SMDefaultAction>();
+    CHECK_FALSE(schema.contains("x-submitMode"));
+}
+
+TEST_CASE("schemaJson omits x-submitMode when explicitSubmit is declared false", "[forms][submitmode]") {
+    auto const schema = morph::forms::schemaJson<SMOptedOutAction>();
+    CHECK_FALSE(schema.contains("x-submitMode"));
+}
+
+TEST_CASE("x-submitMode is a top-level key, like x-layout", "[forms][submitmode]") {
+    // Not a property node: the renderer reads it off the schema root. Parsed
+    // rather than substring-matched so a key that landed inside `properties`
+    // (the mistake worth catching) fails here.
+    auto const schema = morph::forms::schemaJson<SMExplicitAction>();
+    auto parsed = glz::read_json<glz::generic>(schema);
+    REQUIRE(parsed.has_value());
+    auto const& root = parsed.value();
+    REQUIRE(root.contains("x-submitMode"));
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+    CHECK(root["x-submitMode"].get<std::string>() == "explicit");
+    REQUIRE(root.contains("properties"));
+    CHECK_FALSE(root["properties"].contains("x-submitMode"));
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+}

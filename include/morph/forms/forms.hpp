@@ -1526,6 +1526,30 @@ template <typename... Rules>
 template <typename A>
 concept HasFormRules = requires { A::formRules; };
 
+/// @brief Concept: action `A` declares a `static constexpr bool
+///        explicitSubmit`, opting its form out of auto-submit-on-validity.
+///
+/// Opt-in, like `formLayout`/`fieldSpans`/`formRules`: an action that says
+/// nothing keeps the renderer's default (submit as soon as the form is valid),
+/// so adding this changes no existing schema. Declaring it `true` emits
+/// `x-submitMode: "explicit"`; declaring it `false` emits nothing, which is
+/// the same as not declaring it at all.
+///
+/// A side-effectful action wants this. Auto-submit fires on *every* keystroke
+/// that leaves the form valid, so a `CreatePaste` bound directly to a live
+/// controller stores one paste per typed character.
+///
+/// (The template parameter is intentionally left undocumented: clang's
+/// -Wdocumentation does not consider a concept a template declaration, so a
+/// parameter-doc command here is an error under -Weverything -Werror, which is
+/// how the WASM ladder builds. `HasFormRules` above omits it for the same
+/// reason. Note the command cannot even be *named* in this comment -- clang
+/// parses it inside backticks too.)
+template <typename A>
+concept HasExplicitSubmit = requires {
+    { A::explicitSubmit } -> std::convertible_to<bool>;
+};
+
 namespace detail {
 
 /// @brief Evaluates @p rule against @p action, skipping presentation rules
@@ -2209,6 +2233,30 @@ inline void annotateExactNumericBounds(glz::generic_u64& node) {
 }
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
+/// @brief Stamps `x-submitMode` on @p dom when `A` opts out of auto-submit.
+///
+/// A top-level key sourced from a declaration on the action type, exactly as
+/// `x-layout` is (docs/spec/forms/forms.md, "Explicit submit mode"). Emitted
+/// only for `explicitSubmit = true`, so an action that declares nothing -- or
+/// declares it `false` -- keeps the renderer's auto-submit default and its
+/// schema is byte-for-byte unchanged.
+///
+/// A free function rather than a few lines inside `mergeSchemaExtras`: that
+/// function is already at the edge of clang-tidy's cognitive-complexity
+/// threshold, and every `if constexpr` added inline pushes it further.
+/// @tparam A Action type whose schema is being annotated.
+/// @param dom Schema DOM to stamp in place.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+template <typename A>
+void annotateSubmitMode(glz::generic_u64& dom) {
+    if constexpr (HasExplicitSubmit<A>) {
+        if constexpr (A::explicitSubmit) {
+            dom["x-submitMode"] = "explicit";
+        }
+    }
+}
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, `x-decimalPlaces`, and (for actions declaring
 ///        `computedFields`) `x-computed`/`x-readonly` to a glaze-produced schema.
@@ -2384,6 +2432,8 @@ template <typename A>
         rejectUnsatisfiableRules<A>(xRules, requiredMemberNames);
         dom["x-rules"] = xRules;
     }
+
+    annotateSubmitMode<A>(dom);
 
     // Exact companions for any bound a double cannot hold (morph#213). Last,
     // so it also covers nodes added by the passes above.
