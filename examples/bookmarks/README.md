@@ -469,9 +469,10 @@ Known gaps:
 - **No `--seed`.** `LADDER.md` asks every rung for one; this rung's server
   ships none, deliberately — see `src/server/main.cpp`'s file comment for the
   argument (seeding by direct model call would need
-  `morph::session::detail::ScopedContext`, the exact detail-namespace reach
-  [finding 019](../../docs/findings/019-testkit-reaches-into-four-detail-namespaces.md)
-  objects to, and the internal-client alternative is rung 4's `action_driver`
+  `morph::session::detail::ScopedContext`, the exact detail-namespace reach the
+  *testkit reaches into four detail namespaces* finding objects to (recorded on
+  the `application-ladder` branch; not present in `docs/findings/` here), and
+  the internal-client alternative is rung 4's `action_driver`
   work). Demo data is created through the client.
 - **The offscreen QML smoke test proves loading, not behavior** — see
   `tests/test_gui_qml_smoke.cpp`'s own header comment for exactly what it
