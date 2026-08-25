@@ -120,9 +120,11 @@ afterwards:
    Two hard requirements from review: event sequences must survive
    instance destruction (shared instances die *immediately* at refcount
    zero — persist events or issue epoch tokens forcing full resync), and
-   the client polling helper must wrap **its own timeout** around every
-   call (a rate-limited server drops frames silently and morph has no
-   client-side execute deadline — the completion would hang forever).
+   the client polling helper must bound every call (when this was written a
+   rate-limited server dropped frames silently and morph had no client-side
+   execute deadline, so the completion hung forever; both have since changed —
+   `Bridge::setExecuteDeadline` bounds the wait, and the transport now answers
+   a rate-limited frame instead of dropping it).
 3. **File/blob attachments** (rungs 4 and 8) — payloads that should not travel
    the JSON action protocol; side channel must share the authorizer's token
    discipline.
@@ -197,35 +199,51 @@ semantics, never the code.
 
 ## Framework prerequisites (schedule as issues now, not rung discoveries)
 
-Adversarial review found four items that invalidate rung definitions-of-done
-as written; they are prerequisites to schedule against the framework, not
-things to trip over mid-rung:
+Adversarial review found four items that invalidated rung definitions-of-done
+as written. **All four have since shipped**; they are recorded here because
+they explain why the rungs were sequenced as they were, not because anything
+is still blocked on them. Each is listed with where it landed, so a reader can
+check rather than take this section's word for it:
 
 1. **Async shared/keyed attach for WASM** (before rung 3's WASM story) —
-   `registerModelShared`/`attachModel` are synchronous and nest an event
-   loop, which aborts the page on the WASM main thread;
-   `registerModelAsync` covers only the plain path.
+   `registerModelShared`/`attachModel` were synchronous and nested an event
+   loop, which aborts the page on the WASM main thread, and
+   `registerModelAsync` covered only the plain path.
+   **Shipped:** `IBackend::registerModelSharedAsync` and
+   `IBackend::attachModelAsync` (`include/morph/core/backend.hpp`), consumed by
+   `Bridge::ensureBoundAsync`/`attachHandlerAsync` and implemented by
+   `QtWebSocketBackend`.
 2. **Client-side execute deadline** (before rung 3's polling helper) — no
-   timeout exists on a `Completion`; silently dropped frames (rate limiter)
-   or a black-holed server hang the client forever.
+   timeout existed on a `Completion`, so a black-holed server hung the client
+   forever. **Shipped:** `Bridge::setExecuteDeadline`
+   (`include/morph/core/bridge.hpp`), specified in
+   [`docs/spec/core/completion.md`](../docs/spec/core/completion.md). (This
+   item also named rate-limiter drops as a cause; that half no longer applies
+   either — the transport now answers a refused frame instead of dropping it.)
 3. **Injectable time source usable by remotely-constructed models** (before
-   rung 1's expiry semantics) — `LogEntry` timestamps are hard-wired to the
-   system clock, and registry-constructed models are default-constructed,
-   so tests need a process-global now-provider convention.
+   rung 1's expiry semantics) — `LogEntry` timestamps were hard-wired to the
+   system clock and registry-constructed models are default-constructed, so
+   tests needed a process-global now-provider convention.
+   **Shipped:** `setNowOverride` / `ScopedNowOverride`
+   (`include/morph/util/datetime.hpp`) — exactly that convention.
 4. **The fault-injection wire proxy** (rung 0–1, pulled forward by the
    round-7 review) — scriptable drop/delay/duplicate/kill between client
    and server; without it the exactly-once, dead-letter, and
-   reconnect-mid-replay scenarios are demos, not CI tests. The
-   deterministic strand interleaver ships alongside it. See
-   [TESTING.md](TESTING.md).
+   reconnect-mid-replay scenarios are demos, not CI tests.
+   **Shipped:** `examples/common/testkit/fault_proxy.hpp`, with the
+   deterministic `strand_interleaver.hpp` alongside it as promised, both with
+   their own tests. See [TESTING.md](TESTING.md).
 
-Also queued deliberately: the **offline queue has no depth bound** (a week
-offline grows it without limit; note the linear-scan/quadratic enqueue
-applies to `FileOfflineQueue` only — `SqliteOfflineQueue`'s key dedup is
-index-backed), the **SyncWorker's hard-coded 5-attempt cap dead-letters
-legitimate writes after five flaky reconnects** (rung 4 must surface
-dead-letters in the UI, not logs), and **`SQLITE_BUSY` waits occupy pool
-threads** (K writing models on a 2–4-thread pool can starve every strand,
+Also queued deliberately, with their status as of this writing: the offline
+queue's **depth bound has since shipped** — `IOfflineQueue::maxDepth()` and
+`OfflineQueueFullError` (`include/morph/offline/offline_queue.hpp`) enforce a
+reject-newest policy (note the linear-scan/quadratic enqueue applies to
+`FileOfflineQueue` only — `SqliteOfflineQueue`'s key dedup is index-backed);
+the **SyncWorker's 5-attempt cap is still hard-coded** and still dead-letters
+legitimate writes after five flaky reconnects, though the surfacing hook rung 4
+needs now exists (`SyncWorker`'s `DeadLetterSink` constructor parameter), so
+"surface dead-letters in the UI, not logs" is buildable rather than blocked;
+and **`SQLITE_BUSY` waits occupy pool threads** (K writing models on a 2–4-thread pool can starve every strand,
 fire `executeTimeout`, and still commit — the timeout-then-committed
 double-apply is rung 4's sharpest data-corruption test).
 
