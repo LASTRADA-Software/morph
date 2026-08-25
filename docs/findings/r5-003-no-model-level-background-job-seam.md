@@ -1,5 +1,5 @@
 ---
-id: 003
+id: r5-003
 title: No framework seam for a model's own execute() to post background work and later update its own state
 subsystem: core
 severity: minor

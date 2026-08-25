@@ -3675,10 +3675,10 @@ git commit -m "ledger: RuleModel + cascade-journaling with causalParentId and ru
 
 **Files:**
 - Create: `tests/test_ledger_rational_fuzz.cpp`
-- Create: `docs/findings/001-rational-checked-arithmetic-mode.md` (or the
+- Create: `docs/findings/r5-001-rational-checked-arithmetic-mode.md` (or the
   next free number if findings already exist from other work by the time
   this task runs — check `docs/findings/` first)
-- Create: `docs/findings/002-rational-no-predecode-validation-seam.md`
+- Create: `docs/findings/r5-002-rational-no-predecode-validation-seam.md`
   (numbering likewise checked at task time)
 - Modify: `examples/ledger/tests/test_ledger_model.cpp`
 
@@ -3833,8 +3833,8 @@ happen to catch it.
 
 ```bash
 git add tests/test_ledger_rational_fuzz.cpp \
-        docs/findings/001-rational-checked-arithmetic-mode.md \
-        docs/findings/002-rational-no-predecode-validation-seam.md \
+        docs/findings/r5-001-rational-checked-arithmetic-mode.md \
+        docs/findings/r5-002-rational-no-predecode-validation-seam.md \
         examples/ledger/tests/test_ledger_model.cpp \
         tests/CMakeLists.txt
 git commit -m "ledger: Rational overflow fuzz test + two named framework findings (design spec §7)"
@@ -4528,7 +4528,7 @@ with three real findings):
    defaulting to a real `morph::exec::ThreadPoolExecutor`, and
    `execute(SubmitReport)` posts to it directly. This is a genuinely new
    pattern for this codebase, not an application of an existing one --
-   file `docs/findings/003-no-model-level-background-job-seam.md`
+   file `docs/findings/r5-003-no-model-level-background-job-seam.md`
    documenting that no shared, framework-level seam exists for this yet
    (per `IMPLEMENTATION.md` rule 4's own escape-tier requirement: using a
    sanctioned escape tier or inventing a local workaround for a missing
@@ -4600,7 +4600,7 @@ with three real findings):
 
 - [ ] **Step 1: File the finding**
 
-Create `docs/findings/003-no-model-level-background-job-seam.md`:
+Create `docs/findings/r5-003-no-model-level-background-job-seam.md`:
 ```markdown
 ---
 id: 003
@@ -5024,7 +5024,7 @@ git add examples/ledger/include/ledger/dto/report_dto.hpp \
         examples/ledger/include/ledger/models/ledger_model.hpp \
         examples/ledger/src/models/ledger_model.cpp \
         examples/ledger/tests/test_ledger_reports.cpp \
-        docs/findings/003-no-model-level-background-job-seam.md
+        docs/findings/r5-003-no-model-level-background-job-seam.md
 git commit -m "ledger: reports -- submit->poll job idiom, WAL-snapshot semantics, model-owned executor"
 ```
 

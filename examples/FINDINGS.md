@@ -17,11 +17,11 @@ A finding is one of:
    holder-swap primitive for in-place undo on a shared instance").
 
 Each finding is a file under `docs/findings/` named
-`NNN-<kebab-slug>.md` with:
+`<ns>-NNN-<kebab-slug>.md` with:
 
 ```markdown
 ---
-id: NNN
+id: <ns>-NNN
 title: <one line>
 subsystem: <core|bridge|backend|offline|journal|forms|units|session|qt|wire>
 severity: blocker | major | minor | paper-cut
@@ -32,6 +32,47 @@ test: <path to the failing test, or "spec-cited">
 
 <repro or spec citation; what should happen; what happens instead.>
 ```
+
+## Allocating an id
+
+Ids are **namespaced by the rung that produced the finding**, not drawn from one
+global sequence: `r5-001-<slug>.md`, `r5-002-<slug>.md`, and so on. The namespace
+is the rung's number (`r0`–`r8`); a finding produced outside any rung — a spike,
+or a whole-branch review — uses `core`.
+
+The namespace exists because a single global sequence **does not survive parallel
+branches**, and did not: two disjoint series were allocated independently and both
+merged, so `001`–`004` came to mean one thing on one branch and something else on
+another. Every one of those commits followed the obvious rule ("take the next
+unused number") correctly — the rule was the problem, not the discipline. A rule
+that every violation already satisfies is not a control.
+
+Namespacing fixes that at the source: two rungs are worked by different people at
+different times, so their sequences never interleave, and the id a branch picks
+cannot be claimed by a branch it has never seen.
+
+**Within a namespace:**
+
+- **Allocation** — take the next unused number in *that namespace*, three digits,
+  zero-padded. Only that rung's own files are in scope, so `ls docs/findings/r5-*`
+  is the whole question.
+- **Gaps are permanent.** A deleted or withdrawn finding leaves its number
+  retired; ids are never reused, so a citation that outlives its target fails to
+  resolve rather than silently pointing at a different finding.
+- **Rebasing never renumbers.** An id is assigned once, when the file is created,
+  and is stable for the life of the finding. If two branches in the same namespace
+  do collide — the same rung worked twice in parallel — resolve it the way any
+  other content conflict is resolved, by renumbering the *later* one at merge time
+  and updating its citations, not by renumbering both.
+- **Cross-rung references are fine** and read unambiguously: `r3-007` is precise
+  from anywhere, which a bare `007` never was.
+
+**Citing a finding.** In prose, name the finding by its slug as well as its id
+("the async shared/keyed attach finding (`r3-001`)"). An id alone is precise but
+brittle — it is the part that changed when the two series collided, and a reader
+looking at the wrong branch resolves it to something else entirely. The slug is
+what makes a stale citation *look* stale instead of resolving silently to the
+wrong file.
 
 ## Triage and dispositions
 

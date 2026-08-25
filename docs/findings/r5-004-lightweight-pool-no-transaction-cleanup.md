@@ -1,5 +1,5 @@
 ---
-id: 004
+id: r5-004
 title: Lightweight's DataMapperPool::Return performs no transaction cleanup -- a connection returned mid-transaction is silently inherited by the next caller
 subsystem: backend
 severity: minor
