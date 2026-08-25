@@ -1031,8 +1031,7 @@ struct Equals {
             // already do for bounds (morph#213); a renderer that ignores
             // `valueText` behaves exactly as before.
             if constexpr (std::is_integral_v<L> && !std::is_same_v<L, bool>) {
-                if (std::cmp_greater(literal, kExactDoubleLimit) ||
-                    std::cmp_less(literal, -kExactDoubleLimitSigned)) {
+                if (std::cmp_greater(literal, kExactDoubleLimit) || std::cmp_less(literal, -kExactDoubleLimitSigned)) {
                     // Glaze DOM builder — same shape as every sibling assignment here.
                     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
                     node["valueText"] = std::to_string(literal);
@@ -1962,8 +1961,7 @@ void recurseIntoNestedAggregateIfAny(glz::generic_u64& dom, glz::generic_u64& pr
         } else {
             annotateNestedAggregateRef<Member, Ancestors...>(dom, property);
         }
-    } else if constexpr (IsStdVector<Member>::value &&
-                         ReflectableAggregate<typename IsStdVector<Member>::ValueType>) {
+    } else if constexpr (IsStdVector<Member>::value && ReflectableAggregate<typename IsStdVector<Member>::ValueType>) {
         using ItemType = typename IsStdVector<Member>::ValueType;
         if constexpr ((std::same_as<ItemType, Ancestors> || ...)) {
             static_assert(!(std::same_as<ItemType, Ancestors> || ...),
