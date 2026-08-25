@@ -413,6 +413,13 @@ Frame {
         if (text === "")
             return undefined
         const meta = fieldMeta(name)
+        // A boolean field's stored value is the text "true"/"false" (the
+        // CheckBox writes those), but `equals` against a `bool` emits a JSON
+        // *boolean* literal. Comparing the two as text made `"true" === true`
+        // false, so a requiredWhen keyed on a boolean never fired on the
+        // client while the compiled evaluator fired it (morph#176).
+        if (meta && meta.isBoolean)
+            return text === "true"
         if (meta && (meta.isQuantity || meta.isInteger))
             return parseFloat(text)
         return text
@@ -434,6 +441,17 @@ Frame {
         if (kind === "equals") {
             if (!fieldEngaged(names[0]))
                 return false
+            // An integral literal beyond 2^53 arrives here already rounded by
+            // JSON.parse, so comparing it as a number collapses values the
+            // schema kept distinct. `valueText` carries the exact digits when
+            // the emitter judged the number unsafe; compare on digits then
+            // (morph#176).
+            if (cond.valueText !== undefined) {
+                const text = (opt(fieldValues[names[0]], "")).trim()
+                if (!/^-?\d+$/.test(text))
+                    return false
+                return compareIntText(text, cond.valueText) === 0
+            }
             const literal = (cond.value && cond.value.num !== undefined)
                              ? (cond.value.num / cond.value.den) : cond.value
             return comparableValue(names[0]) === literal
