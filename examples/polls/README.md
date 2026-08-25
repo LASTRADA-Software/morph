@@ -165,24 +165,31 @@ runs on.
 
 ## Framework prerequisites (built as part of this rung, before the app tasks that depend on them consume them)
 
-Two items `LADDER.md`'s "Framework prerequisites" section names as blocking
-this rung specifically, both confirmed still open by direct inspection of
-the current framework source (not assumed from the ladder doc alone):
+Two items `LADDER.md`'s "Framework prerequisites" section named as blocking
+this rung specifically. Both were open when this rung started and **both have
+since shipped** — this rung built them, as the heading above says. They are
+kept here because they explain the rung's task order, with a pointer to where
+each now lives:
 
-- **Async shared/keyed attach.** `IBackend::registerModelAsync`'s own doc
-  comment (`include/morph/core/backend.hpp`) explicitly scopes itself out of
-  `registerModelShared`/`attachModel`, which remain synchronous (nest a
-  `QEventLoop`) — the very first `OpenPoll` a WASM tab makes aborts the
-  page. Built as this rung's first framework-level task, mirroring
+- **Async shared/keyed attach.** *Shipped:*
+  `IBackend::registerModelSharedAsync` and `IBackend::attachModelAsync`
+  (`include/morph/core/backend.hpp`), dispatched to by
+  `Bridge::ensureBoundAsync`/`attachHandlerAsync` and implemented by
+  `QtWebSocketBackend`. The synchronous `registerModelShared`/`attachModel`
+  still nest a `QEventLoop` and still abort the page on the WASM main thread,
+  so a WASM client must use the async pair — but it exists, and the very first
+  `OpenPoll` a WASM tab makes is no longer blocked on the framework. Built as
+  this rung's first framework-level task, mirroring
   `registerModelAsync`'s existing opt-in/fallback shape (backend returns
   `true` and later invokes exactly one callback, or returns `false` and the
   caller falls back to the synchronous path unaffected) so every backend
   that has not opted in keeps its current behavior.
-- **Client-side execute deadline.** No timeout exists anywhere on a
-  `Completion` today — a genuinely hung server blocks the calling `Completion`
-  forever. (A frame refused by `messagesPerSecond` used to belong here too; it
-  no longer does, since the transport now answers it with an `err "rate
-  limited"` — morph#225.)
+- **Client-side execute deadline.** *Shipped:*
+  `Bridge::setExecuteDeadline` (`include/morph/core/bridge.hpp`), specified in
+  `docs/spec/core/completion.md`. Without it a genuinely hung server blocked
+  the calling `Completion` forever. (A frame refused by `messagesPerSecond`
+  used to belong here too; it no longer does, since the transport now answers
+  it with an `err "rate limited"` — morph#225.)
   `Completion<T>::state()` already exposes the underlying
   `CompletionState`, and `CompletionState::setException` is
   idempotent-guarded (`if (ready) return;`), so the fix needs no
@@ -274,18 +281,20 @@ log table above.
 
 ## Expected strain points
 
-- **WASM + shared handlers may not work at all today [framework
-  prerequisite]**: the shared/keyed attach path
-  (`registerModelShared`/`attachModel`) is synchronous and nests an event
-  loop — which **aborts the page on the WASM main thread**;
-  `registerModelAsync` covers only the plain path. A WASM tab's very first
-  `OpenPoll` hits this. Run the "several WASM tabs" demo literally, before
-  any polling logic exists; schedule async attach as a framework issue (see
-  [`../LADDER.md`](../LADDER.md) § Framework prerequisites).
-- **The polling helper must own a client-side timeout**: a rate-limited
-  server drops frames silently and morph has no execute deadline — an
-  unwrapped poll call hangs its completion forever. Every later rung
-  inherits this helper; get it right here — and **run this rung's harness
+- **WASM + shared handlers**: the *synchronous* shared/keyed attach path
+  (`registerModelShared`/`attachModel`) nests an event loop and **aborts the
+  page on the WASM main thread**, so a WASM tab's very first `OpenPoll` must
+  not go through it. This is no longer a framework prerequisite:
+  `registerModelSharedAsync`/`attachModelAsync` ship the non-blocking pair
+  (see § Framework prerequisites above). Still worth running the "several WASM
+  tabs" demo literally — the async path's *behaviour in a browser* has never
+  been observed, only its compilation.
+- **The polling helper must own a client-side timeout**: an unwrapped poll
+  call against a hung server hangs its completion forever, which is what
+  `Bridge::setExecuteDeadline` now exists to bound. (A rate-limited server no
+  longer drops frames silently — it answers them — so the limiter is not the
+  case that motivates the timeout any more.) Every later rung inherits this
+  helper; get it right here — and **run this rung's harness
   with `messagesPerSecond` configured ON** (a polling app is the abuse case
   the limiter exists for; the helper's timeout is untested until the
   limiter actually drops its frames).

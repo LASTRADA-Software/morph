@@ -740,21 +740,33 @@ managed by path-filtering (`MORPH_LADDER_RUNGS` computed from changed paths:
    (there is no scheduled workflow in this repo yet), so nothing in the
    ladder should assume a cadence the rest of the project doesn't have.
 
-## Framework gaps this strategy exposes (candidate issues)
+## Framework gaps this strategy exposed (all since closed)
 
-1. Client-side execute deadline — no timeout on `Completion`; a black-holed
-   call hangs forever. Every polling helper must wrap its own timer until the
-   framework provides one. (A frame refused by `messagesPerSecond` no longer
-   belongs on that list: the transport answers it with an `err "rate limited"`
-   addressed to the frame's own `callId`, so the caller's `Completion` fails
-   rather than hanging — morph#225.)
-2. `Bridge::pendingCalls()` (client-side quiescence observability) — makes
-   `settle()` exact; today presenter-level counters substitute.
-3. `MainThreadExecutor::runOnce()/drain()` — a step, not a wall-clock pump.
-4. `QtExecutor` with an optional `QObject*` context target — per-thread
-   affinity for future N-thread client topologies.
-5. Connection-scoped simulated client (via `RemoteServer::openConnection()`)
-   — deterministic connection-lifetime tests without sockets.
-6. Injectable time source usable by *remotely-constructed* (registry
-   default-constructed) models — until then, rungs use a process-global
-   now-provider set by tests (`examples/common` clock interface).
+This list was written as candidate issues to schedule. **Every item on it has
+since shipped.** It is kept because it records what the testing strategy pushed
+the framework to grow, and why — but nothing here is work to pick up, and each
+entry names where the capability now lives so that can be checked rather than
+taken on trust.
+
+1. **Client-side execute deadline** → `Bridge::setExecuteDeadline`
+   (`include/morph/core/bridge.hpp`), specified in
+   [`docs/spec/core/completion.md`](../docs/spec/core/completion.md). A polling
+   helper no longer wraps its own timer. (A rate-limited frame no longer
+   belongs on this list for a second reason: the transport answers it with an
+   `err "rate limited"` addressed to the frame's own `callId`, so the caller's
+   `Completion` fails rather than hanging — morph#225.)
+2. **`Bridge::pendingCalls()`** → `include/morph/core/bridge.hpp`, so
+   `settle()` can be exact rather than substituting presenter-level counters.
+3. **`MainThreadExecutor::runOnce()`/`drain()`** →
+   `include/morph/core/executor.hpp` — a step and a full drain, not a
+   wall-clock pump.
+4. **`QtExecutor` with an optional `QObject*` context target** →
+   `QtExecutor(QObject* context = QCoreApplication::instance())`
+   (`include/morph/qt/qt_executor.hpp`), giving the per-thread affinity
+   N-thread client topologies need.
+5. **Connection-scoped simulated client** → `RemoteServer::openConnection()`
+   (`include/morph/core/remote.hpp`), for deterministic connection-lifetime
+   tests without sockets.
+6. **Injectable time source usable by remotely-constructed models** →
+   `setNowOverride` / `ScopedNowOverride` (`include/morph/util/datetime.hpp`) —
+   the process-global now-provider convention the entry asks for.
