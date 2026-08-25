@@ -960,11 +960,6 @@ template <typename T>
 concept RuleLiteral = std::same_as<T, std::int64_t> || std::same_as<T, bool> || std::same_as<T, std::string> ||
                       std::same_as<T, ::morph::math::Rational> || detail::isLiteralString<T>;
 
-/// @brief Condition: `field`'s engaged value equals @p literal. An
-/// unengaged field is **not** vacuously satisfied here (unlike the
-/// comparison kinds) — a field with no value cannot equal anything, so
-/// `equals` returns `false` while the field is unengaged.
-/// @tparam V Field member type.
 /// @brief Largest magnitude an IEEE-754 double holds exactly: 2^53.
 ///
 /// A JSON number beyond this cannot survive `JSON.parse` intact, so a bound
@@ -974,6 +969,11 @@ inline constexpr std::uint64_t kExactDoubleLimit = 9007199254740992ULL;
 /// @brief Signed spelling of `kExactDoubleLimit`, for the negative bound.
 inline constexpr std::int64_t kExactDoubleLimitSigned = 9007199254740992LL;
 
+/// @brief Condition: `field`'s engaged value equals @p literal. An
+/// unengaged field is **not** vacuously satisfied here (unlike the
+/// comparison kinds) — a field with no value cannot equal anything, so
+/// `equals` returns `false` while the field is unengaged.
+/// @tparam V Field member type.
 /// @tparam A Action type the field belongs to.
 /// @tparam L Literal type (must satisfy `RuleLiteral`).
 template <typename V, typename A, typename L>
