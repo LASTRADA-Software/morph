@@ -341,7 +341,7 @@ emit, in the same `x-` extension convention as `x-decimalPlaces`/`x-rules`:
 
 | Key | Value | Why |
 |---|---|---|
-| `x-payloadFingerprint` | `morph::model::payloadFingerprint<A>()` — `"<scheme>:<16 hex digits>"` | The same discriminator the journal stamps on every recorded entry (see [journal.md](../journal/journal.md#payload-schema-fingerprint)). A client linked against the action can compare it with its own build's value in one string comparison. |
+| `x-payloadFingerprint` | `morph::model::payloadFingerprint<A>()` — `"<scheme>:<16 hex digits>"` | The same discriminator the journal stamps on every recorded entry (see [journal.md](../journal/journal.md#payload-schema-fingerprint)) — **the same function, not a wire-specific reimplementation**, so a change to `kPayloadFingerprintScheme` moves both together and neither can drift from the other. A client linked against the action compares it with its own build's value in one string comparison. |
 | `x-payloadShape` | `morph::model::payloadShapeString<A>()` — e.g. `(amountCents:i8,memo:s)` | A fingerprint mismatch is otherwise two opaque hex strings. The shape rendering says *which* member differs. |
 
 A served description therefore looks like:
@@ -358,6 +358,39 @@ A served description therefore looks like:
   }
 }
 ```
+
+The `1:` prefix is `kPayloadFingerprintScheme`, not a per-action version — it
+tracks the fingerprint *algorithm* and moves for every action at once when that
+algorithm changes. The value above is illustrative of the shape, not a pinned
+constant.
+
+Serving the journal's fingerprint also serves its **limits**, unchanged: a type
+with its own `glz::meta` renders as the opaque `x`, so a retype between two
+custom-codec types is invisible to both fingerprint and shape. See
+[journal.md, "What the fingerprint does not catch"](../journal/journal.md#what-the-fingerprint-does-not-catch).
+That boundary is inherited deliberately — one fingerprint scheme with one set
+of known blind spots beats a second, wire-specific scheme that would have to be
+kept in step with it.
+
+### Why this, and not a fingerprint exchange at `"hello"`
+
+morph#207 proposes exchanging per-action fingerprints during the `"hello"`
+handshake. The fingerprints are the same either way — this reuses
+`morph::model::payloadFingerprint<A>()` rather than defining a wire-specific
+scheme — but the *carrier* is `"schemas"` for one reason: `"hello"` is
+deliberately unauthorized ("carries no `session` and is not authorized —
+orthogonal to `IAuthorizer`", [backend.md](backend.md)), and it has no model
+type in it. A fingerprint map on the `"hello"` reply would therefore have to
+enumerate every action the server hosts, to any peer that connects, before any
+authorization has run. `"schemas"` asks per model type and is gated by the
+type-level `authorize` hook, so the same material crosses the wire without
+turning the handshake into an inventory disclosure.
+
+What `"schemas"` does **not** do is refuse a mismatched peer automatically. It
+carries the material; comparing it — and deciding whether a given difference is
+additive (permitted) or a break (not) — is the client's, and a plain
+fingerprint equality test cannot make that distinction on its own, which is why
+`x-payloadShape` is served alongside it.
 
 `SimulatedRemoteBackend::fetchActionSchemas(typeId)` sends the envelope over
 the same synchronous control path as `registerModel`/`negotiateProtocolVersion`
