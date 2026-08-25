@@ -239,6 +239,7 @@ target_sources(morph
         include/morph/core/file_io_ops.hpp
         include/morph/core/model_key.hpp
         include/morph/core/payload_schema.hpp
+        include/morph/core/payload_shape_tag.hpp
         include/morph/forms/app.hpp
         include/morph/forms/flows.hpp
         include/morph/forms/layout.hpp

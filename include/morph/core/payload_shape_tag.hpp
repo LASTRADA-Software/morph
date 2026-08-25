@@ -70,7 +70,6 @@ template <typename T>
 struct PayloadShapeTag {};
 
 /// @brief Satisfied when `T` declares a stable shape tag.
-/// @tparam T Type under test.
 template <typename T>
 concept HasPayloadShapeTag = requires {
     { PayloadShapeTag<T>::name() } -> std::convertible_to<std::string_view>;
@@ -78,7 +77,6 @@ concept HasPayloadShapeTag = requires {
 
 /// @brief Satisfied when `T`'s tag also names an inner type to render inside
 ///        it (a transparent wrapper).
-/// @tparam T Type under test.
 template <typename T>
 concept HasPayloadShapeInner = HasPayloadShapeTag<T> && requires { typename PayloadShapeTag<T>::Inner; };
 

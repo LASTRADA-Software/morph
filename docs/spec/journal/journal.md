@@ -1303,15 +1303,29 @@ Honest boundaries of the current design:
   entries](#unstamped-entries--what-happens-to-journals-already-written)). It
   describes the *reflected* shape, so it says nothing about an action with a
   hand-written `ActionTraits`, nothing about a swap between two custom-codec
-  types, and nothing about entries an application journals by hand rather than
-  through the two framework execution sites. The full boundary is in [What the
-  fingerprint does not catch](#what-the-fingerprint-does-not-catch).
-- **The binary-skew test is still unwritten.** The executable form of the
-  data-at-rest contract — build a client with `MORPH_CLIENT_ONLY`, run it
-  against a newer server, and assert that an additive field works while a
-  renamed one fails loudly — does not exist. The fingerprint gives that test
-  something to assert *on the journal path*; the wire path it also covers is
-  issue #207's, not this one's.
+  types that have declared no name, and nothing about entries an application
+  journals by hand rather than through the two framework execution sites. The
+  full boundary is in [What the fingerprint does not
+  catch](#what-the-fingerprint-does-not-catch).
+- **The wire-path skew test is still unwritten.** The journal-path half now
+  exists: `tests/compile_checks/journal_skew_probe.cpp` is compiled into two
+  executables, one recording a journal and the other replaying it with a
+  renamed and an added field, run in order as the `journal_skew_old_build_writes`
+  / `journal_skew_new_build_replays` ctest pair. The wire path cannot be tested
+  the same way, because nothing mechanically enforces the action-evolution
+  policy there yet — a per-action fingerprint exchanged at `hello` is issue
+  #207's unimplemented proposal, and until it exists a client/server skew test
+  has nothing to assert on.
+- **`replay()` refuses an additive change, not only a breaking one.** The gate
+  is fingerprint equality, so an entry written before a field was *added*
+  throws exactly as a renamed one does, even though the
+  [data-at-rest contract](#data-at-rest-contract) permits the addition and
+  `fromJson`'s lenient decode still reads the old payload faithfully. The
+  caller's answer is a migration — for a pure addition, one that hands the
+  payload through unchanged. This is a deliberate consequence of choosing
+  equality over a compatibility relation (there is no derived way to tell
+  "field added" from "field renamed" by comparing two digests), not an
+  oversight; the skew test above pins both halves.
 
 ## Cross-references
 
