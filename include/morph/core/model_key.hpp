@@ -282,6 +282,12 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// `MEMBER` is a pointer-to-data-member of `A` (e.g. `&LoadAccount::id`) whose
 /// type satisfies `morph::model::ModelKey`. Must appear at global scope, in
 /// exactly one translation unit, like the other `BRIDGE_REGISTER_*` macros.
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_MODEL_KEY(M, A, MEMBER)                                                                \
     template <>                                                                                       \
     struct morph::model::ActionKeyTraits<A> {                                                         \
@@ -293,6 +299,7 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
     struct morph::model::ModelKeyTraits<M> {                                                          \
         using PrimaryKey = morph::model::detail::MemberTypeOf<decltype(MEMBER)>;                      \
     }
+// clang-format on
 
 /// @brief Declares that action `A` also carries its model's primary key in `MEMBER`.
 ///
@@ -303,6 +310,12 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// specialisation cannot be repeated.
 ///
 /// Must appear at global scope, in exactly one translation unit.
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_KEY_FROM(A, MEMBER)                                                                    \
     template <>                                                                                       \
     struct morph::model::ActionKeyTraits<A> {                                                         \
@@ -310,6 +323,7 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
         static constexpr bool fromResult = false;                                                     \
         static std::string key(const A& action) { return morph::model::keyToString(action.*MEMBER); } \
     }
+// clang-format on
 
 /// @brief Declares that action `A`'s *result* establishes its model's primary key.
 ///
@@ -319,6 +333,12 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// result type (e.g. `&AccountInfo::id`).
 ///
 /// Must appear at global scope, in exactly one translation unit.
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_MODEL_KEY_FROM_RESULT(M, A, MEMBER)                               \
     template <>                                                                  \
     struct morph::model::ActionKeyTraits<A> {                                    \
@@ -333,6 +353,7 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
     struct morph::model::ModelKeyTraits<M> {                                     \
         using PrimaryKey = morph::model::detail::MemberTypeOf<decltype(MEMBER)>; \
     }
+// clang-format on
 
 /// @brief Declares that action `A`'s result also establishes its model's key.
 ///
@@ -340,6 +361,12 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// action on a model whose key type is already established.
 ///
 /// Must appear at global scope, in exactly one translation unit.
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define BRIDGE_KEY_FROM_RESULT(A, MEMBER)                     \
     template <>                                               \
     struct morph::model::ActionKeyTraits<A> {                 \
@@ -350,5 +377,6 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
             return morph::model::keyToString(result.*MEMBER); \
         }                                                     \
     }
+// clang-format on
 
 // NOLINTEND(cppcoreguidelines-macro-usage)

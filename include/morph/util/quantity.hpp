@@ -543,6 +543,12 @@ struct Context {
 /// @cond INTERNAL
 #if MORPH_QUANTITY_PROVENANCE
 #define MORPH_Q_NODE(quantity) (quantity)._ctx.node
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode) \
     do {                                                                             \
         auto morphProvNode = std::make_shared<::morph::units::detail::ASTNode>();    \
@@ -554,13 +560,21 @@ struct Context {
         morphProvNode->right = (rightNode);                                          \
         (out)._ctx.node = std::move(morphProvNode);                                  \
     } while (0)
+// clang-format on
 
 #else
 
 #define MORPH_Q_NODE(quantity) nullptr
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
 #define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode) \
     do {                                                                             \
     } while (0)
+// clang-format on
 
 #endif
 /// @endcond
