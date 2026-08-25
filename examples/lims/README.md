@@ -361,7 +361,9 @@ The write half could not use a framework seam either: there is no
 enqueue-on-failure hook, and the machine that must make the decision (a
 disconnected field client) has no model on it at all.
 `include/lims/offline/field_outbox.hpp` is the app-layer answer, and
-morph#197 is the finding.
+morph#197 is the finding — now dispositioned: `IMPLEMENTATION.md` rule 1
+carries a named carve-out for this seam, and `FieldOutbox` is the shape it
+points at (`docs/spec/offline/offline.md`, "Disposition: app-layer by design").
 
 So neither end of the offline round trip goes through a framework seam. That
 is the honest summary of §7's framework story.
@@ -716,7 +718,10 @@ files no uploaded report contained. Fixed here.
   application's job at the dispatch site; and a disconnected field client has
   no model to put it in anyway. `FieldOutbox` is this rung's app-layer answer,
   and it carries a real invariant (a client's own successive offline edits must
-  chain), not glue.
+  chain), not glue. **Dispositioned as app-layer by design:** rule 1 names the
+  carve-out and `docs/spec/offline/offline.md` records the reasoning and the
+  boundary; a framework primitive is reconsidered when a third rung grows its
+  own enqueue path.
 - **[morph#172](https://github.com/LASTRADA-Software/morph/issues/172)
   — `MORPH_BUILD_OFFLINE_SQLITE=ON` breaks the build on macOS with a non-Apple
   clang.** `FindSQLite3` resolves the SDK's whole `/usr/include`, which is then
