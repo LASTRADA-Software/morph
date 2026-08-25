@@ -1,0 +1,421 @@
+{
+  "readme": [
+    "The shared x-rules corpus (morph#176). ONE file, TWO readers:",
+    "  tests/test_forms_rule_corpus.cpp          -- morph::forms::allRulesSatisfied",
+    "  src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml -- a real DynamicForm",
+    "Neither owns the cases, so the two evaluators cannot be pinned to",
+    "different case lists. See docs/spec/forms/forms.md, 'Two evaluators, one",
+    "corpus'.",
+    "",
+    "'schemas' holds verbatim schemaJson<A>() output, as TEXT. Storing it as a",
+    "JSON string (not an inline object) is deliberate: the renderer parses the",
+    "text it is served, and parsing is what rounds an int64 literal past 2^53.",
+    "An inline object would be re-serialised by the writer and the corpus could",
+    "not express that case at all.",
+    "",
+    "REGENERATE: the C++ test asserts every 'schemas' entry equals the current",
+    "schemaJson<A>() byte-for-byte and prints the expected text on mismatch.",
+    "Fixtures live in tests/forms_rule_corpus.hpp.",
+    "",
+    "'state' maps a wire field name to the TEXT a user would have typed; an",
+    "absent field is unengaged. 'ready' is the submit gate both evaluators must",
+    "agree on. 'visible'/'readonly' are the presentation expectations for the",
+    "two kinds that never gate; only the renderer can assert them."
+  ],
+  "schemas": {
+    "RcEngaged": "{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"$\"},\"x-order\":0,\"title\":\"Amount\",\"x-decimalPlaces\":2},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Note\"}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"RcEngaged\",\"required\":[],\"x-rules\":[{\"kind\":\"requiredWhen\",\"fields\":[\"note\"],\"when\":{\"kind\":\"engaged\",\"fields\":[\"amount\"]}}]}",
+    "RcNotEngaged": "{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"$\"},\"x-order\":0,\"title\":\"Amount\",\"x-decimalPlaces\":2},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Note\"}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"RcNotEngaged\",\"required\":[],\"x-rules\":[{\"kind\":\"requiredWhen\",\"fields\":[\"note\"],\"when\":{\"kind\":\"notEngaged\",\"fields\":[\"amount\"]}}]}",
+    "RcEqualsBool": "{\"type\":\"object\",\"properties\":{\"flag\":{\"type\":[\"boolean\",\"null\"],\"x-order\":0,\"title\":\"Flag\"},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Note\"}},\"additionalProperties\":false,\"title\":\"RcEqualsBool\",\"required\":[],\"x-rules\":[{\"kind\":\"requiredWhen\",\"fields\":[\"note\"],\"when\":{\"kind\":\"equals\",\"fields\":[\"flag\"],\"value\":true}}]}",
+    "RcEqualsBigInt": "{\"type\":\"object\",\"properties\":{\"id\":{\"anyOf\":[{\"$ref\":\"#/$defs/int64_t\"},{\"type\":\"null\"}],\"x-order\":0,\"title\":\"Id\"},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Note\"}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"}},\"title\":\"RcEqualsBigInt\",\"required\":[],\"x-rules\":[{\"kind\":\"requiredWhen\",\"fields\":[\"note\"],\"when\":{\"kind\":\"equals\",\"fields\":[\"id\"],\"value\":9007199254740993,\"valueText\":\"9007199254740993\"}}]}",
+    "RcEqualsString": "{\"type\":\"object\",\"properties\":{\"code\":{\"type\":[\"string\",\"null\"],\"x-order\":0,\"title\":\"Code\"},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Note\"}},\"additionalProperties\":false,\"title\":\"RcEqualsString\",\"required\":[],\"x-rules\":[{\"kind\":\"requiredWhen\",\"fields\":[\"note\"],\"when\":{\"kind\":\"equals\",\"fields\":[\"code\"],\"value\":\"URGENT\"}}]}",
+    "RcGreater": "{\"type\":\"object\",\"properties\":{\"high\":{\"$ref\":\"#/$defs/money\",\"x-order\":1,\"title\":\"High\",\"x-decimalPlaces\":2},\"low\":{\"$ref\":\"#/$defs/money\",\"x-order\":0,\"title\":\"Low\",\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"money\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"$\"}},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"RcGreater\",\"required\":[],\"x-rules\":[{\"kind\":\"greater\",\"fields\":[\"high\",\"low\"]}]}",
+    "RcGreaterOrEqual": "{\"type\":\"object\",\"properties\":{\"high\":{\"$ref\":\"#/$defs/money\",\"x-order\":1,\"title\":\"High\",\"x-decimalPlaces\":2},\"low\":{\"$ref\":\"#/$defs/money\",\"x-order\":0,\"title\":\"Low\",\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"money\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"$\"}},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"RcGreaterOrEqual\",\"required\":[],\"x-rules\":[{\"kind\":\"greaterOrEqual\",\"fields\":[\"high\",\"low\"]}]}",
+    "RcLess": "{\"type\":\"object\",\"properties\":{\"high\":{\"$ref\":\"#/$defs/money\",\"x-order\":1,\"title\":\"High\",\"x-decimalPlaces\":2},\"low\":{\"$ref\":\"#/$defs/money\",\"x-order\":0,\"title\":\"Low\",\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"money\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"$\"}},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"RcLess\",\"required\":[],\"x-rules\":[{\"kind\":\"less\",\"fields\":[\"low\",\"high\"]}]}",
+    "RcLessOrEqual": "{\"type\":\"object\",\"properties\":{\"high\":{\"$ref\":\"#/$defs/money\",\"x-order\":1,\"title\":\"High\",\"x-decimalPlaces\":2},\"low\":{\"$ref\":\"#/$defs/money\",\"x-order\":0,\"title\":\"Low\",\"x-decimalPlaces\":2}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"money\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"$\"}},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"RcLessOrEqual\",\"required\":[],\"x-rules\":[{\"kind\":\"lessOrEqual\",\"fields\":[\"low\",\"high\"]}]}",
+    "RcExactlyOneOf": "{\"type\":\"object\",\"properties\":{\"email\":{\"type\":[\"string\",\"null\"],\"x-order\":0,\"title\":\"Email\"},\"phone\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Phone\"}},\"additionalProperties\":false,\"title\":\"RcExactlyOneOf\",\"required\":[],\"x-rules\":[{\"kind\":\"exactlyOneOf\",\"fields\":[\"email\",\"phone\"]}]}",
+    "RcAtLeastOneOf": "{\"type\":\"object\",\"properties\":{\"email\":{\"type\":[\"string\",\"null\"],\"x-order\":0,\"title\":\"Email\"},\"phone\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Phone\"}},\"additionalProperties\":false,\"title\":\"RcAtLeastOneOf\",\"required\":[],\"x-rules\":[{\"kind\":\"atLeastOneOf\",\"fields\":[\"email\",\"phone\"]}]}",
+    "RcMutuallyExclusive": "{\"type\":\"object\",\"properties\":{\"email\":{\"type\":[\"string\",\"null\"],\"x-order\":0,\"title\":\"Email\"},\"phone\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Phone\"}},\"additionalProperties\":false,\"title\":\"RcMutuallyExclusive\",\"required\":[],\"x-rules\":[{\"kind\":\"mutuallyExclusive\",\"fields\":[\"email\",\"phone\"]}]}",
+    "RcVisibleWhen": "{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"$\"},\"x-order\":0,\"title\":\"Amount\",\"x-decimalPlaces\":2},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Note\"}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"RcVisibleWhen\",\"required\":[],\"x-rules\":[{\"kind\":\"visibleWhen\",\"fields\":[\"note\"],\"when\":{\"kind\":\"engaged\",\"fields\":[\"amount\"]}}]}",
+    "RcReadonlyWhen": "{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"money\",\"unitUnicode\":\"$\"},\"x-order\":0,\"title\":\"Amount\",\"x-decimalPlaces\":2},\"note\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Note\"}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"RcReadonlyWhen\",\"required\":[],\"x-rules\":[{\"kind\":\"readonlyWhen\",\"fields\":[\"note\"],\"when\":{\"kind\":\"engaged\",\"fields\":[\"amount\"]}}]}",
+    "RcAnd": "{\"type\":\"object\",\"properties\":{\"email\":{\"type\":[\"string\",\"null\"],\"x-order\":0,\"title\":\"Email\"},\"phone\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Phone\"}},\"additionalProperties\":false,\"title\":\"RcAnd\",\"required\":[],\"x-rules\":[{\"kind\":\"and\",\"conditions\":[{\"kind\":\"engaged\",\"fields\":[\"email\"]},{\"kind\":\"engaged\",\"fields\":[\"phone\"]}]}]}",
+    "RcOr": "{\"type\":\"object\",\"properties\":{\"email\":{\"type\":[\"string\",\"null\"],\"x-order\":0,\"title\":\"Email\"},\"phone\":{\"type\":[\"string\",\"null\"],\"x-order\":1,\"title\":\"Phone\"}},\"additionalProperties\":false,\"title\":\"RcOr\",\"required\":[],\"x-rules\":[{\"kind\":\"or\",\"conditions\":[{\"kind\":\"engaged\",\"fields\":[\"email\"]},{\"kind\":\"engaged\",\"fields\":[\"phone\"]}]}]}",
+    "RcNot": "{\"type\":\"object\",\"properties\":{\"email\":{\"type\":[\"string\",\"null\"],\"x-order\":0,\"title\":\"Email\"}},\"additionalProperties\":false,\"title\":\"RcNot\",\"required\":[],\"x-rules\":[{\"kind\":\"not\",\"condition\":{\"kind\":\"engaged\",\"fields\":[\"email\"]}}]}"
+  },
+  "cases": [
+    {
+      "id": "engaged/gate-shut",
+      "action": "RcEngaged",
+      "state": {},
+      "ready": true
+    },
+    {
+      "id": "engaged/gate-open-no-note",
+      "action": "RcEngaged",
+      "state": {
+        "amount": "5"
+      },
+      "ready": false
+    },
+    {
+      "id": "engaged/gate-open-note-set",
+      "action": "RcEngaged",
+      "state": {
+        "amount": "5",
+        "note": "why"
+      },
+      "ready": true
+    },
+    {
+      "id": "notEngaged/gate-open",
+      "action": "RcNotEngaged",
+      "state": {},
+      "ready": false
+    },
+    {
+      "id": "notEngaged/gate-shut",
+      "action": "RcNotEngaged",
+      "state": {
+        "amount": "5"
+      },
+      "ready": true
+    },
+    {
+      "id": "notEngaged/gate-open-note-set",
+      "action": "RcNotEngaged",
+      "state": {
+        "note": "why"
+      },
+      "ready": true
+    },
+    {
+      "id": "equals-bool/false",
+      "action": "RcEqualsBool",
+      "state": {
+        "flag": "false"
+      },
+      "ready": true
+    },
+    {
+      "id": "equals-bool/true-no-note",
+      "action": "RcEqualsBool",
+      "state": {
+        "flag": "true"
+      },
+      "ready": false
+    },
+    {
+      "id": "equals-bool/true-note-set",
+      "action": "RcEqualsBool",
+      "state": {
+        "flag": "true",
+        "note": "why"
+      },
+      "ready": true
+    },
+    {
+      "id": "equals-int64/one-below",
+      "action": "RcEqualsBigInt",
+      "state": {
+        "id": "9007199254740992"
+      },
+      "ready": true
+    },
+    {
+      "id": "equals-int64/exact-no-note",
+      "action": "RcEqualsBigInt",
+      "state": {
+        "id": "9007199254740993"
+      },
+      "ready": false
+    },
+    {
+      "id": "equals-int64/exact-note-set",
+      "action": "RcEqualsBigInt",
+      "state": {
+        "id": "9007199254740993",
+        "note": "why"
+      },
+      "ready": true
+    },
+    {
+      "id": "equals-string/other",
+      "action": "RcEqualsString",
+      "state": {
+        "code": "ROUTINE"
+      },
+      "ready": true
+    },
+    {
+      "id": "equals-string/match-no-note",
+      "action": "RcEqualsString",
+      "state": {
+        "code": "URGENT"
+      },
+      "ready": false
+    },
+    {
+      "id": "equals-string/match-note-set",
+      "action": "RcEqualsString",
+      "state": {
+        "code": "URGENT",
+        "note": "why"
+      },
+      "ready": true
+    },
+    {
+      "id": "greater/vacuous",
+      "action": "RcGreater",
+      "state": {},
+      "ready": true
+    },
+    {
+      "id": "greater/holds",
+      "action": "RcGreater",
+      "state": {
+        "low": "1",
+        "high": "2"
+      },
+      "ready": true
+    },
+    {
+      "id": "greater/violated-on-equal",
+      "action": "RcGreater",
+      "state": {
+        "low": "2",
+        "high": "2"
+      },
+      "ready": false
+    },
+    {
+      "id": "greaterOrEqual/holds-on-equal",
+      "action": "RcGreaterOrEqual",
+      "state": {
+        "low": "2",
+        "high": "2"
+      },
+      "ready": true
+    },
+    {
+      "id": "greaterOrEqual/violated",
+      "action": "RcGreaterOrEqual",
+      "state": {
+        "low": "3",
+        "high": "2"
+      },
+      "ready": false
+    },
+    {
+      "id": "greaterOrEqual/vacuous",
+      "action": "RcGreaterOrEqual",
+      "state": {
+        "low": "3"
+      },
+      "ready": true
+    },
+    {
+      "id": "less/holds",
+      "action": "RcLess",
+      "state": {
+        "low": "1",
+        "high": "2"
+      },
+      "ready": true
+    },
+    {
+      "id": "less/violated-on-equal",
+      "action": "RcLess",
+      "state": {
+        "low": "2",
+        "high": "2"
+      },
+      "ready": false
+    },
+    {
+      "id": "lessOrEqual/holds-on-equal",
+      "action": "RcLessOrEqual",
+      "state": {
+        "low": "2",
+        "high": "2"
+      },
+      "ready": true
+    },
+    {
+      "id": "lessOrEqual/violated",
+      "action": "RcLessOrEqual",
+      "state": {
+        "low": "3",
+        "high": "2"
+      },
+      "ready": false
+    },
+    {
+      "id": "exactlyOneOf/none",
+      "action": "RcExactlyOneOf",
+      "state": {},
+      "ready": false
+    },
+    {
+      "id": "exactlyOneOf/one",
+      "action": "RcExactlyOneOf",
+      "state": {
+        "email": "a@b"
+      },
+      "ready": true
+    },
+    {
+      "id": "exactlyOneOf/both",
+      "action": "RcExactlyOneOf",
+      "state": {
+        "email": "a@b",
+        "phone": "1"
+      },
+      "ready": false
+    },
+    {
+      "id": "atLeastOneOf/none",
+      "action": "RcAtLeastOneOf",
+      "state": {},
+      "ready": false
+    },
+    {
+      "id": "atLeastOneOf/one",
+      "action": "RcAtLeastOneOf",
+      "state": {
+        "phone": "1"
+      },
+      "ready": true
+    },
+    {
+      "id": "atLeastOneOf/both",
+      "action": "RcAtLeastOneOf",
+      "state": {
+        "email": "a@b",
+        "phone": "1"
+      },
+      "ready": true
+    },
+    {
+      "id": "mutuallyExclusive/none",
+      "action": "RcMutuallyExclusive",
+      "state": {},
+      "ready": true
+    },
+    {
+      "id": "mutuallyExclusive/one",
+      "action": "RcMutuallyExclusive",
+      "state": {
+        "email": "a@b"
+      },
+      "ready": true
+    },
+    {
+      "id": "mutuallyExclusive/both",
+      "action": "RcMutuallyExclusive",
+      "state": {
+        "email": "a@b",
+        "phone": "1"
+      },
+      "ready": false
+    },
+    {
+      "id": "visibleWhen/condition-false",
+      "action": "RcVisibleWhen",
+      "state": {},
+      "ready": true,
+      "visible": {
+        "note": false
+      }
+    },
+    {
+      "id": "visibleWhen/condition-true",
+      "action": "RcVisibleWhen",
+      "state": {
+        "amount": "5"
+      },
+      "ready": true,
+      "visible": {
+        "note": true
+      }
+    },
+    {
+      "id": "readonlyWhen/condition-false",
+      "action": "RcReadonlyWhen",
+      "state": {},
+      "ready": true,
+      "readonly": {
+        "note": false
+      }
+    },
+    {
+      "id": "readonlyWhen/condition-true",
+      "action": "RcReadonlyWhen",
+      "state": {
+        "amount": "5"
+      },
+      "ready": true,
+      "readonly": {
+        "note": true
+      }
+    },
+    {
+      "id": "and/neither",
+      "action": "RcAnd",
+      "state": {},
+      "ready": false
+    },
+    {
+      "id": "and/one",
+      "action": "RcAnd",
+      "state": {
+        "email": "a@b"
+      },
+      "ready": false
+    },
+    {
+      "id": "and/both",
+      "action": "RcAnd",
+      "state": {
+        "email": "a@b",
+        "phone": "1"
+      },
+      "ready": true
+    },
+    {
+      "id": "or/neither",
+      "action": "RcOr",
+      "state": {},
+      "ready": false
+    },
+    {
+      "id": "or/one",
+      "action": "RcOr",
+      "state": {
+        "email": "a@b"
+      },
+      "ready": true
+    },
+    {
+      "id": "or/both",
+      "action": "RcOr",
+      "state": {
+        "email": "a@b",
+        "phone": "1"
+      },
+      "ready": true
+    },
+    {
+      "id": "not/blank",
+      "action": "RcNot",
+      "state": {},
+      "ready": true
+    },
+    {
+      "id": "not/engaged",
+      "action": "RcNot",
+      "state": {
+        "email": "a@b"
+      },
+      "ready": false
+    }
+  ]
+}
