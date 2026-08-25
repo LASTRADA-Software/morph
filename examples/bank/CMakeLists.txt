@@ -127,5 +127,51 @@ if(MORPH_BUILD_TESTS)
         list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
         include(Catch)
         catch_discover_tests(bank_tests DISCOVERY_MODE PRE_TEST)
+
+        # ── bank_gui_tests: the GUI's own suite ──────────────────────────────
+        # A second binary rather than more sources in bank_tests: bank_tests
+        # links bank_lib and nothing Qt, and it is built in every
+        # -DMORPH_BUILD_BANK_EXAMPLE=ON configure, including the ones with no
+        # Qt at all. The controllers only exist when MORPH_BUILD_BANK_GUI=ON
+        # (that is the option that adds gui/), so anything holding one has to
+        # be gated on the same switch.
+        #
+        # tests/gui/, not tests/: bank lists its test sources by hand rather
+        # than globbing them, so a file in tests/ that is deliberately absent
+        # from bank_tests reads as an oversight. The subdirectory says which
+        # binary a file belongs to.
+        if(TARGET bank_gui_lib)
+            add_executable(bank_gui_tests
+                tests/gui/test_bank_qml_surface.cpp
+                # QmlSurfaceAudit, compiled in rather than linked from
+                # morph::ladder_testkit. That library is only created by
+                # MORPH_BUILD_LADDER=ON, an option entirely independent of
+                # MORPH_BUILD_BANK_EXAMPLE — bank is not a ladder rung (it is
+                # absent from examples/rungs.txt and never calls
+                # morph_add_rung), so requiring the ladder's whole shared
+                # testkit to be configured before the bank GUI can be tested
+                # would couple two option trees that have nothing else to do
+                # with each other. It would also over-link: morph_ladder_testkit
+                # pulls in morph::qt, Qt6::WebSockets, ladder_gui and ladder_app,
+                # while the audit itself needs Qt6::Core and nothing more.
+                # This is the same translation unit, not a copy of it, so the
+                # audit still has exactly one implementation.
+                ${PROJECT_SOURCE_DIR}/examples/common/testkit/qml_surface.cpp
+            )
+            target_include_directories(bank_gui_tests PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests
+                ${PROJECT_SOURCE_DIR}/examples/common)
+            target_link_libraries(bank_gui_tests PRIVATE bank_gui_lib Catch2::Catch2WithMain)
+            target_compile_features(bank_gui_tests PRIVATE cxx_std_23)
+            # The audit reads gui/qml/*.qml out of the source tree at run time,
+            # and ctest runs the binary from the build directory. Same macro,
+            # same value (the repo root) and same reason as every ladder rung's
+            # test binary gets from morph_add_rung().
+            target_compile_definitions(bank_gui_tests PRIVATE
+                MORPH_LADDER_SOURCE_ROOT="${PROJECT_SOURCE_DIR}")
+            apply_bigobj(bank_gui_tests)
+
+            catch_discover_tests(bank_gui_tests DISCOVERY_MODE PRE_TEST)
+        endif()
     endif()
 endif()
