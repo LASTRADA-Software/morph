@@ -19,6 +19,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "JsonExact.js" as JsonExact
 
 Frame {
     id: root
@@ -115,7 +116,12 @@ Frame {
     function bindBodyJson(bind, row) {
         const parts = []
         for (const actionField in (bind || {}))
-            parts.push(JSON.stringify(actionField) + ":" + JSON.stringify(row[bind[actionField]]))
+            // JsonExact.literal, not JSON.stringify: a row id above 2^53 is held
+            // as exact digits (see JsonExact.js) and must be emitted verbatim.
+            // Re-serialising it as a double rounds it, and because doubles round
+            // to even in that range neighbouring ids collapse -- so Delete on one
+            // row built a body naming another (morph#191).
+            parts.push(JSON.stringify(actionField) + ":" + JsonExact.literal(row[bind[actionField]]))
         return "{" + parts.join(",") + "}"
     }
 
@@ -191,7 +197,9 @@ Frame {
                 if (!ok)
                     return
                 let parsed
-                try { parsed = JSON.parse(payload) } catch (ignored) { return }
+                // Exact-int aware: query results carry row ids, and a plain
+                // JSON.parse rounds any above 2^53 before anything can use them.
+                try { parsed = JsonExact.parse(payload) } catch (ignored) { return }
                 root.rows = root.extractRows(parsed)
                 return
             }
@@ -300,7 +308,7 @@ Frame {
                             // same column field name) so a test can target one
                             // row's cell unambiguously.
                             objectName: "cell_" + modelData.field + "_"
-                                        + JSON.stringify(rowDelegate.modelData[root.opt(root.view["v-rowKey"], "id")])
+                                        + JsonExact.text(rowDelegate.modelData[root.opt(root.view["v-rowKey"], "id")])
                             text: root.formatCell(rowDelegate.modelData, modelData)
                             Layout.preferredWidth: 120
                         }
@@ -308,7 +316,7 @@ Frame {
 
                     Button {
                         visible: root.view["v-rowAction"] !== undefined
-                        objectName: "rowOpen_" + JSON.stringify(rowDelegate.modelData[root.opt(root.view["v-rowKey"], "id")])
+                        objectName: "rowOpen_" + JsonExact.text(rowDelegate.modelData[root.opt(root.view["v-rowKey"], "id")])
                         text: "Open"
                         onClicked: root.openEditor(rowDelegate.modelData)
                     }
@@ -318,7 +326,7 @@ Frame {
                         Button {
                             required property var modelData
                             objectName: "rowAction_" + modelData.action + "_"
-                                        + JSON.stringify(rowDelegate.modelData[root.opt(root.view["v-rowKey"], "id")])
+                                        + JsonExact.text(rowDelegate.modelData[root.opt(root.view["v-rowKey"], "id")])
                             text: modelData.label
                             onClicked: root.fireRowAction(modelData, rowDelegate.modelData)
                         }

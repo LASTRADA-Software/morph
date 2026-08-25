@@ -31,6 +31,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "JsonExact.js" as JsonExact
 
 Frame {
     id: form
@@ -988,13 +989,18 @@ Frame {
             if (!ok)
                 return
             let parsed
-            try { parsed = JSON.parse(payload) } catch (ignored) { return }
+            // Exact-int aware: an option id above 2^53 is rounded by a plain
+            // JSON.parse, and re-stringifying the rounded number selects a
+            // different row -- or, for a dense id range, makes two options
+            // indistinguishable from each other (morph#190).
+            try { parsed = JsonExact.parse(payload) } catch (ignored) { return }
             for (let i = 0; i < form.fields.length; ++i) {
                 const f = form.fields[i]
                 if (!f.isChoice || f.optionsAction !== optionsAction)
                     continue
                 form.fieldOptions[f.name] = form.optionRows(parsed).map(function (row) {
-                    return { label: String(row[f.labelField]), valueJson: JSON.stringify(row[f.valueField]) }
+                    return { label: JsonExact.text(row[f.labelField]),
+                             valueJson: JsonExact.literal(row[f.valueField]) }
                 })
                 // A parent change re-fetches; drop a selection the new list
                 // no longer backs (closes the staleness noted in choice.md's
