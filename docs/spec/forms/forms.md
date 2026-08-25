@@ -585,7 +585,7 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups`. Omitted under the same conditions as `x-group`. |
 | `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when greater than `1` (the default, single-column width). A renderer laying fields out in a grid widens the control; a single-column renderer ignores it. |
 | `x-rules` | top-level (object) | array of rule objects | Cross-field rules the renderer must satisfy before enabling submit, and should surface live as inline errors. Emitted only when the action declares `formRules`; absent otherwise. A renderer that ignores it falls back to per-field `required` only. |
-| ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the "Cross-field rules" section's table above (or a condition id: `engaged`, `notEngaged`, `equals`, `and`, `or`, `not`). An unrecognised `kind` must be treated as "cannot evaluate" — the renderer leaves the gate to the server rather than passing the rule (fail-closed). |
+| ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the "Cross-field rules" section's table above (or a condition id: `engaged`, `notEngaged`, `equals`, `and`, `or`, `not`). An unrecognised `kind` — a rule *or* a nested condition — must be treated as "cannot evaluate": a third answer, distinct from both true and false. The renderer neither claims the rule is satisfied nor blocks submission on it; the payload reaches the server, which runs the compiled rule list and has no unrecognised-kind case. See [Renderer fallback](#renderer-fallback) for the full contract and why it is *defer*, not *block*. |
 | ↳ `fields` | rule / condition object | array of strings | Wire field names the rule ranges over, in declaration order (operand order is significant for `greater`/`less`). Absent on `and`/`or`/`not`, which range over nested conditions (`conditions`/`condition` below) instead of fields directly. |
 | ↳ `when` | `requiredWhen` / `visibleWhen` / `readonlyWhen` object | rule/condition object | The nested condition the rule keys on. Present only on these condition-bearing kinds. May itself be an `and`/`or`/`not` node (a compound condition), nested to any depth — see [Compound conditions](#compound-conditions--andof--orof--notof). |
 | ↳ `value` | `equals` condition object | scalar / `{num,den}` | The literal an `equals` condition compares against; a numeric literal is the exact `Rational` `{num, den}`, never a `double`. A `bool` literal is emitted as a JSON **boolean**, so a renderer must compare a boolean field as a boolean, not as its display text. |
@@ -1293,9 +1293,11 @@ exactly one child):
 ```
 
 A renderer that does not recognise `"and"`/`"or"`/`"not"` treats them as an
-unrecognised `kind` per the existing fail-closed rule (see "Renderer
-fallback" below) — it defers enforcement to the server rather than guessing
-at the nested structure, exactly like any other unrecognised `kind`.
+unrecognised `kind` (see "Renderer fallback" below) — it defers enforcement to
+the server rather than guessing at the nested structure, exactly like any
+other unrecognised `kind`. A renderer that recognises them but not one of
+their *children* has the same answer available: "cannot evaluate" propagates
+up through `and`/`or`/`not` rather than collapsing to false.
 
 ### Presentation rules never gate
 
@@ -1426,6 +1428,20 @@ hand-built envelope that violates a rule is rejected with
 dispatch path (local, simulated-remote, Qt WebSocket), before `Model::execute`
 runs.
 
+**Read "the same rule list", not "the same evaluation".** The server walks
+`A::formRules` — typed nodes over decoded members. A client walks the *emitted*
+`x-rules` JSON over widget state, which is a different representation of the
+same declaration: a `Quantity` is exact `Rational` arithmetic on one side and
+entered text on the other, and a client is free to be an approximation of the
+server, never the reverse. Two consequences follow, and both are load-bearing
+rather than caveats:
+
+- a client verdict is a **convenience**, and the correctness floor is the
+  server's — no client rounding, no unrecognised kind, and no missing key can
+  let an action past `validate()`;
+- because the two are different code, "they agree" is a property that has to
+  be *tested*, not assumed. See [Two evaluators, one corpus](#two-evaluators-one-corpus).
+
 ### Renderer fallback
 
 Every key here is additive and optional, consistent with the unversioned
@@ -1438,6 +1454,81 @@ unrecognised `kind` (a rule *or* a nested condition) must be treated as
 "cannot evaluate" by a client renderer, which defers enforcement to the
 server rather than passing the rule — the server, running the compiled C++
 rule list directly, has no such "unrecognised kind" case.
+
+#### "Cannot evaluate" means defer, not block
+
+"Cannot evaluate" is a **third** answer, alongside true and false, and the two
+shipped clients of this sentence once read it in opposite directions — one
+blocked submission on an unknown `kind`, the other deferred (morph#176). The
+contract is *defer*:
+
+| Question a renderer asks | Answer when the condition cannot be evaluated |
+|---|---|
+| Does this rule block submission? | **No.** Hand the payload to the server. |
+| Is this `requiredWhen` field required right now? | **No.** Only a definitely-true condition makes a field required. |
+| Is this `visibleWhen` field shown? | **Yes.** Never hide a field over a condition you could not judge. |
+| Is this `readonlyWhen` field frozen? | **No.** Leave it editable. |
+| What is `and`/`or`/`not` of it? | "Cannot evaluate" **propagates**: `and` is false if any child is false and unevaluable otherwise; `or` is true if any child is true and unevaluable otherwise; `not` of unevaluable is unevaluable. |
+
+The reason is forward compatibility, and it is the whole point of a vocabulary
+that is closed but extensible. Every key here is additive: a server that gains
+a seventeenth rule kind must not thereby brick every renderer already
+deployed. A blocking client turns each such addition into a breaking change —
+the operator sees a form that can never be satisfied, with no error naming
+why, and no action of theirs can fix it. A deferring client submits, and the
+server answers with the one verdict that was ever authoritative.
+
+Nothing is lost on the safety side, because nothing was ever gained there: the
+correctness floor is the server's `validate()`, which evaluates the compiled
+rule list and cannot fail to recognise a kind. "Fail closed" is the right
+instinct for a *decision*, but a client gate is not a decision — it is a
+prediction of one, and a prediction that refuses to be made must not be
+allowed to veto the decision.
+
+The last row above is why the three-valued reading matters even for a renderer
+that understands every top-level kind it is sent. Collapsing "cannot evaluate"
+into `false` makes `not` of an unknown child come out **true**, so a
+`requiredWhen` keyed on it starts demanding a field for a reason the renderer
+has just admitted it cannot judge — blocking through the back door.
+
+### Two evaluators, one corpus
+
+`x-rules` is evaluated twice in this repository, and a reader should know that
+before trusting either:
+
+| Evaluator | Where | Over what |
+|---|---|---|
+| Compiled | `morph::forms::allRulesSatisfied` (`forms/forms.hpp`) | `A::formRules`, typed nodes over decoded members |
+| Client | `testRule`/`testCondition` in `src/qt/forms/qml/DynamicForm.qml` | the emitted `x-rules` JSON over widget text |
+
+They are different code over different representations, so agreement is a
+property to be measured. It is measured by a single shared artifact —
+`src/qt/forms/tests/data/rule_corpus.json`, **one file with two readers**:
+
+- `tests/test_forms_rule_corpus.cpp` drives every row through
+  `allRulesSatisfied`;
+- `src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml` drives the same rows
+  through a real `DynamicForm`.
+
+Each row is `(schema, field state, expected verdict)`. The schemas are stored
+as **text** and parsed by the renderer exactly as an application parses
+`controller.schemasJson`, because parsing is what rounds an integer literal
+past 2^53 — a fixture built as an inline JSON object could not express that
+case at all.
+
+Three assertions are what make this a pin rather than a pair of samples, and a
+change to `x-rules` is expected to keep all three true:
+
+1. every corpus schema equals the current `schemaJson<A>()` **byte for byte**;
+2. every `kind` `detail::ruleKindName` names appears somewhere in the corpus,
+   so a seventeenth rule kind cannot join the vocabulary without rows;
+3. every kind carries **both** verdicts — a corpus whose rows all said "allow"
+   would pass against a client that never blocks anything.
+
+`visibleWhen`/`readonlyWhen` never gate submission, so their rows carry a
+presentation expectation instead of a submit verdict; only the renderer can
+assert it, since a `VisibleWhen` node's `test()` returns `true` unconditionally
+by construction.
 
 ## Computed fields
 
@@ -1557,6 +1648,21 @@ The framework reports violations and the model applies policy; the dispatch
 runners do **not** apply instance constraints, because they have no instance to
 read one from. See [instance_constraints.md](instance_constraints.md) for the
 API, the emitted keys, and the reasoning behind both of those decisions.
+
+**The shipped renderer honours the decorated values.** That is the half that
+makes decoration worth doing rather than a second opinion nobody reads:
+`DynamicForm.qml` takes `x-decimalPlaces` as the entry granularity whether it
+came from the compiled type or from a row, and refuses a `Quantity` outside
+`x-minimum`/`x-maximum` in the canonical unit, alongside the compiled
+`minimum`/`maximum` — an instance range narrows the type's, it never widens it.
+Two boundaries follow the framework's own:
+
+- **`Quantity` fields only**, matching `checkAction`. A client that gated a key
+  the model does not check would be a new divergence, not a repair of one.
+- **The client comparison is a `double` quotient of the bound's `{num,den}`**,
+  exactly like the compiled `minimum`/`maximum` beside it. The exact comparison
+  is `checkValue`'s, against a `Rational`; as everywhere else in the renderer,
+  the live gate is an approximation and the model is the floor.
 
 ## Support traits and helpers
 

@@ -87,6 +87,7 @@ add_executable(morph_tests
     test_computed_fields.cpp
     test_forms_rules.cpp
     test_forms_rule_agreement.cpp
+    test_forms_rule_corpus.cpp
     test_forms_layout.cpp
     test_forms_instance_constraints.cpp
     test_widget_hints.cpp
@@ -165,6 +166,13 @@ target_compile_definitions(morph_tests PRIVATE
     MORPH_CMAKE_VERSION_MINOR=${PROJECT_VERSION_MINOR}
     MORPH_CMAKE_VERSION_PATCH=${PROJECT_VERSION_PATCH}
 )
+
+# The shared x-rules corpus (morph#176). One file, two readers: this suite and
+# src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml, both pointed at it from
+# CMake so neither can quietly grow its own copy. It lives beside the QML half
+# because that half cannot be handed a path at runtime; this half can.
+target_compile_definitions(morph_tests PRIVATE
+    MORPH_FORMS_RULE_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/../src/qt/forms/tests/data/rule_corpus.json")
 
 target_include_directories(morph_tests PRIVATE ${CMAKE_BINARY_DIR}/generated)
 
