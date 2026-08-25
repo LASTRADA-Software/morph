@@ -55,8 +55,13 @@ struct morph::units::UnitTraits<RcUnit> {
     /// @brief Describes the corpus's single unit.
     /// @param unit The unit to describe (only one exists).
     /// @return Its ascii id, display text and default precision.
-    static constexpr morph::units::UnitMeta meta(RcUnit /*unit*/) noexcept {
-        return {.id = "money", .display = "$", .defaultDecimals = 2};
+    static constexpr morph::units::UnitMeta meta(RcUnit unit) noexcept {
+        switch (unit) {
+            case RcUnit::money:
+                return {.id = "money", .display = "$", .defaultDecimals = 2};
+            default:
+                return {.id = "?", .display = "?", .defaultDecimals = 2};
+        }
     }
 };
 
