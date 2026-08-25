@@ -284,7 +284,23 @@ protected:
     /// @param idempotencyKey Key to store.
     void setIdempotencyKey(uint64_t itemId, std::string idempotencyKey) override {
         std::scoped_lock const lock{_mtx};
-        detail::StatementGuard guard{prepare("UPDATE morph_offline_queue SET idempotency_key = ? WHERE id = ?;")};
+        // `WHERE NOT EXISTS (...)` rather than a bare UPDATE: the partial
+        // unique index `ix_queue_idem` rejects stamping a non-empty key a
+        // pending row already holds, and a bare UPDATE turned that into a
+        // thrown SqliteOfflineQueueError -- while this class's own
+        // `enqueue(payload, key)` resolves the identical conflict silently, by
+        // keeping the existing row (morph#249). Same conflict, two answers,
+        // and only one of them matched the documented dedup contract.
+        //
+        // Throwing also bought nothing. This hook is called by the *base*
+        // `IOfflineQueue::enqueue(payload, key)` default, which has already
+        // inserted the row by the time it stamps; on a conflict the row exists
+        // either way, so the throw added an exception to an outcome it could
+        // not undo. Leaving the key unset is the same end state without it.
+        detail::StatementGuard const guard{
+            prepare("UPDATE morph_offline_queue SET idempotency_key = ?1 WHERE id = ?2 "
+                    "AND (?1 = '' OR NOT EXISTS (SELECT 1 FROM morph_offline_queue "
+                    "WHERE idempotency_key = ?1 AND id <> ?2));")};
         bindText(guard.get(), 1, idempotencyKey);
         bindInt64(guard.get(), 2, static_cast<std::int64_t>(itemId));
         stepOrThrow(guard.get(), "setIdempotencyKey");
