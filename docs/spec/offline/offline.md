@@ -375,6 +375,24 @@ void submit(const MyAction& action) {
 }
 ```
 
+That free function is app-layer by design, not by omission:
+`examples/IMPLEMENTATION.md` rule 1 would otherwise keep this code inside a
+model, and
+[Disposition: app-layer by design](#disposition-app-layer-by-design-the-rule-1-carve-out)
+below is the recorded carve-out that puts it here.
+
+`SyncWorker` closes the loop on the *read path*: on reconnect it `drain()`s the
+same queue and replays each payload. The two halves share one `IOfflineQueue`
+instance (see [End-to-end integration](#end-to-end-integration)) — the
+application owns the "enqueue on failure" half, the framework owns the "drain
+and replay" half. Neither `NetworkMonitor` nor `ReconnectCoordinator` enqueues
+anything; they only *observe* and *sequence*.
+
+Because the framework never calls `enqueue`, the serialisation format is
+entirely the caller's (`QueueItem::payload` is an opaque `std::string`), and it
+is the caller's responsibility that the same format round-trips through the
+`SyncWorker::ReplayFunction`.
+
 ### Disposition: app-layer by design (the rule-1 carve-out)
 
 The example above puts domain-adjacent code in a free function at the dispatch
@@ -386,7 +404,7 @@ disposition (morph#197), so a reader who finds
 sanctioned exception rather than an oversight.
 
 **Rule 1 is not being overridden here; it fired.** Its final clause is "If
-logic can't be expressed in a model, that is a finding," and the framework's
+logic can't be expressed in a model, that is a finding," and that document's
 prime directive says the same of the framework itself. This carve-out *is*
 that finding's outcome, not an argument that the rule is wrong.
 
@@ -441,18 +459,6 @@ outbox). No framework primitive is owed yet. A third rung independently growing
 its own enqueue-on-offline path is the trigger to reopen the question of a
 framework-owned outbox dispatcher — a standing disposition must not become the
 reason a third reinvention goes unexamined.
-
-`SyncWorker` closes the loop on the *read path*: on reconnect it `drain()`s the
-same queue and replays each payload. The two halves share one `IOfflineQueue`
-instance (see [End-to-end integration](#end-to-end-integration)) — the
-application owns the "enqueue on failure" half, the framework owns the "drain
-and replay" half. Neither `NetworkMonitor` nor `ReconnectCoordinator` enqueues
-anything; they only *observe* and *sequence*.
-
-Because the framework never calls `enqueue`, the serialisation format is
-entirely the caller's (`QueueItem::payload` is an opaque `std::string`), and it
-is the caller's responsibility that the same format round-trips through the
-`SyncWorker::ReplayFunction`.
 
 ## SyncWorker
 
