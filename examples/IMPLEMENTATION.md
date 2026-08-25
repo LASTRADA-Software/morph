@@ -28,6 +28,27 @@ The user-code contract is: **you implement Models; morph exposes them.**
   plain, single-threaded model classes with typed actions — nothing
   domain-shaped may live in presenters, QML, `main()`, or free functions.
   If logic can't be expressed in a model, that is a finding.
+  - **Named carve-out: the offline write-path enqueue seam.** Deciding
+    *"the backend is unreachable — queue this action instead of sending it"*
+    is app-layer by design and sits at the dispatch site, outside any model.
+    This is not an exemption from the rule; it is the rule's last clause
+    having fired. The finding was raised
+    ([morph#197](https://github.com/LASTRADA-Software/morph/issues/197)) and
+    dispositioned as app-layer under the promotion rule above; the reasoning,
+    the boundary, and the reference shapes are in
+    [`docs/spec/offline/offline.md`](../docs/spec/offline/offline.md)
+    ("Ownership: who enqueues" → "Disposition: app-layer by design"). The
+    carve-out covers the decision to queue and the client-local bookkeeping
+    that decision needs — probe/mint-key/serialise/enqueue/queue-depth, plus
+    a per-entity local version ledger so a client's own successive offline
+    edits chain instead of colliding. Everything the queued action *means*
+    on replay — validation, authorization, dedup, conflict classification —
+    stays in the model, which replay re-dispatches through as usual. The
+    sanctioned home is a dedicated app-layer write-path class
+    (`examples/lims/include/lims/offline/field_outbox.hpp` is the reference),
+    **not** a presenter: kanban's copy in a QML bridge
+    (`examples/kanban/gui_lib/board_qml_bridge.cpp`) stands only because it
+    is transport-shaped glue under rule 2's glue justification.
 - Follow [`bank`](bank/README.md)'s established shape: `BRIDGE_REGISTER_*`
   macros in the model header so every call site sees the `ActionTraits`
   specialisation; stateful models keyed with `BRIDGE_KEY_FROM`/
