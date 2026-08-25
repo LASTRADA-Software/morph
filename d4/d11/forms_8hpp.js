@@ -52,5 +52,7 @@ var forms_8hpp =
     [ "morph::forms::checkQuantityBounds", "d4/d11/forms_8hpp.html#a85e1fc53438e4be699176ce06cb74cdf", null ],
     [ "morph::forms::enforceQuantityBounds", "d4/d11/forms_8hpp.html#a2efd8d0c4e186eab6d6798766ce4c530", null ],
     [ "morph::forms::allRequiredEngaged", "d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601", null ],
-    [ "morph::forms::schemaJson", "d4/d11/forms_8hpp.html#a0a0fb2658d155464d4688af38f09a25e", null ]
+    [ "morph::forms::schemaJson", "d4/d11/forms_8hpp.html#a0a0fb2658d155464d4688af38f09a25e", null ],
+    [ "morph::forms::kExactDoubleLimit", "d4/d11/forms_8hpp.html#aade4a42e3eb13935f956624311dddde0", null ],
+    [ "morph::forms::kExactDoubleLimitSigned", "d4/d11/forms_8hpp.html#a1874a08196a685c11f1e529ed1066ecf", null ]
 ];

@@ -142,7 +142,7 @@ Public Member Functions</h2></td></tr>
 <p>The one contradiction that is decidable from the two halves alone: a rule that <b>caps</b> how many of the fields it ranges over may be engaged at once (<span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#ad4cad9c649a70967d28e838b9b47bd1a" title="Builds an ExactlyOneOf&lt;A, Vs...&gt; rule over fields.">exactlyOneOf</a></span>, <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a818f041020043b4ec157170a31fd2f00" title="Builds a MutuallyExclusive&lt;A, Vs...&gt; rule over fields.">mutuallyExclusive</a></span> — never <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a12e5ed5f38f22a7940d4230b76c30f51" title="Builds an AtLeastOneOf&lt;A, Vs...&gt; rule over fields.">atLeastOneOf</a></span>, which is a floor and can always be met by engaging everything) ranging over two or more fields that <span class="tt">required</span> also demands. <span class="tt">required</span> says "fill in both"; the rule says "at most one"; the form is dead on arrival.</p>
 <p>This is a <b>programming error in the action's declaration</b>, not a runtime condition — hence <span class="tt">std::logic_error</span>, and hence a throw rather than the silent tolerance schema generation extends to a <span class="tt">formLayout</span> entry naming an unknown field. The fix is to name the rule's fields in <span class="tt">A::optionalFields</span> (the rule is then the only gate on them) or to drop the rule. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01607">1607</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01629">1629</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a665b0ba4d4d807dcf0fb8f5de5a60534" name="a665b0ba4d4d807dcf0fb8f5de5a60534"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a665b0ba4d4d807dcf0fb8f5de5a60534">&#9670;&#160;</a></span>UnsatisfiableFormError()</h2>
@@ -186,7 +186,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01616">1616</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01638">1638</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
