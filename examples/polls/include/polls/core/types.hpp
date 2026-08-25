@@ -6,12 +6,29 @@
 #include <glaze/glaze.hpp>
 #include <string>
 
+#include "errors.hpp"
+
 /// @file
 /// Polls' strong id types and constants. `OptionId` and `PollEventId` wrap
-/// auto-incrementing integers (SQLite row ids), following `BookmarkId`'s
-/// pattern. `PollId` itself is not a strong type (see Global Constraints),
-/// but `kTokenBytes` is shared by implementations and tests to ensure
-/// consistency on generated token lengths.
+/// auto-incrementing integers (SQLite row ids). `PollId` itself is not a
+/// strong type (see Global Constraints), but `kTokenBytes` is shared by
+/// implementations and tests to ensure consistency on generated token lengths.
+///
+/// These two use a **zero sentinel**, not `BookmarkId`'s
+/// `std::optional`-backed shape: `value == 0` *is* the "not entered" state.
+/// That is deliberate -- neither is ever handed a nullable payload to adopt,
+/// and `PollEventId{}` is the natural spelling of "no cursor yet, start from
+/// the beginning" for `GetEventsSince` -- but it carries a constraint the
+/// type cannot enforce on its own: **an id of `0` is unrepresentable**.
+/// Construct one and it reports `hasValue() == false` and behaves as absent
+/// everywhere downstream, so a real record would read as "no record"
+/// (morph#215).
+///
+/// The constraint holds because both ids come from SQLite row ids, which
+/// start at 1. `fromRowId()` is the enforcement: every conversion from a
+/// stored row id goes through it, and it rejects `0` loudly rather than
+/// letting it collapse into the empty state. Use it instead of constructing
+/// these ids directly from database values.
 
 namespace polls {
 
@@ -47,6 +64,27 @@ struct OptionId {
 
     /// @brief Equality on the payload.
     [[nodiscard]] constexpr bool operator==(const OptionId&) const = default;
+
+    /// @brief Wraps a stored row id, rejecting the one value this type cannot
+    ///        represent.
+    ///
+    /// `0` is this type's "not entered" sentinel, so an id of `0` would arrive
+    /// as *absent* and a real option would read as "no option selected"
+    /// (morph#215). SQLite row ids start at 1, so this never fires in
+    /// practice -- it exists so that a seeded row, a migrated dataset, an
+    /// externally supplied key, or a sequence reset fails loudly at the
+    /// boundary instead of collapsing silently one layer below the surface.
+    /// @param rowId Stored row id; must be non-zero.
+    /// @return An engaged `OptionId` wrapping @p rowId.
+    /// @throws PollsError if @p rowId is `0`.
+    [[nodiscard]] static OptionId fromRowId(std::int64_t rowId) {
+        if (rowId == 0) {
+            throw PollsError{
+                "OptionId::fromRowId: an option row id of 0 is unrepresentable -- 0 is this "
+                "type's \"not entered\" sentinel (morph#215)"};
+        }
+        return OptionId{.value = rowId};
+    }
 };
 
 /// @brief Strong identifier for one row in the `poll_events` append-only log.
@@ -72,6 +110,28 @@ struct PollEventId {
 
     /// @brief Equality on the payload.
     [[nodiscard]] constexpr bool operator==(const PollEventId&) const = default;
+
+    /// @brief Wraps a stored row id, rejecting the one value this type cannot
+    ///        represent.
+    ///
+    /// `0` is this type's "not entered" sentinel -- the spelling
+    /// `GetEventsSince` uses for "no cursor yet, replay from the beginning" --
+    /// so an event row id of `0` would arrive as *absent* and the reader would
+    /// silently rewind to the start of the log (morph#215). SQLite row ids
+    /// start at 1, so this never fires in practice; it exists so that a
+    /// seeded row, a migrated dataset, or a sequence reset fails loudly at the
+    /// boundary rather than collapsing silently.
+    /// @param rowId Stored row id; must be non-zero.
+    /// @return An engaged `PollEventId` wrapping @p rowId.
+    /// @throws PollsError if @p rowId is `0`.
+    [[nodiscard]] static PollEventId fromRowId(std::int64_t rowId) {
+        if (rowId == 0) {
+            throw PollsError{
+                "PollEventId::fromRowId: an event row id of 0 is unrepresentable -- 0 is this "
+                "type's \"not entered\" sentinel (morph#215)"};
+        }
+        return PollEventId{.value = rowId};
+    }
 };
 
 /// @brief One participant's answer for one option.

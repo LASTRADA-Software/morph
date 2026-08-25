@@ -222,7 +222,7 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
     result.title = textOf(poll.title.Value());
     result.finalized = poll.finalized.Value() ? Finalized::Yes : Finalized::No;
     if (result.finalized == Finalized::Yes) {
-        result.finalizedOptionId = OptionId{.value = poll.finalizedOptionId.Value()};
+        result.finalizedOptionId = OptionId::fromRowId(poll.finalizedOptionId.Value());
     }
 
     const std::uint64_t pollDbId = poll.id.Value();
@@ -235,7 +235,7 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
                      .All();
     for (const auto& opt : options) {
         PollOptionView view;
-        view.id = OptionId{.value = static_cast<std::int64_t>(opt.id.Value())};
+        view.id = OptionId::fromRowId(static_cast<std::int64_t>(opt.id.Value()));
         view.label = textOf(opt.label.Value());
         // Explicit zero, not default-constructed: a default `Count{}` is
         // Quantity's *empty* state (no payload), and Quantity arithmetic
@@ -285,7 +285,7 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
                                    ::Lightweight::SqlResultOrdering::DESCENDING)
                           .First();
     result.lastEventId =
-        lastEvent ? PollEventId{.value = static_cast<std::int64_t>(lastEvent->id.Value())} : PollEventId{};
+        lastEvent ? PollEventId::fromRowId(static_cast<std::int64_t>(lastEvent->id.Value())) : PollEventId{};
     return result;
 }
 
@@ -463,8 +463,8 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     std::vector<OneVote> previousVotes;
     previousVotes.reserve(priorVotes.size());
     for (const auto& v : priorVotes) {
-        previousVotes.push_back({.optionId = OptionId{.value = static_cast<std::int64_t>(v.option.Value())},
-                                  .choice = static_cast<VoteChoice>(v.choice.Value())});
+        previousVotes.push_back({.optionId = OptionId::fromRowId(static_cast<std::int64_t>(v.option.Value())),
+                                 .choice = static_cast<VoteChoice>(v.choice.Value())});
     }
     const std::string previousVotesJson = encodeVotesJson(previousVotes);
 
@@ -730,9 +730,9 @@ GetEventsSinceResult PollModel::execute(const GetEventsSince& action) {
     GetEventsSinceResult result;
     result.events.reserve(rows.size());
     for (const auto& row : rows) {
-        result.events.push_back({.id = PollEventId{.value = static_cast<std::int64_t>(row.id.Value())},
-                                  .kind = textOf(row.kind.Value()),
-                                  .summary = textOf(row.summary.Value())});
+        result.events.push_back({.id = PollEventId::fromRowId(static_cast<std::int64_t>(row.id.Value())),
+                                 .kind = textOf(row.kind.Value()),
+                                 .summary = textOf(row.summary.Value())});
     }
     return result;
 }

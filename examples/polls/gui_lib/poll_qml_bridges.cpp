@@ -77,6 +77,12 @@ using ::morph::ladder::gui::idNumber;
     out.reserve(static_cast<std::size_t>(votes.size()));
     for (const QVariant& entry : votes) {
         const QVariantMap row = entry.toMap();
+        // Deliberately not `OptionId::fromRowId`: this is QML-supplied input,
+        // not a stored row id. A missing or non-numeric `optionId` yields 0
+        // from toLongLong(), which is exactly the "not entered" state the
+        // action's validate() is there to reject -- a clean ValidationError,
+        // rather than the exception fromRowId raises for a corrupt *stored*
+        // id (morph#215).
         out.push_back(OneVote{.optionId = OptionId{.value = row.value(QStringLiteral("optionId")).toLongLong()},
                               .choice = parseChoice(row.value(QStringLiteral("choice")).toString())});
     }

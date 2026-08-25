@@ -7,6 +7,8 @@
 #include <optional>
 #include <string_view>
 
+#include "errors.hpp"
+
 /// @file
 /// Kanban's strong id types and the `Role` enum. Every id wraps an
 /// auto-incrementing SQLite row id -- `BookmarkId`'s shape
@@ -97,11 +99,37 @@ enum class Role : std::uint8_t { Viewer, Member, Manager };
 ///        log. Zero-sentinel shape (not `fromOptional`'s optional shape) --
 ///        it is always looked up already-assigned, per `polls::PollEventId`'s
 ///        identical precedent.
+///
+/// The shape carries a constraint the type cannot enforce on its own: because
+/// `value == 0` *is* the "not entered" state, **an event id of `0` is
+/// unrepresentable** -- construct one and it reports `hasValue() == false`,
+/// so a real event would read as "no event" (morph#215). The constraint holds
+/// because these ids are SQLite row ids, which start at 1. `fromRowId()` is
+/// the enforcement; use it for every conversion from a stored value.
 struct BoardEventId {
     std::int64_t value{0};
     [[nodiscard]] constexpr bool hasValue() const { return value != 0; }
     [[nodiscard]] constexpr std::int64_t operator*() const { return value; }
     [[nodiscard]] constexpr bool operator==(const BoardEventId&) const = default;
+
+    /// @brief Wraps a stored row id, rejecting the one value this type cannot
+    ///        represent.
+    ///
+    /// Never fires in practice (row ids start at 1); it exists so a seeded
+    /// row, a migrated dataset, or a sequence reset fails loudly at the
+    /// boundary rather than collapsing into the empty state one layer below
+    /// the surface, where no conversion helper can restore the distinction.
+    /// @param rowId Stored row id; must be non-zero.
+    /// @return An engaged `BoardEventId` wrapping @p rowId.
+    /// @throws KanbanError if @p rowId is `0`.
+    [[nodiscard]] static BoardEventId fromRowId(std::int64_t rowId) {
+        if (rowId == 0) {
+            throw KanbanError{
+                "BoardEventId::fromRowId: an event row id of 0 is unrepresentable -- 0 is this "
+                "type's \"not entered\" sentinel (morph#215)"};
+        }
+        return BoardEventId{.value = rowId};
+    }
 };
 
 }  // namespace kanban
