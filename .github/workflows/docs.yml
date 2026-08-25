@@ -35,7 +35,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          bash scripts/add_apt_repository_retrying.sh ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
           sudo apt-get install -y cmake ninja-build g++-15
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15

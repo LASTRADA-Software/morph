@@ -135,7 +135,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          bash scripts/add_apt_repository_retrying.sh ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
           sudo apt-get install -y gcc-15 g++-15 ninja-build catch2
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
@@ -580,7 +580,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          bash scripts/add_apt_repository_retrying.sh ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
           sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
             qt6-base-dev qt6-websockets-dev qt6-tools-dev libgl1-mesa-dev
@@ -694,7 +694,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          bash scripts/add_apt_repository_retrying.sh ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
           # unixodbc-dev + libsqliteodbc: the application ladder fetches the
           # Lightweight ORM, whose CMake runs
@@ -1033,7 +1033,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          bash scripts/add_apt_repository_retrying.sh ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
           # unixodbc-dev + libsqliteodbc: the application ladder (enabled in
           # the configure step below) fetches the Lightweight ORM, whose CMake
@@ -1203,7 +1203,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          bash scripts/add_apt_repository_retrying.sh ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
           sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 valgrind
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
@@ -1464,6 +1464,21 @@ jobs:
 
       - name: Check [[deprecated]] markers cite a replacement and removal version
         run: bash scripts/check_deprecated_markers.sh include/morph
+
+  # ── Toolchain-PPA retry helper ─────────────────────────────────────────
+  #
+  # The helper six install steps depend on, tested on its own. A retry wrapper
+  # nobody tests is worth less than no wrapper: it looks like resilience while
+  # possibly retrying nothing, and the only way to find out is during the very
+  # outage it exists to survive.
+  ppa-retry-lint:
+    name: Self-test the toolchain-PPA retry helper
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test scripts/add_apt_repository_retrying.sh
+        run: bash scripts/test_add_apt_repository_retrying.sh
 
   # ── Test file-scope type name collision lint ───────────────────────────
   test-type-name-lint:
