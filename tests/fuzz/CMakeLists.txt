@@ -2,10 +2,18 @@
 # Requires Clang (libFuzzer ships with its runtime via -fsanitize=fuzzer); not
 # built unless MORPH_BUILD_FUZZERS=ON, so the default build never sees these
 # targets. See docs/spec/testing_strategy.md.
+#
+# "Clang" here excludes "AppleClang" on purpose — unlike the warning gate in
+# cmake/compiler_options.cmake, which had to be widened to cover both (issue
+# #298). Xcode's toolchain accepts -fsanitize=fuzzer on the compile line but
+# ships no libFuzzer runtime, so the link fails with
+# "library 'libclang_rt.fuzzer_osx.a' not found". Failing at configure time
+# with the message below is the better error.
 if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     message(FATAL_ERROR
-        "MORPH_BUILD_FUZZERS=ON requires Clang (libFuzzer via -fsanitize=fuzzer); "
-        "current compiler is ${CMAKE_CXX_COMPILER_ID}. Reconfigure with Clang "
+        "MORPH_BUILD_FUZZERS=ON requires upstream Clang (libFuzzer via "
+        "-fsanitize=fuzzer; Apple's Clang does not ship its runtime); current "
+        "compiler is ${CMAKE_CXX_COMPILER_ID}. Reconfigure with Clang "
         "(cmake/llvm-toolchain.cmake) or unset MORPH_BUILD_FUZZERS.")
 endif()
 
