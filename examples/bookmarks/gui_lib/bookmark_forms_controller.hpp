@@ -67,15 +67,17 @@ namespace bookmarks::gui {
 /// server-fetched choice. Adding an unused `fetchOptions()` would be a stub
 /// with nothing to call it.
 ///
-/// @par Known renderer limitation: array-typed members
+/// @par Array-typed members
 /// `CreateBookmark::tags`/`EditBookmark::tags` are `std::vector<std::string>`
-/// and reach `DynamicForm` as JSON-Schema `array` fields, for which the
-/// shipped renderer has no control — it falls back to a plain text field
-/// whose contents encode as a JSON *string*, which the server then rejects.
-/// Both are optional members, so leaving them blank is well-defined and the
-/// rest of each form works; typing into one produces a decode error in the
-/// status line rather than silent corruption. Stated here rather than
-/// smoothed over — see `examples/bookmarks/README.md`'s known-gaps entry.
+/// and reach `DynamicForm` as `{"type":"array","items":{"type":"string"}}`.
+/// The shipped renderer gives that shape a dedicated comma-separated control
+/// (`docs/spec/forms/forms.md`, "Array fields") and encodes it as a genuine
+/// JSON array, so tagging from the create and edit forms works with no
+/// special-casing here: `"work, home"` submits as `["work","home"]`.
+/// Array-of-string is the fully supported case, which is the only array shape
+/// the forms this controller serves declare — `BulkEdit`'s array of
+/// `BookmarkId` is a different shape, and `bookmark_schemas.hpp` explains why
+/// it is not one of them.
 class BookmarkFormsController {
 public:
     /// @param bridge      The shared `Bridge` `AppContext` owns.

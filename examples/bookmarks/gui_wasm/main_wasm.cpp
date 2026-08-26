@@ -81,13 +81,21 @@ int main(int argc, char** argv) {
     std::unique_ptr<bookmarks::gui::TagBridge> tagBridge;
     std::unique_ptr<bookmarks::gui::SharedFeedBridge> feedBridge;
 
-    // Every handler is built from inside onReady(), never before it -- a
-    // Remote context is not usable the line after its constructor returns,
-    // per AppContext's own readiness contract. Identical to gui/main.cpp's
-    // --server path, including building all four adapters up front rather
-    // than tearing one down and rebuilding it around login -- see that
-    // file's identical comment for why (a since-fixed deregister-callId
-    // race this shape was never actually exposed to anyway).
+    // Every handler is built from inside onReady(), never before it. A
+    // registration issued before the socket is up does not fail permanently:
+    // `Remote` mode sets `asyncRegistrationEnabled`, and
+    // `QtWebSocketBackend::registerModelAsync()` queues such a registration and
+    // retries it once the connection comes up (`docs/spec/core/backend.md`,
+    // "Asynchronous registration"). Deferring to onReady() is kept because it
+    // is simpler to reason about than the pre-connect queue -- see
+    // `examples/common/gui/app_context.hpp`'s "Readiness contract". What *is*
+    // still a hard WASM constraint is how readiness is detected: AppContext
+    // uses `setConnectHandler`, never `waitForConnected()`, which nests an
+    // event loop and hangs the page. Identical to gui/main.cpp's --server
+    // path, including building all four adapters up front rather than tearing
+    // one down and rebuilding it around login -- see that file's identical
+    // comment for why (a since-fixed deregister-callId race this shape was
+    // never actually exposed to anyway).
     ctx.onReady([&] {
         formsBridge = std::make_unique<bookmarks::gui::FormsBridge>(ctx.bridge(), ctx.executor());
         bookmarkBridge = std::make_unique<bookmarks::gui::BookmarkBridge>(ctx.bridge(), ctx.executor());

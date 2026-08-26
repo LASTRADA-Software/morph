@@ -3,12 +3,13 @@
 **Status: shipped** — every rung-2 task is complete; see
 [Definition of done](#definition-of-done) for what that does and does not
 mean, and ["The client, and its known gaps"](#the-client-and-its-known-gaps--stated-rather-than-smoothed-over)
-for what the shipped client cannot reach (tagging and pagination are not
-reachable from the GUI; the native stack is verified end to end, the WASM
-client is written and CI-gated but has never been compiled here). A
-multi-user bookmark manager: save URLs, tag them, search, bulk-edit,
-archive, share with other users. The first "small but real" app: several
-related entities, real authorization, and the first background jobs.
+for what the shipped client cannot reach (pagination is not reachable from the
+GUI, and a fetched title only appears on a manual refresh; the native stack is
+verified end to end, the WASM client is written and CI-gated but has never
+been compiled here). A multi-user bookmark manager: save URLs, tag them,
+search, bulk-edit, archive, share with other users. The first "small but real"
+app: several related entities, real authorization, and the first background
+jobs.
 
 ## Running it
 
@@ -132,36 +133,71 @@ Actions, in build order:
   `Bridge::setDefaultSession()`. Its calls then authenticate and authorize
   exactly like a real user's — fully auditable in the journal via
   `session::current()->principal` inside the model — with zero framework
-  changes. `ConnectionId 0` (`SimulatedRemoteBackend`'s calls are always
-  connection-unscoped, so nothing it registers is ever reclaimed by
-  `closeConnection`) is not a new problem: it is the same manual
-  lifetime-ownership discipline `App`'s shutdown-drain contract already
-  established in rung 1, reused verbatim. The GUI sees results on a later
-  poll: this rung's DoD includes a **minimal `GetChangesSince` poll action**
-  as the event-pattern preview (rung 3 formalizes the full event-queue
-  design) — there is no existing polling/event-sequencing precedent
-  anywhere in the framework to reuse; this rung builds it from a
-  `ChangesCursor` query (a millisecond timestamp paired with a same-instant
-  id tie-break, not a bare `Timestamp` — issue #43's fix for the boundary
-  case a timestamp-only cursor can silently drop), deliberately minimal
-  otherwise.
+  changes. This rung's worker constructs its backend with the one-argument
+  `SimulatedRemoteBackend(RemoteServer&)`, so its calls carry `ConnectionId 0`
+  — the server's unscoped sentinel — and nothing it registers is ever
+  reclaimed by `closeConnection`. That is this rung's *choice*, not a
+  framework limitation: `SimulatedRemoteBackend` also ships a
+  `(RemoteServer&, ConnectionId)` constructor taking a scope from
+  `RemoteServer::openConnection()`, and a scoped worker's registrations would
+  be reclaimed exactly as a dropped socket's are
+  (`examples/TESTING.md`'s closed-gap list, entry 5). The unscoped shape is
+  kept for two reasons. It needs no reclamation to be correct: the worker's
+  handlers are created per pass and released only once every dispatch that
+  pass issued has settled, and `App`'s shutdown-drain contract — the same
+  manual lifetime-ownership discipline rung 1 established, reused verbatim —
+  is what ends the last of them. And a scope has nowhere correct to be closed
+  here: `closeConnection` reclaims every instance registered under it, so
+  calling it from `~App`'s *body* would run while `_fetchBridge` and any
+  outstanding pass are still alive — the same "model not found" race
+  `fetchMetadataOnce`'s own comment exists to close — while the point where it
+  would be safe (after `_fetchBridge`'s destruction) is not reachable from a
+  destructor body at all. Scoping the worker is therefore a change to this
+  class's teardown design, not a constructor swap.
+
+  The GUI sees results on a later poll: this rung's DoD includes a **minimal
+  `GetChangesSince` poll action** as the event-pattern preview (rung 3
+  formalizes the full event-queue design) — there is no existing
+  polling/event-sequencing precedent anywhere in the framework to reuse; this
+  rung builds it from a `ChangesCursor` query (a millisecond timestamp paired
+  with a same-instant id tie-break, not a bare `Timestamp` — issue #43's fix
+  for the boundary case a timestamp-only cursor can silently drop),
+  deliberately minimal otherwise. The action exists and is tested; the shipped
+  client does not dispatch it (see the client-gaps list).
 - **Journal**: tag renames and bulk edits give the first multi-row entries.
   Two separate decisions, both resolved:
-  (a) **store/log atomicity — split by blast radius.** `BulkEdit` and tag
-  rename/merge (the actions that touch more than one row) opt into
-  `IModelHolder::setOutboxManaged(true)` + `journal::OutboxRelay`, following
-  `examples/concepts/journal_and_outbox.cpp`'s worked pattern (the only
-  existing consumer of this mechanism anywhere in the repo — rung 0/1 and
-  bank never use it): the model writes its own outbox row inside the same
-  `SqlTransaction` as the multi-row mutation, and a relay pass drains it into
-  the durable `IActionLog` separately, so a crash mid-mutation can never
-  leave the store *and* the journal disagreeing about a partially-applied
-  bulk change. Plain single-row bookmark CRUD (create/edit/archive/delete)
-  keeps the framework's default two-independent-write behavior — the same
-  choice rung 1 made for `PasteModel`, but only ever *implicitly*; here it is
-  explicit: a crash between the store commit and the journal append can lose
-  that one action's journal entry, but can never corrupt the store, and a
-  single-row loss carries none of a partially-applied bulk edit's ambiguity.
+  (a) **store/log atomicity — split by blast radius.** `BulkEdit`
+  (`BookmarkModel`) and `MergeTags` (`TagModel`) are the two actions that
+  mutate more than one row *and* need the journal entry to be atomic with the
+  mutation, so each writes its own `bookmark_outbox` row inside the same
+  `SqlTransaction` as the mutation, and `journal::OutboxRelay` drains that
+  table into the durable `IActionLog` in a separate pass
+  (`App::relayOutboxOnce`). A crash mid-mutation can therefore never leave the
+  store *and* the journal disagreeing about a partially-applied bulk change.
+  `examples/concepts/journal_and_outbox.cpp` is the worked pattern this
+  follows, and remains the repo's only other consumer of `OutboxRelay`.
+
+  The **opt-out mechanism is per action, not per instance**: both are
+  registered `Loggable::No` (`models/bookmark_model.hpp`,
+  `models/tag_model.hpp`), which suppresses the framework's own auto-append
+  for exactly those two action types so it cannot double-log alongside the
+  model's outbox write. The framework's other opt-out,
+  `IModelHolder::setOutboxManaged(true)`, is not used here and would be the
+  wrong tool: it is a property of a model *instance*, so it silences
+  `recordIfAttached` for **every** action that instance serves
+  (`include/morph/core/model.hpp`) — including the single-row CRUD that
+  deliberately keeps the default. Per-action `Loggable::No` is the finer
+  instrument, and it is the one this split needs.
+
+  `RenameTag` is **not** outbox-managed and is registered plain-loggable: it
+  updates one row (`src/models/tag_model.cpp`) and writes no outbox row at
+  all. It sits with the plain single-row bookmark CRUD
+  (create/edit/archive/delete), which keeps the framework's default
+  two-independent-write behavior — the same choice rung 1 made for
+  `PasteModel`, but only ever *implicitly*; here it is explicit: a crash
+  between the store commit and the journal append can lose that one action's
+  journal entry, but can never corrupt the store, and a single-row loss
+  carries none of a partially-applied bulk edit's ambiguity.
   (b) **Undo: no generic undo**, consistent with the ladder-wide position
   [`LADDER.md`](../LADDER.md)'s "Journal honesty" section already recorded at
   rung 1 — `journal::undoLast()` returns a *detached* holder with no API to
@@ -183,18 +219,19 @@ resolve in writing:
   plain** — no `BRIDGE_MODEL_KEY`/`AllowShared` anywhere in this rung.
   The original plan was framework-`shared` instances "keyed by principal,"
   with ownership enforced through `authorizeInstance`; that design does not
-  work. `include/morph/core/remote.hpp:800` —
+  work. `RemoteServer::acquireSharedInstance()`
+  (`include/morph/core/remote.hpp`) records every shared instance as
   `_owners[fresh] = std::string{};  // shared instances are ownerless, by
-  design` — inside `RemoteServer::acquireSharedInstance()`, with the
-  surrounding doc comment (`remote.hpp:714-722`) explaining why: a shared
-  instance's owner is *always* recorded empty, specifically so
-  `authorizeInstance`'s `ownerPrincipal == ctx.principal` check does not
-  reject the second, third, ... client who attaches to it. That makes the
-  ownership check a **no-op** for any `AllowShared` model — exactly
-  backwards from what per-user ownership needs. The mechanism that actually
-  records a real owner is *plain* (non-shared) registration:
-  `remote.hpp:962-966,1011` stamps `_owners[mid] =
-  std::move(env.session.principal)` from the verified, authenticated caller.
+  design`, and its own doc comment says why: a shared instance's owner is
+  *always* recorded empty, specifically so `authorizeInstance`'s
+  `ownerPrincipal == ctx.principal` check does not reject the second,
+  third, ... client who attaches to it. That makes the ownership check a
+  **no-op** for any `AllowShared` model — exactly backwards from what per-user
+  ownership needs. The mechanism that actually records a real owner is *plain*
+  (non-shared) registration: the `register` branch of
+  `RemoteServer::dispatchMessage()` stamps
+  `_owners[mid] = std::move(env.session.principal)` from the verified,
+  authenticated caller.
   So `BookmarkModel`/`TagModel` are registered plain, exactly like
   `pastebin::PasteModel` — each client's own `register` call gets its own
   fresh instance, and `authorizeInstance` genuinely denies a different
@@ -342,8 +379,11 @@ source and test entities, alongside the `examples/pastebin`/
   actually protects one user's data from another's, since instance-level
   ownership alone was never the layer that could.
 - Metadata auto-fetch demonstrably running as a background job: bookmark
-  appears immediately; title/favicon arrive via the minimal
-  `GetChangesSince` poll (the rung-3 preview).
+  appears immediately; title/favicon arrive later, and the minimal
+  `GetChangesSince` poll action (the rung-3 preview) is what a client asks for
+  them with. This criterion is met at the model and presenter level, where
+  `GetChangesSince` is implemented, tested and exposed. The **shipped client
+  does not dispatch it** — see the client-gaps list below.
 - Bulk edit is atomic under injected mid-batch failure.
 - The background-job design record (internal-client vs. framework seam,
   service principal, journaling of job mutations) written in this README.
@@ -402,8 +442,13 @@ The desktop client (`gui/`, `gui_lib/`) is schema-driven throughout
 `ImportBookmarks`, `RenameTag` and `MergeTags` all render from
 `morph::forms::schemaJson<A>()` through the shipped `MorphForms`
 `DynamicForm`, including the login screen — there is **no hand-built username
-field**, and no hand-built input widget anywhere. The one non-form input on
-the whole screen is the per-row selection checkbox, which types nothing.
+field**, and no hand-built input widget anywhere. Each of the six declares
+`explicitSubmit = true`, so its schema carries `"x-submitMode": "explicit"`
+and the renderer supplies its own gated Submit button
+(`docs/spec/forms/forms.md`, "Explicit submit mode"): there is no hand-built
+submit button either, and every form is bound to the live controller. The one
+non-form input on the whole screen is the per-row selection checkbox, which
+types nothing.
 
 Two pieces of glue carry their own written justification, per rule 2's "(b)
 pure glue with no domain logic" clause:
@@ -425,27 +470,39 @@ pure glue with no domain logic" clause:
 
 Known gaps:
 
-- ~~`DynamicForm` has no control for a JSON `array` field.`~~ **Fixed
-  framework-side.** `CreateBookmark::tags`/`EditBookmark::tags` are
-  `std::vector<std::string>`, reaching the renderer as
-  `{"type":"array","items":{"type":"string"}}`. `DynamicForm` now renders a
-  dedicated comma-separated-with-validation control for exactly this shape
-  (`src/qt/forms/qml/DynamicForm.qml`'s `isArray` field descriptor and
-  `fieldJsonLiteral`/`arrayJsonLiteral`, covered by
+- **Array fields are typed as strings, whatever the schema's `items` says.**
+  `DynamicForm` renders a JSON `array` field with a dedicated
+  comma-separated-with-validation control (`src/qt/forms/qml/DynamicForm.qml`'s
+  `isArray` descriptor and `fieldJsonLiteral`/`arrayJsonLiteral`, covered by
   `src/qt/forms/tests/tst_DynamicFormArrayField.qml`) and encodes it as a
-  genuine JSON array literal, not a stringified one — the server-rejection
-  failure mode this bullet used to describe no longer applies. Neither
-  `createForm` nor `editForm` in `BookmarkListView.qml` special-cases `tags`
-  (both render every field the schema declares), so tagging from the create
-  and edit forms works without any change on this rung's side — the fix
-  landed transparently underneath it. Not independently re-verified end to
-  end against this rung's own `MORPH_BUILD_FORMS_QML` build (not enabled in
-  every configuration), but the schema shape is identical to the one the
-  framework test above exercises and this rung's forms apply no exclusion.
-- **`BulkEdit` is not a form**, for that reason: its one required member is
+  genuine JSON array literal, but every entry in that array is a JSON
+  **string**. Array-of-string is therefore the fully supported case and
+  array-of-anything-else is not (`docs/spec/forms/forms.md`, "Array fields").
+  `CreateBookmark::tags`/`EditBookmark::tags` are `std::vector<std::string>`,
+  reaching the renderer as `{"type":"array","items":{"type":"string"}}` —
+  exactly the supported shape — so tagging works from the create and edit
+  forms with no special-casing in `BookmarkListView.qml`, which renders every
+  field the schema declares. Not independently re-verified end to end against
+  this rung's own `MORPH_BUILD_FORMS_QML` build, but the schema shape is
+  identical to the one the framework test above exercises and this rung's
+  forms apply no exclusion.
+- **`BulkEdit` is not a form**, and the reason is the *typing* half above
+  rather than a missing control: its one required member is
+  `std::vector<BookmarkId>`, whose schema is
+  `{"type":"array","items":{"$ref":"#/$defs/BookmarkId"}}` with `BookmarkId`
+  defined as `{"type":["integer","null"], …}`. Typing `1, 2` would submit
+  `["1","2"]`, an array of strings that does not decode back into
   `std::vector<BookmarkId>`. The GUI drives it from the list's own
   multi-selection through `BookmarkBridge::bulkArchive` instead, where no
   typing is involved.
+- **The shipped client never polls for background-job results.** The metadata
+  worker fills a title in some seconds after a bookmark is created, and
+  `GetChangesSince` is the action a client asks for that with — implemented in
+  `BookmarkModel`, exposed as `BookmarkPresenter::getChangesSince`, and tested
+  at both levels. `BookmarkBridge` deliberately does not relay it
+  (`gui_lib/bookmark_qml_bridges.hpp`) and no QML binding asks for it, so a
+  fetched title appears only on the next manual **Refresh**. There is no
+  `Timer` anywhere in this rung's QML.
 - **Six model instances per client, not four.** `app.cpp`'s `kMaxLiveModels`
   comment budgets "roughly one instance per model type it uses (four in this
   rung)". The shipped client registers six: the forms controller owns an

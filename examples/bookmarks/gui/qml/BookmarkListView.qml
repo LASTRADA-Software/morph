@@ -13,8 +13,9 @@
 //   * every error string shown is the model's own `what()`;
 //   * the one non-form input is the per-row selection checkbox, which types
 //     nothing — it feeds BulkEdit's id list, and BulkEdit cannot be a
-//     schema-driven form because its required `ids` member is a JSON array
-//     the shipped renderer has no control for (README, known gaps).
+//     schema-driven form because its required `ids` member is an array of
+//     BookmarkId and the renderer's array control encodes every entry as a
+//     JSON string (gui_lib/bookmark_schemas.hpp; README, known gaps).
 //
 // The three lists below are plain Qt Quick `ListView`s, not morph::forms'
 // own `CollectionView`, and that is a deliberate choice rather than an

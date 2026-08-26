@@ -245,8 +245,10 @@ public:
     ///        `BulkEdit` (all-or-nothing, README).
     ///
     /// Driven from the list's multi-selection rather than a form: `BulkEdit`'s
-    /// required `ids` member is a JSON array, which the shipped `DynamicForm`
-    /// has no control for — see `BookmarkFormsController`'s class comment. No
+    /// required `ids` member is an array of `BookmarkId`, and the shipped
+    /// `DynamicForm`'s array control encodes every entry as a JSON string
+    /// whatever the schema's `items` says — see `bookmark_schemas.hpp` for the
+    /// exact schema and why array-of-integer is the case it cannot serve. No
     /// text is typed here at all; the ids come from rows the user ticked.
     /// @param ids     The bookmarks to affect, as list-row ids.
     /// @param archive `true` to archive, `false` to unarchive.
