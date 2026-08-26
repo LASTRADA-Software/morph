@@ -466,6 +466,13 @@ renderer's own `DynamicForm.qml`, which `QmlSurfaceAudit` does not scan, so
 `tests/test_poll_qml_bridges.cpp` records a single `allowUnbound` exemption
 saying exactly that.
 
+Observed, not inferred: `tests/test_gui_qml_smoke.cpp`'s "VoteView's three
+schema-driven forms render the shipped renderer's own Submit button" loads
+`VoteView` with the real schema document and counts three `submitButton`
+objects in the resulting item tree — with `pollBridge` still null, so what it
+counts is what the renderer built. Dropping `explicitSubmit` from any one
+action turns that into `2 == 3`.
+
 **No `gui/main.cpp`, still.** Task 16's brief scoped the desktop client's
 entry point out (`gui/*.cpp` is absent from its file list), no later task in
 this rung's plan added one, and the branch's final whole-branch review chose
