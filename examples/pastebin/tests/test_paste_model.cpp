@@ -1587,8 +1587,11 @@ TEST_CASE("hello negotiates the protocol version the server is built against", "
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("GetPaste surfaces a real SQLITE_BUSY as a thrown error, not as silent data loss", "[pastebin][model]") {
-    // Finding 018's designated resolution for the busy class: a genuine
-    // competing write transaction on a second connection, not a mock. The
+    // The designated resolution for the busy class, per the README's
+    // "Store-error branch coverage" bullet: a genuine competing write
+    // transaction on a second connection (`testkit/db_busy_fixture.hpp`),
+    // not a mock — `db_fault_fixture.hpp`'s `SqlScopedLock` contention
+    // cannot fault an ordinary `DataMapper` call at all. The
     // model must let that failure reach the client as itself — treating a
     // contended update as "zero rows matched" would silently downgrade an
     // outage into a NotFound, and a burn budget could be spent (or not) with
