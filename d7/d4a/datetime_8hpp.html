@@ -130,6 +130,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/d4a/datetim
 <code>#include &lt;format&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;glaze/glaze.hpp&gt;</code><br />
+<code>#include &lt;<a class="el" href="../../dd/d09/payload__shape__tag_8hpp_source.html">morph/core/payload_shape_tag.hpp</a>&gt;</code><br />
 <code>#include &lt;mutex&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
@@ -146,6 +147,10 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">RAII helper that fixes <span class="tt"><a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da" title="The current UTC instant, truncated to milliseconds.">DateTime::now()</a></span> to a constant instant (or a custom callable) for its lifetime and restores the previous override on destruction.  <a href="../../d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Atime_3A_3ATimestamp" id="r_morph_3A_3Atime_3A_3ATimestamp"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html">morph::time::Timestamp</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An optionally-empty timestamp field.  <a href="../../db/dec/structmorph_1_1time_1_1Timestamp.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Amodel_3A_3APayloadShapeTag_3C_20morph_3A_3Atime_3A_3ADateTime_20_3E" id="r_morph_3A_3Amodel_3A_3APayloadShapeTag_3C_20morph_3A_3Atime_3A_3ADateTime_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d6b/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1DateTime_01_4.html">morph::model::PayloadShapeTag&lt; morph::time::DateTime &gt;</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stable shape tag for <span class="tt">DateTime</span>.  <a href="../../d7/d6b/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1DateTime_01_4.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Amodel_3A_3APayloadShapeTag_3C_20morph_3A_3Atime_3A_3ATimestamp_20_3E" id="r_morph_3A_3Amodel_3A_3APayloadShapeTag_3C_20morph_3A_3Atime_3A_3ATimestamp_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/d1e/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1Timestamp_01_4.html">morph::model::PayloadShapeTag&lt; morph::time::Timestamp &gt;</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stable shape tag for <span class="tt">Timestamp</span>.  <a href="../../db/d1e/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1Timestamp_01_4.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
@@ -197,7 +202,7 @@ Functions</h2></td></tr>
 <p>Mirrors <span class="tt">morph::journal::detail::defaultActionLogState()</span> — the same "mutex-guarded function-local static" shape used for the action-log and logger override seams elsewhere in the codebase. An empty <span class="tt">std::function</span> (the default) means "no override installed"; <span class="tt">DateTime::now()</span> falls back to <span class="tt">std::chrono::system_clock::now()</span> in that case. Forward-declared here (before <span class="tt">DateTime</span> is a complete type &ndash; a function signature only needs <span class="tt">DateTime</span> to be declared, not defined) and defined out-of-line just after the <span class="tt">DateTime</span> struct, before <span class="tt">DateTime::now()</span>'s first caller needs it.</p>
 <p>Defined out-of-line (after <span class="tt">DateTime</span> is a complete type) since the state is keyed on <span class="tt">std::function&lt;DateTime()&gt;</span>. </p><dl class="section return"><dt>Returns</dt><dd>Reference to the process-wide <span class="tt">(mutex, override callable)</span> pair; the callable is empty when no override is installed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00290">290</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -234,7 +239,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -275,7 +280,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">lhs - rhs</span> as a chrono duration, or <span class="tt">std::nullopt</span> if either is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00414">414</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>

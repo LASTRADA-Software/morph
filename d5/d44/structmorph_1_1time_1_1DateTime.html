@@ -162,7 +162,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>A UTC instant with millisecond precision. </p>
 <p>The default state is the Unix epoch — <span class="tt"><a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html" title="A UTC instant with millisecond precision.">DateTime</a></span> itself has no empty state; use <span class="tt"><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html" title="An optionally-empty timestamp field.">Timestamp</a></span> for fields that may be blank. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a6568c8be067937617a2eb8ad56a46840" name="a6568c8be067937617a2eb8ad56a46840"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6568c8be067937617a2eb8ad56a46840">&#9670;&#160;</a></span>DateTime() <span class="overload">[1/2]</span></h2>
@@ -195,7 +195,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -265,7 +265,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -298,7 +298,7 @@ Public Attributes</h2></td></tr>
 <dl class="section warning"><dt>Warning</dt><dd>This function is <span class="tt">noexcept</span>. If an installed override callable throws, that exception escapes a <span class="tt">noexcept</span> function and <span class="tt">std::terminate()</span> is called — an override must not throw. The override also runs while the internal mutex is held, so it must not itself call <span class="tt"><a class="el" href="#a0072664563c3df7e5ff8fe15b63558da" title="The current UTC instant, truncated to milliseconds.">DateTime::now()</a></span> / <span class="tt"><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html#a2cd34a7b7333b01fad971f0c5c6c4495" title="An engaged timestamp holding the current UTC instant.">Timestamp::now()</a></span>, <span class="tt"><a class="el" href="../../d7/d4a/datetime_8hpp.html#a9f0054c406ab3d5c85915800e0c41a60" title="Installs clock as the process-wide override for DateTime::now() (and therefore Timestamp::now(),...">setNowOverride</a></span>, or construct a <span class="tt"><a class="el" href="../../d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html" title="RAII helper that fixes DateTime::now() to a constant instant (or a custom callable) for its lifetime ...">ScopedNowOverride</a></span>: the mutex is non-recursive and any of those would self-deadlock (the same constraint <span class="tt">morph::log</span>'s sink callback documents for the same reason). </dd></dl>
 <dl class="section return"><dt>Returns</dt><dd>The current UTC date-time, or the overridden instant if one is installed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -328,7 +328,7 @@ Public Attributes</h2></td></tr>
 <p>Renders as ISO-8601 UTC: <span class="tt">YYYY-MM-DDTHH:MM:SS.mmmZ</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The formatted instant. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00126">126</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -364,7 +364,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The parsed instant, or <span class="tt">std::nullopt</span> when <code class="param">text</code> is malformed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00147">147</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -436,7 +436,7 @@ template&lt;typename Rep, typename Period&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -474,7 +474,7 @@ template&lt;typename Rep, typename Period&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00246">246</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -493,7 +493,7 @@ template&lt;typename Rep, typename Period&gt; </div>
 
 <p>The underlying UTC instant (Unix time, leap seconds ignored). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>

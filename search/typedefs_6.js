@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['logprovider_0',['LogProvider',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a7a5bff8cb318d46f4347cc5211b92e81',1,'morph::backend::RemoteServer']]]
+  ['inner_0',['Inner',['../d2/d0d/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1util_1_1Tagged_3_01T_00_01Tag_01_4_01_4.html#af9845bcfb674fd14a040784424904acf',1,'morph::model::PayloadShapeTag&lt; morph::util::Tagged&lt; T, Tag &gt; &gt;']]]
 ];

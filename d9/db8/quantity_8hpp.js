@@ -6,6 +6,7 @@ var quantity_8hpp =
     [ "morph::units::QuantityBounds", "df/dca/structmorph_1_1units_1_1QuantityBounds.html", "df/dca/structmorph_1_1units_1_1QuantityBounds" ],
     [ "morph::units::Quantity&lt; U, DeclaredDecimals &gt;", "d5/dda/structmorph_1_1units_1_1Quantity.html", "d5/dda/structmorph_1_1units_1_1Quantity" ],
     [ "morph::units::NamedQuantity&lt; Name, U &gt;", "d1/d58/structmorph_1_1units_1_1NamedQuantity.html", "d1/d58/structmorph_1_1units_1_1NamedQuantity" ],
+    [ "morph::model::PayloadShapeTag&lt; morph::units::Quantity&lt; U, Dec &gt; &gt;", "d8/dba/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1units_1_1Quantity_3_01U_00_01Dec_01_4_01_4.html", null ],
     [ "morph::units::UnitEnum", "d6/db7/conceptmorph_1_1units_1_1UnitEnum.html", null ],
     [ "morph::units::HasUnitRelations", "d8/d4a/conceptmorph_1_1units_1_1HasUnitRelations.html", null ],
     [ "morph::units::HasUnitBounds", "d8/d9a/conceptmorph_1_1units_1_1HasUnitBounds.html", null ],

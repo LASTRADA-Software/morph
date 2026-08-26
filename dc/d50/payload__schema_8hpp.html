@@ -127,6 +127,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/d50/payload
 <code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;glaze/glaze.hpp&gt;</code><br />
+<code>#include &lt;<a class="el" href="../../dd/d09/payload__shape__tag_8hpp_source.html">morph/core/payload_shape_tag.hpp</a>&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
@@ -147,7 +148,7 @@ Functions</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
-<tr class="memitem:a1f0f29da2e9da22c06c079bf0bfb8a55" id="r_a1f0f29da2e9da22c06c079bf0bfb8a55"><td class="memItemLeft">constexpr std::uint32_t&#160;</td><td class="memItemRight"><a class="el" href="#a1f0f29da2e9da22c06c079bf0bfb8a55">morph::model::kPayloadFingerprintScheme</a> = 1</td></tr>
+<tr class="memitem:a1f0f29da2e9da22c06c079bf0bfb8a55" id="r_a1f0f29da2e9da22c06c079bf0bfb8a55"><td class="memItemLeft">constexpr std::uint32_t&#160;</td><td class="memItemRight"><a class="el" href="#a1f0f29da2e9da22c06c079bf0bfb8a55">morph::model::kPayloadFingerprintScheme</a> = 2</td></tr>
 <tr class="memdesc:a1f0f29da2e9da22c06c079bf0bfb8a55"><td class="mdescLeft">&#160;</td><td class="mdescRight">Version of the fingerprint <em>algorithm</em>, not of any one payload.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
@@ -191,7 +192,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The shape rendering; see <span class="tt">detail::payloadShape</span> for the grammar. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html">payload_schema.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html#l00247">247</a> of file <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html">payload_schema.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +231,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Reference to the process-lifetime fingerprint string for <span class="tt">A</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html">payload_schema.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html#l00264">264</a> of file <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html">payload_schema.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,7 +246,7 @@ template&lt;typename A&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::uint32_t morph::model::kPayloadFingerprintScheme = 1</td>
+          <td class="memname">std::uint32_t morph::model::kPayloadFingerprintScheme = 2</td>
         </tr>
       </table>
   </td>
@@ -256,9 +257,10 @@ template&lt;typename A&gt; </div>
 </div><div class="memdoc">
 
 <p>Version of the fingerprint <em>algorithm</em>, not of any one payload. </p>
-<p>Stamped as the prefix of every fingerprint (<span class="tt">"1:…"</span>) so a future build that computes fingerprints differently can still recognise — and reject, or re-derive — a fingerprint written under an earlier scheme, instead of mistaking a scheme change for a payload change. Bumped only when <span class="tt">detail::payloadShape</span> changes what it emits for an unchanged struct. </p>
+<p>Stamped as the prefix of every fingerprint (<span class="tt">"2:…"</span>) so a future build that computes fingerprints differently can still recognise — and reject, or re-derive — a fingerprint written under an earlier scheme, instead of mistaking a scheme change for a payload change. Bumped only when <span class="tt">detail::payloadShape</span> changes what it emits for an unchanged struct.</p>
+<p>Scheme 2 renders a custom-codec type that declares a <span class="tt"><a class="el" href="../../d6/d37/structmorph_1_1model_1_1PayloadShapeTag.html" title="Declares a stable shape tag for a type T whose JSON shape payloadShape cannot decompose.">morph::model::PayloadShapeTag</a></span> as that declared name rather than as the bare opaque tag, so that a retype between two of them is visible. Every payload with such a member therefore fingerprints differently under 2 than it did under 1, which is exactly what the prefix exists to make legible: an entry stamped <span class="tt">1:…</span> read by this build reports a mismatch that names an algorithm change, not a payload change. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html">payload_schema.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../dc/d50/payload__schema_8hpp_source.html">payload_schema.hpp</a>.</p>
 
 </div>
 </div>

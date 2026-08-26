@@ -6,6 +6,7 @@ var rational_8hpp =
     [ "morph::math::WireClampScope", "d3/d68/classmorph_1_1math_1_1WireClampScope.html", "d3/d68/classmorph_1_1math_1_1WireClampScope" ],
     [ "morph::math::Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html", "d2/d5c/structmorph_1_1math_1_1Rational" ],
     [ "morph::math::Rational::Wire", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire" ],
+    [ "morph::model::PayloadShapeTag&lt; morph::math::Rational &gt;", "dd/ddb/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1math_1_1Rational_01_4.html", null ],
     [ "morph::math::RationalError", "d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9e", [
       [ "DivisionByZero", "d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea34e540e6594987eef203290f0a593bd2", null ],
       [ "NotFinite", "d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9eaff6e97b110349dae9c6e8be0ff7a85c3", null ],
@@ -27,6 +28,7 @@ var rational_8hpp =
     [ "morph::math::checkedAdd", "d1/de8/rational_8hpp.html#a1fc28ee664f2d189c9360d015d1cd950", null ],
     [ "morph::math::checkedSub", "d1/de8/rational_8hpp.html#aa69faaf4ebfdfbe93438986be4bbae78", null ],
     [ "morph::math::checkedMul", "d1/de8/rational_8hpp.html#a02c81d919a507454cff316e64fe0e128", null ],
+    [ "morph::math::checkedDiv", "d1/de8/rational_8hpp.html#a7e6a9bb1c427c85160e7bec78f88175f", null ],
     [ "morph::math::operator+", "d1/de8/rational_8hpp.html#a8d7797668561947bd928ea6d1c18d9bb", null ],
     [ "morph::math::operator-", "d1/de8/rational_8hpp.html#a5bcdf7ec70b0c472e876ef9ab7f6a334", null ],
     [ "morph::math::operator*", "d1/de8/rational_8hpp.html#a4da38be67600a696c4fd73deabab3140", null ],

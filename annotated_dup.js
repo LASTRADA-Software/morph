@@ -119,6 +119,12 @@ var annotated_dup =
         [ "ActionValidator", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
         [ "ModelKeyTraits", "d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html", null ],
         [ "ModelTraits", "d2/d14/structmorph_1_1model_1_1ModelTraits.html", null ],
+        [ "PayloadShapeTag", "d6/d37/structmorph_1_1model_1_1PayloadShapeTag.html", null ],
+        [ "PayloadShapeTag&lt; morph::math::Rational &gt;", "dd/ddb/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1math_1_1Rational_01_4.html", null ],
+        [ "PayloadShapeTag&lt; morph::time::DateTime &gt;", "d7/d6b/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1DateTime_01_4.html", null ],
+        [ "PayloadShapeTag&lt; morph::time::Timestamp &gt;", "db/d1e/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1Timestamp_01_4.html", null ],
+        [ "PayloadShapeTag&lt; morph::units::Quantity&lt; U, Dec &gt; &gt;", "d8/dba/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1units_1_1Quantity_3_01U_00_01Dec_01_4_01_4.html", null ],
+        [ "PayloadShapeTag&lt; morph::util::Tagged&lt; T, Tag &gt; &gt;", "d2/d0d/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1util_1_1Tagged_3_01T_00_01Tag_01_4_01_4.html", "d2/d0d/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1util_1_1Tagged_3_01T_00_01Tag_01_4_01_4" ],
         [ "ValidationError", "d7/d1a/structmorph_1_1model_1_1ValidationError.html", "d7/d1a/structmorph_1_1model_1_1ValidationError" ]
       ] ],
       [ "net", null, [
