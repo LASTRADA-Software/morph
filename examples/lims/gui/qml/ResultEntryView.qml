@@ -71,6 +71,18 @@ Item {
             else if (actionType === "ResolveConflict")
                 resolveForm.resetFields()
         }
+
+        // `verifyResult` is a typed call, so its outcome does not arrive on
+        // `replyReceived`; its failures reach the label at the foot of this
+        // file through `failed`, and this is the other half — a recorded
+        // verification changes the row's `verifiedBy`, and re-reading the
+        // listing is how this surface learns any of its own state (the same
+        // re-read `submitIfValid`'s success arm does in the presenter). Not a
+        // second copy of the row: one decoder, not two that could disagree.
+        function onResultVerified(verification) {
+            page.report("verified result " + verification.resultId, false)
+            page.resultBridge.refreshResults()
+        }
     }
 
     ColumnLayout {

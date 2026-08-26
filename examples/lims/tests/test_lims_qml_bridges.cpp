@@ -79,6 +79,35 @@ struct Emissions {
     QVariantMap last;
 };
 
+/// @brief Submits @p capture the way ResultEntryView.qml submits it: as one
+///        schema-driven form body through `submitIfValid`.
+///
+/// The body is `glz::write_json` of the action itself rather than a hand-typed
+/// literal, so the test cannot drift from the wire shape the model reads --
+/// and, unlike a typed invokable, this path carries the reading as the exact
+/// rational the schema declares instead of a `double` the entry point rounds.
+/// @param bridge  The result bridge to submit through.
+/// @param capture The capture to send.
+/// @return `true` when the reply arrived and reported success.
+[[nodiscard]] bool submitCapture(lims::gui::ResultBridge& bridge, const lims::CaptureConcentration& capture) {
+    const auto body = glz::write_json(capture);
+    if (!body) {
+        return false;
+    }
+    bool ok = false;
+    int replies = 0;
+    const auto connection = QObject::connect(&bridge, &lims::gui::ResultBridge::replyReceived,
+                                             [&](const QString&, bool succeeded, const QString& payload) {
+                                                 ok = succeeded;
+                                                 ++replies;
+                                                 INFO("capture reply: " << payload.toStdString());
+                                             });
+    bridge.submitIfValid(QStringLiteral("CaptureConcentration"), QString::fromStdString(*body));
+    const bool settled = pumpUntil([&] { return replies == 1; });
+    QObject::disconnect(connection);
+    return settled && ok;
+}
+
 /// @brief Whether @p object's metaobject declares a signal named @p name.
 ///
 /// This is what makes a QML `Connections { function onFoo() }` binding
@@ -114,17 +143,19 @@ TEST_CASE("Every signal the QML files connect to exists on the bridge that emits
     // Every other signal a `NOTIFY` clause or a view binds to.
     CHECK(hasSignalNamed(sampleBridge, "clientRegistered"));
     CHECK(hasSignalNamed(sampleBridge, "failed"));
-    CHECK(hasSignalNamed(sampleBridge, "bound"));
+    // Both views handle `onReplyReceived`: it is the only carrier a refused
+    // schema-driven submission has.
+    CHECK(hasSignalNamed(sampleBridge, "replyReceived"));
 
     CHECK(hasSignalNamed(resultBridge, "analysesListed"));
     CHECK(hasSignalNamed(resultBridge, "resultsListed"));
     CHECK(hasSignalNamed(resultBridge, "conflictsListed"));
-    CHECK(hasSignalNamed(resultBridge, "resultCaptured"));
+    // ResultEntryView.qml: `function onResultVerified(verification)`, which is
+    // how a recorded four-eyes verification reaches the table at all —
+    // `verifyResult` is a typed call, so its success is not a `replyReceived`.
     CHECK(hasSignalNamed(resultBridge, "resultVerified"));
-    CHECK(hasSignalNamed(resultBridge, "conflictResolved"));
-    CHECK(hasSignalNamed(resultBridge, "sampleAttached"));
     CHECK(hasSignalNamed(resultBridge, "failed"));
-    CHECK(hasSignalNamed(resultBridge, "bound"));
+    CHECK(hasSignalNamed(resultBridge, "replyReceived"));
 }
 
 TEST_CASE("The sample property bag carries every key the QML reads", "[lims][gui][qml-bridge]") {
@@ -207,25 +238,31 @@ TEST_CASE("A result row carries the exact decimal, not a rounded number", "[lims
     sampleBridge.startWork();
     REQUIRE(pumpUntil([&] { return changed.count == 3; }));
 
-    const auto sampleId = sampleBridge.sample().value(QStringLiteral("id")).toLongLong();
-    Emissions attached;
-    QObject::connect(&resultBridge, &lims::gui::ResultBridge::sampleAttached, [&attached] { ++attached.count; });
-    resultBridge.openSample(sampleId);
-    REQUIRE(pumpUntil([&] { return attached.count == 1; }));
+    // Exactly Main.qml's own two lines: attach, then re-read. This surface
+    // announces no attach of its own, so the listing arriving *is* the
+    // evidence the attach landed -- and asserting it here is what keeps that
+    // ordering honest.
+    Emissions listed;
+    QObject::connect(&resultBridge, &lims::gui::ResultBridge::resultsListed, [&listed] { ++listed.count; });
+    Emissions failures;
+    QObject::connect(&resultBridge, &lims::gui::ResultBridge::failed, [&failures] { ++failures.count; });
+    resultBridge.openSample(sampleBridge.sample().value(QStringLiteral("id")).toLongLong());
+    resultBridge.refreshResults();
+    REQUIRE(pumpUntil([&] { return listed.count == 1 || failures.count > 0; }));
+    INFO("attach or listing failed: " << resultBridge.lastError().toStdString());
+    REQUIRE(failures.count == 0);
 
-    // 2.4 typed into a QML TextField arrives as a double and must come back
+    // 2.4 mg/L, submitted the way the screen submits it: one schema-driven
+    // form body through `submitIfValid`, so the reading crosses as the exact
+    // rational the renderer builds and never as a `double`. It must come back
     // out as the exact decimal "2.4" — the value stored is 12/5, and a lab
     // report that showed anything else would be showing a different number
     // from the one on file.
-    Emissions captured;
-    QObject::connect(&resultBridge, &lims::gui::ResultBridge::resultCaptured, [&captured] { ++captured.count; });
-    resultBridge.captureReading(*nitrate.versionId, 2.4, QString{}, 0);
-    REQUIRE(pumpUntil([&] { return captured.count == 1; }));
-
-    Emissions listed;
-    QObject::connect(&resultBridge, &lims::gui::ResultBridge::resultsListed, [&listed] { ++listed.count; });
-    resultBridge.refreshResults();
-    REQUIRE(pumpUntil([&] { return listed.count == 1; }));
+    REQUIRE(submitCapture(resultBridge, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
+                                                                   .value = lims::Concentration{exact(12, 5, 3)}}));
+    // `submitIfValid`'s success arm re-reads the listing itself, so a second
+    // refresh here would be testing a call the screen never makes.
+    REQUIRE(pumpUntil([&] { return listed.count == 2; }));
 
     const auto rows = resultBridge.results();
     REQUIRE(rows.size() == 1);
@@ -274,20 +311,21 @@ TEST_CASE("A no-number result names which claim it is, rather than showing a bla
     sampleBridge.startWork();
     REQUIRE(pumpUntil([&] { return changed.count == 3; }));
 
-    Emissions attached;
-    QObject::connect(&resultBridge, &lims::gui::ResultBridge::sampleAttached, [&attached] { ++attached.count; });
+    Emissions listed;
+    QObject::connect(&resultBridge, &lims::gui::ResultBridge::resultsListed, [&listed] { ++listed.count; });
     resultBridge.openSample(sampleBridge.sample().value(QStringLiteral("id")).toLongLong());
-    REQUIRE(pumpUntil([&] { return attached.count == 1; }));
+    resultBridge.refreshResults();
+    REQUIRE(pumpUntil([&] { return listed.count == 1; }));
 
-    Emissions captured;
-    QObject::connect(&resultBridge, &lims::gui::ResultBridge::resultCaptured, [&captured](const QVariantMap& row) {
-        ++captured.count;
-        captured.last = row;
-    });
-    resultBridge.captureQualifier(*lead.versionId, QStringLiteral("belowLOD"));
-    REQUIRE(pumpUntil([&] { return captured.count == 1; }));
+    // The other branch of the `exactlyOneOf` sum, through the same one form
+    // the screen renders: an engaged `qualifier` and an empty `value`.
+    REQUIRE(submitCapture(resultBridge, lims::CaptureConcentration{.analysisVersionId = lead.versionId,
+                                                                   .qualifier = lims::QualifierChoice{
+                                                                       std::string{lims::kQualifierBelowLod}}}));
+    REQUIRE(pumpUntil([&] { return listed.count == 2; }));
 
-    const auto row = captured.last;
+    REQUIRE(resultBridge.results().size() == 1);
+    const auto row = resultBridge.results().front().toMap();
     CHECK_FALSE(row.value(QStringLiteral("hasValue")).toBool());
     CHECK(row.value(QStringLiteral("valueText")).toString().isEmpty());
     // The distinction the whole §3 encoding exists to keep: the row says

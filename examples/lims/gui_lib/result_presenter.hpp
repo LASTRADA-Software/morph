@@ -36,17 +36,19 @@ namespace lims::gui {
 /// key-less `SampleModel` action here to be defeated by an `AllowShared`
 /// handler's "not bound until attached" rule.
 ///
-/// @par Where the exactness lives
-/// QML has one numeric type and it is a `double`, so a typed reading arrives
-/// here as one. `Concentration::fromDouble` converts it at the field's
-/// **declared** precision (`Quantity<mg_per_L, 3>`), which is exact for any
-/// decimal with at most that many places: scaling by 10^3 and rounding
-/// removes the binary representation error rather than propagating it. That
-/// is also what makes the displayed value and the stored value the same
-/// number — the entry point rounds visibly, at the precision the schema
-/// advertises, instead of storing digits nobody ever sees. A hand-built
-/// payload that skips this path and carries more precision is rejected by the
-/// model (the rung README's §3 decision 7); this path cannot produce one.
+/// @par Where the exactness lives: not here
+/// A reading never crosses this class as a `double`. Capture is submitted as
+/// a schema-driven form body -- `submitIfValid("CaptureConcentration", ...)`
+/// -- so the number travels as the exact rational the shipped renderer built
+/// from the served `x-decimalPlaces`, and the model checks that precision
+/// against the analysis version's own declaration. An earlier
+/// `captureReading(versionId, double, ...)` entry point converted the value
+/// with `Concentration::fromDouble` at the field's declared precision, which
+/// was exact but *rounding*: it made the model's over-precision refusal (the
+/// rung README's §3 decision 7) unreachable from the GUI, and it put the only
+/// `double` on this rung's QML surface, against the convention
+/// `lims_qml_conversions.hpp` states. It was deleted rather than documented
+/// (morph#287).
 class ResultPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
 public:
@@ -64,21 +66,6 @@ public:
     /// @param sampleId The sample to attach to.
     void openSample(SampleId sampleId);
 
-    /// @brief Captures a measured reading. Emits `resultCaptured`, or
-    ///        `failed`.
-    /// @param versionId The analysis version captured under.
-    /// @param reading   The reading in mg/L, as QML supplies it.
-    /// @param dilution  `"neat"`, `"diluted"`, or empty for "not stated".
-    /// @param factor    The dilution factor; ignored unless @p dilution is
-    ///        `"diluted"`, and required by the action's own rules when it is.
-    void captureReading(AnalysisVersionId versionId, double reading, const QString& dilution, double factor);
-
-    /// @brief Captures a non-reading — one of the three "no number" claims.
-    ///        Emits `resultCaptured`, or `failed`.
-    /// @param versionId The analysis version captured under.
-    /// @param code      `"notMeasured"`, `"belowLOD"` or `"aboveUDL"`.
-    void captureQualifier(AnalysisVersionId versionId, const QString& code);
-
     /// @brief Lists the attached sample's results. Emits `resultsListed`, or
     ///        `failed`.
     void refreshResults();
@@ -91,13 +78,6 @@ public:
     /// @brief Lists the conflicts offline replay flagged against the attached
     ///        sample. Emits `conflictsListed`, or `failed`.
     void refreshConflicts();
-
-    /// @brief Records a human's decision about one flagged conflict. Emits
-    ///        `conflictResolved`, or `failed`.
-    /// @param conflictId The conflict to resolve.
-    /// @param resolution `"discard"` or `"apply"`.
-    /// @param note       The resolver's stated rationale. Required.
-    void resolveConflict(ConflictId conflictId, const QString& resolution, const QString& note);
 
     /// @brief Dispatches @p bodyJson as @p actionType's body — the
     ///        schema-driven path the shipped `DynamicForm` submits through.
@@ -123,9 +103,6 @@ signals:
     /// @brief `OpenSample` succeeded on this surface's own handler.
     /// @param view The attached sample.
     void sampleAttached(lims::SampleView view);
-    /// @brief A capture succeeded.
-    /// @param view The stored result.
-    void resultCaptured(lims::ResultView view);
     /// @brief `ListResults` succeeded.
     /// @param result The attached sample's results.
     void resultsListed(lims::ListResultsResult result);
@@ -135,9 +112,6 @@ signals:
     /// @brief `ListConflicts` succeeded.
     /// @param result The attached sample's flagged conflicts.
     void conflictsListed(lims::ListConflictsResult result);
-    /// @brief `ResolveConflict` succeeded.
-    /// @param view The conflict in its resolved state.
-    void conflictResolved(lims::ConflictView view);
     /// @brief Any action's typed error, as `std::exception::what()`.
     /// @param message Ready for direct display.
     void failed(QString message);
@@ -147,10 +121,6 @@ private:
     ///        argument.
     /// @param err The failed completion's exception.
     void reportError(const std::exception_ptr& err);
-
-    /// @brief Dispatches @p action and emits `resultCaptured` with its result.
-    /// @param action The capture to dispatch.
-    void dispatchCapture(CaptureConcentration action);
 
 #ifndef Q_MOC_RUN
     ::morph::bridge::BridgeHandler<AnalysisCatalogModel> _catalog;

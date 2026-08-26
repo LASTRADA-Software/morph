@@ -73,25 +73,11 @@ public:
     ///        `analysesListed`, or `failed`.
     Q_INVOKABLE void refreshAnalyses();
 
-    /// @brief Attaches this surface to a sample. Emits `sampleAttached`, or
-    ///        `failed`.
+    /// @brief Attaches this surface to a sample. The attached state is read
+    ///        back through `refreshResults()`/`refreshConflicts()` rather than
+    ///        announced, so this reports only `failed`.
     /// @param sampleId The sample, as its plain number.
     Q_INVOKABLE void openSample(qlonglong sampleId);
-
-    /// @brief Captures a measured reading. Emits `resultCaptured`, or
-    ///        `failed`.
-    /// @param versionId The analysis version, as its plain number.
-    /// @param reading   The reading in mg/L.
-    /// @param dilution  `"neat"`, `"diluted"`, or empty for "not stated".
-    /// @param factor    The dilution factor; used only when @p dilution is
-    ///        `"diluted"`.
-    Q_INVOKABLE void captureReading(qlonglong versionId, double reading, const QString& dilution, double factor);
-
-    /// @brief Captures one of the three "no number" claims. Emits
-    ///        `resultCaptured`, or `failed`.
-    /// @param versionId The analysis version, as its plain number.
-    /// @param code      `"notMeasured"`, `"belowLOD"` or `"aboveUDL"`.
-    Q_INVOKABLE void captureQualifier(qlonglong versionId, const QString& code);
 
     /// @brief Fetches the attached sample's results. Emits `resultsListed`,
     ///        or `failed`.
@@ -106,26 +92,10 @@ public:
     ///        `conflictsListed`, or `failed`.
     Q_INVOKABLE void refreshConflicts();
 
-    /// @brief Records a decision about one flagged conflict. Emits
-    ///        `conflictResolved`, or `failed`.
-    /// @param conflictId The conflict, as its plain number.
-    /// @param resolution `"discard"` or `"apply"`.
-    /// @param note       The resolver's stated rationale. Required.
-    Q_INVOKABLE void resolveConflict(qlonglong conflictId, const QString& resolution, const QString& note);
-
 signals:
-    /// @brief Emitted once the wrapped presenter's registration round trip
-    ///        settles, successfully or not.
-    void bound();
     /// @brief An analysis listing arrived — see the `analyses` property.
     /// @param analyses The listing's rows.
     void analysesListed(const QVariantList& analyses);
-    /// @brief This surface attached to a sample.
-    /// @param sample The sample's property bag.
-    void sampleAttached(const QVariantMap& sample);
-    /// @brief A capture succeeded.
-    /// @param result The stored result's property bag.
-    void resultCaptured(const QVariantMap& result);
     /// @brief A result listing arrived — see the `results` property.
     /// @param results The listing's rows.
     void resultsListed(const QVariantList& results);
@@ -135,9 +105,6 @@ signals:
     /// @brief A conflict listing arrived — see the `conflicts` property.
     /// @param conflicts The listing's rows.
     void conflictsListed(const QVariantList& conflicts);
-    /// @brief A conflict was resolved.
-    /// @param conflict The conflict's property bag, in its resolved state.
-    void conflictResolved(const QVariantMap& conflict);
     /// @brief Emitted once per `submitIfValid`, whichever way it resolved.
     /// @param actionType The action the reply belongs to.
     /// @param ok Whether it succeeded.

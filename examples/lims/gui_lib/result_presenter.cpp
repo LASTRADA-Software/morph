@@ -25,12 +25,6 @@ void ResultPresenter::reportError(const std::exception_ptr& err) {
     }
 }
 
-void ResultPresenter::dispatchCapture(CaptureConcentration action) {
-    track<ResultView>(
-        _sample.execute(std::move(action)), [this](ResultView view) { emit resultCaptured(std::move(view)); },
-        [this](const std::exception_ptr& err) { reportError(err); });
-}
-
 void ResultPresenter::submitIfValid(const QString& actionType, const QString& bodyJson) {
     static const QStringList kOwned{QStringLiteral("CaptureConcentration"), QStringLiteral("ResolveConflict")};
     if (!kOwned.contains(actionType)) {
@@ -71,31 +65,6 @@ void ResultPresenter::openSample(SampleId sampleId) {
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 
-void ResultPresenter::captureReading(AnalysisVersionId versionId, double reading, const QString& dilution,
-                                     double factor) {
-    CaptureConcentration action{.analysisVersionId = versionId,
-                                // Exact at the declared precision -- see this
-                                // class's own doc comment for why the double
-                                // QML hands over does not cost exactness here.
-                                .value = Concentration::fromDouble(reading)};
-    if (!dilution.isEmpty()) {
-        action.dilution = DilutionChoice{dilution.toStdString()};
-        // Only stamped for a diluted preparation. Sending it regardless would
-        // be harmless (the model ignores a factor whose preparation says
-        // neat -- the rung README's §5 clear-on-hide decision) but it would
-        // put a number in the journal that never applied to anything.
-        if (dilution.toStdString() == std::string{kDilutionDiluted}) {
-            action.dilutionFactor = DilutionFactor::fromDouble(factor);
-        }
-    }
-    dispatchCapture(std::move(action));
-}
-
-void ResultPresenter::captureQualifier(AnalysisVersionId versionId, const QString& code) {
-    dispatchCapture(
-        CaptureConcentration{.analysisVersionId = versionId, .qualifier = QualifierChoice{code.toStdString()}});
-}
-
 void ResultPresenter::refreshResults() {
     track<ListResultsResult>(
         _sample.execute(ListResults{}), [this](ListResultsResult result) { emit resultsListed(std::move(result)); },
@@ -113,19 +82,6 @@ void ResultPresenter::refreshConflicts() {
     track<ListConflictsResult>(
         _sample.execute(ListConflicts{}),
         [this](ListConflictsResult result) { emit conflictsListed(std::move(result)); },
-        [this](const std::exception_ptr& err) { reportError(err); });
-}
-
-void ResultPresenter::resolveConflict(ConflictId conflictId, const QString& resolution, const QString& note) {
-    // The two-value choice is spelled as a string at the QML boundary and
-    // mapped to the enum here -- translation, which is this layer's whole job.
-    // Anything that is not "apply" is a discard: the safe half of the pair,
-    // since discarding leaves the server's own value standing.
-    const auto decision =
-        resolution == QStringLiteral("apply") ? ConflictResolution::ApplyAnyway : ConflictResolution::DiscardStale;
-    track<ConflictView>(
-        _sample.execute(ResolveConflict{.conflictId = conflictId, .resolution = decision, .note = note.toStdString()}),
-        [this](ConflictView view) { emit conflictResolved(std::move(view)); },
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 

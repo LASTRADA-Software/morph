@@ -53,39 +53,44 @@ TEST_CASE("Every lims bridge exposes exactly the surface gui/qml binds, and noth
     audit.bind(QStringLiteral("sampleBridge"), sampleBridge);
     audit.bind(QStringLiteral("resultBridge"), resultBridge);
 
-    // ── The pre-existing backlog, recorded rather than swallowed ──────────
-    // The first run of this audit reported 15 members these two bridges publish
-    // that no file under gui/qml/ binds; `replyReceived` on each bridge has
-    // since left the list, because the views now handle it (see the case below
-    // and gui/qml's own `Connections` blocks). The other direction was clean -- no
-    // QML file binds a name its bridge lacks -- so no screen is broken; each is
-    // either dead surface or a missing control, and deciding which is
-    // per-member work this file does not do. They are listed here so the guard
-    // goes live now and catches the *next* drift in either direction, with the
-    // backlog itemised instead of hidden behind a lowered bar.
+    // ── The two exemptions that survive, each with a mechanism ───────────
+    // The first run of this audit reported 15 members these two bridges
+    // publish that no file under gui/qml/ binds, recorded as one undifferentiated
+    // backlog. Thirteen of them are gone: `replyReceived` on each bridge is
+    // now handled by the views (see the case below), `resultVerified` is
+    // handled by ResultEntryView.qml, and the nine remaining typed invokables
+    // and outcome signals were deleted as redundant second dispatch paths --
+    // every one of them duplicated an action the schema-driven `submitIfValid`
+    // path already carries, from a QML call site that did not exist.
     //
-    // The list is checked in both directions too: an exemption for a member
-    // that has since been deleted, or one QML has since bound, fails this test
-    // (testkit/qml_surface.hpp). It can only shrink deliberately.
+    // The two below are *not* redundant, and the reason is a mechanism rather
+    // than a plan. `SamplePresenter::submitIfValid` routes both registration
+    // actions to the plain, key-less `_creator` handler, so:
     //
-    // Same shape as ledger's, in test_ledger_qml_surface.cpp (morph#239).
-    const QString backlog = QStringLiteral("unbound bridge surface, tracked in morph#287");
+    //  - `registerClient` is the only dispatch that emits `clientRegistered`
+    //    and therefore the only thing that ever sets the `clientId` property
+    //    SampleView.qml binds; the form path emits `replyReceived` carrying
+    //    the same id as JSON and leaves the property at -1.
+    //  - `registerSample` is the only dispatch that leaves the *shared*
+    //    handler attached to the new sample (`BridgeHandler::execute`'s
+    //    `ResultKeyed` branch); through the form path the shared handler stays
+    //    unbound, so the follow-up `GetSample` fails with "handler not bound".
+    //
+    // Deleting either would delete the only working path, so each is exempted
+    // until the form path grows the same effect. Both statements are
+    // falsifiable by test rather than by opinion: make `submitIfValid`'s
+    // `RegisterClient` set `clientId`, or its `RegisterSample` attach the
+    // shared handler, and the exemption becomes stale -- which this audit
+    // reports as a finding in its own right the moment QML binds the member or
+    // the member is deleted.
+    const QString registrationPath = QStringLiteral(
+        "the only dispatch that emits clientRegistered / attaches the shared handler; "
+        "submitIfValid's key-less RegisterClient/RegisterSample path does neither");
     for (const auto& [alias, member] : std::initializer_list<std::pair<const char*, const char*>>{
-             {"sampleBridge", "bound"},
              {"sampleBridge", "registerClient"},
              {"sampleBridge", "registerSample"},
-             {"sampleBridge", "rejectSample"},
-             {"sampleBridge", "returnForRework"},
-             {"resultBridge", "bound"},
-             {"resultBridge", "sampleAttached"},
-             {"resultBridge", "resultCaptured"},
-             {"resultBridge", "resultVerified"},
-             {"resultBridge", "conflictResolved"},
-             {"resultBridge", "captureQualifier"},
-             {"resultBridge", "captureReading"},
-             {"resultBridge", "resolveConflict"},
          }) {
-        audit.allowUnbound(QString::fromLatin1(alias), QString::fromLatin1(member), backlog);
+        audit.allowUnbound(QString::fromLatin1(alias), QString::fromLatin1(member), registrationPath);
     }
 
     const QStringList findings = audit.run();
@@ -115,9 +120,9 @@ TEST_CASE("A refused form submission has a path to the operator", "[lims][gui][q
     // assumed from the fact that the bridge emitted something.
     //
     // Deliberately a separate case from the whole-surface audit above, and
-    // deliberately unexempted: the backlog list up there is allowed to hold
-    // members nothing binds yet, and an entry for `replyReceived` would make
-    // that list say this defect is acceptable.
+    // deliberately unexempted: that case's exemption list is where a member
+    // nothing binds is allowed to live, and an `allowUnbound` entry for
+    // `replyReceived` would make the list say this defect is acceptable.
     BackendRig rig{Mode::Local, 1};
     lims::gui::SampleBridge sampleBridge{rig.bridge(0), rig.executor()};
     lims::gui::ResultBridge resultBridge{rig.bridge(0), rig.executor()};

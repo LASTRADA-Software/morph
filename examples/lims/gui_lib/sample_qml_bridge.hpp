@@ -95,22 +95,10 @@ public:
     /// @brief `InProgress → ToBeVerified`. Emits `sampleChanged`, or `failed`.
     Q_INVOKABLE void submitForVerification();
 
-    /// @brief `ToBeVerified → InProgress`. Emits `sampleChanged`, or `failed`.
-    /// @param reason Why the sample went back to the bench.
-    Q_INVOKABLE void returnForRework(const QString& reason);
-
     /// @brief `ToBeVerified → Published`. Emits `sampleChanged`, or `failed`.
     Q_INVOKABLE void publishSample();
 
-    /// @brief `Registered|Received → Rejected`. Emits `sampleChanged`, or
-    ///        `failed`.
-    /// @param reason Why the container is refused.
-    Q_INVOKABLE void rejectSample(const QString& reason);
-
 signals:
-    /// @brief Emitted once the wrapped presenter's registration round trip
-    ///        settles, successfully or not (`Presenter::bound()`).
-    void bound();
     /// @brief The attached sample changed — see the `sample` property.
     /// @param sample The sample's property bag.
     void sampleChanged(const QVariantMap& sample);

@@ -95,14 +95,6 @@ void SamplePresenter::startWork() { dispatchTransition(StartWork{}); }
 
 void SamplePresenter::submitForVerification() { dispatchTransition(SubmitForVerification{}); }
 
-void SamplePresenter::returnForRework(const QString& reason) {
-    dispatchTransition(ReturnForRework{.reason = reason.toStdString()});
-}
-
 void SamplePresenter::publishSample() { dispatchTransition(PublishSample{}); }
-
-void SamplePresenter::rejectSample(const QString& reason) {
-    dispatchTransition(RejectSample{.reason = reason.toStdString()});
-}
 
 }  // namespace lims::gui
