@@ -26,7 +26,9 @@
 // form-plus-list view instead of a single task's comments. Rules are
 // board-scoped (a rule's triggerColumnId picker needs the open board's own
 // board.columns), which is why this entry point lives here rather than
-// alongside MembersView in ProjectListView.qml.
+// alongside MembersView in ProjectListView.qml. That popup owns the whole
+// lifecycle of the rules list: it fetches on open, and the Connections block
+// below re-fetches after each mutation, because nothing else does.
 //
 // `boardBridge`/`projectAdminBridge` default to null so this same file also
 // loads with nothing wired up, which is exactly what the offscreen
@@ -100,6 +102,22 @@ Item {
             page.report("comment added", false)
         }
 
+        // Automation rules are on-demand state, and neither mutation returns
+        // the new listing: BoardPresenter::createRule/deleteRule resolve to a
+        // bare ruleCreated/ruleDeleted (board_presenter.cpp) and nothing else
+        // re-lists. So the refresh has to happen here -- exactly as
+        // ProjectListView.qml's own onProjectCreated re-calls
+        // refreshProjects() for the same reason.
+        function onRuleCreated() {
+            page.report("rule added", false)
+            page.boardBridge.getRules()
+        }
+
+        function onRuleDeleted() {
+            page.report("rule removed", false)
+            page.boardBridge.getRules()
+        }
+
         function onPollingStopped(message) {
             page.report(message, true)
         }
@@ -128,6 +146,18 @@ Item {
         height: 420
         x: (parent ? parent.width - width : 0) / 2
         y: (parent ? parent.height - height : 0) / 2
+
+        /// Fetches the rule list every time this popup is shown. `rules` is
+        /// on-demand state (BoardBridge.getRules), not part of the polled
+        /// `board` snapshot RulesView's sibling bindings read, so without this
+        /// the pane renders whatever the last fetch left behind -- which,
+        /// before any fetch has ever run, is nothing at all. Mirrors
+        /// TaskDetailPopup.qml's identical `onOpened: getAttachments(taskId)`.
+        onOpened: {
+            if (page.boardBridge !== null) {
+                page.boardBridge.getRules()
+            }
+        }
 
         ColumnLayout {
             anchors.fill: parent

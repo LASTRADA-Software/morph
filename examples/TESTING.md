@@ -254,6 +254,19 @@ A `sleep_for` outside `pump.hpp` is a review-rejectable defect. The test
 binary uses the Qt-owning `main()` (QCoreApplication + `Catch::Session` +
 DeferredDelete drain) copied from `tests/qt/test_qt_websocket.cpp`.
 
+The one sanctioned exception is a test that must not link Qt at all.
+`examples/kanban/tests/test_kanban_stress.cpp` is the case: it runs under
+ThreadSanitizer, and morph#128 established that routing its callbacks through
+a `QtExecutor` produced 165 TSan warnings that all bottomed out in Qt-internal
+frames a prebuilt Qt makes unreadable — evidence for nothing either way. It
+therefore owns a small `waitUntil` over `sleep_for` instead of `pumpUntil`.
+Such a loop still owes the scaling: `examples/common/testkit/deadline.hpp`
+holds `computeDeadlineScale`/`deadlineScale` with **no Qt dependency**,
+`pump.hpp` includes it rather than defining them, and the stress test includes
+only `deadline.hpp`. So `MORPH_LADDER_DEADLINE_MS` moves every wall-clock
+budget in `examples/`, Qt-free ones included — which was not true while the
+scale factor lived inside `pump.hpp`.
+
 `pump.hpp` covers waiting on the *Qt loop*. Waiting on a **background job**
 has its own answer, and it is not a wait at all:
 
@@ -293,7 +306,7 @@ DoD):
 
 | Component | First needed by |
 |---|---|
-| `testkit_main.cpp`, `pump.hpp`, `backend_rig.hpp`, `db_fixture.hpp`, `db_fault_fixture.hpp`, **fault proxy + strand interleaver** (pulled forward, round-7) | rung 0/1 |
+| `testkit_main.cpp`, `pump.hpp`, `deadline.hpp`, `backend_rig.hpp`, `db_fixture.hpp`, `db_fault_fixture.hpp`, **fault proxy + strand interleaver** (pulled forward, round-7) | rung 0/1 |
 | `client_pool.hpp`, `convergence.hpp` | rung 3 |
 | `action_driver.hpp`, `process_pool.hpp`, `offline_rig.hpp` | rung 4 |
 | `step_executor.hpp` | rung 5 |

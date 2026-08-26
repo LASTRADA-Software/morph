@@ -7,10 +7,19 @@
 // place a DTO becomes a `QVariantMap`/`QVariantList` property bag, and QML
 // binds by *string*, so every assertion below pins a real string a future
 // `BoardView.qml` will bind against.
+//
+// What is deliberately *not* here any more: the hand-written metaobject guard
+// this file used to open with -- `indexOfMethod`/`indexOfSignal` lists plus an
+// exact `propertyCount() - propertyOffset()` assertion. `QmlSurfaceAudit`
+// (tests/test_kanban_qml_surface.cpp) replaces it and strictly dominates it:
+// the audit reads the rung's own `.qml` as the expectation, so it covers the
+// direction a transcribed checklist structurally cannot (QML binding a name
+// the bridge does not have), and it cannot go stale the way the checklist
+// had already gone stale -- by the time it was deleted it had silently missed
+// `stopPolling()`, `pollingStopped(QString)` and `syncStatusChanged(int,int)`,
+// three members added long after the list was written. A count that is
+// satisfied by any two compensating edits is not a control.
 
-#include <QMetaMethod>
-#include <QMetaObject>
-#include <QMetaProperty>
 #include <QMetaType>
 #include <QString>
 #include <QTemporaryDir>
@@ -122,60 +131,6 @@ constexpr std::string_view kAttachmentTestSecret = "board-qml-bridge-attachment-
 
 }  // namespace
 
-TEST_CASE("BoardBridge exposes the expected surface", "[kanban][gui][qml-bridge]") {
-    DbFixture fixture;
-    auto rig = makeAuthedRig("alice");
-    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
-
-    const QMetaObject* meta = bridge.metaObject();
-
-    REQUIRE(meta->indexOfProperty("board") >= 0);
-    REQUIRE(meta->indexOfProperty("activity") >= 0);
-    REQUIRE(meta->indexOfProperty("myRole") >= 0);
-    REQUIRE(meta->indexOfProperty("rules") >= 0);
-    REQUIRE(meta->indexOfProperty("attachments") >= 0);
-#ifdef MORPH_BUILD_OFFLINE_SQLITE
-    // Task 6: queueDepth/deadLetterCount only exist when the offline stack
-    // (MORPH_BUILD_OFFLINE_SQLITE) is compiled in -- see board_qml_bridge.hpp's
-    // own gating of these two Q_PROPERTYs.
-    REQUIRE(meta->indexOfProperty("queueDepth") >= 0);
-    REQUIRE(meta->indexOfProperty("deadLetterCount") >= 0);
-    CHECK(meta->propertyCount() - meta->propertyOffset() == 7);
-#else
-    CHECK(meta->propertyCount() - meta->propertyOffset() == 5);
-#endif
-
-    REQUIRE(meta->indexOfMethod("openBoard(QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("refresh()") >= 0);
-    REQUIRE(meta->indexOfMethod("createColumn(QString,int)") >= 0);
-    REQUIRE(meta->indexOfMethod("createSwimlane(QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("createTask(QString,QString,QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("moveTask(QString,QString,QString,int)") >= 0);
-    REQUIRE(meta->indexOfMethod("addComment(QString,QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("setMyRole(QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("createRule(QString,QString,QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("getRules()") >= 0);
-    REQUIRE(meta->indexOfMethod("deleteRule(QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("setAttachmentServerUrl(QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("uploadAttachment(QString,QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("getAttachments(QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("downloadAttachment(QString,QString)") >= 0);
-
-    REQUIRE(meta->indexOfSignal("bound()") >= 0);
-    REQUIRE(meta->indexOfSignal("boardChanged()") >= 0);
-    REQUIRE(meta->indexOfSignal("activityChanged()") >= 0);
-    REQUIRE(meta->indexOfSignal("myRoleChanged()") >= 0);
-    REQUIRE(meta->indexOfSignal("taskMoved(QString)") >= 0);
-    REQUIRE(meta->indexOfSignal("commentAdded(QString)") >= 0);
-    REQUIRE(meta->indexOfSignal("rulesListed(QVariantList)") >= 0);
-    REQUIRE(meta->indexOfSignal("ruleCreated()") >= 0);
-    REQUIRE(meta->indexOfSignal("ruleDeleted()") >= 0);
-    REQUIRE(meta->indexOfSignal("attachmentsListed(QVariantList)") >= 0);
-    REQUIRE(meta->indexOfSignal("attachmentUploaded(QString)") >= 0);
-    REQUIRE(meta->indexOfSignal("attachmentDownloaded(QString)") >= 0);
-    REQUIRE(meta->indexOfSignal("failed(QString)") >= 0);
-}
-
 TEST_CASE("BoardBridge::openBoard then createColumn/createSwimlane/createTask updates the board property",
           "[kanban][gui][qml-bridge]") {
     DbFixture fixture;
@@ -221,8 +176,7 @@ TEST_CASE("BoardBridge::openBoard then createColumn/createSwimlane/createTask up
     CHECK(taskRow.value(QStringLiteral("title")).toString() == QStringLiteral("Fix bug"));
 }
 
-TEST_CASE("BoardBridge exposes the expected surface and moveTask generates a fresh opId per call",
-          "[kanban][gui][qml-bridge]") {
+TEST_CASE("BoardBridge::moveTask generates a fresh opId per call", "[kanban][gui][qml-bridge]") {
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     const auto projectId = seedProject(*rig);

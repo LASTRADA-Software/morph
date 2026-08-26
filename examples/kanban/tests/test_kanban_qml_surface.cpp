@@ -77,33 +77,90 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     audit.bind(QStringLiteral("boardBridge"), boardBridge);
     audit.bind(QStringLiteral("projectAdminBridge"), projectAdminBridge);
 
-    // ── The pre-existing backlog, recorded rather than swallowed ──────────
+    // ── What is exempt, and why each one is permanent ────────────────────
     // The first run of this audit reported nine members BoardBridge publishes
-    // that no file under gui/qml/ binds. The other direction is clean, so no
-    // screen is broken; each is either dead surface or a missing control, and
-    // deciding which is per-member work this file does not do. They are listed
-    // here so the guard goes live now and catches the *next* drift in either
-    // direction, with the backlog itemised instead of hidden behind a lowered
-    // bar.
+    // that no file under gui/qml/ binds, recorded as a backlog under
+    // morph#291. That backlog is now worked off, and nothing here is "tracked,
+    // decide later": five of the nine were dispositioned by binding or
+    // deleting the member, and the two that remain are exempt for a structural
+    // reason that will not change.
     //
-    // The list is checked in both directions too: an exemption for a member
-    // that has since been deleted, or one QML has since bound, fails this test
+    // What went, and where it went:
+    //   * `getRules`/`ruleCreated`/`ruleDeleted` -- these were not dead
+    //     surface, they were the automation-rules pane never being populated
+    //     at all (morph#304 §A2). BoardView.qml now fetches on `rulesPopup`'s
+    //     `onOpened` and re-fetches on each mutation, so the audit resolves
+    //     all three against real binding sites.
+    //   * `attachmentUploaded`/`attachmentDownloaded` -- a missing control.
+    //     TaskDetailPopup.qml now reports both outcomes; the download half in
+    //     particular had no user-visible effect whatsoever, since it writes
+    //     its bytes to a path outside the app.
+    //   * `bound` -- genuinely dead, and deleted rather than exempted. See
+    //     board_qml_bridge.hpp's own note where the signal used to be.
+    //
+    // The list is checked in both directions: an exemption for a member that
+    // has since been deleted, or one QML has since bound, fails this test
     // (testkit/qml_surface.hpp). It can only shrink deliberately.
     //
-    // `syncStatusChanged` is in the list under protest: it is the NOTIFY signal
-    // behind `deadLetterCount`, which BoardView.qml *does* bind, so the signal
-    // is doing its job -- a property binding consumes a NOTIFY signal without
-    // an explicit Connections handler, and the audit does not model that.
-    // Teaching it to would change what ledger's list means too (morph#239 has
-    // the same shape), so it is recorded here and argued in morph#291 rather
-    // than fixed in passing.
+    // Both survivors are C++ call sites. The audit scans `.qml` and nothing
+    // else, so a member whose only caller is C++ sweeps as unreferenced no
+    // matter how load-bearing it is -- that is a limitation of the instrument,
+    // not a finding about the bridge, and no amount of later work will clear
+    // these two.
+    const QString cppOnly = QStringLiteral(
+        "called from C++, not QML -- the audit scans .qml only, so a C++-only caller cannot satisfy it");
+    // gui/main.cpp:152, on the composed desktop client, before any QML runs.
+    audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("setAttachmentServerUrl"), cppOnly);
+    // board_qml_bridge.cpp:533 -- BoardBridge::onEventApplied(), the
+    // EventPoller's own applied-event handler, which resyncs `board` after
+    // every polled event. Deliberately *not* cited as the ReconnectCoordinator
+    // replay dependency further down the same file (:645): that call sits
+    // inside `#ifdef MORPH_BUILD_OFFLINE_SQLITE`, so citing it would make this
+    // reason false in precisely the OFF configure the guard below exists to
+    // check. :533 is outside every guard and holds in both.
+    audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("refresh"), cppOnly);
+#ifndef MORPH_BUILD_OFFLINE_SQLITE
+    // `syncStatusChanged` is declared unconditionally (board_qml_bridge.hpp's
+    // signals block) while *both* properties naming it as their NOTIFY --
+    // `queueDepth` and `deadLetterCount` -- live inside
+    // `#ifdef MORPH_BUILD_OFFLINE_SQLITE`. That asymmetry is the whole story:
     //
-    // Same shape as ledger's (morph#239) and lims' (morph#287).
-    const QString backlog = QStringLiteral("unbound bridge surface, tracked in morph#291");
-    for (const auto* member : {"bound", "ruleCreated", "ruleDeleted", "attachmentUploaded", "attachmentDownloaded",
-                               "syncStatusChanged", "getRules", "refresh", "setAttachmentServerUrl"}) {
-        audit.allowUnbound(QStringLiteral("boardBridge"), QString::fromLatin1(member), backlog);
-    }
+    //   * ON:  `deadLetterCount` exists and BoardView.qml:193/197 reads it for
+    //          real (the `!== undefined` on :192 is the probe; those two are
+    //          uses). The audit treats a property's NOTIFY signal as covered by
+    //          reading the property -- testkit/qml_surface.cpp's signal sweep
+    //          does model this -- so the signal needs no exemption here, and
+    //          claiming one would misdescribe a guard that is already doing its
+    //          job.
+    //   * OFF: neither property is compiled in, so no property read can cover
+    //          the signal, and it sweeps as a signal nothing handles.
+    //
+    // Hence `#ifndef`, the mirror image of `queueDepth`'s `#ifdef` below.
+    // Worth stating plainly because the exemption list's original comment
+    // asserted the opposite -- that the audit "does not model" NOTIFY coverage
+    // by property read. It does, and has since the audit landed; the entry was
+    // unnecessary in the ON configure all along.
+    //
+    // Nothing could have told us, either, and that part is not a kanban quirk:
+    // a redundant NOTIFY exemption is invisible to the audit in *both* sweep
+    // directions. The signal sweep short-circuits on `exempt(name)` before it
+    // ever reaches the NOTIFY-coverage check, so an exempt-but-already-covered
+    // signal is skipped rather than reported. The staleness sweep, which does
+    // catch an exemption QML has since bound, only looks for the member being
+    // read/handled/called *directly* -- never for it being covered
+    // transitively through the property whose NOTIFY it is. So this entry sat
+    // here doing nothing in the ON configure, and the comment justifying it
+    // survived long enough to be written up as a design question. That blind
+    // spot lives in `QmlSurfaceAudit` and affects every rung's exemption list;
+    // it is filed separately, not worked around here.
+    //
+    // Dropping the entry in the configure where it is redundant is what makes
+    // the redundancy checkable at all: with no exemption, the ON configure now
+    // has to pass on genuine NOTIFY coverage or fail loudly.
+    audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("syncStatusChanged"),
+                       QStringLiteral("NOTIFY signal of queueDepth/deadLetterCount, neither of which is compiled in "
+                                      "without MORPH_BUILD_OFFLINE_SQLITE"));
+#endif
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     // Only exists in this configure, and unbound in it: BoardView.qml binds
     // `deadLetterCount` and reads `queueDepth` nowhere. Guarded by the same
@@ -121,7 +178,10 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     // lacks the property -- and this assertion is one of the few places that
     // notices. Keyed off the macro it fails loudly on such a tree; keyed off the
     // metaobject it would pass and let the stale build through.
-    audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("queueDepth"), backlog);
+    audit.allowUnbound(
+        QStringLiteral("boardBridge"), QStringLiteral("queueDepth"),
+        QStringLiteral("compiled in only under MORPH_BUILD_OFFLINE_SQLITE, and unbound in that configure: "
+                       "BoardView.qml's offline banner reads deadLetterCount and nothing reads queueDepth"));
 #endif
 
     const QStringList findings = audit.run();

@@ -229,7 +229,6 @@ BoardBridge::BoardBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
     // Direct (same-thread) connections throughout — same "no meta-type
     // registration needed" note as ProjectAdminBridge's identical
     // constructor comment.
-    connect(&_presenter, &BoardPresenter::bound, this, &BoardBridge::bound);
     connect(&_presenter, &BoardPresenter::boardOpened, this, [this](GetBoardResult result) { applyBoard(result); });
     connect(&_presenter, &BoardPresenter::taskMoved, this, &BoardBridge::taskMoved);
     connect(&_presenter, &BoardPresenter::commentAdded, this, &BoardBridge::commentAdded);

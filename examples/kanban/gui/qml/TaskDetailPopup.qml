@@ -20,7 +20,9 @@
 // attachments already carries only the requested task's own rows (it is
 // populated by an explicit getAttachments(taskId) call, not filtered
 // client-side out of a whole-board list the way comments are), so no
-// client-side filter is needed here.
+// client-side filter is needed here. Both attachment operations also report
+// their outcome through `status` below -- the one thing the bridge's own
+// re-fetch does not cover.
 //
 // `boardBridge` defaults to null and `taskId` defaults to -1 so this same
 // file also loads standalone with nothing wired up, which is exactly what
@@ -45,6 +47,14 @@ Popup {
     property var boardBridge: null
     property string taskId: "-1"
     property string taskTitle: ""
+
+    /// The last attachment upload/download outcome, rendered at the foot of
+    /// this popup. Both operations finish asynchronously and neither is
+    /// self-evident from the list above: an upload's new row only appears
+    /// after a second round trip (the bridge re-fetches), and a download
+    /// writes its bytes to a path *outside* the app, so it has no visible
+    /// effect here at all.
+    property string status: ""
 
     /// This task's own comments -- boardBridge.board.comments filtered to
     /// the rows whose own taskId matches popup.taskId (a decimal string, per
@@ -74,6 +84,25 @@ Popup {
     onOpened: {
         if (popup.boardBridge !== null) {
             popup.boardBridge.getAttachments(popup.taskId)
+        }
+    }
+
+    /// The two attachment operations' completion signals. Deliberately no
+    /// getAttachments() call in either handler: BoardBridge re-fetches the
+    /// list itself after a successful upload (board_qml_bridge.cpp emits
+    /// attachmentUploaded and then calls getAttachments on the same task), so
+    /// re-fetching here would only duplicate that round trip. What the bridge
+    /// does *not* provide is any confirmation to the user, which is all these
+    /// handlers add.
+    Connections {
+        target: popup.boardBridge
+
+        function onAttachmentUploaded(taskId) {
+            popup.status = "attachment uploaded"
+        }
+
+        function onAttachmentDownloaded(localFilePath) {
+            popup.status = "saved to " + localFilePath
         }
     }
 
@@ -196,6 +225,14 @@ Popup {
             text: "Attach file..."
             enabled: popup.boardBridge !== null
             onClicked: attachFileDialog.open()
+        }
+
+        Label {
+            Layout.fillWidth: true
+            visible: popup.status !== ""
+            wrapMode: Text.Wrap
+            opacity: 0.7
+            text: popup.status
         }
 
         Button {
