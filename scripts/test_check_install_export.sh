@@ -115,9 +115,16 @@ expect_caught() {
         return
     fi
 
+    # A here-string, not `printf ... | grep`: under `set -o pipefail` that
+    # pipeline reports failure whenever `grep -q` finds its match early and
+    # exits while `printf` still has output to write, because printf then dies
+    # of EPIPE and pipefail takes the pipeline's status from it. A needle that
+    # IS present is then reported missing -- and it only bites once the
+    # captured output outgrows the pipe buffer, so the compiler-error dumps
+    # this file matches on are exactly the case that triggers it.
     missing=""
     for needle in "${expected[@]}"; do
-        if ! printf '%s' "$output" | grep -qF -- "$needle"; then
+        if ! grep -qF -- "$needle" <<<"$output"; then
             missing="${missing}${missing:+, }'${needle}'"
         fi
     done
