@@ -18,6 +18,10 @@ namespace morph::ladder::testkit {
 
 namespace {
 
+/// @brief The `typeof ` operator, trailing space included, as it appears
+///        before a dotted read the scanner is deciding about.
+const QString kTypeofPrefix = QStringLiteral("typeof ");
+
 /// @brief One-based line number of @p offset within @p text.
 /// @param text   The text @p offset indexes into.
 /// @param offset Character offset.
@@ -244,8 +248,24 @@ QmlScanResult scanQml(const QString& source, const QString& fileName, const QStr
                     (tail.startsWith(QStringLiteral("!==")) || tail.startsWith(QStringLiteral("===")) ||
                      tail.startsWith(QStringLiteral("!=")) || tail.startsWith(QStringLiteral("=="))) &&
                     tail.contains(QStringLiteral("undefined"));
-                const qsizetype before = match.capturedStart(0);
-                const bool typeofApplied = before >= 7 && text.mid(before - 7, 7) == QStringLiteral("typeof ");
+                // `typeof` sits before the whole dotted expression, and the
+                // match starts at the *alias* -- in `typeof page.fixture.depth`
+                // the alias is `fixture`, five characters in. So walk back over
+                // any `page.`-style prefix before looking for the keyword.
+                // Checking a fixed offset only ever recognised `typeof alias.x`
+                // and silently missed every qualified read, which is the shape
+                // QML actually uses.
+                qsizetype before = match.capturedStart(0);
+                while (before > 0) {
+                    const QChar previous = text.at(before - 1);
+                    if (!previous.isLetterOrNumber() && previous != QLatin1Char('_') && previous != QLatin1Char('.')) {
+                        break;
+                    }
+                    --before;
+                }
+                const bool typeofApplied =
+                    before >= kTypeofPrefix.size() &&
+                    text.mid(before - kTypeofPrefix.size(), kTypeofPrefix.size()) == kTypeofPrefix;
                 if (comparedToUndefined || typeofApplied) {
                     result.optionalProbes.insert(alias + QLatin1Char('.') + reference.member);
                 }
