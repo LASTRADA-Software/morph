@@ -109,8 +109,13 @@ TEST_CASE("LedgerQmlBridge carries balances exactly, never as a float", "[ledger
         CHECK(map.value("balanceDecimalPlaces").toLongLong() == 2);
         if (map.value("name").toString() == "Checking") {
             CHECK(numerator == -5000);
+            // `balanceText` is what LedgerView binds, and it is rendered by
+            // `ledger::formatMoney` on this side of the boundary -- QML has
+            // only IEEE doubles, so the view can no longer compute it.
+            CHECK(map.value("balanceText").toString() == "-50");
         } else {
             CHECK(numerator == 5000);
+            CHECK(map.value("balanceText").toString() == "50");
         }
     }
     CHECK(bridge.lastError().isEmpty());

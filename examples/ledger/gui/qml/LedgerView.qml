@@ -11,21 +11,12 @@ ColumnLayout {
     property var bridge: null
     spacing: 8
 
-    /// Renders an exact Rational triple as text.
-    ///
-    /// The bridge publishes numerator/denominator/decimalPlaces rather than
-    /// one pre-divided number (design spec §7's no-float rule), so the
-    /// formatting decision lives here, in the view, where it belongs -- and
-    /// the model never produced a double that could round.
-    function formatAmount(entry) {
-        if (!entry) {
-            return "";
-        }
-        const denominator = entry.balanceDenominator === 0 ? 1 : entry.balanceDenominator;
-        const places = entry.balanceDecimalPlaces;
-        const scaled = entry.balanceNumerator / denominator;
-        return (scaled / Math.pow(10, places)).toFixed(places);
-    }
+    // Balances are bound as `balanceText`, which the bridge pre-renders with
+    // `ledger::formatMoney` (design spec §7's no-float rule). This file does
+    // no arithmetic on money: QML has only IEEE doubles, so dividing the
+    // exact numerator/denominator/decimalPlaces here would undo `Rational`'s
+    // exactness in the last three lines of the path and drift past 2^53. The
+    // exact triple is still published for a view that needs the parts.
 
     Label {
         text: qsTr("Accounts")
@@ -42,7 +33,7 @@ ColumnLayout {
             Label { text: modelData.name; Layout.fillWidth: true }
             Label { text: modelData.kind; opacity: 0.7 }
             Label { text: modelData.currency; opacity: 0.7 }
-            Label { text: view.formatAmount(modelData); font.family: "monospace" }
+            Label { text: modelData.balanceText; font.family: "monospace" }
         }
     }
 

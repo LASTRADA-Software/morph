@@ -11,14 +11,19 @@ ColumnLayout {
     property var bridge: null
     spacing: 8
 
-    /// Formats an exact triple from the report map under `prefix`.
+    /// Reads the text the bridge pre-rendered for `prefix`, or "-" before a
+    /// report has arrived.
+    ///
+    /// The rendering itself is `ledger::formatMoney`, in the bridge: QML has
+    /// only IEEE doubles, so dividing the exact
+    /// numerator/denominator/decimalPlaces here would undo `Rational`'s
+    /// exactness in the last three lines of the path (design spec §7's
+    /// no-float rule). The exact triple is still published alongside.
     function formatPart(report, prefix) {
-        if (!report || report[prefix + "Denominator"] === undefined) {
+        if (!report || report[prefix + "Text"] === undefined) {
             return "-";
         }
-        const denominator = report[prefix + "Denominator"] === 0 ? 1 : report[prefix + "Denominator"];
-        const places = report[prefix + "DecimalPlaces"];
-        return ((report[prefix + "Numerator"] / denominator) / Math.pow(10, places)).toFixed(places);
+        return report[prefix + "Text"];
     }
 
     Label { text: qsTr("Budgets"); font.bold: true }

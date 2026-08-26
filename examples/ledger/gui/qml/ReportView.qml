@@ -68,11 +68,11 @@ ColumnLayout {
                 opacity: 0.8
             }
             Label {
-                text: {
-                    const denominator = modelData.denominator === 0 ? 1 : modelData.denominator;
-                    const places = modelData.decimalPlaces;
-                    return ((modelData.numerator / denominator) / Math.pow(10, places)).toFixed(places);
-                }
+                // Pre-rendered by the bridge with `ledger::formatMoney`
+                // (design spec §7's no-float rule): QML has only IEEE
+                // doubles, so dividing the exact triple here would undo
+                // `Rational`'s exactness in the last three lines of the path.
+                text: modelData.amountText
                 font.family: "monospace"
             }
         }

@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "gui/id_qml.hpp"
+#include "ledger/core/money.hpp"
 #include "ledger/core/units.hpp"
 
 namespace ledger::gui {
@@ -62,19 +63,29 @@ using ::morph::ladder::gui::idNumber;
 ///        no-float rule applies at the QML boundary exactly as it does on
 ///        the wire, and a view that wants to format differently still has
 ///        the exact numerator/denominator to do it from.
+///
+///        `balanceText` is what `LedgerView` actually binds. It has to be
+///        rendered here rather than in the view because QML has only IEEE
+///        doubles: the `numerator / denominator / Math.pow(10, places)` the
+///        view used to compute re-introduced, in the last three lines of the
+///        path, exactly the imprecision `Rational` exists to remove, and
+///        drifted past 2^53 while the payload beneath it stayed exact.
+///        `ledger::formatMoney` is exact integer long division through
+///        `Money<C>` and `morph::units::toDecimalString`.
 /// @param account The account to render.
 /// @return The QML-ready map.
 [[nodiscard]] QVariantMap toVariantMap(const AccountInfo& account) {
     const auto& balance = account.balance;
+    const auto code = currencyToCode(account.currency);
     return QVariantMap{
         {"id", idNumber(account.id)},
         {"name", QString::fromStdString(account.name)},
         {"kind", kindToText(account.kind)},
-        {"currency", QString::fromUtf8(currencyToCode(account.currency).data(),
-                                       static_cast<qsizetype>(currencyToCode(account.currency).size()))},
+        {"currency", QString::fromUtf8(code.data(), static_cast<qsizetype>(code.size()))},
         {"balanceNumerator", static_cast<qlonglong>(balance.numerator)},
         {"balanceDenominator", static_cast<qlonglong>(balance.denominator)},
         {"balanceDecimalPlaces", static_cast<qlonglong>(balance.decimalPlaces.value)},
+        {"balanceText", QString::fromStdString(formatMoney(account.currency, balance))},
     };
 }
 
@@ -139,7 +150,11 @@ void LedgerQmlBridge::storeTransaction(const QString& fromAccountId, const QStri
     const auto to = idFromText<AccountId>(toAccountId);
     // Minor units in, exact Rational out: cents are numerator over a
     // denominator of 1 at 2 decimal places, so nothing is ever rounded on the
-    // way through this boundary.
+    // way through this boundary. The scale is the gesture's own, not the
+    // accounts' -- this view only knows account ids -- and `LedgerModel`
+    // restates each leg onto its account currency's scale on arrival, so a
+    // transfer between two zero-decimal accounts entered here as cents lands
+    // as the whole units it divides into.
     constexpr std::uint32_t kMinorUnitPlaces = 2;
     const auto debit = morph::math::Rational{Numerator{-static_cast<std::int64_t>(amountMinor)}, Denominator{1},
                                              DecimalPlaces{kMinorUnitPlaces}};
