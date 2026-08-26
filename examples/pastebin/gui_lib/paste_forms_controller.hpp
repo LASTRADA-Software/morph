@@ -16,8 +16,10 @@ namespace pastebin::gui {
 ///        (`schemasJson()`/`submitIfValid()`), composed over an injected
 ///        `Bridge&`/`IExecutor*` instead of constructing its own
 ///        `LocalBackend`. The shipped core's own `(Bridge&, IExecutor*,
-///        schemasJson)` constructor now supports this directly (finding
-///        021), but this rung still owns a thin controller of its own —
+///        schemasJson)` constructor now supports this directly
+///        (`include/morph/qt/forms/forms_controller_core.hpp`), closing the
+///        gap that motivated this class, but this rung still owns a thin
+///        controller of its own —
 ///        `TESTING.md`'s presenter rule 2 forbids GUI code from
 ///        constructing its own backend/executor regardless, and this
 ///        controller predates the shipped core gaining that overload. Pure

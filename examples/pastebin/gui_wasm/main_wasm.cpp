@@ -71,10 +71,17 @@ int main(int argc, char** argv) {
     std::unique_ptr<pastebin::gui::FormsBridge> formsBridge;
     std::unique_ptr<pastebin::gui::PasteBridge> pasteBridge;
 
-    // Every handler is built from inside onReady(), never before it: a Remote
-    // context is not usable the line after its constructor returns, and a
-    // registration issued before the socket is up fails permanently with no
-    // retry (docs/findings/017). Identical to gui/main.cpp's --server path.
+    // Every handler is built from inside onReady(), never before it. A
+    // registration issued before the socket is up no longer fails permanently:
+    // `Remote` mode sets `asyncRegistrationEnabled`, and
+    // `QtWebSocketBackend::registerModelAsync()` queues such a registration and
+    // retries it once the connection comes up (`docs/spec/core/backend.md`,
+    // "Asynchronous registration"). Deferring to onReady() is kept because it
+    // is simpler to reason about than the pre-connect queue — see
+    // `examples/common/gui/app_context.hpp`'s "Readiness contract". What *is*
+    // still a hard WASM constraint is how readiness is detected: AppContext
+    // uses `setConnectHandler`, never `waitForConnected()`, which nests an
+    // event loop and hangs the page. Identical to gui/main.cpp's --server path.
     ctx.onReady([&] {
         formsBridge = std::make_unique<pastebin::gui::FormsBridge>(ctx.bridge(), ctx.executor());
         pasteBridge = std::make_unique<pastebin::gui::PasteBridge>(ctx.bridge(), ctx.executor());

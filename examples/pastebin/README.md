@@ -210,6 +210,24 @@ must both work unchanged.
 - **Lightweight behind a model** at the smallest possible scale — the
   DTO ⇄ entity ⇄ `DataMapper` loop of [`../IMPLEMENTATION.md`](../IMPLEMENTATION.md)
   proven on a one-entity schema before the bigger rungs depend on it.
+- **`morph::async::CallbackScope`** — this rung is the ladder's first
+  consumer, in `gui_lib/paste_qml_bridges.hpp`'s `FormsBridge`. Its
+  `submitIfValid` hands the forms controller two callbacks that capture
+  `this` and emit `replyReceived`; a `Completion` always resolves through the
+  executor, and both shells own their bridges by `unique_ptr` in `main()`, so
+  a reply can land after the bridge is gone. The rung's two neighbours are
+  covered by mechanisms that do not reach here — `PastePresenter` through
+  `Presenter::track()`'s `QPointer` re-check, `PasteBridge` through Qt's
+  signal/slot auto-disconnect — so `FormsBridge` takes the framework's
+  general answer: a **last-declared** `CallbackScope` member, with both arms
+  wrapped in `_callbacks.guard(...)`
+  ([`docs/spec/core/callback_scope.md`](../../docs/spec/core/callback_scope.md)).
+  `tests/test_paste_qml_bridges.cpp` drives the window (destroy a bridge
+  mid-submit, then let the reply land) and asserts the observable half — the
+  dispatch completed after the bridge was gone. The suppression itself has no
+  observable signature outside a sanitized build, which is stated there
+  rather than dressed up: this was closed by construction, not after a
+  measured crash.
 
 **Custom-GUI-element justification (`../IMPLEMENTATION.md` rule 2):** at the
 time this rung was built, the shipped `morph::qt::forms::FormsControllerCore
@@ -237,12 +255,26 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
 - **Size-limit UX**: `CreatePaste` bouncing off the server's message-size
   bound; the client renders a typed error. Typed error rendering debuts
   here, not rung 4.
-- **Duplicate create on retry**: a resent `CreatePaste` must not mint two
-  pastes — first appearance of the idempotency-key discipline (rung 4
-  formalizes it). Until the fault-injection proxy exists (rung 4), this is
-  explicitly the **weaker approximation** — double-execute with the same op
-  id — not true reply-frame loss. Plus id-collision handling in the tiny
-  animal-name keyspace.
+- **Duplicate create on retry**: this rung ships the *inverse* of the
+  requirement as originally written, and does so deliberately.
+  `tests/test_paste_model.cpp`'s "Two CreatePaste calls with identical
+  content mint two distinct pastes at this rung" asserts that two identical
+  creates really do produce two pastes, because rung 1's `CreatePaste`
+  carries no op-id / idempotency-key field at all — there is nothing for a
+  server to deduplicate on, and `LADDER.md` scopes exactly-once delivery to
+  rung 4. The case is written to fail loudly the day that discipline lands
+  here, rather than letting a guarantee nobody implemented drift into the
+  documentation.
+
+  The blocker is the missing key, **not** missing tooling: the
+  fault-injection proxy shipped at rung 0–1 as
+  `examples/common/testkit/fault_proxy.hpp` (`LADDER.md`'s queued-work list
+  records it as *Shipped*), it can drop exactly the reply frame of call *k*,
+  and `examples/kanban/tests/test_kanban_offline.cpp` already drives it. A
+  genuine lost-reply-frame retry could therefore be staged against this rung
+  today; it would simply mint the second paste, which is what the existing
+  case already states in the cheaper way. Plus id-collision handling in the
+  tiny animal-name keyspace.
 - **Expiry edges**: `expiresAt` in the past / at epoch / malformed
   (wire error, not clamped); `GetPaste` against an already-past-`expiresAt`
   row before the periodic sweep has reached it (must still throw `Expired`
@@ -310,9 +342,10 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
 - [x] **Burn-after-read and expiry work**, with the atomicity mechanism, its
   `RETURNING` limitation and the ladder-wide journal position documented above.
 - [x] **Model unit tests**, following [`../bank/tests`](../bank/tests)
-  conventions: 33 cases covering the burn/expiry edges, the hostile-content
-  corpus replay, size limits, duplicate create, id collisions, the fail-open
-  security delta and `hello` version negotiation.
+  conventions: 40 cases (`grep -c '^TEST_CASE' tests/test_paste_model.cpp`)
+  covering the burn/expiry edges, the `CreatePaste` validation rules, the
+  hostile-content corpus replay, size limits, duplicate create, id
+  collisions, the fail-open security delta and `hello` version negotiation.
 - [x] **Findings filed rather than worked around** — this rung's actual
   product: ten in total, spanning rung 0 through this rung. Eight have since
   been fixed framework-side; their gaps and fixes are described inline
@@ -330,8 +363,8 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   timer capturing a bare `this`, which fired into freed storage one
   `GENERATE` iteration later and aborted the process
   (`examples/common/testkit/backend_rig.hpp`, with a regression case in
-  `test_backend_rig.cpp`). A fourth bug, `Completion::onError`'s single-slot
-  overwrite (finding 023), was *worked around* at the time rather than fixed:
+  `test_backend_rig.cpp`). A fourth bug — `Completion::onError`'s single-slot
+  overwrite — was *worked around* at the time rather than fixed:
   `gui/presenter.hpp`'s `track()` folded a subclass's error-display callback
   and the busy-counter decrement into the one `.onError()` slot `Completion`
   then kept, instead of composing two separate calls. `Completion`'s
@@ -339,10 +372,23 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   attaches fan out instead of overwriting), so `track()`'s fold is no longer
   load-bearing — kept as-is since it still works and nothing forces the
   change.
-  Finding 026, the sibling-writer half of the first bug above, is also fixed:
-  the same missing control-byte escaping in `journal/action_log.hpp`,
+  The sibling-writer half of the first bug above is also fixed: the same
+  missing control-byte escaping in `journal/action_log.hpp`,
   `offline/file_offline_queue.hpp` and `session/session_auth.hpp` was closed
   framework-side.
+
+  **On the finding numbers this section used to cite.** The ten findings above
+  were filed under a flat global sequence that no longer exists.
+  [`../FINDINGS.md`](../FINDINGS.md) now namespaces every id by the rung that
+  produced it (`<ns>-NNN-<kebab-slug>.md`) precisely because the flat sequence
+  did not survive parallel branches — two disjoint series were allocated
+  independently and both merged, so the same number came to mean different
+  things on different branches. `docs/findings/` holds only `r5-001`…`r5-004`
+  today, and the bare numbers this rung's prose used to carry (`017`, `018`,
+  `021`, `023`, `026`) resolve to no file at all. They have been replaced
+  throughout by a description of the gap and a pointer to the code that closes
+  it, which is what a reader actually needs and what survives a renumbering.
+  No finding file has been invented to make an old citation resolve.
 
 ### Known gaps, stated rather than smoothed over
 
@@ -379,5 +425,9 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   simply never firing and the list pane empty with no terminal error.
 - Deferred by design: the convergence assertion (needs rung 3's
   `poll()`/`lastEventId()`), the full hostile-content corpus (a representative
-  subset ships), true reply-frame loss (rung 4's fault-injection proxy), file
-  attachments.
+  subset ships), file attachments. Reply-frame loss is deferred for a
+  different reason than it once was: the proxy that stages it
+  (`examples/common/testkit/fault_proxy.hpp`) has shipped, so what is missing
+  is the `CreatePaste` idempotency key that would make the retry's outcome
+  differ from the ordinary double-create this rung already asserts — see
+  "Duplicate create on retry" above.
