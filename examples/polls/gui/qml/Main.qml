@@ -34,8 +34,14 @@ ApplicationWindow {
 
     /// Whether this build may create polls. `CreatePoll` is native-client-only
     /// per this rung's Global Constraints (examples/polls/README.md,
-    /// resolved design decision 6: a WASM tab's `assignHandlerPrimary` promote
-    /// step has no async path and would abort the page). Defaults to `true`,
+    /// resolved design decision 6), and the reason is product UX, not a
+    /// technical limit: it mirrors Rallly's anchor split, where an organizer
+    /// creates from the main app and participants open a shared link in
+    /// whatever browser tab they have. (An earlier version of this comment
+    /// cited a framework hazard — `assignHandlerPrimary`'s promote step having
+    /// no async path — which is both fixed and inapplicable here:
+    /// `CreatePoll` is not result-keyed and does not dispatch on a shared
+    /// handler, so that step never runs for it.) Defaults to `true`,
     /// the value a native desktop shell would leave alone;
     /// gui_wasm/main_wasm.cpp passes `nativeClient: false` as an initial
     /// property, which hides (not merely disables — see the Button below) the
