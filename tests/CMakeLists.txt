@@ -210,6 +210,68 @@ include(Catch)
 # hanging blocked a Windows runner for over half an hour).
 catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
 
+# ── Two-binary journal-path skew test (issue #246) ───────────────────────────
+# The executable form of the journal's data-at-rest contract, which
+# examples/lims/README.md asks for and #174 restated as "the other half": an
+# old build records a journal, a new build replays it, and a shape that changed
+# in between must not decode to a plausible default in silence.
+#
+# tests/test_journal_payload_evolution.cpp already simulates an older build
+# inside one process, via a struct it never registers. That proves the gate
+# fires; it cannot prove anything about two separately compiled programs, since
+# there is only ever one compilation. compile_checks/journal_skew_probe.cpp is
+# compiled twice, into two executables that share no translation unit, and the
+# "new" one asserts against a journal file the "old" one actually wrote.
+#
+# NOTE (deviation from the issue's suggestion): two real targets plus ordered
+# ctest cases, not the try_compile()/try_run() pattern the other
+# MORPH_CLIENT_ONLY gates use. Those gates need try_compile because they assert
+# a *link failure*, and because they must define a macro the main build does
+# not. Neither applies here: two ordinary executables differing only in a
+# -D is exactly what add_executable()/target_compile_definitions() are for, and
+# building them at build time lets ninja parallelise them instead of adding two
+# serial multi-minute compiles to every configure.
+#
+# NOTE (scope): neither binary is built with MORPH_CLIENT_ONLY. That macro
+# suppresses the model-owning registrars, so a client-only binary cannot
+# execute a model and therefore cannot journal anything. It is the right gate
+# for the *wire*-path skew test, which needs a per-action fingerprint exchanged
+# at `hello` before there is anything to assert against -- issue #207's
+# unimplemented proposal. This covers the journal path, which ships today.
+set(MORPH_JOURNAL_SKEW_DIR "${CMAKE_CURRENT_BINARY_DIR}/journal_skew")
+file(MAKE_DIRECTORY "${MORPH_JOURNAL_SKEW_DIR}")
+
+foreach(_skew_role old new)
+    string(TOUPPER "${_skew_role}" _skew_role_upper)
+    add_executable(morph_journal_skew_${_skew_role} compile_checks/journal_skew_probe.cpp)
+    target_compile_definitions(morph_journal_skew_${_skew_role}
+        PRIVATE MORPH_SKEW_ROLE_${_skew_role_upper})
+    target_link_libraries(morph_journal_skew_${_skew_role} PRIVATE morph::morph)
+    apply_warnings(morph_journal_skew_${_skew_role})
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_journal_skew_${_skew_role} ${AF_SANITIZER})
+    endif()
+endforeach()
+unset(_skew_role)
+unset(_skew_role_upper)
+
+# FIXTURES_SETUP/FIXTURES_REQUIRED rather than a bare ordering: ctest then
+# refuses to run the replay case at all if the writer failed, instead of
+# reporting a second, confusing failure about a journal file that was never
+# produced. Both are also serialised against each other by the fixture, which
+# matters under `ctest -j`: they share one journal file.
+add_test(NAME journal_skew_old_build_writes
+    COMMAND morph_journal_skew_old "${MORPH_JOURNAL_SKEW_DIR}")
+set_tests_properties(journal_skew_old_build_writes PROPERTIES
+    FIXTURES_SETUP morph_journal_skew_fixture
+    TIMEOUT 120)
+
+add_test(NAME journal_skew_new_build_replays
+    COMMAND morph_journal_skew_new "${MORPH_JOURNAL_SKEW_DIR}")
+set_tests_properties(journal_skew_new_build_replays PROPERTIES
+    FIXTURES_REQUIRED morph_journal_skew_fixture
+    TIMEOUT 120)
+
 # ── MORPH_REQUIRE_VETTED_HMAC guard check ────────────────────────────────────
 # Configure-time proof that the default-argument-removal mechanism in
 # session_auth.hpp (TokenIssuer/TokenVerifier/SigningAuthorizer) actually

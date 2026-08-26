@@ -1126,6 +1126,22 @@ parentheses appear only because `/` over a sum requires them. Had `diff` been
 used once, it would have inlined as `"a" - "b"` in place, with no `c1` at all —
 the placeholder exists precisely to avoid writing shared work twice.
 
+## Payload shape tag
+
+`Quantity<U, Dec>` specialises `morph::model::PayloadShapeTag` and renders as
+`quantity.<unit-ascii-id>.<declared-decimals>` -- for example
+`quantity.gram.3`.
+
+The unit and the declared precision are part of the tag, not just the type
+name, because two `Quantity` fields differing only in unit or precision are
+different payloads: replaying grams into a field that now means kilograms is
+exactly the silent corruption the journal's payload fingerprint exists to
+catch. A custom codec leaves no reflected members to decompose, so without this
+tag every `Quantity` -- and every other custom-codec type -- would render
+identically (morph#245).
+
+See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
+
 ## Cross-references
 
 - **[`rational.md`](rational.md)** — the payload type, and the one to read

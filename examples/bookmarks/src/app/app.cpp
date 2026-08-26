@@ -269,6 +269,15 @@ std::size_t App::relayOutboxOnce() {
         std::vector<::morph::journal::LogEntry> entries;
         entries.reserve(rows.size());
         for (const auto& row : rows) {
+            // journal-stamp-exempt: this entry is not produced by executing
+            // an action -- it is reconstituted from a `BookmarkOutboxRecord`
+            // row written earlier, and that table has no `schema` column
+            // (`bookmarks/db/outbox_entity.hpp`). There is nothing here to
+            // stamp *from*: deriving a fingerprint from this build's action
+            // structs would claim the queued payload has this build's shape,
+            // which is exactly the unverified assumption the field exists to
+            // replace. Carrying the fingerprint end-to-end needs a column on
+            // the outbox table, a rung schema change rather than a stamp.
             ::morph::journal::LogEntry entry;
             // `journal::LogEntry`'s fields are plain `std::string`; every
             // `BookmarkOutboxRecord` string column is a Lightweight strong

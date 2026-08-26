@@ -130,6 +130,13 @@ public:
         if (!_log) {
             return;
         }
+        // journal-stamp-exempt: there is no `Action` type here to derive a
+        // fingerprint from -- this overload exists precisely because the
+        // payload could not be decoded into one. Stamping *this* build's
+        // fingerprint would be a lie about the shape that wrote the payload,
+        // which is the opposite of what the field is for. The entry is
+        // recorded unstamped and `Outcome::Failed`, which is the honest
+        // record: undecodable, by this build, at this instant.
         ::morph::journal::LogEntry entry;
         entry.modelType = std::string{::morph::model::ModelTraits<Model>::typeId()};
         entry.entityKey = _entityKey;

@@ -136,10 +136,16 @@ transitions; journal as regulatory audit.
 - **Stale-schema submission**: schema `required`/bounds are client-side
   only — the server runs whatever payload arrives. A v-N payload against a
   v-N+1 server (narrowed spec range) must be accepted-under-old-rules,
-  rejected, or migrated — pick one and prove it. Extend to real binary
-  skew: build an old client with `MORPH_CLIENT_ONLY` and run it against a
-  new server (additive field must work; a renamed field must fail *loudly*,
-  not decode a lab result to a default).
+  rejected, or migrated — pick one and prove it. The *journal* half of real
+  binary skew is now proven by two separately compiled binaries
+  (`tests/compile_checks/journal_skew_probe.cpp`): an old build records, a
+  new build replays, and a renamed field throws `SchemaMismatchError` rather
+  than decoding a lab result to a default. An additive field throws there
+  too — `replay()`'s gate is fingerprint equality, not compatibility — and
+  is admitted by a pass-through migration. The *wire* half (an old
+  `MORPH_CLIENT_ONLY` client against a new server) stays open: nothing
+  mechanically enforces the action-evolution policy on that path until
+  issue #207's per-action `hello` fingerprint exists to assert on.
 - **Self-conflict in the offline chain**: one field client editing the same
   sample twice offline — the second queued update's base version must
   reference the first *queued* update, not the server state, or replay

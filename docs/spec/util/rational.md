@@ -499,6 +499,21 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
 | Negation limitation | **`INT64_MIN` overflows** | Documented limitation. The wire codec clamps `INT64_MIN` components away for untrusted input. |
 | `fromFloat` not `constexpr` | **Uses `std::llround` / `std::isfinite`** | These standard library functions are not `constexpr`. The `fromFloat` overloads are `inline` out-of-class, `noexcept` but not `constexpr`. |
 
+## Payload shape tag
+
+`Rational` specialises `morph::model::PayloadShapeTag` and renders as
+`rational`.
+
+The tag exists because `Rational`'s `glz::meta` routes serialisation through
+`setWire`/`getWire`, so it has no reflected members for the journal's payload
+fingerprint to decompose. Without a tag it would render as the same opaque
+placeholder every other custom-codec type renders as, and a field retyped
+between two of them -- `Rational` to `DateTime`, say -- would leave the
+fingerprint unchanged, so the journal would replay a recorded payload into a
+type that no longer matches it (morph#245).
+
+See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
+
 ## Cross-references
 
 | Spec | Relationship |

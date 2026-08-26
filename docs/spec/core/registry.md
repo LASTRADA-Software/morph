@@ -223,9 +223,10 @@ in is a matter of defining the member.
 
 ```cpp
 namespace morph::model {
-inline constexpr std::uint32_t kPayloadFingerprintScheme = 1;
+inline constexpr std::uint32_t kPayloadFingerprintScheme = 2;
 template <typename A> const std::string& payloadShapeString();  // "(count:i4,state:s)"
-template <typename A> const std::string& payloadFingerprint();  // "1:8c38bd160c0cf832"
+template <typename A> const std::string& payloadFingerprint();  // "2:8c38bd160c0cf832"
+template <typename T> struct PayloadShapeTag;                   // core/payload_shape_tag.hpp
 }
 ```
 
@@ -236,11 +237,15 @@ the scheme version so a future build that computes fingerprints differently can
 tell a scheme change from a payload change. Both are memoised per type in a
 function-local static.
 
-Every tag is derived from a `std::` type trait or from Glaze's reflected key
-strings — never from a compiler-spelled type name — so builds of the same
-sources on different compilers, standard libraries, or platforms agree on the
-digest. The grammar, the deliberate order-insensitivity, and the full list of
-what the fingerprint cannot see are documented once, in
+Every tag is derived from a `std::` type trait, from Glaze's reflected key
+strings, or from a name spelled in this repository's own sources — never from a
+compiler-spelled type name — so builds of the same sources on different
+compilers, standard libraries, or platforms agree on the digest. A type with a
+custom Glaze codec has no reflected members to decompose and declares its own
+name by specialising `PayloadShapeTag` (`core/payload_shape_tag.hpp`); one that
+declares nothing renders as the opaque `x`. The grammar, the deliberate
+order-insensitivity, and the full list of what the fingerprint cannot see are
+documented once, in
 [journal.md](../journal/journal.md#payload-schema-fingerprint), where the
 consequences live.
 

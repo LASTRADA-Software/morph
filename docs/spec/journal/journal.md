@@ -198,12 +198,12 @@ when the recommendation was not followed.
 computed once per type per process, stamped by value on each entry.
 
 It is the FNV-1a digest of a **shape rendering** (`payloadShapeString<A>()`),
-which is deliberately portable: every tag comes from a `std::` type trait or
-from Glaze's reflected key strings, never from a compiler-spelled type name.
-Two builds of the same sources on different compilers, standard libraries, or
-platforms therefore agree, which a `glz::name_v`-derived fingerprint would
-not — and a journal that only its own compiler can read is not a durable
-record.
+which is deliberately portable: every tag comes from a `std::` type trait, from
+Glaze's reflected key strings, or from a name spelled in this repository's own
+sources, never from a compiler-spelled type name. Two builds of the same
+sources on different compilers, standard libraries, or platforms therefore
+agree, which a `glz::name_v`-derived fingerprint would not — and a journal that
+only its own compiler can read is not a durable record.
 
 | C++ type | Rendering |
 |---|---|
@@ -217,11 +217,58 @@ record.
 | map | `{` key `>` mapped `}` |
 | other range | `[` element `]` |
 | reflected object | `(` key-sorted `key:shape` list `)` |
+| declares a `PayloadShapeTag` | `x{` name `}`, or `x{` name `:` inner shape `}` |
 | anything else | `x` |
 
 So `struct { std::string state; std::int32_t count; }` renders as
 `(count:i4,state:s)`, and renaming `state` to `stateCode` renders as
 `(count:i4,stateCode:s)` — a different digest.
+
+### Custom-codec types name themselves
+
+A type carrying its own `glz::meta` has no reflected members to decompose, so
+it would render as the bare `x` and be indistinguishable from every other such
+type. `morph::model::PayloadShapeTag<T>` (`core/payload_shape_tag.hpp`) is the
+opt-in seam that closes that: a specialisation declares a short name, spelled
+in these sources rather than derived from `glz::name_v`, and the rendering
+becomes `x{`name`}`.
+
+| Type | Rendering |
+|---|---|
+| `math::Rational` | `x{rational}` |
+| `time::DateTime` | `x{datetime}` |
+| `time::Timestamp` | `x{timestamp}` |
+| `units::Quantity<U, Dec>` | `x{quantity.`*unit id*`.`*decimals*`}` |
+| `util::Tagged<T, Tag>` | `x{tagged.`*tag*`:`*T's rendering*`}` |
+
+Two of these are worth stating on their own terms:
+
+- **`Quantity` is the only place its own retype can be caught.** Neither the
+  unit nor the declared precision travels on the wire — a `Quantity` *is* its
+  nullable `Rational` payload — so `Quantity<Gram>` and `Quantity<Litre>`
+  produce byte-identical JSON. No decode, on any path, can tell them apart.
+  The unit's id comes from `UnitTraits<E>::meta(U).id`, an author-declared
+  ascii identifier already part of the protocol vocabulary.
+- **`Tagged` renders its wrapped type inside the tag**, because it is a
+  transparent wrapper: its JSON simply *is* `T`'s, so hiding `T` behind the
+  wrapper's name would lose a real difference (`Tagged<std::string, "acct">`
+  versus `Tagged<std::int64_t, "acct">` genuinely changes the recorded bytes).
+  The tag text, like the unit id, never travels either.
+
+A specialisation must be visible wherever `payloadShape` is instantiated for
+that type, or two translation units would render one payload two ways. In
+practice that is automatic: a payload struct with a `Rational` member is only
+complete where `morph/util/rational.hpp` has been included, and that header
+carries the specialisation.
+
+**Scheme 2.** Rendering a declared name where scheme 1 rendered `x` changes the
+fingerprint of every payload with such a member, so
+`kPayloadFingerprintScheme` is `2`. That is precisely what the prefix exists
+for: an entry stamped `1:…` read by a scheme-2 build reports a mismatch whose
+two sides are legibly the product of different *algorithms*, not of different
+payloads. Such an entry is handled the same way as any other mismatch — a
+migration registered for its `(actionType, fromSchema)` pair, a build whose
+fingerprint matches, or a surfaced failure.
 
 **Members are sorted, so reordering a struct is not a schema change.** JSON
 objects are unordered and the decode matches by name, so moving a field
@@ -232,12 +279,15 @@ would turn a cosmetic edit into a replay break for every retained journal.
 
 Stated plainly, because the guarantee is only as good as its boundary:
 
-- **A retype between two custom-codec types.** Any type with its own
-  `glz::meta` — `Rational`, `Quantity`, `DateTime`, `Tagged` — renders as the
-  opaque `x`, so swapping one for another is invisible to the fingerprint. (A
-  custom-codec type swapped for a plain one *is* caught: `x` versus `s`.) The
-  alternative was a `glz::name_v`-derived tag, which is compiler-dependent;
-  a journal readable only by the compiler that wrote it is the worse failure.
+- **A retype between two custom-codec types that have declared no name.** The
+  seam above is opt-in, so it is incomplete by construction: a type with its
+  own `glz::meta` and no `PayloadShapeTag` specialisation still renders as the
+  opaque `x`, and swapping two such types for one another is still invisible.
+  Every custom-codec type morph itself ships has declared one; a new one added
+  later starts out undeclared. (A custom-codec type swapped for a plain one
+  *is* caught either way: `x` versus `s`.) The alternative to declared names
+  was a `glz::name_v`-derived tag, which is compiler-dependent; a journal
+  readable only by the compiler that wrote it is the worse failure.
 - **A retype that changes nothing about the JSON shape** at a nesting depth
   past `detail::kPayloadShapeMaxDepth` (8), where recursion stops and `x` is
   emitted.
@@ -1101,6 +1151,7 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 | Payload evolution is **detected**, not prevented | **Fingerprint stamped per entry; `replay()` refuses a mismatch** | The additive-only [data-at-rest contract](#data-at-rest-contract) was already published and already unenforced. Strict decode would reject the additive change the contract permits; a lint sees one commit while a journal outlives the deployment that wrote it. A derived fingerprint cannot be forgotten the way a hand-maintained version number can. |
 | A mismatch throws rather than warning | **`SchemaMismatchError` out of `replay()`** | The defect is confident wrongness. A suspect holder plus a log line reproduces it with extra steps, and puts the burden of noticing on the code path that demonstrably did not notice. |
 | The fingerprint is order-insensitive and compiler-independent | **Key-sorted shape rendering from `std::` traits and reflected key strings** | Reordering members changes nothing about which JSON bytes decode where, so an order-sensitive digest would break replay for a cosmetic edit. A `glz::name_v`-derived tag would be compiler-spelled, making a journal readable only by the compiler that wrote it. |
+| A custom-codec type is distinguished by a name it declares, not one the compiler spells | **Opt-in `PayloadShapeTag<T>` specialisation, defaulting to the opaque `x`** | The portability requirement rules out the only *derived* per-type name available, so the name has to be author-written. Opt-in keeps that cost on the handful of types that need it, at the price of a new type silently starting out undeclared — stated as a boundary rather than assumed away. |
 | Unstamped entries replay by default | **`UnstampedPayloadPolicy::Replay`** | Refusing them would make an upgrade a data-loss event for every retained journal — this feature's own failure mode, inverted. `Refuse` exists for callers who would rather have no answer than an unverifiable one. |
 | Migrations rewrite in memory, never on disk | **`PayloadMigrationRegistry`, applied per replayed entry** | Reading never mutates history — the same rule the [migration recipe](#the-migration-recipe-not-shipped) states for the offline path. It also keeps the migration reviewable as code rather than as a one-time script someone ran. |
 | `fromJson` reads leniently | **`glz::read<{.error_on_unknown_keys = false}>`, not `glz::read_json`** | Matches `wire::decode`'s forward-compatibility contract; without it, adding the `v` key itself (or any future key) would be a reader flag-day for every already-deployed reader. |
@@ -1252,15 +1303,29 @@ Honest boundaries of the current design:
   entries](#unstamped-entries--what-happens-to-journals-already-written)). It
   describes the *reflected* shape, so it says nothing about an action with a
   hand-written `ActionTraits`, nothing about a swap between two custom-codec
-  types, and nothing about entries an application journals by hand rather than
-  through the two framework execution sites. The full boundary is in [What the
-  fingerprint does not catch](#what-the-fingerprint-does-not-catch).
-- **The binary-skew test is still unwritten.** The executable form of the
-  data-at-rest contract — build a client with `MORPH_CLIENT_ONLY`, run it
-  against a newer server, and assert that an additive field works while a
-  renamed one fails loudly — does not exist. The fingerprint gives that test
-  something to assert *on the journal path*; the wire path it also covers is
-  issue #207's, not this one's.
+  types that have declared no name, and nothing about entries an application
+  journals by hand rather than through the two framework execution sites. The
+  full boundary is in [What the fingerprint does not
+  catch](#what-the-fingerprint-does-not-catch).
+- **The wire-path skew test is still unwritten.** The journal-path half now
+  exists: `tests/compile_checks/journal_skew_probe.cpp` is compiled into two
+  executables, one recording a journal and the other replaying it with a
+  renamed and an added field, run in order as the `journal_skew_old_build_writes`
+  / `journal_skew_new_build_replays` ctest pair. The wire path cannot be tested
+  the same way, because nothing mechanically enforces the action-evolution
+  policy there yet — a per-action fingerprint exchanged at `hello` is issue
+  #207's unimplemented proposal, and until it exists a client/server skew test
+  has nothing to assert on.
+- **`replay()` refuses an additive change, not only a breaking one.** The gate
+  is fingerprint equality, so an entry written before a field was *added*
+  throws exactly as a renamed one does, even though the
+  [data-at-rest contract](#data-at-rest-contract) permits the addition and
+  `fromJson`'s lenient decode still reads the old payload faithfully. The
+  caller's answer is a migration — for a pure addition, one that hands the
+  payload through unchanged. This is a deliberate consequence of choosing
+  equality over a compatibility relation (there is no derived way to tell
+  "field added" from "field renamed" by comparing two digests), not an
+  oversight; the skew test above pins both halves.
 
 ## Cross-references
 

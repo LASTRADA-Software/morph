@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -33,12 +34,20 @@ namespace morph::model {
 
 /// @brief Version of the fingerprint *algorithm*, not of any one payload.
 ///
-/// Stamped as the prefix of every fingerprint (`"1:…"`) so a future build that
+/// Stamped as the prefix of every fingerprint (`"2:…"`) so a future build that
 /// computes fingerprints differently can still recognise — and reject, or
 /// re-derive — a fingerprint written under an earlier scheme, instead of
 /// mistaking a scheme change for a payload change. Bumped only when
 /// `detail::payloadShape` changes what it emits for an unchanged struct.
-inline constexpr std::uint32_t kPayloadFingerprintScheme = 1;
+///
+/// Scheme 2 renders a custom-codec type that declares a
+/// `morph::model::PayloadShapeTag` as that declared name rather than as the
+/// bare opaque tag, so that a retype between two of them is visible. Every
+/// payload with such a member therefore fingerprints differently under 2 than
+/// it did under 1, which is exactly what the prefix exists to make legible: an
+/// entry stamped `1:…` read by this build reports a mismatch that names an
+/// algorithm change, not a payload change.
+inline constexpr std::uint32_t kPayloadFingerprintScheme = 2;
 
 namespace detail {
 
@@ -55,11 +64,17 @@ inline constexpr int kPayloadShapeMaxDepth = 8;
 ///        decompose — a type with a custom Glaze codec (`glz::meta` naming a
 ///        value rather than an object), a function pointer, a variant.
 ///
-/// Deliberately carries no type name: `glz::name_v` falls back to a
-/// `__PRETTY_FUNCTION__`/`__FUNCSIG__`-derived spelling that differs between
-/// compilers, and a fingerprint that changes when the *compiler* changes would
-/// make every journal unreadable by a peer build. See the spec's "What the
-/// fingerprint does not catch".
+/// Deliberately carries no *compiler-derived* type name: `glz::name_v` falls
+/// back to a `__PRETTY_FUNCTION__`/`__FUNCSIG__`-derived spelling that differs
+/// between compilers, and a fingerprint that changes when the *compiler*
+/// changes would make every journal unreadable by a peer build.
+///
+/// A custom-codec type can still name *itself*, by specialising
+/// `morph::model::PayloadShapeTag` with a name spelled in these sources
+/// (`core/payload_shape_tag.hpp`); `payloadShape` then emits
+/// `x{<name>}` in place of the bare tag. This tag is what remains for a type
+/// that has declared nothing. See the spec's "What the fingerprint does not
+/// catch".
 inline constexpr std::string_view kOpaqueShapeTag = "x";
 
 template <typename T>
@@ -130,12 +145,19 @@ template <typename T>
 /// | map | `{` key `>` mapped `}` |
 /// | other range | `[` element `]` |
 /// | reflected object | `(` sorted `key:shape` list `)` |
+/// | declares a `PayloadShapeTag` | `x{` name `}`, or `x{` name `:` inner shape `}` |
 /// | anything else | `x` (see `kOpaqueShapeTag`) |
 ///
-/// Every tag is derived from `std::` type traits or from Glaze's *reflected
-/// key strings*, never from a compiler-spelled type name, so two builds of the
-/// same sources on different compilers, standard libraries, or platforms
-/// render an unchanged struct identically.
+/// Every tag is derived from `std::` type traits, from Glaze's *reflected key
+/// strings*, or from a name spelled in this repository's own sources, never
+/// from a compiler-spelled type name, so two builds of the same sources on
+/// different compilers, standard libraries, or platforms render an unchanged
+/// struct identically.
+///
+/// A declared `PayloadShapeTag` is consulted *first*, before any structural
+/// case. A custom-codec type that Glaze can also reflect over would otherwise
+/// be decomposed into members its codec never reads or writes, describing a
+/// shape that never reaches the journal.
 ///
 /// @tparam T     Type to render.
 /// @param  depth Current recursion depth; at `kPayloadShapeMaxDepth` the
@@ -147,7 +169,12 @@ template <typename T>
     if (depth > kPayloadShapeMaxDepth) {
         return std::string{kOpaqueShapeTag};
     }
-    if constexpr (std::is_same_v<U, bool>) {
+    if constexpr (HasPayloadShapeInner<U>) {
+        return std::string{kOpaqueShapeTag} + '{' + std::string{PayloadShapeTag<U>::name()} + ':' +
+               payloadShape<typename PayloadShapeTag<U>::Inner>(depth + 1) + '}';
+    } else if constexpr (HasPayloadShapeTag<U>) {
+        return std::string{kOpaqueShapeTag} + '{' + std::string{PayloadShapeTag<U>::name()} + '}';
+    } else if constexpr (std::is_same_v<U, bool>) {
         return "b";
     } else if constexpr (std::is_same_v<U, char>) {
         return "c";

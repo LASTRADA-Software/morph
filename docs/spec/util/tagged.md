@@ -118,6 +118,19 @@ empty state.
 | Wire | **Transparent — `glz::meta` maps straight to the payload** | Matches the existing newtype family (`Quantity`, `Choice`, `Timestamp` all reduce to their payload on the wire); the tag is a compile-time-only distinction, invisible to any wire consumer. |
 | Schema `title` | **Set to the tag, not to `T`'s type name** | Lets client-side codegen distinguish `UserId` from `AccountId` in the generated schema even though both compile down to the same wire shape. |
 
+## Payload shape tag
+
+`Tagged<T, Tag>` specialises `morph::model::PayloadShapeTag` and renders the tag
+text with the wrapped type inside it -- an `AccountId` tagged `acct` renders as
+`acct`, distinct from a `CustomerId` tagged `cust`.
+
+Carrying the tag text is the whole point: `Tagged` exists to separate two
+wrappers that are structurally identical but semantically different, and a
+payload fingerprint that ignored the tag would report them as the same shape --
+so swapping one strong id for another would replay clean while writing the
+wrong key. See [`journal/journal.md`](../journal/journal.md) for the fingerprint
+itself.
+
 ## Cross-references
 
 - **[`../detail/fixed_string.hpp`](../../../include/morph/detail/fixed_string.hpp)**
