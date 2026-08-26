@@ -77,18 +77,43 @@ throughout — this is itself a deliberate contrast with `bank::Money`
 (`examples/bank/include/bank/core/money.hpp`: `struct Money { int64_t
 minor; Currency currency; }`, whose `operator+`/`-` do not check currency
 match — exactly the class of bug this rung exists to make structurally
-impossible). Every leg amount is `morph::units::Quantity<Currency, dp>`
-(never `bank::Money`, never a bare `int64_t minor`); account kind, rule
-trigger/action types are `enum class`; account/journal/category/budget/rule
-identity are per-entity strong id types (`AccountId`, `JournalId`, ...) with
-`hasValue()`.
+impossible). Account kind and rule trigger/action types are `enum class`;
+account/journal/category/budget/rule identity are per-entity strong id types
+(`AccountId`, `JournalId`, ...) with `hasValue()`.
+
+**Money is the one field the palette cannot type.** `morph::units::Quantity`
+takes its unit as a *compile-time* non-type template parameter
+(`Quantity<auto U, std::uint32_t DeclaredDecimals>`), and a leg's currency is
+the account's runtime data — §2 below sets out why there is no
+`Quantity<Currency, dp>` spelling meaning "whichever currency this account
+happens to hold", and `ledger::Money<C>`
+(`examples/ledger/include/ledger/core/units.hpp`) fixes `C` at compile time by
+construction. A leg amount is therefore a `morph::math::Rational` carrying a
+**whole number of the currency's minor units**, with `decimalPlaces` naming
+the scale those units are counted in: `$4.50` is `{num: 450, den: 1, dp: 2}`,
+`¥500` is `{num: 500, den: 1, dp: 0}`. Never `bank::Money`, and never a bare
+`int64_t minor` — the scale travels with the value. `Money<C>` *is* used where
+the currency is known at the point of use: the display path (§7).
+
+That encoding is deliberately **not** `Rational`'s own reading of the same
+triple. `include/morph/util/rational.hpp` defines the value as
+`numerator/denominator` with `decimalPlaces` a display tag that "never changes
+a stored value", and compares "purely value-based on the canonical
+(numerator, denominator) pair", ignoring `decimalPlaces` entirely. `Rational`
+therefore reads `{450, 1, dp 2}` and `{450, 1, dp 1}` as the same number where
+this rung reads `$4.50` and `$45.00`. **The two readings agree only when every
+operand is on one scale, so the model puts them on one scale before it does
+any arithmetic** — see step 1 of the zero-sum decision below. The full
+rationale, the encoding's rules, and the framework gaps it surfaced are in
+`examples/ledger/README.md`'s "How money is represented"
+(`ledger/core/money.hpp` is the code).
 
 **`StoreTransaction { description, date, legs[] }`** — one composite,
 all-or-nothing action. `legs: std::vector<TransactionLeg>` where
-`TransactionLeg { accountId: AccountId, amount: Quantity<Currency, dp> }`
-(the currency lives in the account, so a leg's amount type is generic over
-`Currency` and the account's own currency determines the concrete unit at
-validation time — see §2 for why this can't be a compile-time
+`TransactionLeg { accountId: AccountId, amount: Rational }` (the currency
+lives in the account, so a leg's amount carries only a minor-unit count and a
+scale, and the account's own currency supplies the denomination at validation
+time — see §2 for why this can't be a compile-time
 `Quantity<SpecificCurrency, dp>` per leg). `validate()` requires
 `allRequiredEngaged` plus: at least two legs, every `accountId` engaged.
 
@@ -100,9 +125,23 @@ balancing across.* Concretely, `LedgerModel::execute(StoreTransaction)`:
 1. Partitions `legs` by `currencyCode` (the leg's account's currency, looked
    up from `AccountRecord`, never a client-supplied field — the client
    cannot assert a leg's currency independent of its account).
-2. For each currency partition, sums the `Rational` amounts (via
-   `Rational::operator+`, which propagates precision as the `max` of the
-   operands' own precisions) and asserts the sum is canonical zero (`0/1`).
+   **Restates every leg onto that account currency's scale** before it
+   enters a partition (`ledger::restateMinorUnits` against
+   `currencyDecimalPlaces` of the currency just looked up). Leg amounts are
+   minor-unit counts and nothing on the wire constrains the scale a client
+   sends them at; without this step the check is unsound in *both*
+   directions, because `Rational::operator+` adds numerators and propagates
+   `std::max` of the two precisions. `$4.50` (`{450, dp 2}`) and `-$45.00`
+   (`{-450, dp 1}`) net to numerator zero and are **accepted**; `$4.50`
+   written `{45, dp 1}` and `-$4.50` written `{-450, dp 2}` net to -405 and
+   are **rejected**. Restating also keeps every stored leg of an account on
+   that account's own scale, which `buildLedgerState` relies on when it seeds
+   each balance at the currency's precision. Restating is exact or nothing —
+   an amount with more precision than its currency has (`$4.505` in USD), or
+   a non-integral minor-unit count off the wire (`{"num":9,"den":2}`), is
+   rejected with `ValidationError`. **The model never rounds money.**
+2. For each currency partition, sums the restated `Rational` amounts (via
+   `Rational::operator+`) and asserts the sum is canonical zero (`0/1`).
    Rejects with `ZeroSumViolation{currency, actualSum}` on any partition
    that fails — **never rounds, never auto-balances**, per the README.
 3. A **foreign-amount pair** is two legs on accounts of different
@@ -161,12 +200,13 @@ correctly), so JPY/KRW need no app-side workaround or `x-rules` gate — see
 also the corresponding fix to `examples/ledger/README.md`'s "Expected
 strain points" section, made alongside this spec.
 
-A leg's wire-level amount is `Quantity<Currency, /*declared*/2>` as a
-DTO-level default, with the model re-deriving the *actual* decimal places
-from the account's currency at validation time — the `DeclaredDecimals`
-template parameter is a schema/UI hint, not the runtime authority; the
-`Rational` payload's own `decimalPlaces` field (set from the account's
-currency, not the client's claim) is.
+A leg's wire-level amount is a bare `morph::math::Rational` — a minor-unit
+count plus the scale it is counted at (§1) — and the model derives the
+*actual* scale from the account's currency at validation time: every leg is
+restated onto `currencyDecimalPlaces(theAccountsCurrency)` before the
+zero-sum check and before it is written. The client's `dp` is therefore an
+input to that restatement, never the authority; the stored
+`decimalPlaces` is always the account currency's own.
 
 **Exchange rates** are `Rational`, exact by construction — never `double`.
 A foreign-amount pair (§1) carries its booked rate implicitly as the ratio
@@ -350,12 +390,20 @@ model tests separately assert the zero-sum invariant holds under the
 model's real validation path). Generates sequences of `StoreTransaction`-
 shaped leg sets at ledger-realistic magnitudes (dp 2 currencies up to
 10^9 minor units, matching README's motivating case of "amount ×
-exchange-rate with high-dp currencies") and asserts: (a) the zero-sum
-check never accepts a non-zero sum and never rejects a true zero (no false
-positive/negative from precision mismatches across legs of differing
-`decimalPlaces` within one currency — a legal but easy-to-mishandle case,
-e.g. a USD leg at dp=2 and a correcting USD leg at dp=4 in the same
-journal), and (b) *documents* — as a comment plus this section, once
+exchange-rate with high-dp currencies") and asserts: (a) that
+`Rational::operator+` is **scale-blind** — two legs at different
+`decimalPlaces` are summed on their numerators alone, so a USD leg at dp=2
+and one at dp=4 net to canonical zero whenever their numerators cancel, no
+matter what money they denote. That is a property of `Rational`, not a
+guarantee about the invariant: this test cannot say anything about false
+accepts or false rejects, because it never reaches the model. What makes
+the invariant sound is §1's restatement step, which restates every leg onto its
+account currency's scale *before* summing, and the false-accept and
+false-reject cases are pinned where the model can actually be driven, in
+`examples/ledger/tests/test_ledger_model.cpp`. A leg at dp=4 in a USD
+account stays legal, but only when it carries no digit below a cent
+(`{45000, dp 4}` restates to `{450, dp 2}`; `{45001, dp 4}` is rejected).
+And (b) *documents* — as a comment plus this section, once
 measured, not asserted defensively in production code — the row count and
 per-leg magnitude at which an intermediate cross-term (the multiplication
 inside `amount × exchangeRate` that a foreign-amount pair's rate
@@ -388,6 +436,28 @@ workaround `IMPLEMENTATION.md`'s prime directive calls a defect. Instead:
 left to the repo owner's triage per `FINDINGS.md`) with a test proving the
 clamp-then-incidentally-caught path, so the gap is on record rather than
 silently absorbed by an invariant that happens to catch it this time.
+
+**The no-float rule, and where rendering happens.** No money value becomes a
+`double` anywhere on the path from database to screen. The bridges still
+publish each amount's exact `numerator`/`denominator`/`decimalPlaces`, so a
+view that wants to format differently can, but they also publish the
+**rendered text** (`balanceText`, `limitText`, `spentText`, `amountText`) and
+that is what every QML label binds. The rendering is
+`ledger::formatMoney(currency, amount)`
+(`examples/ledger/include/ledger/core/money.hpp`): it recovers the decimal
+value from the minor-unit count, wraps it in `Money<C>` for the currency —
+the one place in this rung where the currency *is* known at compile time, and
+therefore the one place `morph::units` can type money at all — and lets
+`morph::units::toDecimalString` produce the digits by exact integer long
+division.
+
+Formatting in the view was the earlier design, and it was wrong: QML has only
+IEEE doubles, so `numerator / denominator / Math.pow(10, places)`
+re-introduced in the last three lines of the path exactly the imprecision
+`Rational` exists to remove, and drifted for balances past 2^53 while the
+payload beneath it stayed exact. `toDecimalString` renders shortest-form
+(`$4.50` as `"4.5"`); that is a `Quantity` gap recorded in the rung README,
+not a reason to hand-roll a second formatter.
 
 ## 8. CSV/OFX import with dedup (step 6)
 

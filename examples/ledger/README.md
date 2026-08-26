@@ -149,6 +149,77 @@ Forms: transaction entry uses `morph::forms` schemas — amount fields as
 `Rational` with per-currency `x-decimalPlaces`, category combo via
 `forms::Choice` backed by a list action.
 
+## How money is represented
+
+Every money value in this rung — a transaction leg, a budget limit, an
+account balance, a report total — is a `morph::math::Rational` carrying a
+**whole number of the currency's minor units**, with `decimalPlaces` naming
+the scale those units are counted in. `$4.50` is `{num: 450, den: 1, dp: 2}`;
+`¥500` is `{num: 500, den: 1, dp: 0}`. `ledger/core/money.hpp` owns the
+encoding and the two operations it needs.
+
+**This is not `Rational`'s own reading of that triple.** `rational.hpp`
+defines the value as `numerator/denominator` and calls `decimalPlaces` a
+display tag that "never changes a stored value"; comparison is "purely
+value-based on the canonical (numerator, denominator) pair and ignores
+`decimalPlaces` entirely". `Rational` therefore reads `{450, 1, dp 2}` and
+`{450, 1, dp 1}` as the same number, where this rung reads `$4.50` and
+`$45.00`. The two readings agree only when every operand is on one scale.
+
+**The model is what guarantees that.** `LedgerModel::execute(StoreTransaction)`
+and `storeJournalImpl` restate every leg onto *its own account currency's*
+scale (`ledger::restateMinorUnits`, `ledger::currencyDecimalPlaces`) before
+the per-currency zero-sum check runs and before any row is written;
+`BudgetModel::execute(SetBudgetLimit)` restates a limit the same way. Restating
+is exact or nothing — an amount with more precision than its currency has
+(`$4.505` in a USD account) or a non-integral minor-unit count off the wire
+(`{"num":9,"den":2}`) is rejected with `ValidationError`. **The model never
+rounds money.**
+
+Without that step the invariant is unsound in both directions, because
+`Rational::operator+` adds numerators and propagates `std::max` of the two
+precisions: `$4.50` at `dp 2` and `-$45.00` at `dp 1` both have numerator
+±450, so they net to zero and a journal booking four dollars fifty against
+forty-five dollars is *accepted*; and `$4.50` written `{45, dp 1}` against
+`-$4.50` written `{-450, dp 2}` nets to -405 and a balanced pair is
+*rejected*. Both are pinned as tests in `tests/test_ledger_model.cpp`.
+Restating also keeps every stored leg of an account on that account's own
+scale, which `buildLedgerState` relies on when it seeds each balance at the
+currency's precision — one leg stored at a wider scale would otherwise pull
+that account's rendered balance off by a factor of ten permanently.
+
+**Why not `morph::units::Quantity`.** `Quantity` takes its unit as a
+*compile-time* non-type template parameter (`Quantity<auto U, std::uint32_t
+DeclaredDecimals>`), and a leg's currency is the account's runtime data —
+there is no `Quantity` spelling meaning "whichever currency this account
+happens to hold", which is the conclusion the design spec's §2 already
+reached. Typing every leg `Money<Currency::USD>` would put a false unit tag
+on every EUR, JPY and KRW leg. Leg amounts therefore stay `Rational` and the
+encoding above is the rung's binding convention. `Money<C>` *is* used where
+the currency is known at the point of use — the display path.
+
+**Display.** `ledger::formatMoney(currency, amount)` is the single rendering
+path: it recovers the decimal value from the minor-unit count, hands it to
+`Money<C>` for the named currency, and lets `morph::units::toDecimalString`
+produce the digits by exact integer long division. The QML views bind the
+pre-rendered `balanceText` / `limitText` / `spentText` / `amountText` the
+bridges publish.
+
+### Findings this encoding surfaced
+
+- **No fixed-fraction-width rendering on `Quantity`.**
+  `morph::units::toDecimalString` renders shortest-form, so `$4.50` comes
+  back as `"4.5"` and a zero balance as `"0"`. A money column wants `"4.50"`
+  and `"0.00"`; there is no width knob to ask for it. The rung renders
+  shortest-form rather than hand-rolling a second formatter.
+- **No public integer power of ten.** `morph::math::detail::powerOfTen` is
+  exactly what restating between scales needs, but it lives in the
+  framework's `detail` namespace; `ledger::detail::powerOfTen` writes it out
+  again rather than depend on a private symbol.
+- **No runtime-unit `Quantity`.** The gap under "Why not
+  `morph::units::Quantity`" above is the reason this rung's money type is a
+  bare `Rational` with an out-of-band encoding at all.
+
 ## morph subsystems exercised
 
 Exact `Rational` arithmetic under a hard invariant; schema-driven money
@@ -188,9 +259,12 @@ data; the submit→poll job idiom.
   normalizer strips it anywhere — typing `1.5` submits **15**, a silent 10×
   money error. Pin the behavior, fix (positional grouping validation or
   reject), and mirror the vectors through `normalizeLocaleNumber` (D5).
-  Related: result *display* in the shipped renderer goes through `double`
-  division — balances beyond 2^53 drift on readback while the payload is
-  exact; presenter display must use the exact formatter.
+  Related: result *display* in the shipped forms renderer goes through
+  `double` division — balances beyond 2^53 drift on readback while the
+  payload is exact. This rung's own views do not: every money label binds
+  text the bridge pre-rendered through `ledger::formatMoney`, which is exact
+  integer long division (see "How money is represented" below). No QML file
+  divides anything.
 - **Recurring transactions (time-scheduled jobs — this rung owns the
   shape)**: Firefly-style schedules are the ladder's one cron-shaped
   server job — who ticks, on what thread, under what principal, journaled

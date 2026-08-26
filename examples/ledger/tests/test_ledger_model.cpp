@@ -8,6 +8,7 @@
 #include <morph/session/session.hpp>
 
 #include "ledger/core/errors.hpp"
+#include "ledger/core/money.hpp"
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/budget_model.hpp"
 #include "ledger/models/ledger_model.hpp"
@@ -597,4 +598,247 @@ TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum an
             CHECK(legRow.amountNum.Value() == -5000);  // negation of the original 5000
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Per-currency scale: a leg's `decimalPlaces` is the scale its numerator is
+// expressed in, so two legs at different scales are not comparable until
+// both are restated at the account currency's own scale. These two cases
+// are the ones morph#304 §A1 predicted; both are checked through the real
+// `StoreTransaction` path, not against the partitioning helper directly.
+// ─────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("StoreTransaction rejects legs that balance only because their scales differ", "[ledger][model]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // "4.50" is 450 at a scale of 2; "-45.0" is -450 at a scale of 1. They
+    // are $4.50 and -$45.00 -- forty dollars fifty apart -- and the pair
+    // must be refused. Summing the two numerators without restating either
+    // at USD's own scale reads them as 450 and -450 and calls it balanced.
+    CHECK_THROWS_AS(
+        model.execute(ledger::StoreTransaction{
+            .ledgerId = ledgerId,
+            .description = "Scale-mismatched pair",
+            .date = morph::time::Timestamp::now(),
+            .legs = {ledger::TransactionLeg{
+                         .accountId = ledgerState.accounts[0].id,
+                         .amount = morph::math::Rational{Numerator{450}, Denominator{1}, DecimalPlaces{2}}},
+                     ledger::TransactionLeg{
+                         .accountId = ledgerState.accounts[1].id,
+                         .amount = morph::math::Rational{Numerator{-450}, Denominator{1}, DecimalPlaces{1}}}}}),
+        ledger::ZeroSumViolation);
+}
+
+TEST_CASE("StoreTransaction accepts a balanced pair written at different scales", "[ledger][model]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    const auto checkingId = ledgerState.accounts[0].id;
+    const auto groceriesId = ledgerState.accounts[1].id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // "4.5" is 45 at a scale of 1; "-4.50" is -450 at a scale of 2. Both are
+    // $4.50, so the pair balances and must be accepted -- and both legs must
+    // land on USD's own scale of 2, whatever scale they arrived on.
+    auto result = model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Balanced pair at mixed scales",
+        .date = morph::time::Timestamp::now(),
+        .legs = {
+            ledger::TransactionLeg{.accountId = checkingId,
+                                   .amount = morph::math::Rational{Numerator{45}, Denominator{1}, DecimalPlaces{1}}},
+            ledger::TransactionLeg{
+                .accountId = groceriesId,
+                .amount = morph::math::Rational{Numerator{-450}, Denominator{1}, DecimalPlaces{2}}}}});
+
+    REQUIRE(result.accounts.size() == 2);
+    auto checking = std::ranges::find_if(result.accounts, [&](const auto& a) { return a.id == checkingId; });
+    auto groceries = std::ranges::find_if(result.accounts, [&](const auto& a) { return a.id == groceriesId; });
+    REQUIRE(checking != result.accounts.end());
+    REQUIRE(groceries != result.accounts.end());
+    CHECK(checking->balance.numerator == 450);
+    CHECK(checking->balance.decimalPlaces == DecimalPlaces{2});
+    CHECK(groceries->balance.numerator == -450);
+    CHECK(groceries->balance.decimalPlaces == DecimalPlaces{2});
+}
+
+TEST_CASE("StoreTransaction rejects a leg carrying more precision than its currency has", "[ledger][model]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // $4.505 in a USD account. Restating dp 3 onto USD's dp 2 would have to
+    // drop a non-zero digit, and the model never rounds money -- so the pair
+    // is rejected outright even though it is perfectly self-balancing.
+    CHECK_THROWS_AS(
+        model.execute(ledger::StoreTransaction{
+            .ledgerId = ledgerId,
+            .description = "Sub-cent leg",
+            .date = morph::time::Timestamp::now(),
+            .legs = {ledger::TransactionLeg{
+                         .accountId = ledgerState.accounts[0].id,
+                         .amount = morph::math::Rational{Numerator{-4505}, Denominator{1}, DecimalPlaces{3}}},
+                     ledger::TransactionLeg{
+                         .accountId = ledgerState.accounts[1].id,
+                         .amount = morph::math::Rational{Numerator{4505}, Denominator{1}, DecimalPlaces{3}}}}}),
+        ledger::ValidationError);
+
+    // A wider scale is fine when it carries no digit below a cent: $4.50
+    // written at dp 4 restates to {450, dp 2}.
+    auto result = model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Wide but exact",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{
+                     .accountId = ledgerState.accounts[0].id,
+                     .amount = morph::math::Rational{Numerator{-45000}, Denominator{1}, DecimalPlaces{4}}},
+                 ledger::TransactionLeg{
+                     .accountId = ledgerState.accounts[1].id,
+                     .amount = morph::math::Rational{Numerator{45000}, Denominator{1}, DecimalPlaces{4}}}}});
+    REQUIRE(result.accounts.size() == 2);
+    CHECK(result.accounts[0].balance.numerator == -450);
+    CHECK(result.accounts[0].balance.decimalPlaces == DecimalPlaces{2});
+}
+
+TEST_CASE("StoreTransaction rejects a leg that is not a whole number of minor units", "[ledger][model]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // `{"num":9,"den":2}` off the wire: nine halves of a cent is not a
+    // quantity of money this rung can store, and `Rational`'s codec clamps
+    // rather than rejects, so the model is the only thing that can refuse it.
+    CHECK_THROWS_AS(model.execute(ledger::StoreTransaction{
+                        .ledgerId = ledgerId,
+                        .description = "Fractional minor units",
+                        .date = morph::time::Timestamp::now(),
+                        .legs = {ledger::TransactionLeg{
+                                     .accountId = ledgerState.accounts[0].id,
+                                     .amount = morph::math::Rational{Numerator{-9}, Denominator{2}, DecimalPlaces{2}}},
+                                 ledger::TransactionLeg{.accountId = ledgerState.accounts[1].id,
+                                                        .amount = morph::math::Rational{Numerator{9}, Denominator{2},
+                                                                                        DecimalPlaces{2}}}}}),
+                    ledger::ValidationError);
+}
+
+TEST_CASE("A JPY leg stores and renders as a true integer", "[ledger][model]") {
+    // The README's own named test for a zero-decimal currency. JPY declares
+    // dp 0, so a leg is a whole number of yen: a client that sends it at
+    // dp 2 (the majority default) has it restated onto JPY's scale, and the
+    // stored row and rendered text both come back as whole yen -- no
+    // `x-rules` gate, no app-side workaround.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Tokyo trip";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Yen wallet",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::JPY});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Ramen",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::JPY});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    auto result = model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Ramen",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{
+                     .accountId = ledgerState.accounts[0].id,
+                     .amount = morph::math::Rational{Numerator{-1500}, Denominator{1}, DecimalPlaces{0}}},
+                 // The same ¥1500, sent at the dp-2 default a generic client
+                 // would use.
+                 ledger::TransactionLeg{
+                     .accountId = ledgerState.accounts[1].id,
+                     .amount = morph::math::Rational{Numerator{150000}, Denominator{1}, DecimalPlaces{2}}}}});
+
+    REQUIRE(result.accounts.size() == 2);
+    CHECK(result.accounts[0].balance.numerator == -1500);
+    CHECK(result.accounts[0].balance.decimalPlaces == DecimalPlaces{0});
+    CHECK(result.accounts[1].balance.numerator == 1500);
+    CHECK(result.accounts[1].balance.decimalPlaces == DecimalPlaces{0});
+    CHECK(ledger::formatMoney(ledger::Currency::JPY, result.accounts[1].balance) == "1500");
 }

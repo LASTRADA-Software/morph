@@ -12,6 +12,7 @@
 
 #include "clock.hpp"
 #include "ledger/core/errors.hpp"
+#include "ledger/core/money.hpp"
 #include "ledger/db/ledger_entity.hpp"
 
 namespace ledger {
@@ -191,12 +192,22 @@ BudgetId BudgetModel::execute(const SetBudgetLimit& action) {
     if (budgetRows.empty()) {
         throw NotFound{"SetBudgetLimit: no such budget"};
     }
+    // Onto the limit currency's own scale before it is stored, the same way
+    // LedgerModel restates a transaction leg onto its account currency's --
+    // a limit is compared against a sum of legs, and two values only compare
+    // as money when they sit on one scale. Rejected rather than rounded when
+    // the amount carries a digit the currency does not have.
+    const auto limit = restateMinorUnits(action.limit, currencyDecimalPlaces(action.currency));
+    if (!limit.has_value()) {
+        throw ValidationError{std::string{"SetBudgetLimit: limit is not a whole number of "} +
+                              std::string{currencyToCode(action.currency)} + " minor units"};
+    }
     db::BudgetLimitRecord limitRow;
     limitRow.budget = budgetRows.front();
     limitRow.month = action.month;
-    limitRow.limitNum = action.limit.numerator;
-    limitRow.limitDen = action.limit.denominator;
-    limitRow.limitDp = static_cast<int>(action.limit.decimalPlaces.value);
+    limitRow.limitNum = limit->numerator;
+    limitRow.limitDen = limit->denominator;
+    limitRow.limitDp = static_cast<int>(limit->decimalPlaces.value);
     limitRow.currencyCode = currencyToCode(action.currency);  // Task 7's helper
     mapper.Create(limitRow);
     logAction(action, action.budgetId);
@@ -249,7 +260,15 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
         accountIds.push_back(accountRow.id.Value());
     }
 
-    morph::math::Rational spent{morph::math::Numerator{0}, morph::math::Denominator{1}, morph::math::DecimalPlaces{2}};
+    // Seeded at the report currency's own scale rather than a hardcoded 2, so
+    // a zero-decimal budget (JPY, KRW) does not report its total tagged as if
+    // it had cents. `Rational::operator+` propagates `std::max` of the two
+    // precisions, and every leg LedgerModel stores now sits on its account
+    // currency's scale, so the running total stays on this one.
+    const auto reportCurrency =
+        limitRows.empty() ? Currency::USD : codeToCurrency(limitRows.front().currencyCode.Value().ToStringView());
+    morph::math::Rational spent =
+        morph::math::Rational::zero(morph::math::DecimalPlaces{currencyDecimalPlaces(reportCurrency)});
     if (!accountIds.empty()) {
         const auto [monthStartMs, monthEndMs] = monthRangeMs(action.month);
         auto journalRows =
@@ -279,16 +298,16 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
         }
     }
 
-    Currency currency = Currency::USD;
+    // No limit row for this month means no limit was ever set, which reports
+    // as a limit equal to what was spent rather than as an error.
     morph::math::Rational limit = spent;
     if (!limitRows.empty()) {
         limit = morph::math::Rational{
             morph::math::Numerator{limitRows.front().limitNum.Value()},
             morph::math::Denominator{limitRows.front().limitDen.Value()},
             morph::math::DecimalPlaces{static_cast<std::uint32_t>(limitRows.front().limitDp.Value())}};
-        currency = codeToCurrency(limitRows.front().currencyCode.Value().ToStringView());
     }
-    return GetBudgetReportResult{.limit = limit, .spent = spent, .currency = currency};
+    return GetBudgetReportResult{.limit = limit, .spent = spent, .currency = reportCurrency};
 }
 
 }  // namespace ledger

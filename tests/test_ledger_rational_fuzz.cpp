@@ -5,23 +5,35 @@
 #include <morph/util/rational.hpp>
 #include <vector>
 
-TEST_CASE("Zero-sum check never false-positives across differing decimalPlaces in one currency",
-          "[ledger][rational][fuzz]") {
+TEST_CASE("Rational addition is exact, and blind to decimalPlaces", "[ledger][rational][fuzz]") {
     using morph::math::DecimalPlaces;
     using morph::math::Denominator;
     using morph::math::Numerator;
     using morph::math::Rational;
 
-    // A USD leg at dp=2 and a correcting USD leg at dp=4 in the same
-    // journal, constructed to sum to true zero once both are reduced to a
-    // common scale. Assert Rational::operator+ over the two produces
-    // canonical zero (num=0, den=1) -- not a "close to zero" approximation.
+    // This case used to be titled "zero-sum check never false-positives
+    // across differing decimalPlaces in one currency" and claimed the two
+    // operands below were "constructed to sum to true zero once both are
+    // reduced to a common scale". They are not reduced to a common scale, and
+    // nothing here reaches the zero-sum check: `Rational::operator+` adds
+    // numerators and propagates `std::max` of the two precisions, so under
+    // ledger's minor-unit encoding these two are -$50.00 and +$0.50 and they
+    // "cancel" only because the addition cannot see the scales.
+    //
+    // What the case actually measures -- and now says -- is that `Rational`
+    // arithmetic is exact and scale-blind. That is a property of the value
+    // type, not a guarantee about the ledger's invariant. The invariant is
+    // made sound by `LedgerModel` restating every leg onto its account
+    // currency's scale *before* summing, and the false-accept and
+    // false-reject cases are pinned where the model can actually be driven,
+    // in `examples/ledger/tests/test_ledger_model.cpp`.
     Rational a{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}};
     Rational b{Numerator{5000}, Denominator{1}, DecimalPlaces{4}};
     auto sum = a + b;
-    // -5000 + 5000 = 0 demonstrates exact arithmetic across decimal places
     CHECK(sum.numerator == 0);
     CHECK(sum.denominator == 1);
+    // The wider precision wins, and neither operand's value moved.
+    CHECK(sum.decimalPlaces == DecimalPlaces{4});
 }
 
 TEST_CASE("Measure the row count at which partial-sum overflow occurs at ledger-realistic magnitudes",
