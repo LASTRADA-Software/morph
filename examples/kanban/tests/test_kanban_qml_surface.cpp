@@ -100,8 +100,8 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     //
     // Same shape as ledger's (morph#239) and lims' (morph#287).
     const QString backlog = QStringLiteral("unbound bridge surface, tracked in morph#291");
-    for (const auto* member : {"bound", "ruleCreated", "ruleDeleted", "attachmentUploaded", "attachmentDownloaded",
-                               "syncStatusChanged", "getRules", "refresh", "setAttachmentServerUrl"}) {
+    for (const auto* member : {"bound", "attachmentUploaded", "attachmentDownloaded", "syncStatusChanged", "refresh",
+                               "setAttachmentServerUrl"}) {
         audit.allowUnbound(QStringLiteral("boardBridge"), QString::fromLatin1(member), backlog);
     }
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
