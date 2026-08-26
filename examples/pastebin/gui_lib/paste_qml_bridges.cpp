@@ -74,14 +74,22 @@ FormsBridge::FormsBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
 QString FormsBridge::schemasJson() const { return QString::fromStdString(_controller.schemasJson()); }
 
 void FormsBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
-    _controller.submitIfValid(
-        actionType.toStdString(), bodyJson.toStdString(),
-        [this, actionType](std::string resultJson) {
-            emit replyReceived(actionType, true, QString::fromStdString(resultJson));
-        },
-        [this, actionType](const std::exception_ptr& err) {
-            emit replyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
-        });
+    // Both arms capture `this` and resolve through the executor, so neither may
+    // be attached bare — see this class's doc comment for the full argument.
+    // `_callbacks.guard(...)` is the general-purpose gate (`CallbackScope`'s
+    // `guard()`, not `Completion`'s `then(scope, fn)` overload) because the
+    // `Completion` these end up on is created and attached *inside*
+    // `PasteFormsController::submitIfValid`, one frame further in; what this
+    // function hands over is a pair of plain callables. Wrapping them here
+    // keeps the controller a callback-shape-agnostic seam and puts the gate in
+    // the class that owns the captured `this`, which is where it belongs.
+    _controller.submitIfValid(actionType.toStdString(), bodyJson.toStdString(),
+                              _callbacks.guard([this, actionType](std::string resultJson) {
+                                  emit replyReceived(actionType, true, QString::fromStdString(resultJson));
+                              }),
+                              _callbacks.guard([this, actionType](const std::exception_ptr& err) {
+                                  emit replyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
+                              }));
 }
 
 PasteBridge::PasteBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)

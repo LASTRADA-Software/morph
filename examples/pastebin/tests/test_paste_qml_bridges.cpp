@@ -232,6 +232,75 @@ TEST_CASE("FormsBridge::submitIfValid relays a rejected create as replyReceived(
     CHECK(rows.isEmpty());
 }
 
+TEST_CASE("A FormsBridge destroyed with a submit in flight has its reply suppressed, not delivered",
+          "[pastebin][gui][qml-bridges]") {
+    // `FormsBridge::submitIfValid` hands the controller two callbacks that
+    // capture `this` and emit `replyReceived`. A `Completion` never resolves
+    // inline — even `LocalBackend` posts through the executor
+    // (docs/spec/core/completion.md) — so the bridge can be destroyed while a
+    // reply is still in flight, and both shells own theirs by `unique_ptr` in
+    // `main()`. Unguarded, that reply runs `emit` against freed storage.
+    // `FormsBridge`'s last-declared `morph::async::CallbackScope` is what
+    // refuses it (docs/spec/core/callback_scope.md).
+    //
+    // **What this case does and does not measure.** It drives the exact window
+    // deterministically and asserts the observable half: the dispatch really
+    // did complete after the bridge was gone. The suppression itself has no
+    // observable signature in an ordinary build — a bare `this` capture would
+    // touch freed memory, which is undefined rather than detectable, and Qt
+    // cannot help because the sender is the destroyed object. Only a sanitized
+    // build distinguishes the two, and this case is written so that build has
+    // something to catch. Read on its own it is a smoke test; read as the
+    // scenario an ASan run executes it is the regression guard.
+    //
+    // `LocalSingleThread` deliberately: every dispatch and every completion
+    // runs on the one Qt thread through `QtDrivenMainThreadExecutor`, so the
+    // abandoned submit is strictly ordered before the live one below. When the
+    // second reply arrives, the first has necessarily already been delivered
+    // into the guard.
+    DbFixture fixture;
+    BackendRig rig{Mode::LocalSingleThread, 1};
+
+    {
+        pastebin::gui::FormsBridge abandoned{rig.bridge(0), rig.executor()};
+        abandoned.submitIfValid(QStringLiteral("CreatePaste"),
+                                createBody(QStringLiteral("submitted, then abandoned")));
+        // No pump before this closing brace: the reply cannot have been
+        // delivered yet, so `abandoned` is destroyed mid-flight by
+        // construction rather than by timing luck.
+    }
+
+    // A second, live bridge submits *after* the destruction. Its reply is the
+    // ordering fence described above.
+    pastebin::gui::FormsBridge live{rig.bridge(0), rig.executor()};
+    bool replied = false;
+    bool ok = false;
+    QObject::connect(&live, &pastebin::gui::FormsBridge::replyReceived,
+                     [&](const QString&, bool succeeded, const QString&) {
+                         ok = succeeded;
+                         replied = true;
+                     });
+    live.submitIfValid(QStringLiteral("CreatePaste"), createBody(QStringLiteral("submitted and awaited")));
+    REQUIRE(pumpUntil([&] { return replied; }));
+    CHECK(ok);
+
+    // The abandoned submit was suppressed at the *callback*, not cancelled at
+    // the dispatch: its paste exists. That is what makes this a real
+    // use-after-free window rather than a call that never happened — the model
+    // ran, the completion resolved, and the guard is the only reason nothing
+    // touched the destroyed bridge.
+    pastebin::gui::PasteBridge pastes{rig.bridge(0), rig.executor()};
+    QVariantList rows;
+    bool listed = false;
+    QObject::connect(&pastes, &pastebin::gui::PasteBridge::listed, [&](const QVariantList& page) {
+        rows = page;
+        listed = true;
+    });
+    pastes.refresh();
+    REQUIRE(pumpUntil([&] { return listed; }));
+    CHECK(rows.size() == 2);
+}
+
 // ═════════════════════════════════════════════════════════════════════════
 // PasteBridge: the property-bag shapes
 // ═════════════════════════════════════════════════════════════════════════
