@@ -13,6 +13,7 @@
 #include <vector>
 
 using morph::math::checkedAdd;
+using morph::math::checkedDiv;
 using morph::math::checkedMul;
 using morph::math::checkedSub;
 using morph::math::DecimalPlaces;
@@ -123,6 +124,110 @@ TEST_CASE("checkedMul handles a zero operand without dividing by a zero gcd", "[
     const auto product = checkedMul(whole(0), whole(kMax));
     REQUIRE(product.has_value());
     CHECK(product->numerator == 0);
+}
+
+TEST_CASE("checkedDiv reports the overflow dividedBy reports as success", "[rational][checked]") {
+    // morph#206. Dividing INT64_MAX by 1/1000000 has an exact quotient of
+    // 9223372036854775807000000, which does not fit. dividedBy multiplies by
+    // the reciprocal through the saturating path, clamps to INT64_MAX/1, and
+    // hands back a *successful* expected -- so the caller who checks it is
+    // told the division worked. checkedDiv is the form that says otherwise.
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                 morph::log::LogLevel::error};
+
+    const Rational dividend{Numerator{kMax}, Denominator{1}, DecimalPlaces{0}};
+    const Rational divisor{Numerator{1}, Denominator{1'000'000}, DecimalPlaces{6}};
+
+    // The behaviour that stays: dividedBy still saturates, on purpose.
+    const auto saturated = dividend.dividedBy(divisor);
+    REQUIRE(saturated.has_value());
+    CHECK(saturated->numerator == kMax);
+    CHECK(saturated->denominator == 1);
+    CHECK((dividend / divisor).has_value());
+
+    // The behaviour that is new: the same operands, reported.
+    const auto reported = checkedDiv(dividend, divisor);
+    REQUIRE_FALSE(reported.has_value());
+    CHECK(reported.error() == RationalError::Overflow);
+}
+
+TEST_CASE("checkedDiv agrees with operator/ on quotients that fit", "[rational][checked]") {
+    const Rational six{Numerator{6}, Denominator{1}, DecimalPlaces{2}};
+    const Rational three{Numerator{3}, Denominator{1}, DecimalPlaces{2}};
+
+    const auto quotient = checkedDiv(six, three);
+    REQUIRE(quotient.has_value());
+    CHECK(*quotient == whole(2));
+    CHECK(*quotient == *(six / three));
+
+    // A negative divisor keeps the sign on the numerator, as reciprocal does.
+    const auto negative = checkedDiv(six, whole(-3));
+    REQUIRE(negative.has_value());
+    CHECK(negative->numerator == -2);
+    CHECK(negative->denominator == 1);
+
+    // Usable in a constant expression, like the rest of the family.
+    static_assert(checkedDiv(Rational{Numerator{6}, Denominator{1}, DecimalPlaces{2}},
+                             Rational{Numerator{3}, Denominator{1}, DecimalPlaces{2}})
+                      ->numerator == 2);
+}
+
+TEST_CASE("checkedDiv reports a zero divisor through the same channel", "[rational][checked]") {
+    // Both failure modes reach the caller as one error type: the point of the
+    // helper is that a caller need not check the expected *and* separately
+    // inspect the value for a clamp.
+    const auto byZero = checkedDiv(whole(1), whole(0));
+    REQUIRE_FALSE(byZero.has_value());
+    CHECK(byZero.error() == RationalError::DivisionByZero);
+}
+
+TEST_CASE("checkedDiv checks the cross-cancelled factors, not the raw operands", "[rational][checked]") {
+    // kMax/2 divided by 1/2 cross-cancels to kMax/1 and divides fine, so the
+    // predicate must be the one operator*= uses -- checking raw operands would
+    // reject this pair.
+    const Rational lhs{Numerator{kMax}, Denominator{2}, DecimalPlaces{2}};
+    const Rational half{Numerator{1}, Denominator{2}, DecimalPlaces{2}};
+
+    const auto quotient = checkedDiv(lhs, half);
+    REQUIRE(quotient.has_value());
+    CHECK(quotient->numerator == kMax);
+    CHECK(quotient->denominator == 1);
+}
+
+TEST_CASE("A saturating division names its own site and its own remedy", "[rational][checked][saturate]") {
+    // morph#206: dividedBy saturates through operator*='s arithmetic, and the
+    // log used to say so -- naming a function the division caller never
+    // called, and offering checkedAdd/checkedSub/checkedMul, none of which is
+    // a division. Each site now names itself and the one helper that helps.
+    std::vector<std::string> logged;
+    const morph::log::ScopedLoggerOverride capture{
+        [&logged](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); },
+        morph::log::LogLevel::error};
+
+    const Rational dividend{Numerator{kMax}, Denominator{1}, DecimalPlaces{0}};
+    const Rational divisor{Numerator{1}, Denominator{1'000'000}, DecimalPlaces{6}};
+    (void)dividend.dividedBy(divisor);
+
+    REQUIRE(logged.size() == 1);
+    CHECK(logged.front().find("dividedBy") != std::string::npos);
+    CHECK(logged.front().find("checkedDiv") != std::string::npos);
+    CHECK(logged.front().find("operator*=") == std::string::npos);
+    CHECK(logged.front().find("checkedAdd") == std::string::npos);
+    CHECK(logged.front().find("checkedMul") == std::string::npos);
+
+    // The three operators keep their own attribution, each naming the one
+    // remedy that applies to it.
+    logged.clear();
+    (void)(whole(kMax) + whole(1));
+    (void)(whole(kMin + 1) - whole(2));
+    (void)(whole(kMax) * whole(3));
+    REQUIRE(logged.size() == 3);
+    CHECK(logged[0].find("operator+=") != std::string::npos);
+    CHECK(logged[0].find("checkedAdd") != std::string::npos);
+    CHECK(logged[1].find("operator-=") != std::string::npos);
+    CHECK(logged[1].find("checkedSub") != std::string::npos);
+    CHECK(logged[2].find("operator*=") != std::string::npos);
+    CHECK(logged[2].find("checkedMul") != std::string::npos);
 }
 
 TEST_CASE("Summing at ledger magnitudes reports the boundary rather than crossing it", "[rational][checked]") {
