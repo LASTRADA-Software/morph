@@ -11,6 +11,7 @@ carries all request and reply variants, discriminated by a `kind` string field.
 - [Encode and decode](#encode-and-decode)
 - [Parsing guarantees and hardening](#parsing-guarantees-and-hardening)
 - [Protocol version negotiation](#protocol-version-negotiation)
+- [Serving action schemas](#serving-action-schemas)
 - [Action-evolution policy](#action-evolution-policy)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -29,6 +30,7 @@ their `kind` needs and leave the rest as default-constructed values.
 | `"attach"`   | request   | Client re-points at a different `primary` of `typeId`, releasing `modelId` if non-zero. Replies `ok` with the target instance's id in `modelId`. | `typeId`, `primary`, `modelId` (optional), `contextKey` (optional) |
 | `"assign"`   | request   | Client files a live `modelId` under `primary` of `typeId`. | `typeId`, `primary`, `modelId` |
 | `"instances"` | request  | Client asks for the live shared primary keys of `typeId`. Replies `ok` with a JSON array of key strings in `body`. | `typeId` |
+| `"schemas"`  | request   | Client asks for `typeId`'s action descriptions. Replies `ok` with a `{actionType: schema}` JSON object in `body`. See [Serving action schemas](#serving-action-schemas). | `typeId` |
 | `"deregister"` | request | Client destroys an instance. | `modelId` |
 | `"execute"`  | request   | Client dispatches an action. | `callId`, `modelId`, `modelType`, `actionType`, `body`, `session` |
 | `"hello"`    | request   | Client announces its protocol version, once per connection, before any `register`/`execute`. See [Protocol version negotiation](#protocol-version-negotiation). | `protocolVersion` |
@@ -59,7 +61,7 @@ session — they round-trip it verbatim; enforcement lives in the server.
 
 ## Factory functions
 
-Nine free functions construct `Envelope` instances with the correct `kind` and
+Ten free functions construct `Envelope` instances with the correct `kind` and
 relevant fields. Callers never set `kind` manually.
 
 | Function | `kind` | Parameters |
@@ -69,6 +71,7 @@ relevant fields. Callers never set `kind` manually.
 | `makeAttach(typeId, primary, modelId = 0, contextKey = {})` | `"attach"` | Model type id, primary key to attach to, instance id to release (`0` for none), optional stable identity. |
 | `makeAssign(typeId, primary, modelId)` | `"assign"` | Model type id, primary key to file under, live instance id. |
 | `makeInstances(typeId)` | `"instances"` | Model type id whose live shared primary keys are wanted. |
+| `makeSchemas(typeId)` | `"schemas"` | Model type id whose action descriptions are wanted. See [Serving action schemas](#serving-action-schemas). |
 | `makeDeregister(modelId)` | `"deregister"` | Instance id to destroy. |
 | `makeHello(protocolVersion = kProtocolVersion)` | `"hello"` | Protocol version the sender speaks. See [Protocol version negotiation](#protocol-version-negotiation). |
 | `makeOk(callId = 0, body = {}, modelId = 0)` | `"ok"` | Correlation id, serialized result (stored in the `body` field), optional model id (for register-replies). |
@@ -293,6 +296,107 @@ no version check, `protocolVersion` stays `0` on every envelope.
   clear `"protocol version unsupported"` refusal at connect time instead of a
   confusing failure on the first `execute`.
 
+## Serving action schemas
+
+`morph::forms::schemaJson<A>()` renders one action as a JSON Schema document —
+properties, a derived `required` array, `x-decimalPlaces`, `x-rules`, layout
+hints. It is a *compile-time* function over a reflected action struct, so until
+the `"schemas"` kind existed the document was reachable only from a caller
+linked against the model's own C++. A WASM page, a third-party client, or a
+scenario runner that wants to name the offending field *before* a round trip
+had no way to ask (LASTRADA-Software/morph#234).
+
+### The `"schemas"` control kind
+
+| `kind` | Direction | Fields used | Reply |
+|---|---|---|---|
+| `"schemas"` | request | `typeId` (the model type to describe), `session` | `"ok"` with `body` = a `{actionType: schema}` JSON object, or `"err"` |
+
+`RemoteServer` answers from `ActionDispatcher`, which files one lazily-computed
+`ActionDescription` per action at registration time:
+
+- **One document, every action.** `ActionDispatcher::schemasJson(typeId)`
+  concatenates the description of every action registered under `typeId`, keyed
+  by action type-id and emitted in **sorted** order, so two calls — and two
+  servers built from the same sources — produce byte-identical documents.
+- **`{}` for a type with no registered actions.** Not an error: "this type
+  exposes no actions" and "this type does not exist" are not distinguishable at
+  this layer, and inventing the distinction would tell an unauthenticated
+  prober which type ids are real.
+- **Gated by `authorize(session, typeId, {})`** — the same type-level read hook
+  `"instances"` uses. A description discloses field names, bounds, rules and
+  the payload fingerprint of every action, so it must not be reachable by a
+  caller the server would not let execute. A deployer can refuse *describing*
+  a type without refusing *using* it.
+- **Lazily computed, once per type per process.** The thunk defers
+  `forms::schemaJson<A>()` (and its `UnsatisfiableFormError` throw path) off
+  static-init, where a throw would abort before `main`; the value is cached in
+  a function-local `static`, so the maps `ActionDispatcher` fills at
+  static-init are read-only when a pool thread answers a request.
+
+### The two extra keys
+
+Each served schema carries two top-level keys `forms::schemaJson` does not
+emit, in the same `x-` extension convention as `x-decimalPlaces`/`x-rules`:
+
+| Key | Value | Why |
+|---|---|---|
+| `x-payloadFingerprint` | `morph::model::payloadFingerprint<A>()` — `"<scheme>:<16 hex digits>"` | The same discriminator the journal stamps on every recorded entry (see [journal.md](../journal/journal.md#payload-schema-fingerprint)) — **the same function, not a wire-specific reimplementation**, so a change to `kPayloadFingerprintScheme` moves both together and neither can drift from the other. A client linked against the action compares it with its own build's value in one string comparison. |
+| `x-payloadShape` | `morph::model::payloadShapeString<A>()` — e.g. `(amountCents:i8,memo:s)` | A fingerprint mismatch is otherwise two opaque hex strings. The shape rendering says *which* member differs. |
+
+A served description therefore looks like:
+
+```json
+{
+  "Deposit": {
+    "type": "object",
+    "properties": { "amountCents": { "$ref": "#/$defs/int64_t", "x-order": 0 },
+                    "memo": { "type": "string", "x-order": 1 } },
+    "required": ["amountCents"],
+    "x-payloadFingerprint": "1:821c7650a597bbdd",
+    "x-payloadShape": "(amountCents:i8,memo:s)"
+  }
+}
+```
+
+The `1:` prefix is `kPayloadFingerprintScheme`, not a per-action version — it
+tracks the fingerprint *algorithm* and moves for every action at once when that
+algorithm changes. The value above is illustrative of the shape, not a pinned
+constant.
+
+Serving the journal's fingerprint also serves its **limits**, unchanged: a type
+with its own `glz::meta` renders as the opaque `x`, so a retype between two
+custom-codec types is invisible to both fingerprint and shape. See
+[journal.md, "What the fingerprint does not catch"](../journal/journal.md#what-the-fingerprint-does-not-catch).
+That boundary is inherited deliberately — one fingerprint scheme with one set
+of known blind spots beats a second, wire-specific scheme that would have to be
+kept in step with it.
+
+### Why this, and not a fingerprint exchange at `"hello"`
+
+morph#207 proposes exchanging per-action fingerprints during the `"hello"`
+handshake. The fingerprints are the same either way — this reuses
+`morph::model::payloadFingerprint<A>()` rather than defining a wire-specific
+scheme — but the *carrier* is `"schemas"` for one reason: `"hello"` is
+deliberately unauthorized ("carries no `session` and is not authorized —
+orthogonal to `IAuthorizer`", [backend.md](backend.md)), and it has no model
+type in it. A fingerprint map on the `"hello"` reply would therefore have to
+enumerate every action the server hosts, to any peer that connects, before any
+authorization has run. `"schemas"` asks per model type and is gated by the
+type-level `authorize` hook, so the same material crosses the wire without
+turning the handshake into an inventory disclosure.
+
+What `"schemas"` does **not** do is refuse a mismatched peer automatically. It
+carries the material; comparing it — and deciding whether a given difference is
+additive (permitted) or a break (not) — is the client's, and a plain
+fingerprint equality test cannot make that distinction on its own, which is why
+`x-payloadShape` is served alongside it.
+
+`SimulatedRemoteBackend::fetchActionSchemas(typeId)` sends the envelope over
+the same synchronous control path as `registerModel`/`negotiateProtocolVersion`
+and returns the raw document, throwing on an `"err"` reply. Like
+`negotiateProtocolVersion()`, it is **opt-in**: nothing calls it for you.
+
 ## Action-evolution policy
 
 The passive forward-compat contract (`error_on_unknown_keys = false` on
@@ -351,6 +455,74 @@ is:
   `setSupportedVersionRange` accordingly, then narrows it once the window
   closes.
 
+### Enforcing the policy
+
+The four bullets above were, until `PayloadCompleteness`, enforced by nothing
+but author discipline: a client that performed the forbidden rename *and*
+skipped the mandated `kProtocolVersion` bump was accepted silently, because the
+lenient inner decode reads an unknown key as absent and an absent one as
+default-constructed. `validate()` cannot close that gap — it sees a
+zero-valued action and cannot tell "the client sent nothing" from "the client
+sent a legitimate zero" (LASTRADA-Software/morph#207).
+
+**What is mechanically checkable, and what is not.** Only the first bullet
+states a machine-readable predicate: *new fields must be optional, so an older
+peer that omits them decodes cleanly*. That makes optionality — and only
+optionality — the wire's marker for **may be absent**, which turns the
+contrapositive into a rule a server can enforce without knowing anything about
+either peer's version history: **a field that is not optional may not be
+absent**. The other three bullets are not decidable from a single message. A
+rename is a removal plus an addition, so a renamed field and a newer client's
+additive field are the *same* wire observation; distinguishing them needs a
+second version's shape, not this message. And "optional" is itself only
+partly machine-readable — the policy admits "a `std::optional<...>`, an
+empty-capable `Quantity`/`Timestamp`, or a type with a safe default", and the
+last clause is a judgement, not a predicate.
+
+**The narrowest defensible rule** is therefore to enforce the one thing the
+action already *publishes*: the `required` array of its served schema, which
+`morph::forms` derives as "every member that is not a `std::optional<...>`,
+not listed in the action's `optionalFields`, and not a computed field". That
+list is the author's own declaration of what may be omitted, so the gate
+enforces exactly what the schema told the client, and an author who considers a
+non-`optional` type safely defaulted says so by adding it to `optionalFields`
+rather than by hoping the wire agrees.
+
+**The rule, as `RemoteServer` applies it.**
+`RemoteServer::setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields)`
+rejects an `"execute"` whose `body` carries no **key** for a field the action's
+served schema lists in `required`, replying
+`err "payload missing required field(s): <names>"`. Presence is judged on the
+key, not on the decoded value, because that is precisely the question the
+action codec cannot answer. Three deliberate non-behaviours:
+
+- **A newer client's additive field is still accepted.** The check is a
+  presence test over `required`, *not* `error_on_unknown_keys = true`. Strict
+  decode would turn a legal additive payload into a parse error — a breaking
+  protocol change dressed up as a hardening measure — and would still miss an
+  empty `{}` body, which has no unknown key to trip over.
+- **A body that is not a JSON object reports nothing missing.** There are no
+  keys to test; `fromJson` raises the better diagnostic a moment later.
+- **An action whose description cannot be produced contributes no rule.**
+  `ActionDispatcher::requiredFieldsFor` returns `nullptr` there, meaning
+  *nothing to check* — never *nothing is required*. An action that could not
+  publish a requirement never published one.
+
+**Why it is opt-in.** Turning the check on rejects payloads a pre-existing
+client sends today. That is a non-additive change to the wire contract —
+exactly what the fourth bullet says requires a `kProtocolVersion` bump. Making
+it the default would break the policy in the act of enforcing it. A deployment
+that has verified its clients enables it explicitly; a future
+`kProtocolVersion` bump is the point at which the default could change.
+
+**What this does not do.** It does not exchange per-action fingerprints during
+the `"hello"` handshake and refuse a mismatched peer the way Qt Remote Objects'
+`SignatureMismatch` does. The material for that now crosses the wire — every
+served schema carries `x-payloadFingerprint` and `x-payloadShape` (see
+[Serving action schemas](#serving-action-schemas)) — but comparing them, and
+deciding whether a given difference is additive or a break, is left to the
+client.
+
 ## API reference
 
 ### `wire::Envelope`
@@ -380,6 +552,7 @@ is:
 | `makeAttach` | `Envelope makeAttach(std::string typeId, std::string primary, uint64_t modelId = 0, std::string contextKey = {})` |
 | `makeAssign` | `Envelope makeAssign(std::string typeId, std::string primary, uint64_t modelId)` |
 | `makeInstances` | `Envelope makeInstances(std::string typeId)` |
+| `makeSchemas` | `Envelope makeSchemas(std::string typeId)` |
 | `makeDeregister` | `Envelope makeDeregister(uint64_t modelId)` |
 | `makeHello` | `Envelope makeHello(uint32_t protocolVersion = kProtocolVersion)` |
 | `makeOk` | `Envelope makeOk(uint64_t callId = 0, std::string body = {}, uint64_t modelId = 0)` |
