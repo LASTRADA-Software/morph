@@ -23,6 +23,15 @@
 /// `DynamicForm` renders them exactly as it renders `Login`/`RenameTag` in
 /// rung 2.
 ///
+/// All three also declare `static constexpr bool explicitSubmit = true`
+/// (`dto/vote_dto.hpp`), so every schema in this document carries the
+/// top-level `x-submitMode: "explicit"` key. That is what lets
+/// `gui/qml/VoteView.qml` bind `controller: page.pollBridge` on the forms
+/// directly: the renderer suppresses its default auto-submit-on-validity and
+/// supplies its own Submit button instead. All three actions mutate, and
+/// `FinalizePoll` is irreversible, so auto-submit would be wrong for each of
+/// them (`docs/spec/forms/forms.md`, "Explicit submit mode").
+///
 /// Every other `PollModel` action is deliberately absent, for one of three
 /// reasons:
 ///

@@ -61,9 +61,22 @@ struct UpdateVotes {
     }
 };
 
+/// @brief One participant's comment on a poll.
+///
+/// `explicitSubmit` (here and on the two actions below) is the reason
+/// `gui/qml/VoteView.qml` can bind these three forms straight to
+/// `PollBridge`: `schemaJson<A>()` stamps `x-submitMode: "explicit"`
+/// (`docs/spec/forms/forms.md`, "Explicit submit mode"), which suppresses
+/// `DynamicForm`'s default auto-submit-on-validity and renders the shipped
+/// renderer's own Submit button instead. Without it a live `controller`
+/// would post one comment per keystroke that happened to leave the form
+/// valid. These are the only three `PollModel` actions rendered by
+/// `DynamicForm` (`gui_lib/poll_schemas.hpp`), and all three mutate.
 struct AddComment {
     std::string participantName;
     std::string body;
+
+    static constexpr bool explicitSubmit = true;
 
     [[nodiscard]] bool validate() const noexcept {
         return !participantName.empty() && participantName.size() <= kMaxParticipantNameBytes && !body.empty() &&
@@ -71,9 +84,14 @@ struct AddComment {
     }
 };
 
-/// @brief Admin-token-gated: the poll becomes read-only.
+/// @brief Admin-token-gated: the poll becomes read-only. Irreversible, so
+///        `explicitSubmit` is not merely prudent here — auto-submit would
+///        finalize the poll on the first optionId digit that named a real
+///        option. See `AddComment` above for the mechanism.
 struct FinalizePoll {
     OptionId optionId;
+
+    static constexpr bool explicitSubmit = true;
 
     [[nodiscard]] bool validate() const noexcept { return optionId.hasValue(); }
 };
@@ -81,9 +99,11 @@ struct FinalizePoll {
 /// @brief Reverses the calling participant's own most recent vote change --
 ///        a compensating action against `vote_history`, never
 ///        `SessionLog::undoLast()`. See the README's resolved design
-///        decision 3.
+///        decision 3. Mutating, so `explicitSubmit` — see `AddComment`.
 struct UndoLastVoteChange {
     std::string participantName;
+
+    static constexpr bool explicitSubmit = true;
 
     [[nodiscard]] bool validate() const noexcept {
         return !participantName.empty() && participantName.size() <= kMaxParticipantNameBytes;
