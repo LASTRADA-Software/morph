@@ -153,9 +153,12 @@ public:
     ///
     /// Synchronous, so it needs no in-flight seam of its own: it touches the
     /// database and the log directly rather than dispatching through the
-    /// server. Both `BookmarkModel::execute(const BulkEdit&)` and
-    /// `TagModel`'s `RenameTag`/`MergeTags` write into that one table, so one
-    /// relay covers both models.
+    /// server. Two actions write into that one table —
+    /// `BookmarkModel::execute(const BulkEdit&)` and
+    /// `TagModel::execute(const MergeTags&)` — so one relay covers both
+    /// models. `RenameTag` is not among them: it updates a single row and is
+    /// registered plain-loggable, so the framework's own auto-append is its
+    /// journal entry.
     /// @return The number of outbox rows relayed in this pass.
     std::size_t relayOutboxOnce();
 

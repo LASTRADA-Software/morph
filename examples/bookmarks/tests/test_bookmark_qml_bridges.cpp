@@ -57,6 +57,7 @@
 // themselves purely for a test. Stated rather than silently skipped; if a later
 // rung adds the missing action, the arms become reachable and belong here.
 
+#include <QByteArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaMethod>
@@ -71,6 +72,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <memory>
+#include <morph/forms/forms.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <optional>
@@ -277,7 +279,7 @@ TEST_CASE("Every bookmarks bridge exposes exactly the surface gui/qml binds, and
     //
     // The old shape enumerated each bridge's metaobject against a transcription
     // of the QML — every expected name spelled out in C++, each one carrying a
-    // `BookmarkListView.qml:301`-style citation in a comment, plus an
+    // `BookmarkListView.qml:297`-style citation in a comment, plus an
     // `ownMethodCount(meta) == 15` to catch anything added. It worked in one
     // direction only: it proved every name a human had *transcribed* was still
     // there. A QML file that binds a name the bridge never had — `onListd` for
@@ -307,6 +309,21 @@ TEST_CASE("Every bookmarks bridge exposes exactly the surface gui/qml binds, and
     audit.bind(QStringLiteral("bookmarkController"), bookmarkBridge);
     audit.bind(QStringLiteral("tagController"), tags);
     audit.bind(QStringLiteral("feedController"), feed);
+
+    // The one exemption, and the exact case `allowUnbound`'s own doc comment
+    // names: `submitIfValid` is called from the shipped `MorphForms`
+    // renderer's QML (`src/qt/forms/qml/DynamicForm.qml`'s `submit()` and its
+    // auto-submit path), not from this rung's. Every form here declares
+    // `explicitSubmit = true` and is bound with `controller:
+    // page.formsController`, so the renderer's own Submit button is the sole
+    // caller — this rung's QML names the *controller*, never the method. The
+    // exemption cannot go stale unnoticed: the audit rejects it the moment
+    // `FormsBridge` loses the member, or some scanned `.qml` file starts
+    // binding it again.
+    audit.allowUnbound(QStringLiteral("formsController"), QStringLiteral("submitIfValid"),
+                       QStringLiteral("called by the shipped MorphForms DynamicForm, whose QML this audit does not "
+                                      "scan; this rung's forms are bound to the controller and submitted by the "
+                                      "renderer's own explicit Submit button"));
 
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());
@@ -348,14 +365,63 @@ TEST_CASE("The bookmarks bridges' surface carries the metaobject facts QML canno
     CHECK(forms.schemasJson().toStdString() == bookmarks::gui::bookmarkSchemasJson());
     const QJsonDocument schemas = QJsonDocument::fromJson(forms.schemasJson().toUtf8());
     REQUIRE(schemas.isObject());
-    // The six action ids QML passes to `submitIfValid` as string literals must
-    // each have a schema to render from, or the form is blank.
+    // The six action ids QML writes as `actionType:` string literals on its
+    // `DynamicForm`s must each have a schema to render from, or the form is
+    // blank.
     for (const char* actionType :
          {"Login", "CreateBookmark", "EditBookmark", "ImportBookmarks", "RenameTag", "MergeTags"}) {
         INFO("missing schema: " << actionType);
         CHECK(schemas.object().contains(QString::fromLatin1(actionType)));
     }
     CHECK(schemas.object().size() == 6);
+}
+
+TEST_CASE("Every form in the shipped schema document opts out of auto-submit", "[bookmarks][gui][qml-bridges]") {
+    // `LoginView.qml` and `BookmarkListView.qml` bind every one of these forms
+    // to the live `formsController`, and the shipped renderer's default is to
+    // call `submitIfValid` the instant a form is valid
+    // (`docs/spec/forms/forms.md`, "Explicit submit mode"). Each of these six
+    // actions has effects — five write rows, and `Login` mints a signed bearer
+    // token — so a schema that lost its `x-submitMode` would mean one stored
+    // row (or one minted token) per typed character, in the shipped GUI, with
+    // nothing else to catch it: the engine-load smoke test loads every root
+    // with a null controller, and `QmlSurfaceAudit` reads names, not schemas.
+    //
+    // The guard reads the generated *schema* rather than each action's
+    // `explicitSubmit` declaration for the same reason the `title`-required
+    // guard in `test_bookmark_dto.cpp` does: the declaration is only ever
+    // meaningful through what `schemaJson<A>()` emits, which is what
+    // `DynamicForm` actually reads. It also sweeps the whole document rather
+    // than a written-out list of six, so a seventh form added to
+    // `bookmarkSchemasJson()` cannot join the shipped client without answering
+    // this question.
+    const QJsonDocument schemas =
+        QJsonDocument::fromJson(QByteArray::fromStdString(bookmarks::gui::bookmarkSchemasJson()));
+    REQUIRE(schemas.isObject());
+    // Held in a named object, not iterated straight off `schemas.object()`:
+    // that returns a *copy*, so an iterator taken from the temporary is
+    // already dangling by the time the loop body runs.
+    const QJsonObject document = schemas.object();
+    REQUIRE(document.size() == 6);
+    for (auto entry = document.constBegin(); entry != document.constEnd(); ++entry) {
+        INFO("action type: " << entry.key().toStdString());
+        REQUIRE(entry.value().isObject());
+        CHECK(entry.value().toObject().value(QStringLiteral("x-submitMode")).toString() == QStringLiteral("explicit"));
+    }
+}
+
+TEST_CASE("A read-only action's schema carries no x-submitMode at all", "[bookmarks][gui][qml-bridges]") {
+    // The other half of the guard above, and the reason it is not vacuous:
+    // `x-submitMode` is opt-in, so a check that only ever looked for the key's
+    // presence would pass just as happily if `annotateSubmitMode` stamped
+    // every schema unconditionally — at which point it would be measuring
+    // nothing. `ListBookmarks` is a pure query: it mutates nothing, wants the
+    // auto-submit default, and declares no `explicitSubmit`, so its schema
+    // must not carry the key.
+    const QJsonDocument schema =
+        QJsonDocument::fromJson(QByteArray::fromStdString(::morph::forms::schemaJson<bookmarks::ListBookmarks>()));
+    REQUIRE(schema.isObject());
+    CHECK_FALSE(schema.object().contains(QStringLiteral("x-submitMode")));
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -376,9 +442,9 @@ TEST_CASE("BookmarkBridge::open emits a bookmark bag carrying every key Bookmark
     const QVariantMap bag = openBag(bookmarkBridge, id);
 
     // Every key below is read by name in QML: `title`/`url` from
-    // BookmarkListView.qml:345-347, `description`/`notes`/`tags`/`visibility`/
+    // BookmarkListView.qml:341-343, `description`/`notes`/`tags`/`visibility`/
     // `readState`/`archiveState`/`createdAt`/`updatedAt` from the detail
-    // Repeater's model (:352-360), `id` from :377, :383, :389.
+    // Repeater's model (:348-356), `id` from :373, :379, :385.
     for (const char* key : {"id", "url", "title", "description", "notes", "tags", "createdAt", "updatedAt",
                             "readState", "archiveState", "visibility"}) {
         INFO("missing key: " << key);
@@ -397,7 +463,7 @@ TEST_CASE("BookmarkBridge::open emits a bookmark bag carrying every key Bookmark
 
     // `id` is a *number*, not a string: `open`/`archive`/`unarchive`/`remove`
     // all take `qlonglong`, and BookmarkListView.qml feeds them straight from
-    // this bag (:377) and from a list row (:301).
+    // this bag (:373) and from a list row (:280).
     CHECK(bag.value(QStringLiteral("id")).typeId() == QMetaType::LongLong);
     // `tags` is a list, because :355 calls `.join(", ")` on it.
     REQUIRE(bag.value(QStringLiteral("tags")).typeId() == QMetaType::QVariantList);
@@ -442,7 +508,7 @@ TEST_CASE("BookmarkBridge::refresh emits rows in the narrower summary shape, wit
     const QVariantMap bag = rows.front().toMap();
 
     // `id`/`title`/`url`/`visibility`/`archiveState` are read off `modelData`
-    // at BookmarkListView.qml:290, :296-298, :301, :307; the remaining four are
+    // at BookmarkListView.qml:286, :292-294, :297, :303; the remaining four are
     // the summary shape the shared-feed delegate also reads (:516-517).
     for (const char* key :
          {"id", "url", "title", "tags", "createdAt", "updatedAt", "readState", "archiveState", "visibility"}) {
@@ -476,7 +542,7 @@ TEST_CASE("TagBridge::refresh emits {id, name, bookmarkCount} rows and nothing e
     REQUIRE(rows.size() == 1);
     const QVariantMap bag = rows.front().toMap();
 
-    // `modelData.id` / `.name` / `.bookmarkCount` — BookmarkListView.qml:455-456.
+    // `modelData.id` / `.name` / `.bookmarkCount` — BookmarkListView.qml:431-432.
     for (const char* key : {"id", "name", "bookmarkCount"}) {
         INFO("missing key: " << key);
         REQUIRE(bag.contains(QString::fromLatin1(key)));
@@ -521,7 +587,7 @@ TEST_CASE("SharedFeedBridge::refresh emits the same summary shape, and only Shar
     // `BookmarkSummary`, so the same non-leak rule applies here too.
     CHECK(bag.size() == 9);
     CHECK_FALSE(bag.contains(QStringLiteral("notes")));
-    // `modelData.title` / `.url` / `.createdAt` — BookmarkListView.qml:516-517.
+    // `modelData.title` / `.url` / `.createdAt` — BookmarkListView.qml:478-479.
     CHECK(bag.value(QStringLiteral("title")).toString() == QStringLiteral("Shared one"));
     CHECK_FALSE(bag.value(QStringLiteral("createdAt")).toString().isEmpty());
     // `visibilityText`'s *other* arm: the feed only ever carries Shared rows.
@@ -537,7 +603,7 @@ TEST_CASE("BookmarkBridge renders the second arm of the visibility and archive-s
     // The bag cases above exercise each renderer's *default* arm (Private,
     // Unread, Active). This one exercises the other arm of the two that a
     // client can actually reach, which is where a formatting regression would
-    // be visible: BookmarkListView.qml:307 shows
+    // be visible: BookmarkListView.qml:303 shows
     // `visibility + " · " + archiveState` on every row, verbatim.
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
@@ -569,7 +635,7 @@ TEST_CASE("BookmarkBridge renders the second arm of the visibility and archive-s
 TEST_CASE("BookmarkBridge::bulkArchive maps true to BulkArchiveOp::Archive and false to Unarchive",
           "[bookmarks][gui][qml-bridges]") {
     // The one place in the client where a QML `bool` becomes a domain enum
-    // (`bulkArchive(page.selectedIds, true)` at BookmarkListView.qml:323, and
+    // (`bulkArchive(page.selectedIds, true)` at BookmarkListView.qml:319, and
     // `false` at :329). Inverting the ternary would archive on "Unarchive" and
     // vice versa, with no compile error and no visible difference until a user
     // pressed the wrong-behaving button.
@@ -663,7 +729,7 @@ TEST_CASE("BookmarkFormsController::dispatch routes every one of the six form ac
     }
 
     // 5/6 — RenameTag -> TagModel. The ids come from the tag list, exactly as
-    // the user reads them off BookmarkListView.qml:455 before typing them in.
+    // the user reads them off BookmarkListView.qml:431 before typing them in.
     const QVariantList before = tagRows(tags);
     REQUIRE(before.size() == 2);
     const qlonglong workId = tagIdNamed(before, QStringLiteral("work"));

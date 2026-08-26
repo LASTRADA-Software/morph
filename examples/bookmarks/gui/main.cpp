@@ -93,9 +93,16 @@ int main(int argc, char** argv) {
     }
 
     // Mirrors AppContext's own doc-comment construction pattern: pick the
-    // mode, then build every handler from inside onReady() — a Remote context
-    // is *not* usable the line after its constructor returns
-    // (docs/findings/017).
+    // mode, then build every handler from inside onReady(). `Remote` mode
+    // builds its backend with `asyncRegistrationEnabled`, and
+    // `QtWebSocketBackend::registerModelAsync()` queues a registration issued
+    // before the socket finishes connecting and retries it once the connection
+    // comes up (`docs/spec/core/backend.md`, "Asynchronous registration"), so
+    // this ordering is no longer load-bearing for correctness — it is simply
+    // the one shape that reads the same in both modes (`Local` is ready on
+    // construction and runs onReady() inline). See
+    // `examples/common/gui/app_context.hpp`'s "Readiness contract" and
+    // `examples/TESTING.md` presenter rule 2.
     ::morph::ladder::gui::AppContext ctx{
         serverUrl ? ::morph::ladder::gui::AppContext::Mode{::morph::ladder::gui::Remote{.url = *serverUrl}}
                   : ::morph::ladder::gui::AppContext::Mode{::morph::ladder::gui::Local{.workers = 4}}};

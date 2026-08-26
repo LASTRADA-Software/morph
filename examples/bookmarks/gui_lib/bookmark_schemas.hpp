@@ -37,12 +37,20 @@ namespace bookmarks::gui {
 /// * `RenameTag` / `MergeTags` — `TagModel`.
 ///
 /// `BulkEdit` is deliberately absent, and its absence is a renderer
-/// limitation rather than a design choice: its one required member is
-/// `std::vector<BookmarkId>`, and the shipped `DynamicForm` has no control
-/// for a JSON `array` field (see `BookmarkFormsController`'s class comment
-/// and `examples/bookmarks/README.md`'s known-gaps entry). The GUI therefore
-/// drives `BulkEdit` from the list's own multi-selection through
-/// `BookmarkBridge`, where no typing is involved at all.
+/// limitation rather than a design choice — but a narrower one than "no array
+/// control". The shipped `DynamicForm` does render array fields
+/// (`docs/spec/forms/forms.md`, "Array fields"), which is how
+/// `CreateBookmark::tags` is typed. What it does not do is *type* the
+/// entries: every comma-separated entry is encoded as a JSON **string**,
+/// whatever the schema's `items` says. `BulkEdit`'s one required member is
+/// `std::vector<BookmarkId>`, whose schema is
+/// `{"type":"array","items":{"$ref":"#/$defs/BookmarkId"}}` with `BookmarkId`
+/// defined as `{"type":["integer","null"], …}` — so typing `1, 2` would
+/// submit `["1","2"]`, an array of strings that does not decode back into
+/// `std::vector<BookmarkId>`. Array-of-string is the fully supported case;
+/// array-of-integer is not. The GUI therefore drives `BulkEdit` from the
+/// list's own multi-selection through `BookmarkBridge`, where no typing is
+/// involved at all.
 ///
 /// @return `{"Login": …, "CreateBookmark": …, "EditBookmark": …,
 ///          "ImportBookmarks": …, "RenameTag": …, "MergeTags": …}`.

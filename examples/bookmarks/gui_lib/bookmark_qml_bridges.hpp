@@ -17,6 +17,7 @@
 // signatures below are all it reads.
 #ifndef Q_MOC_RUN
 #include <morph/core/bridge.hpp>
+#include <morph/core/callback_scope.hpp>
 #include <morph/core/executor.hpp>
 
 #include "bookmark_forms_controller.hpp"
@@ -88,6 +89,37 @@ namespace bookmarks::gui {
 /// property, `submitIfValid(actionType, bodyJson)`, and a `replyReceived`
 /// signal — so the shipped renderer needs no bookmarks-specific knowledge,
 /// and one instance serves the login screen and every domain form alike.
+///
+/// @par Why this class holds a `CallbackScope`
+/// `submitIfValid` hands the wrapped controller two callbacks that capture
+/// `this`; the success arm also reaches `_bridge` through `onLoginSucceeded`.
+/// They are attached to a `Completion`, which **always** resolves through the
+/// executor — never inline, even in `Local` mode
+/// (`docs/spec/core/completion.md`) — so an in-flight reply outlives its
+/// dispatch call by construction, and this object can be destroyed before the
+/// reply lands. Both shells own their bridges by `unique_ptr` in `main()` and
+/// destroy them when the process tears down (`gui/main.cpp`,
+/// `gui_wasm/main_wasm.cpp`), which is exactly such a window.
+///
+/// The rung's three neighbours are already covered and neither mechanism
+/// reaches here: `BookmarkPresenter`/`TagPresenter`/`SharedFeedPresenter`
+/// inherit `Presenter::track()`, which re-checks a `QPointer` before touching
+/// the presenter (`examples/common/gui/presenter.hpp` — added for a real
+/// AddressSanitizer `stack-use-after-scope`, morph#137), and the three
+/// `*Bridge` classes over them relay through Qt signal/slot connections, which
+/// Qt severs when either end is destroyed. `FormsBridge` dispatches directly
+/// and goes through neither, so it takes the framework's general answer:
+/// `morph::async::CallbackScope` (`docs/spec/core/callback_scope.md`) as a
+/// **last-declared member**, with every `this`-capturing callback wrapped in
+/// `_callbacks.guard(...)`. Members are destroyed in reverse declaration
+/// order, so the scope dies first and every gated callback is already refused
+/// before the fields it would have touched are torn down. Same shape, and the
+/// same reasoning, as `pastebin::gui::FormsBridge`.
+///
+/// Stated precisely, because the distinction matters for how much this claim
+/// is worth: this is a by-construction hazard closed pre-emptively, not a
+/// crash that was observed here. Nothing in this rung's suite reproduced a
+/// use-after-free through `FormsBridge`.
 class FormsBridge : public QObject {
     Q_OBJECT
 
@@ -144,6 +176,23 @@ private:
 
     ::morph::bridge::Bridge& _bridge;
     BookmarkFormsController _controller;
+
+    /// @brief Lifetime gate for the `this`-capturing reply callbacks
+    ///        `submitIfValid` attaches — see this class's own doc comment.
+    ///
+    /// **Declared last on purpose**, and it must stay last: reverse-order
+    /// member destruction is what makes the gate close before `_controller`
+    /// (and the three `BridgeHandler`s inside it) is torn down. Anything added
+    /// to this class goes *above* this line.
+    ///
+    /// `requestStop()`/`reset()` are deliberately not called anywhere: this
+    /// bridge has no "user navigated away" or "supersede the previous query"
+    /// moment — `DynamicForm.qml` submits one action at a time and wants every
+    /// reply it asked for, and `Login`'s reply in particular must not be
+    /// dropped, since installing the returned token is what makes every later
+    /// action possible. Destruction is the only event that must suppress a
+    /// callback here, and `~CallbackScope()` is what handles it.
+    ::morph::async::CallbackScope _callbacks;
 #endif
 };
 
@@ -196,8 +245,10 @@ public:
     ///        `BulkEdit` (all-or-nothing, README).
     ///
     /// Driven from the list's multi-selection rather than a form: `BulkEdit`'s
-    /// required `ids` member is a JSON array, which the shipped `DynamicForm`
-    /// has no control for — see `BookmarkFormsController`'s class comment. No
+    /// required `ids` member is an array of `BookmarkId`, and the shipped
+    /// `DynamicForm`'s array control encodes every entry as a JSON string
+    /// whatever the schema's `items` says — see `bookmark_schemas.hpp` for the
+    /// exact schema and why array-of-integer is the case it cannot serve. No
     /// text is typed here at all; the ids come from rows the user ticked.
     /// @param ids     The bookmarks to affect, as list-row ids.
     /// @param archive `true` to archive, `false` to unarchive.
