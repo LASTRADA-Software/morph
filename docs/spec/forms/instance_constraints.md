@@ -71,11 +71,31 @@ Added to the renderer contract in [forms.md](forms.md#renderer-contract-the-sche
 | Key | Where | Meaning |
 |---|---|---|
 | `x-decimalPlaces` | property node | **Overwritten** with the instance's precision when one is declared. Same meaning as always — the entry granularity — now sourced from data. |
-| `x-minimum` / `x-maximum` | property node | The instance's inclusive bounds, as `{"num","den","dp"}` — the same node shape a `Rational` takes on the wire, so a renderer parses a bound exactly the way it parses the value it bounds. |
+| `x-minimum` / `x-maximum` | property node | The instance's inclusive bounds, as `{"num","den","dp"}` — the same node shape a `Rational` takes on the wire, so a renderer parses a bound exactly the way it parses the value it bounds. Distinct from `x-min`/`x-max`, which are a *slider track* and are never checked. |
 | `x-instanceConstraints` | top-level | Array of the wire field names whose keys came from instance data rather than from the compiled type. **This is what makes a decorated schema self-describing**: without it a renderer could not tell an instance-sourced `x-decimalPlaces` from a compiled one, which is the ambiguity the two-key workaround created in the first place. |
 
 Emitted only when at least one declared field actually exists on the schema; a
 schema with no decorations carries no `x-instanceConstraints` key.
+
+### What the shipped renderer does with them
+
+A key nothing reads is the two-key workaround wearing one name, so
+`DynamicForm.qml` honours all three:
+
+| Key | Effect in the renderer |
+|---|---|
+| `x-decimalPlaces` | The field's entry granularity and the maximum fraction length accepted, whether the value came from the compiled type or from a row. |
+| `x-minimum` / `x-maximum` | A `Quantity` outside the range produces no payload literal, so the form does not become submittable — alongside, not instead of, the compiled `minimum`/`maximum`. An instance range therefore narrows the type's; it cannot widen it. |
+| `x-instanceConstraints` | Not consumed. It exists for a renderer that needs to *distinguish* an instance-sourced key from a compiled one, and for a reviewer or conformance test asking whether the matching model-side check exists. |
+
+Two boundaries, both inherited from the framework rather than chosen here:
+
+- **`Quantity` fields only**, matching `checkAction`. A client that gated a key
+  the model does not check would be a fresh divergence, not a repair of one.
+- **The client compares a `double`** quotient of the bound's `{num,den}`,
+  exactly as it already does for the compiled `minimum`/`maximum`. The exact
+  comparison is `checkValue`'s, against a `Rational`. The renderer's gate is an
+  approximation everywhere; the model is the floor.
 
 ### `checkValue` vs `checkAction`
 

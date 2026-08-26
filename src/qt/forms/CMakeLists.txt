@@ -50,6 +50,17 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
     qt_add_executable(morph_forms_qml_tests tests/tst_main.cpp)
     target_link_libraries(morph_forms_qml_tests PRIVATE morph_forms_moduleplugin Qt6::QuickTest)
 
+    # The shared x-rules corpus (morph#176) has two readers: this suite and
+    # tests/test_forms_rule_corpus.cpp. Both are pointed at the one file from
+    # CMake so neither can quietly grow its own copy. tst_main.cpp reads it and
+    # publishes it to the QML engine -- QML's own XMLHttpRequest refuses a
+    # `file:` URL unless QML_XHR_ALLOW_FILE_READ is exported, and a suite whose
+    # coverage depends on how it was invoked is exactly the "control that
+    # measures nothing" this corpus exists to rule out.
+    target_compile_definitions(morph_forms_qml_tests PRIVATE
+        MORPH_FORMS_RULE_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/rule_corpus.json"
+        MORPH_FORMS_INSTANCE_BOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/instance_bounds.json")
+
     if(WIN32)
         find_program(MORPH_WINDEPLOYQT_EXECUTABLE windeployqt
             HINTS "${QT6_INSTALL_PREFIX}/bin" "${Qt6_DIR}/../../../bin"

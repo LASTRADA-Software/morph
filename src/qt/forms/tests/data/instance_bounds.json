@@ -1,0 +1,105 @@
+{
+  "readme": [
+    "The per-instance constraints corpus (morph#164). ONE file, TWO readers:",
+    "  tests/test_forms_instance_constraints.cpp -- InstanceConstraints::checkValue",
+    "  src/qt/forms/tests/tst_DynamicFormInstanceBounds.qml -- a real DynamicForm",
+    "",
+    "The point of the seam is that ONE declaration both serves a schema and",
+    "checks a submitted value, so the two cannot drift. That is only worth",
+    "anything if the shipped renderer honours what was served -- otherwise the",
+    "instance's range is a second opinion nobody reads, which is the two-keys-",
+    "for-one-concept outcome the seam exists to remove.",
+    "",
+    "'constraints' is the declaration BOTH the served schema and the checked",
+    "bound come from: the C++ side rebuilds InstanceConstraints from it and",
+    "asserts instanceSchemaJson<ICCapture>() equals 'schemas.decorated' byte for",
+    "byte. Regenerate that text from the failure message if the emitter changes.",
+    "",
+    "The 'compiled' rows are the control: the same values against the",
+    "undecorated schemaJson<ICCapture>(), where they are accepted. Without them",
+    "a renderer that rejected everything would pass."
+  ],
+  "constraints": {
+    "field": "value",
+    "decimalPlaces": 1,
+    "minimum": {
+      "num": 0,
+      "den": 1,
+      "dp": 1
+    },
+    "maximum": {
+      "num": 20,
+      "den": 1,
+      "dp": 1
+    }
+  },
+  "schemas": {
+    "decorated": "{\"type\":\"object\",\"properties\":{\"analysisVersionId\":{\"$ref\":\"#/$defs/int64_t\",\"x-order\":0,\"title\":\"Analysis Version Id\"},\"value\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"mg_per_L\",\"unitUnicode\":\"mg/L\"},\"x-order\":1,\"title\":\"Value\",\"x-decimalPlaces\":1,\"x-minimum\":{\"num\":0,\"den\":1,\"dp\":1},\"x-maximum\":{\"num\":20,\"den\":1,\"dp\":1}}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"ICCapture\",\"required\":[\"analysisVersionId\",\"value\"],\"x-instanceConstraints\":[\"value\"]}",
+    "compiled": "{\"type\":\"object\",\"properties\":{\"analysisVersionId\":{\"$ref\":\"#/$defs/int64_t\",\"x-order\":0,\"title\":\"Analysis Version Id\"},\"value\":{\"type\":[\"object\",\"null\"],\"properties\":{\"den\":{\"$ref\":\"#/$defs/int64_t\"},\"dp\":{\"$ref\":\"#/$defs/uint32_t\"},\"num\":{\"$ref\":\"#/$defs/int64_t\"}},\"additionalProperties\":false,\"ExtUnits\":{\"unitAscii\":\"mg_per_L\",\"unitUnicode\":\"mg/L\"},\"x-order\":1,\"title\":\"Value\",\"x-decimalPlaces\":3}},\"additionalProperties\":false,\"$defs\":{\"int64_t\":{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807,\"x-exactMinimum\":\"-9223372036854775808\",\"x-exactMaximum\":\"9223372036854775807\"},\"uint32_t\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4294967295}},\"title\":\"ICCapture\",\"required\":[\"analysisVersionId\",\"value\"]}"
+  },
+  "cases": [
+    {
+      "id": "decorated/in-range",
+      "schema": "decorated",
+      "state": {
+        "analysisVersionId": "7",
+        "value": "12"
+      },
+      "ready": true
+    },
+    {
+      "id": "decorated/in-range-at-declared-precision",
+      "schema": "decorated",
+      "state": {
+        "analysisVersionId": "7",
+        "value": "12.5"
+      },
+      "ready": true
+    },
+    {
+      "id": "decorated/above-the-instance-maximum",
+      "schema": "decorated",
+      "state": {
+        "analysisVersionId": "7",
+        "value": "25"
+      },
+      "ready": false
+    },
+    {
+      "id": "decorated/below-the-instance-minimum",
+      "schema": "decorated",
+      "state": {
+        "analysisVersionId": "7",
+        "value": "-1"
+      },
+      "ready": false
+    },
+    {
+      "id": "decorated/finer-than-the-instance-precision",
+      "schema": "decorated",
+      "state": {
+        "analysisVersionId": "7",
+        "value": "12.55"
+      },
+      "ready": false
+    },
+    {
+      "id": "compiled/the-same-25-is-accepted",
+      "schema": "compiled",
+      "state": {
+        "analysisVersionId": "7",
+        "value": "25"
+      },
+      "ready": true
+    },
+    {
+      "id": "compiled/two-decimals-accepted-at-compiled-precision",
+      "schema": "compiled",
+      "state": {
+        "analysisVersionId": "7",
+        "value": "12.55"
+      },
+      "ready": true
+    }
+  ]
+}

@@ -85,12 +85,18 @@ using Draft = std::map<std::string, DraftField>;
 
 /// @brief Evaluates one condition node from a served `x-rules` entry.
 ///
-/// **Fails closed on an unrecognised `kind`.** That is the framework's own
-/// stated contract ("An unrecognised `kind` … must be treated as 'cannot
-/// evaluate' by a client renderer, which defers enforcement to the server
-/// rather than passing the rule") and the direction matters: a client that
-/// *passed* an unknown rule would let a payload through that the server then
-/// rejects, which looks to the operator like the form lying to them.
+/// **Never claims an unrecognised `kind` holds.** forms.md ("Renderer
+/// fallback" → "'Cannot evaluate' means defer, not block") settles the
+/// contract: an unknown kind is a third answer, and the rule it belongs to is
+/// handed to the server rather than blocked on. `clientWouldSubmit` below is
+/// where the deferring happens; this function only refuses to assert.
+///
+/// **A known narrowing.** The contract says "cannot evaluate" *propagates*
+/// through `and`/`or`/`not`; this evaluator is two-valued, so `notOf(unknown)`
+/// would come out `true` here rather than unevaluable. No schema this rung
+/// serves nests an unknown kind under a `not`, so nothing in this file
+/// reaches it — the shipped renderer (`DynamicForm.qml`) implements the
+/// three-valued form, and a client promoted out of this file would have to.
 /// @param node The condition node.
 /// @param draft The current draft.
 /// @return `true` when the condition holds; `false` when it does not, or when

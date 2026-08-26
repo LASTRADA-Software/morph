@@ -99,6 +99,26 @@ Frame {
         return value === undefined ? fallback : value
     }
 
+    // A `{num,den,dp}` Rational node (the wire shape `x-minimum`/`x-maximum`
+    // take on a schema decorated by morph::forms::InstanceConstraints) read as
+    // a JS number, or `undefined` when the key is absent or malformed.
+    //
+    // The quotient is a double, like the compiled `minimum`/`maximum` this
+    // sits beside: the live client gate is an approximation, and the exact
+    // check is the model's own `InstanceConstraints::checkValue`, which
+    // compares the same declaration against an exact `Rational`. No client
+    // rounding can let a value past the model (see forms.md, "Per-instance
+    // constraints").
+    function boundValue(node) {
+        if (node === undefined || node === null || typeof node !== "object")
+            return undefined
+        const num = node.num
+        const den = node.den
+        if (typeof num !== "number" || typeof den !== "number" || den === 0)
+            return undefined
+        return num / den
+    }
+
     // Three-way compare of two integers held as decimal strings: -1, 0, 1.
     // Needed because a JS number cannot hold an int64 bound exactly, so the
     // comparison has to happen on digits (morph#213). Inputs are already
@@ -296,6 +316,17 @@ Frame {
                     // exactly, which is the overwhelmingly common case.
                     exactMinimum: p["x-exactMinimum"],
                     exactMaximum: p["x-exactMaximum"],
+                    // Per-*instance* bounds a model wrote into the served
+                    // schema from data (morph::forms::InstanceConstraints;
+                    // morph#164). `{num,den,dp}` Rational nodes, never plain
+                    // numbers, and never emitted by schemaJson<A>() itself.
+                    // Without these the renderer honoured only the compiled
+                    // `minimum`/`maximum` and an instance's own range was
+                    // decorative -- exactly the "two values for one concept,
+                    // and the renderer believes the compiled one" outcome the
+                    // decoration seam exists to remove.
+                    instanceMinimum: boundValue(opt(raw["x-minimum"], p["x-minimum"])),
+                    instanceMaximum: boundValue(opt(raw["x-maximum"], p["x-maximum"])),
                     section: opt(raw["x-section"], p["x-section"]),
                     colspan: opt(opt(raw["x-colspan"], p["x-colspan"]), 1),
                     isMultiline: widget === "textarea",
@@ -428,10 +459,22 @@ Frame {
 
     // Evaluates one condition node (`engaged` / `notEngaged` / `equals` / a
     // comparison kind reused as a boolean / the compound `and`/`or`/`not`
-    // kinds, which recurse into `conditions`/`condition` to any depth). An
-    // unrecognised `kind` fails closed (`false`) -- the renderer defers
-    // enforcement to the server rather than passing an unknown validation
-    // condition.
+    // kinds, which recurse into `conditions`/`condition` to any depth).
+    //
+    // **Three-valued.** `true` / `false` / `undefined`, where `undefined` is
+    // "this renderer cannot evaluate this node" -- an unrecognised `kind`.
+    // That is a distinct answer from `false`, and collapsing the two is what
+    // made the shipped renderer contradict every other client of the same
+    // spec sentence (morph#176): a `not` wrapping an unknown child came out
+    // *true*, so a requiredWhen keyed on it started demanding a field for a
+    // reason the renderer had just admitted it could not judge.
+    //
+    // `undefined` propagates. `and` is `false` if any child is false, and
+    // `undefined` if none is false but some is unevaluable. `or` is `true` if
+    // any child is true, and `undefined` if none is true but some is
+    // unevaluable. `not` of `undefined` is `undefined`. Each caller then
+    // decides what "unevaluable" means for its own question -- see testRule
+    // (defer), fieldVisible (show) and fieldReadonly (leave editable).
     function testCondition(cond) {
         const kind = cond.kind
         const names = cond.fields || []
@@ -469,44 +512,65 @@ Frame {
         }
         if (kind === "and") {
             const nested = cond.conditions || []
+            let unknown = false
             for (let i = 0; i < nested.length; ++i) {
-                if (!testCondition(nested[i]))
-                    return false
+                const child = testCondition(nested[i])
+                if (child === false)
+                    return false        // one false child settles `and` outright
+                if (child === undefined)
+                    unknown = true
             }
-            return true
+            return unknown ? undefined : true
         }
         if (kind === "or") {
             const nested = cond.conditions || []
+            let unknown = false
             for (let i = 0; i < nested.length; ++i) {
-                if (testCondition(nested[i]))
-                    return true
+                const child = testCondition(nested[i])
+                if (child === true)
+                    return true         // one true child settles `or` outright
+                if (child === undefined)
+                    unknown = true
             }
-            return false
+            return unknown ? undefined : false
         }
-        if (kind === "not")
-            return !testCondition(cond.condition)
-        return false
+        if (kind === "not") {
+            const child = testCondition(cond.condition)
+            return child === undefined ? undefined : !child
+        }
+        return undefined                // unrecognised kind: cannot evaluate
     }
 
-    // Evaluates one top-level x-rules entry. Presentation kinds
-    // (visibleWhen/readonlyWhen) always return true -- they never gate
-    // submission, only presentation (see fieldVisible/fieldReadonly below).
-    // `and`/`or`/`not` are valid directly as a top-level rule (not only
-    // nested inside a `when` clause) -- a single rule carrying a compound
-    // condition tree -- so they delegate to testCondition exactly like the
-    // comparison kinds already do. An unrecognised rule kind fails closed:
-    // the renderer defers enforcement to the server rather than passing the
-    // rule.
+    // Evaluates one top-level x-rules entry: `true` means "this rule does not
+    // block submission". Presentation kinds (visibleWhen/readonlyWhen) always
+    // return true -- they never gate submission, only presentation (see
+    // fieldVisible/fieldReadonly below). `and`/`or`/`not` are valid directly
+    // as a top-level rule (not only nested inside a `when` clause) -- a single
+    // rule carrying a compound condition tree -- so they delegate to
+    // testCondition exactly like the comparison kinds already do.
+    //
+    // **An unevaluable rule does not block** -- an unrecognised `kind`, or a
+    // recognised one whose condition tree contains an unrecognised node. The
+    // renderer hands it to the server, which runs the compiled rule list and
+    // has no "unrecognised kind" case at all (forms.md, "Renderer fallback").
+    // Blocking instead would make every additive extension of the closed rule
+    // vocabulary a breaking change for every deployed renderer: an older
+    // client would refuse to submit *anything* against a newer server, and
+    // the user would see a permanently disabled form with no way to satisfy
+    // it. The correctness floor is unaffected -- it never depended on the
+    // client understanding the key.
     function testRule(rule) {
         const kind = rule.kind
         const names = rule.fields || []
         if (kind === "requiredWhen") {
-            if (!testCondition(rule.when))
+            // Only a definitely-true condition makes the field required;
+            // `false` (vacuous) and `undefined` (unevaluable) both pass.
+            if (testCondition(rule.when) !== true)
                 return true
             return fieldEngaged(names[0])
         }
         if (kind === "greater" || kind === "greaterOrEqual" || kind === "less" || kind === "lessOrEqual")
-            return testCondition(rule)
+            return testCondition(rule) !== false
         if (kind === "exactlyOneOf" || kind === "atLeastOneOf" || kind === "mutuallyExclusive") {
             let count = 0
             for (let i = 0; i < names.length; ++i) {
@@ -520,8 +584,8 @@ Frame {
         if (kind === "visibleWhen" || kind === "readonlyWhen")
             return true
         if (kind === "and" || kind === "or" || kind === "not")
-            return testCondition(rule)
-        return false
+            return testCondition(rule) !== false
+        return true                     // unrecognised kind: defer to the server
     }
 
     // Whether `name` is required right now because some requiredWhen rule's
@@ -531,29 +595,33 @@ Frame {
         for (let i = 0; i < rules.length; ++i) {
             const rule = rules[i]
             if (rule.kind === "requiredWhen" && rule.fields[0] === name)
-                return testCondition(rule.when)
+                return testCondition(rule.when) === true
         }
         return false
     }
 
     // Whether `name` should be shown. A field with no visibleWhen rule is
-    // always visible (renderer fallback per forms.md).
+    // always visible (renderer fallback per forms.md), and so is one whose
+    // condition this renderer cannot evaluate -- hiding a field over an
+    // unrecognised `kind` would remove the user's only way to fill in a form
+    // the server may well accept.
     function fieldVisible(name) {
         for (let i = 0; i < rules.length; ++i) {
             const rule = rules[i]
             if (rule.kind === "visibleWhen" && rule.fields.indexOf(name) !== -1)
-                return testCondition(rule.when)
+                return testCondition(rule.when) !== false
         }
         return true
     }
 
     // Whether `name` should be read-only. A field with no readonlyWhen rule
-    // is always editable (renderer fallback).
+    // is always editable (renderer fallback), and so is one whose condition
+    // cannot be evaluated -- same reasoning as fieldVisible.
     function fieldReadonly(name) {
         for (let i = 0; i < rules.length; ++i) {
             const rule = rules[i]
             if (rule.kind === "readonlyWhen" && rule.fields.indexOf(name) !== -1)
-                return testCondition(rule.when)
+                return testCondition(rule.when) === true
         }
         return false
     }
@@ -764,6 +832,16 @@ Frame {
                 if (f.minimum !== undefined && value < f.minimum)
                     return null
                 if (f.maximum !== undefined && value > f.maximum)
+                    return null
+                // A decorated schema's per-instance range (morph#164). Narrows
+                // the compiled bound; it never widens it, because both are
+                // checked. Quantity fields only, matching what
+                // InstanceConstraints::checkAction checks server-side -- a
+                // client that gated a key the model does not check would be a
+                // new divergence, not a fix for one.
+                if (f.instanceMinimum !== undefined && value < f.instanceMinimum)
+                    return null
+                if (f.instanceMaximum !== undefined && value > f.instanceMaximum)
                     return null
             }
             return rationalJson(canonicalText, unit, f.canonDp)
