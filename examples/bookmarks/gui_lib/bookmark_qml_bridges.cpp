@@ -143,9 +143,18 @@ void FormsBridge::onLoginSucceeded(const LoginResult& result) {
 }
 
 void FormsBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
+    // Both arms capture `this` -- and the success arm reaches `_bridge` through
+    // `onLoginSucceeded` -- so neither may be attached bare; see this class's
+    // doc comment for the full argument. `_callbacks.guard(...)` is the
+    // general-purpose gate (`CallbackScope`'s `guard()`, not `Completion`'s
+    // `then(scope, fn)` overload) because the `Completion` these end up on is
+    // created and attached *inside* `BookmarkFormsController::submitIfValid`,
+    // one frame further in; what this function hands over is a pair of plain
+    // callables. Wrapping them here keeps the controller a
+    // callback-shape-agnostic seam and puts the gate in the class that owns the
+    // captured `this`, which is where it belongs.
     _controller.submitIfValid(
-        actionType.toStdString(), bodyJson.toStdString(),
-        [this, actionType](std::string resultJson) {
+        actionType.toStdString(), bodyJson.toStdString(), _callbacks.guard([this, actionType](std::string resultJson) {
             // A successful Login is the one reply this client reads rather
             // than merely displays: the token has to be installed before
             // anything else dispatches. See `decodeLoginResult` for why the
@@ -174,10 +183,10 @@ void FormsBridge::submitIfValid(const QString& actionType, const QString& bodyJs
                 return;
             }
             emit replyReceived(actionType, true, QString::fromStdString(resultJson));
-        },
-        [this, actionType](const std::exception_ptr& err) {
+        }),
+        _callbacks.guard([this, actionType](const std::exception_ptr& err) {
             emit replyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
-        });
+        }));
 }
 
 // ── BookmarkBridge ──────────────────────────────────────────────────────────
