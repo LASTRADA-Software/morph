@@ -5,6 +5,8 @@
 #include <string>
 #include <utility>
 
+#include "gui/error_text.hpp"
+
 namespace lims::gui {
 
 ResultPresenter::ResultPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
@@ -17,13 +19,7 @@ ResultPresenter::ResultPresenter(::morph::bridge::Bridge& bridge, ::morph::exec:
     trackBound(_catalog.whenBound());
 }
 
-void ResultPresenter::reportError(const std::exception_ptr& err) {
-    try {
-        std::rethrow_exception(err);
-    } catch (const std::exception& ex) {
-        emit failed(QString::fromStdString(ex.what()));
-    }
-}
+void ResultPresenter::reportError(const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); }
 
 void ResultPresenter::submitIfValid(const QString& actionType, const QString& bodyJson) {
     static const QStringList kOwned{QStringLiteral("CaptureConcentration"), QStringLiteral("ResolveConflict")};
@@ -43,11 +39,7 @@ void ResultPresenter::submitIfValid(const QString& actionType, const QString& bo
             refreshConflicts();
         },
         [this, actionType](const std::exception_ptr& err) {
-            try {
-                std::rethrow_exception(err);
-            } catch (const std::exception& ex) {
-                emit replyReceived(actionType, false, QString::fromStdString(ex.what()));
-            }
+            emit replyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
         });
 }
 

@@ -4,6 +4,8 @@
 #include <QStringList>
 #include <utility>
 
+#include "gui/error_text.hpp"
+
 namespace lims::gui {
 
 SamplePresenter::SamplePresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
@@ -14,13 +16,7 @@ SamplePresenter::SamplePresenter(::morph::bridge::Bridge& bridge, ::morph::exec:
     trackBound(_creator.whenBound());
 }
 
-void SamplePresenter::reportError(const std::exception_ptr& err) {
-    try {
-        std::rethrow_exception(err);
-    } catch (const std::exception& ex) {
-        emit failed(QString::fromStdString(ex.what()));
-    }
-}
+void SamplePresenter::reportError(const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); }
 
 template <typename Action>
 void SamplePresenter::dispatchTransition(Action action) {
@@ -58,11 +54,7 @@ void SamplePresenter::submitIfValid(const QString& actionType, const QString& bo
             refresh();
         },
         [this, actionType](const std::exception_ptr& err) {
-            try {
-                std::rethrow_exception(err);
-            } catch (const std::exception& ex) {
-                emit replyReceived(actionType, false, QString::fromStdString(ex.what()));
-            }
+            emit replyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
         });
 }
 
