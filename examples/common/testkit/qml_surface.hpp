@@ -3,6 +3,7 @@
 
 #include <QMap>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -50,7 +51,9 @@
 ///    invokable; a handler declaring more parameters than the signal carries.
 /// 4. **A bridge the audit was never handed.** A `Connections` block whose
 ///    `target` alias no `bind()` call named — the way a bridge silently ends
-///    up with no guard at all.
+///    up with no guard at all. Only for the `target: <id>.<alias>` shape; see
+///    `QmlScanResult::connectionsTargets` for why a bare-identifier target
+///    cannot be told from a local `id`.
 /// 5. **An exemption that has outlived its reason.** See `allowUnbound()`.
 ///
 /// @par What it does not cover — stated rather than implied
@@ -67,6 +70,19 @@
 ///   record the member with `allowUnbound()` and a reason.
 /// * **Dynamic member access.** `bridge[someName]()` and anything reached
 ///   through `Qt.createComponent` string sources are invisible to a scanner.
+///   `bank`'s `AppShell.qml` is the worked example: it keeps its controllers
+///   in a `readonly property var controllers: [...]` and calls
+///   `controllers[current].refresh()`, so every one of those `refresh`
+///   invokables sweeps as unreferenced.
+/// * **Inherited members, in the sweep only.** A reference written in QML is
+///   resolved against everything the bridge can reach, base classes included —
+///   `bank`'s controllers inherit their `error` signal from a shared
+///   `BankController`, and handling `onError` is correct. The
+///   unreferenced-member sweep, though, covers only what the bound class
+///   itself declares: a member a shared base publishes is that base's
+///   business, and reporting it once per derived bridge would be noise. A
+///   bridge whose whole surface is inherited is therefore unswept — and is
+///   reported as declaring no QML-visible members of its own.
 /// * **Whether the alias is wired to the class the audit was handed.** The
 ///   alias-to-instance mapping is the one genuinely per-rung fact, and it is
 ///   the test's `bind()` call, not something derived from the shell's
@@ -122,9 +138,31 @@ struct QmlScanResult {
     /// keyed by the alias the reference was made through.
     QMap<QString, QVector<QmlReference>> referencesByAlias;
     /// Aliases that are the `target` of a `Connections` block, in the
-    /// `<id>.<alias>` shape every ladder rung writes. Used to notice a bridge
-    /// the QML consumes signals from that the audit was never handed.
+    /// `<id>.<alias>` shape a rung writes when the shell hands the bridge to a
+    /// view as a property. Used to notice a bridge the QML consumes signals
+    /// from that the audit was never handed.
+    ///
+    /// A shell that publishes its bridges with
+    /// `QQmlContext::setContextProperty` instead writes the target as a bare
+    /// identifier (`Connections { target: app }` — `examples/bank`). Those
+    /// handlers *are* scanned, but only when the identifier is an alias the
+    /// audit was handed, and they are deliberately not listed here: a bare
+    /// identifier is far more often a local `id`, and there is no way to tell
+    /// the two apart. The unhanded-bridge check (drift direction 4) therefore
+    /// does not reach a context-property shell.
     QStringList connectionsTargets;
+    /// `alias.member` for every member this file *probes* for existence, by
+    /// comparing it against `undefined` or applying `typeof` to it.
+    ///
+    /// Such a read is a question, not a use: it is how QML asks whether a
+    /// conditionally-compiled member is present in this build. kanban's
+    /// `BoardView.qml` guards its dead-letter banner exactly this way, because
+    /// `BoardBridge::deadLetterCount` exists only under
+    /// `MORPH_BUILD_OFFLINE_SQLITE`. Reporting that as "reads a property the
+    /// bridge does not have" would be backwards -- the QML is handling the
+    /// absence correctly, and the only way to satisfy the audit would be to
+    /// delete the guard that makes it safe.
+    QSet<QString> optionalProbes;
 };
 
 /// @brief Strips comments and string-literal bodies from @p source, keeping

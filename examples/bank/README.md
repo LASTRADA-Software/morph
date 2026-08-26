@@ -171,6 +171,10 @@ cmake --build build --target bank_gui
 
 Structure:
 
+- **`gui/bank_gui_lib`** — a static library holding `BankClient` and every
+  controller, linking `Qt6::Core` only (no Quick, no Qml). `bank_gui` is
+  `main.cpp` plus the QML module on top of it; `bank_gui_tests` and
+  `bank_gui_qml_tests` (see [Tests](#tests)) are the other consumers.
 - **`gui/BankClient`** — owns the worker pool, a `morph::qt::QtExecutor`, the
   `Bridge` (local backend), DB setup, and the session. UI-toolkit-agnostic.
 - **`gui/controllers/`** — one QObject controller per domain (`AppController`,
@@ -181,11 +185,14 @@ Structure:
   `QVariantList`s (money pre-formatted), plus an `error(QString)` signal. The
   heavy morph/Lightweight includes are hidden from `moc` behind `#ifndef
   Q_MOC_RUN` (moc follows includes and its parser trips on them).
-- **`gui/qml/`** — the front-end: `Main` (login ⇄ shell + error toast),
+- **`gui/qml/`** — the front-end: `Main` (login ⇄ shell + a toast that carries
+  both the controllers' `error` signals and the `posted`/`paid` confirmations),
   `AppShell` (sidebar + stacked pages), the five pages, and reusable components
   (`Panel`, `AppButton`, `Field`, `Pill`, `Picker`). Bundled via
-  `qt_add_qml_module` (URI `BankGui`). The warm, "Claude-inspired" palette is
-  passed in from `main.cpp` as the `theme` object.
+  `qt_add_qml_module` (URI `BankGui`). The warm, "Claude-inspired" palette comes
+  from `gui/Theme.hpp` and is installed as the `theme` context property — in
+  `bank_gui_lib` rather than `main.cpp` so the QML tests instantiate the shipped
+  `.qml` with the shipped palette.
 
 A headless screenshot smoke test runs when `BANK_GUI_SMOKE=<dir>` is set (with
 `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`): it seeds data, signs in,
@@ -239,6 +246,38 @@ shared on-disk test database. Notable cross-cutting tests:
   custom `IAuthorizer` rejecting an action.
 - `test_offline.cpp` — parks deposits in an `InMemoryOfflineQueue` while "offline" and
   replays them via `SyncWorker` on "reconnect".
+
+`tests/gui/` is a second binary, `bank_gui_tests`, built only when
+`-DMORPH_BUILD_BANK_GUI=ON` is also set — `bank_tests` links no Qt at all and
+is built in configures that have none. It holds `test_bank_qml_surface.cpp`,
+which points the ladder testkit's `QmlSurfaceAudit`
+(`examples/common/testkit/qml_surface.hpp`, `examples/TESTING.md`) at the six
+controllers and the thirteen `.qml` files, and fails on any name that exists on
+one side only: a renamed `Q_INVOKABLE`, a `Connections` handler for a signal
+that is gone, a property read that would resolve to `undefined`. None of those
+is a compile error or a QML warning; the pane just stays empty.
+
+```sh
+cmake --build build --target bank_gui_tests
+./build/examples/bank/bank_gui_tests
+```
+
+A third binary, `bank_gui_qml_tests`, holds the cases that need a live QML
+engine — behaviour that lives in the `.qml` and is invisible from C++. It loads
+the shipped files out of the source tree by URL (the `BankGui` module is inside
+the `bank_gui` executable and cannot be linked; QML's implicit directory import
+resolves `Panel`/`Picker`/… with no `qmldir`), wires the real controllers as
+context properties, and reads values back off the items the engine created.
+`MoveMoneyPage`'s account picker is the worked example: `TransactionController`
+is self-consistent under any C++ drive, and the bug was a `ComboBox` whose
+`currentIndex` nothing restored after `refresh()` replaced its model. It is
+kept out of `bank_gui_tests` so that binary stays `Qt6::Core`-only and needs no
+platform plugin.
+
+```sh
+cmake --build build --target bank_gui_qml_tests
+QT_QPA_PLATFORM=offscreen ./build/examples/bank/bank_gui_qml_tests
+```
 
 ## Status
 
