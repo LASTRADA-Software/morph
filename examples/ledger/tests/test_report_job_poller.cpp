@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <exception>
 #include <memory>
 #include <string>
 
@@ -125,4 +126,32 @@ TEST_CASE("ReportJobPoller treats a dispatch error as terminal, not a retry loop
     const auto dispatchesAtFailure = dispatches;
     REQUIRE_FALSE(pumpUntil([] { return false; }, 120ms));
     CHECK(dispatches == dispatchesAtFailure);
+}
+
+TEST_CASE("ReportJobPoller survives a null exception_ptr on the error path", "[ledger][gui][poller]") {
+    // The poller used to re-implement `morph::ladder::gui::errorText` and call
+    // `std::rethrow_exception` with no null check, which is undefined
+    // behaviour on a null `exception_ptr` -- a default-constructed one is a
+    // legal thing for a backend to hand an onError callback. The shared helper
+    // documents and handles that case; this pins that the poller reaches it.
+    BackendRig rig{Mode::Local, 1};
+
+    int failedCalls = 0;
+    QString message;
+    ledger::gui::ReportJobPoller poller{
+        rig.bridge(0),
+        ledger::ReportJobId{4},
+        [&](ledger::ReportJobId, ledger::gui::ReportJobPoller::OnSuccess,
+            ledger::gui::ReportJobPoller::OnError onError) { onError(std::exception_ptr{}); },
+        [&](std::string) {},
+        [&](const QString& msg) {
+            ++failedCalls;
+            message = msg;
+        },
+        /*interval=*/10ms};
+
+    REQUIRE(pumpUntil([&] { return failedCalls > 0; }));
+    CHECK(failedCalls == 1);
+    CHECK(message == QStringLiteral("unknown error"));
+    CHECK(poller.finished());
 }

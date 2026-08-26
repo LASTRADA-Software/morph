@@ -301,9 +301,9 @@ private:
     ///        keeps its own inline insert logic rather than calling this
     ///        helper, since threading its opId/cascade logic through this
     ///        signature would be more churn than sharing is worth -- this
-    ///        helper exists solely for `execute(UndoTransaction)` to call,
-    ///        mirroring `setCategoryImpl`'s own role as a single-caller
-    ///        extraction, not a refactor of `execute(StoreTransaction)`.
+    ///        helper is called by `execute(UndoTransaction)` (once, for the
+    ///        reversing entry) and by `execute(ImportLedgerChunk)` (once per
+    ///        CSV row), never by `execute(StoreTransaction)`.
     ///
     ///        Does not re-run `execute(StoreTransaction)`'s zero-sum
     ///        partitioning loop -- it trusts its caller already knows the
@@ -311,6 +311,14 @@ private:
     ///        already-zero-sum set is itself zero-sum). Any future caller
     ///        that cannot make that guarantee must validate before calling
     ///        this helper.
+    ///
+    ///        It *does* restate every leg onto its own account currency's
+    ///        scale, exactly as `execute(StoreTransaction)` does, because
+    ///        that is a property of the rows this method writes rather than
+    ///        of the caller's own checking -- see `restateLegAmounts` in
+    ///        `src/models/ledger_model.cpp`. A leg that is not a whole
+    ///        number of its currency's minor units is rejected with
+    ///        `ValidationError` before any transaction is opened.
     /// @param mapper The data mapper to mutate through -- opens its own
     ///        `Lightweight::SqlTransaction` on this mapper's connection.
     /// @param ledgerId The ledger the new journal belongs to.

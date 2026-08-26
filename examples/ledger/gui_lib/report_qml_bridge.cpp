@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "gui/id_qml.hpp"
+#include "ledger/core/money.hpp"
+#include "ledger/core/units.hpp"
 
 namespace ledger::gui {
 
@@ -34,11 +36,19 @@ ReportQmlBridge::ReportQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec:
         QVariantList lines;
         lines.reserve(static_cast<qsizetype>(decoded.size()));
         for (const auto& line : decoded) {
+            // `amountText` is what `ReportView` binds; the exact triple stays
+            // alongside it for any view that wants to format differently. The
+            // rendering cannot happen in QML, which has only IEEE doubles --
+            // see `ledger::formatMoney`.
+            const auto total = morph::math::Rational{morph::math::Numerator{line.numerator},
+                                                     morph::math::Denominator{line.denominator},
+                                                     morph::math::DecimalPlaces{line.decimalPlaces}};
             lines.push_back(QVariantMap{
                 {"currency", QString::fromStdString(line.currency)},
                 {"numerator", static_cast<qlonglong>(line.numerator)},
                 {"denominator", static_cast<qlonglong>(line.denominator)},
                 {"decimalPlaces", static_cast<qlonglong>(line.decimalPlaces)},
+                {"amountText", QString::fromStdString(formatMoney(codeToCurrency(line.currency), total))},
                 {"transactionCount", static_cast<qlonglong>(line.transactionCount)},
             });
         }

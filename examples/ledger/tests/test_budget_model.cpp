@@ -198,3 +198,73 @@ TEST_CASE("CreateCategory records a LogEntry once a log is attached, and is a no
     CHECK(entries[0].outcome == morph::journal::Outcome::Succeeded);
     CHECK(entries[0].entityKey == std::to_string(*ledgerId));
 }
+
+TEST_CASE("SetBudgetLimit restates a limit onto its currency's scale, and refuses what it cannot",
+          "[ledger][budget]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    const ScopedPrincipal principal{"alice"};
+    ledger::BudgetModel budgetModel;
+    auto categoryId = budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Food"});
+    auto budgetId = budgetModel.execute(
+        ledger::CreateBudget{.ledgerId = ledgerId, .name = "Monthly groceries", .categoryId = categoryId});
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+
+    // $200 written at dp 0 is 200 dollars, which is 20000 cents once it is on
+    // USD's own scale. A limit is compared against a sum of legs, and the
+    // legs are all on the account currency's scale, so the limit must be too.
+    budgetModel.execute(
+        ledger::SetBudgetLimit{.budgetId = budgetId,
+                               .month = "2026-01",
+                               .limit = morph::math::Rational{Numerator{200}, Denominator{1}, DecimalPlaces{0}},
+                               .currency = ledger::Currency::USD});
+    auto report = budgetModel.execute(ledger::GetBudgetReport{.budgetId = budgetId, .month = "2026-01"});
+    CHECK(report.limit.numerator == 20000);
+    CHECK(report.limit.decimalPlaces == DecimalPlaces{2});
+
+    // Sub-cent precision is rejected, not rounded.
+    CHECK_THROWS_AS(budgetModel.execute(ledger::SetBudgetLimit{
+                        .budgetId = budgetId,
+                        .month = "2026-02",
+                        .limit = morph::math::Rational{Numerator{20001}, Denominator{1}, DecimalPlaces{3}},
+                        .currency = ledger::Currency::USD}),
+                    ledger::ValidationError);
+}
+
+TEST_CASE("GetBudgetReport reports a zero-decimal currency's total on its own scale", "[ledger][budget]") {
+    // Without this, `spent` was seeded at a hardcoded dp 2 and a JPY budget
+    // reported its total tagged as if yen had cents.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Tokyo trip";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    const ScopedPrincipal principal{"alice"};
+    ledger::BudgetModel budgetModel;
+    auto categoryId = budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Food"});
+    auto budgetId =
+        budgetModel.execute(ledger::CreateBudget{.ledgerId = ledgerId, .name = "Ramen", .categoryId = categoryId});
+    budgetModel.execute(ledger::SetBudgetLimit{
+        .budgetId = budgetId,
+        .month = "2026-01",
+        .limit = morph::math::Rational{morph::math::Numerator{30000}, morph::math::Denominator{1},
+                                       morph::math::DecimalPlaces{0}},
+        .currency = ledger::Currency::JPY});
+
+    auto report = budgetModel.execute(ledger::GetBudgetReport{.budgetId = budgetId, .month = "2026-01"});
+    CHECK(report.currency == ledger::Currency::JPY);
+    CHECK(report.limit.numerator == 30000);
+    CHECK(report.limit.decimalPlaces == morph::math::DecimalPlaces{0});
+    CHECK(report.spent.numerator == 0);
+    CHECK(report.spent.decimalPlaces == morph::math::DecimalPlaces{0});
+}

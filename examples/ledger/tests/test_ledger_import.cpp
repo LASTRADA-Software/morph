@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <morph/session/session.hpp>
+#include <optional>
+#include <string>
 
 #include "ledger/core/errors.hpp"
 #include "ledger/db/ledger_entity.hpp"
@@ -189,4 +191,68 @@ TEST_CASE("ImportLedgerChunk rejects a malformed CSV row", "[ledger][import]") {
                         .csvChunk = csv,
                         .opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"chunk-bad"})}),
                     ledger::ValidationError);
+}
+
+TEST_CASE("ImportLedgerChunk lands every spelling of an amount on the account currency's scale", "[ledger][import]") {
+    // A CSV amount's scale is however many digits the file happened to write
+    // after the point: "-4.5" parses at dp 1 and "-4.50" at dp 2, and they are
+    // the same money. Both must land on USD's own scale of 2, or the two rows
+    // add up as if one of them were ten times the other -- `Rational::operator+`
+    // adds numerators and cannot see the scales.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Suspense",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    const auto checkingId = ledgerState.accounts[0].id;
+    const auto suspenseId = ledgerState.accounts[1].id;
+
+    const auto account = std::to_string(*checkingId);
+    const std::string csv =
+        "date,description,account_id,amount\n"
+        "2026-01-01T00:00:00Z,Coffee," +
+        account +
+        ",-4.5\n"
+        "2026-01-02T00:00:00Z,Tea," +
+        account + ",-4.50\n";
+
+    auto result = model.execute(ledger::ImportLedgerChunk{
+        .ledgerId = ledgerId,
+        .counterAccountId = suspenseId,
+        .csvChunk = csv,
+        .opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"chunk-scales"})});
+    CHECK(result.imported == 2);
+
+    auto finalState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto checking = std::ranges::find_if(finalState.accounts, [&](const auto& a) { return a.id == checkingId; });
+    REQUIRE(checking != finalState.accounts.end());
+    // -$4.50 twice is -$9.00, i.e. -900 cents at dp 2 -- not -495 at dp 2,
+    // which is what summing 45-at-dp-1 with 450-at-dp-2 produces.
+    CHECK(checking->balance.numerator == -900);
+    CHECK(checking->balance.decimalPlaces == morph::math::DecimalPlaces{2});
+
+    // Every stored leg carries USD's scale, whatever the file wrote.
+    auto legRows = mapper.Query<ledger::db::TransactionLegRecord>()
+                       .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionLegRecord::account>, "=",
+                              static_cast<std::uint64_t>(*checkingId))
+                       .All();
+    REQUIRE(legRows.size() == 2);
+    for (const auto& legRow : legRows) {
+        CHECK(legRow.amountDp.Value() == 2);
+        CHECK(legRow.amountDen.Value() == 1);
+        CHECK(legRow.amountNum.Value() == -450);
+    }
 }

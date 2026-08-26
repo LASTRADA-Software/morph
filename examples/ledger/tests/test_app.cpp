@@ -238,14 +238,20 @@ TEST_CASE("The App runs a job for every ledger, not only the first", "[ledger][a
     CHECK(model.execute(ledger::GetReportStatus{.jobId = secondJob}).status == ledger::ReportStatus::Done);
 }
 
-TEST_CASE("A job whose ledger no longer exists settles Done with an empty report", "[ledger][app]") {
-    // Characterisation, not aspiration: this pins what the runner *actually*
-    // does with a job whose ledger is gone, which is not what one would guess.
-    // The aggregation does not fail -- it finds no accounts, produces `[]`,
-    // and the job settles Done. So the App's failure arm is not reachable this
-    // way, and a caller cannot tell "no such ledger" from "a ledger with no
-    // activity". Filed as morph#250; asserted here so the behaviour cannot
-    // change silently while that is open.
+TEST_CASE("A job whose ledger no longer exists settles Failed", "[ledger][app]") {
+    // morph#250, now closed. This test previously pinned the opposite: the
+    // aggregation found no accounts, produced `[]`, and the job settled Done,
+    // so a caller could not tell "no such ledger" from "a ledger with no
+    // activity" and the App's failure arm was unreachable this way.
+    // `RunReportJob` now checks its ledger row the way every sibling action
+    // does (OpenAccount, StoreTransaction, ImportLedgerChunk, SubmitReport,
+    // storeJournalImpl).
+    //
+    // The check is raised inside the aggregation's own try block, so the job
+    // still settles *terminally*, which is the property the original test was
+    // written to guard. Throwing out of the action instead would leave the row
+    // Pending, and `runPendingReportsOnce` re-sweeps every Pending row on
+    // every pass -- the same doomed job would be re-dispatched forever.
     //
     // The row is written directly rather than through `SubmitReport`, which
     // would refuse a ledger it cannot find -- the shape under test is a row
@@ -272,11 +278,11 @@ TEST_CASE("A job whose ledger no longer exists settles Done with an empty report
         REQUIRE(pumpUntil([&app] { return !app.reportsInFlight(); }));
     }
 
-    // Terminal either way: a row left Pending is what a poller spins on
-    // forever, and that is the property worth pinning regardless of which
-    // terminal state is chosen later.
+    // Terminal, and distinguishable: `Failed` with no body, rather than
+    // `Done` with an empty one that a real ledger with no activity would also
+    // produce. A row left Pending is what a poller spins on forever, so
+    // terminality is the other half of the property.
     const auto status = model.execute(ledger::GetReportStatus{.jobId = orphanId});
-    CHECK(status.status == ledger::ReportStatus::Done);
-    REQUIRE(status.result.has_value());
-    CHECK(*status.result == "[]");
+    CHECK(status.status == ledger::ReportStatus::Failed);
+    CHECK_FALSE(status.result.has_value());
 }

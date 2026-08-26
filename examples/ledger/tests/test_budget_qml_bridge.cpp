@@ -80,6 +80,10 @@ TEST_CASE("BudgetQmlBridge publishes a report as exact triples, not a rounded nu
     CHECK(report.value("limitDecimalPlaces").toLongLong() == 2);
     CHECK(report.value("spentNumerator").toLongLong() == 0);
     CHECK(report.value("currency").toString() == "USD");
+    // The text BudgetView binds, rendered by `ledger::formatMoney` here
+    // rather than divided out of the triple in QML.
+    CHECK(report.value("limitText").toString() == "300");
+    CHECK(report.value("spentText").toString() == "0");
     CHECK(bridge.lastError().isEmpty());
 }
 

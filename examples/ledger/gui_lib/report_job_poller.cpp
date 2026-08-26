@@ -3,6 +3,8 @@
 
 #include <utility>
 
+#include "gui/error_text.hpp"
+
 namespace ledger::gui {
 
 ReportJobPoller::ReportJobPoller(::morph::bridge::Bridge& bridge, ReportJobId jobId, Dispatch dispatch, OnDone onDone,
@@ -66,16 +68,13 @@ void ReportJobPoller::pollOnce() {
             // Pending" bug hides. The presenter above decides whether to
             // resubmit.
             disarm();
-            QString message = QStringLiteral("report status poll failed");
-            try {
-                std::rethrow_exception(err);
-            } catch (const std::exception& ex) {
-                message = QString::fromStdString(ex.what());
-            } catch (...) {
-                // keep the generic message
-            }
+            // The shared helper, not a fourth hand-written copy of it: this
+            // one called std::rethrow_exception with no null check, which is
+            // undefined behaviour on a null exception_ptr. `errorText`
+            // documents and handles that case, and the rung's four
+            // presenters already route through it.
             if (_onFailed) {
-                _onFailed(message);
+                _onFailed(::morph::ladder::gui::errorText(err));
             }
         });
 }

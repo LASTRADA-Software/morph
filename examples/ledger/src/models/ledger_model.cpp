@@ -23,6 +23,7 @@
 
 #include "clock.hpp"
 #include "ledger/core/errors.hpp"
+#include "ledger/core/money.hpp"
 #include "ledger/core/time_util.hpp"
 #include "ledger/core/units.hpp"
 #include "ledger/db/ledger_entity.hpp"
@@ -141,6 +142,52 @@ namespace {
         }
     }
     return result;
+}
+
+/// @brief Restates every leg's amount onto its own account currency's scale,
+///        so the zero-sum partitioning that follows compares like with like.
+///
+///        A leg amount is a whole number of minor units at whatever
+///        `decimalPlaces` the client chose (`ledger/core/money.hpp` documents
+///        the encoding and why it is not `Rational`'s own reading of the same
+///        triple). Nothing on the wire constrains that scale to the account's,
+///        and `Rational::operator+` cannot notice the difference: it adds
+///        numerators and propagates `std::max` of the two precisions. So
+///        `{450, dp 2}` ($4.50) and `{-450, dp 1}` (-$45.00) sum to a
+///        numerator of zero and pass a check they should fail, while
+///        `{45, dp 1}` ($4.50) and `{-450, dp 2}` (-$4.50) sum to -405 and
+///        fail one they should pass. Restating first removes both.
+///
+///        It also keeps every stored leg of an account on that account's own
+///        scale, which the read side depends on: `buildLedgerState` seeds each
+///        balance at the currency's precision and accumulates with the same
+///        `std::max` propagation, so a single leg written at a wider scale
+///        would pull that account's rendered balance off by a power of ten
+///        for as long as the row exists.
+/// @param legs The legs to restate, positionally aligned with @p legAccounts.
+/// @param legAccounts Each leg's own account row, in the same order.
+/// @param actionName The action name to prefix a rejection message with.
+/// @return One restated amount per leg, in leg order.
+/// @throws ValidationError When a leg's amount is not a whole number of its
+///         account currency's minor units -- either more precision than the
+///         currency has (`$4.505` in a USD account) or a non-integral
+///         minor-unit count off the wire (`{"num":9,"den":2}`). Rejected, not
+///         rounded: the model never rounds money (design spec §1).
+[[nodiscard]] std::vector<morph::math::Rational> restateLegAmounts(const std::vector<TransactionLeg>& legs,
+                                                                   const std::vector<db::AccountRecord>& legAccounts,
+                                                                   std::string_view actionName) {
+    std::vector<morph::math::Rational> restated;
+    restated.reserve(legs.size());
+    for (std::size_t i = 0; i < legs.size(); ++i) {
+        const std::string code{legAccounts[i].currencyCode.Value().ToStringView()};
+        auto amount = restateMinorUnits(legs[i].amount, currencyDecimalPlaces(codeToCurrency(code)));
+        if (!amount.has_value()) {
+            throw ValidationError{std::string{actionName} + ": leg amount is not a whole number of " + code +
+                                  " minor units"};
+        }
+        restated.push_back(*amount);
+    }
+    return restated;
 }
 
 /// @brief Splits @p text on every occurrence of @p delimiter, keeping empty
@@ -571,7 +618,6 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
 
     // Partition legs by the account's OWN currency, never a client-supplied
     // field (design spec §1) -- look up every referenced account first.
-    std::map<std::string, morph::math::Rational> sumsByCurrency;
     std::vector<db::AccountRecord> legAccounts;
     legAccounts.reserve(action.legs.size());
     for (const auto& leg : action.legs) {
@@ -582,12 +628,22 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
             throw NotFound{"StoreTransaction: no such account"};
         }
         legAccounts.push_back(rows.front());
-        const std::string currency{legAccounts.back().currencyCode.Value().ToStringView()};
+    }
+
+    // Every leg onto its own account currency's scale before anything sums
+    // them, and the restated amounts -- not the client's -- are what get
+    // stored below. See restateLegAmounts for why the invariant is unsound in
+    // both directions without this.
+    const auto legAmounts = restateLegAmounts(action.legs, legAccounts, "StoreTransaction");
+
+    std::map<std::string, morph::math::Rational> sumsByCurrency;
+    for (std::size_t i = 0; i < action.legs.size(); ++i) {
+        const std::string currency{legAccounts[i].currencyCode.Value().ToStringView()};
         auto it = sumsByCurrency.find(currency);
         if (it == sumsByCurrency.end()) {
-            sumsByCurrency.emplace(currency, leg.amount);
+            sumsByCurrency.emplace(currency, legAmounts[i]);
         } else {
-            it->second = it->second + leg.amount;
+            it->second = it->second + legAmounts[i];
         }
     }
     for (const auto& [currency, sum] : sumsByCurrency) {
@@ -629,9 +685,11 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         db::TransactionLegRecord legRow;
         legRow.journal = journalRow;
         legRow.account = legAccounts[i];
-        legRow.amountNum = action.legs[i].amount.numerator;
-        legRow.amountDen = action.legs[i].amount.denominator;
-        legRow.amountDp = static_cast<int>(action.legs[i].amount.decimalPlaces.value);
+        // The restated amount, never the client's: the stored scale is always
+        // the account currency's own.
+        legRow.amountNum = legAmounts[i].numerator;
+        legRow.amountDen = legAmounts[i].denominator;
+        legRow.amountDp = static_cast<int>(legAmounts[i].decimalPlaces.value);
         legRow.currencyCode = legAccounts[i].currencyCode.Value();
         // Foreign-amount triple: display/audit metadata only, never read by
         // the zero-sum partitioning loop above (design spec §1 step 3).
@@ -1104,6 +1162,26 @@ RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
     }
 
     try {
+        // The ledger guard every sibling action already has -- OpenAccount,
+        // StoreTransaction, ImportLedgerChunk, SubmitReport and
+        // storeJournalImpl all refuse a ledger they cannot find, and this
+        // action checked only its own job row. Without it a job whose ledger
+        // has since been deleted aggregates an empty account set, produces
+        // `[]` and settles Done, so a caller cannot tell "no such ledger"
+        // from "a ledger with no activity" (morph#250).
+        //
+        // Raised *inside* this try on purpose. Throwing out of the method
+        // instead would leave the row Pending, and ledger::app::App re-sweeps
+        // every Pending row on every pass -- the same doomed job would be
+        // re-dispatched forever. The catch below settles it Failed, which is
+        // terminal, which is the property the row needs.
+        auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                              .All();
+        if (ledgerRows.empty()) {
+            throw NotFound{"RunReportJob: no such ledger"};
+        }
+
         std::string resultJson;
         {
             // Read-transaction snapshot pinning (IMPLEMENTATION.md rule 4's
@@ -1224,6 +1302,11 @@ GetLedgerResult LedgerModel::storeJournalImpl(Lightweight::DataMapper& mapper, c
                                               const std::vector<TransactionLeg>& legs,
                                               const std::vector<db::AccountRecord>& legAccounts,
                                               std::optional<std::string> causalParentId) {
+    // Before the transaction opens, so a rejected leg never leaves one behind:
+    // the same restatement `execute(StoreTransaction)` performs, applied here
+    // too because this path has its own callers (undo, CSV import) that reach
+    // the leg columns without going through that method.
+    const auto legAmounts = restateLegAmounts(legs, legAccounts, "storeJournalImpl");
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     db::TransactionJournalRecord journalRow;
     journalRow.description = description;
@@ -1242,9 +1325,9 @@ GetLedgerResult LedgerModel::storeJournalImpl(Lightweight::DataMapper& mapper, c
         db::TransactionLegRecord legRow;
         legRow.journal = journalRow;
         legRow.account = legAccounts[i];
-        legRow.amountNum = legs[i].amount.numerator;
-        legRow.amountDen = legs[i].amount.denominator;
-        legRow.amountDp = static_cast<int>(legs[i].amount.decimalPlaces.value);
+        legRow.amountNum = legAmounts[i].numerator;
+        legRow.amountDen = legAmounts[i].denominator;
+        legRow.amountDp = static_cast<int>(legAmounts[i].decimalPlaces.value);
         legRow.currencyCode = legAccounts[i].currencyCode.Value();
         const auto& foreignAmount = legs[i].foreignAmount;
         legRow.foreignAmountNum = foreignAmount ? std::optional{foreignAmount->numerator} : std::nullopt;
