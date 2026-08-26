@@ -428,9 +428,57 @@ cmake --build build/clang-release --target morph_tests
 ```
 
 Relevant CMake options: `MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`,
-`MORPH_BUILD_QT`, `MORPH_BUILD_FORMS_QML`, `MORPH_BUILD_DOCUMENTATION`.
-Because morph is header-only, using it in your own project is just adding
-`include/` to your include path and linking Glaze.
+`MORPH_BUILD_QT`, `MORPH_BUILD_FORMS_QML`, `MORPH_BUILD_DOCUMENTATION`,
+`MORPH_INSTALL` (on by default when morph is the top-level project).
+
+### Using morph in your own project
+
+**Install it, then `find_package`.** This is the supported path:
+
+```sh
+cmake -S . -B build-min -DMORPH_BUILD_TESTS=OFF -DMORPH_BUILD_EXAMPLES=OFF
+cmake --install build-min --prefix /your/prefix
+```
+
+```cmake
+find_package(morph CONFIG REQUIRED)
+target_link_libraries(your_app PRIVATE morph::morph)
+```
+
+`morph::morph` carries the include path, Glaze, Threads, and morph's own
+compile definitions, so nothing else has to be restated. Point
+`CMAKE_PREFIX_PATH` at the prefix you installed into. Glaze is installed
+alongside morph when the build fetched it, and `morphConfig.cmake` resolves it
+for you via `find_dependency` — an installed morph whose Glaze cannot be found
+fails at `find_package` time rather than at compile time.
+
+Optional components install only when their build option was on, and are
+requested by name:
+
+```cmake
+find_package(morph CONFIG REQUIRED COMPONENTS net offline_sqlite)
+target_link_libraries(your_app PRIVATE morph::net morph::offline_sqlite)
+```
+
+The components are `net` (`MORPH_BUILD_NET`, POSIX only), `offline_sqlite`
+(`MORPH_BUILD_OFFLINE_SQLITE`), `qt` (`MORPH_BUILD_QT`) and `qt_forms`
+(`MORPH_BUILD_FORMS_QML`). Asking for one that was not installed fails at
+`find_package` and says which.
+
+**Or vendor the repo.** `add_subdirectory(morph)` or `FetchContent` works and
+gives you the same `morph::morph` target. morph's own install rules turn
+themselves off in this case (`MORPH_INSTALL` defaults to
+`PROJECT_IS_TOP_LEVEL`), so it will not add its headers to your project's
+install.
+
+**The bare `-I` recipe is a fallback, not the supported path.** morph is
+header-only, so `-I<repo>/include` does compile — but nothing then tells you
+what the interface target would have: Glaze at the pinned version (currently
+7.4), a C++23 standard library (the default logger uses `std::println`), the
+thread library, and each optional subsystem's own dependencies (Qt 6 for
+`morph::qt`, SQLite3 for `morph::offline_sqlite`). If the only Glaze around is
+the copy `FetchContent` dropped in a build directory, that recipe also points
+your include path into someone's build tree. Prefer `find_package`.
 
 ## Examples
 
