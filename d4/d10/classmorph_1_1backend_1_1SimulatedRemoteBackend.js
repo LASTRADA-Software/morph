@@ -10,6 +10,7 @@ var classmorph_1_1backend_1_1SimulatedRemoteBackend =
     [ "listInstances", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ac4b30b19f91a79a0b6cf640b6cc01165", null ],
     [ "deregisterModel", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404", null ],
     [ "negotiateProtocolVersion", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#adcfb2aa99aecc7f5a0972f4794fd4ecd", null ],
+    [ "fetchActionSchemas", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a2910ac9542018e16c88c25e91ff1080a", null ],
     [ "execute", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4", null ],
     [ "notifyBackendChanged", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec", null ],
     [ "cancelPending", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a99914bc40b056f11484ec271746ec237", null ],

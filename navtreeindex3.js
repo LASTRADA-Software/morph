@@ -1,5 +1,8 @@
 var NAVTREEINDEX3 =
 {
+"dc/de7/classmorph_1_1session_1_1TokenIssuer.html#aa52f9bc64855fcd2963dcb353187da33":[2,0,0,17,8,1],
+"dc/df3/structmorph_1_1forms_1_1Multiline.html":[2,0,0,8,16],
+"dc/df3/structmorph_1_1forms_1_1Multiline.html#a026ef4468a19dfcc80d9955ecd2d72ca":[2,0,0,8,16,2],
 "dc/df3/structmorph_1_1forms_1_1Multiline.html#a893d5a3579ada47949d44ec5f0ecc5de":[2,0,0,8,16,1],
 "dc/df3/structmorph_1_1forms_1_1Multiline.html#aa501343877eaa752adf26c6344e7ce3f":[2,0,0,8,16,3],
 "dc/df3/structmorph_1_1forms_1_1Multiline.html#ad2af0c8222944dccf67672ec77074c83":[2,0,0,8,16,0],
@@ -246,8 +249,5 @@ var NAVTREEINDEX3 =
 "functions_u.html":[2,3,0,20],
 "functions_v.html":[2,3,0,21],
 "functions_vars.html":[2,3,2],
-"functions_vars.html":[2,3,2,0],
-"functions_vars_a.html":[2,3,2,1],
-"functions_vars_b.html":[2,3,2,2],
-"functions_vars_c.html":[2,3,2,3]
+"functions_vars.html":[2,3,2,0]
 };

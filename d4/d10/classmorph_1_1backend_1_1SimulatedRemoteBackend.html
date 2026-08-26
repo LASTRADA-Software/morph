@@ -154,6 +154,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ae05332b7c26d6617e468f1c750431404"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deregisters the model on the server. Processed inline; safe from any thread.  <br /></td></tr>
 <tr class="memitem:adcfb2aa99aecc7f5a0972f4794fd4ecd" id="r_adcfb2aa99aecc7f5a0972f4794fd4ecd"><td class="memItemLeft">::morph::wire::ProtocolNegotiationResult&#160;</td><td class="memItemRight"><a class="el" href="#adcfb2aa99aecc7f5a0972f4794fd4ecd">negotiateProtocolVersion</a> ()</td></tr>
 <tr class="memdesc:adcfb2aa99aecc7f5a0972f4794fd4ecd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <span class="tt">"hello"</span> envelope to the server and classifies its reply.  <br /></td></tr>
+<tr class="memitem:a2910ac9542018e16c88c25e91ff1080a" id="r_a2910ac9542018e16c88c25e91ff1080a"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a2910ac9542018e16c88c25e91ff1080a">fetchActionSchemas</a> (std::string typeId)</td></tr>
+<tr class="memdesc:a2910ac9542018e16c88c25e91ff1080a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fetches the server's <span class="tt">{actionType: schema}</span> document for <code class="param">typeId</code>.  <br /></td></tr>
 <tr class="memitem:af575c96f8350bdf7745cf45662314bc4" id="r_af575c96f8350bdf7745cf45662314bc4"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::shared_ptr&lt; void &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af575c96f8350bdf7745cf45662314bc4">execute</a> (::morph::exec::detail::ModelId mid, detail::ActionCall call, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec) override</td></tr>
 <tr class="memdesc:af575c96f8350bdf7745cf45662314bc4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Serialises the action, sends it to the server, and returns a <span class="tt">Completion</span>.  <br /></td></tr>
 <tr class="memitem:a06e3f39db0975c6baf3a7b433f01a0ec" id="r_a06e3f39db0975c6baf3a7b433f01a0ec"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a06e3f39db0975c6baf3a7b433f01a0ec">notifyBackendChanged</a> () override</td></tr>
@@ -167,7 +169,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p><span class="tt">IBackend</span> adapter that routes all calls through a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> as wire <span class="tt">Envelope</span> messages. </p>
 <p>Intended for testing and in-process simulation of remote execution. <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel()</a></span> and <span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline; safe from any thread.">deregisterModel()</a></span> are processed inline on the calling thread via <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818" title="Synchronously processes a JSON Envelope on the calling thread and returns the reply.">RemoteServer::handleInline</a></span>. <span class="tt"><a class="el" href="#af575c96f8350bdf7745cf45662314bc4" title="Serialises the action, sends it to the server, and returns a Completion.">execute()</a></span> is asynchronous: it sends the message through <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">RemoteServer::handle</a></span> and resolves the returned <span class="tt">Completion</span> when the reply arrives (there is no <span class="tt">std::promise</span> and no blocking wait). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01587">1587</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01712">1712</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a978cad0db6efd8ccd3f33c1bf15be188" name="a978cad0db6efd8ccd3f33c1bf15be188"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a978cad0db6efd8ccd3f33c1bf15be188">&#9670;&#160;</a></span>SimulatedRemoteBackend() <span class="overload">[1/2]</span></h2>
@@ -200,7 +202,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01600">1600</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01725">1725</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -242,7 +244,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01622">1622</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01747">1747</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -290,7 +292,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01634">1634</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01759">1759</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -342,7 +344,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01650">1650</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01775">1775</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -395,7 +397,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01672">1672</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01797">1797</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -454,7 +456,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01699">1699</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01824">1824</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -500,7 +502,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01722">1722</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01847">1847</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -542,7 +544,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01736">1736</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01861">1861</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -577,7 +579,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01773">1773</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01898">1898</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -614,7 +616,51 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01791">1791</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01916">1916</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2910ac9542018e16c88c25e91ff1080a" name="a2910ac9542018e16c88c25e91ff1080a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2910ac9542018e16c88c25e91ff1080a">&#9670;&#160;</a></span>fetchActionSchemas()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::backend::SimulatedRemoteBackend::fetchActionSchemas </td>
+          <td>(</td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Fetches the server's <span class="tt">{actionType: schema}</span> document for <code class="param">typeId</code>. </p>
+<p>Sends a <span class="tt">"schemas"</span> envelope over the same synchronous control path as <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel</a></span>/<span class="tt"><a class="el" href="#adcfb2aa99aecc7f5a0972f4794fd4ecd" title="Sends a &quot;hello&quot; envelope to the server and classifies its reply.">negotiateProtocolVersion</a></span> (<span class="tt">handleInline</span>), carrying the current session so an authorizing server can refuse. Opt-in in the same sense <span class="tt"><a class="el" href="#adcfb2aa99aecc7f5a0972f4794fd4ecd" title="Sends a &quot;hello&quot; envelope to the server and classifies its reply.">negotiateProtocolVersion()</a></span> is: nothing calls it for you.</p>
+<p>The document is what a client that is <b>not</b> linked against the model's C++ needs — each action's properties, <span class="tt">required</span> array, form metadata, and its <span class="tt">x-payloadFingerprint</span>/<span class="tt">x-payloadShape</span>. A client that <em>is</em> linked against it can compare that fingerprint against its own <span class="tt"><a class="el" href="../../dc/d50/payload__schema_8hpp.html#ac52e95bf399047c5d1266ca9a843250a" title="Returns A&#39;s payload fingerprint: &quot;&lt;scheme&gt;:&lt;16 hex digits&gt;&quot;.">morph::model::payloadFingerprint</a>&lt;A&gt;()</span> to detect a build skew.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>Model type id to describe. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The raw <span class="tt">{actionType: schema}</span> JSON document. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::runtime_error</td><td>if the server replies <span class="tt">err</span> (e.g. <span class="tt">"unauthorized"</span>, or <span class="tt">"unknown envelope kind: schemas"</span> from a server predating this kind). </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01939">1939</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -662,7 +708,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the deserialized result or an error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01807">1807</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01961">1961</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -691,7 +737,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 
 <p>No-op — models live in <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>, not locally. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01844">1844</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01998">1998</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -726,7 +772,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01848">1848</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02002">2002</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -761,7 +807,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01865">1865</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02019">2019</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

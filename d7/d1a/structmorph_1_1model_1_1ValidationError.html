@@ -141,7 +141,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Thrown when a decoded action fails <span class="tt"><a class="el" href="../../d5/d92/structmorph_1_1model_1_1ActionValidator.html" title="Per-action validator used by BridgeHandler::set&lt;...&gt; to decide whether the in-progress draft is ready...">ActionValidator</a>&lt;Action&gt;::ready(...)</span> on a server-side or local execution path, before <span class="tt">Model::execute</span> runs. </p>
 <p>Raised by <span class="tt">morph::model::detail::ActionDispatcher::registerAction</span>'s runner (the server dispatch path used by <span class="tt">RemoteServer</span>, every remote and Qt WebSocket topology) and by <span class="tt">Bridge::executeVia</span>'s <span class="tt">localOp</span> (the in-process path used by <span class="tt">LocalBackend</span>) — the two execution sites an in-progress action reaches without first passing through the reactive <span class="tt">set&lt;&gt;</span> gate (<span class="tt">BridgeHandler::tryFireImpl</span>) or the type-erased <span class="tt">executeJson</span> gate (<span class="tt">ActionExecuteRegistry::registerAction</span>), both of which already enforce <span class="tt">ready()</span> themselves. Deriving from <span class="tt">std::runtime_error</span> means existing <span class="tt">catch (const std::exception&amp;)</span> handling — e.g. <span class="tt">RemoteServer::dispatchExecute</span>'s strand catch, which turns any thrown exception into an <span class="tt">err</span> reply — keeps working unchanged; callers that care can <span class="tt">catch</span>/<span class="tt">dynamic_cast</span> the specific type instead. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a5d3ab41ea96c68f40e3637cedbd92874" name="a5d3ab41ea96c68f40e3637cedbd92874"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5d3ab41ea96c68f40e3637cedbd92874">&#9670;&#160;</a></span>ValidationError()</h2>
@@ -179,7 +179,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 
 </div>
 </div>
