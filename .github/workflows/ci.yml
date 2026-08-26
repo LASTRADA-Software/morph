@@ -1506,3 +1506,49 @@ jobs:
       # loud. See docs/spec/journal/journal.md, "Payload schema fingerprint".
       - name: Check hand-rolled LogEntry constructions stamp schema
         run: bash scripts/check_journal_stamps.sh examples
+
+  # ── Install / export: find_package(morph CONFIG) must work ─────────────
+  #
+  # Its own job rather than a step on an existing leg. It configures, installs
+  # and consumes morph three times over (once for the checker, twice more for
+  # the self-test's slow cases) and would add several minutes to whichever
+  # matrix leg it was bolted onto; here it runs in parallel with them and
+  # costs nothing on the critical path.
+  #
+  # Nothing else in CI installs morph at all, which is how morph#232 survived:
+  # every ladder rung builds from inside the tree, so `cmake --install`
+  # exiting 0 with none of morph in the prefix was invisible to all ~16 legs.
+  install-export:
+    name: find_package(morph CONFIG) consumability
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # GCC 15 for the same reason the gcc-* presets use it: the default
+      # logger needs a standard library with <print>, and ubuntu-24.04 ships
+      # GCC 13.
+      - name: Install GCC 15 and ninja
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-15 g++-15 ninja-build
+
+      # See scripts/test_check_install_export.sh's own comment: a gate nobody
+      # tests reports green whether or not it still detects anything, and this
+      # one guards a defect whose whole character was reporting success.
+      - name: Self-test the install/export checker
+        env:
+          CC: gcc-15
+          CXX: g++-15
+        run: bash scripts/test_check_install_export.sh
+
+      # The check itself: install to a scratch prefix, then configure, build
+      # and run a consumer project outside the tree against morph::morph and
+      # morph::net via find_package(morph CONFIG REQUIRED).
+      - name: Install morph and build a consumer against the prefix
+        env:
+          CC: gcc-15
+          CXX: g++-15
+        run: bash scripts/check_install_export.sh

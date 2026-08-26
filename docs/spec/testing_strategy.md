@@ -15,6 +15,7 @@ behind its own CMake option, default `OFF`, so an ordinary `cmake --build`
 - [Soak tests](#soak-tests-testssoak)
 - [Load / latency benchmark](#load--latency-benchmark-testsbench)
 - [Adversarial cross-socket run](#adversarial-cross-socket-run-testsqttest_qt_websocket_adversarialcpp)
+- [Install / export consumability](#install--export-consumability-scriptscheck_install_exportsh)
 - [Cross-references](#cross-references)
 
 ## Fuzz harness (`tests/fuzz/`)
@@ -312,6 +313,58 @@ same simple name appears at file scope in more than one file. Self-tested by
 `scripts/test_check_test_type_names.sh` against the fixtures in
 `tests/lint/test_type_names/` before the real scan runs, following the same
 "test the checker first" pattern as the deprecation-marker lint.
+
+## Install / export consumability (`scripts/check_install_export.sh`)
+
+Every other suite in this document builds morph from *inside* the tree, where
+`include/` is on the include path because the build put it there. That is how
+morph#232 survived: `cmake --install` exited 0 having installed Glaze's headers
+and a working `glazeConfig.cmake` — Glaze carries its own install/export rules
+and gets them for free through `FetchContent` — while installing zero morph
+headers and no `morphConfig.cmake`. No CI leg installed morph, so nothing
+noticed. A consumer following the standard CMake workflow got a prefix holding
+someone else's dependency and none of the library they meant to install.
+
+**CI-enforced** by a dedicated job (`install-export` in `ci.yml`), which
+self-tests the checker first, then runs it. The checker installs morph to a
+scratch prefix and *compiles and runs* a consumer project outside the tree —
+`find_package(morph CONFIG REQUIRED COMPONENTS net)` plus
+`target_link_libraries(consumer PRIVATE morph::morph morph::net)` over one
+translation unit including `morph/core/bridge.hpp`, `morph/forms/forms.hpp`,
+`morph/util/quantity.hpp`, `morph/util/rational.hpp` and `morph/version.hpp`.
+
+Compiling is the point, not `find_package` succeeding. Three defects in the
+install rules produced a prefix that `find_package` accepted and that no
+filename inspection would have questioned:
+
+- installing only the declared `FILE_SET HEADERS` omits
+  `morph/detail/fixed_string.hpp` and `morph/detail/quantity_equation.hpp`,
+  which public headers include, so the installed tree resolves in the build
+  directory and nowhere else;
+- `install(EXPORT … NAMESPACE morph::)` prefixes the *target* name, so
+  `morph_net` arrives as `morph::morph_net` while every in-tree alias says
+  `morph::net`;
+- without `find_dependency(glaze)` in the package config, `morphTargets.cmake`
+  names an imported target nobody created.
+
+The checker also builds `morph_verify_interface_header_sets`, which is not part
+of `all` and which nothing else in CI builds. That phase is what keeps
+`INTERFACE_HEADER_SETS_TO_VERIFY` honest: the `detail/` header set is
+*installed* but deliberately outside the *verified* set, because
+`morph/detail/quantity_equation.hpp` is included partway down
+`morph/util/quantity.hpp` and is not self-contained. It is the one slow phase,
+and `--skip-header-set-verification` drops it for the self-test's fast cases.
+
+Two vacuity guards, because a consumability check that measures nothing looks
+exactly like one that passes: the run fails if no optional component was
+installed (leaving the exported-name check with nothing to read), and a
+consumer asking for a component that was *not* installed must fail at
+`find_package` rather than succeeding and breaking at link time.
+
+Self-tested by `scripts/test_check_install_export.sh`, which reintroduces each
+defect into a scratch copy of the tree one at a time and requires the checker
+to catch each one *for the stated reason* — the same "test the checker first"
+pattern as the deprecation-marker and test-type-name lints.
 
 ## Cross-references
 
