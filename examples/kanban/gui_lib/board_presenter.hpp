@@ -34,7 +34,7 @@ namespace kanban::gui {
 ///        never decides").
 ///
 /// `AllowShared`, not a plain handler: `BoardModel` is keyed per-project
-/// (`morph::model::ModelKeyTraits<BoardModel>`, `board_model.hpp`), so every
+/// (`BRIDGE_MODEL_KEY`, `board_model.hpp`), so every
 /// client attached to the same project must join the same shared-instance
 /// directory the keyed `OpenBoard` attach relies on — a plain (`NoSharing`)
 /// handler registers its own private instance eagerly at construction and

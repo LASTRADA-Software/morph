@@ -28,7 +28,7 @@ namespace ledger::gui {
 ///        as a Qt signal.
 ///
 /// `AllowShared` for the same reason `LedgerPresenter` uses it: `BudgetModel`
-/// is keyed (its own `ModelKeyTraits`, budget_model.hpp), so a second client
+/// is keyed (its own `PrimaryKey` alias, budget_model.hpp), so a second client
 /// working the same ledger's budgets must join the same shared-instance
 /// directory rather than registering a private instance.
 class BudgetPresenter : public ::morph::ladder::gui::Presenter {

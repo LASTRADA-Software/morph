@@ -60,6 +60,14 @@ API surface).
 - `examples/bank` is reshaped onto stateful, keyed models: `AccountModel` holds
   one account in memory keyed by account id, and the new `CustomerModel` takes
   the per-owner half (`ListAccounts`/`OpenAccount`).
+- The ladder rungs that hand-wrote `ModelKeyTraits`/`ActionKeyTraits` because
+  `ModelKey` rejected their strong ids — kanban, ledger, lims — now use
+  `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM`/`BRIDGE_KEY_FROM_RESULT` instead.
+  `BoardModel`, `SampleModel` and `RuleModel` key on their strong id itself
+  (`ProjectId`, `SampleId`, `LedgerId`), so `primary()`/`instances()` return
+  it; `LedgerModel` and `BudgetModel` keep `std::int64_t` as a nested
+  `PrimaryKey` alias, because each is named by actions carrying two different
+  strong id types.
 
 ### Removed
 
@@ -78,6 +86,12 @@ API surface).
 - `CustomerModel::execute(ListAccounts)` dereferenced `QuerySingle`'s optional
   unchecked (inherited verbatim from the old `AccountModel`); it now throws
   `NotFound`.
+- Key extraction for an action carrying an *empty* strong id was undefined
+  behaviour in the ledger and lims rungs: their hand-written `key()` bodies
+  did `*action.id` on a disengaged `std::optional`, which handed back whatever
+  the union held and attached the caller to an arbitrary shared instance.
+  Routing through `morph::model::keyToString` refuses the empty id, and
+  `BridgeHandler::execute` turns the refusal into a rejected `Completion`.
 - A flaky assertion in `tests/test_concurrency_invariants.cpp`: `succeeded > 0`
   during backend churn is a scheduling race, not an invariant — under a
   thread-serialising tool the switcher can cancel every in-flight call. The

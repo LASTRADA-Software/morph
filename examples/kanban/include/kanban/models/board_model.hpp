@@ -413,40 +413,24 @@ BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::AddAttachment, "AddAttachment
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetAttachments, "GetAttachments", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::RemoveAttachment, "RemoveAttachment")
 
-// `BRIDGE_MODEL_KEY(kanban::BoardModel, kanban::OpenBoard, &kanban::OpenBoard::projectId)`
-// cannot be used verbatim here: that macro deduces the model's PrimaryKey as
-// the *type* of the pointed-to member (`morph::model::detail::MemberTypeOf`),
-// which for `&OpenBoard::projectId` is `kanban::ProjectId` -- a struct
-// wrapping `std::optional<std::int64_t>`, not an integral or `std::string`,
-// so it fails `morph::model::ModelKey`'s concept. `BoardModel` is keyed on
-// the same value in its unwrapped, wire-canonical form (`std::int64_t`)
-// instead, by hand-writing the two specializations the macro would otherwise
-// generate.
-template <>
-struct morph::model::ActionKeyTraits<kanban::OpenBoard> {
-    static constexpr bool hasKey = true;
-    static constexpr bool fromResult = false;
-    static std::string key(const kanban::OpenBoard& action) {
-        // `action.projectId` can be disengaged (e.g. BoardBridge::openBoard()
-        // parsing an unparseable QString into a default-constructed
-        // ProjectId{}) -- key extraction runs before BoardModel::execute()'s
-        // own hasValue() check ever gets a chance to reject it (include/
-        // morph/core/bridge.hpp's BridgeHandler::execute(), the
-        // `try { key = ActionKeyTraits<Action>::key(action); } catch (...)`
-        // block), so this is the first and only place able to catch it.
-        // Throwing here is explicitly the sanctioned way to reject a bad key
-        // (that catch block's own comment: "a throw here resolves the
-        // Completion, it does not escape"), mirroring
-        // BoardModel::execute(OpenBoard)'s identical "projectId is required"
-        // rejection for the case where the key never even reaches that
-        // check.
-        if (!action.projectId.hasValue()) {
-            throw kanban::ValidationError{"OpenBoard: projectId is required"};
-        }
-        return morph::model::keyToString(*action.projectId);
-    }
-};
-template <>
-struct morph::model::ModelKeyTraits<kanban::BoardModel> {
-    using PrimaryKey = std::int64_t;
-};
+// `BoardModel` is keyed on the project the board belongs to, and `OpenBoard`
+// is the action that names it. `BRIDGE_MODEL_KEY` deduces the key *type* from
+// the member it is handed, so `PrimaryKeyOf<BoardModel>` is `kanban::ProjectId`
+// itself -- the strong id examples/IMPLEMENTATION.md rule 3 requires -- rather
+// than the unwrapped `std::int64_t` this rung declared while
+// `morph::model::ModelKey` still admitted only raw scalars (morph#163 widened
+// it; morph#183 migrated this rung off the hand-written specialisations).
+//
+// The disengaged-`projectId` rejection the hand-written `key()` spelled out is
+// now `morph::model::keyToString`'s own: it throws for a strong id with no
+// value instead of dereferencing an empty optional, which is what makes
+// `BoardBridge::openBoard("not-a-number")` (parsed into a default-constructed
+// `ProjectId{}` by board_qml_bridge.cpp's `parseId`) a rejected `Completion`
+// rather than undefined behaviour. `BridgeHandler::execute`'s
+// `try { key = ActionKeyTraits<Action>::key(action); } catch (...)` block
+// still turns the throw into `.onError()`, unchanged. What *did* change is the
+// exception's type: morph's own `std::runtime_error`, no longer
+// `kanban::ValidationError` -- nothing in this rung catches the key rejection
+// by type (`morph::ladder::gui::errorText` reads `what()` off any
+// `std::exception`), and test_board_model.cpp pins the new type.
+BRIDGE_MODEL_KEY(kanban::BoardModel, kanban::OpenBoard, &kanban::OpenBoard::projectId);

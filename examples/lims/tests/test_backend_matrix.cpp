@@ -8,9 +8,10 @@
 // This is also the only place this rung's *keyed* wiring is exercised through
 // a `Bridge` at all. The model suites construct `SampleModel` directly and
 // call `execute()`, which never touches `ActionKeyTraits` — so the
-// hand-written `ActionKeyTraits<OpenSample>` (payload-keyed) and
-// `ActionKeyTraits<RegisterSample>` (result-keyed) specialisations were, until
-// this file, compiled but never run.
+// `ActionKeyTraits<OpenSample>` (payload-keyed) and
+// `ActionKeyTraits<RegisterSample>` (result-keyed) declarations that
+// `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM_RESULT` generate in sample_model.hpp
+// were, until this file, compiled but never run.
 //
 // Socket mode needs a *verifying* authorizer: with a non-authenticating one,
 // `RemoteServer` clears `Context::principal` before dispatch rather than
@@ -155,7 +156,7 @@ TEST_CASE("A payload-keyed OpenSample attaches a fresh handler in every mode", "
         awaitQt(creator.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2"}));
 
     // A *different*, freshly built handler attaches by id — the payload-keyed
-    // path, through the hand-written `ActionKeyTraits<OpenSample>`.
+    // path, through `ActionKeyTraits<OpenSample>`.
     BridgeHandler<lims::SampleModel, AllowShared> office{rig.bridge(0), rig.executor()};
     const auto opened = awaitQt(office.execute(lims::OpenSample{.sampleId = registered.id}));
     CHECK(opened.id == registered.id);
