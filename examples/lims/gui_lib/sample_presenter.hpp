@@ -88,17 +88,8 @@ public:
     /// @brief `InProgress → ToBeVerified`. Emits `sampleChanged`, or `failed`.
     void submitForVerification();
 
-    /// @brief `ToBeVerified → InProgress`. Emits `sampleChanged`, or `failed`.
-    /// @param reason Why the sample went back to the bench.
-    void returnForRework(const QString& reason);
-
     /// @brief `ToBeVerified → Published`. Emits `sampleChanged`, or `failed`.
     void publishSample();
-
-    /// @brief `Registered|Received → Rejected`. Emits `sampleChanged`, or
-    ///        `failed`.
-    /// @param reason Why the container is refused.
-    void rejectSample(const QString& reason);
 
     /// @brief Dispatches @p bodyJson as @p actionType's body, the
     ///        schema-driven path the shipped `DynamicForm` submits through.

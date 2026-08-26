@@ -13,7 +13,6 @@ SampleBridge::SampleBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExec
     // Direct (same-thread) connections throughout, so no meta-type
     // registration is needed for the DTO-carrying signals -- the same note
     // kanban's bridges carry.
-    connect(&_presenter, &SamplePresenter::bound, this, &SampleBridge::bound);
     connect(&_presenter, &SamplePresenter::sampleChanged, this, [this](SampleView view) {
         _sample = toVariantMap(view);
         emit sampleChanged(_sample);
@@ -47,11 +46,7 @@ void SampleBridge::startWork() { _presenter.startWork(); }
 
 void SampleBridge::submitForVerification() { _presenter.submitForVerification(); }
 
-void SampleBridge::returnForRework(const QString& reason) { _presenter.returnForRework(reason); }
-
 void SampleBridge::publishSample() { _presenter.publishSample(); }
-
-void SampleBridge::rejectSample(const QString& reason) { _presenter.rejectSample(reason); }
 
 QString SampleBridge::schemasJson() const { return QString::fromStdString(limsSchemasJson()); }
 

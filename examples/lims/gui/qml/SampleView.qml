@@ -37,9 +37,59 @@ Item {
     /// The served `{actionType: schema}` document, parsed once.
     readonly property var schemas: page.sampleBridge ? JSON.parse(page.sampleBridge.schemasJson) : ({})
 
+    /// The last schema-driven submission's outcome, as one line of text.
+    property string reply: ""
+    property bool replyIsError: false
+
+    function report(message, isError) {
+        page.reply = message
+        page.replyIsError = isError
+    }
+
+    // Every form on this screen submits through `submitIfValid`, and
+    // `submitIfValid` reports *both* outcomes on `replyReceived` — not on
+    // `failed`, which carries only the typed invokables' errors. So this, and
+    // not the `lastError` label in Main.qml, is where a refused registration,
+    // rework or rejection arrives. Without it the operator clicks a button and
+    // the screen does not change, which on a rung whose subject is refusals is
+    // the entire story going missing.
+    //
+    // The same shape bookmarks' BookmarkListView.qml, pastebin's Main.qml and
+    // polls' VoteView.qml use, for the same reason.
+    Connections {
+        target: page.sampleBridge
+
+        function onReplyReceived(actionType, ok, payload) {
+            if (!ok) {
+                page.report(actionType + ": " + payload, true)
+                return
+            }
+            page.report(actionType + " ok", false)
+            // Only a form that was actually accepted is cleared: a refused
+            // submission keeps what the operator typed, so the correction is
+            // an edit rather than a re-entry.
+            if (actionType === "RegisterClient")
+                clientForm.resetFields()
+            else if (actionType === "RegisterSample")
+                sampleForm.resetFields()
+            else if (actionType === "ReturnForRework")
+                reworkForm.resetFields()
+            else if (actionType === "RejectSample")
+                rejectForm.resetFields()
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 8
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            visible: text !== ""
+            color: page.replyIsError ? "red" : "black"
+            text: page.reply
+        }
 
         GroupBox {
             Layout.fillWidth: true

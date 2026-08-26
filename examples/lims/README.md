@@ -613,6 +613,29 @@ submitted by an explicit button, following bookmarks' and pastebin's
 precedent: a bound form auto-submits the moment its required fields are
 engaged, which for a lab reading would file a result mid-keystroke.
 
+### Two channels carry a refusal, and both are bound
+
+A refusal is this rung's product, not its exception path — an over-precise
+reading (decision 7), an `exactlyOneOf` violation (decision 6), a four-eyes
+refusal (decision 16), an unknown qualifier or dilution code (decision 18) and
+a rejected conflict resolution are each a statement about the measurement that
+the analyst has to read. So both surfaces bind both channels the bridges have:
+
+- **`failed` / `lastError`** carries the *typed* invokables' errors —
+  `openSample`, `refresh`, the zero-field transitions, `verifyResult`. It is
+  bound as the red label in `Main.qml` and at the foot of `ResultEntryView.qml`.
+- **`replyReceived(actionType, ok, payload)`** carries every *schema-driven*
+  form's outcome, both ways, with the model's own `what()` as the payload when
+  `ok` is false. `submitIfValid` is the only path those six forms have and it
+  never routes through `failed`, so each view handles `replyReceived` in a
+  `Connections` block — the same shape bookmarks, pastebin and polls use — and
+  clears a form only once the submission was actually accepted.
+
+`test_lims_qml_surface.cpp` asserts the second half rather than assuming it:
+one case runs the QML-surface audit unexempted and requires that no finding
+names `replyReceived`, so deleting either `Connections` block fails the build's
+tests instead of quietly emptying the screen.
+
 ### Two handlers on the lifecycle surface, and why
 
 `SampleModel` is keyed, so the handler every attached action runs on is
@@ -621,9 +644,42 @@ to a key**, and `RegisterClient`/`RegisterSample` carry none — dispatching
 either on it fails with "handler not bound". This was confirmed empirically
 here before `SamplePresenter` grew a second, plain handler for exactly those
 two actions; `polls::gui::PollPresenter` reached the same conclusion for
-`CreatePoll`. `registerSample` therefore does two dispatches: create on the
-plain handler, then attach the shared one to the id that came back. `busy()`
-never dips between them.
+`CreatePoll`. `RegisterSample` needs no such help even though it too arrives
+before any key exists: it is result-keyed, so `BridgeHandler::execute`'s
+`ResultKeyed` branch runs it on an anonymous instance and promotes that
+instance to the id the result names before the completion resolves — one
+dispatch, and the shared handler is attached when it returns.
+
+That asymmetry is why the two registration invokables survive the surface trim
+below while the other typed calls do not. `submitIfValid` routes both
+registration actions to the *plain* handler, so through the form path
+`RegisterClient` never sets the `clientId` property and `RegisterSample` never
+leaves the shared handler attached — the invokables are the only dispatch that
+does either, which is exactly what their exemptions in
+`test_lims_qml_surface.cpp` say.
+
+### One dispatch path per action (morph#287)
+
+Both bridges published a typed invokable *and* a schema-driven form for the
+same action: `registerClient`/`registerSample`/`rejectSample`/
+`returnForRework` beside `submitIfValid("RegisterClient")` and its three
+siblings, and `captureReading`/`captureQualifier`/`resolveConflict` beside
+`submitIfValid("CaptureConcentration")` and `submitIfValid("ResolveConflict")`.
+No QML called the typed half. Two paths to one action is two places for the
+behaviour to differ, and here they already did: `captureReading` took the
+reading as a `double` and converted it with `Concentration::fromDouble` at the
+field's declared precision, so it *rounded* an over-precise reading that the
+form path submits exactly and the model refuses (decision 7) — and it was the
+only `double` on this rung's QML surface, against the convention
+`gui_lib/lims_qml_conversions.hpp` states for a `Quantity`.
+
+So the redundant half is deleted, together with the outcome signals only it
+emitted (`resultCaptured`, `conflictResolved`), the `sampleAttached` signal
+whose state `Main.qml` re-reads through `refreshResults()` instead, and the
+`bound` relay neither view handles. `rejectSample` and `returnForRework` are
+gone from `SamplePresenter` too, since nothing else called them. What survives
+is one path per action, and a QML-surface exemption list of two entries, each
+naming a mechanism rather than a backlog.
 
 ### What the smoke test does not prove, and what covers it instead
 
