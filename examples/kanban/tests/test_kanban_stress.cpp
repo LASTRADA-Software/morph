@@ -104,6 +104,7 @@
 #include "kanban/models/project_admin_model.hpp"
 #include "testkit/action_driver.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/deadline.hpp"
 
 using morph::bridge::AllowShared;
 using morph::bridge::Bridge;
@@ -133,10 +134,27 @@ struct InlineExecutor : morph::exec::IExecutor {
 ///        `pumpUntil` call, minus the Qt event-loop pump -- nothing here
 ///        needs one, since no callback in this file is ever queued onto a
 ///        Qt event loop in the first place.
+///
+/// @p budget is scaled by `MORPH_LADDER_DEADLINE_MS` exactly as every
+/// `pumpUntil` deadline is, via `testkit/deadline.hpp` -- the Qt-free half of
+/// `pump.hpp`, split out precisely so this file can share the knob without
+/// acquiring the `<QCoreApplication>` include that morph#128 exists to keep
+/// out of it. Scaling here rather than at the eight-odd call sites is
+/// deliberate: it is one place, and it reaches the explicit 90s budget below
+/// too. Before this, every other wait in `examples/` honoured the env var and
+/// the slowest test in the ladder was the only one that did not.
+///
+/// @tparam Pred  Predicate polled for completion.
+/// @param pred   Polled until it returns `true`.
+/// @param budget Unscaled wall-clock budget; scaled as described above.
+/// @param step   Sleep between polls.
+/// @return `true` if @p pred became true before the scaled budget elapsed.
 template <typename Pred>
 [[nodiscard]] bool waitUntil(Pred pred, std::chrono::milliseconds budget = std::chrono::milliseconds{20000},
                              std::chrono::milliseconds step = std::chrono::milliseconds{5}) {
-    const auto deadline = std::chrono::steady_clock::now() + budget;
+    const auto scaledBudget =
+        std::chrono::milliseconds{morph::ladder::testkit::detail::scaledDeadlineMs(budget.count())};
+    const auto deadline = std::chrono::steady_clock::now() + scaledBudget;
     while (!pred()) {
         if (std::chrono::steady_clock::now() >= deadline) {
             return false;
@@ -381,10 +399,12 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
         script->flushBurst();
     }
 
-    // 90s, not 20s: this loop's own real-thread-pool callback delivery
-    // (InlineExecutor, above) runs every .then()/.onError() directly on
-    // whichever pool worker resolves each completion, unlike the original
-    // Qt-based version's client-side callback delivery -- and ThreadSanitizer
+    // 90s, not 20s -- and, like every budget in this file, scaled from there
+    // by MORPH_LADDER_DEADLINE_MS (see waitUntil above), so this number is a
+    // baseline rather than a ceiling. This loop's own real-thread-pool
+    // callback delivery (InlineExecutor, above) runs every .then()/.onError()
+    // directly on whichever pool worker resolves each completion, unlike the
+    // original Qt-based version's client-side callback delivery -- and ThreadSanitizer
     // instrumentation adds a well-documented 5-15x slowdown on top of that.
     // Confirmed empirically: this exact 200-action workload (4 clients x 50
     // actions) finished in ~32s under real TSan instrumentation in CI, comfortably

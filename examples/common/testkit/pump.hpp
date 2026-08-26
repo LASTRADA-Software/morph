@@ -5,12 +5,11 @@
 #include <QEventLoop>
 #include <chrono>
 #include <concepts>
-#include <cstdlib>
-#include <exception>
 #include <morph/core/completion.hpp>
 #include <optional>
 #include <stdexcept>
-#include <string>
+
+#include "testkit/deadline.hpp"
 
 /// @file
 /// The ladder testkit's only sanctioned wait surface (examples/TESTING.md,
@@ -19,44 +18,11 @@
 
 namespace morph::ladder::testkit {
 
-namespace detail {
-
-/// @brief Pure decision logic behind `deadlineScale()`, factored out so it is
-///        directly unit-testable: `deadlineScale()` itself reads
-///        `MORPH_LADDER_DEADLINE_MS` behind a `static const` guard that runs
-///        exactly once per *process*, so no test in the shared
-///        `ladder_common_tests` binary can ever be first to observe a
-///        particular env value — some earlier test (or `testkit_main.cpp`'s
-///        own Qt setup) has always already forced the "unset" path before any
-///        test gets to run. Taking the raw env value as a parameter instead
-///        of reading it internally sidesteps that entirely: a test calls this
-///        with whatever string it likes, no process boundary required.
-/// @param envValue `MORPH_LADDER_DEADLINE_MS`'s raw value (as `std::getenv`
-///        would return it), or `nullptr` if unset.
-/// @return The scale factor, interpreting @p envValue as "use this many ms as
-///         the new 5000ms baseline"; `1.0` if unset or unparseable.
-[[nodiscard]] inline double computeDeadlineScale(const char* envValue) noexcept {
-    if (envValue == nullptr) {
-        return 1.0;
-    }
-    try {
-        return std::stod(envValue) / 5000.0;
-    } catch (const std::exception&) {
-        return 1.0;
-    }
-}
-
-/// @brief `MORPH_LADDER_DEADLINE_MS`, read once per process — scales every
-///        `pumpUntil` default deadline uniformly (slow CI runners, sanitizer
-///        builds) without touching call sites. All the interesting logic
-///        (unset vs. set, parseable vs. not) lives in `computeDeadlineScale`
-///        above; this is a one-line, branch-free delegation.
-inline double deadlineScale() {
-    static const double scale = computeDeadlineScale(std::getenv("MORPH_LADDER_DEADLINE_MS"));
-    return scale;
-}
-
-}  // namespace detail
+// `detail::computeDeadlineScale` / `detail::deadlineScale` used to be defined
+// here. They moved to `testkit/deadline.hpp`, included above, so a wait loop
+// that cannot take a Qt dependency can share the one `MORPH_LADDER_DEADLINE_MS`
+// knob -- see that header for why. Same namespace, same names: nothing that
+// called them through this header had to change.
 
 /// @brief Bounded `processEvents` slices until @p pred is true or @p deadline elapses.
 ///
@@ -65,8 +31,7 @@ inline double deadlineScale() {
 /// @return `true` if @p pred became true before the deadline, `false` on timeout.
 template <std::predicate<> Pred>
 [[nodiscard]] bool pumpUntil(Pred pred, std::chrono::milliseconds deadline = std::chrono::milliseconds{5000}) {
-    const auto scaledDeadline = std::chrono::milliseconds{
-        static_cast<long long>(static_cast<double>(deadline.count()) * detail::deadlineScale())};
+    const auto scaledDeadline = std::chrono::milliseconds{detail::scaledDeadlineMs(deadline.count())};
     const auto start = std::chrono::steady_clock::now();
     while (!pred()) {
         if (std::chrono::steady_clock::now() - start >= scaledDeadline) {
