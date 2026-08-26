@@ -375,6 +375,12 @@ void submit(const MyAction& action) {
 }
 ```
 
+That free function is app-layer by design, not by omission:
+`examples/IMPLEMENTATION.md` rule 1 would otherwise keep this code inside a
+model, and
+[Disposition: app-layer by design](#disposition-app-layer-by-design-the-rule-1-carve-out)
+below is the recorded carve-out that puts it here.
+
 `SyncWorker` closes the loop on the *read path*: on reconnect it `drain()`s the
 same queue and replays each payload. The two halves share one `IOfflineQueue`
 instance (see [End-to-end integration](#end-to-end-integration)) — the
@@ -386,6 +392,73 @@ Because the framework never calls `enqueue`, the serialisation format is
 entirely the caller's (`QueueItem::payload` is an opaque `std::string`), and it
 is the caller's responsibility that the same format round-trips through the
 `SyncWorker::ReplayFunction`.
+
+### Disposition: app-layer by design (the rule-1 carve-out)
+
+The example above puts domain-adjacent code in a free function at the dispatch
+site. `examples/IMPLEMENTATION.md` rule 1 would otherwise forbid exactly that
+placement — "nothing domain-shaped may live in presenters, QML, `main()`, or
+free functions." The placement is deliberate, and this section is its recorded
+disposition (morph#197), so a reader who finds
+`if (!monitor.isOnline()) queue.enqueue(...)` outside a model knows it is a
+sanctioned exception rather than an oversight.
+
+**Rule 1 is not being overridden here; it fired.** Its final clause is "If
+logic can't be expressed in a model, that is a finding," and that document's
+prime directive says the same of the framework itself. This carve-out *is*
+that finding's outcome, not an argument that the rule is wrong.
+
+**Why a model cannot host it.** `enqueue()` is the write path's last act before
+the wire, taken precisely when the wire is unavailable. In the canonical wiring
+this file and `ARCHITECTURE.md` both show, the client keeps an in-process
+`LocalBackend`, so a client-side model does exist and could in principle own
+the decision. On a **remote deployment** — models behind a server, reached over
+a `Bridge` — it does not: the one machine that must decide "queue this instead
+of sending it" is the one machine with no model on it. morph offers no seam
+there, and none of the framework's own offline types fills the gap: neither
+`NetworkMonitor` nor `ReconnectCoordinator` enqueues, and the queue stays
+passive by design (above).
+
+**What the carve-out covers, and what it does not.**
+
+| Belongs in the write-path seam | Stays in the model |
+|---|---|
+| Probing `NetworkMonitor::isOnline()`, or catching a failed `execute()` | Validating and authorizing the action (`Context::principal`) |
+| Minting the idempotency key, serialising the payload, calling `enqueue()` | Deduping the replayed op against the journal |
+| Surfacing queue depth to the UI | Classifying a stale base version as a conflict |
+| Client-local bookkeeping that keeps *this client's own* queued items consistent — e.g. a per-entity version ledger so a second offline edit chains onto the first rather than colliding with it | Everything the payload *means* once it lands: replay re-dispatches it as an ordinary typed action |
+
+The last row of the left column is the sharp edge: it is genuinely
+domain-shaped, and the carve-out sanctions it only in a **dedicated app-layer
+write-path class** — never in a presenter, a QML bridge, or `main()`. The
+domain semantics of the queued action never move out of the model; only the
+decision to queue it, and the client-local state that decision needs, live in
+the seam.
+
+**Reference shapes in the ladder.**
+
+- `examples/lims/include/lims/offline/field_outbox.hpp` — the reference for the
+  domain-shaped half. A plain, non-Qt, app-layer class that stamps each queued
+  capture with a base version from its own local ledger and advances that
+  ledger on enqueue, so a client's second offline edit chains onto its own
+  pending first edit. Replay still goes through the model
+  (`SampleModel::execute(QueuedCapture)`), which owns validation, authorization
+  and conflict classification.
+- `examples/kanban/gui_lib/board_qml_bridge.cpp` — the transport-shaped half
+  only: probe, mint an op id, serialise, enqueue, update queue depth. It lives
+  in a presenter, which rule 1 names as forbidden for *domain-shaped* code;
+  nothing there is domain-shaped, so it stands as glue under rule 2's
+  "pure glue with no domain logic" justification. Anything with a domain
+  invariant in it belongs in a `FieldOutbox`-shaped class instead.
+
+**Scope, and when to revisit.** This is the "explicitly dispositioned in the
+spec as app-layer by design" branch of `examples/IMPLEMENTATION.md`'s promotion
+rule, taken at **two** occurrences of the transport-shaped seam (kanban's
+bridge, lims' outbox) and **one** of the domain-shaped version chaining (lims'
+outbox). No framework primitive is owed yet. A third rung independently growing
+its own enqueue-on-offline path is the trigger to reopen the question of a
+framework-owned outbox dispatcher — a standing disposition must not become the
+reason a third reinvention goes unexamined.
 
 ## SyncWorker
 

@@ -16,16 +16,21 @@
 /// @file
 /// The field client's **write path** for offline capture (README §7).
 ///
-/// @par Why this is not a model, and why that is a finding
+/// @par Why this is not a model, and why that is sanctioned
 /// `examples/IMPLEMENTATION.md` rule 1 says all domain logic lives in models.
 /// It cannot here. `docs/spec/offline/offline.md` ("Ownership: who enqueues")
 /// is explicit that the framework supplies no seam for it — *"detecting an
 /// offline/failed `execute()` and calling `enqueue()` is the application's
-/// job"*, and its own worked example puts that code at the dispatch site. A
-/// disconnected field client has no model to put it in either: a rung's models
-/// live server-side behind Lightweight/ODBC (rule 4's WASM clause), so the one
-/// machine that must decide "queue this instead of sending it" is the one
-/// machine with no model on it. See morph#197.
+/// job"*, and its own worked example puts that code at the dispatch site. This
+/// rung's field client is deployed remotely: its models live server-side
+/// behind Lightweight/ODBC and are reached over a `Bridge`, so the one machine
+/// that must decide "queue this instead of sending it" is the one machine with
+/// no model on it. Filed as morph#197 and dispositioned there: rule 1 now
+/// carries a named carve-out for the offline write-path enqueue seam, and this
+/// class is the carve-out's reference shape for the domain-shaped half (see
+/// `docs/spec/offline/offline.md`, "Disposition: app-layer by design"). The
+/// domain semantics stay in the model — replay re-dispatches each queued item
+/// through `SampleModel::execute(QueuedCapture)`.
 ///
 /// @par What it actually does: chain a client's own edits
 /// The trap the README names, and the one ODK Central hit: a client that edits
