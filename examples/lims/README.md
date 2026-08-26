@@ -613,6 +613,29 @@ submitted by an explicit button, following bookmarks' and pastebin's
 precedent: a bound form auto-submits the moment its required fields are
 engaged, which for a lab reading would file a result mid-keystroke.
 
+### Two channels carry a refusal, and both are bound
+
+A refusal is this rung's product, not its exception path — an over-precise
+reading (decision 7), an `exactlyOneOf` violation (decision 6), a four-eyes
+refusal (decision 16), an unknown qualifier or dilution code (decision 18) and
+a rejected conflict resolution are each a statement about the measurement that
+the analyst has to read. So both surfaces bind both channels the bridges have:
+
+- **`failed` / `lastError`** carries the *typed* invokables' errors —
+  `openSample`, `refresh`, the zero-field transitions, `verifyResult`. It is
+  bound as the red label in `Main.qml` and at the foot of `ResultEntryView.qml`.
+- **`replyReceived(actionType, ok, payload)`** carries every *schema-driven*
+  form's outcome, both ways, with the model's own `what()` as the payload when
+  `ok` is false. `submitIfValid` is the only path those six forms have and it
+  never routes through `failed`, so each view handles `replyReceived` in a
+  `Connections` block — the same shape bookmarks, pastebin and polls use — and
+  clears a form only once the submission was actually accepted.
+
+`test_lims_qml_surface.cpp` asserts the second half rather than assuming it:
+one case runs the QML-surface audit unexempted and requires that no finding
+names `replyReceived`, so deleting either `Connections` block fails the build's
+tests instead of quietly emptying the screen.
+
 ### Two handlers on the lifecycle surface, and why
 
 `SampleModel` is keyed, so the handler every attached action runs on is

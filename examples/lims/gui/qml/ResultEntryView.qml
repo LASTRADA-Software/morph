@@ -39,9 +39,51 @@ Item {
     /// The served `{actionType: schema}` document, parsed once.
     readonly property var schemas: page.resultBridge ? JSON.parse(page.resultBridge.schemasJson) : ({})
 
+    /// The last schema-driven submission's outcome, as one line of text.
+    property string reply: ""
+    property bool replyIsError: false
+
+    function report(message, isError) {
+        page.reply = message
+        page.replyIsError = isError
+    }
+
+    // Both forms on this screen submit through `submitIfValid`, whose replies
+    // arrive here rather than on `failed` (which carries only the typed
+    // invokables' errors). This is the screen where that matters most: an
+    // over-precise reading (§7), an `exactlyOneOf` violation the renderer let
+    // through (§6), an unknown qualifier or dilution code (§18) and a refused
+    // conflict resolution are all server refusals of a *capture*, and each of
+    // them is a statement about the measurement that the analyst has to see.
+    Connections {
+        target: page.resultBridge
+
+        function onReplyReceived(actionType, ok, payload) {
+            if (!ok) {
+                page.report(actionType + ": " + payload, true)
+                return
+            }
+            page.report(actionType + " ok", false)
+            // Only an accepted submission is cleared — a refused reading keeps
+            // what was typed, so it can be corrected rather than re-entered.
+            if (actionType === "CaptureConcentration")
+                captureForm.resetFields()
+            else if (actionType === "ResolveConflict")
+                resolveForm.resetFields()
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 8
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            visible: text !== ""
+            color: page.replyIsError ? "red" : "black"
+            text: page.reply
+        }
 
         RowLayout {
             Layout.fillWidth: true

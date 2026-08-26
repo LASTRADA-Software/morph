@@ -401,3 +401,49 @@ TEST_CASE("A form body submitted through the schema path reaches the model", "[l
     // new id straight out of it.
     CHECK(payload.contains(QStringLiteral("clientId")));
 }
+
+TEST_CASE("A model's refusal of a form body comes back as the model's own message", "[lims][gui][qml-bridge][forms]") {
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    lims::gui::SampleBridge bridge{rig->bridge(0), rig->executor()};
+
+    QString actionType;
+    bool ok = true;
+    QString payload;
+    int replies = 0;
+    QObject::connect(&bridge, &lims::gui::SampleBridge::replyReceived,
+                     [&](const QString& type, bool succeeded, const QString& text) {
+                         actionType = type;
+                         ok = succeeded;
+                         payload = text;
+                         ++replies;
+                     });
+
+    Emissions registered;
+    QObject::connect(&bridge, &lims::gui::SampleBridge::clientRegistered, [&registered] { ++registered.count; });
+    bridge.registerClient(QStringLiteral("Waterworks Ltd"));
+    REQUIRE(pumpUntil([&] { return registered.count == 1; }));
+    REQUIRE(replies == 0);
+
+    Emissions changed;
+    QObject::connect(&bridge, &lims::gui::SampleBridge::sampleChanged, [&changed] { ++changed.count; });
+    bridge.registerSample(bridge.clientId(), QStringLiteral("WW-1"));
+    REQUIRE(pumpUntil([&] { return changed.count == 1; }));
+
+    // The sample is `registered`; rework is a `ToBeVerified → InProgress`
+    // edge, so the model refuses it. The point is not that the model refuses
+    // -- test_sample_lifecycle.cpp owns that -- but that a refusal arriving on
+    // the *schema* path carries the model's own words out to the surface. The
+    // three-argument signal is the only carrier it has (`failed`/`lastError`
+    // are the typed invokables' channel), which is why
+    // test_lims_qml_surface.cpp separately proves gui/qml handles it.
+    bridge.submitIfValid(QStringLiteral("ReturnForRework"), QStringLiteral(R"({"reason":"balance drifted"})"));
+    REQUIRE(pumpUntil([&] { return replies == 1; }));
+    CHECK(actionType == QStringLiteral("ReturnForRework"));
+    CHECK_FALSE(ok);
+    INFO("refusal: " << payload.toStdString());
+    // Not a generic "failed": the message names the transition, which is the
+    // only thing that tells an operator what to do next.
+    CHECK(payload.contains(QStringLiteral("registered")));
+    CHECK_FALSE(payload.isEmpty());
+}
