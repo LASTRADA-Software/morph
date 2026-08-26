@@ -661,3 +661,10 @@ endif()
 if(MORPH_BUILD_DOCUMENTATION)
     add_subdirectory(docs)
 endif()
+
+# ── Warning-set guard ───────────────────────────────────────────────────────
+# Must run after every add_subdirectory() above, so it sees every target that
+# went through apply_warnings(). Fails the configure if the project's warning
+# flags did not actually reach one of them — the class of silent failure that
+# hid -Weverything from every macOS build (issue #298).
+morph_verify_warning_flags()
