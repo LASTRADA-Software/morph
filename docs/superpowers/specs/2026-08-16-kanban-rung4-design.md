@@ -11,8 +11,10 @@ reference implementations, build order, and the Definition of Done.
 `MoveTaskPosition`, WIP limits, per-project RBAC, activity stream, offline
 drag-a-card), plus the cascade-journaling *decision* for step 6 (§9). The
 rules engine itself — the executable event→condition→mutation machinery
-step 6 also names — is what remains deferred, along with step 8 (task
-attachments); see the README's own "Deferred within this rung" section.
+step 6 also names — was left out of this document's scope, along with step 8
+(task attachments). Both have since been implemented; the README's "Steps 6
+and 8: implemented" section carries what shipped, and §9 below remains the
+cascade-journaling decision the engine was built on.
 
 ## 1. Exactly-once semantics (`MoveTaskPosition`)
 
@@ -400,6 +402,17 @@ stack can define its own overflow behavior; filed rather than designed
 around, since the decision affects `IOfflineQueue`'s public interface and
 should not be made unilaterally inside one rung's app code. Marked in
 `examples/kanban/README.md`'s own "Expected strain points" section.
+
+**Update: morph#112 is closed.** The framework took the reject-newest branch.
+`IOfflineQueue::maxDepth()` reports a configured capacity,
+`enqueue()` throws `OfflineQueueFullError` at it, and all three shipped queues
+(`InMemoryOfflineQueue`, `FileOfflineQueue`, `SqliteOfflineQueue`) accept the
+capacity as a constructor argument; the policy and its ordering against dedup
+are specified in `docs/spec/offline/offline.md` ("Depth bound and overflow
+policy"). This rung has not adopted it — `BoardBridge::enableOfflineQueue`
+still constructs its `SqliteOfflineQueue` from the path alone — so kanban's
+own queue is unbounded; see the README's strain-point entry for why turning
+the bound on needs an enqueue-failure path first.
 
 ## 6. Testkit obligations this rung must build
 

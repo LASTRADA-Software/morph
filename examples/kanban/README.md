@@ -103,8 +103,18 @@ Build order:
    round-7 T5 it is **framework-candidate code**: an `IOfflineQueue`
    implementation belongs in morph or nowhere, never as app code in this
    rung. Queued moves
-   replay on reconnect; conflicts (column deleted while offline) surface
-   through the model's `onBackendChanged` reconciliation, not silently.
+   replay on reconnect; conflicts surface as typed errors from the model,
+   not silently — and not through a reconciliation hook: neither
+   `BoardModel` nor `ProjectAdminModel` implements `onBackendChanged()`, and
+   nothing in this rung uses it. `execute(MoveTaskPosition)` re-checks the
+   whole destination inside its own transaction and throws the rung's typed
+   errors — `NotFound` for a column or swimlane that no longer belongs to
+   the project (`src/models/board_model.cpp:849`, `:858`), `Conflict` for a
+   target column already at its WIP limit (`:835`). A replay that keeps
+   throwing is retried by `SyncWorker` up to its 5-attempt cumulative cap
+   and then dead-lettered, and `BoardBridge`'s `DeadLetterSink` turns that
+   into a `syncStatusChanged(queueDepth, deadLettered)` emission the GUI
+   renders.
 8. Task attachments — first blob answer: bytes over a side channel (plain
    HTTP endpoint next to the WebSocket server), metadata through actions.
 
@@ -113,6 +123,26 @@ Build order:
 Strand ordering under real contention (2), typed server-side validation (3),
 authorization at Kanboard's granularity (4), journal-derived activity + undo
 (5, 6), the full offline stack (7), shared board instances throughout.
+
+**Not exercised: `morph::forms`.** Every screen in `gui/qml/` is hand-built
+Qt Quick. The rung's source trees hold three comment lines mentioning
+`MorphForms`/`FormsController` and no code that uses either, and every input
+is a hand-written `TextField`/`ComboBox`/`SpinBox`
+(`gui/qml/LoginView.qml:63`, `gui/qml/RulesView.qml:89`, `:97`, `:103`,
+`gui/qml/MembersView.qml:56`, `:81`, `:87`,
+`gui/qml/ProjectListView.qml:125`, plus `gui/qml/BoardView.qml`'s
+column/task/comment entry fields and `gui/qml/TaskDetailPopup.qml`'s comment
+field).
+[`IMPLEMENTATION.md`](../IMPLEMENTATION.md)'s rule 2 forbids hand-built input
+widgets by default and requires a written justification here for each one; no
+such justification has been written, and the GUI design spec the QML comments
+point at (`docs/superpowers/specs/2026-08-17-kanban-gui-design.md` §4)
+settles the bridge/property-bag architecture without addressing forms at all.
+Recorded as
+[`r4-002`](../../docs/findings/r4-002-flagship-gui-bypasses-forms.md) (the
+flagship-GUI forms-bypass finding) rather than justified after the fact here:
+deciding *which* of rule 2's two justifications applies is a design call this
+rung has not made.
 
 ## Expected strain points
 
@@ -152,14 +182,32 @@ authorization at Kanboard's granularity (4), journal-derived activity + undo
   models *eventually commit anyway* → clients retry → double-apply. Test:
   pool=4, 32 boards writing concurrently, WAL on and off; measure
   throughput collapse; assert no timeout-then-committed double-apply.
-- **Offline queue growth is unbounded**: no depth bound exists on any
-  shipped queue — define an overflow policy
-  [framework gap, filed as morph#112]. (Scope
-  correction from verification: the linear-scan/quadratic enqueue applies
-  to `FileOfflineQueue` only; this rung's `SqliteOfflineQueue` dedups via
-  an index. Measure depth growth on the SQLite queue; the 10⁴–10⁵-item
-  enqueue-latency measurement belongs to `FileOfflineQueue` as the
-  alternative-queue comparison.)
+- **The queue depth bound exists in the framework; this rung has not
+  adopted it.** The framework gap this rung filed as morph#112 is closed:
+  `IOfflineQueue` enforces a reject-newest overflow policy — `maxDepth()`
+  (`include/morph/offline/offline_queue.hpp:192`) reports the configured
+  capacity, `enqueue()` throws `OfflineQueueFullError` (`:80`) rather than
+  evicting, and a rejection emits the `queueOverflow` counter
+  (`include/morph/core/observability.hpp:34`). All three shipped queues
+  take the capacity as a constructor argument and enforce it:
+  `InMemoryOfflineQueue` (`offline_queue.hpp:235`, `:250`),
+  `FileOfflineQueue` (`file_offline_queue.hpp:154`, `:199`), and
+  `SqliteOfflineQueue` (`sqlite_offline_queue.hpp:107`, `:370-379`). The
+  policy and the per-implementation ordering against dedup are specified in
+  [`docs/spec/offline/offline.md`](../../docs/spec/offline/offline.md)
+  ("Depth bound and overflow policy").
+  What is still true here is narrower and is this rung's own gap, not the
+  framework's: `BoardBridge::enableOfflineQueue` constructs its
+  `SqliteOfflineQueue` from the path alone, passing no `maxDepth`, so
+  kanban's queue is unbounded in the shipped build. Adopting the bound is
+  not a one-line change — the enqueue happens inside a `Q_INVOKABLE` move
+  handler that has no failure path today, so the rung needs a
+  user-visible answer to "this change could not be queued" before it can
+  turn the bound on. (Scope correction from verification, unchanged: the
+  linear-scan/quadratic enqueue applies to `FileOfflineQueue` only; this
+  rung's `SqliteOfflineQueue` dedups via an index. Measure depth growth on
+  the SQLite queue; the 10⁴–10⁵-item enqueue-latency measurement belongs to
+  `FileOfflineQueue` as the alternative-queue comparison.)
 - Attachment bytes must bypass the JSON protocol; only metadata is an
   action — and the side channel is **the largest new attack surface in the
   ladder** (a hand-written HTTP server beside the WebSocket server): it
@@ -188,14 +236,36 @@ hand-written HTTP side channel next to the WebSocket server, authorizing
 reads by the caller's project role (not bearer-token validity alone).
 [`ledger`](../ledger) reuses this rung's cascade-journaling decision.
 
+## Findings
+
+Filed under `docs/findings/` per [`FINDINGS.md`](../FINDINGS.md), in this
+rung's own `r4-` namespace:
+
+- [`r4-001`](../../docs/findings/r4-001-sync-worker-conflates-undelivered-and-rejected.md)
+  — the replay-attempt budget cannot tell an undelivered replay from a
+  rejected one, so reconnect flaps dead-letter work the server never saw.
+- [`r4-002`](../../docs/findings/r4-002-flagship-gui-bypasses-forms.md) —
+  the flagship GUI is hand-built with no `morph::forms` usage and no rule-2
+  justification (see "morph subsystems exercised").
+
+Not filed here, deliberately: the applied-ops ledger that "Exactly-once has
+no owner in the stack" (below) forces every rung to rebuild is already
+morph#226, which records the pattern as past
+[`IMPLEMENTATION.md`](../IMPLEMENTATION.md)'s rule-of-three threshold — this
+rung's `AppliedOpRecord` is one of its occurrences, not a separate gap. The
+ladder-wide sweep that prompted this README's truth pass is morph#304.
+
 ## Definition of done
 
 - Concurrent-move stress test green under ThreadSanitizer (N=4, seeded
   scripts, run in **Local rig mode on `ThreadPoolExecutor`** — the repo's
   CI deliberately keeps Qt stacks out of the sanitizer matrix; see
   [`../TESTING.md`](../TESTING.md)).
-- Exactly-once proven under reply-frame loss (fault-injection proxy in the
-  testkit by this rung).
+- Exactly-once proven under reply-frame loss, in
+  `tests/test_kanban_offline.cpp`'s "Dropping `MoveTaskPosition`'s reply
+  frame and retrying is exactly-once" case. The fault-injection proxy it
+  drives is not this rung's to build: `examples/common/testkit/fault_proxy.hpp`
+  shipped with rung 0's shared infrastructure, and this rung consumes it.
 - Kill the network mid-drag: client keeps queuing, reconnect replays, board
   converges; the five-flap dead-letter path surfaces in the GUI — proven by
   test (`test_board_offline_bridge.cpp`), not yet by a runnable `--seed`
