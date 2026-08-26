@@ -15,6 +15,16 @@ namespace ledger {
 ///        `params` is opaque to the model: a JSON object carrying whatever
 ///        the named `kind` needs (period bounds, the client's timezone
 ///        offset, ...), stored with the job rather than interpreted here.
+///
+///        "Enqueues" means exactly one thing: a `Pending` row is written,
+///        carrying `kind` and `params` verbatim. Nothing is scheduled and no
+///        thread is started -- the row *is* the queue, and
+///        `ledger::app::App`'s report runner is what drains it, by
+///        dispatching `RunReportJob` back at this model (morph#160). A job
+///        submitted while no runner is up therefore stays `Pending` and is
+///        picked up by the first pass of the next one, which is what makes a
+///        report survive a server restart instead of dying with the process
+///        that accepted it.
 struct SubmitReport {
     LedgerId ledgerId;
     ReportKind kind;
@@ -45,6 +55,53 @@ struct MonthlyStatementParams {
     int year{};
     unsigned month{};
     int timezoneOffsetMinutes{};
+};
+
+/// @brief Computes the report the job named by `jobId` was submitted for and
+///        writes its terminal state onto that job's row -- the *run* half of
+///        the submit->run->poll triple.
+///
+///        Dispatched by `ledger::app::App`'s report runner, never by a user
+///        client: `LedgerModel::execute(const RunReportJob&)` refuses any
+///        principal but `kReportRunnerPrincipal`. It exists as an action, and
+///        not as a lambda posted to an executor the model owns, because the
+///        aggregation is business logic and business logic lives in a model
+///        (`examples/IMPLEMENTATION.md` rule 1) -- while deciding *when* it
+///        runs is orchestration, which does not (morph#160). Re-entering the
+///        model as an ordinary dispatch is the same shape
+///        `bookmarks::RecordMetadata` has for that rung's metadata worker.
+///
+///        Idempotent by construction: a job that has already reached a
+///        terminal status is left exactly as it is and its current status
+///        returned, so a second dispatch for the same job -- which the
+///        runner will issue whenever a pass ticks while a previous pass's
+///        dispatch is still outstanding -- recomputes nothing and overwrites
+///        nothing.
+///
+///        Carries `ledgerId` alongside `jobId` even though the job row
+///        records its own ledger: `ActionKeyTraits<RunReportJob>` keys on it,
+///        so the run lands on the *same* strand as every other action against
+///        that ledger. Resolving it by reading the job row inside `key()`
+///        would repeat the DB-lookup-inside-key() pattern this rung already
+///        rejected once (see `ActionKeyTraits<GetReportStatus>`'s comment).
+struct RunReportJob {
+    ReportJobId jobId;
+    LedgerId ledgerId;
+
+    /// @brief Whether this action carries the fields its execution needs.
+    /// @return `true` if both `jobId` and `ledgerId` are engaged.
+    [[nodiscard]] bool validate() const noexcept { return jobId.hasValue() && ledgerId.hasValue(); }
+};
+
+/// @brief What the job's row says after `RunReportJob` returns: `Done` when
+///        this call computed the body (or found it already computed),
+///        `Failed` when the aggregation threw and the failure was recorded.
+///
+///        Never `Pending`: `RunReportJob` either settles the job or reports
+///        that it was already settled, so a runner seeing `Pending` come back
+///        would be looking at a bug rather than at work still to do.
+struct RunReportJobResult {
+    ReportStatus status{ReportStatus::Pending};
 };
 
 /// @brief Polls the job `SubmitReport` returned. A pure read with no

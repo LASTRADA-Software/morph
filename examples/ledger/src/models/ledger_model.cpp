@@ -16,7 +16,6 @@
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -466,16 +465,6 @@ void LedgerModel::logAction(const Action& action, const Result& result, std::str
     // unflushed bytes. InMemoryActionLog::flush() is a no-op, so this
     // costs nothing for the log type most tests attach.
     _log->flush();
-}
-
-LedgerModel::LedgerModel(std::shared_ptr<::morph::exec::IExecutor> reportExecutor)
-    : _reportExecutor{std::move(reportExecutor)} {
-    // Checked rather than left to a later null dereference inside
-    // execute(SubmitReport): the crash would happen on whichever call first
-    // submits a report, arbitrarily far from the construction that caused it.
-    if (_reportExecutor == nullptr) {
-        throw std::invalid_argument{"LedgerModel: reportExecutor must not be null"};
-    }
 }
 
 AccountInfo LedgerModel::execute(const OpenAccount& action) {
@@ -1044,6 +1033,13 @@ ReportJobId LedgerModel::execute(const SubmitReport& action) {
     jobRow.kind = static_cast<int>(action.kind);
     jobRow.status = static_cast<int>(ReportStatus::Pending);
     jobRow.createdAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
+    // Stored verbatim, uninterpreted, exactly as SubmitReport's doc comment
+    // promises: whoever eventually runs this job -- a runner in another
+    // process, or the same one after a restart -- has nothing but this row to
+    // reconstruct the request from. Decoding is deferred to
+    // execute(RunReportJob), where a malformed payload is still not an error
+    // (decodeMonthlyParams falls back to an all-time report).
+    jobRow.paramsJson = std::optional{action.params};
     mapper.Create(jobRow);
     // job_id stores the row's own stringified id. ReportJobRecord::job_id (a
     // string column) and ReportJobId (an int64-based strong id) both predate
@@ -1055,92 +1051,124 @@ ReportJobId LedgerModel::execute(const SubmitReport& action) {
     jobRow.jobId = std::to_string(jobRow.id.Value());
     mapper.Update(jobRow);
 
-    const auto jobId = ReportJobId{static_cast<std::int64_t>(jobRow.id.Value())};
+    // Not journaled, exactly as before this action stopped owning a worker:
+    // SubmitReport's own effect is the Pending row, and the entry worth
+    // auditing is the one RunReportJob writes when the report is actually
+    // produced. Adding a second entry here would be an unrelated change to
+    // this rung's audit trail.
+    return ReportJobId{static_cast<std::int64_t>(jobRow.id.Value())};
+}
 
-    // Only plain values cross the thread boundary: the job's own integer id
-    // and the ledger id, both copied. Nothing from this stack frame -- not
-    // `mapper`, not `ctx` (a thread-local session pointer), not `action` --
-    // is captured: `execute()` returns and tears all of that down long
-    // before the worker runs. See _reportExecutor's own comment (and
-    // docs/findings/003) for why this model owns an executor at all.
-    const auto jobIdValue = *jobId;
-    const auto ledgerId = action.ledgerId;
-    // Decoded here, on the caller's thread, so what crosses the boundary
-    // stays a plain value: `MonthlyStatementParams` is three ints, copied
-    // like `jobIdValue` and `ledgerId` above. A kind other than
-    // MonthlyStatement leaves this disengaged and reports all-time, which is
-    // also the fallback when the params fail to decode -- see
-    // decodeMonthlyParams for why that beats failing the job.
-    std::optional<MonthlyStatementParams> reportPeriod;
-    if (action.kind == ReportKind::MonthlyStatement) {
-        reportPeriod = decodeMonthlyParams(action.params);
+RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
+    // The layering gate, not an authorization one -- see
+    // kReportRunnerPrincipal's own @warning. What it actually buys with an
+    // allow-all authorizer installed is that a *client* dispatching
+    // RunReportJob by mistake (or a presenter reaching for it because it is
+    // registered and therefore visible) fails loudly instead of quietly
+    // completing a job the runner owns.
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal != kReportRunnerPrincipal) {
+        throw Forbidden{"RunReportJob: only the report runner may run a report job"};
     }
-    _reportExecutor->post([jobIdValue, ledgerId, reportPeriod] {
-        try {
-            auto workerMapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-            std::string resultJson;
-            {
-                // Read-transaction snapshot pinning (IMPLEMENTATION.md rule
-                // 4's pre-cleared raw-SQL escape tier): a raw BEGIN DEFERRED
-                // as the FIRST statement on this connection, before any
-                // DataMapper::Query<T>() call, so every query the
-                // aggregation makes sees one consistent snapshot rather than
-                // a partial concurrent write mid-aggregation.
-                // Lightweight::SqlTransaction cannot do this -- it only
-                // toggles SQL_ATTR_AUTOCOMMIT via ODBC and issues no BEGIN
-                // of its own (see examples/common/testkit/db_busy_fixture.hpp's
-                // own doc comment, which demonstrates this same raw pattern
-                // with IMMEDIATE). DataMapper::Query issues its SQL through
-                // exactly the connection DataMapper::Connection() exposes,
-                // so the pin covers every query below.
-                //
-                // WalSnapshotGuard's destructor closes this transaction
-                // (via COMMIT, swallowing any failure -- see its own doc
-                // comment) no matter how this scope is exited: on the
-                // normal-exit path here, or via stack unwinding if
-                // computeReportJson throws. Its own COMMIT can never
-                // itself escape and leave the transaction open, which is
-                // exactly why a bare sequential pair of ExecuteDirect
-                // calls would not be safe here -- see WalSnapshotGuard's
-                // own doc comment for why an open transaction on a
-                // returned pooled connection matters.
-                WalSnapshotGuard snapshot{workerMapper->Connection()};
-                resultJson = computeReportJson(workerMapper.Get(), ledgerId, reportPeriod);
-            }
-            // Written only after the read snapshot has been released, so this
-            // connection is not simultaneously holding a read lock and asking
-            // for a write one.
-            finishReportJob(workerMapper.Get(), jobIdValue, ReportStatus::Done, std::move(resultJson));
-        } catch (...) {
-            // Catch-all, not just `const std::exception&`: an escaping
-            // exception of any type must still leave the job in a terminal
-            // state, or a poller would spin against Pending forever. The
-            // pool's own worker loop would log-and-continue on such a throw,
-            // but it cannot record Failed on this job's behalf.
-            std::string detail = "unknown exception";
-            try {
-                throw;
-            } catch (const std::exception& exc) {
-                detail = exc.what();
-            } catch (...) {
-                // keep the placeholder
-            }
-            ::morph::log::logError("[ledger] SubmitReport worker failed: " + detail);
-            try {
-                auto workerMapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-                finishReportJob(workerMapper.Get(), jobIdValue, ReportStatus::Failed, std::nullopt);
-            } catch (...) {
-                // A failure recording the failure has nowhere left to go at
-                // this rung's scope -- the job stays Pending, an accepted
-                // limitation rather than a silently swallowed one (the same
-                // shape bookmarks' own fetchMetadataOnce() catch block
-                // settles for).
-                ::morph::log::logError("[ledger] SubmitReport worker failed and could not record failure");
-            }
-        }
-    });
+    if (!action.validate()) {
+        throw ValidationError{"RunReportJob: jobId and ledgerId are required"};
+    }
 
-    return jobId;
+    Lightweight::DataMapper mapper;
+    auto jobRows = mapper.Query<db::ReportJobRecord>()
+                       .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=",
+                              static_cast<std::uint64_t>(*action.jobId))
+                       .All();
+    if (jobRows.empty()) {
+        throw NotFound{"RunReportJob: no such job"};
+    }
+    const auto currentStatus = static_cast<ReportStatus>(jobRows.front().status.Value());
+    if (currentStatus != ReportStatus::Pending) {
+        // Already settled: recompute nothing, overwrite nothing. The runner
+        // re-dispatches a job whenever a pass ticks while an earlier pass's
+        // dispatch for the same job is still outstanding, and both dispatches
+        // land on this ledger's one strand, so the second one arrives here
+        // and takes exactly this branch. It is also what makes
+        // "byte-identical on re-poll" hold trivially -- there is only ever
+        // one computation per job.
+        return RunReportJobResult{.status = currentStatus};
+    }
+
+    // Decoded from the row, not from an action field: the params travelled
+    // through the database, which is the whole point of storing them.
+    std::optional<MonthlyStatementParams> reportPeriod;
+    if (static_cast<ReportKind>(jobRows.front().kind.Value()) == ReportKind::MonthlyStatement) {
+        const auto& storedParams = jobRows.front().paramsJson.Value();
+        reportPeriod =
+            decodeMonthlyParams(storedParams.has_value() ? storedParams->ToStringView() : std::string_view{});
+    }
+
+    try {
+        std::string resultJson;
+        {
+            // Read-transaction snapshot pinning (IMPLEMENTATION.md rule 4's
+            // pre-cleared raw-SQL escape tier): a raw BEGIN DEFERRED as the
+            // FIRST statement on this connection for the aggregation, so
+            // every query it makes sees one consistent snapshot rather than a
+            // partial concurrent write mid-aggregation.
+            //
+            // Still needed even though this now runs on the ledger's own
+            // strand: the strand serialises this ledger's *own* actions, and
+            // says nothing about BudgetModel (its own strand) or any other
+            // connection writing to the same database.
+            // Lightweight::SqlTransaction cannot express this -- it only
+            // toggles SQL_ATTR_AUTOCOMMIT via ODBC and issues no BEGIN of its
+            // own (see examples/common/testkit/db_busy_fixture.hpp's own doc
+            // comment, which demonstrates this same raw pattern with
+            // IMMEDIATE). DataMapper::Query issues its SQL through exactly
+            // the connection DataMapper::Connection() exposes, so the pin
+            // covers every query below.
+            //
+            // WalSnapshotGuard's destructor closes this transaction (via
+            // COMMIT, swallowing any failure -- see its own doc comment) no
+            // matter how this scope is exited, including by
+            // computeReportJson throwing.
+            WalSnapshotGuard snapshot{mapper.Connection()};
+            resultJson = computeReportJson(mapper, action.ledgerId, reportPeriod);
+        }
+        // Written only after the read snapshot has been released, so this
+        // connection is not simultaneously holding a read lock and asking for
+        // a write one.
+        finishReportJob(mapper, *action.jobId, ReportStatus::Done, std::move(resultJson));
+    } catch (...) {
+        // Catch-all, not just `const std::exception&`: an escaping exception
+        // of any type must still leave the job in a terminal state, or a
+        // poller would spin against Pending forever. Unlike the thread-pool
+        // worker this replaced, the failure is also *reported* -- the runner
+        // gets a Failed result back rather than only a log line -- but the
+        // job row is still settled here rather than by rethrowing, because a
+        // thrown dispatch would leave the row Pending and the next pass would
+        // retry an aggregation that has already been shown to fail.
+        std::string detail = "unknown exception";
+        try {
+            throw;
+        } catch (const std::exception& exc) {
+            detail = exc.what();
+        } catch (...) {
+            // keep the placeholder
+        }
+        ::morph::log::logError("[ledger] RunReportJob failed: " + detail);
+        try {
+            finishReportJob(mapper, *action.jobId, ReportStatus::Failed, std::nullopt);
+        } catch (...) {
+            // A failure recording the failure has nowhere left to go at this
+            // rung's scope -- the job stays Pending and the next pass retries
+            // it, an accepted limitation rather than a silently swallowed one
+            // (the same shape bookmarks' own fetchMetadataOnce() catch block
+            // settles for).
+            ::morph::log::logError("[ledger] RunReportJob failed and could not record failure");
+        }
+        return RunReportJobResult{.status = ReportStatus::Failed};
+    }
+
+    auto result = RunReportJobResult{.status = ReportStatus::Done};
+    logAction(action, result);
+    return result;
 }
 
 GetReportStatusResult LedgerModel::execute(const GetReportStatus& action) {

@@ -187,3 +187,20 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000013, "Create ledger_applied_ops table") {
         .RequiredColumn("created_at_ms", Bigint());
     plan.CreateUniqueIndex("idx_ledger_applied_ops_ledger_op", "ledger_applied_ops", {"ledger_id", "op_id"});
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000014, "Store SubmitReport params with the job row") {
+    // The job row has to be self-describing now that the aggregation no
+    // longer runs inside SubmitReport's own call frame (morph#160): the
+    // params used to be decoded on the caller's thread and captured into the
+    // posted lambda, so nothing needed to persist them. With the run moved
+    // to ledger::app::App's runner -- possibly in a different process, and
+    // certainly after a restart -- the row is the only record of what was
+    // asked for.
+    //
+    // Nullable (AddNotRequiredColumn, not AddColumn) because SQLite cannot
+    // add a NOT NULL column to a table that may already hold rows without a
+    // default value. Every row this rung writes populates it; std::nullopt
+    // means "submitted before this column existed", which
+    // decodeMonthlyParams already treats as the all-time fallback.
+    plan.AlterTable("ledger_report_jobs").AddNotRequiredColumn("params_json", NVarchar(0));
+}

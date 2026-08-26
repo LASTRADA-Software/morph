@@ -9,11 +9,17 @@ cmake_minimum_required(VERSION 3.25)
 
 morph_add_rung(NAME ledger)
 
-# No target_sources() extras yet: unlike polls' src/auth/ (PollsAuthorizer),
-# this rung has no source directory morph_add_rung()'s globs
-# (src/models/*.cpp, src/db/*.cpp, src/app/*.cpp) don't already cover. Add
-# one here, mirroring polls' own CMakeLists.txt treatment of src/auth/, if a
-# later task introduces such a directory.
+# No target_sources() extras: unlike polls' src/auth/ (PollsAuthorizer), this
+# rung has no source directory morph_add_rung()'s globs (src/models/*.cpp,
+# src/db/*.cpp, src/app/*.cpp) don't already cover -- src/app/app.cpp
+# (ledger::app::App, the report runner) is picked up by the third of those.
+# Add one here, mirroring polls' own CMakeLists.txt treatment of src/auth/,
+# if a later task introduces such a directory.
+#
+# There is deliberately no src/server/ yet, so morph_add_rung() emits no
+# ladder_ledger_server target: this rung installs no authorizer, and an
+# unauthenticated financial server is not something to ship (morph#242). See
+# examples/ledger/include/ledger/app/app.hpp.
 
 # gui/*.cpp and gui_wasm/*.cpp don't exist yet (Task 22 wires the desktop
 # client) -- morph_add_rung() already skips ladder_ledger_gui and

@@ -1,18 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <chrono>
 #include <glaze/glaze.hpp>
-#include <memory>
 #include <morph/session/session.hpp>
-#include <thread>
+#include <string>
 #include <vector>
 
 #include "ledger/core/errors.hpp"
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/ledger_model.hpp"
 #include "testkit/db_fixture.hpp"
-#include "testkit/step_executor.hpp"
 
 namespace {
 
@@ -35,67 +32,47 @@ private:
     morph::session::detail::ScopedContext _scope;
 };
 
-using morph::ladder::testkit::StepExecutor;
-
-/// @brief Polls @p model's `GetReportStatus` for @p jobId until it leaves
-///        `Pending`, or until the hard iteration cap is reached.
+/// @brief Runs the report job @p jobId, on @p ledgerId, the way
+///        `ledger::app::App`'s runner does -- under the runner principal,
+///        as an ordinary `RunReportJob` dispatch.
 ///
-/// A bounded retry loop with a hard cap (100 x 10ms = 1s). Used by exactly
-/// ONE test case below -- the one that deliberately keeps a real
-/// `ThreadPoolExecutor` underneath the model (see its own comment). Every
-/// other case in this file injects a `StepExecutor` and drives the worker by
-/// hand, so it neither sleeps nor guesses at a budget. Do not reach for this
-/// helper for a new case without the same explicit justification.
-/// @param model The model to poll.
+/// This file used to poll `GetReportStatus` in a bounded retry loop with
+/// `std::this_thread::sleep_for` between iterations, because
+/// `execute(SubmitReport)` posted the aggregation to a real
+/// `ThreadPoolExecutor` the model itself owned and there was no way to
+/// observe -- let alone control -- when the worker ran. There is no loop, no
+/// sleep and no cap any more, and not because a test double was introduced:
+/// the aggregation is now an ordinary synchronous action
+/// (morph#160), so "the report has been computed" is simply what this call
+/// returning means. `examples/TESTING.md`'s ban on `sleep_for` outside
+/// `pump.hpp` is satisfied by construction here rather than by budget.
+///
+/// The principal scope is installed and dropped inside this helper, so a
+/// caller's own `ScopedPrincipal` (a *user*, which `RunReportJob` refuses)
+/// is restored by the time it returns.
+/// @param model The model to run the job on.
 /// @param jobId The submitted job.
-/// @return The last status observed -- still `Pending` only if the cap was hit.
-[[nodiscard]] ledger::GetReportStatusResult pollUntilSettled(ledger::LedgerModel& model,
-                                                             const ledger::ReportJobId& jobId) {
-    ledger::GetReportStatusResult status;
-    for (int i = 0; i < 100; ++i) {
-        status = model.execute(ledger::GetReportStatus{.jobId = jobId});
-        if (status.status != ledger::ReportStatus::Pending) {
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    return status;
+/// @param ledgerId The job's ledger -- what the action keys on.
+/// @return The job's terminal status, as the run itself reported it.
+[[nodiscard]] ledger::RunReportJobResult runReportJob(ledger::LedgerModel& model, const ledger::ReportJobId& jobId,
+                                                      const ledger::LedgerId& ledgerId) {
+    const ScopedPrincipal runner{std::string{ledger::kReportRunnerPrincipal}};
+    return model.execute(ledger::RunReportJob{.jobId = jobId, .ledgerId = ledgerId});
 }
 
-/// @brief Runs the one report job @p worker is holding, asserting on the way
-///        through that it really was holding exactly one and that the job
-///        posted no follow-up work of its own.
-///
-/// The `pending() == 1` on entry is the assertion a real pool cannot make:
-/// against a `ThreadPoolExecutor` the worker may already have finished by the
-/// time the test looks, so "submitted but not yet run" can only be sampled.
-/// @param worker The executor injected into the model under test.
-void runReportJob(StepExecutor& worker) {
-    REQUIRE(worker.pending() == 1);
-    REQUIRE(worker.runOne());
-    CHECK_FALSE(worker.runOne());
+/// @brief Runs @p jobId and returns what a client polling it would then see.
+/// @param model The model to run and poll.
+/// @param jobId The submitted job.
+/// @param ledgerId The job's ledger.
+/// @return The `GetReportStatus` answer after the run.
+[[nodiscard]] ledger::GetReportStatusResult runAndPoll(ledger::LedgerModel& model, const ledger::ReportJobId& jobId,
+                                                       const ledger::LedgerId& ledgerId) {
+    static_cast<void>(runReportJob(model, jobId, ledgerId));
+    return model.execute(ledger::GetReportStatus{.jobId = jobId});
 }
 
 }  // namespace
 
-// The one case in this file that deliberately keeps a REAL ThreadPoolExecutor,
-// and the reason not everything here was converted to `StepExecutor`. It is
-// the only test that exercises the production shape end to end:
-//
-//   * the default-constructed `LedgerModel` -- the constructor the bridge
-//     registry actually uses, and the one that owns the pool. Every converted
-//     case below goes through the injecting constructor instead, so without
-//     this case nothing covers the default wiring at all.
-//   * the worker running on a genuinely different thread. `execute(SubmitReport)`
-//     is written on the premise that nothing from the caller's stack frame
-//     survives into the task -- not its `DataMapper`, and in particular not
-//     `morph::session::current()`, a thread-local. Under `StepExecutor` the
-//     task runs inline on the test's thread, where the `ScopedPrincipal` above
-//     is still installed: a worker that wrongly reached for the caller's
-//     session would pass every converted case and fail only here.
-//
-// The cost is the retry loop `pollUntilSettled` still carries. Paying it once,
-// for the properties only a real thread can show, beats paying it five times.
 TEST_CASE("SubmitReport returns immediately; GetReportStatus transitions Pending to Done", "[ledger][reports]") {
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
@@ -136,7 +113,17 @@ TEST_CASE("SubmitReport returns immediately; GetReportStatus transitions Pending
         ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
     REQUIRE(jobId.hasValue());
 
-    const auto status = pollUntilSettled(model, jobId);
+    // Submit is now provably only a row write: the job is Pending, with no
+    // body, and stays that way for as long as nothing runs it. Against the
+    // model-owned thread pool this replaced, the same two polls raced the
+    // worker and proved nothing -- a SubmitReport that computed the report
+    // inline would have passed them.
+    const auto beforeRun = model.execute(ledger::GetReportStatus{.jobId = jobId});
+    CHECK(beforeRun.status == ledger::ReportStatus::Pending);
+    CHECK_FALSE(beforeRun.result.has_value());
+
+    CHECK(runReportJob(model, jobId, ledgerId).status == ledger::ReportStatus::Done);
+    const auto status = model.execute(ledger::GetReportStatus{.jobId = jobId});
     REQUIRE(status.status == ledger::ReportStatus::Done);
     REQUIRE(status.result.has_value());
     // The body is a real aggregation, not an empty placeholder: the two USD
@@ -164,8 +151,7 @@ TEST_CASE("A 23:30-local transaction is reported in its local month, not its UTC
     mapper.Create(ledgerRow);
     const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
 
-    auto worker = std::make_shared<StepExecutor>();
-    ledger::LedgerModel model{worker};
+    ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
                                       .name = "Checking",
@@ -206,12 +192,7 @@ TEST_CASE("A 23:30-local transaction is reported in its local month, not its UTC
         const auto jobId = model.execute(ledger::SubmitReport{
             .ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = paramsJson});
         REQUIRE(jobId.hasValue());
-        // Three report jobs run in this test case; each is submitted, asserted
-        // still Pending, then run by hand. Previously this was three passes of
-        // a 10ms-granularity poll loop, and the bulk of this file's runtime.
-        CHECK(model.execute(ledger::GetReportStatus{.jobId = jobId}).status == ledger::ReportStatus::Pending);
-        runReportJob(*worker);
-        const auto status = model.execute(ledger::GetReportStatus{.jobId = jobId});
+        const auto status = runAndPoll(model, jobId, ledgerId);
         REQUIRE(status.status == ledger::ReportStatus::Done);
         REQUIRE(status.result.has_value());
         std::vector<ledger::ReportLine> lines;
@@ -240,8 +221,7 @@ TEST_CASE("Re-polling the same completed job returns byte-identical results", "[
     mapper.Create(ledgerRow);
     const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
 
-    auto worker = std::make_shared<StepExecutor>();
-    ledger::LedgerModel model{worker};
+    ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
                                       .name = "Checking",
@@ -251,8 +231,7 @@ TEST_CASE("Re-polling the same completed job returns byte-identical results", "[
     auto jobId = model.execute(
         ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
 
-    runReportJob(*worker);
-    const auto status = model.execute(ledger::GetReportStatus{.jobId = jobId});
+    const auto status = runAndPoll(model, jobId, ledgerId);
     REQUIRE(status.status == ledger::ReportStatus::Done);
 
     // Two more polls of the SAME completed job -- byte-identical results
@@ -263,93 +242,6 @@ TEST_CASE("Re-polling the same completed job returns byte-identical results", "[
     auto thirdPoll = model.execute(ledger::GetReportStatus{.jobId = jobId});
     CHECK(secondPoll.result == thirdPoll.result);
     CHECK(secondPoll.status == thirdPoll.status);
-}
-
-TEST_CASE("A submitted report stays Pending until its worker actually runs", "[ledger][reports]") {
-    // The assertion a real thread pool cannot support. Against a
-    // `ThreadPoolExecutor` the worker may already have finished by the time
-    // the test looks, so "submitted, and the aggregation has NOT happened yet"
-    // can only be sampled and hoped for -- which means a `SubmitReport` that
-    // quietly computed the report inline, on the caller's thread, would pass
-    // every previous test in this file. Here it is an ordinary CHECK.
-    morph::ladder::testkit::DbFixture fixture;
-    Lightweight::DataMapper mapper;
-    ledger::db::LedgerRecord ledgerRow;
-    ledgerRow.name = "Personal";
-    mapper.Create(ledgerRow);
-    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
-
-    auto worker = std::make_shared<StepExecutor>();
-    ledger::LedgerModel model{worker};
-    const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
-                                      .name = "Checking",
-                                      .kind = ledger::AccountKind::Asset,
-                                      .currency = ledger::Currency::USD});
-
-    const auto jobId = model.execute(
-        ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
-    REQUIRE(jobId.hasValue());
-
-    // Submitted: the aggregation is queued and provably has not run.
-    CHECK(worker->pending() == 1);
-    // Stable, not merely "not yet": polled repeatedly, it stays Pending with
-    // no result body for as long as the worker is not run. On a real pool the
-    // same three polls race the job and prove nothing.
-    for (int poll = 0; poll < 3; ++poll) {
-        const auto pending = model.execute(ledger::GetReportStatus{.jobId = jobId});
-        CHECK(pending.status == ledger::ReportStatus::Pending);
-        CHECK_FALSE(pending.result.has_value());
-    }
-    CHECK(worker->pending() == 1);
-
-    REQUIRE(worker->runOne());
-
-    const auto done = model.execute(ledger::GetReportStatus{.jobId = jobId});
-    CHECK(done.status == ledger::ReportStatus::Done);
-    CHECK(done.result.has_value());
-    // The job is one task, not a chain: it left nothing queued behind it.
-    CHECK_FALSE(worker->runOne());
-}
-
-TEST_CASE("Running one report job settles that job and no other", "[ledger][reports]") {
-    // Two jobs outstanding at once, settled one at a time. Only a hand-driven
-    // worker can hold a second job at Pending while the first completes, so a
-    // completion that wrote the wrong row -- or every row -- was previously
-    // untestable here: with a real pool both jobs finish before either can be
-    // observed, and "job B is Done" looks the same either way.
-    morph::ladder::testkit::DbFixture fixture;
-    Lightweight::DataMapper mapper;
-    ledger::db::LedgerRecord ledgerRow;
-    ledgerRow.name = "Personal";
-    mapper.Create(ledgerRow);
-    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
-
-    auto worker = std::make_shared<StepExecutor>();
-    ledger::LedgerModel model{worker};
-    const ScopedPrincipal principal{"alice"};
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
-                                      .name = "Checking",
-                                      .kind = ledger::AccountKind::Asset,
-                                      .currency = ledger::Currency::USD});
-
-    const auto first = model.execute(
-        ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
-    const auto second = model.execute(
-        ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
-    REQUIRE(first.hasValue());
-    REQUIRE(second.hasValue());
-    REQUIRE(*first != *second);
-    REQUIRE(worker->pending() == 2);
-
-    // FIFO: the first submitted is the first queued, so this settles `first`.
-    REQUIRE(worker->runOne());
-    CHECK(model.execute(ledger::GetReportStatus{.jobId = first}).status == ledger::ReportStatus::Done);
-    CHECK(model.execute(ledger::GetReportStatus{.jobId = second}).status == ledger::ReportStatus::Pending);
-
-    REQUIRE(worker->runOne());
-    CHECK(model.execute(ledger::GetReportStatus{.jobId = second}).status == ledger::ReportStatus::Done);
-    CHECK_FALSE(worker->runOne());
 }
 
 TEST_CASE("SubmitReport rejects a disengaged ledgerId and an unknown ledger", "[ledger][reports]") {
@@ -372,4 +264,224 @@ TEST_CASE("GetReportStatus rejects a disengaged jobId and an unknown job", "[led
     ledger::LedgerModel model;
     CHECK_THROWS_AS(model.execute(ledger::GetReportStatus{.jobId = ledger::ReportJobId{}}), ledger::ValidationError);
     CHECK_THROWS_AS(model.execute(ledger::GetReportStatus{.jobId = ledger::ReportJobId{9999}}), ledger::NotFound);
+}
+
+TEST_CASE("A submitted report stays Pending for as long as nothing runs it", "[ledger][reports]") {
+    // The property that says the executor really did leave the model
+    // (morph#160), and the one the old thread-pool version could not assert
+    // at all: with no runner anywhere in the process, a submitted job is
+    // stable at Pending rather than merely "not done yet". This is also
+    // exactly what a job outliving the process that accepted it looks like --
+    // the row waits for whichever runner comes along next.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+
+    const auto jobId = model.execute(
+        ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
+    REQUIRE(jobId.hasValue());
+
+    for (int poll = 0; poll < 3; ++poll) {
+        const auto pending = model.execute(ledger::GetReportStatus{.jobId = jobId});
+        CHECK(pending.status == ledger::ReportStatus::Pending);
+        CHECK_FALSE(pending.result.has_value());
+    }
+}
+
+TEST_CASE("Running one report job settles that job and no other", "[ledger][reports]") {
+    // Two jobs outstanding at once, settled one at a time -- a completion
+    // that wrote the wrong row, or every row, would show up here and nowhere
+    // else. The property predates morph#160 as a goal but could not be
+    // asserted while the aggregation was a lambda on a real pool: both jobs
+    // finished before either could be observed, and "job B is Done" looked
+    // the same whether B ran or A settled it. `RunReportJob` names the job it
+    // settles, so the second one staying Pending is now an ordinary CHECK.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    ledger::ReportJobId first;
+    ledger::ReportJobId second;
+    {
+        const ScopedPrincipal alice{"alice"};
+        model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                          .name = "Checking",
+                                          .kind = ledger::AccountKind::Asset,
+                                          .currency = ledger::Currency::USD});
+        first = model.execute(
+            ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
+        second = model.execute(
+            ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
+    }
+    REQUIRE(first.hasValue());
+    REQUIRE(second.hasValue());
+    REQUIRE(*first != *second);
+
+    CHECK(runReportJob(model, first, ledgerId).status == ledger::ReportStatus::Done);
+    CHECK(model.execute(ledger::GetReportStatus{.jobId = first}).status == ledger::ReportStatus::Done);
+    CHECK(model.execute(ledger::GetReportStatus{.jobId = second}).status == ledger::ReportStatus::Pending);
+
+    CHECK(runReportJob(model, second, ledgerId).status == ledger::ReportStatus::Done);
+    CHECK(model.execute(ledger::GetReportStatus{.jobId = second}).status == ledger::ReportStatus::Done);
+}
+
+TEST_CASE("SubmitReport stores its params on the job row, and RunReportJob reads them back", "[ledger][reports]") {
+    // The params used to be decoded on SubmitReport's own thread and captured
+    // into the posted lambda, so they never had to persist. Now the run
+    // happens later -- possibly in another process -- and the row is the only
+    // record of what was asked for. Proven through behavior rather than by
+    // reading the column: a January statement and a February one over the
+    // same ledger must disagree, which they can only do if each job's own
+    // params survived the round trip through the database.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    const auto checkingId = ledgerState.accounts[0].id;
+    const auto groceriesId = ledgerState.accounts[1].id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    const auto instant = morph::time::DateTime::fromIso8601("2026-02-01T04:30:00Z");
+    REQUIRE(instant.has_value());
+    model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "late on the 31st, local",
+        .date = morph::time::Timestamp{*instant},
+        .legs = {ledger::TransactionLeg{
+                     .accountId = checkingId,
+                     .amount = morph::math::Rational{Numerator{-5000}, Denominator{1}, DecimalPlaces{2}}},
+                 ledger::TransactionLeg{
+                     .accountId = groceriesId,
+                     .amount = morph::math::Rational{Numerator{5000}, Denominator{1}, DecimalPlaces{2}}}}});
+
+    // BOTH jobs are submitted before EITHER is run: whatever distinguishes
+    // them at run time cannot have come from the submitting call frame.
+    const auto submitFor = [&](int year, unsigned month) {
+        const ledger::MonthlyStatementParams params{.year = year, .month = month, .timezoneOffsetMinutes = -300};
+        std::string paramsJson;
+        REQUIRE(!glz::write_json(params, paramsJson));
+        return model.execute(ledger::SubmitReport{
+            .ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = paramsJson});
+    };
+    const auto januaryJob = submitFor(2026, 1);
+    const auto februaryJob = submitFor(2026, 2);
+
+    const auto countOf = [&](const ledger::GetReportStatusResult& status) {
+        REQUIRE(status.status == ledger::ReportStatus::Done);
+        REQUIRE(status.result.has_value());
+        std::vector<ledger::ReportLine> lines;
+        REQUIRE(!glz::read_json(lines, *status.result));
+        REQUIRE(lines.size() == 1);
+        return lines[0].transactionCount;
+    };
+    CHECK(countOf(runAndPoll(model, januaryJob, ledgerId)) == 1);
+    CHECK(countOf(runAndPoll(model, februaryJob, ledgerId)) == 0);
+}
+
+TEST_CASE("RunReportJob refuses any principal but the report runner's", "[ledger][reports]") {
+    // The layering gate: RunReportJob is the App layer's action, not a
+    // client's. An ordinary user dispatching it must not be able to settle a
+    // job -- and, just as importantly, must not be able to do so *silently*.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    ledger::ReportJobId jobId;
+    {
+        const ScopedPrincipal alice{"alice"};
+        jobId = model.execute(
+            ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
+        REQUIRE(jobId.hasValue());
+        CHECK_THROWS_AS(model.execute(ledger::RunReportJob{.jobId = jobId, .ledgerId = ledgerId}), ledger::Forbidden);
+    }
+    // Refused with no session at all, too -- not merely with the wrong one.
+    CHECK_THROWS_AS(model.execute(ledger::RunReportJob{.jobId = jobId, .ledgerId = ledgerId}), ledger::Forbidden);
+
+    // And the refusal left the job alone rather than half-settling it.
+    CHECK(model.execute(ledger::GetReportStatus{.jobId = jobId}).status == ledger::ReportStatus::Pending);
+}
+
+TEST_CASE("Running an already-settled job recomputes nothing", "[ledger][reports]") {
+    // The runner re-dispatches a job whenever a pass ticks while an earlier
+    // pass's dispatch for the same job is still outstanding, so this is the
+    // ordinary case, not an exotic one. Both dispatches land on the ledger's
+    // one strand; the second must find the job terminal and leave it exactly
+    // as it is.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    ledger::ReportJobId jobId;
+    {
+        const ScopedPrincipal alice{"alice"};
+        model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                          .name = "Checking",
+                                          .kind = ledger::AccountKind::Asset,
+                                          .currency = ledger::Currency::USD});
+        jobId = model.execute(
+            ledger::SubmitReport{.ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
+    }
+    const auto first = runAndPoll(model, jobId, ledgerId);
+    REQUIRE(first.status == ledger::ReportStatus::Done);
+
+    // The second run reports Done without touching the row: byte-identical,
+    // which is what makes the re-run safe rather than merely tolerated.
+    CHECK(runReportJob(model, jobId, ledgerId).status == ledger::ReportStatus::Done);
+    const auto second = model.execute(ledger::GetReportStatus{.jobId = jobId});
+    CHECK(second.status == first.status);
+    CHECK(second.result == first.result);
+}
+
+TEST_CASE("RunReportJob rejects unengaged ids and an unknown job", "[ledger][reports]") {
+    morph::ladder::testkit::DbFixture fixture;
+    ledger::LedgerModel model;
+    const ScopedPrincipal runner{std::string{ledger::kReportRunnerPrincipal}};
+
+    CHECK_THROWS_AS(
+        model.execute(ledger::RunReportJob{.jobId = ledger::ReportJobId{}, .ledgerId = ledger::LedgerId{1}}),
+        ledger::ValidationError);
+    CHECK_THROWS_AS(
+        model.execute(ledger::RunReportJob{.jobId = ledger::ReportJobId{1}, .ledgerId = ledger::LedgerId{}}),
+        ledger::ValidationError);
+    CHECK_THROWS_AS(
+        model.execute(ledger::RunReportJob{.jobId = ledger::ReportJobId{9999}, .ledgerId = ledger::LedgerId{9999}}),
+        ledger::NotFound);
 }
