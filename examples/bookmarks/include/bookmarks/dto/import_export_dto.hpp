@@ -38,6 +38,18 @@ struct ImportBookmarks {
     // "make the chunks smaller" vs. "this request was malformed" distinction
     // `kMaxImportChunkBytes`'s own doc comment promises. The bound is
     // enforced once, in `BookmarkModel::execute(const ImportBookmarks&)`.
+    /// @brief Same opt-out, same reason as `CreateBookmark::explicitSubmit` —
+    ///        an import writes rows, so it must not fire per typed character.
+    ///
+    /// Sharper here than anywhere else in this rung: `chunk` holds a whole
+    /// Netscape HTML document, so an auto-submitting form would dispatch one
+    /// import per keystroke, each carrying a different *prefix* of the
+    /// document. The per-`opId` dedup below then makes that worse rather than
+    /// better — every submission after the first with the same `opId` is
+    /// answered as a retry of the truncated first one, so the finished
+    /// document is never the one that gets imported.
+    static constexpr bool explicitSubmit = true;
+
     [[nodiscard]] bool validate() const noexcept { return !chunk.empty() && opId.hasValue(); }
 };
 

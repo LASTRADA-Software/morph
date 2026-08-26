@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// bookmarks' first screen. One schema-driven form and one button — there is
-// no hand-built username field here, because there does not need to be: the
-// generated form already renders Login's single `std::string username`
-// member, complete with its required-gate (examples/IMPLEMENTATION.md rule 2,
-// "schema-driven forms only"). If Login ever grows a second field, this file
-// does not change.
+// bookmarks' first screen. One schema-driven form and nothing else — there is
+// no hand-built username field here, and no hand-built submit button either:
+// the generated form renders Login's single `std::string username` member
+// with its required-gate, and the renderer's own explicit Submit button
+// submits it (examples/IMPLEMENTATION.md rule 2, "schema-driven forms only").
+// If Login ever grows a second field, this file does not change.
 //
 // `formsController` defaults to null so this same file also loads with
 // nothing wired up, which is exactly what the offscreen engine-load smoke
@@ -69,25 +69,16 @@ Item {
         }
 
         DynamicForm {
-            id: loginForm
             Layout.fillWidth: true
             actionType: "Login"
             schema: page.loginSchema
-            // Deliberately not `controller: page.formsController`: a bound
-            // DynamicForm auto-submits on every keystroke once its required
-            // fields are engaged, which for Login would mint a token per typed
-            // character. Left unbound it is a pure renderer/validator —
-            // `ready` is the submit gate and `previewLine` is the exact JSON
-            // body the button below hands over. Same reasoning, verbatim, as
-            // pastebin's create form.
-            controller: null
-        }
-
-        Button {
-            Layout.fillWidth: true
-            text: "Sign in"
-            enabled: page.formsController !== null && loginForm.ready
-            onClicked: page.formsController.submitIfValid("Login", loginForm.previewLine)
+            // Bound, and safe to bind: `Login` declares `explicitSubmit = true`
+            // (bookmarks/dto/auth_dto.hpp), so its schema carries
+            // `"x-submitMode": "explicit"` and the renderer never auto-submits
+            // — it renders its own Submit button, gated on the same `ready`
+            // state, and that click is the sole trigger
+            // (docs/spec/forms/forms.md, "Explicit submit mode").
+            controller: page.formsController
         }
 
         Label {

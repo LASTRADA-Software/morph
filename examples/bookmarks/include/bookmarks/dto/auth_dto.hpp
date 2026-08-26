@@ -98,6 +98,16 @@ struct Login {
     /// only wants the DTO shape.
     /// @return `true` if `username` is a valid principal.
     [[nodiscard]] bool validate() const noexcept;
+
+    /// @brief Opts the login form out of the shipped renderer's
+    ///        auto-submit-on-validity default
+    ///        (`docs/spec/forms/forms.md`, "Explicit submit mode").
+    ///
+    /// `Login` is side-effectful: it mints a signed bearer token. A bound
+    /// `DynamicForm` without this would mint one per typed character, since
+    /// `username` becomes a valid principal as soon as its first character is
+    /// entered.
+    static constexpr bool explicitSubmit = true;
 };
 
 /// @brief What a successful `Login` returns.

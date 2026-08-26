@@ -232,15 +232,11 @@ Item {
                     Layout.fillWidth: true
                     actionType: "CreateBookmark"
                     schema: page.schemas["CreateBookmark"] || ({})
-                    // Unbound on purpose — see LoginView.qml's identical note.
-                    controller: null
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    text: "Create bookmark"
-                    enabled: page.formsController !== null && createForm.ready
-                    onClicked: page.formsController.submitIfValid("CreateBookmark", createForm.previewLine)
+                    // Bound — see LoginView.qml's identical note. Every action
+                    // rendered on this screen declares `explicitSubmit = true`,
+                    // so each form carries its own gated Submit button and none
+                    // of them auto-submits.
+                    controller: page.formsController
                 }
 
                 RowLayout {
@@ -397,14 +393,7 @@ Item {
                             Layout.fillWidth: true
                             actionType: "EditBookmark"
                             schema: page.schemas["EditBookmark"] || ({})
-                            controller: null
-                        }
-
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Apply edit"
-                            enabled: page.formsController !== null && editForm.ready
-                            onClicked: page.formsController.submitIfValid("EditBookmark", editForm.previewLine)
+                            controller: page.formsController
                         }
 
                         DynamicForm {
@@ -412,14 +401,7 @@ Item {
                             Layout.fillWidth: true
                             actionType: "ImportBookmarks"
                             schema: page.schemas["ImportBookmarks"] || ({})
-                            controller: null
-                        }
-
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Import chunk"
-                            enabled: page.formsController !== null && importForm.ready
-                            onClicked: page.formsController.submitIfValid("ImportBookmarks", importForm.previewLine)
+                            controller: page.formsController
                         }
                     }
                 }
@@ -464,14 +446,7 @@ Item {
                             Layout.fillWidth: true
                             actionType: "RenameTag"
                             schema: page.schemas["RenameTag"] || ({})
-                            controller: null
-                        }
-
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Rename tag"
-                            enabled: page.formsController !== null && renameForm.ready
-                            onClicked: page.formsController.submitIfValid("RenameTag", renameForm.previewLine)
+                            controller: page.formsController
                         }
 
                         DynamicForm {
@@ -479,14 +454,7 @@ Item {
                             Layout.fillWidth: true
                             actionType: "MergeTags"
                             schema: page.schemas["MergeTags"] || ({})
-                            controller: null
-                        }
-
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Merge tags"
-                            enabled: page.formsController !== null && mergeForm.ready
-                            onClicked: page.formsController.submitIfValid("MergeTags", mergeForm.previewLine)
+                            controller: page.formsController
                         }
                     }
                 }

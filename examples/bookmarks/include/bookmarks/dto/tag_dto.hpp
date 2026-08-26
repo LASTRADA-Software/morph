@@ -21,6 +21,13 @@ struct RenameTag {
     TagId id;
     std::string name;
 
+    /// @brief Same opt-out, same reason as `CreateBookmark::explicitSubmit` —
+    ///        a rename mutates a row, so it must not fire per keystroke. Here
+    ///        every intermediate name a user types through would be applied
+    ///        (and the last one that happened to collide would be reported as
+    ///        the `Conflict`).
+    static constexpr bool explicitSubmit = true;
+
     [[nodiscard]] bool validate() const noexcept {
         return id.hasValue() && !name.empty() && name.size() <= kMaxTagNameBytes;
     }
@@ -32,6 +39,12 @@ struct RenameTag {
 struct MergeTags {
     TagId sourceId;
     TagId targetId;
+
+    /// @brief Same opt-out, same reason as `CreateBookmark::explicitSubmit`.
+    ///        A merge is destructive — it reassigns every junction row and
+    ///        then deletes `sourceId` — so firing it on a digit typed midway
+    ///        through an id would destroy the wrong tag.
+    static constexpr bool explicitSubmit = true;
 
     [[nodiscard]] bool validate() const noexcept {
         return sourceId.hasValue() && targetId.hasValue() && *sourceId != *targetId;

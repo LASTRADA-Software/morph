@@ -65,6 +65,17 @@ struct CreateBookmark {
     static constexpr std::array<std::string_view, 5> optionalFields{"title", "description", "notes", "tags",
                                                                     "visibility"};
 
+    /// @brief Opts the generated form out of the shipped renderer's
+    ///        auto-submit-on-validity default (`morph::forms::HasExplicitSubmit`,
+    ///        `docs/spec/forms/forms.md`, "Explicit submit mode").
+    ///
+    /// This action stores a row. Auto-submit fires on *every* keystroke that
+    /// leaves the form valid, so a `CreateBookmark` bound to a live controller
+    /// would store one bookmark per typed character. With this declared,
+    /// `schemaJson<CreateBookmark>()` emits `"x-submitMode": "explicit"` and
+    /// `DynamicForm.qml` renders its own gated Submit button instead.
+    static constexpr bool explicitSubmit = true;
+
     [[nodiscard]] bool validate() const noexcept {
         return !url.empty() && url.size() <= kMaxUrlBytes && title.size() <= kMaxTitleBytes;
     }
@@ -90,6 +101,10 @@ struct EditBookmark {
     ///        it for the same reason — see that member's doc comment.
     static constexpr std::array<std::string_view, 5> optionalFields{"title", "description", "notes", "tags",
                                                                     "visibility"};
+
+    /// @brief Same opt-out, same reason as `CreateBookmark::explicitSubmit` —
+    ///        this action rewrites a row, so it must not fire per keystroke.
+    static constexpr bool explicitSubmit = true;
 
     [[nodiscard]] bool validate() const noexcept {
         return id.hasValue() && !url.empty() && url.size() <= kMaxUrlBytes && title.size() <= kMaxTitleBytes;
