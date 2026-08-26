@@ -333,11 +333,13 @@ TEST_CASE("CreatePaste's validate() rejects empty content and empty syntax", "[p
 }
 
 TEST_CASE("CreatePaste's validate() rejects a zero or negative burnAfterReads", "[pastebin][model]") {
-    // A budget of 0 is a whole number, so it passes Reads' own whole-number
-    // constraint, but PasteModel::execute(GetPaste)'s burn check
+    // A budget of 0 is a whole number, so it clears the integrality half of
+    // `CreatePaste::validate()`'s burn-budget rule (the case below this one),
+    // but PasteModel::execute(GetPaste)'s burn check
     // (`readCount >= *burnAfterReads`) is already true before the first read
     // ever happens — a paste born with burnAfterReads=0 would be permanently
-    // Burned on its very first GetPaste, having never been read once.
+    // Burned on its very first GetPaste, having never been read once. The two
+    // halves of the rule are independent and are asserted separately.
     DbFixture fixture;
     pastebin::PasteModel model;
 
@@ -356,6 +358,61 @@ TEST_CASE("CreatePaste's validate() rejects a zero or negative burnAfterReads", 
 
     // Nothing was stored by either rejection — only the positive create.
     CHECK(model.execute(pastebin::ListPastes{}).pastes.size() == 1);
+}
+
+TEST_CASE("CreatePaste's validate() rejects a fractional burnAfterReads", "[pastebin][model]") {
+    // The whole-number premise `Reads` documents (`pastebin/units.hpp`) and
+    // `paste_model.cpp`'s `countOf` relies on is a *DTO* obligation — the type
+    // cannot carry it, because `Quantity` requires `DeclaredDecimals >= 1` and
+    // so `Reads` represents one tenth exactly. A fractional budget therefore
+    // travels the whole path intact: it survives the wire codec (a `Rational`
+    // serialises as its own num/den pair), reaches `validate()`, and — before
+    // this case existed — was accepted, then floored to a *different* budget by
+    // `countOf`'s `math::floor` on the way into the row. `2.5` became `2`, and
+    // `GetPaste` reported `2` back. That is the same silent-data-loss class the
+    // `syntax` bound is validated to prevent (`kMaxSyntaxBytes`' own doc
+    // comment), arriving through an unguarded door, so the answer is the same:
+    // refuse the input rather than quietly rewrite it.
+    DbFixture fixture;
+    pastebin::PasteModel model;
+
+    auto fractional = makeCreate("body", "text");
+    fractional.burnAfterReads = pastebin::Reads::fromDouble(2.5);
+
+    // The premise this whole case rests on: 2.5 really is exactly representable
+    // in `Reads`, so nothing upstream of `validate()` has already rejected or
+    // rounded it. If `Reads` ever gains a zero declared precision this fails
+    // here rather than silently turning the assertions below into tautologies.
+    REQUIRE(fractional.burnAfterReads.hasValue());
+    REQUIRE_FALSE(fractional.burnAfterReads.value()->isInteger());
+    CHECK(fractional.burnAfterReads.value()->numerator == 5);
+    CHECK(fractional.burnAfterReads.value()->denominator == 2);
+
+    REQUIRE_THROWS_AS(model.execute(fractional), pastebin::ValidationError);
+
+    // A negative fraction is refused by the integrality rule too, not only by
+    // the sign rule — the two checks are independent.
+    auto negativeFraction = makeCreate("body", "text");
+    negativeFraction.burnAfterReads = pastebin::Reads::fromDouble(-0.5);
+    REQUIRE_THROWS_AS(model.execute(negativeFraction), pastebin::ValidationError);
+
+    // The neighbouring whole numbers are both still accepted, so the rejection
+    // above is the fractional part and not a blanket refusal of the field.
+    for (const double whole : {2.0, 3.0}) {
+        auto accepted = makeCreate("body", "text");
+        accepted.burnAfterReads = pastebin::Reads::fromDouble(whole);
+        REQUIRE_NOTHROW(model.execute(accepted));
+    }
+
+    // Nothing was stored by either rejection — only the two whole-number
+    // creates. Had 2.5 been accepted and floored, this would read three.
+    const auto listed = model.execute(pastebin::ListPastes{}).pastes;
+    REQUIRE(listed.size() == 2);
+    for (const auto& summary : listed) {
+        const auto budget = model.execute(pastebin::GetPaste{.id = summary.id}).burnAfterReads;
+        CHECK(budget.hasValue());
+        CHECK(budget.value()->isInteger());
+    }
 }
 
 TEST_CASE("An over-length syntax is rejected, not silently truncated into the column", "[pastebin][model]") {

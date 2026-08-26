@@ -90,14 +90,34 @@ struct CreatePaste {
             return false;
         }
         // Reads' own doc comment (units.hpp) puts the whole-number constraint
-        // on this DTO to enforce, not on the type. A budget of 0 (or
-        // negative) is the same problem in a different guise: it is a whole
-        // number, but PasteModel::execute(GetPaste)'s burn check
+        // on this DTO to enforce, not on the type — `Quantity` requires
+        // `DeclaredDecimals >= 1`, so `Reads` represents tenths exactly and
+        // `2.5` is a perfectly ordinary value of it, one that survives the
+        // wire codec (a `Rational` travels as its own num/den pair) and
+        // arrives here intact. This is where the premise stops being an
+        // aspiration: without the `isInteger()` test below, a fractional
+        // budget was accepted and then quietly rewritten into a *different*
+        // budget by `paste_model.cpp`'s `countOf`, whose `math::floor` turned
+        // 5/2 into 2 on the way into the row — the create reported success and
+        // `GetPaste` reported the budget as 2. That is the same silent
+        // data-loss class `kMaxSyntaxBytes` exists to prevent (see its doc
+        // comment) reaching the row through a different door, and it gets the
+        // same answer: refuse the input rather than rewrite it. A rung that
+        // ever *wants* "2.5 means 2" must say so in `Reads` (whose declared
+        // precision is the only honest place for it), not by letting a
+        // conversion helper decide.
+        //
+        // A budget of 0 (or negative) is a third guise of "accepted, then
+        // behaves as something else": both are whole numbers, but
+        // PasteModel::execute(GetPaste)'s burn check
         // (`readCount >= *burnAfterReads`) is already true before the first
         // read ever happens, so the paste is born unreadable — accepted by
         // `validate()`, then permanently `Burned` on the very first `GetPaste`.
-        if (burnAfterReads.hasValue() && (burnAfterReads.value()->isZero() || burnAfterReads.value()->isNegative())) {
-            return false;
+        if (burnAfterReads.hasValue()) {
+            const auto& budget = *burnAfterReads.value();
+            if (!budget.isInteger() || budget.isZero() || budget.isNegative()) {
+                return false;
+            }
         }
         return true;
     }

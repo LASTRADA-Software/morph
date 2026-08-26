@@ -78,8 +78,18 @@ namespace {
 /// @brief An engaged `Reads` back as a whole-number count.
 ///
 /// `math::floor` is exact on a `Rational` (integer division on the stored
-/// numerator/denominator) — no floating-point step. `Reads` only ever carries
-/// whole numbers here, so flooring and truncating agree.
+/// numerator/denominator) — no floating-point step.
+///
+/// Every `Reads` that reaches this function is a whole number, so flooring
+/// changes nothing and flooring and truncating agree. That is an enforced
+/// premise, not an assumption: the one `Reads` a client can supply is
+/// `CreatePaste::burnAfterReads`, and `CreatePaste::validate()` rejects a
+/// non-integral one outright (`pastebin/dto/paste_dto.hpp`; `Reads` declares
+/// one decimal place, so `2.5` is representable and does arrive here
+/// otherwise). Every other `Reads` in the rung is minted by `readsOf` from a
+/// whole `std::int64_t`. Were that validation removed, this line would not
+/// fail — it would silently store a budget the client never asked for, which
+/// is exactly the bug the validation closed.
 [[nodiscard]] std::int64_t countOf(const Reads& reads) noexcept { return ::morph::math::floor(*reads); }
 
 [[nodiscard]] std::string textOf(const Light::SqlAnsiString<32>& stored) { return std::string{stored.str()}; }
