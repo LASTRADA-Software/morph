@@ -1162,6 +1162,26 @@ RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
     }
 
     try {
+        // The ledger guard every sibling action already has -- OpenAccount,
+        // StoreTransaction, ImportLedgerChunk, SubmitReport and
+        // storeJournalImpl all refuse a ledger they cannot find, and this
+        // action checked only its own job row. Without it a job whose ledger
+        // has since been deleted aggregates an empty account set, produces
+        // `[]` and settles Done, so a caller cannot tell "no such ledger"
+        // from "a ledger with no activity" (morph#250).
+        //
+        // Raised *inside* this try on purpose. Throwing out of the method
+        // instead would leave the row Pending, and ledger::app::App re-sweeps
+        // every Pending row on every pass -- the same doomed job would be
+        // re-dispatched forever. The catch below settles it Failed, which is
+        // terminal, which is the property the row needs.
+        auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                              .All();
+        if (ledgerRows.empty()) {
+            throw NotFound{"RunReportJob: no such ledger"};
+        }
+
         std::string resultJson;
         {
             // Read-transaction snapshot pinning (IMPLEMENTATION.md rule 4's
