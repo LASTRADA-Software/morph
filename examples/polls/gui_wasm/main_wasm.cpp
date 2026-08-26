@@ -31,16 +31,17 @@
 /// @par No database bootstrap, no `TokenIssuer` — same as every ladder rung's
 /// WASM client, but for a slightly different reason here: this rung has
 /// **no `TokenIssuer`/signed tokens at all**, native or WASM
-/// (`examples/polls/README.md`'s Global Constraints, judgment call 2 — a
-/// deliberate departure from rung 1/2's pattern, forced by there being no
-/// framework authorizer for bare shared secrets). `CreatePoll` mints its
+/// (the rung README's resolved design decision 1, and
+/// `polls::auth::PollsAuthorizer`'s own `@file` comment — a deliberate
+/// departure from rung 1/2's pattern, forced by there being no framework
+/// authorizer for bare shared secrets). `CreatePoll` mints its
 /// admin/participant tokens itself, inside `PollModel::execute()`; there is
 /// no signing secret for this file to *not* set up, unlike pastebin's/
 /// bookmarks' own "no bootstrap" note.
 ///
 /// @par `nativeClient: false` — the only way `CreatePollView.qml` stays reachable-nowhere
-/// `CreatePoll` is native-client-only (`examples/polls/README.md`'s Global
-/// Constraints). `gui/qml/Main.qml`'s `ApplicationWindow` declares
+/// `CreatePoll` is native-client-only (`examples/polls/README.md`'s resolved
+/// design decision 6). `gui/qml/Main.qml`'s `ApplicationWindow` declares
 /// `property bool nativeClient: true` for exactly this file to flip — its own
 /// doc comment (written by Task 16, before this file existed) already
 /// anticipates "a future gui_wasm/main_wasm.cpp is expected to pass

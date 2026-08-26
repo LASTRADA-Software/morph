@@ -78,8 +78,8 @@ public:
     /// @return `{actionType: schema}` JSON.
     [[nodiscard]] QString schemasJson() const;
 
-    /// @brief Creates a new poll. Native-client-only (this rung's Global
-    ///        Constraints — see `examples/polls/README.md`); nothing in this
+    /// @brief Creates a new poll. Native-client-only (the rung README's
+    ///        resolved design decision 6); nothing in this
     ///        method itself enforces that, `gui/qml/Main.qml`'s own
     ///        `nativeClient` gate does. Emits `created` on success, `failed`
     ///        on error.

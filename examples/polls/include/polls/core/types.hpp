@@ -11,7 +11,9 @@
 /// @file
 /// Polls' strong id types and constants. `OptionId` and `PollEventId` wrap
 /// auto-incrementing integers (SQLite row ids). `PollId` itself is not a
-/// strong type (see Global Constraints), but `kTokenBytes` is shared by
+/// strong type (see the rung README's resolved design decision 7, which
+/// records that as this rung's unmigrated state rather than a framework
+/// restriction), but `kTokenBytes` is shared by
 /// implementations and tests to ensure consistency on generated token lengths.
 ///
 /// These two use a **zero sentinel**, not `BookmarkId`'s
@@ -88,8 +90,9 @@ struct OptionId {
 };
 
 /// @brief Strong identifier for one row in the `poll_events` append-only log.
-///        Table-wide monotonic (not per-poll), autoincrement — see this
-///        plan's Global Constraints on why a sequence id, not a timestamp.
+///        Table-wide monotonic (not per-poll), autoincrement — see the
+///        rung README's resolved design decision 4 on why a sequence id,
+///        not a timestamp.
 struct PollEventId {
     /// @brief The payload; `0` means "not entered" (analogous to empty optional).
     std::int64_t value{0};

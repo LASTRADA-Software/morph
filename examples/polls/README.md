@@ -426,7 +426,7 @@ log table above.
   ones recorded before the instance died -- confirmed independently against
   the real on-disk SQLite file (`sqlite3` inspection of `poll_events`), not
   just the in-memory assertions. No epoch token was needed, exactly as
-  design decision 2 above predicts.
+  design decision 4 above predicts.
 - The event-polling helper (with its client-side timeout) is factored so
   [`kanban`](../kanban) can lift it.
   **Confirmed (Task 15):** `morph::ladder::gui::EventPoller<EventT, EventIdT>`

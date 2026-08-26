@@ -33,8 +33,8 @@ ApplicationWindow {
     property var pollBridge: null
 
     /// Whether this build may create polls. `CreatePoll` is native-client-only
-    /// per this rung's Global Constraints (examples/polls/README.md,
-    /// resolved design decision 6), and the reason is product UX, not a
+    /// per examples/polls/README.md's resolved design decision 6, and the
+    /// reason is product UX, not a
     /// technical limit: it mirrors Rallly's anchor split, where an organizer
     /// creates from the main app and participants open a shared link in
     /// whatever browser tab they have. (An earlier version of this comment

@@ -35,8 +35,9 @@ TEST_CASE("The polls schema creates all six tables and a poll round-trips", "[po
 
     // The remaining four tables are read via a plain Query<T>().Where(...)
     // on the poll's own id, never through an embedded relation field on
-    // PollRecord -- see this rung's Global Constraints, and poll_entity.hpp's
-    // file comment.
+    // PollRecord -- see poll_entity.hpp's own @file comment, which carries
+    // the verified reason (DataMapper::Update()'s non-reflection path calls
+    // IsModified() on every member, which no relation type declares).
     polls::db::VoteRecord vote;
     vote.poll = poll;
     vote.option = opt;
@@ -114,8 +115,8 @@ TEST_CASE("Duplicate (pollId, participantName, optionId) votes are rejected by t
 TEST_CASE("PollRecord has no relation-typed member -- Update() must compile", "[polls][db]") {
     // A compile-time proof, not a runtime assertion: if PollRecord ever grows
     // an embedded HasMany/HasManyThrough field, this line stops compiling
-    // with the exact "no member IsModified" error the Global Constraints
-    // section documents.
+    // with the exact "no member IsModified" error poll_entity.hpp's own
+    // @file comment documents.
     DbFixture fixture;
     Lightweight::DataMapper mapper;
 

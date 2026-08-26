@@ -123,8 +123,8 @@ static_assert((kRandomTokenBytes * 8 + 5) / 6 == kTokenBytes,
 ///        `randomPasteId()` (a deliberately small, collidable, human-typo-
 ///        tolerant keyspace) or bank's card-number generator, these three
 ///        tokens ARE the entire security boundary for admin/participant
-///        identity in this rung (see the plan's Global Constraints and the
-///        rung README's resolved design decision 1) -- there is no signed
+///        identity in this rung (see the rung README's resolved design
+///        decision 1) -- there is no signed
 ///        `SigningAuthorizer` token backing them up, only a bare secret
 ///        compared directly against the poll row's own stored columns, so
 ///        the byte source itself must be a real entropy source, not a

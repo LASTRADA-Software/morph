@@ -198,7 +198,7 @@ public:
     ///        cardinality.
     ///
     ///        Durable persistence alone closes the Zulip-pattern gap this
-    ///        rung's README documents as design decision 2: the event log
+    ///        rung's README documents as design decision 4: the event log
     ///        survives this handler's own destruction/rebirth (a fresh
     ///        `PollModel` reading the same `poll_events` table sees every row
     ///        a now-gone instance wrote), and a stale cursor simply gets
