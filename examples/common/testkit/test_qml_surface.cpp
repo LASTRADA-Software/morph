@@ -726,6 +726,22 @@ TEST_CASE("QmlSurfaceAudit: an exemption that no longer suppresses anything is i
         CHECK_THAT(describe(audit.run()),
                    Catch::Matchers::ContainsSubstring("unnecessary allowUnbound('fixture', 'refresh'"));
     }
+
+    SECTION("a NOTIFY signal the QML covers transitively, by reading its property") {
+        // `depthChanged` is never named in the QML at all -- `cleanQml()`
+        // reads `depth` directly, and the engine subscribes to the
+        // notification on its own behalf (see the "counts as bound when the
+        // property is read" case above). An exemption recorded against the
+        // signal by name is therefore just as redundant as one recorded
+        // against a directly-called member: the property read covers it, so
+        // the exemption suppresses nothing and must report itself as such.
+        QmlSurfaceAudit audit{dir.path()};
+        audit.bind(QStringLiteral("fixture"), bridge);
+        audit.allowUnbound(QStringLiteral("fixture"), QStringLiteral("depthChanged"),
+                           QStringLiteral("bound from somewhere else"));
+        CHECK_THAT(describe(audit.run()),
+                   Catch::Matchers::ContainsSubstring("unnecessary allowUnbound('fixture', 'depthChanged'"));
+    }
 }
 
 #include "test_qml_surface.moc"
