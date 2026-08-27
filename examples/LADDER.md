@@ -256,8 +256,17 @@ proposal); schemas-as-data render old versions but **validation always runs
 against the current compiled struct**; no per-caller schema shaping; nested
 aggregates get schemas but **no enforcement recursion and no child-table
 renderer**; no pre-decode wire validation seam (clamped `Rational`s reach
-`validate()` as plausible numbers); the shipped renderer **auto-fires on
-validity with no submit button** (explicit-submit mode needed before any side-effectful rung form).
+`validate()` as plausible numbers).
+
+Explicit-submit mode is **closed** (it was the last entry on this list): an
+action declaring `static constexpr bool explicitSubmit = true` makes
+`schemaJson<A>()` emit the top-level `x-submitMode: "explicit"` key, and the
+shipped `DynamicForm.qml` renders its own Submit button — gated on the form's
+`ready` state — instead of auto-firing on validity
+(`docs/spec/forms/forms.md`, "Explicit submit mode"). Adoption is per rung and
+only `polls` has migrated so far, on all three of its schema-driven actions;
+`bookmarks`, `lims` and `pastebin` still pair `controller: null` with a
+hand-written Button at thirteen call sites between them.
 
 ## Operations and security (binding conventions)
 

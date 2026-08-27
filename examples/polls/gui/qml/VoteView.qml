@@ -8,6 +8,14 @@
 // wired to Task 15's EventPoller (through PollBridge — see
 // poll_qml_bridges.hpp's own doc comment for the wiring).
 //
+// The three DynamicForms bind `controller: page.pollBridge` directly and
+// carry no submit Button of their own: all three actions declare
+// `explicitSubmit = true` (dto/vote_dto.hpp), so their schemas carry
+// `x-submitMode: "explicit"` and the renderer supplies its own Submit
+// button, enabled only while the form is ready. Reaching into
+// `form.previewLine` from an external Button — what this file did before —
+// is what that mode exists to make unnecessary.
+//
 // `pollBridge`/`schemas` default to null/{} so this same file also loads
 // standalone with nothing wired up, which is exactly what the offscreen
 // engine-load smoke test (tests/test_gui_qml_smoke.cpp) does.
@@ -242,13 +250,7 @@ Item {
                     Layout.fillWidth: true
                     actionType: "UndoLastVoteChange"
                     schema: page.schemas["UndoLastVoteChange"] || ({})
-                    controller: null
-                }
-                Button {
-                    Layout.fillWidth: true
-                    text: "Undo my last vote change"
-                    enabled: page.pollBridge !== null && undoForm.ready
-                    onClicked: page.pollBridge.submitIfValid("UndoLastVoteChange", undoForm.previewLine)
+                    controller: page.pollBridge
                 }
             }
 
@@ -279,13 +281,7 @@ Item {
                     Layout.fillWidth: true
                     actionType: "AddComment"
                     schema: page.schemas["AddComment"] || ({})
-                    controller: null
-                }
-                Button {
-                    Layout.fillWidth: true
-                    text: "Add comment"
-                    enabled: page.pollBridge !== null && commentForm.ready
-                    onClicked: page.pollBridge.submitIfValid("AddComment", commentForm.previewLine)
+                    controller: page.pollBridge
                 }
 
                 Label {
@@ -314,14 +310,15 @@ Item {
                     Layout.fillWidth: true
                     actionType: "FinalizePoll"
                     schema: page.schemas["FinalizePoll"] || ({})
-                    controller: null
-                }
-                Button {
-                    Layout.fillWidth: true
-                    text: "Finalize poll"
-                    enabled: page.pollBridge !== null && page.state !== null && !page.state.finalized
-                             && finalizeForm.ready
-                    onClicked: page.pollBridge.submitIfValid("FinalizePoll", finalizeForm.previewLine)
+                    controller: page.pollBridge
+                    // The one gate the schema cannot carry: an already-
+                    // finalized poll refuses FinalizePoll in the model, and
+                    // there is no point offering the form for it. Applied to
+                    // the whole form rather than to a button, since the
+                    // renderer owns its Submit control now — `enabled` on a
+                    // Frame propagates to every child, the Submit button
+                    // included.
+                    enabled: page.state !== null && !page.state.finalized
                 }
             }
 

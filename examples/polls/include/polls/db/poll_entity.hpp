@@ -38,7 +38,8 @@ struct PollRecord {
     static constexpr std::string_view TableName = "polls";
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    /// The shareable link id -- see this rung's Global Constraints. Fixed-width,
+    /// The shareable link id -- see the rung README's resolved design
+    /// decision 7 for why it is a plain `std::string`. Fixed-width,
     /// ASCII, `kTokenBytes` long: the same ID/token-shaped case bank's `number`
     /// and pastebin's `id` are, so `SqlAnsiString<kTokenBytes>` -- a fixed
     /// capacity matching the token's own fixed length, unlike this rung's
@@ -141,7 +142,8 @@ struct VoteHistoryRecord {
 };
 
 /// @brief The event log. Table-wide autoincrement `id` is `PollEventId`'s
-///        wire value directly -- see this plan's Global Constraints.
+///        wire value directly -- see the rung README's resolved design
+///        decision 4.
 struct PollEventRecord {
     static constexpr std::string_view TableName = "poll_events";
 

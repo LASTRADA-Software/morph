@@ -139,7 +139,7 @@ struct ParticipantToken {
 enum class Finalized : std::uint8_t { No, Yes };
 
 struct CreatePollResult {
-    std::string pollId;                 // the shareable link id -- see Global Constraints
+    std::string pollId;                 // the shareable link id -- see README design decision 7
     AdminToken adminToken;              // kept by the organizer only
     ParticipantToken participantToken;  // handed out with the shared link; verified by nothing today
 };

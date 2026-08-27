@@ -119,49 +119,97 @@ runs on.
    shape.
 5. **`messagesPerSecond` is not a framework gap — already implemented.**
    `QtWebSocketServerConfig::messagesPerSecond` (`docs/spec/core/backend.md`)
-   is a real, shipped, separately-tested per-connection token bucket; a
-   frame that finds an empty bucket is dropped silently. This rung's own
+   is a real, shipped, separately-tested per-connection token bucket. A frame
+   that finds an empty bucket is **refused, and answered**: it never reaches
+   `RemoteServer`, and the sender receives an `err "rate limited"` addressed
+   to that frame's own `callId` (morph#225 —
+   `src/qt/qt_websocket_server.cpp`'s `makeErr("rate limited", …)` call, and
+   `include/morph/qt/qt_websocket_server.hpp`'s own doc comment). It used to
+   be dropped silently; that is what made a rate-limited call hang until the
+   client-side deadline fired, and it is no longer the case. This rung's own
    "run this rung's harness with `messagesPerSecond` configured ON" is a
    **test-harness configuration decision**, not new framework work — the
    client-side execute-deadline prerequisite below is what actually needs
    building; the rate limiter it must survive already exists.
-6. **`CreatePoll` runs from the native/desktop client only — never from a
-   WASM tab.** Closing framework prerequisite #1 (below) discovered a
-   second, narrower gap it does not close:
-   `Bridge::assignHandlerPrimary`'s promote step (filing a freshly-created
-   shared instance into the directory under its generated key) has no
-   async path — `IBackend::assignPrimary` is still a synchronous `sendSync`
-   on `QtWebSocketBackend`, with no `assignPrimaryAsync` anywhere in the
-   tree. `CreatePoll` is a result-keyed *creating* action (the instance
-   doesn't exist until the call returns and names it), so a WASM tab
-   dispatching it would still abort the page at the promote step — filed as
-   the *assignPrimary has no async path* finding (recorded on the
-   `application-ladder` branch; not present in `docs/findings/` here).
-   **Resolved
-   shape**: this matches Rallly's own anchor UX exactly (an organizer
-   creates via the main app/site; participants open a shared link in
-   whatever browser tab they have), so the rung's own design already wants
-   this split — `CreatePoll` is native-client-only by design, not merely
-   worked around; every WASM tab's role is strictly the participant-attach
-   story (`OpenPoll`, payload-keyed, fully covered by the prerequisite work
+6. **`CreatePoll` runs from the native/desktop client only — a product-UX
+   decision, and nothing more.** This entry originally carried a second,
+   framework-level justification, and **that half was wrong twice over**;
+   it is struck rather than quietly dropped, since the `nativeClient` gate
+   in `gui/qml/Main.qml` still points here.
+
+   The struck claim was: `Bridge::assignHandlerPrimary`'s promote step has
+   no async path (`IBackend::assignPrimary` being a synchronous `sendSync`
+   on `QtWebSocketBackend`, "with no `assignPrimaryAsync` anywhere in the
+   tree"), so a WASM tab dispatching `CreatePoll` would abort the page at
+   the promote step. Both premises are false against the tree as it stands:
+
+   - **`assignPrimaryAsync` exists**, at every layer the claim named:
+     `IBackend::assignPrimaryAsync` (`include/morph/core/backend.hpp`),
+     `QtWebSocketBackend::assignPrimaryAsync`
+     (`src/qt/qt_websocket_backend.cpp`), and `assignHandlerPrimary` itself,
+     which prefers it and falls back to the synchronous call only for a
+     backend that offers none (`include/morph/core/bridge.hpp`).
+   - **The promote step never runs for this rung anyway.**
+     `assignHandlerPrimary` is reached from exactly one branch of
+     `BridgeHandler::execute`, guarded by `kShared &&
+     ResultKeyed<Action>` (`include/morph/core/bridge.hpp`). `CreatePoll`
+     is neither: it carries no `BRIDGE_KEY_FROM_RESULT` declaration
+     (`models/poll_model.hpp`'s registration block ends at a plain
+     `BRIDGE_REGISTER_ACTION`), and it dispatches through
+     `PollPresenter::_creator`, a plain `NoSharing`
+     `BridgeHandler<PollModel>`. `OpenPoll` — payload-keyed, on the
+     `AllowShared` handler — is this rung's only keyed action, and it takes
+     the attach branch, not the promote branch.
+
+   **What survives, and is the whole of the justification now:** this
+   matches Rallly's own anchor UX (an organizer creates via the main
+   app/site; participants open a shared link in whatever browser tab they
+   have), so the rung's own design wants the split independently of any
+   framework property. Every WASM tab's role is the participant-attach
+   story (`OpenPoll`, payload-keyed, covered by the prerequisite work
    below), never poll creation.
-7. **`OpenPoll::pollId` (and any field a `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM`
-   macro deduces a key type from) must be plain `std::string`, not a strong
-   type.** `morph::model::ModelKey`'s concept (`include/morph/core/model_key.hpp`)
-   requires an exact `std::same_as<K, std::string>` or `std::integral<K>`
-   match — a wrapper type like rung 1/2's `PasteId`/`BookmarkId` does not
-   satisfy it, since the macro deduces `PrimaryKey` directly from the
-   member's own declared type via `MemberTypeOf`. This is a genuine,
-   narrow exception to `IMPLEMENTATION.md` rule 3 ("only `std::string` is a
-   permitted plain type"), not a violation of it: `pollId` is a shareable
-   link identifier, the same natural-string-identity category rule 3
-   already carves out for URLs and titles — it is generated once
-   server-side as an unguessable random token (mirroring the admin/
-   participant tokens' own generation), never user-typed, and never
-   confused with an ordinary integer id precisely because it *is* a
-   string. Every other identity field this rung defines (`OptionId`, the
-   event log's sequence id) is never the target of a keying macro and
-   stays a strong type, per the usual rule.
+
+   **The `nativeClient` gate stays, with that restated reason.** Removing
+   it would be a behaviour change to a shipped client, made on the strength
+   of a docs correction, and it would not actually give anyone a working
+   organizer path — the browser client is this rung's only compilable GUI
+   binary, but it has never been compiled either, and the desktop entry
+   point that would exercise the other side of the split does not exist at
+   all. The gate now rests on product UX alone; it is no longer defended by
+   any framework hazard, and nothing below should be read as claiming
+   otherwise.
+7. **`OpenPoll::pollId` is a plain `std::string` — and that is now this
+   rung's own unmigrated state, not a framework restriction.**
+
+   This entry originally read: "`OpenPoll::pollId` (and any field a
+   `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` macro deduces a key type from)
+   **must** be plain `std::string`, not a strong type", because
+   `morph::model::ModelKey` "requires an exact `std::same_as<K,
+   std::string>` or `std::integral<K>` match". **The framework no longer
+   says that**, and stating it here asserted that the framework forbids
+   what another rung does. `include/morph/core/model_key.hpp` defines
+   `WrappedModelKey` alongside `RawModelKey` — "key types that *wrap* a
+   `RawModelKey` — the ladder's strong ids", deduced structurally from
+   `hasValue()`, an `operator*` yielding a raw key, and constructibility
+   back from that raw value. `ModelKey` is the union of the two. `lims`
+   keys `SampleModel` on `lims::SampleId` through exactly that path
+   (`BRIDGE_MODEL_KEY(lims::SampleModel, lims::OpenSample,
+   &lims::OpenSample::sampleId)`), and the widening (morph#163) let
+   morph#183 delete three rungs' hand-written `ModelKeyTraits`
+   specialisations.
+
+   **Current state, stated as such:** `polls::OpenPoll::pollId` is still a
+   plain `std::string`, and this rung has not been migrated to a
+   `polls::PollId` strong id. Nothing prevents it any more. Until it
+   happens, the field sits in the same natural-string-identity category
+   `IMPLEMENTATION.md` rule 3 already carves out for URLs and titles — a
+   shareable link identifier generated once server-side as an unguessable
+   random token (mirroring the admin/participant tokens' own generation),
+   never user-typed. That is an accurate description of a plain field, not
+   a justification for keeping it plain: **migrating `pollId` to a
+   `polls::PollId` strong id is named follow-up work.** Every other
+   identity field this rung defines (`OptionId`, `PollEventId`) is already
+   a strong type, per the usual rule.
 
 ## Framework prerequisites (built as part of this rung, before the app tasks that depend on them consume them)
 
@@ -231,8 +279,13 @@ Actions, in build order:
 1. `CreatePoll { title, options[] }` → admin + participant link tokens.
 2. `OpenPoll { pollId }` (the keyed action), `GetPollState {}`.
 3. `SubmitVotes { participantName, votes[] }` — **anonymous**: participants
-   have no account; the participant token in `session::Context` is the whole
-   identity. `UpdateVotes`, `AddComment`.
+   have no account, and there is no participant *authentication* of any
+   kind. The identity that matters is the action's own free-text
+   `participantName`, scoped to the poll — knowing the `pollId` is the
+   capability, and `CreatePollResult::participantToken` is verified by
+   nothing (design decision 1 above, and `PollModel`'s own "What is
+   actually gated, stated exactly" doc comment). `UpdateVotes`,
+   `AddComment`.
 4. `FinalizePoll { optionId }` — admin-token-gated state transition; the poll
    becomes read-only.
 5. `UndoLastVoteChange` — user-facing undo, **redesigned per review**: it
@@ -277,7 +330,16 @@ log table above.
   + payload); clients poll `GetEventsSince` on a timer and apply increments;
   a stale client falls back to `GetPollState`. Zulip proves an entire chat
   product ships on exactly this; here it debuts at toy scale.
-- **Journal as user feature**: vote-change history and undo, not just audit.
+- **The framework journal, as audit only.** `FileActionLog` is installed
+  process-wide (`app/app.hpp`) and every mutating action is `Loggable`, which
+  is the whole of what the journal does here. The rung's *user-facing*
+  vote-change history and undo are **not** built on it: `SessionLog::undoLast()`
+  is principal-blind and returns a detached holder no API can install into a
+  live shared instance, so `UndoLastVoteChange` is a compensating action over
+  this rung's own `db::VoteHistoryRecord` table instead — design decision 3
+  above, which resolved this before implementation started. The original
+  "journal as user feature: vote-change history and undo" framing was the
+  ladder's pre-implementation guess and is what design decision 3 overturned.
 
 ## Expected strain points
 
@@ -291,13 +353,16 @@ log table above.
   been observed, only its compilation.
 - **The polling helper must own a client-side timeout**: an unwrapped poll
   call against a hung server hangs its completion forever, which is what
-  `Bridge::setExecuteDeadline` now exists to bound. (A rate-limited server no
-  longer drops frames silently — it answers them — so the limiter is not the
-  case that motivates the timeout any more.) Every later rung inherits this
-  helper; get it right here — and **run this rung's harness
-  with `messagesPerSecond` configured ON** (a polling app is the abuse case
-  the limiter exists for; the helper's timeout is untested until the
-  limiter actually drops its frames).
+  `Bridge::setExecuteDeadline` now exists to bound. A rate-limited server no
+  longer drops frames silently — it answers them with `err "rate limited"`
+  (morph#225) — so the limiter is no longer the case that motivates the
+  timeout; a genuinely unresponsive server is. **Done:** this rung's harness
+  does run with `messagesPerSecond` configured ON (a polling app is the abuse
+  case the limiter exists for), and
+  `tests/test_shared_instance_lifecycle.cpp`'s "The real rate limiter refuses
+  an over-budget call without hanging it" proves the *answered* property end
+  to end — the over-budget call settles on its own, with the deadline no
+  longer being what saves it.
 - Poll-interval latency: two voters editing simultaneously see each other
   only on the next tick — measure and document acceptable intervals.
 - `subscribe<R>` fan-out is in-process only: verify the documented limit that
@@ -361,7 +426,7 @@ log table above.
   ones recorded before the instance died -- confirmed independently against
   the real on-disk SQLite file (`sqlite3` inspection of `poll_events`), not
   just the in-memory assertions. No epoch token was needed, exactly as
-  design decision 2 above predicts.
+  design decision 4 above predicts.
 - The event-polling helper (with its client-side timeout) is factored so
   [`kanban`](../kanban) can lift it.
   **Confirmed (Task 15):** `morph::ladder::gui::EventPoller<EventT, EventIdT>`
@@ -387,6 +452,27 @@ actions are genuinely schema-driven (`AddComment`, `FinalizePoll`,
 `MorphForms` `DynamicForm`); the rest are dedicated `PollBridge` invokables,
 for the reasons below.
 
+All three schema-driven forms bind `controller: page.pollBridge` and carry
+**no submit control of their own**: each action declares
+`static constexpr bool explicitSubmit = true`, so `schemaJson<A>()` stamps the
+top-level `x-submitMode: "explicit"` key and the renderer supplies its own
+Submit button, enabled only while the form is `ready`
+(`docs/spec/forms/forms.md`, "Explicit submit mode"). That matters because all
+three mutate and `FinalizePoll` is irreversible — the renderer's default is to
+fire on validity, which against a live controller means one dispatch per
+keystroke. This rung is the ladder's first adopter of that mode; the one
+consequence is that `PollBridge::submitIfValid` is now called only from the
+renderer's own `DynamicForm.qml`, which `QmlSurfaceAudit` does not scan, so
+`tests/test_poll_qml_bridges.cpp` records a single `allowUnbound` exemption
+saying exactly that.
+
+Observed, not inferred: `tests/test_gui_qml_smoke.cpp`'s "VoteView's three
+schema-driven forms render the shipped renderer's own Submit button" loads
+`VoteView` with the real schema document and counts three `submitButton`
+objects in the resulting item tree — with `pollBridge` still null, so what it
+counts is what the renderer built. Dropping `explicitSubmit` from any one
+action turns that into `2 == 3`.
+
 **No `gui/main.cpp`, still.** Task 16's brief scoped the desktop client's
 entry point out (`gui/*.cpp` is absent from its file list), no later task in
 this rung's plan added one, and the branch's final whole-branch review chose
@@ -405,40 +491,45 @@ actual desktop application against a real server.
 
 Known gaps:
 
-- **`DynamicForm` has no control for a JSON `array` field** (finding 031,
-  discovered during rung 2's own GUI shell). `CreatePoll::options` is
-  `std::vector<CreatePollOption>` and hits this directly, so `CreatePoll` is
+- **`DynamicForm`'s array control handles arrays of *strings* only.** The
+  control itself ships (`src/qt/forms/qml/DynamicForm.qml`: a
+  comma-separated-with-validation entry that encodes to a genuine JSON array
+  literal, `"a, b"` → `["a","b"]`), and it is deliberately scoped to
+  array-of-string — a field whose `items` are *objects* still gets that same
+  control, but every entry is encoded as a JSON string, which is not a payload
+  such a field can accept. That narrower statement, not "`DynamicForm` has no
+  control for a JSON `array` field", is what actually blocks this rung, and it
+  is the wording `gui_lib/poll_schemas.hpp` already carries.
+  `CreatePoll::options` is `std::vector<CreatePollOption>`, so `CreatePoll` is
   excluded from `poll_schemas.hpp`'s document entirely and driven instead by
   `gui/qml/CreatePollView.qml`'s own hand-written option-label list editor
   (add/remove rows), submitted through `PollBridge::createPoll(title,
   optionLabels)` — the same shape rung 2's `BulkEdit` workaround established.
-  **The same finding also blocks `SubmitVotes`/`UpdateVotes`**, whose one
-  required field beyond `participantName` is `std::vector<OneVote>` — not
-  called out by name in finding 031 itself (rung 2 has no array-of-struct
-  DTO field to have found it with), but the identical rendering gap. Both are
-  excluded from the schema document too and driven by
-  `gui/qml/VoteView.qml`'s hand-rolled per-option Yes/If-need-be/No radio
-  picker, via `PollBridge::submitVotes`/`updateVotes`.
-- **`BridgeHandler::executeJson` silently skips the payload-keyed attach
-  step on an `AllowShared` handler** — a new finding this task surfaced,
-  filed as the *executeJson skips payload-keyed attach for AllowShared
-  handlers* finding (recorded on the `application-ladder` branch; not present
-  in `docs/findings/` here).
-  `ActionExecuteRegistry::registerAction<Model, Action>` (`morph/core/bridge.hpp`)
-  closes its stored executor over the *plain* `BridgeHandler<Model>` overload
-  of `execute<Action>()`, regardless of the real handler's `Sharing`
-  argument, so `kShared` resolves `false` at that call site no matter what —
-  dispatching `OpenPoll` (this rung's one payload-keyed action) through
-  `executeJson` on an `AllowShared` handler therefore never attaches; it
-  dispatches straight to `executeVia` with whatever `currentId` the binding
-  already has, failing "handler not bound" on a fresh handler. `OpenPoll` is
-  therefore never routed through `submitIfValid`/`executeJson` anywhere in
-  this client — `PollFormsController::openPoll(pollId)` calls the templated
-  `execute<OpenPoll>()` directly instead, which resolves the real
-  `AllowShared` branch at compile time. Every other action `PollModel`
-  registers is unkeyed, so it dispatches identically either way and this gap
-  never bites them — but it is a real, general framework gap for any future
-  keyed `AllowShared` model that tries to schema-drive its own attach action.
+  **The same gap blocks `SubmitVotes`/`UpdateVotes`**, whose one required
+  field beyond `participantName` is `std::vector<OneVote>`. Both are excluded
+  from the schema document too and driven by `gui/qml/VoteView.qml`'s
+  hand-rolled per-option Yes/If-need-be/No radio picker, via
+  `PollBridge::submitVotes`/`updateVotes`.
+- **`OpenPoll` bypasses `executeJson`, and the gap that forced it is now
+  fixed.** The finding this rung surfaced was real: `ActionExecuteRegistry::
+  registerAction<Model, Action>` used to close its stored executor over the
+  *plain* `BridgeHandler<Model>` overload of `execute<Action>()` regardless of
+  the real handler's `Sharing` argument, so `kShared` resolved `false` at that
+  call site no matter what, and dispatching a payload-keyed action through
+  `executeJson` on an `AllowShared` handler silently never attached.
+  **It was fixed framework-side (morph#68)**: `registerAction` now builds one
+  executor per `Sharing` policy from the same generic-lambda template, keyed
+  by `(modelId, actionId, typeid(Sharing))`, and `executeJson` dispatches
+  through the handler's own real policy — `ActionExecuteRegistry` and the
+  out-of-line `registerAction` definition, both in
+  `include/morph/core/bridge.hpp`.
+  **What remains is this rung's own unmigrated state, not a framework gap.**
+  `PollFormsController::openPoll(pollId)` still calls the templated
+  `execute<OpenPoll>()` directly, and `submitIfValid` still refuses `OpenPoll`
+  unconditionally via its `kSchemaActions` allow-list — routing it through the
+  now-correct generic path is work nobody has done, not work anybody is
+  blocked on. Both that class's doc comment and `poll_schemas.hpp`'s already
+  say so.
 - **`PollFormsController` cannot be a verbatim copy of
   `bookmarks::gui::BookmarkFormsController`'s per-model-handler shape.**
   Every one of bookmarks' three models is plain (`NoSharing`), so which
@@ -463,16 +554,20 @@ Known gaps:
   the increment-application the Zulip pattern's `README`-level description
   suggests — acceptable at this rung's toy scale, worth reconsidering if a
   later rung's event volume makes it not.
-- **The `CreatePoll` screen is native-client-only by gate, not by absence.**
+- **The `CreatePoll` screen is native-client-only by gate, not by absence —
+  and the gate is a product decision, not a technical one.**
   `gui/qml/Main.qml`'s `nativeClient` property (default `true`) hides — not
-  merely disables — the one button that reaches `CreatePollView.qml` (see
-  design decision 6 above for why `CreatePoll` must never run from a WASM
-  tab). `gui_wasm/main_wasm.cpp` (Task 18) is what flips it, passing
-  `nativeClient: false` as an initial property. The consequence, stated
-  plainly: **the browser client cannot create a poll at all.** A WASM
-  participant either follows a `?poll=<id>` link or pastes a poll id on the
-  landing screen; some organizer on some other client had to create it, and
-  today no such client exists (see the next bullet).
+  merely disables — the one button that reaches `CreatePollView.qml`.
+  `gui_wasm/main_wasm.cpp` (Task 18) is what flips it, passing
+  `nativeClient: false` as an initial property. Design decision 6 above is the
+  justification, and it is now purely the Rallly anchor-UX split: the
+  framework hazard that entry used to cite (`assignHandlerPrimary`'s promote
+  step having no async path) is both fixed and inapplicable to `CreatePoll`,
+  which is not result-keyed and does not dispatch on a shared handler. The
+  consequence, stated plainly: **the browser client cannot create a poll at
+  all.** A WASM participant either follows a `?poll=<id>` link or pastes a
+  poll id on the landing screen; some organizer on some other client had to
+  create it, and today no such client exists (see the next bullet).
 - **No native desktop entry point exists, so nothing here has been run as an
   application.** There is no `examples/polls/gui/main.cpp`; no task in this
   rung's plan wrote one, and this fix round deliberately did not add one

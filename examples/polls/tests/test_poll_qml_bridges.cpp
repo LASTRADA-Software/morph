@@ -212,6 +212,28 @@ TEST_CASE("PollBridge exposes exactly the surface Main.qml/CreatePollView.qml/Vo
     // that header for what it does and does not catch.
     QmlSurfaceAudit audit{QStringLiteral(MORPH_LADDER_SOURCE_ROOT "/examples/polls/gui/qml")};
     audit.bind(QStringLiteral("pollBridge"), bridge);
+
+    // ── `submitIfValid`, called by QML this audit does not scan ───────────
+    // The audit's own documented blind spot ("QML the rung does not own, such
+    // as the shipped MorphForms renderer's" — testkit/qml_surface.hpp), met
+    // head on rather than worked around. VoteView.qml binds
+    // `controller: page.pollBridge` on its three DynamicForms; the *only*
+    // caller of `submitIfValid` is now DynamicForm.qml's own
+    // `form.controller.submitIfValid(form.actionType, form.previewLine)`
+    // (src/qt/forms/qml/DynamicForm.qml), which lives outside
+    // examples/polls/gui/qml and is therefore invisible to a scan rooted
+    // there.
+    //
+    // Falsifiable, not a blanket waiver: delete `PollBridge::submitIfValid`
+    // and the three forms stop submitting entirely — the behaviour is covered
+    // by this file's own `PollBridge::submitIfValid` cases below, which drive
+    // it directly. This exemption records that no *polls* .qml names it, not
+    // that nothing does.
+    audit.allowUnbound(QStringLiteral("pollBridge"), QStringLiteral("submitIfValid"),
+                       QStringLiteral("called by the shipped MorphForms renderer's own DynamicForm.qml "
+                                      "(src/qt/forms/qml/), which this audit does not scan; VoteView.qml "
+                                      "reaches it by binding `controller: page.pollBridge`"));
+
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());
     CHECK(findings.isEmpty());
@@ -234,7 +256,18 @@ TEST_CASE("PollBridge exposes exactly the surface Main.qml/CreatePollView.qml/Vo
     REQUIRE(schemas.isObject());
     for (const char* actionType : {"AddComment", "FinalizePoll", "UndoLastVoteChange"}) {
         INFO("missing schema: " << actionType);
-        CHECK(schemas.object().contains(QString::fromLatin1(actionType)));
+        REQUIRE(schemas.object().contains(QString::fromLatin1(actionType)));
+        // Every schema in this document is rendered by a DynamicForm bound to
+        // a live controller (VoteView.qml), and all three actions mutate — so
+        // each must carry `x-submitMode: "explicit"` or the renderer would
+        // auto-fire it on every keystroke that left the form valid. Asserted
+        // on the shipped document rather than on `schemaJson<A>()` alone: this
+        // is the exact JSON Main.qml hands the forms.
+        CHECK(schemas.object()
+                  .value(QString::fromLatin1(actionType))
+                  .toObject()
+                  .value(QStringLiteral("x-submitMode"))
+                  .toString() == QStringLiteral("explicit"));
     }
     CHECK(schemas.object().size() == 3);
 }
