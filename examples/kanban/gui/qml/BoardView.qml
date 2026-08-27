@@ -227,6 +227,23 @@ Item {
             text: visible ? "%1 changes could not be synced".arg(page.boardBridge.deadLetterCount) : ""
         }
 
+        // Pending-sync indicator, next to the dead-letter banner above: the
+        // dead-letter banner reports moves SyncWorker gave up on, but nothing
+        // showed moves still waiting to replay. Bound directly to
+        // boardBridge.queueDepth (a Q_PROPERTY backed by the same
+        // syncStatusChanged signal), so it tracks the offline queue live.
+        // Absent from a MORPH_BUILD_OFFLINE_SQLITE=OFF build, where
+        // boardBridge has no such property and this binding's guard keeps it
+        // hidden.
+        Label {
+            Layout.fillWidth: true
+            visible: page.boardBridge !== null && page.boardBridge.queueDepth !== undefined
+                     && page.boardBridge.queueDepth > 0
+            wrapMode: Text.Wrap
+            opacity: 0.8
+            text: visible ? "%1 changes pending sync".arg(page.boardBridge.queueDepth) : ""
+        }
+
         RowLayout {
             Layout.fillWidth: true
 
