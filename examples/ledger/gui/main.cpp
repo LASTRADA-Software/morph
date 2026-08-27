@@ -150,7 +150,8 @@ int main(int argc, char** argv) {
         // server-verified token before building anything that depends on it.
         // See this file's @file comment for why this is a direct dispatch
         // rather than a login screen.
-        authHandler = std::make_unique<::morph::bridge::BridgeHandler<ledger::AuthModel>>(ctx.bridge(), ctx.executor());
+        authHandler =
+            std::make_unique<::morph::bridge::BridgeHandler<ledger::AuthModel>>(ctx.bridge(), ctx.executor());
         authHandler->execute(ledger::Login{.username = kDevPrincipal})
             .then([&](ledger::LoginResult result) {
                 morph::session::Context session;

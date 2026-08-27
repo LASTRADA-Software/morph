@@ -44,7 +44,9 @@ constexpr std::string_view kSecret = "test-only-shared-secret";
 ///        `ScopedTokenIssuer`.
 class ScopedTokenIssuer {
 public:
-    explicit ScopedTokenIssuer(std::shared_ptr<TokenIssuer> issuer) { ledger::auth::setTokenIssuer(std::move(issuer)); }
+    explicit ScopedTokenIssuer(std::shared_ptr<TokenIssuer> issuer) {
+        ledger::auth::setTokenIssuer(std::move(issuer));
+    }
     ~ScopedTokenIssuer() { ledger::auth::setTokenIssuer(nullptr); }
     ScopedTokenIssuer(const ScopedTokenIssuer&) = delete;
     ScopedTokenIssuer& operator=(const ScopedTokenIssuer&) = delete;
@@ -216,13 +218,13 @@ TEST_CASE("A tokenless client logs in over a real RemoteServer and its token unl
     const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
 
     morph::bridge::BridgeHandler<ledger::LedgerModel, morph::bridge::AllowShared> ledgerHandler{rig.bridge(0),
-                                                                                                 rig.executor()};
+                                                                                                rig.executor()};
 
     // Without a token, a domain action is refused by the server.
     CHECK_THROWS(awaitQt(ledgerHandler.execute(ledger::OpenAccount{.ledgerId = ledgerId,
-                                                                    .name = "Checking",
-                                                                    .kind = ledger::AccountKind::Asset,
-                                                                    .currency = ledger::Currency::USD})));
+                                                                   .name = "Checking",
+                                                                   .kind = ledger::AccountKind::Asset,
+                                                                   .currency = ledger::Currency::USD})));
 
     const auto result = awaitQt(auth.execute(ledger::Login{.username = "alice"}));
     REQUIRE(result.token.hasValue());
@@ -234,11 +236,10 @@ TEST_CASE("A tokenless client logs in over a real RemoteServer and its token unl
     session.token = *result.token;
     rig.bridge(0).setDefaultSession(session);
 
-    const auto account =
-        awaitQt(ledgerHandler.execute(ledger::OpenAccount{.ledgerId = ledgerId,
-                                                           .name = "Checking",
-                                                           .kind = ledger::AccountKind::Asset,
-                                                           .currency = ledger::Currency::USD}));
+    const auto account = awaitQt(ledgerHandler.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                                                           .name = "Checking",
+                                                                           .kind = ledger::AccountKind::Asset,
+                                                                           .currency = ledger::Currency::USD}));
     REQUIRE(account.id.hasValue());
 
     const auto state = awaitQt(ledgerHandler.execute(ledger::GetLedger{.ledgerId = ledgerId}));
