@@ -59,45 +59,24 @@ TEST_CASE("Every lims bridge exposes exactly the surface gui/qml binds, and noth
     audit.bind(QStringLiteral("sampleBridge"), sampleBridge);
     audit.bind(QStringLiteral("resultBridge"), resultBridge);
 
-    // ── The two exemptions that survive, each with a mechanism ───────────
+    // ── The exemptions that survive, and the one mechanism behind them ───
     // The first run of this audit reported 15 members these two bridges
     // publish that no file under gui/qml/ binds, recorded as one undifferentiated
-    // backlog. Thirteen of them are gone: `replyReceived` on each bridge is
-    // now handled by the views (see the case below), `resultVerified` is
-    // handled by ResultEntryView.qml, and the nine remaining typed invokables
-    // and outcome signals were deleted as redundant second dispatch paths --
-    // every one of them duplicated an action the schema-driven `submitIfValid`
-    // path already carries, from a QML call site that did not exist.
+    // backlog. Thirteen of them went first: `replyReceived` on each bridge is
+    // handled by the views (see the case below), `resultVerified` is handled
+    // by ResultEntryView.qml, and the nine remaining typed invokables and
+    // outcome signals were deleted as redundant second dispatch paths -- every
+    // one of them duplicated an action the schema-driven `submitIfValid` path
+    // already carried, from a QML call site that did not exist.
     //
-    // The two below are *not* redundant, and the reason is a mechanism rather
-    // than a plan. `SamplePresenter::submitIfValid` routes both registration
-    // actions to the plain, key-less `_creator` handler, so:
-    //
-    //  - `registerClient` is the only dispatch that emits `clientRegistered`
-    //    and therefore the only thing that ever sets the `clientId` property
-    //    SampleView.qml binds; the form path emits `replyReceived` carrying
-    //    the same id as JSON and leaves the property at -1.
-    //  - `registerSample` is the only dispatch that leaves the *shared*
-    //    handler attached to the new sample (`BridgeHandler::execute`'s
-    //    `ResultKeyed` branch); through the form path the shared handler stays
-    //    unbound, so the follow-up `GetSample` fails with "handler not bound".
-    //
-    // Deleting either would delete the only working path, so each is exempted
-    // until the form path grows the same effect. Both statements are
-    // falsifiable by test rather than by opinion: make `submitIfValid`'s
-    // `RegisterClient` set `clientId`, or its `RegisterSample` attach the
-    // shared handler, and the exemption becomes stale -- which this audit
-    // reports as a finding in its own right the moment QML binds the member or
-    // the member is deleted.
-    const QString registrationPath = QStringLiteral(
-        "the only dispatch that emits clientRegistered / attaches the shared handler; "
-        "submitIfValid's key-less RegisterClient/RegisterSample path does neither");
-    for (const auto& [alias, member] : std::initializer_list<std::pair<const char*, const char*>>{
-             {"sampleBridge", "registerClient"},
-             {"sampleBridge", "registerSample"},
-         }) {
-        audit.allowUnbound(QString::fromLatin1(alias), QString::fromLatin1(member), registrationPath);
-    }
+    // The last two, `registerClient` and `registerSample`, survived until
+    // `submitIfValid` grew their two effects itself: `RegisterClient`'s reply
+    // is decoded to emit `clientRegistered` (the only thing that sets the
+    // `clientId` property SampleView.qml binds), and `RegisterSample` runs on
+    // the shared handler, so it leaves that handler attached to the new sample
+    // the same way the typed call did (`BridgeHandler::execute`'s `ResultKeyed`
+    // branch). Neither typed invokable added anything beyond that any more, so
+    // both are gone (morph#309, closing morph#287's last two exemptions).
 
     // `submitIfValid` on both bridges is called from the shipped `MorphForms`
     // renderer's QML (`src/qt/forms/qml/DynamicForm.qml`'s `submit()` and its

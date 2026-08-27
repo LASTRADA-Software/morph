@@ -28,12 +28,6 @@ SampleBridge::SampleBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExec
     });
 }
 
-void SampleBridge::registerClient(const QString& name) { _presenter.registerClient(name); }
-
-void SampleBridge::registerSample(qlonglong clientId, const QString& reference) {
-    _presenter.registerSample(ClientId{static_cast<std::int64_t>(clientId)}, reference);
-}
-
 void SampleBridge::openSample(qlonglong sampleId) {
     _presenter.openSample(SampleId{static_cast<std::int64_t>(sampleId)});
 }

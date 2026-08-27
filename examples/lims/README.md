@@ -647,30 +647,32 @@ tests instead of quietly emptying the screen.
 
 `SampleModel` is keyed, so the handler every attached action runs on is
 `AllowShared`. But an `AllowShared` handler is **not bound until it attaches
-to a key**, and `RegisterClient`/`RegisterSample` carry none — dispatching
-either on it fails with "handler not bound". This was confirmed empirically
-here before `SamplePresenter` grew a second, plain handler for exactly those
-two actions; `polls::gui::PollPresenter` reached the same conclusion for
-`CreatePoll`. `RegisterSample` needs no such help even though it too arrives
-before any key exists: it is result-keyed, so `BridgeHandler::execute`'s
-`ResultKeyed` branch runs it on an anonymous instance and promotes that
-instance to the id the result names before the completion resolves — one
-dispatch, and the shared handler is attached when it returns.
+to a key**, and `RegisterClient` carries none — dispatching it there fails
+with "handler not bound" (confirmed empirically here; `polls::gui::
+PollPresenter` reached the same conclusion for `CreatePoll`). So `submitIfValid`
+routes that one action to a second, plain `NoSharing` handler, which registers
+a fresh instance on construction and is bound immediately. `RegisterSample`
+needs no such help even though it too arrives before any key exists: it is
+result-keyed, so `BridgeHandler::execute`'s `ResultKeyed` branch runs it on an
+anonymous instance and promotes that instance to the id the result names
+before the completion resolves — one dispatch, on the *shared* handler, and
+that handler is attached when it returns.
 
-That asymmetry is why the two registration invokables survive the surface trim
-below while the other typed calls do not. `submitIfValid` routes both
-registration actions to the *plain* handler, so through the form path
-`RegisterClient` never sets the `clientId` property and `RegisterSample` never
-leaves the shared handler attached — the invokables are the only dispatch that
-does either, which is exactly what their exemptions in
-`test_lims_qml_surface.cpp` say.
+`RegisterClient`'s reply is decoded (the same glaze reflection the wire used)
+to emit `clientRegistered`, since the form path yields raw JSON rather than a
+typed result — `clientRegistered` is what sets the `clientId` property
+`SampleView.qml`'s "Latest client id" label binds (morph#309). With both
+effects on the `submitIfValid` path itself, the typed `registerClient`/
+`registerSample` invokables that morph#287 had exempted as "the only working
+path" became genuinely redundant and are gone — the surface audit in
+`test_lims_qml_surface.cpp` carries no exemption for either any more.
 
-### One dispatch path per action (morph#287)
+### One dispatch path per action (morph#287, morph#309)
 
-Both bridges published a typed invokable *and* a schema-driven form for the
-same action: `registerClient`/`registerSample`/`rejectSample`/
-`returnForRework` beside `submitIfValid("RegisterClient")` and its three
-siblings, and `captureReading`/`captureQualifier`/`resolveConflict` beside
+Both bridges used to publish a typed invokable *and* a schema-driven form for
+the same action: `rejectSample`/`returnForRework` beside
+`submitIfValid("RejectSample")` and its sibling, and `captureReading`/
+`captureQualifier`/`resolveConflict` beside
 `submitIfValid("CaptureConcentration")` and `submitIfValid("ResolveConflict")`.
 No QML called the typed half. Two paths to one action is two places for the
 behaviour to differ, and here they already did: `captureReading` took the
@@ -683,10 +685,11 @@ only `double` on this rung's QML surface, against the convention
 So the redundant half is deleted, together with the outcome signals only it
 emitted (`resultCaptured`, `conflictResolved`), the `sampleAttached` signal
 whose state `Main.qml` re-reads through `refreshResults()` instead, and the
-`bound` relay neither view handles. `rejectSample` and `returnForRework` are
-gone from `SamplePresenter` too, since nothing else called them. What survives
-is one path per action, and a QML-surface exemption list of two entries, each
-naming a mechanism rather than a backlog.
+`bound` relay neither view handles. `rejectSample`, `returnForRework`,
+`registerClient` and `registerSample` are gone from `SamplePresenter` too,
+since nothing else called them once `submitIfValid` carried their whole
+effect. What survives is one path per action, and a QML-surface exemption list
+with nothing on it.
 
 ### What the smoke test does not prove, and what covers it instead
 
