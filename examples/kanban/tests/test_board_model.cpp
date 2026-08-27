@@ -621,23 +621,32 @@ TEST_CASE("Replaying a cascaded journal entry does not re-fire the cascade", "[k
             .tasks.front()
             .id;
 
-    // The "trigger": a task moved into the Done column. A real rule would
-    // react to this by cascading into a further mutation; today nothing
-    // does, so the cascade below is appended to the log by hand.
+    // The "trigger": a task moved into the Done column. This test creates no
+    // rule, so nothing cascades from the move on its own -- deliberately, to
+    // keep the replay property below independent of the engine (see this
+    // TEST_CASE's own header comment); the cascade is appended to the log by
+    // hand instead. Task 14's "A rule firing on move-to-column adds a tag,
+    // journaled with a causal parent" case is the same shape with a real
+    // CreateRule doing the cascading.
     model.execute(kanban::MoveTaskPosition{
         .taskId = taskId, .columnId = columnId, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
 
     // Mint the trigger's own stable identity -- independent of LogEntry::seq
     // (design spec §9, docs/spec/journal/journal.md's Invariants section:
     // seq is sink-local and re-stamped on every forward, so it cannot serve
-    // as a cross-sink/cross-restart causal key). A real rules engine would
-    // mint this at the trigger entry's creation; this test mints it after
-    // the fact purely because it is constructing the cascade by hand.
+    // as a cross-sink/cross-restart causal key). The shipped rules engine
+    // mints exactly this kind of id at the trigger's own commit -- the
+    // `"boardEvent:" + event.id` in `BoardModel::execute(MoveTaskPosition)`
+    // (src/models/board_model.cpp:982); this test mints its own after the
+    // fact purely because it is constructing the cascade by hand.
     const std::string triggerCausalId = "cascade-trigger-" + projectIdStr;
 
-    // The "cascade": stands in for "assign to closer, add tag" (kanban has
-    // neither an assignee nor a tag entity yet) with an AddComment, linked
-    // to the trigger via causalParentId.
+    // The "cascade": an AddComment linked to the trigger via causalParentId,
+    // standing in for the README's illustrative "assign to closer, add tag".
+    // The tag half is real now (the engine's AddTag/RemoveTag mutations write
+    // `db::TaskTagRecord` rows); the assignee half has no entity in this rung
+    // at all. An AddComment keeps this test's assertion a plain, engine-free
+    // count of one observable row.
     ::morph::journal::LogEntry cascadeEntry;
     cascadeEntry.modelType = "BoardModel";
     cascadeEntry.entityKey = projectIdStr;
@@ -687,11 +696,15 @@ TEST_CASE("Replaying a cascaded journal entry does not re-fire the cascade", "[k
     // times (dropped) and not twice (re-fired by both replaying the
     // trigger *and* an unsuppressed rule evaluation reacting to the
     // replayed trigger, which is exactly the double-application design
-    // spec §9 rejects). There is no rules engine yet to double-fire this in
-    // practice, but the replay mechanics this test exercises -- one
-    // recorded entry in, one dispatch out -- are exactly what keeps a real
-    // cascade convergent once Phase 6 adds rule evaluation gated on
-    // `morph::journal::isReplaying()`.
+    // spec §9 rejects). The engine that could double-fire a cascade now
+    // exists and is guarded -- `BoardModel::evaluateRules` returns
+    // immediately when `morph::journal::isReplaying()`
+    // (src/models/board_model.cpp:1006), which Task 14's "Replaying a
+    // move-to-Done journal entry does not re-fire its rule" case asserts
+    // directly. What this test owns is the layer underneath that guard: the
+    // replay mechanics themselves -- one recorded entry in, one dispatch out
+    // -- which have to hold for a cascade to converge whether or not any rule
+    // is involved.
     const auto cascadeComments = std::ranges::count_if(
         replayedState.comments, [](const auto& c) { return c.body == "auto-tagged: moved to Done"; });
     CHECK(cascadeComments == 1);
