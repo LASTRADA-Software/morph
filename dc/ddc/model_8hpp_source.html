@@ -183,239 +183,306 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/ddc/model_8
 <div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>    <span class="keyword">requires</span>(M&amp; model, std::shared_ptr&lt;::morph::journal::IActionLog&gt; log, std::string key) {</div>
 <div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>        { model.attachActionLog(log, key) } -&gt; std::same_as&lt;void&gt;;</div>
 <div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>    };</div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span> </div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="comment">// ── Conditional mixin ─────────────────────────────────────────────────────────</span></div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span><span class="comment"></span> </div>
-<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="comment">/// @brief Empty base when `M` does not declare `onBackendChanged()`.</span></div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> M, <span class="keywordtype">bool</span> = BackendChangedNotifiable&lt;M&gt;&gt;</div>
-<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span><span class="keyword">struct </span>BackendChangedMixin {};</div>
-<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="comment"></span> </div>
-<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment">/// @brief Specialisation that wires `IBackendChangedSink` to `M::onBackendChanged()`.</span></div>
-<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> M&gt;</div>
-<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span><span class="keyword">struct </span>BackendChangedMixin&lt;M, true&gt; : IBackendChangedSink {<span class="comment"></span></div>
-<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span><span class="comment">    /// @brief Forwards the virtual call to the concrete model instance.</span></div>
-<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>    <span class="keywordtype">void</span> onBackendChanged()<span class="keyword"> override </span>{ <span class="keyword">static_cast&lt;</span>ModelHolder&lt;M&gt;*<span class="keyword">&gt;</span>(<span class="keyword">this</span>)-&gt;model.onBackendChanged(); }</div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span>};</div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span> </div>
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="comment">// ── Core type-erasure ─────────────────────────────────────────────────────────</span></div>
-<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="comment"></span> </div>
-<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span><span class="comment">/// @brief Type-erased wrapper that owns a single model instance.</span></div>
-<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span><span class="comment">///</span></div>
-<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span><span class="comment">/// Used internally by backends to store heterogeneous models in a single map.</span></div>
-<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span><span class="comment">// NOLINTBEGIN(cppcoreguidelines-special-member-functions)</span></div>
-<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span><span class="keyword">struct </span>IModelHolder {</div>
-<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span>    <span class="keyword">virtual</span> ~IModelHolder() = <span class="keywordflow">default</span>;</div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="comment"></span> </div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="comment">/// @brief Concept satisfied by model types that expose a model-level</span></div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span><span class="comment">///        `attachIdentity(std::string primaryKey)`.</span></div>
+<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="comment">///</span></div>
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="comment">/// A registry-constructed instance (`ModelRegistryFactory::create`, used by</span></div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span><span class="comment">/// `RemoteServer`&#39;s `register`/`attach` paths) knows its own primary key —</span></div>
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="comment">/// `env.primary` — at construction time, but nothing on that path previously</span></div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment">/// told the model itself: `ModelFactory::create&lt;Model&gt;()` default-constructs</span></div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="comment">/// it and the key only ever reached `Model::execute` inside a keyed action&#39;s</span></div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span><span class="comment">/// own payload. A model that wants to know its key once, at construction,</span></div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span><span class="comment">/// rather than re-deriving it from every action, opts in by declaring</span></div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="comment">/// `attachIdentity` with this exact shape — purely by structural convention,</span></div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment">/// the same &quot;detect the hook structurally, forward only if present&quot; shape</span></div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span><span class="comment">/// `ModelLevelActionLogAttachable`/`BackendChangedNotifiable` already</span></div>
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="comment">/// establish. This concept is what lets `ModelHolder&lt;Model&gt;::onIdentityAttached`</span></div>
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="comment">/// forward to it generically.</span></div>
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> M&gt;</div>
+<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span><span class="keyword">concept </span>ModelIdentityAttachable = <span class="keyword">requires</span>(M&amp; model, std::string key) {</div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>    { model.attachIdentity(key) } -&gt; std::same_as&lt;void&gt;;</div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span>};</div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span> </div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span><span class="comment">// ── Conditional mixin ─────────────────────────────────────────────────────────</span></div>
 <div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span><span class="comment"></span> </div>
-<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span><span class="comment">    /// @brief Returns the `std::type_index` of the concrete model type.</span></div>
-<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span>    [[nodiscard]] <span class="keyword">virtual</span> std::type_index type() const noexcept = 0;</div>
-<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span><span class="comment"></span> </div>
-<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment">    /// @brief Returns `true` if the concrete model type declares `void onBackendChanged()`.</span></div>
-<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span><span class="comment">    /// Answered by `ModelHolder&lt;Model&gt;` from the `BackendChangedNotifiable&lt;Model&gt;`</span></div>
-<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="comment">    /// concept — a compile-time constant per concrete `Model` — so a backend can</span></div>
-<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">    /// learn this once, at registration time, instead of `dynamic_cast`ing every</span></div>
-<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">    /// holder on every backend switch. See `LocalBackend::registerModel` /</span></div>
-<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span><span class="comment">    /// `LocalBackend::notifyBackendChanged` (`backend.hpp`).</span></div>
-<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span>    [[nodiscard]] virtual <span class="keywordtype">bool</span> isBackendChangeAware() const noexcept = 0;</div>
-<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="comment"></span> </div>
-<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span><span class="comment">    /// @brief Forwards to the concrete model&#39;s `onBackendChanged()`, if it declared one.</span></div>
-<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span><span class="comment">    /// Default implementation is a no-op, for holders whose model is not</span></div>
-<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span><span class="comment">    /// backend-change-aware. `ModelHolder&lt;Model&gt;` overrides this to call</span></div>
-<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span><span class="comment">    /// `Model::onBackendChanged()` when `BackendChangedNotifiable&lt;Model&gt;` holds.</span></div>
-<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span><span class="comment">    /// Called by `LocalBackend::notifyBackendChanged` through this base-class</span></div>
-<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span><span class="comment">    /// virtual — no `dynamic_cast`, no RTTI dependency on this path.</span></div>
-<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span>    virtual <span class="keywordtype">void</span> onBackendChanged() {}</div>
-<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span><span class="comment"></span> </div>
-<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span><span class="comment">    /// @brief Down-casts to a concrete `Model` reference.</span></div>
-<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span><span class="comment">    /// @tparam Model The expected concrete type.</span></div>
-<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span><span class="comment">    /// @throws std::bad_cast if the stored type is not `Model`.</span></div>
-<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
-<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>    Model&amp; into() {</div>
-<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>        <span class="keywordflow">if</span> (type() != std::type_index(<span class="keyword">typeid</span>(Model))) {</div>
-<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>            <span class="keywordflow">throw</span> std::bad_cast{};</div>
-<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span>        }</div>
-<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>ModelHolder&lt;Model&gt;*<span class="keyword">&gt;</span>(<span class="keyword">this</span>)-&gt;model;</div>
-<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>    }</div>
-<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span><span class="comment"></span> </div>
-<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span><span class="comment">    /// @brief Attaches a durable action log and this instance&#39;s stable identity.</span></div>
-<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span><span class="comment">    /// Set once, typically from the same custom `HandlerBinding::modelFactory`</span></div>
-<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span><span class="comment">    /// closure already used to inject other dependencies, or from</span></div>
-<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span><span class="comment">    /// `RemoteServer::LogProvider` for a registry-constructed remote instance</span></div>
-<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">    /// (see `docs/spec/journal/journal.md`, &quot;Attaching a log to remote</span></div>
-<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">    /// instances&quot;). @p contextKey is stamped onto every `LogEntry` this</span></div>
-<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">    /// instance produces (e.g. an account id) so log entries are identifiable</span></div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">    /// without parsing `payload`/`result` JSON.</span></div>
+<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span><span class="comment">/// @brief Empty base when `M` does not declare `onBackendChanged()`.</span></div>
+<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> M, <span class="keywordtype">bool</span> = BackendChangedNotifiable&lt;M&gt;&gt;</div>
+<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span><span class="keyword">struct </span>BackendChangedMixin {};</div>
+<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment"></span> </div>
+<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">/// @brief Specialisation that wires `IBackendChangedSink` to `M::onBackendChanged()`.</span></div>
+<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> M&gt;</div>
+<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="keyword">struct </span>BackendChangedMixin&lt;M, true&gt; : IBackendChangedSink {<span class="comment"></span></div>
+<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">    /// @brief Forwards the virtual call to the concrete model instance.</span></div>
+<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span>    <span class="keywordtype">void</span> onBackendChanged()<span class="keyword"> override </span>{ <span class="keyword">static_cast&lt;</span>ModelHolder&lt;M&gt;*<span class="keyword">&gt;</span>(<span class="keyword">this</span>)-&gt;model.onBackendChanged(); }</div>
+<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span>};</div>
+<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span> </div>
+<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="comment">// ── Core type-erasure ─────────────────────────────────────────────────────────</span></div>
+<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span><span class="comment"></span> </div>
+<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span><span class="comment">/// @brief Type-erased wrapper that owns a single model instance.</span></div>
+<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span><span class="comment">///</span></div>
+<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span><span class="comment">/// Used internally by backends to store heterogeneous models in a single map.</span></div>
+<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span><span class="comment">// NOLINTBEGIN(cppcoreguidelines-special-member-functions)</span></div>
+<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span><span class="keyword">struct </span>IModelHolder {</div>
+<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span>    <span class="keyword">virtual</span> ~IModelHolder() = <span class="keywordflow">default</span>;</div>
+<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span><span class="comment"></span> </div>
+<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span><span class="comment">    /// @brief Returns the `std::type_index` of the concrete model type.</span></div>
+<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>    [[nodiscard]] <span class="keyword">virtual</span> std::type_index type() const noexcept = 0;</div>
+<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span><span class="comment"></span> </div>
+<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span><span class="comment">    /// @brief Returns `true` if the concrete model type declares `void onBackendChanged()`.</span></div>
+<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span><span class="comment">    /// Answered by `ModelHolder&lt;Model&gt;` from the `BackendChangedNotifiable&lt;Model&gt;`</span></div>
+<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span><span class="comment">    /// concept — a compile-time constant per concrete `Model` — so a backend can</span></div>
+<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span><span class="comment">    /// learn this once, at registration time, instead of `dynamic_cast`ing every</span></div>
+<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span><span class="comment">    /// holder on every backend switch. See `LocalBackend::registerModel` /</span></div>
+<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span><span class="comment">    /// `LocalBackend::notifyBackendChanged` (`backend.hpp`).</span></div>
+<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>    [[nodiscard]] virtual <span class="keywordtype">bool</span> isBackendChangeAware() const noexcept = 0;</div>
+<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span><span class="comment"></span> </div>
+<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span><span class="comment">    /// @brief Forwards to the concrete model&#39;s `onBackendChanged()`, if it declared one.</span></div>
+<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span><span class="comment">    /// Default implementation is a no-op, for holders whose model is not</span></div>
+<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span><span class="comment">    /// backend-change-aware. `ModelHolder&lt;Model&gt;` overrides this to call</span></div>
+<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span><span class="comment">    /// `Model::onBackendChanged()` when `BackendChangedNotifiable&lt;Model&gt;` holds.</span></div>
+<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span><span class="comment">    /// Called by `LocalBackend::notifyBackendChanged` through this base-class</span></div>
+<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">    /// virtual — no `dynamic_cast`, no RTTI dependency on this path.</span></div>
+<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span>    virtual <span class="keywordtype">void</span> onBackendChanged() {}</div>
+<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment"></span> </div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">    /// @brief Down-casts to a concrete `Model` reference.</span></div>
 <div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">    /// Also forwards @p log/@p contextKey to the wrapped model&#39;s own</span></div>
-<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">    /// `attachActionLog(log, contextKey)`, if it declares one matching</span></div>
-<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span><span class="comment">    /// `ModelLevelActionLogAttachable` — see `onActionLogAttached`&#39;s doc</span></div>
-<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span><span class="comment">    /// comment for why this second call exists alongside the holder&#39;s own</span></div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span><span class="comment">    /// `_actionLog`/`_contextKey` state below.</span></div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span><span class="comment">    /// @param log        Sink entries are forwarded to. Pass a `SessionLog` to also</span></div>
-<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment">    ///                   get undo/checkpoint support.</span></div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment">    /// @param contextKey Stable identity of this model instance.</span></div>
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>    <span class="keywordtype">void</span> attachActionLog(std::shared_ptr&lt;::morph::journal::IActionLog&gt; log, std::string contextKey) {</div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>        onActionLogAttached(log, contextKey);</div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>        _actionLog = std::move(log);</div>
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>        _contextKey = std::move(contextKey);</div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>    }</div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span><span class="comment"></span> </div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment">    /// @brief Returns `true` if an action log is attached to this instance.</span></div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>    [[nodiscard]] <span class="keywordtype">bool</span> hasActionLog() const noexcept { <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span><span class="keywordtype">bool</span><span class="keyword">&gt;</span>(_actionLog); }</div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment"></span> </div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment">    /// @brief Marks this instance as outbox-managed: the model records its own</span></div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment">    ///        `LogEntry` (inside its own store&#39;s transaction) and relays it via</span></div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment">    ///        `journal::OutboxRelay`, so `recordIfAttached` must stop</span></div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">    ///        auto-appending for it — otherwise the framework&#39;s normal</span></div>
-<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">    ///        fire-after-success append would double-log the same action.</span></div>
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span><span class="comment">    /// Independent of `attachActionLog`/`hasActionLog()`: those keep reporting</span></div>
-<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span><span class="comment">    /// whatever log is attached and whether one is attached, respectively; this</span></div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">    /// flag only changes whether `recordIfAttached` actually forwards to it.</span></div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment">    /// Defaults to `false` — every instance auto-appends exactly as before</span></div>
-<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment">    /// unless a model explicitly opts in.</span></div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment">    /// @param outboxManaged `true` to suppress `recordIfAttached`; `false` to</span></div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment">    ///        restore the ordinary fire-after-success behavior.</span></div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>    <span class="keywordtype">void</span> setOutboxManaged(<span class="keywordtype">bool</span> outboxManaged) <span class="keyword">noexcept</span> { _outboxManaged = outboxManaged; }</div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment"></span> </div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">    /// @brief Returns `true` if `setOutboxManaged(true)` was called on this instance.</span></div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>    [[nodiscard]] <span class="keywordtype">bool</span> isOutboxManaged() const noexcept { <span class="keywordflow">return</span> _outboxManaged; }</div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment"></span> </div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span><span class="comment">    /// @brief Records @p entry if a log is attached and this instance is not</span></div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment">    ///        outbox-managed; no-op otherwise.</span></div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    /// Called automatically by the two places `Model::execute()` is actually</span></div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// invoked (`ActionDispatcher`&#39;s runner and `Bridge::executeVia`&#39;s local</span></div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    /// op) — model code and application code never call this directly.</span></div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    /// Overwrites `entityKey`, `principal`, and `timestampMs` on @p entry;</span></div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    /// callers only need to fill `modelType`, `actionType`, `payload`, `result`.</span></div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">    /// A no-op if no log is attached, **or** if `setOutboxManaged(true)` was</span></div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">    /// called on this instance (the model records its own entry elsewhere).</span></div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">    /// @param entry Entry to record; `seq` is assigned by the attached sink.</span></div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>    <span class="keywordtype">void</span> recordIfAttached(::morph::journal::LogEntry entry) {</div>
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>        <span class="keywordflow">if</span> (!_actionLog || _outboxManaged) {</div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>            <span class="keywordflow">return</span>;</div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>        }</div>
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a253bed67a42a440ad432356b338f5b48">entityKey</a> = _contextKey;</div>
-<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span>        <span class="keywordflow">if</span> (<span class="keyword">const</span> <span class="keyword">auto</span>* ctx = ::morph::session::current()) {</div>
-<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span>            entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30">principal</a> = ctx-&gt;principal;</div>
-<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>        }</div>
-<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07">timestampMs</a> =</div>
-<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>            std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(std::chrono::system_clock::now().time_since_epoch())</div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>                .count();</div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>        _actionLog-&gt;append(std::move(entry));</div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>    }</div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span> </div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span><span class="keyword">protected</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment">    /// @brief Forwards @p log/@p contextKey to the wrapped model&#39;s own</span></div>
-<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">    ///        `attachActionLog`, if it declares one. No-op default, for the</span></div>
-<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="comment">    ///        overwhelming majority of models that only ever rely on</span></div>
-<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="comment">    ///        `recordIfAttached`&#39;s auto-append and have no model-level state</span></div>
-<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span><span class="comment">    ///        of their own to keep a log reference in.</span></div>
-<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span><span class="comment">    /// `ModelHolder&lt;Model&gt;` overrides this exactly like `onBackendChanged()`</span></div>
-<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span><span class="comment">    /// (see `BackendChangedMixin`): detected structurally via</span></div>
-<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span><span class="comment">    /// `ModelLevelActionLogAttachable&lt;Model&gt;`, not through a shared</span></div>
-<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="comment">    /// interface a model opts into by inheritance. This closes the gap a</span></div>
-<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="comment">    /// registry-constructed remote instance would otherwise have — before</span></div>
-<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span><span class="comment">    /// this hook existed, `RemoteServer::LogProvider`&#39;s `holder-&gt;</span></div>
-<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span><span class="comment">    /// attachActionLog(log, contextKey)` populated only this holder&#39;s own</span></div>
-<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span><span class="comment">    /// `_actionLog`/`_contextKey` (used by `recordIfAttached`&#39;s auto-append),</span></div>
-<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span><span class="comment">    /// never a `Model`-level `_log`-shaped member a model reads back from</span></div>
-<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span><span class="comment">    /// itself (e.g. for an activity-stream view): the model instance</span></div>
-<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="comment">    /// `into&lt;Model&gt;()` down-casts to is default-constructed by `ModelFactory::</span></div>
-<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span><span class="comment">    /// create&lt;Model&gt;()` and never otherwise touched. A model with no</span></div>
-<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="comment">    /// `attachActionLog` of its own is entirely unaffected — this call</span></div>
-<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment">    /// resolves to the base&#39;s no-op body for it, same as before this hook</span></div>
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="comment">    /// was added.</span></div>
-<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span><span class="comment">    /// @param log        Sink entries are forwarded to.</span></div>
-<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment">    /// @param contextKey Stable identity of this model instance.</span></div>
-<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>    <span class="keyword">virtual</span> <span class="keywordtype">void</span> onActionLogAttached(<span class="keyword">const</span> std::shared_ptr&lt;::morph::journal::IActionLog&gt;&amp; log,</div>
-<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>                                     <span class="keyword">const</span> std::string&amp; contextKey) {</div>
-<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>        (void)log;</div>
-<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>        (void)contextKey;</div>
-<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span>    }</div>
-<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span> </div>
-<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="keyword">private</span>:</div>
-<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span>    std::shared_ptr&lt;::morph::journal::IActionLog&gt; _actionLog;</div>
-<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span>    std::string _contextKey;</div>
-<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span>    <span class="keywordtype">bool</span> _outboxManaged{<span class="keyword">false</span>};</div>
-<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span>};</div>
-<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span><span class="comment">// NOLINTEND(cppcoreguidelines-special-member-functions)</span></div>
-<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="comment"></span> </div>
-<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">/// @brief Concrete holder that stores a `Model` by value.</span></div>
-<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span><span class="comment">///</span></div>
-<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span><span class="comment">/// Inherits `BackendChangedMixin&lt;Model&gt;` so that backend-change notifications</span></div>
-<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="comment">/// are forwarded automatically when `Model` opts in.</span></div>
-<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
-<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span><span class="keyword">struct </span>ModelHolder : IModelHolder, BackendChangedMixin&lt;Model&gt; {<span class="comment"></span></div>
-<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span><span class="comment">    /// @brief The owned model instance.</span></div>
-<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>    Model model;</div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span><span class="comment"></span> </div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span><span class="comment">    /// @brief Constructs the model by forwarding all arguments.</span></div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>    <span class="keyword">explicit</span> ModelHolder(Args&amp;&amp;... args) : model{std::forward&lt;Args&gt;(args)...} {}</div>
-<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span><span class="comment"></span> </div>
-<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span><span class="comment">    /// @brief Returns `typeid(Model)` wrapped in a `std::type_index`.</span></div>
-<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>    [[nodiscard]] std::type_index type() const noexcept<span class="keyword"> override </span>{ <span class="keywordflow">return</span> <span class="keyword">typeid</span>(Model); }</div>
-<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span><span class="comment"></span> </div>
-<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span><span class="comment">    /// @brief Returns `BackendChangedNotifiable&lt;Model&gt;` — a compile-time constant.</span></div>
-<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>    [[nodiscard]] <span class="keywordtype">bool</span> isBackendChangeAware() const noexcept<span class="keyword"> override </span>{ <span class="keywordflow">return</span> BackendChangedNotifiable&lt;Model&gt;; }</div>
-<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span><span class="comment"></span> </div>
-<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span><span class="comment">    /// @brief Forwards to `Model::onBackendChanged()` iff `Model` declared one; no-op otherwise.</span></div>
-<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span><span class="comment">    /// This single definition is the final overrider for two unrelated base</span></div>
-<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span><span class="comment">    /// virtuals: `IModelHolder::onBackendChanged` (always), and — when `Model`</span></div>
-<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span><span class="comment">    /// is notifiable — `IBackendChangedSink::onBackendChanged`, reached via</span></div>
-<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span><span class="comment">    /// `BackendChangedMixin&lt;Model, true&gt;`. That mixin&#39;s own forwarding body</span></div>
-<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span><span class="comment">    /// becomes unreachable (shadowed by this more-derived override) but is left</span></div>
-<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span><span class="comment">    /// as-is; both call paths (`IModelHolder*` and `dynamic_cast&lt;IBackendChangedSink*&gt;`)</span></div>
-<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span><span class="comment">    /// land here.</span></div>
-<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>    <span class="keywordtype">void</span> onBackendChanged()<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (BackendChangedNotifiable&lt;Model&gt;) {</div>
-<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span>            model.onBackendChanged();</div>
-<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span>        }</div>
-<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span>    }</div>
-<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span> </div>
-<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span><span class="keyword">protected</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span><span class="comment">    /// @brief Forwards to `Model::attachActionLog(log, contextKey)` iff `Model`</span></div>
-<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span><span class="comment">    ///        declared one matching `ModelLevelActionLogAttachable`; no-op otherwise.</span></div>
-<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span>    <span class="keywordtype">void</span> onActionLogAttached(<span class="keyword">const</span> std::shared_ptr&lt;::morph::journal::IActionLog&gt;&amp; log,</div>
-<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span>                             <span class="keyword">const</span> std::string&amp; contextKey)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (ModelLevelActionLogAttachable&lt;Model&gt;) {</div>
-<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span>            model.attachActionLog(log, contextKey);</div>
-<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span>        }</div>
-<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span>    }</div>
-<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span>};</div>
-<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment"></span> </div>
-<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">/// @brief Factory that creates default-constructed `ModelHolder&lt;Model&gt;` instances.</span></div>
-<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="keyword">class </span>ModelFactory {</div>
-<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span><span class="comment">    /// @brief Creates a new `ModelHolder&lt;Model&gt;` on the heap.</span></div>
-<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span><span class="comment">    /// If a process-wide default action log is installed (see</span></div>
-<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span><span class="comment">    /// `morph::journal::setActionLog`), it is attached to the new holder</span></div>
-<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span><span class="comment">    /// automatically (with an empty `entityKey`) — this is the single</span></div>
-<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span><span class="comment">    /// construction path behind every ordinary model registration, local or</span></div>
-<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span><span class="comment">    /// remote, which is what makes &quot;set the log once in `main()`&quot; work</span></div>
-<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span><span class="comment">    /// uniformly across topologies. Callers that need a specific instance</span></div>
-<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span><span class="comment">    /// identity call `attachActionLog` again afterward to override it.</span></div>
-<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span><span class="comment">    /// @tparam Model The model type to instantiate.</span></div>
-<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span><span class="comment">    /// @return Owning pointer to the new holder.</span></div>
-<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
-<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>    <span class="keyword">static</span> std::unique_ptr&lt;IModelHolder&gt; create() {</div>
-<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span>        <span class="keyword">auto</span> holder = std::make_unique&lt;ModelHolder&lt;Model&gt;&gt;();</div>
-<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span>        <span class="keywordflow">if</span> (<span class="keyword">auto</span> log = ::morph::journal::defaultActionLog()) {</div>
-<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>            holder-&gt;attachActionLog(std::move(log), {});</div>
-<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>        }</div>
-<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span>        <span class="keywordflow">return</span> holder;</div>
-<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>    }</div>
-<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span>};</div>
-<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span> </div>
-<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>}  <span class="comment">// namespace morph::model::detail</span></div>
+<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">    /// @tparam Model The expected concrete type.</span></div>
+<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">    /// @throws std::bad_cast if the stored type is not `Model`.</span></div>
+<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
+<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>    Model&amp; into() {</div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>        <span class="keywordflow">if</span> (type() != std::type_index(<span class="keyword">typeid</span>(Model))) {</div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>            <span class="keywordflow">throw</span> std::bad_cast{};</div>
+<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span>        }</div>
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>ModelHolder&lt;Model&gt;*<span class="keyword">&gt;</span>(<span class="keyword">this</span>)-&gt;model;</div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>    }</div>
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span><span class="comment"></span> </div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span><span class="comment">    /// @brief Attaches a durable action log and this instance&#39;s stable identity.</span></div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span><span class="comment">    /// Set once, typically from the same custom `HandlerBinding::modelFactory`</span></div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span><span class="comment">    /// closure already used to inject other dependencies, or from</span></div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment">    /// `RemoteServer::LogProvider` for a registry-constructed remote instance</span></div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span><span class="comment">    /// (see `docs/spec/journal/journal.md`, &quot;Attaching a log to remote</span></div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment">    /// instances&quot;). @p contextKey is stamped onto every `LogEntry` this</span></div>
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment">    /// instance produces (e.g. an account id) so log entries are identifiable</span></div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment">    /// without parsing `payload`/`result` JSON.</span></div>
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">    /// Also forwards @p log/@p contextKey to the wrapped model&#39;s own</span></div>
+<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">    /// `attachActionLog(log, contextKey)`, if it declares one matching</span></div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment">    /// `ModelLevelActionLogAttachable` — see `onActionLogAttached`&#39;s doc</span></div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span><span class="comment">    /// comment for why this second call exists alongside the holder&#39;s own</span></div>
+<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span><span class="comment">    /// `_actionLog`/`_contextKey` state below.</span></div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">    /// @param log        Sink entries are forwarded to. Pass a `SessionLog` to also</span></div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment">    ///                   get undo/checkpoint support.</span></div>
+<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment">    /// @param contextKey Stable identity of this model instance.</span></div>
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span>    <span class="keywordtype">void</span> attachActionLog(std::shared_ptr&lt;::morph::journal::IActionLog&gt; log, std::string contextKey) {</div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>        onActionLogAttached(log, contextKey);</div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>        _actionLog = std::move(log);</div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>        _contextKey = std::move(contextKey);</div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>    }</div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="comment"></span> </div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment">    /// @brief Tells this instance its own stable primary key, once, at</span></div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span><span class="comment">    ///        construction time.</span></div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">    /// Called by `ModelRegistryFactory::create(modelId, primary)` immediately</span></div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    /// after building the holder, when @p primaryKey is non-empty — the</span></div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// registry-constructed counterpart of a model reading its key back out</span></div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    /// of every keyed action&#39;s payload. Forwards to the wrapped model&#39;s own</span></div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    /// `attachIdentity(primaryKey)`, if it declares one matching</span></div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    /// `ModelIdentityAttachable`; a no-op otherwise, for the majority of</span></div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">    /// models that have no need to know their own key ahead of the first</span></div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">    /// action that carries it.</span></div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">    /// Independent of `attachActionLog`/`_contextKey`: `contextKey` is the</span></div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="comment">    /// action log&#39;s entity-key field, `primaryKey` is the shared-instance</span></div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment">    /// directory key (see `backend.hpp`&#39;s `InstanceIdentity` for why the two</span></div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">    /// are kept as separate named fields rather than conflated) — a caller</span></div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span><span class="comment">    /// wanting both calls both.</span></div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="comment">    /// @param primaryKey Stable identity of this model instance; a no-op if empty.</span></div>
+<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span>    <span class="keywordtype">void</span> attachIdentity(std::string primaryKey) {</div>
+<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>        <span class="keywordflow">if</span> (primaryKey.empty()) {</div>
+<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>        }</div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>        onIdentityAttached(primaryKey);</div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>    }</div>
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span><span class="comment"></span> </div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment">    /// @brief Returns `true` if an action log is attached to this instance.</span></div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span>    [[nodiscard]] <span class="keywordtype">bool</span> hasActionLog() const noexcept { <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span><span class="keywordtype">bool</span><span class="keyword">&gt;</span>(_actionLog); }</div>
+<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment"></span> </div>
+<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">    /// @brief Marks this instance as outbox-managed: the model records its own</span></div>
+<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="comment">    ///        `LogEntry` (inside its own store&#39;s transaction) and relays it via</span></div>
+<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="comment">    ///        `journal::OutboxRelay`, so `recordIfAttached` must stop</span></div>
+<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span><span class="comment">    ///        auto-appending for it — otherwise the framework&#39;s normal</span></div>
+<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span><span class="comment">    ///        fire-after-success append would double-log the same action.</span></div>
+<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span><span class="comment">    /// Independent of `attachActionLog`/`hasActionLog()`: those keep reporting</span></div>
+<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span><span class="comment">    /// whatever log is attached and whether one is attached, respectively; this</span></div>
+<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="comment">    /// flag only changes whether `recordIfAttached` actually forwards to it.</span></div>
+<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="comment">    /// Defaults to `false` — every instance auto-appends exactly as before</span></div>
+<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span><span class="comment">    /// unless a model explicitly opts in.</span></div>
+<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span><span class="comment">    /// @param outboxManaged `true` to suppress `recordIfAttached`; `false` to</span></div>
+<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span><span class="comment">    ///        restore the ordinary fire-after-success behavior.</span></div>
+<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>    <span class="keywordtype">void</span> setOutboxManaged(<span class="keywordtype">bool</span> outboxManaged) <span class="keyword">noexcept</span> { _outboxManaged = outboxManaged; }</div>
+<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span><span class="comment"></span> </div>
+<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="comment">    /// @brief Returns `true` if `setOutboxManaged(true)` was called on this instance.</span></div>
+<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>    [[nodiscard]] <span class="keywordtype">bool</span> isOutboxManaged() const noexcept { <span class="keywordflow">return</span> _outboxManaged; }</div>
+<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="comment"></span> </div>
+<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment">    /// @brief Records @p entry if a log is attached and this instance is not</span></div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="comment">    ///        outbox-managed; no-op otherwise.</span></div>
+<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment">    /// Called automatically by the two places `Model::execute()` is actually</span></div>
+<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span><span class="comment">    /// invoked (`ActionDispatcher`&#39;s runner and `Bridge::executeVia`&#39;s local</span></div>
+<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span><span class="comment">    /// op) — model code and application code never call this directly.</span></div>
+<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span><span class="comment">    /// Overwrites `entityKey`, `principal`, and `timestampMs` on @p entry;</span></div>
+<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span><span class="comment">    /// callers only need to fill `modelType`, `actionType`, `payload`, `result`.</span></div>
+<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span><span class="comment">    /// A no-op if no log is attached, **or** if `setOutboxManaged(true)` was</span></div>
+<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment">    /// called on this instance (the model records its own entry elsewhere).</span></div>
+<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// @param entry Entry to record; `seq` is assigned by the attached sink.</span></div>
+<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span>    <span class="keywordtype">void</span> recordIfAttached(::morph::journal::LogEntry entry) {</div>
+<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span>        <span class="keywordflow">if</span> (!_actionLog || _outboxManaged) {</div>
+<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span>        }</div>
+<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a253bed67a42a440ad432356b338f5b48">entityKey</a> = _contextKey;</div>
+<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span>        <span class="keywordflow">if</span> (<span class="keyword">const</span> <span class="keyword">auto</span>* ctx = ::morph::session::current()) {</div>
+<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span>            entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30">principal</a> = ctx-&gt;principal;</div>
+<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span>        }</div>
+<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07">timestampMs</a> =</div>
+<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span>            std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(std::chrono::system_clock::now().time_since_epoch())</div>
+<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span>                .count();</div>
+<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span>        _actionLog-&gt;append(std::move(entry));</div>
+<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span>    }</div>
+<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span> </div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span><span class="keyword">protected</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span><span class="comment">    /// @brief Forwards @p log/@p contextKey to the wrapped model&#39;s own</span></div>
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span><span class="comment">    ///        `attachActionLog`, if it declares one. No-op default, for the</span></div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span><span class="comment">    ///        overwhelming majority of models that only ever rely on</span></div>
+<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span><span class="comment">    ///        `recordIfAttached`&#39;s auto-append and have no model-level state</span></div>
+<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span><span class="comment">    ///        of their own to keep a log reference in.</span></div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span><span class="comment">    /// `ModelHolder&lt;Model&gt;` overrides this exactly like `onBackendChanged()`</span></div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span><span class="comment">    /// (see `BackendChangedMixin`): detected structurally via</span></div>
+<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span><span class="comment">    /// `ModelLevelActionLogAttachable&lt;Model&gt;`, not through a shared</span></div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span><span class="comment">    /// interface a model opts into by inheritance. This closes the gap a</span></div>
+<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span><span class="comment">    /// registry-constructed remote instance would otherwise have — before</span></div>
+<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span><span class="comment">    /// this hook existed, `RemoteServer::LogProvider`&#39;s `holder-&gt;</span></div>
+<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span><span class="comment">    /// attachActionLog(log, contextKey)` populated only this holder&#39;s own</span></div>
+<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span><span class="comment">    /// `_actionLog`/`_contextKey` (used by `recordIfAttached`&#39;s auto-append),</span></div>
+<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span><span class="comment">    /// never a `Model`-level `_log`-shaped member a model reads back from</span></div>
+<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span><span class="comment">    /// itself (e.g. for an activity-stream view): the model instance</span></div>
+<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span><span class="comment">    /// `into&lt;Model&gt;()` down-casts to is default-constructed by `ModelFactory::</span></div>
+<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span><span class="comment">    /// create&lt;Model&gt;()` and never otherwise touched. A model with no</span></div>
+<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span><span class="comment">    /// `attachActionLog` of its own is entirely unaffected — this call</span></div>
+<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span><span class="comment">    /// resolves to the base&#39;s no-op body for it, same as before this hook</span></div>
+<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span><span class="comment">    /// was added.</span></div>
+<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span><span class="comment">    /// @param log        Sink entries are forwarded to.</span></div>
+<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span><span class="comment">    /// @param contextKey Stable identity of this model instance.</span></div>
+<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span>    <span class="keyword">virtual</span> <span class="keywordtype">void</span> onActionLogAttached(<span class="keyword">const</span> std::shared_ptr&lt;::morph::journal::IActionLog&gt;&amp; log,</div>
+<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span>                                     <span class="keyword">const</span> std::string&amp; contextKey) {</div>
+<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span>        (void)log;</div>
+<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span>        (void)contextKey;</div>
+<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span>    }</div>
+<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span><span class="comment"></span> </div>
+<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span><span class="comment">    /// @brief Forwards @p primaryKey to the wrapped model&#39;s own</span></div>
+<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span><span class="comment">    ///        `attachIdentity`, if it declares one. No-op default, for models</span></div>
+<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span><span class="comment">    ///        with no need to know their own key ahead of the first action</span></div>
+<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span><span class="comment">    ///        that carries it.</span></div>
+<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment">    /// `ModelHolder&lt;Model&gt;` overrides this exactly like `onActionLogAttached`:</span></div>
+<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">    /// detected structurally via `ModelIdentityAttachable&lt;Model&gt;`, not</span></div>
+<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">    /// through a shared interface a model opts into by inheritance. A model</span></div>
+<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="comment">    /// with no `attachIdentity` of its own is entirely unaffected — this call</span></div>
+<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span><span class="comment">    /// resolves to this no-op body for it.</span></div>
+<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span><span class="comment">    /// @param primaryKey Stable identity of this model instance; never empty</span></div>
+<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span><span class="comment">    ///                    (the public `attachIdentity` filters that case out).</span></div>
+<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>    <span class="keyword">virtual</span> <span class="keywordtype">void</span> onIdentityAttached(<span class="keyword">const</span> std::string&amp; primaryKey) { (void)primaryKey; }</div>
+<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span> </div>
+<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>    std::shared_ptr&lt;::morph::journal::IActionLog&gt; _actionLog;</div>
+<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>    std::string _contextKey;</div>
+<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>    <span class="keywordtype">bool</span> _outboxManaged{<span class="keyword">false</span>};</div>
+<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>};</div>
+<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span><span class="comment">// NOLINTEND(cppcoreguidelines-special-member-functions)</span></div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span><span class="comment"></span> </div>
+<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span><span class="comment">/// @brief Concrete holder that stores a `Model` by value.</span></div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span><span class="comment">///</span></div>
+<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span><span class="comment">/// Inherits `BackendChangedMixin&lt;Model&gt;` so that backend-change notifications</span></div>
+<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span><span class="comment">/// are forwarded automatically when `Model` opts in.</span></div>
+<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
+<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span><span class="keyword">struct </span>ModelHolder : IModelHolder, BackendChangedMixin&lt;Model&gt; {<span class="comment"></span></div>
+<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span><span class="comment">    /// @brief The owned model instance.</span></div>
+<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>    Model model;</div>
+<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span><span class="comment"></span> </div>
+<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span><span class="comment">    /// @brief Constructs the model by forwarding all arguments.</span></div>
+<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
+<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>    <span class="keyword">explicit</span> ModelHolder(Args&amp;&amp;... args) : model{std::forward&lt;Args&gt;(args)...} {}</div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span><span class="comment"></span> </div>
+<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span><span class="comment">    /// @brief Returns `typeid(Model)` wrapped in a `std::type_index`.</span></div>
+<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>    [[nodiscard]] std::type_index type() const noexcept<span class="keyword"> override </span>{ <span class="keywordflow">return</span> <span class="keyword">typeid</span>(Model); }</div>
+<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span><span class="comment"></span> </div>
+<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span><span class="comment">    /// @brief Returns `BackendChangedNotifiable&lt;Model&gt;` — a compile-time constant.</span></div>
+<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>    [[nodiscard]] <span class="keywordtype">bool</span> isBackendChangeAware() const noexcept<span class="keyword"> override </span>{ <span class="keywordflow">return</span> BackendChangedNotifiable&lt;Model&gt;; }</div>
+<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span><span class="comment"></span> </div>
+<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span><span class="comment">    /// @brief Forwards to `Model::onBackendChanged()` iff `Model` declared one; no-op otherwise.</span></div>
+<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span><span class="comment">    /// This single definition is the final overrider for two unrelated base</span></div>
+<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span><span class="comment">    /// virtuals: `IModelHolder::onBackendChanged` (always), and — when `Model`</span></div>
+<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span><span class="comment">    /// is notifiable — `IBackendChangedSink::onBackendChanged`, reached via</span></div>
+<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span><span class="comment">    /// `BackendChangedMixin&lt;Model, true&gt;`. That mixin&#39;s own forwarding body</span></div>
+<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span><span class="comment">    /// becomes unreachable (shadowed by this more-derived override) but is left</span></div>
+<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span><span class="comment">    /// as-is; both call paths (`IModelHolder*` and `dynamic_cast&lt;IBackendChangedSink*&gt;`)</span></div>
+<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span><span class="comment">    /// land here.</span></div>
+<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span>    <span class="keywordtype">void</span> onBackendChanged()<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (BackendChangedNotifiable&lt;Model&gt;) {</div>
+<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span>            model.onBackendChanged();</div>
+<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span>        }</div>
+<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span>    }</div>
+<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span> </div>
+<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span><span class="keyword">protected</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span><span class="comment">    /// @brief Forwards to `Model::attachActionLog(log, contextKey)` iff `Model`</span></div>
+<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span><span class="comment">    ///        declared one matching `ModelLevelActionLogAttachable`; no-op otherwise.</span></div>
+<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span>    <span class="keywordtype">void</span> onActionLogAttached(<span class="keyword">const</span> std::shared_ptr&lt;::morph::journal::IActionLog&gt;&amp; log,</div>
+<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span>                             <span class="keyword">const</span> std::string&amp; contextKey)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (ModelLevelActionLogAttachable&lt;Model&gt;) {</div>
+<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>            model.attachActionLog(log, contextKey);</div>
+<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>        }</div>
+<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span>    }</div>
+<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span><span class="comment"></span> </div>
+<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span><span class="comment">    /// @brief Forwards to `Model::attachIdentity(primaryKey)` iff `Model`</span></div>
+<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span><span class="comment">    ///        declared one matching `ModelIdentityAttachable`; no-op otherwise.</span></div>
+<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span>    <span class="keywordtype">void</span> onIdentityAttached(<span class="keyword">const</span> std::string&amp; primaryKey)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (ModelIdentityAttachable&lt;Model&gt;) {</div>
+<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span>            model.attachIdentity(primaryKey);</div>
+<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span>        }</div>
+<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span>    }</div>
+<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span>};</div>
+<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span><span class="comment"></span> </div>
+<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span><span class="comment">/// @brief Factory that creates default-constructed `ModelHolder&lt;Model&gt;` instances.</span></div>
+<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span><span class="keyword">class </span>ModelFactory {</div>
+<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span><span class="comment">    /// @brief Creates a new `ModelHolder&lt;Model&gt;` on the heap.</span></div>
+<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span><span class="comment">    /// If a process-wide default action log is installed (see</span></div>
+<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span><span class="comment">    /// `morph::journal::setActionLog`), it is attached to the new holder</span></div>
+<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span><span class="comment">    /// automatically (with an empty `entityKey`) — this is the single</span></div>
+<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span><span class="comment">    /// construction path behind every ordinary model registration, local or</span></div>
+<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span><span class="comment">    /// remote, which is what makes &quot;set the log once in `main()`&quot; work</span></div>
+<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span><span class="comment">    /// uniformly across topologies. Callers that need a specific instance</span></div>
+<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span><span class="comment">    /// identity call `attachActionLog` again afterward to override it.</span></div>
+<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span><span class="comment">    /// @tparam Model The model type to instantiate.</span></div>
+<div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span><span class="comment">    /// @return Owning pointer to the new holder.</span></div>
+<div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
+<div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span>    <span class="keyword">static</span> std::unique_ptr&lt;IModelHolder&gt; create() {</div>
+<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span>        <span class="keyword">auto</span> holder = std::make_unique&lt;ModelHolder&lt;Model&gt;&gt;();</div>
+<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span>        <span class="keywordflow">if</span> (<span class="keyword">auto</span> log = ::morph::journal::defaultActionLog()) {</div>
+<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span>            holder-&gt;attachActionLog(std::move(log), {});</div>
+<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span>        }</div>
+<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span>        <span class="keywordflow">return</span> holder;</div>
+<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span>    }</div>
+<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span>};</div>
+<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span> </div>
+<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span>}  <span class="comment">// namespace morph::model::detail</span></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_a0179dc557393efbb5572f4609b651b30"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30">morph::journal::LogEntry::principal</a></div><div class="ttdeci">std::string principal</div><div class="ttdoc">Auth principal from morph::session::current(), if any. Empty if unset.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00092">action_log.hpp:92</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_a253bed67a42a440ad432356b338f5b48"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a253bed67a42a440ad432356b338f5b48">morph::journal::LogEntry::entityKey</a></div><div class="ttdeci">std::string entityKey</div><div class="ttdoc">Stable identity of the model instance (e.g. an account id), stamped from the value passed to attachAc...</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00048">action_log.hpp:48</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_ab965e19dcd3a6526e4d17e898bd69a07"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07">morph::journal::LogEntry::timestampMs</a></div><div class="ttdeci">int64_t timestampMs</div><div class="ttdoc">Wall-clock time of execution, milliseconds since the Unix epoch.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00095">action_log.hpp:95</a></div></div>
