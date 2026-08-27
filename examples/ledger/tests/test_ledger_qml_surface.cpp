@@ -78,21 +78,22 @@ TEST_CASE("Every ledger bridge exposes exactly the surface gui/qml binds, and no
     // member that has since been deleted, or one QML has since bound, fails
     // this test (testkit/qml_surface.hpp). It can only shrink deliberately,
     // and #239 closes when it is empty.
+    // `busyChanged` is not listed alongside `busy` below: the audit treats a
+    // property's NOTIFY signal as covered whenever the property itself is
+    // exempted, so a separate exemption for the signal would be redundant
+    // (testkit/qml_surface.hpp) and this test would fail on its own backlog.
     const QString backlog = QStringLiteral("unbound bridge surface, tracked in morph#239");
     for (const auto& [alias, member] : std::initializer_list<std::pair<const char*, const char*>>{
              {"ledgerBridge", "busy"},
-             {"ledgerBridge", "busyChanged"},
              {"ledgerBridge", "refresh"},
              {"ledgerBridge", "undoTransaction"},
              {"budgetBridge", "busy"},
-             {"budgetBridge", "busyChanged"},
              {"budgetBridge", "categoryCreated"},
              {"budgetBridge", "budgetCreated"},
              {"budgetBridge", "limitSet"},
              {"budgetBridge", "lastBudgetId"},
              {"budgetBridge", "linkAccount"},
              {"ruleBridge", "busy"},
-             {"ruleBridge", "busyChanged"},
              {"ruleBridge", "ruleCreated"},
              {"ruleBridge", "ruleUpdated"},
          }) {
