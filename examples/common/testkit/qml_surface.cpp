@@ -618,19 +618,24 @@ QStringList QmlSurfaceAudit::run() const {
             findings.append(
                 QStringLiteral("%1::%2 is a Q_PROPERTY no scanned .qml reads (%3)").arg(cls, property, where));
         }
+        // A property's NOTIFY signal is covered by reading the property: QML
+        // binds the property directly and the engine subscribes to the
+        // notification on its own behalf. Computed for every signal up
+        // front, before `exempt()` is consulted below, so an exempted
+        // signal is tested for coverage exactly like any other — otherwise
+        // an exemption on a transitively-covered signal would short-circuit
+        // out of this sweep before coverage is even checked, and the
+        // staleness sweep further down (which reuses this set) would have
+        // no way to see the redundancy either.
+        QSet<QString> notifyCoveredSignals;
+        for (auto it = surface.notifyByProperty.constBegin(); it != surface.notifyByProperty.constEnd(); ++it) {
+            if (readProperties.contains(it.key()) || exempt(it.key())) {
+                notifyCoveredSignals.insert(it.value());
+            }
+        }
+
         for (const QString& name : surface.signalNames) {
-            if (handledSignals.contains(name) || exempt(name)) {
-                continue;
-            }
-            // A property's NOTIFY signal is covered by reading the property.
-            bool isCoveredNotify = false;
-            for (auto it = surface.notifyByProperty.constBegin(); it != surface.notifyByProperty.constEnd(); ++it) {
-                if (it.value() == name && (readProperties.contains(it.key()) || exempt(it.key()))) {
-                    isCoveredNotify = true;
-                    break;
-                }
-            }
-            if (isCoveredNotify) {
+            if (handledSignals.contains(name) || notifyCoveredSignals.contains(name) || exempt(name)) {
                 continue;
             }
             findings.append(QStringLiteral("%1::%2 is a signal no scanned .qml handles (%3)").arg(cls, name, where));
@@ -661,7 +666,7 @@ QStringList QmlSurfaceAudit::run() const {
                 continue;
             }
             if (readProperties.contains(exemption.member) || handledSignals.contains(exemption.member) ||
-                calledMethods.contains(exemption.member)) {
+                calledMethods.contains(exemption.member) || notifyCoveredSignals.contains(exemption.member)) {
                 findings.append(
                     QStringLiteral("unnecessary allowUnbound('%1', '%2', \"%3\"): a scanned .qml does bind it")
                         .arg(exemption.alias, exemption.member, exemption.reason));

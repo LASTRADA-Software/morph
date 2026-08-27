@@ -18,9 +18,23 @@ ColumnLayout {
     // exactness in the last three lines of the path and drift past 2^53. The
     // exact triple is still published for a view that needs the parts.
 
-    Label {
-        text: qsTr("Accounts")
-        font.bold: true
+    RowLayout {
+        Label {
+            text: qsTr("Accounts")
+            font.bold: true
+        }
+        BusyIndicator {
+            running: view.bridge ? view.bridge.busy : false
+            visible: running
+            implicitWidth: 20
+            implicitHeight: 20
+        }
+        Item { Layout.fillWidth: true }
+        Button {
+            text: qsTr("Refresh")
+            enabled: view.bridge !== null
+            onClicked: view.bridge.refresh()
+        }
     }
 
     ListView {
@@ -76,6 +90,23 @@ ColumnLayout {
             enabled: view.bridge !== null && amountMinor.acceptableInput
             onClicked: view.bridge.storeTransaction(fromId.text, toId.text,
                                                     parseInt(amountMinor.text, 10), description.text)
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        TextField {
+            id: undoJournalId
+            placeholderText: qsTr("Journal id to undo")
+            Layout.fillWidth: true
+        }
+        Button {
+            text: qsTr("Undo")
+            enabled: view.bridge !== null && undoJournalId.text.length > 0
+            onClicked: {
+                view.bridge.undoTransaction(undoJournalId.text);
+                undoJournalId.text = "";
+            }
         }
     }
 

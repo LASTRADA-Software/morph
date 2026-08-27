@@ -26,7 +26,39 @@ ColumnLayout {
         return report[prefix + "Text"];
     }
 
-    Label { text: qsTr("Budgets"); font.bold: true }
+    RowLayout {
+        Label { text: qsTr("Budgets"); font.bold: true }
+        BusyIndicator {
+            running: view.bridge ? view.bridge.busy : false
+            visible: running
+            implicitWidth: 20
+            implicitHeight: 20
+        }
+    }
+
+    // A single status line for the three create/set gestures below, told
+    // apart by which one last fired. Mirrors ReportView's "answer arrives
+    // asynchronously" framing: each of these calls returns nothing to bind,
+    // only a signal, so without this line succeeding produced no visible
+    // effect distinguishable from doing nothing.
+    Label {
+        id: statusLabel
+        Layout.fillWidth: true
+        opacity: 0.7
+        text: ""
+    }
+    Connections {
+        target: view.bridge
+        function onCategoryCreated() {
+            statusLabel.text = qsTr("Category created (id %1)").arg(view.bridge.lastCategoryId());
+        }
+        function onBudgetCreated() {
+            statusLabel.text = qsTr("Budget created (id %1)").arg(view.bridge.lastBudgetId());
+        }
+        function onLimitSet() {
+            statusLabel.text = qsTr("Limit set");
+        }
+    }
 
     RowLayout {
         Layout.fillWidth: true
@@ -44,12 +76,27 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
+        TextField { id: linkAccountId; placeholderText: qsTr("Account id"); Layout.fillWidth: true }
+        TextField { id: linkCategoryId; placeholderText: qsTr("Category id"); Layout.fillWidth: true }
+        Button {
+            text: qsTr("Link account to category")
+            enabled: view.bridge !== null && linkAccountId.text.length > 0 && linkCategoryId.text.length > 0
+            onClicked: view.bridge.linkAccount(linkAccountId.text, linkCategoryId.text)
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
         TextField { id: budgetName; placeholderText: qsTr("Budget name"); Layout.fillWidth: true }
         TextField { id: budgetCategoryId; placeholderText: qsTr("Category id"); Layout.fillWidth: true }
         Button {
             text: qsTr("Create budget")
             enabled: view.bridge !== null && budgetName.text.length > 0
             onClicked: view.bridge.createBudget(budgetName.text, budgetCategoryId.text)
+        }
+        Label {
+            text: view.bridge && view.bridge.lastBudgetId() ? qsTr("id %1").arg(view.bridge.lastBudgetId()) : ""
+            opacity: 0.7
         }
     }
 

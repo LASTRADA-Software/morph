@@ -11,7 +11,15 @@ ColumnLayout {
     property var bridge: null
     spacing: 8
 
-    Label { text: qsTr("Categorisation rules"); font.bold: true }
+    RowLayout {
+        Label { text: qsTr("Categorisation rules"); font.bold: true }
+        BusyIndicator {
+            running: view.bridge ? view.bridge.busy : false
+            visible: running
+            implicitWidth: 20
+            implicitHeight: 20
+        }
+    }
 
     Label {
         Layout.fillWidth: true
@@ -22,6 +30,23 @@ ColumnLayout {
         // classified. The version is how a reader tells the two apart.
         text: qsTr("Editing a rule bumps its version. Transactions already categorised keep the version "
                  + "that categorised them — an edit never rewrites history.")
+    }
+
+    // `ruleCreated`/`ruleUpdated` carry no payload of their own -- the row
+    // they describe is `lastRule`, already bound below -- so this status
+    // line exists only to tell the two outcomes apart at the moment they
+    // happen, which the "Last rule" box alone cannot do (it looks the same
+    // either way once both have landed).
+    Label {
+        id: ruleStatusLabel
+        Layout.fillWidth: true
+        opacity: 0.7
+        text: ""
+    }
+    Connections {
+        target: view.bridge
+        function onRuleCreated() { ruleStatusLabel.text = qsTr("Rule created"); }
+        function onRuleUpdated() { ruleStatusLabel.text = qsTr("Rule updated"); }
     }
 
     RowLayout {
