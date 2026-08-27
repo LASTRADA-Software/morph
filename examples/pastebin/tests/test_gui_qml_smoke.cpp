@@ -52,8 +52,7 @@ TEST_CASE("pastebin's QML engine loads Main.qml and creates a root object with n
     REQUIRE_FALSE(engine.rootObjects().isEmpty());
 }
 
-TEST_CASE("Main.qml's create form renders the shipped renderer's own Submit button",
-          "[pastebin][gui][qml-smoke]") {
+TEST_CASE("Main.qml's create form renders the shipped renderer's own Submit button", "[pastebin][gui][qml-smoke]") {
     // The load above passes no `schemas` property, so the create DynamicForm
     // has no schema to render and this cannot be observed there. Loaded once
     // more with the real document instead, which is the only way to see the

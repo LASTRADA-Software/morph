@@ -113,7 +113,8 @@ TEST_CASE("SampleView's four schema-driven forms render the shipped renderer's o
     //
     // Still an engine-load test per examples/TESTING.md presenter rule 6 --
     // it queries the object tree, and synthesizes no input events.
-    const QJsonDocument document = QJsonDocument::fromJson(QString::fromStdString(lims::gui::limsSchemasJson()).toUtf8());
+    const QJsonDocument document =
+        QJsonDocument::fromJson(QString::fromStdString(lims::gui::limsSchemasJson()).toUtf8());
     REQUIRE(document.isObject());
 
     QQmlApplicationEngine engine;
@@ -131,7 +132,8 @@ TEST_CASE("SampleView's four schema-driven forms render the shipped renderer's o
 TEST_CASE("ResultEntryView's two schema-driven forms render the shipped renderer's own Submit button",
           "[lims][gui][qml-smoke]") {
     // Same reasoning as SampleView above.
-    const QJsonDocument document = QJsonDocument::fromJson(QString::fromStdString(lims::gui::limsSchemasJson()).toUtf8());
+    const QJsonDocument document =
+        QJsonDocument::fromJson(QString::fromStdString(lims::gui::limsSchemasJson()).toUtf8());
     REQUIRE(document.isObject());
 
     QQmlApplicationEngine engine;
