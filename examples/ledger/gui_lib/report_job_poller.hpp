@@ -11,6 +11,7 @@
 
 #ifndef Q_MOC_RUN
 #include <morph/core/bridge.hpp>
+#include <morph/core/callback_scope.hpp>
 
 #include "ledger/dto/report_dto.hpp"
 #endif
@@ -33,8 +34,8 @@ namespace ledger::gui {
 /// `EventPoller` would mean a cursor that never advances, a `resume()` that
 /// must never be called, and an event vector that is always empty or a
 /// single-element stand-in for a completion. The two share a *pattern* -- the
-/// `Dispatch` closure shape, the `_liveness` weak token, `&_timer` as the
-/// connection's context object -- and reusing the pattern while writing a
+/// `Dispatch` closure shape, the `CallbackScope`-gated callback, `&_timer` as
+/// the connection's context object -- and reusing the pattern while writing a
 /// distinct class is what the design brief asks for.
 ///
 /// A finished job never restarts. There is no `resume()`: unlike an event
@@ -102,12 +103,20 @@ private:
     bool _finished{false};
     QTimer _timer;
 
-    /// @brief Declared last, destroyed first: an in-flight completion that
-    ///        resolves after this poller dies checks the expired weak form of
-    ///        this token and returns instead of touching freed members. Same
-    ///        token pattern, and same declared-last requirement, as
-    ///        `EventPoller`'s own.
-    std::shared_ptr<const void> _liveness{std::make_shared<char>()};
+    /// @brief Lifetime gate for `pollOnce()`'s `Dispatch` reply callbacks.
+    ///
+    /// `ReportJobPoller` is not a `QObject`; `_dispatch`'s `onSuccess`/
+    /// `onError` are plain `std::function`-based callbacks with no
+    /// Qt-provided auto-disconnect, and both capture raw `this`.
+    /// `morph::async::CallbackScope` (`docs/spec/core/callback_scope.md`) is
+    /// the framework's general answer, composing with this class exactly as
+    /// it would with a `QObject` — it is a data member, not a base class.
+    ///
+    /// **Declared last, destroyed first**: an in-flight reply that resolves
+    /// after this poller dies finds its token inactive and returns instead of
+    /// touching freed members. Same declared-last requirement as
+    /// `EventPoller`'s own `_liveness`.
+    ::morph::async::CallbackScope _callbacks;
 };
 
 }  // namespace ledger::gui

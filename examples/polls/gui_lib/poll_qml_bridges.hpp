@@ -14,6 +14,7 @@
 // and doc comment for the full rationale.
 #ifndef Q_MOC_RUN
 #include <morph/core/bridge.hpp>
+#include <morph/core/callback_scope.hpp>
 #include <morph/core/executor.hpp>
 
 #include "gui/event_poller.hpp"
@@ -213,27 +214,37 @@ private:
     ///        one poll tick — see `.cpp`'s `onEventApplied`.
     QTimer _refreshDebounce;
 
-    /// @brief Weak-observable proof this object still exists.
+    /// @brief Lifetime gate for the `this`-capturing completion callbacks
+    ///        `openPoll`, `refresh`, `submitVotes`, `updateVotes`,
+    ///        `submitIfValid` and `startPolling`'s `Dispatch`/`ApplyEvent`/
+    ///        `OnFatalError` closures all attach.
     ///
-    /// `PollBridge` is a `QObject`, but its `.then()`/`.onError()` completion
-    /// callbacks (`openPoll`, `refresh`, `submitVotes`, `updateVotes`,
-    /// `submitIfValid`, `startPolling`'s `Dispatch`) are plain
-    /// `std::function`-based `Completion<T>` continuations, not
-    /// `QObject::connect`-based signal/slot connections — Qt's own
-    /// auto-disconnect-on-destruction machinery does not apply to them at
-    /// all. Every one of those callbacks captures raw `this`; destroying a
-    /// `PollBridge` while any of them is still in flight (an ordinary GUI
-    /// case — a view closing mid-request) would otherwise write into freed
-    /// memory. Same pattern, same reasoning, and the same **must remain the
-    /// last declared member** requirement as
+    /// `PollBridge` is a `QObject`, but those callbacks are plain
+    /// `std::function`-based `Completion<T>` continuations (or `EventPoller`
+    /// callback parameters), not `QObject::connect`-based signal/slot
+    /// connections — Qt's own auto-disconnect-on-destruction machinery does
+    /// not apply to them at all. Destroying a `PollBridge` while any of them
+    /// is still in flight (an ordinary GUI case — a view closing
+    /// mid-request) would otherwise write into freed memory through the
+    /// captured `this`. `morph::async::CallbackScope`
+    /// (`docs/spec/core/callback_scope.md`) is the framework's general
+    /// answer, used here exactly as `morph::bridge::Bridge::_callbacks`
+    /// (`include/morph/core/bridge.hpp`) and
     /// `morph::ladder::gui::EventPoller::_liveness`
-    /// (`examples/common/gui/event_poller.hpp`) and
-    /// `morph::bridge::Bridge::_liveness` (`include/morph/core/bridge.hpp`):
-    /// members are destroyed in reverse declaration order, so the
-    /// last-declared member is destroyed first, and the weak_ptr each
-    /// callback captures observes that before anything else it might touch
-    /// has been torn down.
-    std::shared_ptr<const void> _liveness{std::make_shared<char>()};
+    /// (`examples/common/gui/event_poller.hpp`) use their own.
+    ///
+    /// **Declared last on purpose**, and it must stay last: members are
+    /// destroyed in reverse declaration order, so the scope closes before
+    /// `_presenter`/`_forms`/`_poller`/`_bridge` — everything a gated
+    /// callback might touch — are torn down. Anything added to this class
+    /// goes *above* this line.
+    ///
+    /// `requestStop()`/`reset()` are deliberately not called anywhere: each
+    /// dispatch here answers a specific QML invocation the view wants a reply
+    /// to, with no "user navigated away" or "supersede the previous query"
+    /// moment. Destruction is the only event that must suppress a callback,
+    /// and `~CallbackScope()` is what handles it.
+    ::morph::async::CallbackScope _callbacks;
 };
 
 }  // namespace polls::gui

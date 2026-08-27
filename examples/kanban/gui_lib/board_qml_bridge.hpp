@@ -22,6 +22,7 @@
 #ifndef Q_MOC_RUN
 #include <QNetworkAccessManager>
 #include <morph/core/bridge.hpp>
+#include <morph/core/callback_scope.hpp>
 #include <morph/core/executor.hpp>
 
 #include "board_presenter.hpp"
@@ -77,7 +78,7 @@ namespace kanban::gui {
 /// one order the design allows.
 ///
 /// @par Member declaration order is load-bearing
-/// `_presenter` must be declared **before** `_poller`, and `_liveness` must
+/// `_presenter` must be declared **before** `_poller`, and `_callbacks` must
 /// stay the **last** declared member — same requirement, same reasoning, as
 /// `polls::gui::PollBridge` (`examples/polls/gui_lib/poll_qml_bridges.hpp`,
 /// see its own doc comment's identical section). `EventPoller`'s own
@@ -544,9 +545,9 @@ private:
     /// Declaring `_networkMonitor` *before* them (destroyed *after* them)
     /// would let a probe-thread callback still in flight during teardown
     /// reach an already-destroyed `_reconnectCoordinator` through a
-    /// `unique_ptr` that had already been reset to null -- `_liveness`'s own
-    /// `weak_ptr` guard does not catch this, since `_liveness` itself is
-    /// destroyed even later still and would not yet be expired.
+    /// `unique_ptr` that had already been reset to null -- `_callbacks`'s own
+    /// guard does not catch this, since `_callbacks` itself is destroyed even
+    /// later still and would not yet report the token inactive.
     std::unique_ptr<::morph::offline::SqliteOfflineQueue> _offlineQueue;
     std::unique_ptr<::morph::offline::SyncWorker> _syncWorker;
     std::unique_ptr<::morph::offline::ReconnectCoordinator> _reconnectCoordinator;
@@ -590,34 +591,52 @@ private:
     ///        polling from".
     bool _openPending = false;
 
-    /// @brief Weak-observable proof this object still exists.
+    /// @brief Lifetime gate for every `this`-capturing async callback this
+    ///        class attaches: `startPolling()`'s `Dispatch`/`ApplyEvent`/
+    ///        `OnFatalError` closures, `uploadAttachment()`/
+    ///        `downloadAttachment()`'s HTTP reply handlers, and (when the
+    ///        offline stack is built) `enableOfflineQueue()`'s
+    ///        `NetworkMonitor` callbacks.
     ///
-    /// `startPolling()`'s `Dispatch` closure calls
-    /// `_presenter.getEventsSinceForPolling()`, whose returned `Completion`'s
-    /// `.then()`/`.onError()` continuations are plain `std::function`-based,
-    /// not `QObject::connect`-based signal/slot connections — Qt's
-    /// auto-disconnect-on-destruction machinery does not apply to them.
-    /// Every one of those callbacks captures raw `this`; destroying a
-    /// `BoardBridge` while a tick is still in flight (an ordinary GUI case —
-    /// a view closing mid-poll) would otherwise write into freed memory. See
-    /// `polls::gui::PollBridge::_liveness`'s identical doc comment
-    /// (`poll_qml_bridges.hpp`) for the full rationale. Same pattern, same
-    /// reasoning, and the same **must remain the last declared member**
-    /// requirement as
+    /// Those callbacks are plain `std::function`-based `Completion<T>`
+    /// continuations, `EventPoller` callback parameters, or
+    /// `QNetworkReply::finished` handlers — not all of them go through Qt's
+    /// auto-disconnect-on-destruction machinery, and none of the non-Qt ones
+    /// do at all. Every one of them captures raw `this`; destroying a
+    /// `BoardBridge` while one is still in flight (an ordinary GUI case — a
+    /// view closing mid-poll or mid-upload) would otherwise write into freed
+    /// memory. `morph::async::CallbackScope`
+    /// (`docs/spec/core/callback_scope.md`) is the framework's general
+    /// answer, used here exactly as `polls::gui::PollBridge::_callbacks`
+    /// (`poll_qml_bridges.hpp`), `morph::bridge::Bridge::_callbacks`
+    /// (`include/morph/core/bridge.hpp`) and
     /// `morph::ladder::gui::EventPoller::_liveness`
-    /// (`examples/common/gui/event_poller.hpp`) and
-    /// `morph::bridge::Bridge::_liveness` (`include/morph/core/bridge.hpp`).
+    /// (`examples/common/gui/event_poller.hpp`) use their own.
     ///
-    /// `enableOfflineQueue()`'s three new callback sites guard on this exact
-    /// token, the same way `startPolling()`'s three closures above already
-    /// do: `NetworkMonitor`'s `onOffline`/`onOnline` (called on the probe
-    /// thread, so they capture a `weak_ptr` and check `.expired()` before
-    /// `post()`-ing anything that touches `this`) and the posted lambda that
-    /// actually runs `_reconnectCoordinator->onOnline()`/`onOffline()` on the
-    /// Qt thread (checked again there, since the `post()` can outlive this
-    /// object between being queued and actually running). No separate
-    /// lifetime mechanism is introduced for the offline stack.
-    std::shared_ptr<const void> _liveness{std::make_shared<char>()};
+    /// **Declared last on purpose**, and it must stay last: members are
+    /// destroyed in reverse declaration order, so the scope closes before
+    /// everything above it — including the offline stack — is torn down.
+    /// Anything added to this class goes *above* this line.
+    ///
+    /// `enableOfflineQueue()`'s three offline callback sites gate on this
+    /// same scope, the same way `startPolling()`'s three closures above
+    /// already do: `NetworkMonitor`'s `onOffline`/`onOnline` (called on the
+    /// probe thread — `CallbackToken`'s every member is safe to call from any
+    /// thread, see `docs/spec/core/callback_scope.md`'s "Thread safety and
+    /// the boundary of the guarantee" — check the token before `post()`-ing
+    /// anything that touches `this`) and the posted lambda that actually runs
+    /// `_reconnectCoordinator->onOnline()`/`onOffline()` on the Qt thread
+    /// (checked again there, since the `post()` can outlive this object
+    /// between being queued and actually running). No separate lifetime
+    /// mechanism is introduced for the offline stack.
+    ///
+    /// `requestStop()`/`reset()` are deliberately not called anywhere: every
+    /// gated callback here answers a specific request this bridge issued
+    /// (a poll tick, an HTTP reply, a network-state transition), with no
+    /// "supersede the previous query" moment. Destruction is the only event
+    /// that must suppress a callback, and `~CallbackScope()` is what handles
+    /// it.
+    ::morph::async::CallbackScope _callbacks;
 };
 
 }  // namespace kanban::gui

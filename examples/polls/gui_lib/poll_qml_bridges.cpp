@@ -193,68 +193,35 @@ void PollBridge::createPoll(const QString& title, const QVariantList& optionLabe
 void PollBridge::openPoll(const QString& pollId) {
     const std::string pollIdStd = pollId.toStdString();
     _forms.openPoll(pollIdStd)
-        .then([this, alive = std::weak_ptr<const void>{_liveness}](GetPollStateResult result) {
-            if (alive.expired()) {
-                return;
-            }
-            const PollEventId cursor = result.lastEventId;
-            emit opened(toVariantMap(result));
-            startPolling(cursor);
-        })
-        .onError([this, alive = std::weak_ptr<const void>{_liveness}](const std::exception_ptr& err) {
-            if (alive.expired()) {
-                return;
-            }
-            emit failed(::morph::ladder::gui::errorText(err));
-        });
+        .then(_callbacks,
+              [this](GetPollStateResult result) {
+                  const PollEventId cursor = result.lastEventId;
+                  emit opened(toVariantMap(result));
+                  startPolling(cursor);
+              })
+        .onError(_callbacks,
+                 [this](const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); });
 }
 
 void PollBridge::refresh() {
     _forms.getPollState()
-        .then([this, alive = std::weak_ptr<const void>{_liveness}](GetPollStateResult result) {
-            if (alive.expired()) {
-                return;
-            }
-            emit stateChanged(toVariantMap(result));
-        })
-        .onError([this, alive = std::weak_ptr<const void>{_liveness}](const std::exception_ptr& err) {
-            if (alive.expired()) {
-                return;
-            }
-            emit failed(::morph::ladder::gui::errorText(err));
-        });
+        .then(_callbacks, [this](GetPollStateResult result) { emit stateChanged(toVariantMap(result)); })
+        .onError(_callbacks,
+                 [this](const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); });
 }
 
 void PollBridge::submitVotes(const QString& participantName, const QVariantList& votes) {
     _forms.submitVotes(SubmitVotes{.participantName = participantName.toStdString(), .votes = decodeVotes(votes)})
-        .then([this, alive = std::weak_ptr<const void>{_liveness}](GetPollStateResult result) {
-            if (alive.expired()) {
-                return;
-            }
-            emit stateChanged(toVariantMap(result));
-        })
-        .onError([this, alive = std::weak_ptr<const void>{_liveness}](const std::exception_ptr& err) {
-            if (alive.expired()) {
-                return;
-            }
-            emit failed(::morph::ladder::gui::errorText(err));
-        });
+        .then(_callbacks, [this](GetPollStateResult result) { emit stateChanged(toVariantMap(result)); })
+        .onError(_callbacks,
+                 [this](const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); });
 }
 
 void PollBridge::updateVotes(const QString& participantName, const QVariantList& votes) {
     _forms.updateVotes(UpdateVotes{.participantName = participantName.toStdString(), .votes = decodeVotes(votes)})
-        .then([this, alive = std::weak_ptr<const void>{_liveness}](GetPollStateResult result) {
-            if (alive.expired()) {
-                return;
-            }
-            emit stateChanged(toVariantMap(result));
-        })
-        .onError([this, alive = std::weak_ptr<const void>{_liveness}](const std::exception_ptr& err) {
-            if (alive.expired()) {
-                return;
-            }
-            emit failed(::morph::ladder::gui::errorText(err));
-        });
+        .then(_callbacks, [this](GetPollStateResult result) { emit stateChanged(toVariantMap(result)); })
+        .onError(_callbacks,
+                 [this](const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); });
 }
 
 void PollBridge::setAdminToken(const QString& token) {
@@ -264,20 +231,19 @@ void PollBridge::setAdminToken(const QString& token) {
 }
 
 void PollBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
-    _forms.submitIfValid(
-        actionType.toStdString(), bodyJson.toStdString(),
-        [this, actionType, alive = std::weak_ptr<const void>{_liveness}](std::string resultJson) {
-            if (alive.expired()) {
-                return;
-            }
-            emit replyReceived(actionType, true, QString::fromStdString(resultJson));
-        },
-        [this, actionType, alive = std::weak_ptr<const void>{_liveness}](const std::exception_ptr& err) {
-            if (alive.expired()) {
-                return;
-            }
-            emit replyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
-        });
+    // Both arms capture `this` and resolve through the executor, so neither may
+    // be attached bare. `_callbacks.guard(...)` is the general-purpose gate
+    // (`CallbackScope`'s `guard()`, not `Completion`'s `then(scope, fn)`
+    // overload) because the `Completion` these end up on is created and
+    // attached *inside* `PollFormsController::submitIfValid`, one frame
+    // further in; what this function hands over is a pair of plain callables.
+    _forms.submitIfValid(actionType.toStdString(), bodyJson.toStdString(),
+                         _callbacks.guard([this, actionType](std::string resultJson) {
+                             emit replyReceived(actionType, true, QString::fromStdString(resultJson));
+                         }),
+                         _callbacks.guard([this, actionType](const std::exception_ptr& err) {
+                             emit replyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
+                         }));
 }
 
 void PollBridge::stopPolling() {
@@ -292,11 +258,7 @@ void PollBridge::startPolling(PollEventId cursor) {
     // itself be torn down before `_forms` is.
     _poller = std::make_unique<Poller>(
         _bridge, cursor,
-        [this, alive = std::weak_ptr<const void>{_liveness}](PollEventId lastEventId, Poller::OnSuccess onSuccess,
-                                                             Poller::OnError onError) {
-            if (alive.expired()) {
-                return;
-            }
+        _callbacks.guard([this](PollEventId lastEventId, Poller::OnSuccess onSuccess, Poller::OnError onError) {
             // The production-safe Dispatch shape event_poller.hpp's own doc
             // comment asks for: built directly over one call's own
             // Completion, never over a Presenter's shared failed(QString)
@@ -306,26 +268,17 @@ void PollBridge::startPolling(PollEventId cursor) {
             // EventPoller's own callbacks, already guarded on its own
             // _liveness token (see event_poller.hpp) — nothing further to
             // add here beyond not touching `_forms` past this object's own
-            // lifetime, which the `alive` check above already covers.
+            // lifetime, which the `_callbacks.guard(...)` wrapper above
+            // already covers.
             _forms.getEventsSince(GetEventsSince{.lastEventId = lastEventId})
                 .then([lastEventId, onSuccess](GetEventsSinceResult result) {
                     const PollEventId newLastEventId = result.events.empty() ? lastEventId : result.events.back().id;
                     onSuccess(std::move(result.events), newLastEventId);
                 })
                 .onError([onError](const std::exception_ptr& err) { onError(err); });
-        },
-        [this, alive = std::weak_ptr<const void>{_liveness}](const PollEvent& event) {
-            if (alive.expired()) {
-                return;
-            }
-            onEventApplied(event);
-        },
-        [this, alive = std::weak_ptr<const void>{_liveness}](const QString& message) {
-            if (alive.expired()) {
-                return;
-            }
-            emit pollingStopped(message);
-        });
+        }),
+        _callbacks.guard([this](const PollEvent& event) { onEventApplied(event); }),
+        _callbacks.guard([this](const QString& message) { emit pollingStopped(message); }));
 }
 
 void PollBridge::onEventApplied(const PollEvent& event) {

@@ -155,3 +155,47 @@ TEST_CASE("ReportJobPoller survives a null exception_ptr on the error path", "[l
     CHECK(message == QStringLiteral("unknown error"));
     CHECK(poller.finished());
 }
+
+TEST_CASE("A ReportJobPoller destroyed with a dispatch in flight has its reply suppressed, not delivered",
+          "[ledger][gui][poller]") {
+    // `pollOnce()` hands `_dispatch` two callbacks that capture raw `this` and
+    // are gated on `_callbacks` (`morph::async::CallbackScope`,
+    // docs/spec/core/callback_scope.md). This case captures the poller's own
+    // `onSuccess` out of the injected `Dispatch` closure and invokes it
+    // *after* the poller has already been destroyed -- the exact shape a real
+    // `Completion` resolving post-destruction has, reproduced deterministically
+    // by holding the callback outside the closure rather than racing threads.
+    // Unguarded, this would write into freed memory through the captured
+    // `this`; guarded, the call is a silent no-op.
+    BackendRig rig{Mode::Local, 1};
+
+    ledger::gui::ReportJobPoller::OnSuccess capturedOnSuccess;
+    int doneCalls = 0;
+
+    {
+        ledger::gui::ReportJobPoller poller{rig.bridge(0),
+                                            ledger::ReportJobId{5},
+                                            [&](ledger::ReportJobId, ledger::gui::ReportJobPoller::OnSuccess onSuccess,
+                                                ledger::gui::ReportJobPoller::OnError) {
+                                                // Captured, not invoked: this stands in for a Completion that
+                                                // has not resolved yet when the poller is torn down below.
+                                                capturedOnSuccess = std::move(onSuccess);
+                                            },
+                                            [&](std::string) { ++doneCalls; },
+                                            [&](const QString&) {},
+                                            /*interval=*/10ms};
+
+        REQUIRE(pumpUntil([&] { return static_cast<bool>(capturedOnSuccess); }));
+        // `poller` is destroyed here, with `capturedOnSuccess` still holding a
+        // reply this destroyed poller never gets to see.
+    }
+
+    REQUIRE(capturedOnSuccess);
+    ledger::GetReportStatusResult result;
+    result.status = ledger::ReportStatus::Done;
+    result.result = std::string{R"([{"currency":"USD"}])"};
+    // Must not touch the destroyed poller's members -- `_callbacks`'s guard is
+    // the only thing standing between this call and a use-after-free.
+    capturedOnSuccess(std::move(result));
+    CHECK(doneCalls == 0);
+}

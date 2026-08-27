@@ -29,54 +29,52 @@ void ReportJobPoller::pollOnce() {
     if (_finished) {
         return;
     }
-    _dispatch(
-        _jobId,
-        [this, alive = std::weak_ptr<const void>{_liveness}](GetReportStatusResult result) {
-            if (alive.expired() || _finished) {
+    _dispatch(_jobId, _callbacks.guard([this](GetReportStatusResult result) {
+        if (_finished) {
+            return;
+        }
+        switch (result.status) {
+            case ReportStatus::Done:
+                // Disarm *before* the callback: a handler that reacts by
+                // destroying this poller must not return into a live
+                // timer, and a late reply from an already-dispatched tick
+                // must not produce a second terminal callback.
+                disarm();
+                if (_onDone) {
+                    _onDone(result.result.value_or(std::string{}));
+                }
                 return;
-            }
-            switch (result.status) {
-                case ReportStatus::Done:
-                    // Disarm *before* the callback: a handler that reacts by
-                    // destroying this poller must not return into a live
-                    // timer, and a late reply from an already-dispatched tick
-                    // must not produce a second terminal callback.
-                    disarm();
-                    if (_onDone) {
-                        _onDone(result.result.value_or(std::string{}));
-                    }
-                    return;
-                case ReportStatus::Failed:
-                    disarm();
-                    if (_onFailed) {
-                        _onFailed(QStringLiteral("report job failed"));
-                    }
-                    return;
-                case ReportStatus::Pending:
-                default:
-                    // Still working; the timer fires again.
-                    return;
-            }
-        },
-        [this, alive = std::weak_ptr<const void>{_liveness}](std::exception_ptr err) {
-            if (alive.expired() || _finished) {
+            case ReportStatus::Failed:
+                disarm();
+                if (_onFailed) {
+                    _onFailed(QStringLiteral("report job failed"));
+                }
                 return;
-            }
-            // A dispatch error is terminal for this poller rather than
-            // retried: the deadline armed above already bounds one attempt,
-            // and silently retrying a failing call forever is how a "stuck at
-            // Pending" bug hides. The presenter above decides whether to
-            // resubmit.
-            disarm();
-            // The shared helper, not a fourth hand-written copy of it: this
-            // one called std::rethrow_exception with no null check, which is
-            // undefined behaviour on a null exception_ptr. `errorText`
-            // documents and handles that case, and the rung's four
-            // presenters already route through it.
-            if (_onFailed) {
-                _onFailed(::morph::ladder::gui::errorText(err));
-            }
-        });
+            case ReportStatus::Pending:
+            default:
+                // Still working; the timer fires again.
+                return;
+        }
+    }),
+              _callbacks.guard([this](std::exception_ptr err) {
+                  if (_finished) {
+                      return;
+                  }
+                  // A dispatch error is terminal for this poller rather than
+                  // retried: the deadline armed above already bounds one attempt,
+                  // and silently retrying a failing call forever is how a "stuck at
+                  // Pending" bug hides. The presenter above decides whether to
+                  // resubmit.
+                  disarm();
+                  // The shared helper, not a fourth hand-written copy of it: this
+                  // one called std::rethrow_exception with no null check, which is
+                  // undefined behaviour on a null exception_ptr. `errorText`
+                  // documents and handles that case, and the rung's four
+                  // presenters already route through it.
+                  if (_onFailed) {
+                      _onFailed(::morph::ladder::gui::errorText(err));
+                  }
+              }));
 }
 
 }  // namespace ledger::gui
