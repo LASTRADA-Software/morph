@@ -120,14 +120,13 @@ struct Emissions {
 [[nodiscard]] bool registerSampleViaBridge(lims::gui::SampleBridge& bridge) {
     int clientReplies = 0;
     bool clientOk = false;
-    const auto clientConn = QObject::connect(
-        &bridge, &lims::gui::SampleBridge::replyReceived,
-        [&](const QString& type, bool succeeded, const QString&) {
-            if (type == QStringLiteral("RegisterClient")) {
-                clientOk = succeeded;
-                ++clientReplies;
-            }
-        });
+    const auto clientConn = QObject::connect(&bridge, &lims::gui::SampleBridge::replyReceived,
+                                             [&](const QString& type, bool succeeded, const QString&) {
+                                                 if (type == QStringLiteral("RegisterClient")) {
+                                                     clientOk = succeeded;
+                                                     ++clientReplies;
+                                                 }
+                                             });
     bridge.submitIfValid(QStringLiteral("RegisterClient"), QStringLiteral(R"({"name":"Waterworks Ltd"})"));
     const bool clientSettled = pumpUntil([&] { return clientReplies == 1; });
     QObject::disconnect(clientConn);
@@ -136,13 +135,12 @@ struct Emissions {
     }
 
     bool sampleOk = false;
-    const auto sampleConn = QObject::connect(
-        &bridge, &lims::gui::SampleBridge::replyReceived,
-        [&](const QString& type, bool succeeded, const QString&) {
-            if (type == QStringLiteral("RegisterSample")) {
-                sampleOk = succeeded;
-            }
-        });
+    const auto sampleConn = QObject::connect(&bridge, &lims::gui::SampleBridge::replyReceived,
+                                             [&](const QString& type, bool succeeded, const QString&) {
+                                                 if (type == QStringLiteral("RegisterSample")) {
+                                                     sampleOk = succeeded;
+                                                 }
+                                             });
     int changes = 0;
     const auto changedConn =
         QObject::connect(&bridge, &lims::gui::SampleBridge::sampleChanged, [&changes] { ++changes; });
@@ -468,9 +466,10 @@ TEST_CASE("A form body submitted through the schema path reaches the model", "[l
     CHECK(payload.contains(QStringLiteral("clientId")));
 }
 
-TEST_CASE("Registering a client and a sample through the form path leaves the shared handler "
-          "attached and clientId populated",
-          "[lims][gui][qml-bridge][forms]") {
+TEST_CASE(
+    "Registering a client and a sample through the form path leaves the shared handler "
+    "attached and clientId populated",
+    "[lims][gui][qml-bridge][forms]") {
     // `SamplePresenter::submitIfValid` routes `RegisterClient` to the plain
     // handler (the one action here with no key at all) and `RegisterSample` to
     // the shared one, decoding `RegisterClient`'s reply to emit
