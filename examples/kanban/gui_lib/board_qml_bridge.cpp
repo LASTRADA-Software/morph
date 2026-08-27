@@ -375,56 +375,51 @@ void BoardBridge::uploadAttachment(const QString& taskId, const QString& localFi
     // POST, not multipart -- AttachmentServer's own class doc comment
     // documents the raw-bytes-plus-header convention this request must speak
     // (see kanban/http/attachment_server.hpp). The reply is parented to
-    // `_networkManager` for its own lifetime; this lambda captures `alive` so
-    // a bridge destroyed mid-request never has its (by-then-dangling) `this`
-    // touched by a reply that arrives after teardown -- same weak_ptr guard
-    // every other async continuation in this class already uses. Every
-    // captured value here (parsedTaskId/filename/contentType/size) travels
-    // with this one call's own continuation, never through a shared field --
-    // two overlapping uploadAttachment() calls each get their own closure, so
-    // neither's outcome can be cross-attributed to the other (the same
-    // "no shared mutable field carries one call's data" lesson moveTask()'s
-    // own doc comment cites).
+    // `_networkManager` for its own lifetime; this lambda is gated on
+    // `_callbacks` so a bridge destroyed mid-request never has its
+    // (by-then-dangling) `this` touched by a reply that arrives after
+    // teardown -- same guard every other async continuation in this class
+    // already uses. Every captured value here
+    // (parsedTaskId/filename/contentType/size) travels with this one call's
+    // own continuation, never through a shared field -- two overlapping
+    // uploadAttachment() calls each get their own closure, so neither's
+    // outcome can be cross-attributed to the other (the same "no shared
+    // mutable field carries one call's data" lesson moveTask()'s own doc
+    // comment cites).
     QNetworkReply* reply = _networkManager->post(request, bytes);
-    connect(reply, &QNetworkReply::finished, this,
-            [this, reply, taskId, parsedTaskId, filename, contentType, size = bytes.size(),
-             alive = std::weak_ptr<const void>{_liveness}] {
-                reply->deleteLater();
-                if (alive.expired()) {
-                    return;
-                }
-                if (reply->error() != QNetworkReply::NoError) {
-                    emit failed(QStringLiteral("uploadAttachment: HTTP request failed: %1").arg(reply->errorString()));
-                    return;
-                }
-                const QByteArray responseBody = reply->readAll();
-                const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
-                const QString storageKey = doc.object().value(QStringLiteral("storageKey")).toString();
-                if (storageKey.isEmpty()) {
-                    emit failed(QStringLiteral("uploadAttachment: server response carried no storageKey"));
-                    return;
-                }
-                // BoardPresenter::addAttachment() returns its own independent
-                // Completion<Ack> (not a shared signal) for exactly this
-                // reason: this continuation is this call's, and only this
-                // call's.
-                _presenter
-                    .addAttachment(parsedTaskId, filename, contentType, static_cast<std::int64_t>(size), storageKey)
-                    .then([this, taskId, parsedTaskId, alive](Ack) {
-                        if (alive.expired()) {
-                            return;
-                        }
-                        emit attachmentUploaded(taskId);
-                        _presenter.getAttachments(parsedTaskId);
-                    })
-                    .onError([this, alive](const std::exception_ptr& err) {
-                        if (alive.expired()) {
-                            return;
-                        }
-                        emit failed(QStringLiteral("uploadAttachment: AddAttachment failed: %1")
-                                        .arg(::morph::ladder::gui::errorText(err)));
-                    });
-            });
+    connect(
+        reply, &QNetworkReply::finished, this,
+        [this, reply, taskId, parsedTaskId, filename, contentType, size = bytes.size(), alive = _callbacks.token()] {
+            reply->deleteLater();
+            if (!alive.active()) {
+                return;
+            }
+            if (reply->error() != QNetworkReply::NoError) {
+                emit failed(QStringLiteral("uploadAttachment: HTTP request failed: %1").arg(reply->errorString()));
+                return;
+            }
+            const QByteArray responseBody = reply->readAll();
+            const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+            const QString storageKey = doc.object().value(QStringLiteral("storageKey")).toString();
+            if (storageKey.isEmpty()) {
+                emit failed(QStringLiteral("uploadAttachment: server response carried no storageKey"));
+                return;
+            }
+            // BoardPresenter::addAttachment() returns its own independent
+            // Completion<Ack> (not a shared signal) for exactly this
+            // reason: this continuation is this call's, and only this
+            // call's.
+            _presenter.addAttachment(parsedTaskId, filename, contentType, static_cast<std::int64_t>(size), storageKey)
+                .then(alive,
+                      [this, taskId, parsedTaskId](Ack) {
+                          emit attachmentUploaded(taskId);
+                          _presenter.getAttachments(parsedTaskId);
+                      })
+                .onError(alive, [this](const std::exception_ptr& err) {
+                    emit failed(QStringLiteral("uploadAttachment: AddAttachment failed: %1")
+                                    .arg(::morph::ladder::gui::errorText(err)));
+                });
+        });
 }
 
 void BoardBridge::downloadAttachment(const QString& storageKey, const QString& localFilePath) {
@@ -447,26 +442,28 @@ void BoardBridge::downloadAttachment(const QString& storageKey, const QString& l
     // -- see localFilePathFrom()'s own doc comment.
     const QString resolvedPath = localFilePathFrom(localFilePath);
     QNetworkReply* reply = _networkManager->get(request);
-    connect(
-        reply, &QNetworkReply::finished, this,
-        [this, reply, resolvedPath, alive = std::weak_ptr<const void>{_liveness}] {
-            reply->deleteLater();
-            if (alive.expired()) {
-                return;
-            }
-            if (reply->error() != QNetworkReply::NoError) {
-                emit failed(QStringLiteral("downloadAttachment: HTTP request failed: %1").arg(reply->errorString()));
-                return;
-            }
-            QFile file{resolvedPath};
-            if (!file.open(QIODevice::WriteOnly)) {
-                emit failed(QStringLiteral("downloadAttachment: could not open '%1' for writing").arg(resolvedPath));
-                return;
-            }
-            file.write(reply->readAll());
-            file.close();
-            emit attachmentDownloaded(resolvedPath);
-        });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, resolvedPath, alive = _callbacks.token()] {
+        // `deleteLater()` must run regardless of whether the bridge is
+        // still alive -- it releases Qt's own object, not anything this
+        // bridge owns, so it is not gated on `alive` the way the rest of
+        // this handler's `this`-touching work below is.
+        reply->deleteLater();
+        if (!alive.active()) {
+            return;
+        }
+        if (reply->error() != QNetworkReply::NoError) {
+            emit failed(QStringLiteral("downloadAttachment: HTTP request failed: %1").arg(reply->errorString()));
+            return;
+        }
+        QFile file{resolvedPath};
+        if (!file.open(QIODevice::WriteOnly)) {
+            emit failed(QStringLiteral("downloadAttachment: could not open '%1' for writing").arg(resolvedPath));
+            return;
+        }
+        file.write(reply->readAll());
+        file.close();
+        emit attachmentDownloaded(resolvedPath);
+    });
 }
 
 void BoardBridge::stopPolling() {
@@ -487,11 +484,7 @@ void BoardBridge::startPolling() {
     // any event.
     _poller = std::make_unique<Poller>(
         _bridge, BoardEventId{},
-        [this, alive = std::weak_ptr<const void>{_liveness}](BoardEventId lastEventId, Poller::OnSuccess onSuccess,
-                                                             Poller::OnError onError) {
-            if (alive.expired()) {
-                return;
-            }
+        _callbacks.guard([this](BoardEventId lastEventId, Poller::OnSuccess onSuccess, Poller::OnError onError) {
             // The production-safe Dispatch shape event_poller.hpp's own doc
             // comment asks for: built directly over one call's own
             // Completion, never over a Presenter's shared failed(QString)
@@ -501,26 +494,17 @@ void BoardBridge::startPolling() {
             // EventPoller's own callbacks, already guarded on its own
             // _liveness token (see event_poller.hpp) — nothing further to
             // add here beyond not touching `_presenter` past this object's
-            // own lifetime, which the `alive` check above already covers.
+            // own lifetime, which the `_callbacks.guard(...)` wrapper above
+            // already covers.
             _presenter.getEventsSinceForPolling(lastEventId)
                 .then([lastEventId, onSuccess](GetEventsSinceResult result) {
                     const BoardEventId newLastEventId = result.events.empty() ? lastEventId : result.events.back().id;
                     onSuccess(std::move(result.events), newLastEventId);
                 })
                 .onError([onError](const std::exception_ptr& err) { onError(err); });
-        },
-        [this, alive = std::weak_ptr<const void>{_liveness}](const BoardEvent& event) {
-            if (alive.expired()) {
-                return;
-            }
-            onEventApplied(event);
-        },
-        [this, alive = std::weak_ptr<const void>{_liveness}](const QString& message) {
-            if (alive.expired()) {
-                return;
-            }
-            emit pollingStopped(message);
-        });
+        }),
+        _callbacks.guard([this](const BoardEvent& event) { onEventApplied(event); }),
+        _callbacks.guard([this](const QString& message) { emit pollingStopped(message); }));
 }
 
 void BoardBridge::onEventApplied(const BoardEvent&) {
@@ -653,35 +637,20 @@ void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline:
     // O(1) work only -- they post the coordinator's sequencing onto
     // `_executor` (the Qt thread) rather than running it inline, exactly
     // docs/spec/offline/offline.md's "End-to-end integration" pattern. Both
-    // posted lambdas re-check `alive` after landing on the Qt thread, since
-    // the post() can outlive this object between being queued and actually
-    // running (same two-layer guard startPolling()'s closures use above:
-    // once before capturing anything, implicitly by capturing only `alive`
-    // and `this`, and once again on arrival).
+    // posted lambdas are gated on `_callbacks` again after landing on the Qt
+    // thread, since the post() can outlive this object between being queued
+    // and actually running (same two-layer guard startPolling()'s closures
+    // use above: once before capturing anything -- `_callbacks.guard(...)`
+    // wraps the whole outer lambda -- and once again on arrival, via a fresh
+    // `guard(...)` around the posted inner one). `CallbackToken`'s every
+    // member is safe to call from any thread
+    // (docs/spec/core/callback_scope.md's "Thread safety and the boundary of
+    // the guarantee"), so gating the probe-thread call itself is sound.
     _networkMonitor = std::make_unique<::morph::offline::NetworkMonitor>(
-        std::move(probe),
-        [this, alive = std::weak_ptr<const void>{_liveness}] {
-            if (alive.expired()) {
-                return;
-            }
-            _executor->post([this, alive] {
-                if (alive.expired()) {
-                    return;
-                }
-                _reconnectCoordinator->onOffline();
-            });
-        },
-        [this, alive = std::weak_ptr<const void>{_liveness}] {
-            if (alive.expired()) {
-                return;
-            }
-            _executor->post([this, alive] {
-                if (alive.expired()) {
-                    return;
-                }
-                _reconnectCoordinator->onOnline();
-            });
-        },
+        std::move(probe), _callbacks.guard([this] {
+            _executor->post(_callbacks.guard([this] { _reconnectCoordinator->onOffline(); }));
+        }),
+        _callbacks.guard([this] { _executor->post(_callbacks.guard([this] { _reconnectCoordinator->onOnline(); })); }),
         monitorConfig);
 }
 
