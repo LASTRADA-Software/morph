@@ -26,11 +26,10 @@
 //
 // The audit needs no branch to *find* the surface -- it reads the metaobject
 // that was actually built, so in a configure without the switch the two
-// properties simply are not there. But the exemption list below does need one,
-// because `queueDepth` is unbound in the configure where it exists: BoardView.qml
-// binds `deadLetterCount` and nothing reads `queueDepth`. An exemption for a
-// member the bridge does not have is itself a finding, so that entry has to be
-// compiled in only when the member is.
+// properties simply are not there. Both properties are bound in the configure
+// where they exist: BoardView.qml reads `deadLetterCount` for the dead-letter
+// banner and `queueDepth` for the pending-sync indicator beside it, so neither
+// needs an exemption.
 //
 // This was found by CI, not locally. An earlier draft of this file asserted the
 // two configures produce identical findings; they do not, and the check behind
@@ -38,8 +37,8 @@
 // per-configure verification below is what should have been done first.
 //
 // What *also* needed work is the other direction. `BoardView.qml` reads
-// `deadLetterCount` unconditionally-looking but guards it with
-// `!== undefined`, precisely so the dead-letter banner stays hidden in an OFF
+// `deadLetterCount` and `queueDepth` unconditionally-looking but guards each
+// with `!== undefined`, precisely so their banners stay hidden in an OFF
 // build. The audit used to report that as "reads a property the bridge has no
 // such property" -- backwards, since the only way to satisfy it would have been
 // to delete the guard that makes the binding safe. A read compared against
@@ -81,7 +80,7 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     // The first run of this audit reported nine members BoardBridge publishes
     // that no file under gui/qml/ binds, recorded as a backlog under
     // morph#291. That backlog is now worked off, and nothing here is "tracked,
-    // decide later": five of the nine were dispositioned by binding or
+    // decide later": every one of the nine was dispositioned by binding or
     // deleting the member, and the two that remain are exempt for a structural
     // reason that will not change.
     //
@@ -97,6 +96,10 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     //     its bytes to a path outside the app.
     //   * `bound` -- genuinely dead, and deleted rather than exempted. See
     //     board_qml_bridge.hpp's own note where the signal used to be.
+    //   * `queueDepth` -- genuinely unbound, and bound rather than deleted
+    //     (morph#308). BoardView.qml now reads it for a pending-sync
+    //     indicator beside the dead-letter banner, so the audit resolves it
+    //     against a real binding site too.
     //
     // The list is checked in both directions: an exemption for a member that
     // has since been deleted, or one QML has since bound, fails this test
@@ -125,17 +128,19 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     // `queueDepth` and `deadLetterCount` -- live inside
     // `#ifdef MORPH_BUILD_OFFLINE_SQLITE`. That asymmetry is the whole story:
     //
-    //   * ON:  `deadLetterCount` exists and BoardView.qml:193/197 reads it for
-    //          real (the `!== undefined` on :192 is the probe; those two are
-    //          uses). The audit treats a property's NOTIFY signal as covered by
-    //          reading the property -- testkit/qml_surface.cpp's signal sweep
-    //          does model this -- so the signal needs no exemption here, and
-    //          claiming one would misdescribe a guard that is already doing its
-    //          job.
+    //   * ON:  `deadLetterCount` and `queueDepth` both exist, and
+    //          BoardView.qml reads each for real (the `!== undefined` guard
+    //          on each banner's `visible` is the probe; the `visible ? ... :
+    //          ""` ternary on each `text` is the use). The audit treats a
+    //          property's NOTIFY signal as covered by reading the property --
+    //          testkit/qml_surface.cpp's signal sweep does model this -- so
+    //          the signal needs no exemption here, and claiming one would
+    //          misdescribe a guard that is already doing its job.
     //   * OFF: neither property is compiled in, so no property read can cover
     //          the signal, and it sweeps as a signal nothing handles.
     //
-    // Hence `#ifndef`, the mirror image of `queueDepth`'s `#ifdef` below.
+    // Hence `#ifndef`: this exemption applies only to the configure where
+    // both properties -- and the NOTIFY they share -- are compiled out.
     // Worth stating plainly because the exemption list's original comment
     // asserted the opposite -- that the audit "does not model" NOTIFY coverage
     // by property read. It does, and has since the audit landed; the entry was
@@ -160,28 +165,6 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("syncStatusChanged"),
                        QStringLiteral("NOTIFY signal of queueDepth/deadLetterCount, neither of which is compiled in "
                                       "without MORPH_BUILD_OFFLINE_SQLITE"));
-#endif
-#ifdef MORPH_BUILD_OFFLINE_SQLITE
-    // Only exists in this configure, and unbound in it: BoardView.qml binds
-    // `deadLetterCount` and reads `queueDepth` nowhere. Guarded by the same
-    // macro as the property, because the audit rejects an exemption naming a
-    // member the bridge does not have -- so an unguarded entry would fail the
-    // OFF configure exactly as its absence failed the ON one.
-    //
-    // Deliberately keyed off the macro rather than off
-    // `metaObject()->indexOfProperty("queueDepth") >= 0`, which would also work
-    // and is tempting because it cannot go stale. That is exactly why it is the
-    // worse choice here: asking the metaobject makes this test agree with
-    // whatever was built, including a build where the two disagree. A
-    // reconfigure from OFF to ON does not reliably re-run AUTOMOC, so the
-    // bridge can carry the macro on its compile line while its metaobject still
-    // lacks the property -- and this assertion is one of the few places that
-    // notices. Keyed off the macro it fails loudly on such a tree; keyed off the
-    // metaobject it would pass and let the stale build through.
-    audit.allowUnbound(
-        QStringLiteral("boardBridge"), QStringLiteral("queueDepth"),
-        QStringLiteral("compiled in only under MORPH_BUILD_OFFLINE_SQLITE, and unbound in that configure: "
-                       "BoardView.qml's offline banner reads deadLetterCount and nothing reads queueDepth"));
 #endif
 
     const QStringList findings = audit.run();
