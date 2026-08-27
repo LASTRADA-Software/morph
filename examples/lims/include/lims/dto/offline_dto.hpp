@@ -238,6 +238,12 @@ struct ResolveConflict {
     /// @brief Whether this decision is well-formed.
     /// @return `true` when a conflict is named and a reason is given.
     [[nodiscard]] bool validate() const noexcept { return conflictId.hasValue() && !note.empty(); }
+
+    /// @brief Opts the generated form out of auto-submit-on-validity
+    ///        (docs/spec/forms/forms.md, "Explicit submit mode"). Without
+    ///        this, a form bound directly to a live controller would fire a
+    ///        conflict resolution per keystroke.
+    static constexpr bool explicitSubmit = true;
 };
 
 }  // namespace lims

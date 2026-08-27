@@ -94,6 +94,12 @@ struct RegisterClient {
     /// @brief Whether this registration is well-formed.
     /// @return `true` when the name is non-empty.
     [[nodiscard]] bool validate() const noexcept { return !name.empty(); }
+
+    /// @brief Opts the generated form out of auto-submit-on-validity
+    ///        (docs/spec/forms/forms.md, "Explicit submit mode"). Without
+    ///        this, a form bound directly to a live controller would
+    ///        register a client per keystroke.
+    static constexpr bool explicitSubmit = true;
 };
 
 /// @brief The registered client's generated id.
@@ -114,6 +120,9 @@ struct RegisterSample {
     /// @brief Whether this registration is well-formed.
     /// @return `true` when a client is named and a reference is given.
     [[nodiscard]] bool validate() const noexcept { return clientId.hasValue() && !reference.empty(); }
+
+    /// @brief Same opt-out, same reason as `RegisterClient::explicitSubmit`.
+    static constexpr bool explicitSubmit = true;
 };
 
 /// @brief One sample's full current state — the result of registering it,
@@ -185,6 +194,9 @@ struct ReturnForRework {
     /// @brief Whether a reason was given.
     /// @return `true` when the reason is non-empty.
     [[nodiscard]] bool validate() const noexcept { return !reason.empty(); }
+
+    /// @brief Same opt-out, same reason as `RegisterClient::explicitSubmit`.
+    static constexpr bool explicitSubmit = true;
 };
 
 /// @brief `ToBeVerified → Published`: the report is released to the client.
@@ -203,6 +215,9 @@ struct RejectSample {
     /// @brief Whether a reason was given.
     /// @return `true` when the reason is non-empty.
     [[nodiscard]] bool validate() const noexcept { return !reason.empty(); }
+
+    /// @brief Same opt-out, same reason as `RegisterClient::explicitSubmit`.
+    static constexpr bool explicitSubmit = true;
 };
 
 }  // namespace lims

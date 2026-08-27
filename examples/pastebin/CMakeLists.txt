@@ -27,3 +27,27 @@ if(TARGET ladder_pastebin_gui_wasm)
         MORPH_LADDER_PASTEBIN_WASM_SERVER_URL="${MORPH_LADDER_PASTEBIN_WASM_SERVER_URL}"
     )
 endif()
+
+# Local workaround: the machine-local fastcache-cc/fastcached compiler-cache
+# launcher (cmake/CompileCache.cmake) served a stale ladder_pastebin_tests
+# object for tests/test_gui_qml_smoke.cpp after a TEST_CASE was added to it --
+# reproduced by compiling the same source directly with clang-cl (bypassing
+# fastcache-cc entirely) and finding the new TEST_CASE name present in that
+# object but absent from the one ninja linked, even after a from-scratch
+# rebuild of just that translation unit. Same bug and same symptom as
+# ledger's src/db/schema.cpp.obj / tests/test_ledger_schema.cpp.obj (see that
+# file's identical comment), tracked upstream at
+# https://github.com/LASTRADA-Software/fastcached/issues/51. Safe to remove
+# once that is fixed. Gated on fastcache-cc actually being the launcher --
+# clearing the property unconditionally would clear *whatever* launcher is
+# configured, silently bypassing sccache on CI (this bug is local-development
+# only; fastcache-cc is only selected when a daemon actually answers).
+if(MORPH_COMPILER_CACHE_IS_FASTCACHE)
+    foreach(_pastebin_target IN ITEMS ladder_pastebin_lib ladder_pastebin_gui_lib ladder_pastebin_tests)
+        if(TARGET ${_pastebin_target})
+            set_target_properties(${_pastebin_target} PROPERTIES
+                C_COMPILER_LAUNCHER ""
+                CXX_COMPILER_LAUNCHER "")
+        endif()
+    endforeach()
+endif()

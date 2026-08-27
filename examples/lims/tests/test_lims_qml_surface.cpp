@@ -22,12 +22,18 @@
 // sub-view under the *same* property name, so one bind per bridge covers every
 // file that reads it.
 
+#include <QByteArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <catch2/catch_test_macros.hpp>
 #include <initializer_list>
+#include <morph/forms/forms.hpp>
 #include <utility>
 
+#include "lims/dto/sample_dto.hpp"
+#include "lims_schemas.hpp"
 #include "result_qml_bridge.hpp"
 #include "sample_qml_bridge.hpp"
 #include "testkit/backend_rig.hpp"
@@ -93,6 +99,25 @@ TEST_CASE("Every lims bridge exposes exactly the surface gui/qml binds, and noth
         audit.allowUnbound(QString::fromLatin1(alias), QString::fromLatin1(member), registrationPath);
     }
 
+    // `submitIfValid` on both bridges is called from the shipped `MorphForms`
+    // renderer's QML (`src/qt/forms/qml/DynamicForm.qml`'s `submit()` and its
+    // auto-submit path), not from this rung's. Every form on both views
+    // declares `explicitSubmit = true` and is bound with `controller:
+    // page.sampleBridge` / `controller: page.resultBridge`, so the renderer's
+    // own Submit button is the sole caller — this rung's QML names the
+    // *controller*, never the method. The exemption cannot go stale
+    // unnoticed: the audit rejects it the moment either bridge loses the
+    // member, or some scanned `.qml` file starts binding it again.
+    const QString rendererPath = QStringLiteral(
+        "called by the shipped MorphForms DynamicForm, whose QML this audit does not scan; this rung's forms "
+        "are bound to the controller and submitted by the renderer's own explicit Submit button");
+    for (const auto& [alias, member] : std::initializer_list<std::pair<const char*, const char*>>{
+             {"sampleBridge", "submitIfValid"},
+             {"resultBridge", "submitIfValid"},
+         }) {
+        audit.allowUnbound(QString::fromLatin1(alias), QString::fromLatin1(member), rendererPath);
+    }
+
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());
     CHECK(findings.isEmpty());
@@ -137,4 +162,52 @@ TEST_CASE("A refused form submission has a path to the operator", "[lims][gui][q
     const QStringList findings = audit.run().filter(QStringLiteral("replyReceived"));
     INFO(findings.join(QStringLiteral("\n")).toStdString());
     CHECK(findings.isEmpty());
+}
+
+TEST_CASE("Every form in the shipped schema document opts out of auto-submit", "[lims][gui][qml-surface]") {
+    // `SampleView.qml` and `ResultEntryView.qml` bind every one of these forms
+    // to a live controller (`sampleBridge`/`resultBridge`), and the shipped
+    // renderer's default is to call `submitIfValid` the instant a form is
+    // valid (`docs/spec/forms/forms.md`, "Explicit submit mode"). Every one of
+    // these six actions has effects -- registering a client or sample, a
+    // rework/rejection, a captured reading, a conflict resolution -- so a
+    // schema that lost its `x-submitMode` would mean one dispatch per typed
+    // character, in the shipped GUI, with nothing else to catch it: the
+    // engine-load smoke test loads every root with a null controller, and
+    // `QmlSurfaceAudit` reads names, not schemas.
+    //
+    // The guard reads the generated *schema* rather than each action's
+    // `explicitSubmit` declaration, since the declaration is only ever
+    // meaningful through what `schemaJson<A>()` emits, which is what
+    // `DynamicForm` actually reads. It also sweeps the whole document rather
+    // than a written-out list of six, so a seventh form added to
+    // `limsSchemasJson()` cannot join the shipped client without answering
+    // this question.
+    const QJsonDocument schemas = QJsonDocument::fromJson(QByteArray::fromStdString(lims::gui::limsSchemasJson()));
+    REQUIRE(schemas.isObject());
+    // Held in a named object, not iterated straight off `schemas.object()`:
+    // that returns a *copy*, so an iterator taken from the temporary is
+    // already dangling by the time the loop body runs.
+    const QJsonObject document = schemas.object();
+    REQUIRE(document.size() == 6);
+    for (auto entry = document.constBegin(); entry != document.constEnd(); ++entry) {
+        INFO("action type: " << entry.key().toStdString());
+        REQUIRE(entry.value().isObject());
+        CHECK(entry.value().toObject().value(QStringLiteral("x-submitMode")).toString() == QStringLiteral("explicit"));
+    }
+}
+
+TEST_CASE("A read-only action's schema carries no x-submitMode at all", "[lims][gui][qml-surface]") {
+    // The other half of the guard above, and the reason it is not vacuous:
+    // `x-submitMode` is opt-in, so a check that only ever looked for the key's
+    // presence would pass just as happily if `annotateSubmitMode` stamped
+    // every schema unconditionally -- at which point it would be measuring
+    // nothing. `GetSample` is a pure query: it mutates nothing, carries no
+    // fields at all (`lims_schemas.hpp` never renders it as a form), wants the
+    // auto-submit default, and declares no `explicitSubmit`, so its schema
+    // must not carry the key.
+    const QJsonDocument schema =
+        QJsonDocument::fromJson(QByteArray::fromStdString(::morph::forms::schemaJson<lims::GetSample>()));
+    REQUIRE(schema.isObject());
+    CHECK_FALSE(schema.object().contains(QStringLiteral("x-submitMode")));
 }

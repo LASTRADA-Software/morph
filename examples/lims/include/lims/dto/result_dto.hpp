@@ -250,6 +250,12 @@ struct CaptureConcentration {
     [[nodiscard]] bool validate() const noexcept {
         return analysisVersionId.hasValue() && ::morph::forms::allRulesSatisfied(*this);
     }
+
+    /// @brief Opts the generated form out of auto-submit-on-validity
+    ///        (docs/spec/forms/forms.md, "Explicit submit mode"). Without
+    ///        this, a form bound directly to a live controller would file a
+    ///        result mid-keystroke.
+    static constexpr bool explicitSubmit = true;
 };
 
 /// @brief One captured result, as served back.
