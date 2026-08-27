@@ -304,6 +304,22 @@ private:
     template <typename Action, typename Result>
     void logAction(const Action& action, const Result& result, std::string causalParentId = {}) const;
 
+    /// @brief Records a rejected @p action as a `LogEntry` with
+    ///        `Outcome::Failed` and @p error, if a log is attached; no-op
+    ///        otherwise. The refused-attempt counterpart to `logAction`
+    ///        above: every mutating `execute()` overload catches its own
+    ///        `KanbanError` hierarchy around the whole body and calls this
+    ///        before rethrowing, so a `Forbidden`, `NotFound`,
+    ///        `ValidationError`, or `Conflict` refusal leaves the same
+    ///        audit trace a success does -- see
+    ///        `lims::SelfJournal::recordFailure` for the identical rationale
+    ///        this mirrors (`include/lims/core/self_journal.hpp`).
+    /// @tparam Action Concrete action type.
+    /// @param action The rejected action.
+    /// @param error The rejecting exception's `what()`.
+    template <typename Action>
+    void logFailure(const Action& action, const std::string& error) const;
+
     /// @brief Throws `Forbidden` unless the calling principal's role on
     ///        this handler's attached project is at least `minimum`. Same
     ///        shape as `ProjectAdminModel::requireRole` -- not shared code

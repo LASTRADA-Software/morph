@@ -555,56 +555,84 @@ void LedgerModel::logAction(const Action& action, const Result& result, std::str
     _log->flush();
 }
 
+template <typename Action>
+void LedgerModel::logFailure(const Action& action, const std::string& error) const {
+    if (!_log) {
+        return;
+    }
+    ::morph::journal::LogEntry entry;
+    entry.modelType = "LedgerModel";
+    entry.entityKey = _entityKeyStr.value_or(std::string{});
+    entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
+    entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+    entry.schema = ::morph::model::detail::actionPayloadSchema<Action>();
+    // No `result` -- there was none. `error` carries the rejecting
+    // exception's text, matching LogEntry's own documented success/failure
+    // shape (`morph/journal/action_log.hpp`).
+    entry.error = error;
+    entry.outcome = ::morph::journal::Outcome::Failed;
+    if (const auto* ctx = ::morph::session::current()) {
+        entry.principal = ctx->principal;
+    }
+    entry.timestampMs = (*morph::ladder::now().value).value.time_since_epoch().count();
+    _log->append(std::move(entry));
+    _log->flush();
+}
+
 AccountInfo LedgerModel::execute(const OpenAccount& action) {
-    const auto* ctx = morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
+        }
+        if (!action.validate()) {
+            throw ValidationError{"OpenAccount: ledgerId and name are required"};
+        }
+        Lightweight::DataMapper mapper;
+        // The ledger row must already exist -- this rung's scope has no
+        // CreateLedger action (see the design note in the task brief); load it
+        // by primary key rather than fabricating a stub LedgerRecord, since
+        // BelongsTo assignment needs the real persisted parent (per
+        // polls::db::OptionRecord's own `opt.poll = poll;` usage, where `poll`
+        // is a row that has actually round-tripped through Create/Query).
+        auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                              .All();
+        if (ledgerRows.empty()) {
+            throw NotFound{"OpenAccount: no such ledger"};
+        }
+        db::AccountRecord accountRow;
+        accountRow.ledger = ledgerRows.front();
+        accountRow.name = action.name;
+        accountRow.kind = static_cast<int>(action.kind);
+        accountRow.currencyCode = currencyToCode(action.currency);
+        mapper.Create(accountRow);
+        // Returns the freshly created account's info, not void -- see
+        // ledger_model.hpp's doc comment on this method for why a void
+        // execute() cannot be registered via BRIDGE_REGISTER_ACTION.
+        auto result = AccountInfo{
+            .id = AccountId{static_cast<std::int64_t>(accountRow.id.Value())},
+            .name = action.name,
+            .kind = action.kind,
+            .currency = action.currency,
+            .balance = morph::math::Rational{morph::math::Numerator{0}, morph::math::Denominator{1},
+                                             morph::math::DecimalPlaces{
+                                                 UnitTraits<Currency>::meta(action.currency)
+                                                     .defaultDecimals}},  // no
+                                                                          // legs exist yet at this task's
+                                                                          // scope -- Task 8 computes a real
+                                                                          // balance -- but the placeholder
+                                                                          // zero is still tagged at the
+                                                                          // account's actual currency
+                                                                          // precision (0 for JPY/KRW, 2 for
+                                                                          // USD/EUR), not a hardcoded 2
+        };
+        logAction(action, result);
+        return result;
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!action.validate()) {
-        throw ValidationError{"OpenAccount: ledgerId and name are required"};
-    }
-    Lightweight::DataMapper mapper;
-    // The ledger row must already exist -- this rung's scope has no
-    // CreateLedger action (see the design note in the task brief); load it
-    // by primary key rather than fabricating a stub LedgerRecord, since
-    // BelongsTo assignment needs the real persisted parent (per
-    // polls::db::OptionRecord's own `opt.poll = poll;` usage, where `poll`
-    // is a row that has actually round-tripped through Create/Query).
-    auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                          .All();
-    if (ledgerRows.empty()) {
-        throw NotFound{"OpenAccount: no such ledger"};
-    }
-    db::AccountRecord accountRow;
-    accountRow.ledger = ledgerRows.front();
-    accountRow.name = action.name;
-    accountRow.kind = static_cast<int>(action.kind);
-    accountRow.currencyCode = currencyToCode(action.currency);
-    mapper.Create(accountRow);
-    // Returns the freshly created account's info, not void -- see
-    // ledger_model.hpp's doc comment on this method for why a void
-    // execute() cannot be registered via BRIDGE_REGISTER_ACTION.
-    auto result = AccountInfo{
-        .id = AccountId{static_cast<std::int64_t>(accountRow.id.Value())},
-        .name = action.name,
-        .kind = action.kind,
-        .currency = action.currency,
-        .balance =
-            morph::math::Rational{
-                morph::math::Numerator{0}, morph::math::Denominator{1},
-                morph::math::DecimalPlaces{
-                    UnitTraits<Currency>::meta(action.currency).defaultDecimals}},  // no
-                                                                                    // legs exist yet at this task's
-                                                                                    // scope -- Task 8 computes a real
-                                                                                    // balance -- but the placeholder
-                                                                                    // zero is still tagged at the
-                                                                                    // account's actual currency
-                                                                                    // precision (0 for JPY/KRW, 2 for
-                                                                                    // USD/EUR), not a hardcoded 2
-    };
-    logAction(action, result);
-    return result;
 }
 
 GetLedgerResult LedgerModel::execute(const GetLedger& action) {
@@ -621,481 +649,502 @@ GetLedgerResult LedgerModel::execute(const GetLedger& action) {
 }
 
 GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
-    const auto* ctx = morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
-    }
-    if (!action.validate()) {
-        throw ValidationError{
-            "StoreTransaction: description and at least two legs with engaged accountIds are required"};
-    }
-    Lightweight::DataMapper mapper;
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
+        }
+        if (!action.validate()) {
+            throw ValidationError{
+                "StoreTransaction: description and at least two legs with engaged accountIds are required"};
+        }
+        Lightweight::DataMapper mapper;
 
-    // Task 11b, design spec §1 (kanban's execute(MoveTaskPosition) pattern,
-    // ladder-kanban-impl:examples/kanban/src/models/board_model.cpp):
-    // ledger lookup, after the empty-principal/validate() checks above
-    // (this action has no further role/auth gate), before any account
-    // lookup or zero-sum partitioning. A disengaged opId (Task 8/9's own
-    // existing call sites, which predate this field) skips this whole
-    // block -- never attempts a lookup against an empty string key.
-    if (action.opId.hasValue()) {
-        auto existingOp = mapper.Query<db::AppliedOpRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::ledger>, "=", *action.ledgerId)
-                              .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::opId>, "=", *action.opId)
+        // Task 11b, design spec §1 (kanban's execute(MoveTaskPosition) pattern,
+        // ladder-kanban-impl:examples/kanban/src/models/board_model.cpp):
+        // ledger lookup, after the empty-principal/validate() checks above
+        // (this action has no further role/auth gate), before any account
+        // lookup or zero-sum partitioning. A disengaged opId (Task 8/9's own
+        // existing call sites, which predate this field) skips this whole
+        // block -- never attempts a lookup against an empty string key.
+        if (action.opId.hasValue()) {
+            auto existingOp =
+                mapper.Query<db::AppliedOpRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::ledger>, "=", *action.ledgerId)
+                    .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::opId>, "=", *action.opId)
+                    .All();
+            if (!existingOp.empty()) {
+                GetLedgerResult replayed;
+                if (auto err = glz::read_json(replayed, std::string{existingOp.front().resultJson.Value()}); err) {
+                    throw LedgerError{"StoreTransaction: corrupt applied-ops ledger entry"};
+                }
+                // A ledger hit means this call performed nothing new -- it only
+                // returned a previously-stored result -- so there is nothing to
+                // journal here (verified against kanban's own identical point:
+                // the framework's own auto-append does not double-log this
+                // path, so skipping logAction on a ledger hit is correct).
+                return replayed;
+            }
+        }
+
+        // Partition legs by the account's OWN currency, never a client-supplied
+        // field (design spec §1) -- look up every referenced account first.
+        std::vector<db::AccountRecord> legAccounts;
+        legAccounts.reserve(action.legs.size());
+        for (const auto& leg : action.legs) {
+            auto rows = mapper.Query<db::AccountRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *leg.accountId)
+                            .All();
+            if (rows.empty()) {
+                throw NotFound{"StoreTransaction: no such account"};
+            }
+            legAccounts.push_back(rows.front());
+        }
+
+        // Every leg onto its own account currency's scale before anything sums
+        // them, and the restated amounts -- not the client's -- are what get
+        // stored below. See restateLegAmounts for why the invariant is unsound in
+        // both directions without this.
+        const auto legAmounts = restateLegAmounts(action.legs, legAccounts, "StoreTransaction");
+        checkZeroSumByCurrency(legAmounts, legAccounts);
+
+        // Constructor/commit shape copied verbatim from
+        // bank::LoanModel::execute(const dto::TakeLoan&) (examples/bank/src/
+        // models/loan_model.cpp:77-80) -- the exact multi-row-commit pattern
+        // this rung's own StoreTransaction (journal + N legs) needs.
+        Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+        db::TransactionJournalRecord journalRow;
+        journalRow.description = action.description;
+        // DateTime->epoch-millis conversion copied verbatim from
+        // bookmarks::db's own nowMs()/fromEpochMs() helpers
+        // (bookmark_model.cpp:61-63): Timestamp::value is
+        // std::optional<DateTime>, DateTime::value is
+        // std::chrono::sys_time<milliseconds> -- .time_since_epoch().count()
+        // gives the raw millisecond integer this entity column stores.
+        // action.date is a client-supplied "when did this happen" field
+        // (design spec §1) -- not a server audit stamp, so this does NOT go
+        // through morph::ladder::now() (see this rung's own note on that
+        // convention, which binds server-stamped timestamps like
+        // ImportedOpRecord::appliedAtMs/ReportJobRecord::createdAtMs in later
+        // tasks, not a client-supplied journal date).
+        journalRow.date = action.date.value.has_value() ? (*action.date.value).value.time_since_epoch().count() : 0;
+        auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
                               .All();
-        if (!existingOp.empty()) {
-            GetLedgerResult replayed;
-            if (auto err = glz::read_json(replayed, std::string{existingOp.front().resultJson.Value()}); err) {
-                throw LedgerError{"StoreTransaction: corrupt applied-ops ledger entry"};
+        if (ledgerRows.empty()) {
+            throw NotFound{"StoreTransaction: no such ledger"};
+        }
+        journalRow.ledger = ledgerRows.front();
+        mapper.Create(journalRow);
+
+        for (std::size_t i = 0; i < action.legs.size(); ++i) {
+            db::TransactionLegRecord legRow;
+            legRow.journal = journalRow;
+            legRow.account = legAccounts[i];
+            // The restated amount, never the client's: the stored scale is always
+            // the account currency's own.
+            legRow.amountNum = legAmounts[i].numerator;
+            legRow.amountDen = legAmounts[i].denominator;
+            legRow.amountDp = static_cast<int>(legAmounts[i].decimalPlaces.value);
+            legRow.currencyCode = legAccounts[i].currencyCode.Value();
+            // Foreign-amount triple: display/audit metadata only, never read by
+            // the zero-sum partitioning loop above (design spec §1 step 3).
+            // Assigned unconditionally -- std::optional's own empty state
+            // already expresses "no foreign amount" through the nullable
+            // column, so this never branches on whether the leg has one.
+            const auto& foreignAmount = action.legs[i].foreignAmount;
+            legRow.foreignAmountNum = foreignAmount ? std::optional{foreignAmount->numerator} : std::nullopt;
+            legRow.foreignAmountDen = foreignAmount ? std::optional{foreignAmount->denominator} : std::nullopt;
+            legRow.foreignAmountDp =
+                foreignAmount ? std::optional{static_cast<int>(foreignAmount->decimalPlaces.value)} : std::nullopt;
+            legRow.foreignCurrencyCode =
+                action.legs[i].foreignCurrency
+                    ? std::optional{Lightweight::SqlAnsiString<3>{currencyToCode(*action.legs[i].foreignCurrency)}}
+                    : std::nullopt;
+            mapper.Create(legRow);
+        }
+
+        // Rebuilt through the same mapper/in-flight transaction as the mutation
+        // above (buildLedgerState, not a fresh execute(GetLedger{...}) call
+        // against a second Lightweight::DataMapper connection) -- Task 11b's
+        // applied-ops row below serializes this exact result and must commit
+        // atomically with it.
+        auto result = buildLedgerState(mapper, action.ledgerId);
+
+        // Task 11b: written *inside* the same transaction, before sqlTxn.Commit()
+        // -- confirmed against kanban's own real execute(MoveTaskPosition), which
+        // creates its AppliedOpRecord before transaction.Commit() so the op-id
+        // write and the business mutation commit atomically together.
+        if (action.opId.hasValue()) {
+            std::string resultJson;
+            if (auto err = glz::write_json(result, resultJson); err) {
+                throw LedgerError{"StoreTransaction: failed to serialize result for the applied-ops ledger"};
             }
-            // A ledger hit means this call performed nothing new -- it only
-            // returned a previously-stored result -- so there is nothing to
-            // journal here (verified against kanban's own identical point:
-            // the framework's own auto-append does not double-log this
-            // path, so skipping logAction on a ledger hit is correct).
-            return replayed;
+            db::AppliedOpRecord op;
+            op.ledger = ledgerRows.front();
+            op.opId = *action.opId;
+            op.resultJson = resultJson;
+            op.createdAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
+            mapper.Create(op);
         }
-    }
 
-    // Partition legs by the account's OWN currency, never a client-supplied
-    // field (design spec §1) -- look up every referenced account first.
-    std::vector<db::AccountRecord> legAccounts;
-    legAccounts.reserve(action.legs.size());
-    for (const auto& leg : action.legs) {
-        auto rows = mapper.Query<db::AccountRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *leg.accountId)
-                        .All();
-        if (rows.empty()) {
-            throw NotFound{"StoreTransaction: no such account"};
-        }
-        legAccounts.push_back(rows.front());
-    }
-
-    // Every leg onto its own account currency's scale before anything sums
-    // them, and the restated amounts -- not the client's -- are what get
-    // stored below. See restateLegAmounts for why the invariant is unsound in
-    // both directions without this.
-    const auto legAmounts = restateLegAmounts(action.legs, legAccounts, "StoreTransaction");
-    checkZeroSumByCurrency(legAmounts, legAccounts);
-
-    // Constructor/commit shape copied verbatim from
-    // bank::LoanModel::execute(const dto::TakeLoan&) (examples/bank/src/
-    // models/loan_model.cpp:77-80) -- the exact multi-row-commit pattern
-    // this rung's own StoreTransaction (journal + N legs) needs.
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    db::TransactionJournalRecord journalRow;
-    journalRow.description = action.description;
-    // DateTime->epoch-millis conversion copied verbatim from
-    // bookmarks::db's own nowMs()/fromEpochMs() helpers
-    // (bookmark_model.cpp:61-63): Timestamp::value is
-    // std::optional<DateTime>, DateTime::value is
-    // std::chrono::sys_time<milliseconds> -- .time_since_epoch().count()
-    // gives the raw millisecond integer this entity column stores.
-    // action.date is a client-supplied "when did this happen" field
-    // (design spec §1) -- not a server audit stamp, so this does NOT go
-    // through morph::ladder::now() (see this rung's own note on that
-    // convention, which binds server-stamped timestamps like
-    // ImportedOpRecord::appliedAtMs/ReportJobRecord::createdAtMs in later
-    // tasks, not a client-supplied journal date).
-    journalRow.date = action.date.value.has_value() ? (*action.date.value).value.time_since_epoch().count() : 0;
-    auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                          .All();
-    if (ledgerRows.empty()) {
-        throw NotFound{"StoreTransaction: no such ledger"};
-    }
-    journalRow.ledger = ledgerRows.front();
-    mapper.Create(journalRow);
-
-    for (std::size_t i = 0; i < action.legs.size(); ++i) {
-        db::TransactionLegRecord legRow;
-        legRow.journal = journalRow;
-        legRow.account = legAccounts[i];
-        // The restated amount, never the client's: the stored scale is always
-        // the account currency's own.
-        legRow.amountNum = legAmounts[i].numerator;
-        legRow.amountDen = legAmounts[i].denominator;
-        legRow.amountDp = static_cast<int>(legAmounts[i].decimalPlaces.value);
-        legRow.currencyCode = legAccounts[i].currencyCode.Value();
-        // Foreign-amount triple: display/audit metadata only, never read by
-        // the zero-sum partitioning loop above (design spec §1 step 3).
-        // Assigned unconditionally -- std::optional's own empty state
-        // already expresses "no foreign amount" through the nullable
-        // column, so this never branches on whether the leg has one.
-        const auto& foreignAmount = action.legs[i].foreignAmount;
-        legRow.foreignAmountNum = foreignAmount ? std::optional{foreignAmount->numerator} : std::nullopt;
-        legRow.foreignAmountDen = foreignAmount ? std::optional{foreignAmount->denominator} : std::nullopt;
-        legRow.foreignAmountDp =
-            foreignAmount ? std::optional{static_cast<int>(foreignAmount->decimalPlaces.value)} : std::nullopt;
-        legRow.foreignCurrencyCode =
-            action.legs[i].foreignCurrency
-                ? std::optional{Lightweight::SqlAnsiString<3>{currencyToCode(*action.legs[i].foreignCurrency)}}
-                : std::nullopt;
-        mapper.Create(legRow);
-    }
-
-    // Rebuilt through the same mapper/in-flight transaction as the mutation
-    // above (buildLedgerState, not a fresh execute(GetLedger{...}) call
-    // against a second Lightweight::DataMapper connection) -- Task 11b's
-    // applied-ops row below serializes this exact result and must commit
-    // atomically with it.
-    auto result = buildLedgerState(mapper, action.ledgerId);
-
-    // Task 11b: written *inside* the same transaction, before sqlTxn.Commit()
-    // -- confirmed against kanban's own real execute(MoveTaskPosition), which
-    // creates its AppliedOpRecord before transaction.Commit() so the op-id
-    // write and the business mutation commit atomically together.
-    if (action.opId.hasValue()) {
-        std::string resultJson;
-        if (auto err = glz::write_json(result, resultJson); err) {
-            throw LedgerError{"StoreTransaction: failed to serialize result for the applied-ops ledger"};
-        }
-        db::AppliedOpRecord op;
-        op.ledger = ledgerRows.front();
-        op.opId = *action.opId;
-        op.resultJson = resultJson;
-        op.createdAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
-        mapper.Create(op);
-    }
-
-    // Cascade rule evaluation (design spec §4/§5): a matching
-    // RuleTrigger::DescriptionContains rule cascades into a second,
-    // causally-linked SetCategory mutation. The mutation itself
-    // (setCategoryImpl below) runs inside this same SQL transaction, before
-    // sqlTxn.Commit(), so it commits atomically with the triggering
-    // journal+legs insert -- exactly like the applied-ops row above. The
-    // *logging* of each fired cascade is deferred (into cascadesToLog) and
-    // only emitted after the trigger's own logAction(action, result) call
-    // below, so the trigger entry is always seq-ordered ahead of any cascade
-    // entry it caused -- entries[0] is the trigger, per design spec §5's own
-    // causal-order expectation and this task's own journal test.
-    //
-    // Gated on !isReplaying(): replay() re-dispatches this StoreTransaction
-    // entry to reconstruct state, and the cascade it originally produced is
-    // its own separate, already-recorded SetCategory entry later in the same
-    // log -- re-evaluating rules here during replay would either double-apply
-    // the cascade (if the rule is unchanged) or apply a *different* outcome
-    // than what was actually recorded (if the rule was edited since), which
-    // is exactly the divergence the causalParentId/ruleVersion pinning exists
-    // to prevent. Live dispatch (isReplaying() == false) is the only time
-    // this block ever runs.
-    std::vector<SetCategory> cascadesToLog;
-    if (!morph::journal::isReplaying()) {
-        auto rules = mapper.Query<db::RuleRecord>()
-                         .Where(::Lightweight::FieldNameOf<&db::RuleRecord::ledger>, "=", *action.ledgerId)
-                         .Where(::Lightweight::FieldNameOf<&db::RuleRecord::trigger>, "=",
-                                static_cast<int>(RuleTrigger::DescriptionContains))
-                         .All();
-        // Decision 1 (design spec's own step 4, transliterated for ledger):
-        // the leg to categorize is the first Expense/Revenue account among
-        // this transaction's own legs -- legAccounts is the same vector the
-        // zero-sum partitioning loop above already built, positionally
-        // aligned with action.legs.
-        std::optional<std::size_t> categorizableLegIndex;
-        for (std::size_t i = 0; i < legAccounts.size(); ++i) {
-            const auto kind = static_cast<AccountKind>(legAccounts[i].kind.Value());
-            if (kind == AccountKind::Expense || kind == AccountKind::Revenue) {
-                categorizableLegIndex = i;
-                break;
-            }
-        }
-        if (categorizableLegIndex.has_value()) {
-            for (const auto& rule : rules) {
-                if (action.description.find(std::string{rule.matchText.Value().ToStringView()}) == std::string::npos) {
-                    continue;
+        // Cascade rule evaluation (design spec §4/§5): a matching
+        // RuleTrigger::DescriptionContains rule cascades into a second,
+        // causally-linked SetCategory mutation. The mutation itself
+        // (setCategoryImpl below) runs inside this same SQL transaction, before
+        // sqlTxn.Commit(), so it commits atomically with the triggering
+        // journal+legs insert -- exactly like the applied-ops row above. The
+        // *logging* of each fired cascade is deferred (into cascadesToLog) and
+        // only emitted after the trigger's own logAction(action, result) call
+        // below, so the trigger entry is always seq-ordered ahead of any cascade
+        // entry it caused -- entries[0] is the trigger, per design spec §5's own
+        // causal-order expectation and this task's own journal test.
+        //
+        // Gated on !isReplaying(): replay() re-dispatches this StoreTransaction
+        // entry to reconstruct state, and the cascade it originally produced is
+        // its own separate, already-recorded SetCategory entry later in the same
+        // log -- re-evaluating rules here during replay would either double-apply
+        // the cascade (if the rule is unchanged) or apply a *different* outcome
+        // than what was actually recorded (if the rule was edited since), which
+        // is exactly the divergence the causalParentId/ruleVersion pinning exists
+        // to prevent. Live dispatch (isReplaying() == false) is the only time
+        // this block ever runs.
+        std::vector<SetCategory> cascadesToLog;
+        if (!morph::journal::isReplaying()) {
+            auto rules = mapper.Query<db::RuleRecord>()
+                             .Where(::Lightweight::FieldNameOf<&db::RuleRecord::ledger>, "=", *action.ledgerId)
+                             .Where(::Lightweight::FieldNameOf<&db::RuleRecord::trigger>, "=",
+                                    static_cast<int>(RuleTrigger::DescriptionContains))
+                             .All();
+            // Decision 1 (design spec's own step 4, transliterated for ledger):
+            // the leg to categorize is the first Expense/Revenue account among
+            // this transaction's own legs -- legAccounts is the same vector the
+            // zero-sum partitioning loop above already built, positionally
+            // aligned with action.legs.
+            std::optional<std::size_t> categorizableLegIndex;
+            for (std::size_t i = 0; i < legAccounts.size(); ++i) {
+                const auto kind = static_cast<AccountKind>(legAccounts[i].kind.Value());
+                if (kind == AccountKind::Expense || kind == AccountKind::Revenue) {
+                    categorizableLegIndex = i;
+                    break;
                 }
-                // Decision 2: lookup, never auto-create -- a rule naming a
-                // category that doesn't exist in this ledger simply doesn't
-                // fire; it is not an error on the triggering transaction.
-                auto categoryRows =
-                    mapper.Query<db::CategoryRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::ledger>, "=", *action.ledgerId)
-                        .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::name>, "=", rule.actionValue.Value())
-                        .All();
-                if (categoryRows.empty()) {
-                    continue;
+            }
+            if (categorizableLegIndex.has_value()) {
+                for (const auto& rule : rules) {
+                    if (action.description.find(std::string{rule.matchText.Value().ToStringView()}) ==
+                        std::string::npos) {
+                        continue;
+                    }
+                    // Decision 2: lookup, never auto-create -- a rule naming a
+                    // category that doesn't exist in this ledger simply doesn't
+                    // fire; it is not an error on the triggering transaction.
+                    auto categoryRows =
+                        mapper.Query<db::CategoryRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::ledger>, "=", *action.ledgerId)
+                            .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::name>, "=",
+                                   rule.actionValue.Value())
+                            .All();
+                    if (categoryRows.empty()) {
+                        continue;
+                    }
+                    const SetCategory cascadeAction{
+                        .accountId =
+                            AccountId{static_cast<std::int64_t>(legAccounts[*categorizableLegIndex].id.Value())},
+                        .categoryId = CategoryId{static_cast<std::int64_t>(categoryRows.front().id.Value())},
+                        .ruleId = RuleId{static_cast<std::int64_t>(rule.id.Value())},
+                        .ruleVersion = rule.version.Value()};
+                    setCategoryImpl(mapper, cascadeAction);
+                    cascadesToLog.push_back(cascadeAction);
                 }
-                const SetCategory cascadeAction{
-                    .accountId = AccountId{static_cast<std::int64_t>(legAccounts[*categorizableLegIndex].id.Value())},
-                    .categoryId = CategoryId{static_cast<std::int64_t>(categoryRows.front().id.Value())},
-                    .ruleId = RuleId{static_cast<std::int64_t>(rule.id.Value())},
-                    .ruleVersion = rule.version.Value()};
-                setCategoryImpl(mapper, cascadeAction);
-                cascadesToLog.push_back(cascadeAction);
             }
         }
+
+        sqlTxn.Commit();
+
+        logAction(action, result);
+
+        // Logged only now, after the trigger's own entry above, so the cascade
+        // always lands strictly after its trigger in the log's seq order.
+        // logAction is the *only* logger for each of these entries --
+        // setCategoryImpl holds no logging of its own, and the public
+        // execute(SetCategory) overload (which also calls setCategoryImpl, then
+        // logs unconditionally with an empty causalParentId) is deliberately not
+        // called from here, to avoid double-logging the same firing.
+        const std::string triggerCausalId = "transactionJournal:" + std::to_string(journalRow.id.Value());
+        for (const auto& cascadeAction : cascadesToLog) {
+            logAction(cascadeAction, SetCategoryResult{}, triggerCausalId);
+        }
+
+        return result;
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-
-    sqlTxn.Commit();
-
-    logAction(action, result);
-
-    // Logged only now, after the trigger's own entry above, so the cascade
-    // always lands strictly after its trigger in the log's seq order.
-    // logAction is the *only* logger for each of these entries --
-    // setCategoryImpl holds no logging of its own, and the public
-    // execute(SetCategory) overload (which also calls setCategoryImpl, then
-    // logs unconditionally with an empty causalParentId) is deliberately not
-    // called from here, to avoid double-logging the same firing.
-    const std::string triggerCausalId = "transactionJournal:" + std::to_string(journalRow.id.Value());
-    for (const auto& cascadeAction : cascadesToLog) {
-        logAction(cascadeAction, SetCategoryResult{}, triggerCausalId);
-    }
-
-    return result;
 }
 
 GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
-    const auto* ctx = morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
-    }
-    if (!action.validate()) {
-        throw ValidationError{"UndoTransaction: ledgerId and journalId are required"};
-    }
-    Lightweight::DataMapper mapper;
-
-    auto journalRows =
-        mapper.Query<db::TransactionJournalRecord>()
-            .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::id>, "=", *action.journalId)
-            .All();
-    if (journalRows.empty()) {
-        throw NotFound{"UndoTransaction: no such journal"};
-    }
-    auto& originalJournalRow = journalRows.front();
-    // Redundant-but-required field, per this action's own doc comment: a
-    // wrong ledgerId cannot be used to target the wrong ledger's model
-    // instance or bypass anything, since the journal's own ledger is
-    // verified independently here.
-    if (originalJournalRow.ledger.Value() != static_cast<std::uint64_t>(*action.ledgerId)) {
-        throw NotFound{"UndoTransaction: journal does not belong to this ledger"};
-    }
-
-    // A compensating entry names the entry it reverses, so "has this already
-    // been reversed?" is a query rather than mutable state on the original --
-    // which keeps the original journal row immutable, as design spec §6
-    // requires of an audit record.
-    //
-    // Without this check two devices that both queued a reversal of the same
-    // transaction while offline each post one, and the second silently pays
-    // the money back a second time. The ledger's per-currency zero-sum
-    // invariant does not catch that: a reversal is itself zero-sum, so the
-    // sum stays zero while the individual account balances go wrong.
-    const auto reversalCausalParentId = "transactionJournal:" + std::to_string(originalJournalRow.id.Value());
-    const auto existingReversals =
-        mapper.Query<db::TransactionJournalRecord>()
-            .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::causalParentId>, "=",
-                   reversalCausalParentId)
-            .All();
-    if (!existingReversals.empty()) {
-        throw AlreadyReversed{};
-    }
-
-    auto originalLegRows =
-        mapper.Query<db::TransactionLegRecord>()
-            .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::journal>, "=", originalJournalRow.id.Value())
-            .All();
-
-    std::vector<TransactionLeg> reversalLegs;
-    std::vector<db::AccountRecord> reversalLegAccounts;
-    reversalLegs.reserve(originalLegRows.size());
-    reversalLegAccounts.reserve(originalLegRows.size());
-    for (const auto& legRow : originalLegRows) {
-        const auto originalAmount = morph::math::Rational{
-            morph::math::Numerator{legRow.amountNum.Value()}, morph::math::Denominator{legRow.amountDen.Value()},
-            morph::math::DecimalPlaces{static_cast<std::uint32_t>(legRow.amountDp.Value())}};
-        auto accountRows = mapper.Query<db::AccountRecord>()
-                               .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", legRow.account.Value())
-                               .All();
-        if (accountRows.empty()) {
-            throw NotFound{"UndoTransaction: no such account"};
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
         }
-        reversalLegAccounts.push_back(accountRows.front());
-        // Member unary negation (Rational::operator-() const), never the
-        // free binary subtraction operator also declared in rational.hpp --
-        // see this action's own doc comment.
-        reversalLegs.push_back(TransactionLeg{
-            .accountId = AccountId{static_cast<std::int64_t>(legRow.account.Value())}, .amount = -originalAmount});
+        if (!action.validate()) {
+            throw ValidationError{"UndoTransaction: ledgerId and journalId are required"};
+        }
+        Lightweight::DataMapper mapper;
+
+        auto journalRows =
+            mapper.Query<db::TransactionJournalRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::id>, "=", *action.journalId)
+                .All();
+        if (journalRows.empty()) {
+            throw NotFound{"UndoTransaction: no such journal"};
+        }
+        auto& originalJournalRow = journalRows.front();
+        // Redundant-but-required field, per this action's own doc comment: a
+        // wrong ledgerId cannot be used to target the wrong ledger's model
+        // instance or bypass anything, since the journal's own ledger is
+        // verified independently here.
+        if (originalJournalRow.ledger.Value() != static_cast<std::uint64_t>(*action.ledgerId)) {
+            throw NotFound{"UndoTransaction: journal does not belong to this ledger"};
+        }
+
+        // A compensating entry names the entry it reverses, so "has this already
+        // been reversed?" is a query rather than mutable state on the original --
+        // which keeps the original journal row immutable, as design spec §6
+        // requires of an audit record.
+        //
+        // Without this check two devices that both queued a reversal of the same
+        // transaction while offline each post one, and the second silently pays
+        // the money back a second time. The ledger's per-currency zero-sum
+        // invariant does not catch that: a reversal is itself zero-sum, so the
+        // sum stays zero while the individual account balances go wrong.
+        const auto reversalCausalParentId = "transactionJournal:" + std::to_string(originalJournalRow.id.Value());
+        const auto existingReversals =
+            mapper.Query<db::TransactionJournalRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::causalParentId>, "=",
+                       reversalCausalParentId)
+                .All();
+        if (!existingReversals.empty()) {
+            throw AlreadyReversed{};
+        }
+
+        auto originalLegRows = mapper.Query<db::TransactionLegRecord>()
+                                   .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::journal>, "=",
+                                          originalJournalRow.id.Value())
+                                   .All();
+
+        std::vector<TransactionLeg> reversalLegs;
+        std::vector<db::AccountRecord> reversalLegAccounts;
+        reversalLegs.reserve(originalLegRows.size());
+        reversalLegAccounts.reserve(originalLegRows.size());
+        for (const auto& legRow : originalLegRows) {
+            const auto originalAmount = morph::math::Rational{
+                morph::math::Numerator{legRow.amountNum.Value()}, morph::math::Denominator{legRow.amountDen.Value()},
+                morph::math::DecimalPlaces{static_cast<std::uint32_t>(legRow.amountDp.Value())}};
+            auto accountRows =
+                mapper.Query<db::AccountRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", legRow.account.Value())
+                    .All();
+            if (accountRows.empty()) {
+                throw NotFound{"UndoTransaction: no such account"};
+            }
+            reversalLegAccounts.push_back(accountRows.front());
+            // Member unary negation (Rational::operator-() const), never the
+            // free binary subtraction operator also declared in rational.hpp --
+            // see this action's own doc comment.
+            reversalLegs.push_back(TransactionLeg{
+                .accountId = AccountId{static_cast<std::int64_t>(legRow.account.Value())}, .amount = -originalAmount});
+        }
+
+        // The reversal's own date is "now" (when the undo happened), via
+        // morph::time::Timestamp::now() -- the same type/convention
+        // StoreTransaction.date itself uses for a client-observable "when did
+        // this happen" field (see execute(StoreTransaction)'s own comment on
+        // why journalRow.date does NOT go through morph::ladder::now()) -- NOT
+        // the original journal's own date, which belongs to the transaction
+        // being reversed, not the reversal itself.
+        auto result =
+            storeJournalImpl(mapper, action.ledgerId,
+                             "Reversal of: " + std::string{originalJournalRow.description.Value().ToStringView()},
+                             morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts, reversalCausalParentId);
+
+        logAction(action, result, reversalCausalParentId);
+        return result;
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-
-    // The reversal's own date is "now" (when the undo happened), via
-    // morph::time::Timestamp::now() -- the same type/convention
-    // StoreTransaction.date itself uses for a client-observable "when did
-    // this happen" field (see execute(StoreTransaction)'s own comment on
-    // why journalRow.date does NOT go through morph::ladder::now()) -- NOT
-    // the original journal's own date, which belongs to the transaction
-    // being reversed, not the reversal itself.
-    auto result = storeJournalImpl(
-        mapper, action.ledgerId, "Reversal of: " + std::string{originalJournalRow.description.Value().ToStringView()},
-        morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts, reversalCausalParentId);
-
-    logAction(action, result, reversalCausalParentId);
-    return result;
 }
 
 ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
-    const auto* ctx = morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
-    }
-    const std::string principal = ctx->principal;
-
-    if (action.csvChunk.empty() || !action.ledgerId.hasValue() || !action.counterAccountId.hasValue()) {
-        throw ValidationError{"ImportLedgerChunk: ledgerId, counterAccountId, and csvChunk are required"};
-    }
-
-    Lightweight::DataMapper mapper;
-
-    // Chunk-retry dedup (design spec §8, Task 15's own scope-narrowing
-    // ruling): the opId ledger is populated below (once per chunk, after
-    // every row has been processed) so `ledger_imported_ops` satisfies this
-    // task's own "chunk-level opId dedup" interface line, but it is
-    // deliberately NOT read back here for an early return. `ImportedOpRecord`
-    // (unlike `StoreTransaction`'s `AppliedOpRecord`) stores no
-    // `result_json` -- mirroring bookmarks::db::ImportedOpRecord's own
-    // shape exactly -- so an early return on a ledger hit could only ever
-    // produce a zeroed `ImportResult{}`, which would UNDER-report a genuine
-    // replay's real imported/duplicates counts. A replay is still a safe
-    // no-op without this early return: re-parsing the identical csvChunk
-    // re-derives identical content hashes, which the hash-dedup check below
-    // re-skips on its own. Building a correctly-counted early return would
-    // require storing those counts, which this task's own test does not
-    // need -- recorded as a deliberate ruling, not an unresolved TODO.
-    //
-    // No single `Lightweight::SqlTransaction` wraps this whole loop:
-    // `storeJournalImpl` (reused per row below) opens and commits its own
-    // `SqlTransaction` on this same `mapper.Connection()`, and
-    // `Lightweight::SqlTransaction`'s constructor/destructor toggle
-    // `SQL_ATTR_AUTOCOMMIT` on the connection directly (confirmed against
-    // its real implementation) -- nesting a second one around it would
-    // have the inner `Commit()` re-enable autocommit and end the
-    // transaction out from under the still-open outer one, silently
-    // breaking rollback-on-throw for every row after the first. Every
-    // other multi-row commit in this file (`execute(StoreTransaction)`,
-    // `execute(UndoTransaction)`) also opens exactly one
-    // `Lightweight::SqlTransaction` per call, never two nested ones on the
-    // same connection -- this loop instead commits one row at a time,
-    // atomically, via `storeJournalImpl`'s own transaction: a thrown
-    // `ValidationError`/`NotFound`/`ZeroSumViolation` on a malformed or
-    // unbalanced row still leaves every already-committed row from earlier
-    // in the same chunk in place (each is checked and posted as its own
-    // complete, zero-sum journal entry by `storeJournalImpl` -- see that
-    // method's own doc comment), it just does not roll the whole chunk back
-    // to empty.
-    auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                          .All();
-    if (ledgerRows.empty()) {
-        throw NotFound{"ImportLedgerChunk: no such ledger"};
-    }
-
-    auto counterAccountRows =
-        mapper.Query<db::AccountRecord>()
-            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.counterAccountId)
-            .All();
-    if (counterAccountRows.empty()) {
-        throw NotFound{"ImportLedgerChunk: no such account"};
-    }
-    const auto& counterAccountRow = counterAccountRows.front();
-
-    std::int64_t imported = 0;
-    std::int64_t duplicates = 0;
-
-    // Split on '\n', skip the header line (row 0).
-    auto lines = splitOn(action.csvChunk, '\n');
-    for (std::size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
-        if (lineIndex == 0) {
-            continue;  // header row
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
         }
-        if (lines[lineIndex].empty()) {
-            continue;
-        }
-        auto fields = splitOn(lines[lineIndex], ',');
-        if (fields.size() != 4) {
-            throw ValidationError{"ImportLedgerChunk: malformed CSV row"};
-        }
-        const auto& dateField = fields[0];
-        const auto& descriptionField = fields[1];
-        const auto& accountIdField = fields[2];
-        const auto& amountField = fields[3];
+        const std::string principal = ctx->principal;
 
-        auto parsedDate = morph::time::DateTime::fromIso8601(dateField);
-        if (!parsedDate.has_value()) {
-            throw ValidationError{"ImportLedgerChunk: malformed date"};
+        if (action.csvChunk.empty() || !action.ledgerId.hasValue() || !action.counterAccountId.hasValue()) {
+            throw ValidationError{"ImportLedgerChunk: ledgerId, counterAccountId, and csvChunk are required"};
         }
-        const auto rowAccountId = AccountId{std::stoll(accountIdField)};
-        const auto amount = parseAmount(amountField);
 
-        auto rowAccountRows = mapper.Query<db::AccountRecord>()
-                                  .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *rowAccountId)
-                                  .All();
-        if (rowAccountRows.empty()) {
+        Lightweight::DataMapper mapper;
+
+        // Chunk-retry dedup (design spec §8, Task 15's own scope-narrowing
+        // ruling): the opId ledger is populated below (once per chunk, after
+        // every row has been processed) so `ledger_imported_ops` satisfies this
+        // task's own "chunk-level opId dedup" interface line, but it is
+        // deliberately NOT read back here for an early return. `ImportedOpRecord`
+        // (unlike `StoreTransaction`'s `AppliedOpRecord`) stores no
+        // `result_json` -- mirroring bookmarks::db::ImportedOpRecord's own
+        // shape exactly -- so an early return on a ledger hit could only ever
+        // produce a zeroed `ImportResult{}`, which would UNDER-report a genuine
+        // replay's real imported/duplicates counts. A replay is still a safe
+        // no-op without this early return: re-parsing the identical csvChunk
+        // re-derives identical content hashes, which the hash-dedup check below
+        // re-skips on its own. Building a correctly-counted early return would
+        // require storing those counts, which this task's own test does not
+        // need -- recorded as a deliberate ruling, not an unresolved TODO.
+        //
+        // No single `Lightweight::SqlTransaction` wraps this whole loop:
+        // `storeJournalImpl` (reused per row below) opens and commits its own
+        // `SqlTransaction` on this same `mapper.Connection()`, and
+        // `Lightweight::SqlTransaction`'s constructor/destructor toggle
+        // `SQL_ATTR_AUTOCOMMIT` on the connection directly (confirmed against
+        // its real implementation) -- nesting a second one around it would
+        // have the inner `Commit()` re-enable autocommit and end the
+        // transaction out from under the still-open outer one, silently
+        // breaking rollback-on-throw for every row after the first. Every
+        // other multi-row commit in this file (`execute(StoreTransaction)`,
+        // `execute(UndoTransaction)`) also opens exactly one
+        // `Lightweight::SqlTransaction` per call, never two nested ones on the
+        // same connection -- this loop instead commits one row at a time,
+        // atomically, via `storeJournalImpl`'s own transaction: a thrown
+        // `ValidationError`/`NotFound`/`ZeroSumViolation` on a malformed or
+        // unbalanced row still leaves every already-committed row from earlier
+        // in the same chunk in place (each is checked and posted as its own
+        // complete, zero-sum journal entry by `storeJournalImpl` -- see that
+        // method's own doc comment), it just does not roll the whole chunk back
+        // to empty.
+        auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                              .All();
+        if (ledgerRows.empty()) {
+            throw NotFound{"ImportLedgerChunk: no such ledger"};
+        }
+
+        auto counterAccountRows =
+            mapper.Query<db::AccountRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.counterAccountId)
+                .All();
+        if (counterAccountRows.empty()) {
             throw NotFound{"ImportLedgerChunk: no such account"};
         }
-        const auto& rowAccountRow = rowAccountRows.front();
+        const auto& counterAccountRow = counterAccountRows.front();
 
-        // Content hash (design spec §8's "description + date + legs,
-        // canonicalized" -- the amount IS the leg here, since each row is a
-        // single two-leg entry whose only client-supplied amount is this one
-        // value): description + "|" + ISO date string + "|" + numerator +
-        // "|" + denominator + "|" + decimalPlaces.
-        const std::string hashInput = descriptionField + "|" + dateField + "|" + std::to_string(amount.numerator) +
-                                      "|" + std::to_string(amount.denominator) + "|" +
-                                      std::to_string(amount.decimalPlaces.value);
-        const std::string hash = std::to_string(std::hash<std::string>{}(hashInput));
+        std::int64_t imported = 0;
+        std::int64_t duplicates = 0;
 
-        auto existingHashRows =
-            mapper.Query<db::ImportedTxnHashRecord>()
-                .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::ledger>, "=", *action.ledgerId)
-                .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::hash>, "=", hash)
-                .All();
-        if (!existingHashRows.empty()) {
-            ++duplicates;
-            continue;
+        // Split on '\n', skip the header line (row 0).
+        auto lines = splitOn(action.csvChunk, '\n');
+        for (std::size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+            if (lineIndex == 0) {
+                continue;  // header row
+            }
+            if (lines[lineIndex].empty()) {
+                continue;
+            }
+            auto fields = splitOn(lines[lineIndex], ',');
+            if (fields.size() != 4) {
+                throw ValidationError{"ImportLedgerChunk: malformed CSV row"};
+            }
+            const auto& dateField = fields[0];
+            const auto& descriptionField = fields[1];
+            const auto& accountIdField = fields[2];
+            const auto& amountField = fields[3];
+
+            auto parsedDate = morph::time::DateTime::fromIso8601(dateField);
+            if (!parsedDate.has_value()) {
+                throw ValidationError{"ImportLedgerChunk: malformed date"};
+            }
+            const auto rowAccountId = AccountId{std::stoll(accountIdField)};
+            const auto amount = parseAmount(amountField);
+
+            auto rowAccountRows = mapper.Query<db::AccountRecord>()
+                                      .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *rowAccountId)
+                                      .All();
+            if (rowAccountRows.empty()) {
+                throw NotFound{"ImportLedgerChunk: no such account"};
+            }
+            const auto& rowAccountRow = rowAccountRows.front();
+
+            // Content hash (design spec §8's "description + date + legs,
+            // canonicalized" -- the amount IS the leg here, since each row is a
+            // single two-leg entry whose only client-supplied amount is this one
+            // value): description + "|" + ISO date string + "|" + numerator +
+            // "|" + denominator + "|" + decimalPlaces.
+            const std::string hashInput = descriptionField + "|" + dateField + "|" + std::to_string(amount.numerator) +
+                                          "|" + std::to_string(amount.denominator) + "|" +
+                                          std::to_string(amount.decimalPlaces.value);
+            const std::string hash = std::to_string(std::hash<std::string>{}(hashInput));
+
+            auto existingHashRows =
+                mapper.Query<db::ImportedTxnHashRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::ledger>, "=", *action.ledgerId)
+                    .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::hash>, "=", hash)
+                    .All();
+            if (!existingHashRows.empty()) {
+                ++duplicates;
+                continue;
+            }
+
+            const std::vector<TransactionLeg> legs{
+                TransactionLeg{.accountId = rowAccountId, .amount = amount},
+                TransactionLeg{.accountId = action.counterAccountId, .amount = -amount}};
+            const std::vector<db::AccountRecord> legAccounts{rowAccountRow, counterAccountRow};
+            [[maybe_unused]] auto rowResult = storeJournalImpl(mapper, action.ledgerId, descriptionField,
+                                                               morph::time::Timestamp{*parsedDate}, legs, legAccounts);
+
+            db::ImportedTxnHashRecord hashRow;
+            hashRow.ledger = ledgerRows.front();
+            hashRow.hash = hash;
+            mapper.Create(hashRow);
+
+            ++imported;
         }
 
-        const std::vector<TransactionLeg> legs{
-            TransactionLeg{.accountId = rowAccountId, .amount = amount},
-            TransactionLeg{.accountId = action.counterAccountId, .amount = -amount}};
-        const std::vector<db::AccountRecord> legAccounts{rowAccountRow, counterAccountRow};
-        [[maybe_unused]] auto rowResult = storeJournalImpl(mapper, action.ledgerId, descriptionField,
-                                                           morph::time::Timestamp{*parsedDate}, legs, legAccounts);
-
-        db::ImportedTxnHashRecord hashRow;
-        hashRow.ledger = ledgerRows.front();
-        hashRow.hash = hash;
-        mapper.Create(hashRow);
-
-        ++imported;
-    }
-
-    // Populated (not read back for an early-return -- see this method's own
-    // comment above), but still guarded by a lookup rather than an
-    // unconditional insert: `ledger_imported_ops` has a real UNIQUE index on
-    // `(owner_principal, op_id)` (the migration's own constraint, mirroring
-    // bookmarks::db::ImportedOpRecord's identical shape), so a replayed
-    // chunk under the same opId would otherwise violate it on its second
-    // call -- turning the intended safe no-op into a thrown SQL error. The
-    // lookup here exists purely to keep the replay safe, not to short-
-    // circuit any of the work above.
-    if (action.opId.hasValue()) {
-        auto existingOpRows =
-            mapper.Query<db::ImportedOpRecord>()
-                .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::ownerPrincipal>, "=", principal)
-                .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::opId>, "=", *action.opId)
-                .All();
-        if (existingOpRows.empty()) {
-            db::ImportedOpRecord opRow;
-            opRow.ownerPrincipal = principal;
-            opRow.opId = *action.opId;
-            opRow.appliedAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
-            mapper.Create(opRow);
+        // Populated (not read back for an early-return -- see this method's own
+        // comment above), but still guarded by a lookup rather than an
+        // unconditional insert: `ledger_imported_ops` has a real UNIQUE index on
+        // `(owner_principal, op_id)` (the migration's own constraint, mirroring
+        // bookmarks::db::ImportedOpRecord's identical shape), so a replayed
+        // chunk under the same opId would otherwise violate it on its second
+        // call -- turning the intended safe no-op into a thrown SQL error. The
+        // lookup here exists purely to keep the replay safe, not to short-
+        // circuit any of the work above.
+        if (action.opId.hasValue()) {
+            auto existingOpRows =
+                mapper.Query<db::ImportedOpRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::ownerPrincipal>, "=", principal)
+                    .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::opId>, "=", *action.opId)
+                    .All();
+            if (existingOpRows.empty()) {
+                db::ImportedOpRecord opRow;
+                opRow.ownerPrincipal = principal;
+                opRow.opId = *action.opId;
+                opRow.appliedAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
+                mapper.Create(opRow);
+            }
         }
-    }
 
-    auto result = ImportResult{.imported = imported, .duplicates = duplicates};
-    logAction(action, result);
-    return result;
+        auto result = ImportResult{.imported = imported, .duplicates = duplicates};
+        logAction(action, result);
+        return result;
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
+    }
 }
 
 ReportJobId LedgerModel::execute(const SubmitReport& action) {
@@ -1299,16 +1348,21 @@ GetReportStatusResult LedgerModel::execute(const GetReportStatus& action) {
 }
 
 SetCategoryResult LedgerModel::execute(const SetCategory& action) {
-    const auto* ctx = morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
+        }
+        Lightweight::DataMapper mapper;
+        Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+        setCategoryImpl(mapper, action);
+        sqlTxn.Commit();
+        logAction(action, SetCategoryResult{});
+        return SetCategoryResult{};
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    Lightweight::DataMapper mapper;
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    setCategoryImpl(mapper, action);
-    sqlTxn.Commit();
-    logAction(action, SetCategoryResult{});
-    return SetCategoryResult{};
 }
 
 void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCategory& action) {

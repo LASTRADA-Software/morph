@@ -100,118 +100,161 @@ void BudgetModel::logAction(const Action& action, const Result& result, std::str
     _log->flush();
 }
 
+template <typename Action>
+void BudgetModel::logFailure(const Action& action, const std::string& error) const {
+    if (!_log) {
+        return;
+    }
+    ::morph::journal::LogEntry entry;
+    entry.modelType = "BudgetModel";
+    entry.entityKey = _entityKeyStr.value_or(std::string{});
+    entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
+    entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+    entry.schema = ::morph::model::detail::actionPayloadSchema<Action>();
+    // See LedgerModel::logFailure's identical comment: no `result` -- there
+    // was none -- and `error` carries the rejecting exception's text.
+    entry.error = error;
+    entry.outcome = ::morph::journal::Outcome::Failed;
+    if (const auto* ctx = ::morph::session::current()) {
+        entry.principal = ctx->principal;
+    }
+    entry.timestampMs = (*morph::ladder::now().value).value.time_since_epoch().count();
+    _log->append(std::move(entry));
+    _log->flush();
+}
+
 CategoryId BudgetModel::execute(const CreateCategory& action) {
-    const auto* ctx = morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
+        }
+        if (!action.validate()) {
+            throw ValidationError{"CreateCategory: ledgerId and name are required"};
+        }
+        Lightweight::DataMapper mapper;
+        auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                              .All();
+        if (ledgerRows.empty()) {
+            throw NotFound{"CreateCategory: no such ledger"};
+        }
+        db::CategoryRecord categoryRow;
+        categoryRow.ledger = ledgerRows.front();
+        categoryRow.name = action.name;
+        mapper.Create(categoryRow);
+        auto result = CategoryId{static_cast<std::int64_t>(categoryRow.id.Value())};
+        logAction(action, result);
+        return result;
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!action.validate()) {
-        throw ValidationError{"CreateCategory: ledgerId and name are required"};
-    }
-    Lightweight::DataMapper mapper;
-    auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                          .All();
-    if (ledgerRows.empty()) {
-        throw NotFound{"CreateCategory: no such ledger"};
-    }
-    db::CategoryRecord categoryRow;
-    categoryRow.ledger = ledgerRows.front();
-    categoryRow.name = action.name;
-    mapper.Create(categoryRow);
-    auto result = CategoryId{static_cast<std::int64_t>(categoryRow.id.Value())};
-    logAction(action, result);
-    return result;
 }
 
 AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
-    const auto* ctx = morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
+        }
+        if (!action.validate()) {
+            throw ValidationError{"LinkAccountToCategory: accountId and categoryId are required"};
+        }
+        Lightweight::DataMapper mapper;
+        auto accountRows = mapper.Query<db::AccountRecord>()
+                               .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.accountId)
+                               .All();
+        auto categoryRows = mapper.Query<db::CategoryRecord>()
+                                .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
+                                .All();
+        if (accountRows.empty() || categoryRows.empty()) {
+            throw NotFound{"LinkAccountToCategory: no such account or category"};
+        }
+        accountRows.front().category = categoryRows.front();
+        mapper.Update(accountRows.front());
+        auto result = AccountId{static_cast<std::int64_t>(accountRows.front().id.Value())};
+        logAction(action, result);
+        return result;
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!action.validate()) {
-        throw ValidationError{"LinkAccountToCategory: accountId and categoryId are required"};
-    }
-    Lightweight::DataMapper mapper;
-    auto accountRows = mapper.Query<db::AccountRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.accountId)
-                           .All();
-    auto categoryRows = mapper.Query<db::CategoryRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
-                            .All();
-    if (accountRows.empty() || categoryRows.empty()) {
-        throw NotFound{"LinkAccountToCategory: no such account or category"};
-    }
-    accountRows.front().category = categoryRows.front();
-    mapper.Update(accountRows.front());
-    auto result = AccountId{static_cast<std::int64_t>(accountRows.front().id.Value())};
-    logAction(action, result);
-    return result;
 }
 
 BudgetId BudgetModel::execute(const CreateBudget& action) {
-    const auto* ctx = morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
+        }
+        if (!action.validate()) {
+            throw ValidationError{"CreateBudget: ledgerId, name, and categoryId are required"};
+        }
+        Lightweight::DataMapper mapper;
+        auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                              .All();
+        auto categoryRows = mapper.Query<db::CategoryRecord>()
+                                .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
+                                .All();
+        if (ledgerRows.empty() || categoryRows.empty()) {
+            throw NotFound{"CreateBudget: no such ledger or category"};
+        }
+        db::BudgetRecord budgetRow;
+        budgetRow.ledger = ledgerRows.front();
+        budgetRow.name = action.name;
+        budgetRow.category = categoryRows.front();
+        mapper.Create(budgetRow);
+        auto result = BudgetId{static_cast<std::int64_t>(budgetRow.id.Value())};
+        logAction(action, result);
+        return result;
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!action.validate()) {
-        throw ValidationError{"CreateBudget: ledgerId, name, and categoryId are required"};
-    }
-    Lightweight::DataMapper mapper;
-    auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                          .All();
-    auto categoryRows = mapper.Query<db::CategoryRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
-                            .All();
-    if (ledgerRows.empty() || categoryRows.empty()) {
-        throw NotFound{"CreateBudget: no such ledger or category"};
-    }
-    db::BudgetRecord budgetRow;
-    budgetRow.ledger = ledgerRows.front();
-    budgetRow.name = action.name;
-    budgetRow.category = categoryRows.front();
-    mapper.Create(budgetRow);
-    auto result = BudgetId{static_cast<std::int64_t>(budgetRow.id.Value())};
-    logAction(action, result);
-    return result;
 }
 
 BudgetId BudgetModel::execute(const SetBudgetLimit& action) {
-    const auto* ctx = morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
+        }
+        if (!action.validate()) {
+            throw ValidationError{"SetBudgetLimit: budgetId and a YYYY-MM month are required"};
+        }
+        Lightweight::DataMapper mapper;
+        auto budgetRows = mapper.Query<db::BudgetRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::BudgetRecord::id>, "=", *action.budgetId)
+                              .All();
+        if (budgetRows.empty()) {
+            throw NotFound{"SetBudgetLimit: no such budget"};
+        }
+        // Onto the limit currency's own scale before it is stored, the same way
+        // LedgerModel restates a transaction leg onto its account currency's --
+        // a limit is compared against a sum of legs, and two values only compare
+        // as money when they sit on one scale. Rejected rather than rounded when
+        // the amount carries a digit the currency does not have.
+        const auto limit = restateMinorUnits(action.limit, currencyDecimalPlaces(action.currency));
+        if (!limit.has_value()) {
+            throw ValidationError{std::string{"SetBudgetLimit: limit is not a whole number of "} +
+                                  std::string{currencyToCode(action.currency)} + " minor units"};
+        }
+        db::BudgetLimitRecord limitRow;
+        limitRow.budget = budgetRows.front();
+        limitRow.month = action.month;
+        limitRow.limitNum = limit->numerator;
+        limitRow.limitDen = limit->denominator;
+        limitRow.limitDp = static_cast<int>(limit->decimalPlaces.value);
+        limitRow.currencyCode = currencyToCode(action.currency);  // Task 7's helper
+        mapper.Create(limitRow);
+        logAction(action, action.budgetId);
+        return action.budgetId;
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!action.validate()) {
-        throw ValidationError{"SetBudgetLimit: budgetId and a YYYY-MM month are required"};
-    }
-    Lightweight::DataMapper mapper;
-    auto budgetRows = mapper.Query<db::BudgetRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::BudgetRecord::id>, "=", *action.budgetId)
-                          .All();
-    if (budgetRows.empty()) {
-        throw NotFound{"SetBudgetLimit: no such budget"};
-    }
-    // Onto the limit currency's own scale before it is stored, the same way
-    // LedgerModel restates a transaction leg onto its account currency's --
-    // a limit is compared against a sum of legs, and two values only compare
-    // as money when they sit on one scale. Rejected rather than rounded when
-    // the amount carries a digit the currency does not have.
-    const auto limit = restateMinorUnits(action.limit, currencyDecimalPlaces(action.currency));
-    if (!limit.has_value()) {
-        throw ValidationError{std::string{"SetBudgetLimit: limit is not a whole number of "} +
-                              std::string{currencyToCode(action.currency)} + " minor units"};
-    }
-    db::BudgetLimitRecord limitRow;
-    limitRow.budget = budgetRows.front();
-    limitRow.month = action.month;
-    limitRow.limitNum = limit->numerator;
-    limitRow.limitDen = limit->denominator;
-    limitRow.limitDp = static_cast<int>(limit->decimalPlaces.value);
-    limitRow.currencyCode = currencyToCode(action.currency);  // Task 7's helper
-    mapper.Create(limitRow);
-    logAction(action, action.budgetId);
-    return action.budgetId;
 }
 
 GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {

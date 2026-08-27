@@ -211,6 +211,43 @@ struct glz::meta<polls::ParticipantToken> {
     static constexpr std::string_view name = "ParticipantToken";
 };
 
+/// @brief Stable payload-shape tag for `AdminToken`, so a journal fingerprint
+///        can tell it apart from `ParticipantToken` below.
+///
+/// The `glz::meta` specialisation above is what makes `AdminToken`
+/// serialisable at all, and it is also what makes it *opaque* to
+/// `morph::model::payloadShape`: a type whose meta names a value rather than
+/// an object has no reflected members to decompose, so it renders as the bare
+/// `x` (`morph/core/payload_shape_tag.hpp`; `docs/spec/journal/journal.md`,
+/// "Custom-codec types name themselves"). `CreatePollResult` carries both an
+/// `AdminToken` and a `ParticipantToken` as sibling fields -- deliberately
+/// distinct types per `AdminToken`'s own doc comment above ("never
+/// interchangeable") -- but without declared tags both would render as the
+/// bare `x` and be interchangeable in that struct's fingerprint, which is
+/// exactly the confusion the two-type split exists to prevent. Same risk and
+/// closure as `ledger::LEDGER_DEFINE_STRONG_ID_SHAPE_TAG`
+/// (`examples/ledger/include/ledger/core/types.hpp`), which this mirrors.
+///
+/// The tag is spelled here rather than derived from `glz::name_v`, which is
+/// compiler-dependent. `polls.`-namespaced so it cannot collide with another
+/// rung's tag.
+template <>
+struct morph::model::PayloadShapeTag<polls::AdminToken> {
+    /// @brief This token's stable shape name.
+    /// @return The tag.
+    static constexpr std::string_view name() noexcept { return "polls.adminToken"; }
+};
+
+/// @brief Stable payload-shape tag for `ParticipantToken` -- see
+///        `morph::model::PayloadShapeTag<polls::AdminToken>` above for the
+///        rationale.
+template <>
+struct morph::model::PayloadShapeTag<polls::ParticipantToken> {
+    /// @brief This token's stable shape name.
+    /// @return The tag.
+    static constexpr std::string_view name() noexcept { return "polls.participantToken"; }
+};
+
 /// @brief Reflects `Finalized` as the strings `"No"`/`"Yes"` rather than its
 ///        underlying `0`/`1` — same rationale and `glz::enumerate` shape as
 ///        `glz::meta<pastebin::Visibility>` (a bare ordinal also degrades the
