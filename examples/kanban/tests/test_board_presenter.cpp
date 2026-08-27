@@ -8,23 +8,37 @@
 // proves the presenter wires each action to the right signal and neither
 // crashes nor hangs).
 
+#include <QUrl>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <kanban/models/project_admin_model.hpp>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/qt/qt_executor.hpp>
+#include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
 #include <string>
+#include <string_view>
 
 #include "board_presenter.hpp"
+#include "kanban/auth/kanban_authorizer.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/fault_proxy.hpp"
 #include "testkit/pump.hpp"
 
 namespace {
 
 using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
+using morph::ladder::testkit::FaultProxy;
 using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::pumpUntil;
+
+using namespace std::chrono_literals;
+
+constexpr std::string_view kSecret = "test-secret-32-bytes-minimum!!!!";
 
 /// @brief Builds a rig whose one bridge already carries a valid session for
 ///        @p principal. Same recipe as
@@ -39,16 +53,38 @@ using morph::ladder::testkit::pumpUntil;
     return rig;
 }
 
+/// @brief Builds a signed session `Context` for @p principal, issued by
+///        @p issuer -- identical shape to test_kanban_offline.cpp's own
+///        `tokenContextFor`: `KanbanAuthorizer` is `SigningAuthorizer`-derived,
+///        so a bare (unsigned) principal is not enough to pass `requireRole`.
+[[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
+                                                      std::string principal) {
+    morph::session::Context ctx;
+    ctx.principal = principal;
+    ctx.token = issuer.issue(morph::session::SessionToken{
+        .principal = std::move(principal), .issuedAtMs = 0, .expiresAtMs = 4102444800000, .roles = {}});
+    return ctx;
+}
+
+/// @brief Seeds one project (alice is its Manager) directly through
+///        `ProjectAdminModel`'s own `BridgeHandler`, bypassing
+///        `ProjectAdminPresenter` entirely — this suite is about
+///        `BoardPresenter`, not project bootstrap.
+/// @param bridge   The bridge to dispatch the seed through.
+/// @param executor The executor to dispatch the seed through.
+/// @return The new project's id.
+[[nodiscard]] kanban::ProjectId seedProject(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor) {
+    morph::bridge::BridgeHandler<kanban::ProjectAdminModel> creator{bridge, executor};
+    return morph::ladder::testkit::awaitQt(creator.execute(kanban::CreateProject{.name = "Sprint Board"})).id;
+}
+
 /// @brief Seeds one project (alice is its Manager) directly through
 ///        `ProjectAdminModel`'s own `BridgeHandler`, bypassing
 ///        `ProjectAdminPresenter` entirely — this suite is about
 ///        `BoardPresenter`, not project bootstrap.
 /// @param rig The rig whose bridge/executor to dispatch the seed through.
 /// @return The new project's id.
-[[nodiscard]] kanban::ProjectId seedProject(BackendRig& rig) {
-    morph::bridge::BridgeHandler<kanban::ProjectAdminModel> creator{rig.bridge(0), rig.executor()};
-    return morph::ladder::testkit::awaitQt(creator.execute(kanban::CreateProject{.name = "Sprint Board"})).id;
-}
+[[nodiscard]] kanban::ProjectId seedProject(BackendRig& rig) { return seedProject(rig.bridge(0), rig.executor()); }
 
 }  // namespace
 
@@ -71,6 +107,59 @@ TEST_CASE("BoardPresenter::openBoard attaches and reports the board's empty init
     CHECK(opened.name == "Sprint Board");
     CHECK(opened.columns.empty());
     CHECK(opened.tasks.empty());
+}
+
+TEST_CASE(
+    "BoardPresenter::openBoard, dispatched the instant the presenter is constructed over "
+    "a stalled Socket-mode attach, still reports the board once the attach reply lands",
+    "[kanban][gui][presenter]") {
+    // morph#305's premise: `openBoard()` fired immediately after construction
+    // races the handler's registration and can fail fast with "handler not
+    // bound". `OpenBoard` is payload-keyed (BRIDGE_MODEL_KEY, board_model.hpp)
+    // so `BridgeHandler::execute()` routes it through `Bridge::attachHandlerAsync`
+    // (bridge.hpp), which the type's own doc comment says never throws "handler
+    // not bound" out of `execute()` -- it waits for the attach round trip and
+    // dispatches from inside that completion. `FaultProxy::delayReply` stalls
+    // the attach reply itself, the most adversarial timing this rung's own
+    // transport can produce, to check that promise rather than assume it.
+    DbFixture fixture;
+    const auto authorizer =
+        std::make_shared<kanban::auth::KanbanAuthorizer>(std::string{kSecret}, morph::session::hmacSha256);
+    BackendRig rig{Mode::Socket, 1, authorizer};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
+    const auto projectId = seedProject(rig);
+
+    FaultProxy proxy{rig.url()};
+    const QUrl proxyUrl = proxy.start();
+    auto clientBackend = std::make_unique<::morph::qt::QtWebSocketBackend>(
+        proxyUrl, std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
+    REQUIRE(clientBackend->waitForConnected());
+    ::morph::qt::QtExecutor qtExec;
+    ::morph::bridge::Bridge bridge{std::move(clientBackend)};
+    bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
+
+    // Stall the very first request this bridge makes -- OpenBoard's own
+    // attach -- by a comfortable margin over pumpUntil's default deadline,
+    // so a "fails fast" bug would report failure long before the delay ends.
+    proxy.setRequestObserver([&](std::uint64_t callId, FaultProxy& self) { self.delayReply(callId, 300ms); });
+
+    kanban::gui::BoardPresenter presenter{bridge, &qtExec};
+
+    kanban::GetBoardResult opened;
+    bool gotOpened = false;
+    bool gotFailed = false;
+    QObject::connect(&presenter, &kanban::gui::BoardPresenter::boardOpened, [&](kanban::GetBoardResult result) {
+        opened = std::move(result);
+        gotOpened = true;
+    });
+    QObject::connect(&presenter, &kanban::gui::BoardPresenter::failed, [&](QString) { gotFailed = true; });
+
+    presenter.openBoard(projectId);
+    REQUIRE(pumpUntil([&] { return gotOpened || gotFailed; }, 5000ms));
+    CHECK_FALSE(gotFailed);
+    CHECK(gotOpened);
+    CHECK(opened.name == "Sprint Board");
 }
 
 TEST_CASE("BoardPresenter::createColumn/createSwimlane/createTask populate the reported board state",
