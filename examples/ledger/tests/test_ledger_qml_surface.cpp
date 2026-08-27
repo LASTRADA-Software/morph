@@ -28,8 +28,6 @@
 #include <QString>
 #include <QStringList>
 #include <catch2/catch_test_macros.hpp>
-#include <initializer_list>
-#include <utility>
 
 #include "budget_qml_bridge.hpp"
 #include "ledger_qml_bridge.hpp"
@@ -66,38 +64,41 @@ TEST_CASE("Every ledger bridge exposes exactly the surface gui/qml binds, and no
     audit.bind(QStringLiteral("reportBridge"), reportBridge);
     audit.bindIn(QStringLiteral("ReportView.qml"), QStringLiteral("bridge"), reportBridge);
 
-    // ── The pre-existing backlog, recorded rather than swallowed (#239) ──
+    // ── The former backlog, worked off member by member (#239) ───────────
     // The first run of this audit reported 15 members these four bridges
-    // publish that no file under gui/qml/ binds. None of them is a broken
-    // screen — the other direction was clean, so no QML file binds a name its
-    // bridge lacks — but each is either dead surface or a missing control, and
-    // deciding which is per-member work this file does not do. They are listed
-    // here so the guard goes live now and catches the *next* drift in either
-    // direction, with the backlog itemised instead of hidden behind a lowered
-    // bar. The list is checked in both directions too: an exemption for a
-    // member that has since been deleted, or one QML has since bound, fails
-    // this test (testkit/qml_surface.hpp). It can only shrink deliberately,
-    // and #239 closes when it is empty.
-    const QString backlog = QStringLiteral("unbound bridge surface, tracked in morph#239");
-    for (const auto& [alias, member] : std::initializer_list<std::pair<const char*, const char*>>{
-             {"ledgerBridge", "busy"},
-             {"ledgerBridge", "busyChanged"},
-             {"ledgerBridge", "refresh"},
-             {"ledgerBridge", "undoTransaction"},
-             {"budgetBridge", "busy"},
-             {"budgetBridge", "busyChanged"},
-             {"budgetBridge", "categoryCreated"},
-             {"budgetBridge", "budgetCreated"},
-             {"budgetBridge", "limitSet"},
-             {"budgetBridge", "lastBudgetId"},
-             {"budgetBridge", "linkAccount"},
-             {"ruleBridge", "busy"},
-             {"ruleBridge", "busyChanged"},
-             {"ruleBridge", "ruleCreated"},
-             {"ruleBridge", "ruleUpdated"},
-         }) {
-        audit.allowUnbound(QString::fromLatin1(alias), QString::fromLatin1(member), backlog);
-    }
+    // publish that no file under gui/qml/ bound: `busy`/`busyChanged` on all
+    // three of `LedgerQmlBridge`/`BudgetQmlBridge`/`RuleQmlBridge`,
+    // `ledgerBridge`'s `refresh`/`undoTransaction`, `budgetBridge`'s
+    // `categoryCreated`/`budgetCreated`/`limitSet`/`lastBudgetId`/
+    // `linkAccount`, and `ruleBridge`'s `ruleCreated`/`ruleUpdated`. Every one
+    // was live, meaningful surface backed by real presenter state (`busy()`
+    // forwards to `_presenter.busy()` on all three; the others are real
+    // create/link/undo gestures with a model and a presenter behind them) —
+    // none was dead scaffolding, so all 15 were bound rather than deleted:
+    //
+    //   * `busy` now gates a `BusyIndicator` in `LedgerView.qml`,
+    //     `BudgetView.qml` and `RulesView.qml`. Its `busyChanged` NOTIFY needs
+    //     no exemption of its own: the audit treats a property's NOTIFY as
+    //     covered by reading the property (testkit/qml_surface.cpp's signal
+    //     sweep), and that is exactly what these three views now do.
+    //   * `ledgerBridge.refresh` is a "Refresh" button; `undoTransaction` is a
+    //     journal-id field plus an "Undo" button, both in `LedgerView.qml`.
+    //   * `budgetBridge.linkAccount` is an account-id/category-id pair plus a
+    //     button in `BudgetView.qml`; `lastBudgetId` fills the same
+    //     chain-without-a-round-trip label next to "Create budget" that
+    //     `lastCategoryId` already had next to "Create category".
+    //   * `categoryCreated`/`budgetCreated`/`limitSet` and `ruleCreated`/
+    //     `ruleUpdated` carry no payload of their own — the state they
+    //     describe is already bound (`lastCategoryId`/`lastBudgetId`/
+    //     `lastRule`) — so each gets a `Connections` handler that writes a
+    //     status line, the same shape bank's `Main.qml` uses for
+    //     `txns.posted`/`payees.paid` (#303): a transient confirmation is the
+    //     only way a fire-and-forget signal becomes visible at all.
+    //
+    // The list is checked in both directions: an exemption for a member that
+    // has since been deleted, or one QML has since bound, fails this test
+    // (testkit/qml_surface.hpp). It can only shrink deliberately, and with
+    // every one of the 15 now bound, there is nothing left to exempt.
 
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());
