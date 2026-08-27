@@ -679,12 +679,27 @@ public:
     }
 
     /// @brief Creates a new model holder for the type registered under @p modelId.
-    std::unique_ptr<IModelHolder> create(std::string_view modelId) {
+    ///
+    /// @param modelId Type-id the holder's factory was registered under.
+    /// @param primary The instance's stable primary key, or empty for an
+    ///                anonymous (unshareable) instance. Forwarded to the new
+    ///                holder via `IModelHolder::attachIdentity` immediately
+    ///                after construction, which in turn reaches `Model`'s own
+    ///                `attachIdentity`, if it declares one matching
+    ///                `ModelIdentityAttachable` — a no-op otherwise, and a
+    ///                no-op entirely when @p primary is empty. This is what
+    ///                lets `RemoteServer` (whose two construction call sites
+    ///                already have `env.primary` in scope) tell a keyed
+    ///                model its own key once, at construction, rather than
+    ///                the model re-deriving it from every action's payload.
+    std::unique_ptr<IModelHolder> create(std::string_view modelId, std::string_view primary = {}) {
         auto iter = _factories.find(std::string{modelId});
         if (iter == _factories.end()) {
             throw std::runtime_error("unknown model type: " + std::string{modelId});
         }
-        return iter->second();
+        auto holder = iter->second();
+        holder->attachIdentity(std::string{primary});
+        return holder;
     }
 
     /// @brief Returns the process-level singleton registry.

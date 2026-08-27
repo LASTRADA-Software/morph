@@ -596,3 +596,104 @@ TEST_CASE("morph::backend::RemoteServer: setHealthHandler(nullptr) clears the ha
     server->setHealthHandler(nullptr);
     REQUIRE(calls == 1);
 }
+
+// ── morph::backend::RemoteServer: identity injection at construction ────────────────────────
+
+namespace {
+/// @brief Model that declares attachIdentity to observe whether
+///        RemoteServer's construction paths (acquireSharedInstance's
+///        directory-miss branch, and the plain register branch) forward
+///        env.primary all the way down to the model instance itself.
+/// GetOwnKey echoes the key back through an ordinary action, so a wire-level
+/// test can assert on it directly instead of reaching into RemoteServer's
+/// internals.
+struct GetOwnKey {};
+struct IdentityAwareModel {
+    std::string primaryKey;
+    void attachIdentity(std::string key) { primaryKey = std::move(key); }
+    [[nodiscard]] std::string execute(const GetOwnKey&) const { return primaryKey; }
+};
+}  // namespace
+
+template <>
+struct morph::model::ModelTraits<IdentityAwareModel> {
+    static constexpr std::string_view typeId() { return "RX_IdentityAwareModel"; }
+};
+template <>
+struct morph::model::ActionTraits<GetOwnKey> {
+    using Result = std::string;
+    static constexpr std::string_view typeId() { return "RX_GetOwnKey"; }
+    static std::string toJson(const GetOwnKey&) { return "{}"; }
+    static GetOwnKey fromJson(std::string_view) { return {}; }
+    static std::string resultToJson(const std::string& res) {
+        std::string out;
+        (void)glz::write_json(res, out);
+        return out;
+    }
+    static std::string resultFromJson(std::string_view json) {
+        std::string result;
+        (void)glz::read_json(result, json);
+        return result;
+    }
+};
+
+static Env& identityEnv() {
+    static Env env = [] {
+        Env env2;
+        env2.registry.registerModel<IdentityAwareModel>("RX_IdentityAwareModel");
+        env2.dispatcher.registerAction<IdentityAwareModel, GetOwnKey>("RX_IdentityAwareModel", "RX_GetOwnKey");
+        return env2;
+    }();
+    return env;
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer: a shared register with a primary key tells the freshly created model its "
+    "own key via attachIdentity",
+    "[remote]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = identityEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("RX_IdentityAwareModel", "acct-7")),
+                   std::ref(reg));
+    reg.await();
+    REQUIRE(reg.env.kind == "ok");
+
+    morph::wire::Envelope execEnv;
+    execEnv.kind = "execute";
+    execEnv.modelType = "RX_IdentityAwareModel";
+    execEnv.actionType = "RX_GetOwnKey";
+    execEnv.modelId = reg.env.modelId;
+    execEnv.body = "{}";
+    WaitReply exec;
+    server->handle(morph::wire::encode(execEnv), std::ref(exec));
+    exec.await();
+    REQUIRE(exec.env.kind == "ok");
+    REQUIRE(exec.env.body == R"("acct-7")");
+}
+
+TEST_CASE("morph::backend::RemoteServer: a plain (non-shared) register with no primary does not call attachIdentity",
+          "[remote]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = identityEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_IdentityAwareModel")), std::ref(reg));
+    reg.await();
+    REQUIRE(reg.env.kind == "ok");
+
+    morph::wire::Envelope execEnv;
+    execEnv.kind = "execute";
+    execEnv.modelType = "RX_IdentityAwareModel";
+    execEnv.actionType = "RX_GetOwnKey";
+    execEnv.modelId = reg.env.modelId;
+    execEnv.body = "{}";
+    WaitReply exec;
+    server->handle(morph::wire::encode(execEnv), std::ref(exec));
+    exec.await();
+    REQUIRE(exec.env.kind == "ok");
+    REQUIRE(exec.env.body == R"("")");
+}

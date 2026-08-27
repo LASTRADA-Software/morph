@@ -62,6 +62,26 @@ concept ModelLevelActionLogAttachable =
         { model.attachActionLog(log, key) } -> std::same_as<void>;
     };
 
+/// @brief Concept satisfied by model types that expose a model-level
+///        `attachIdentity(std::string primaryKey)`.
+///
+/// A registry-constructed instance (`ModelRegistryFactory::create`, used by
+/// `RemoteServer`'s `register`/`attach` paths) knows its own primary key —
+/// `env.primary` — at construction time, but nothing on that path previously
+/// told the model itself: `ModelFactory::create<Model>()` default-constructs
+/// it and the key only ever reached `Model::execute` inside a keyed action's
+/// own payload. A model that wants to know its key once, at construction,
+/// rather than re-deriving it from every action, opts in by declaring
+/// `attachIdentity` with this exact shape — purely by structural convention,
+/// the same "detect the hook structurally, forward only if present" shape
+/// `ModelLevelActionLogAttachable`/`BackendChangedNotifiable` already
+/// establish. This concept is what lets `ModelHolder<Model>::onIdentityAttached`
+/// forward to it generically.
+template <typename M>
+concept ModelIdentityAttachable = requires(M& model, std::string key) {
+    { model.attachIdentity(key) } -> std::same_as<void>;
+};
+
 // ── Conditional mixin ─────────────────────────────────────────────────────────
 
 /// @brief Empty base when `M` does not declare `onBackendChanged()`.
@@ -141,6 +161,31 @@ struct IModelHolder {
         _contextKey = std::move(contextKey);
     }
 
+    /// @brief Tells this instance its own stable primary key, once, at
+    ///        construction time.
+    ///
+    /// Called by `ModelRegistryFactory::create(modelId, primary)` immediately
+    /// after building the holder, when @p primaryKey is non-empty — the
+    /// registry-constructed counterpart of a model reading its key back out
+    /// of every keyed action's payload. Forwards to the wrapped model's own
+    /// `attachIdentity(primaryKey)`, if it declares one matching
+    /// `ModelIdentityAttachable`; a no-op otherwise, for the majority of
+    /// models that have no need to know their own key ahead of the first
+    /// action that carries it.
+    ///
+    /// Independent of `attachActionLog`/`_contextKey`: `contextKey` is the
+    /// action log's entity-key field, `primaryKey` is the shared-instance
+    /// directory key (see `backend.hpp`'s `InstanceIdentity` for why the two
+    /// are kept as separate named fields rather than conflated) — a caller
+    /// wanting both calls both.
+    /// @param primaryKey Stable identity of this model instance; a no-op if empty.
+    void attachIdentity(std::string primaryKey) {
+        if (primaryKey.empty()) {
+            return;
+        }
+        onIdentityAttached(primaryKey);
+    }
+
     /// @brief Returns `true` if an action log is attached to this instance.
     [[nodiscard]] bool hasActionLog() const noexcept { return static_cast<bool>(_actionLog); }
 
@@ -217,6 +262,20 @@ protected:
         (void)contextKey;
     }
 
+    /// @brief Forwards @p primaryKey to the wrapped model's own
+    ///        `attachIdentity`, if it declares one. No-op default, for models
+    ///        with no need to know their own key ahead of the first action
+    ///        that carries it.
+    ///
+    /// `ModelHolder<Model>` overrides this exactly like `onActionLogAttached`:
+    /// detected structurally via `ModelIdentityAttachable<Model>`, not
+    /// through a shared interface a model opts into by inheritance. A model
+    /// with no `attachIdentity` of its own is entirely unaffected — this call
+    /// resolves to this no-op body for it.
+    /// @param primaryKey Stable identity of this model instance; never empty
+    ///                    (the public `attachIdentity` filters that case out).
+    virtual void onIdentityAttached(const std::string& primaryKey) { (void)primaryKey; }
+
 private:
     std::shared_ptr<::morph::journal::IActionLog> _actionLog;
     std::string _contextKey;
@@ -265,6 +324,14 @@ protected:
                              const std::string& contextKey) override {
         if constexpr (ModelLevelActionLogAttachable<Model>) {
             model.attachActionLog(log, contextKey);
+        }
+    }
+
+    /// @brief Forwards to `Model::attachIdentity(primaryKey)` iff `Model`
+    ///        declared one matching `ModelIdentityAttachable`; no-op otherwise.
+    void onIdentityAttached(const std::string& primaryKey) override {
+        if constexpr (ModelIdentityAttachable<Model>) {
+            model.attachIdentity(primaryKey);
         }
     }
 };
