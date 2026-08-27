@@ -3,8 +3,10 @@
 
 #include <compare>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 /// @file
@@ -67,4 +69,23 @@ template <>
 struct glz::meta<ledger::ImportOpId> {
     static constexpr auto value = &ledger::ImportOpId::value;
     static constexpr std::string_view name = "ImportOpId";
+};
+
+/// @brief Stable payload-shape tag for `ImportOpId`, for the reason
+///        `ledger/core/types.hpp`'s own block gives at length: the `glz::meta`
+///        above leaves nothing for `morph::model::payloadShape` to decompose,
+///        so without this an `opId` field renders as the bare `x` -- the same
+///        rendering every strong id and every other custom-codec type would
+///        get, which makes a retype between them invisible to
+///        `journal::replay()`'s mismatch gate. `StoreTransaction` and
+///        `ImportLedgerChunk` both carry one alongside several strong ids.
+///
+/// The tag is part of the on-disk fingerprint of every entry recording either
+/// action, so it is an interface: renaming it invalidates those entries exactly
+/// as renaming a field does.
+template <>
+struct morph::model::PayloadShapeTag<ledger::ImportOpId> {
+    /// @brief This type's stable shape name.
+    /// @return `"ledger.importOpId"`.
+    static constexpr std::string_view name() noexcept { return "ledger.importOpId"; }
 };

@@ -4,6 +4,7 @@
 #include <compare>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <optional>
 #include <string_view>
 
@@ -96,3 +97,50 @@ LEDGER_DEFINE_STRONG_ID_WIRE(RuleId);
 LEDGER_DEFINE_STRONG_ID_WIRE(ReportJobId);
 
 #undef LEDGER_DEFINE_STRONG_ID_WIRE
+
+/// @brief Stable payload-shape tag for each `LEDGER_DEFINE_STRONG_ID` type, so
+///        a journal fingerprint can tell one id from another.
+///
+/// The `glz::meta` specialisations above are what make these types serialisable
+/// at all, and they are also what makes them *opaque* to
+/// `morph::model::payloadShape`: a type whose meta names a value rather than an
+/// object has no reflected members to decompose, so it renders as the bare `x`
+/// and every id in a payload looks like every other one
+/// (`morph/core/payload_shape_tag.hpp`; `docs/spec/journal/journal.md`,
+/// "Custom-codec types name themselves").
+///
+/// That matters more here than for most rungs, because this rung's payloads are
+/// largely *made of* ids: `UndoTransaction{LedgerId, JournalId}` would
+/// fingerprint as two interchangeable `x`s and `SetCategory{AccountId,
+/// CategoryId, RuleId, …}` as three, so exchanging two of them -- what an id
+/// rename or a copy-paste in a later rung produces -- would leave the
+/// fingerprint untouched and `journal::replay()`'s mismatch gate with nothing
+/// to fire on, while the recorded integers decoded into the wrong slots. The
+/// ids are all `std::optional<std::int64_t>` on the wire, so the JSON is
+/// byte-identical across such a swap and no decode, on any path, can catch it:
+/// the tag is the only place it is visible at all.
+///
+/// The tag text is spelled here rather than derived from `glz::name_v`, which
+/// is compiler-dependent -- a journal readable only by the build that wrote it
+/// is the worse failure. It is part of the on-disk fingerprint of every entry
+/// this rung records, so it is an interface: renaming a tag invalidates every
+/// retained journal entry carrying that id, exactly as renaming a field does.
+///
+/// One specialisation per id type, generated the same way the structs and their
+/// `glz::meta`s are, then undefined immediately after.
+#define LEDGER_DEFINE_STRONG_ID_SHAPE_TAG(Name, Tag)                      \
+    template <>                                                           \
+    struct morph::model::PayloadShapeTag<ledger::Name> {                  \
+        /** @brief This id's stable shape name. @return The tag. */       \
+        static constexpr std::string_view name() noexcept { return Tag; } \
+    }
+
+LEDGER_DEFINE_STRONG_ID_SHAPE_TAG(LedgerId, "ledger.ledgerId");
+LEDGER_DEFINE_STRONG_ID_SHAPE_TAG(AccountId, "ledger.accountId");
+LEDGER_DEFINE_STRONG_ID_SHAPE_TAG(JournalId, "ledger.journalId");
+LEDGER_DEFINE_STRONG_ID_SHAPE_TAG(CategoryId, "ledger.categoryId");
+LEDGER_DEFINE_STRONG_ID_SHAPE_TAG(BudgetId, "ledger.budgetId");
+LEDGER_DEFINE_STRONG_ID_SHAPE_TAG(RuleId, "ledger.ruleId");
+LEDGER_DEFINE_STRONG_ID_SHAPE_TAG(ReportJobId, "ledger.reportJobId");
+
+#undef LEDGER_DEFINE_STRONG_ID_SHAPE_TAG
