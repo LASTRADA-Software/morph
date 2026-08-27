@@ -751,7 +751,11 @@ private:
         // Directory miss. Construct outside the lock, exactly as the private
         // register path does, then re-check under the insert lock: a concurrent
         // request for the same key may have won the race while we built ours.
-        auto holder = _registry.create(env.typeId);
+        // env.primary is this instance's directory key -- always non-empty
+        // here (acquireSharedInstance is only reached for a shared/keyed
+        // register-or-attach), so the model learns its own key once, at
+        // construction, via IModelHolder::attachIdentity.
+        auto holder = _registry.create(env.typeId, env.primary);
         attachLogIfConfigured(*holder, env);
         ::morph::exec::detail::ModelId const fresh{nextOpaqueId()};
         {
@@ -993,7 +997,12 @@ private:
                     acquireSharedInstance(env, reply, cid, ::morph::exec::detail::ModelId{0});
                     return;
                 }
-                auto holder = _registry.create(env.typeId);
+                // The branch above already returned for a shared register
+                // naming a primary; env.primary here is either empty (a
+                // private/anonymous instance -- attachIdentity is then a
+                // no-op) or a caller-supplied identity for a non-shared
+                // instance, which is still this instance's own key to learn.
+                auto holder = _registry.create(env.typeId, env.primary);
                 attachLogIfConfigured(*holder, env);
                 // Record the owner principal for per-instance authorization:
                 // env.session's principal is already the verified identity

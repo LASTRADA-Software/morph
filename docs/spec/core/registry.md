@@ -424,6 +424,7 @@ struct IModelHolder {
     template <typename Model> Model& into();
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog>, std::string contextKey);
     bool hasActionLog() const noexcept;
+    void attachIdentity(std::string primaryKey);
     void recordIfAttached(LogEntry entry);
     void setOutboxManaged(bool outboxManaged) noexcept;
     [[nodiscard]] bool isOutboxManaged() const noexcept;
@@ -455,6 +456,21 @@ struct IModelHolder {
   instances"](../journal/journal.md#attaching-a-log-to-remote-instances). A
   model with no `attachActionLog` of its own is unaffected: the hook resolves
   to the base's no-op body for it.
+- `attachIdentity(primaryKey)` tells this instance its own stable primary key,
+  once, at construction time — the registry-constructed counterpart of a
+  model re-deriving its key from every keyed action's own payload. A no-op if
+  `primaryKey` is empty. Otherwise forwards to the wrapped model's own
+  `attachIdentity(primaryKey)` when it declares one matching
+  `ModelIdentityAttachable` (`morph/core/model.hpp`) — the same
+  "detect the hook structurally, forward only if present" shape
+  `attachActionLog`/`ModelLevelActionLogAttachable` use above; a no-op
+  otherwise. Called by `ModelRegistryFactory::create(modelId, primary)`
+  immediately after construction — see that method below. Independent of
+  `attachActionLog`/`_contextKey`: `contextKey` is the action log's
+  entity-key field, `primaryKey` is the shared-instance directory key (see
+  [backend.md](backend.md)'s `InstanceIdentity` for why the two are kept as
+  separate named fields rather than conflated); a caller wanting both calls
+  both.
 - `recordIfAttached` is called automatically by `ActionDispatcher`'s runner and
   `Bridge::executeVia` — model code never calls it directly. It fills
   `entityKey`, `principal` (from `session::current()`), and `timestampMs` on the
@@ -481,6 +497,7 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
   protected:
     void onActionLogAttached(const std::shared_ptr<::morph::journal::IActionLog>&,
                              const std::string& contextKey) override;
+    void onIdentityAttached(const std::string& primaryKey) override;
 };
 ```
 
@@ -644,12 +661,23 @@ class ModelRegistryFactory {
                  std::convertible_to<std::invoke_result_t<Factory>, std::unique_ptr<IModelHolder>>
     void registerModel(std::string_view modelId, Factory factory);
 
-    std::unique_ptr<IModelHolder> create(std::string_view modelId);
+    std::unique_ptr<IModelHolder> create(std::string_view modelId, std::string_view primary = {});
     static ModelRegistryFactory& instance();
 };
 ```
 
-- `create` throws `std::runtime_error` for unknown model types.
+- `create` throws `std::runtime_error` for unknown model types. The optional
+  @p primary parameter is the instance's stable primary key (empty for an
+  anonymous instance); after building the holder, `create` calls
+  `holder->attachIdentity(primary)` on it, which reaches the wrapped model's
+  own `attachIdentity` when it declares one (see `IModelHolder::attachIdentity`
+  above) — a no-op for a model that doesn't, and a no-op entirely when
+  @p primary is empty, so every existing single-argument call site is
+  unaffected. This is what lets `RemoteServer`'s two construction call sites
+  (`acquireSharedInstance`'s directory-miss branch, and the plain `register`
+  branch — both already have `env.primary` in scope) tell a keyed model its
+  own key once, at construction, instead of the model re-deriving it from
+  every action's own payload.
 - The single-argument `registerModel<Model>(modelId)` registers the plain
   default-construction path — equivalent to
   `registerModel<Model>(modelId, [] { return ModelFactory::create<Model>(); })`

@@ -184,6 +184,104 @@ TEST_CASE(
     REQUIRE(holder->hasActionLog());
 }
 
+// ── morph::model::detail::ModelRegistryFactory::create(modelId, primary): identity injection ────────
+
+namespace {
+/// @brief Model that declares the structural `attachIdentity(primaryKey)` hook
+///        (mirrors ALLoggingModel::attachActionLog in test_action_log.cpp) and
+///        records the key it was told, so a test can observe whether
+///        ModelRegistryFactory::create's key-aware overload actually reached it.
+struct RegIdentityModel {
+    std::string primaryKey;
+    int attachCount = 0;
+
+    void attachIdentity(std::string key) {
+        primaryKey = std::move(key);
+        ++attachCount;
+    }
+};
+
+/// @brief Model with no attachIdentity of any kind -- the overwhelming
+///        majority case. Must build and construct exactly as before; the
+///        key-aware create() overload must be a no-op for it, not an error.
+struct RegNoIdentityModel {
+    int dummy = 0;
+};
+}  // namespace
+
+template <>
+struct morph::model::ModelTraits<RegIdentityModel> {
+    static constexpr std::string_view typeId() { return "REG_IdentityModel"; }
+};
+template <>
+struct morph::model::ModelTraits<RegNoIdentityModel> {
+    static constexpr std::string_view typeId() { return "REG_NoIdentityModel"; }
+};
+
+TEST_CASE("morph::model::detail::ModelIdentityAttachable detects attachIdentity(std::string) structurally",
+          "[registry]") {
+    static_assert(morph::model::detail::ModelIdentityAttachable<RegIdentityModel>);
+    static_assert(!morph::model::detail::ModelIdentityAttachable<RegNoIdentityModel>);
+}
+
+TEST_CASE(
+    "morph::model::detail::ModelRegistryFactory::create(modelId, primary) forwards primary to a model "
+    "declaring attachIdentity",
+    "[registry]") {
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<RegIdentityModel>("REG_IdentityModel");
+
+    auto holder = registry.create("REG_IdentityModel", "account-42");
+
+    auto& model = holder->into<RegIdentityModel>();
+    REQUIRE(model.primaryKey == "account-42");
+    REQUIRE(model.attachCount == 1);
+}
+
+TEST_CASE(
+    "morph::model::detail::ModelRegistryFactory::create(modelId, primary) is a no-op for a model with no "
+    "attachIdentity",
+    "[registry]") {
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<RegNoIdentityModel>("REG_NoIdentityModel");
+
+    // Must not throw, must not require the model to declare anything.
+    auto holder = registry.create("REG_NoIdentityModel", "some-key");
+    REQUIRE(holder != nullptr);
+    REQUIRE(holder->into<RegNoIdentityModel>().dummy == 0);
+}
+
+TEST_CASE(
+    "morph::model::detail::ModelRegistryFactory::create(modelId, primary) with an empty primary does not "
+    "call attachIdentity",
+    "[registry]") {
+    // An empty primary means "anonymous instance" (see InstanceIdentity::primary
+    // in backend.hpp) -- attachIdentity should not fire with an empty string,
+    // exactly as attachActionLog's contextKey-empty check (RemoteServer::
+    // attachLogIfConfigured) treats "" as "nothing to attach".
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<RegIdentityModel>("REG_IdentityModel_Empty");
+
+    auto holder = registry.create("REG_IdentityModel_Empty", "");
+
+    auto& model = holder->into<RegIdentityModel>();
+    REQUIRE(model.attachCount == 0);
+}
+
+TEST_CASE(
+    "morph::model::detail::ModelRegistryFactory::create(modelId) with no primary argument still works "
+    "unchanged (existing single-argument call sites are unaffected)",
+    "[registry]") {
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<RegIdentityModel>("REG_IdentityModel_Default");
+
+    auto holder = registry.create("REG_IdentityModel_Default");
+
+    auto& model = holder->into<RegIdentityModel>();
+    REQUIRE(model.attachCount == 0);
+    REQUIRE(model.primaryKey.empty());
+}
+
 // ── morph::model::detail::ActionDispatcher: KeyHash collision avoidance (basic) ─────────────────────
 
 TEST_CASE("morph::model::detail::ActionDispatcher: different (model,action) pairs are independent", "[registry]") {
