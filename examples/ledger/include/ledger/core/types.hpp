@@ -58,13 +58,15 @@ enum class ReportStatus : std::uint8_t { Pending, Done, Failed };
 ///        no human login occupies, so a user principal cannot collide with it
 ///        by accident.
 ///
-/// @warning This rung installs no authorizer, so nothing verifies a claimed
-///          principal. The gate on `RunReportJob` is therefore a *layering*
-///          check -- it keeps a user-issued action from silently completing a
-///          job the runner owns -- not an authorization boundary. It becomes
-///          one the moment this rung grows a signing authorizer, exactly as
-///          bookmarks' did, and not before. See
-///          `examples/ledger/include/ledger/app/app.hpp`.
+/// The gate on `RunReportJob` is a genuine authorization boundary:
+/// `ledger::app::App` mints a real, signed token for this principal and
+/// dispatches through its own `RemoteServer` + `LedgerAuthorizer`
+/// (`examples/ledger/include/ledger/app/app.hpp`), and `AuthModel::
+/// execute(const Login&)` refuses to mint a token in the reserved `system:`
+/// namespace this principal occupies (`ledger::auth::isReservedPrincipal`),
+/// so no client can obtain one by logging in. A user-issued action naming
+/// this principal is refused the same way any other forged claim is: it
+/// never carries a validly signed token for it.
 inline constexpr std::string_view kReportRunnerPrincipal = "system:report-runner";
 
 }  // namespace ledger

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <morph/session/session.hpp>
 #include <string>
+#include <string_view>
 
 #include "ledger/app/app.hpp"
 #include "ledger/core/types.hpp"
@@ -55,6 +56,14 @@ constexpr std::chrono::hours kTimerOff{1};
 /// that must never arrive.
 constexpr std::chrono::milliseconds kFastRunInterval{20};
 
+/// @brief Shared secret every `App` in this file signs/verifies tokens
+///        with. Not a real deployment secret -- this file never talks to an
+///        `App` over anything but its own internal `SimulatedRemoteBackend`
+///        report-runner bridge, so nothing here relies on it being kept
+///        confidential; a fixed literal keeps every case identical to the
+///        next, which is what the [ledger][app] cases care about.
+constexpr std::string_view kTestTokenSecret = "ledger-app-test-secret";
+
 /// @brief Creates a ledger with one account and returns its id.
 /// @param mapper The mapper to create the ledger row through.
 /// @param model The model to open the account on.
@@ -102,7 +111,7 @@ TEST_CASE("App::runPendingReportsOnce settles a job the model only wrote a row f
     REQUIRE(model.execute(ledger::GetReportStatus{.jobId = jobId}).status == ledger::ReportStatus::Pending);
 
     {
-        ledger::app::App app{kTimerOff};
+        ledger::app::App app{std::string{kTestTokenSecret}, kTimerOff};
         app.runPendingReportsOnce();
         REQUIRE(pumpUntil([&app] { return !app.reportsInFlight(); }));
 
@@ -128,7 +137,7 @@ TEST_CASE("A job submitted before the App existed is picked up by its first pass
     ledger::ReportJobId second;
     {
         // A first "process": submits two jobs, runs neither, and goes away.
-        ledger::app::App accepting{kTimerOff};
+        ledger::app::App accepting{std::string{kTestTokenSecret}, kTimerOff};
         first = submitReport(model, ledgerId);
         second = submitReport(model, ledgerId);
         REQUIRE(first.hasValue());
@@ -140,7 +149,7 @@ TEST_CASE("A job submitted before the App existed is picked up by its first pass
 
     {
         // A second "process": one pass, and both survivors settle.
-        ledger::app::App resuming{kTimerOff};
+        ledger::app::App resuming{std::string{kTestTokenSecret}, kTimerOff};
         resuming.runPendingReportsOnce();
         REQUIRE(pumpUntil([&resuming] { return !resuming.reportsInFlight(); }));
     }
@@ -159,7 +168,7 @@ TEST_CASE("App::runPendingReportsOnce with nothing pending dispatches nothing", 
     const auto ledgerId = makeLedger(mapper, model);
     const auto jobId = submitReport(model, ledgerId);
 
-    ledger::app::App app{kTimerOff};
+    ledger::app::App app{std::string{kTestTokenSecret}, kTimerOff};
     app.runPendingReportsOnce();
     REQUIRE(app.reportsInFlight());
     REQUIRE(pumpUntil([&app] { return !app.reportsInFlight(); }));
@@ -180,7 +189,7 @@ TEST_CASE("The App's report timer settles a job with no pass driven by hand", "[
     const auto ledgerId = makeLedger(mapper, model);
     const auto jobId = submitReport(model, ledgerId);
 
-    ledger::app::App app{kFastRunInterval};
+    ledger::app::App app{std::string{kTestTokenSecret}, kFastRunInterval};
     REQUIRE(pumpUntil(
         [&] { return model.execute(ledger::GetReportStatus{.jobId = jobId}).status == ledger::ReportStatus::Done; }));
     app.stopBackgroundJobs();
@@ -198,7 +207,7 @@ TEST_CASE("stopBackgroundJobs stops the report runner for good", "[ledger][app]"
     ledger::LedgerModel model;
     const auto ledgerId = makeLedger(mapper, model);
 
-    ledger::app::App app{kFastRunInterval};
+    ledger::app::App app{std::string{kTestTokenSecret}, kFastRunInterval};
     app.stopBackgroundJobs();
 
     // Submitted only after the timer is stopped, so the job is one no pass
@@ -230,7 +239,7 @@ TEST_CASE("The App runs a job for every ledger, not only the first", "[ledger][a
     const auto firstJob = submitReport(model, firstLedger);
     const auto secondJob = submitReport(model, secondLedger);
 
-    ledger::app::App app{kTimerOff};
+    ledger::app::App app{std::string{kTestTokenSecret}, kTimerOff};
     app.runPendingReportsOnce();
     REQUIRE(pumpUntil([&app] { return !app.reportsInFlight(); }));
 
@@ -271,7 +280,7 @@ TEST_CASE("A job whose ledger no longer exists settles Failed", "[ledger][app]")
     const auto orphanId = ledger::ReportJobId{static_cast<std::int64_t>(orphan.id.Value())};
 
     {
-        ledger::app::App app{kTimerOff};
+        ledger::app::App app{std::string{kTestTokenSecret}, kTimerOff};
         // One job failing must not fail the pass, and one job whose ledger is
         // missing must not either.
         REQUIRE_NOTHROW(app.runPendingReportsOnce());

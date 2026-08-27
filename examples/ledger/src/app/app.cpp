@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger/app/app.hpp"
 
+#include "ledger/auth/ledger_authorizer.hpp"
 #include "ledger/core/types.hpp"
 #include "ledger/dto/report_dto.hpp"
 // Every model this rung hosts is included here, not only the one the report
@@ -9,19 +10,21 @@
 // the header both registers the type with the process-wide
 // registry/dispatcher and emits a reference to that model's `execute` bodies
 // -- which is what pulls each model's object file out of the static library
-// for a binary (a future server `main()`) whose own code names nothing but
-// `App`. Without this, such a binary would either fail to link or come up
-// serving no models at all. Same reason, same comment, as bookmarks' own
-// app.cpp.
+// for a binary (`ladder_ledger_server`'s `main()`) whose own code names
+// nothing but `App`. Without this, such a binary would either fail to link or
+// come up serving no models at all. Same reason, same comment, as bookmarks'
+// own app.cpp.
 #include <Lightweight/SqlStatement.hpp>
 #include <cstdint>
 #include <exception>
 #include <morph/core/logger.hpp>
 #include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "ledger/models/auth_model.hpp"
 #include "ledger/models/budget_model.hpp"
 #include "ledger/models/ledger_model.hpp"
 #include "ledger/models/rule_model.hpp"
@@ -47,22 +50,73 @@ namespace {
     }
 }
 
+/// @brief Expiry stamped into the report runner's own service token.
+///
+/// The same far-future constant `AuthModel` uses, for the same reason
+/// (`SessionToken::expiresAtMs` must be strictly positive, so "no expiry" is
+/// not expressible) -- and with an additional one here, mirroring
+/// `bookmarks::app::App`'s identical constant: the runner has no login to
+/// repeat, so a token that expired mid-run would silently stop the
+/// background job on a long-lived server with nothing to renew it. The
+/// process's own lifetime is the real bound; the token is never written
+/// down, never leaves this process, and dies with it.
+constexpr std::int64_t kServiceTokenExpiresAtMs = 4102444800000;  // 2100-01-01T00:00:00Z
+
+/// @brief Live-instance cap this server installs. Mirrors
+///        `bookmarks::app::App`'s identical `kMaxLiveModels` and rationale:
+///        `LedgerAuthorizer` installs no `authorizeRegister` override, so an
+///        unauthenticated client can still make the server create model
+///        instances even though it can never execute anything on them past
+///        `Login`. Generous on purpose -- the shipped client registers four
+///        bridges (ledger, budget, rule, report), so this is dozens of
+///        concurrent clients, not a limit a real session will meet.
+constexpr std::size_t kMaxLiveModels = 256;
+
 }  // namespace
 
-App::App(std::chrono::milliseconds runInterval, std::size_t workers, QObject* parent)
+App::App(std::string tokenSecret, std::chrono::milliseconds runInterval, std::size_t workers, QObject* parent)
     // Initialiser order follows the declaration order in app.hpp, which is
     // itself chosen for teardown safety -- see that header's comment.
-    : QObject{parent}, _pool{workers}, _reportBridge{std::make_unique<::morph::backend::LocalBackend>(_pool)} {
-    // The runner's own session. No token and no issuer: this rung installs no
-    // authorizer (see app.hpp for why there is no RemoteServer here either),
-    // so there is nothing to verify a token against and minting one would be
-    // theatre. The principal is what
-    // `LedgerModel::execute(const RunReportJob&)` checks, and
-    // `kReportRunnerPrincipal`'s own doc comment is explicit that without a
-    // verifying authorizer this is a layering gate rather than an
-    // authorization boundary.
+    : QObject{parent},
+      _pool{workers},
+      // hmacSha256 named explicitly -- same reason as the two TokenIssuer
+      // call sites below: LedgerAuthorizer inherits SigningAuthorizer's
+      // constructor, whose MacFunction default is dropped entirely under
+      // MORPH_REQUIRE_VETTED_HMAC.
+      _server{std::make_shared<::morph::backend::RemoteServer>(
+          _pool, std::make_shared<auth::LedgerAuthorizer>(tokenSecret, ::morph::session::hmacSha256))},
+      _reportBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server)} {
+    // Installed process-wide so AuthModel::execute(const Login&) can mint
+    // tokens against this exact secret -- the same "registry-constructed
+    // models are always default-constructed, so there is no DI seam" answer
+    // morph::journal::setActionLog and bookmarks::auth::setTokenIssuer
+    // already use.
+    auth::setTokenIssuer(std::make_shared<::morph::session::TokenIssuer>(tokenSecret, ::morph::session::hmacSha256));
+
+    ::morph::backend::LimitPolicy limits;
+    limits.maxLiveModels = kMaxLiveModels;
+    _server->setLimitPolicy(limits);
+
+    // The runner's own service-principal session, genuinely signed. Minted
+    // here rather than through AuthModel deliberately: AuthModel *refuses* to
+    // mint a token in the reserved `system:` namespace
+    // (`auth::isReservedPrincipal`), which is exactly the property that keeps
+    // a client from obtaining this authority. The server process minting its
+    // own is the one legitimate path, and it shares `tokenSecret` with the
+    // authorizer installed above, so it verifies exactly like a real user's
+    // token -- the runner now clears `LedgerAuthorizer::authorize()` on its
+    // own merits rather than dispatching over a backend with no authorizer to
+    // clear. Mirrors `bookmarks::app::App`'s identical service-token minting
+    // for its metadata-fetch worker.
+    const ::morph::session::TokenIssuer serviceIssuer{tokenSecret, ::morph::session::hmacSha256};
     ::morph::session::Context session;
     session.principal = std::string{kReportRunnerPrincipal};
+    session.token = serviceIssuer.issue(::morph::session::SessionToken{
+        .principal = std::string{kReportRunnerPrincipal},
+        .issuedAtMs = 0,
+        .expiresAtMs = kServiceTokenExpiresAtMs,
+        .roles = {},
+    });
     _reportBridge.setDefaultSession(session);
 
     // The timer slot is wrapped rather than connected to the method directly.
@@ -99,6 +153,12 @@ App::~App() {
     // again here is a no-op, and keeps this destructor correct for every
     // owner that does not.
     stopBackgroundJobs();
+    // Matches setActionLog's own clear-on-destruction discipline (and
+    // bookmarks::app::App's identical teardown line): a later test (or a
+    // second App in the same process) must see auth::tokenIssuer() ==
+    // nullptr rather than a previous App's still-live issuer, which would be
+    // holding a *different* secret than whatever authorizer is current.
+    auth::setTokenIssuer(nullptr);
 }
 
 void App::runPendingReportsOnce() {

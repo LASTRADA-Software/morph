@@ -120,7 +120,7 @@ TEST_CASE("ReportQmlBridge drives submit->poll to done and publishes exact lines
     // is what dominates. Constructed before the bridge and torn down after
     // it (see the end of this case): its dispatches complete against objects
     // it owns, so it must not be destroyed with one outstanding.
-    ledger::app::App app{20ms};
+    ledger::app::App app{"report-presenter-test-secret", 20ms};
 
     auto rig = makeAuthedRig("alice");
     ledger::gui::ReportQmlBridge bridge{rig->bridge(0), rig->executor()};

@@ -124,14 +124,19 @@ Build order (status as of rung 5's implementation, see
    starts later — after a crash, after a restart — picks it up. The previous
    design's queued lambda died with its process.
 
-   **The App does not own a `RemoteServer`, and this rung ships no server
-   binary.** `RemoteServer` clears the session principal for any authorizer
-   that does not authenticate (`docs/spec/security.md`), and this rung
-   installs no authorizer at all, so every mutating action reaching a model
-   over a remote backend arrives with an empty principal and is refused. The
-   runner therefore dispatches over a `LocalBackend` — the same backend the
-   shipped client uses. Rung 5's missing login/authorizer story is tracked in
-   morph#242; it is not a report-runner problem.
+   **The App owns a `RemoteServer`, fronted by `ladder_ledger_server`
+   (morph#242).** `RemoteServer` clears the session principal for any
+   authorizer that does not authenticate (`docs/spec/security.md`), so a real
+   login story needed a real, verifying authorizer: `LedgerAuthorizer`
+   (`ledger/auth/ledger_authorizer.hpp`) plus `AuthModel`/`Login`
+   (`ledger/models/auth_model.hpp`, `ledger/dto/auth_dto.hpp`), the same
+   signed-token shape bookmarks'/kanban's authorizers use. The report
+   runner's internal client now dispatches through a `SimulatedRemoteBackend`
+   over this `App`'s own `RemoteServer`, carrying a genuinely signed token
+   for `kReportRunnerPrincipal` — an ordinary authenticated dispatch, not a
+   `LocalBackend` bypass. `ladder_ledger_gui` mints a Local-mode session via
+   `AppContext::login()` in Local mode, and dispatches `Login` against the
+   server in Remote mode, mirroring bookmarks'/kanban's own `gui/main.cpp`.
 8. **Sync benchmark** (written deliverable, not code): reproduce one
    concurrent-edit scenario from Actual (two offline clients edit the same
    transaction's different fields) and one from ODK-style base-version
