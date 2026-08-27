@@ -190,6 +190,47 @@ namespace {
     return restated;
 }
 
+/// @brief Partitions @p legAmounts by the currency of the matching entry in
+///        @p legAccounts and requires every partition to sum to canonical
+///        zero, throwing `ZeroSumViolation` on the first one that does not.
+///
+///        The single per-currency zero-sum check every journal-writing path
+///        runs: `execute(StoreTransaction)` and `storeJournalImpl` (and, in
+///        turn, everything that reaches the database through
+///        `storeJournalImpl` -- `execute(UndoTransaction)` and
+///        `execute(ImportLedgerChunk)`) all call this same function rather
+///        than each re-deriving the partitioning loop. Grouping by account
+///        currency, never a client-supplied field, is what makes a two-leg
+///        entry across a USD account and a EUR account rejected as two
+///        unbalanced single-legged postings instead of accepted as if
+///        balanced (design spec §1).
+/// @param legAmounts Each leg's amount, already restated onto its own
+///        account currency's scale (`restateLegAmounts`) -- summing
+///        un-restated amounts across differently-scaled legs of the same
+///        currency is exactly the bug `restateLegAmounts` exists to prevent
+///        (see that function's own doc comment).
+/// @param legAccounts Each leg's own account row, positionally aligned with
+///        @p legAmounts.
+/// @throws ZeroSumViolation When any currency's legs do not sum to zero.
+void checkZeroSumByCurrency(const std::vector<morph::math::Rational>& legAmounts,
+                            const std::vector<db::AccountRecord>& legAccounts) {
+    std::map<std::string, morph::math::Rational> sumsByCurrency;
+    for (std::size_t i = 0; i < legAmounts.size(); ++i) {
+        const std::string currency{legAccounts[i].currencyCode.Value().ToStringView()};
+        auto it = sumsByCurrency.find(currency);
+        if (it == sumsByCurrency.end()) {
+            sumsByCurrency.emplace(currency, legAmounts[i]);
+        } else {
+            it->second = it->second + legAmounts[i];
+        }
+    }
+    for (const auto& [currency, sum] : sumsByCurrency) {
+        if (sum.numerator != 0) {
+            throw ZeroSumViolation{currency, "legs did not sum to zero"};
+        }
+    }
+}
+
 /// @brief Splits @p text on every occurrence of @p delimiter, keeping empty
 ///        fields (so `"a,,b"` yields `{"a", "", "b"}`, and a trailing
 ///        delimiter yields a trailing empty field) -- the plain building
@@ -635,22 +676,7 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
     // stored below. See restateLegAmounts for why the invariant is unsound in
     // both directions without this.
     const auto legAmounts = restateLegAmounts(action.legs, legAccounts, "StoreTransaction");
-
-    std::map<std::string, morph::math::Rational> sumsByCurrency;
-    for (std::size_t i = 0; i < action.legs.size(); ++i) {
-        const std::string currency{legAccounts[i].currencyCode.Value().ToStringView()};
-        auto it = sumsByCurrency.find(currency);
-        if (it == sumsByCurrency.end()) {
-            sumsByCurrency.emplace(currency, legAmounts[i]);
-        } else {
-            it->second = it->second + legAmounts[i];
-        }
-    }
-    for (const auto& [currency, sum] : sumsByCurrency) {
-        if (sum.numerator != 0) {
-            throw ZeroSumViolation{currency, "legs did not sum to zero"};
-        }
-    }
+    checkZeroSumByCurrency(legAmounts, legAccounts);
 
     // Constructor/commit shape copied verbatim from
     // bank::LoanModel::execute(const dto::TakeLoan&) (examples/bank/src/
@@ -950,10 +976,12 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
     // `Lightweight::SqlTransaction` per call, never two nested ones on the
     // same connection -- this loop instead commits one row at a time,
     // atomically, via `storeJournalImpl`'s own transaction: a thrown
-    // `ValidationError`/`NotFound` on a malformed row still leaves every
-    // already-committed row from earlier in the same chunk in place
-    // (each was its own complete, self-balancing journal entry), it just
-    // does not roll the whole chunk back to empty.
+    // `ValidationError`/`NotFound`/`ZeroSumViolation` on a malformed or
+    // unbalanced row still leaves every already-committed row from earlier
+    // in the same chunk in place (each is checked and posted as its own
+    // complete, zero-sum journal entry by `storeJournalImpl` -- see that
+    // method's own doc comment), it just does not roll the whole chunk back
+    // to empty.
     auto ledgerRows = mapper.Query<db::LedgerRecord>()
                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
                           .All();
@@ -1303,10 +1331,14 @@ GetLedgerResult LedgerModel::storeJournalImpl(Lightweight::DataMapper& mapper, c
                                               const std::vector<db::AccountRecord>& legAccounts,
                                               std::optional<std::string> causalParentId) {
     // Before the transaction opens, so a rejected leg never leaves one behind:
-    // the same restatement `execute(StoreTransaction)` performs, applied here
-    // too because this path has its own callers (undo, CSV import) that reach
-    // the leg columns without going through that method.
+    // the same restatement and per-currency zero-sum check
+    // `execute(StoreTransaction)` performs, applied here too because this
+    // path has its own callers (undo, CSV import) that reach the leg columns
+    // without going through that method. Neither check is optional per
+    // caller -- see this method's own doc comment in ledger_model.hpp for why
+    // the check lives here rather than in each caller.
     const auto legAmounts = restateLegAmounts(legs, legAccounts, "storeJournalImpl");
+    checkZeroSumByCurrency(legAmounts, legAccounts);
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     db::TransactionJournalRecord journalRow;
     journalRow.description = description;

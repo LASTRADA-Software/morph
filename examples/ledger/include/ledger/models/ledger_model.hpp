@@ -164,10 +164,22 @@ public:
     ///        amount` hash was already imported into this ledger, so the
     ///        same statement re-uploaded under a different opId is still
     ///        only recorded once.
+    ///
+    ///        Each row's two legs go through `storeJournalImpl`, which
+    ///        enforces the same per-currency zero-sum invariant
+    ///        `execute(StoreTransaction)` does (see that method's own doc
+    ///        comment): a row whose account and `action.counterAccountId`
+    ///        hold different currencies is not balanced in either currency,
+    ///        so it is rejected rather than posted as two unbalanced
+    ///        single-legged postings.
     /// @param action The ledger id, counter account, raw CSV chunk, and
     ///        this chunk's idempotency key.
     /// @return How many rows were newly imported vs. skipped as
     ///        content-hash duplicates.
+    /// @throws ZeroSumViolation When a row's account and
+    ///         `action.counterAccountId` do not share a currency (or, more
+    ///         generally, when a row's two legs do not sum to zero within
+    ///         some currency).
     ImportResult execute(const ImportLedgerChunk& action);
 
     /// @brief Enqueues a report computation for `action.ledgerId` and returns
@@ -305,17 +317,25 @@ private:
     ///        reversing entry) and by `execute(ImportLedgerChunk)` (once per
     ///        CSV row), never by `execute(StoreTransaction)`.
     ///
-    ///        Does not re-run `execute(StoreTransaction)`'s zero-sum
-    ///        partitioning loop -- it trusts its caller already knows the
-    ///        legs it's inserting are zero-sum (negating every leg of an
-    ///        already-zero-sum set is itself zero-sum). Any future caller
-    ///        that cannot make that guarantee must validate before calling
-    ///        this helper.
+    ///        Runs `execute(StoreTransaction)`'s own per-currency zero-sum
+    ///        check itself (`checkZeroSumByCurrency` in
+    ///        `src/models/ledger_model.cpp`), on the restated amounts below,
+    ///        before opening any transaction. The check lives here rather
+    ///        than in each caller precisely because a caller can otherwise
+    ///        skip it: `execute(ImportLedgerChunk)` did, for as long as this
+    ///        helper only trusted its caller to have validated already (the
+    ///        two-leg entry a CSV row posts can name any two accounts, and
+    ///        nothing about parsing a row constrains them to share a
+    ///        currency). `execute(UndoTransaction)`'s reversal legs pass the
+    ///        check trivially -- negating every leg of an already-zero-sum
+    ///        set is itself zero-sum in every currency the original entry
+    ///        touched -- so hoisting the check here changes nothing for that
+    ///        caller.
     ///
-    ///        It *does* restate every leg onto its own account currency's
-    ///        scale, exactly as `execute(StoreTransaction)` does, because
-    ///        that is a property of the rows this method writes rather than
-    ///        of the caller's own checking -- see `restateLegAmounts` in
+    ///        Also restates every leg onto its own account currency's scale,
+    ///        exactly as `execute(StoreTransaction)` does, because that is a
+    ///        property of the rows this method writes rather than of the
+    ///        caller's own checking -- see `restateLegAmounts` in
     ///        `src/models/ledger_model.cpp`. A leg that is not a whole
     ///        number of its currency's minor units is rejected with
     ///        `ValidationError` before any transaction is opened.
@@ -337,6 +357,8 @@ private:
     ///        what makes a second reversal of that entry detectable.
     /// @return The full rebuilt ledger state, per the ladder-wide
     ///         full-rebuilt-state convention.
+    /// @throws ZeroSumViolation When @p legs, restated onto their own account
+    ///         currencies, do not sum to zero within some currency.
     [[nodiscard]] GetLedgerResult storeJournalImpl(Lightweight::DataMapper& mapper, const LedgerId& ledgerId,
                                                    const std::string& description, const morph::time::Timestamp& date,
                                                    const std::vector<TransactionLeg>& legs,

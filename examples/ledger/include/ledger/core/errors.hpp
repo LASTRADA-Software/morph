@@ -27,9 +27,13 @@ public:
     explicit Forbidden(std::string message) : LedgerError{std::move(message)} {}
 };
 
-/// @brief Thrown when a `StoreTransaction`'s legs, partitioned by currency,
-///        do not sum to canonical zero for at least one partition. Never
-///        thrown for rounding — the model never rounds (design spec §1).
+/// @brief Thrown when a journal's legs, partitioned by currency, do not sum
+///        to canonical zero for at least one partition. `execute(StoreTransaction)`
+///        checks this directly; `storeJournalImpl` checks it too (see that
+///        method's own doc comment), so it is also thrown from every path
+///        that reaches the database through it — `execute(UndoTransaction)`
+///        and `execute(ImportLedgerChunk)`. Never thrown for rounding — the
+///        model never rounds (design spec §1).
 class ZeroSumViolation : public LedgerError {
 public:
     ZeroSumViolation(std::string currency, std::string message)

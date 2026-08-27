@@ -256,3 +256,95 @@ TEST_CASE("ImportLedgerChunk lands every spelling of an amount on the account cu
         CHECK(legRow.amountNum.Value() == -450);
     }
 }
+
+TEST_CASE("ImportLedgerChunk rejects a row whose account and counter account hold different currencies",
+          "[ledger][import]") {
+    // A row posts +amount/-amount across the row's own account and
+    // action.counterAccountId. When those two accounts hold different
+    // currencies the row is not balanced in either currency -- it is two
+    // unbalanced single-legged postings -- which the per-currency zero-sum
+    // invariant `execute(StoreTransaction)` enforces is meant to forbid
+    // everywhere a journal is written, not just on that one path.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Suspense",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::EUR});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto checkingId = ledgerState.accounts[0].id;
+    auto suspenseId = ledgerState.accounts[1].id;
+
+    std::string csv =
+        "date,description,account_id,amount\n2026-01-01T00:00:00Z,Coffee," + std::to_string(*checkingId) + ",-4.50\n";
+
+    CHECK_THROWS_AS(model.execute(ledger::ImportLedgerChunk{
+                        .ledgerId = ledgerId,
+                        .counterAccountId = suspenseId,
+                        .csvChunk = csv,
+                        .opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"chunk-mixed-currency"})}),
+                    ledger::ZeroSumViolation);
+
+    // Nothing landed: the rejected row must not leave a half-posted journal
+    // behind in either account.
+    auto finalState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto checking = std::ranges::find_if(finalState.accounts, [&](const auto& a) { return a.id == checkingId; });
+    auto suspense = std::ranges::find_if(finalState.accounts, [&](const auto& a) { return a.id == suspenseId; });
+    REQUIRE(checking != finalState.accounts.end());
+    REQUIRE(suspense != finalState.accounts.end());
+    CHECK(checking->balance.numerator == 0);
+    CHECK(suspense->balance.numerator == 0);
+}
+
+TEST_CASE("ImportLedgerChunk rejects a chunk that does not sum to zero within a currency", "[ledger][import]") {
+    // storeJournalImpl's zero-sum check (hoisted there so no caller can skip
+    // it -- see its own doc comment) validates the legs of one call, i.e. one
+    // imported row at a time. A single row's own two legs (+amount on the
+    // row's account, -amount on the counter account) always sum to zero
+    // arithmetically when both accounts share a currency, so this exercises
+    // the same currency-partitioned check from the other angle: swapping in
+    // an account whose currency does not match the counter account's still
+    // trips it even though the row's raw amount field is internally
+    // consistent.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::JPY});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Suspense",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto checkingId = ledgerState.accounts[0].id;
+    auto suspenseId = ledgerState.accounts[1].id;
+
+    std::string csv =
+        "date,description,account_id,amount\n2026-01-01T00:00:00Z,Coffee," + std::to_string(*checkingId) + ",-450\n";
+
+    CHECK_THROWS_AS(model.execute(ledger::ImportLedgerChunk{
+                        .ledgerId = ledgerId,
+                        .counterAccountId = suspenseId,
+                        .csvChunk = csv,
+                        .opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"chunk-jpy-usd"})}),
+                    ledger::ZeroSumViolation);
+}
