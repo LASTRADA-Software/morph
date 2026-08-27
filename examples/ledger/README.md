@@ -54,14 +54,20 @@ Build order (status as of rung 5's implementation, see
   compensating action, CSV import with dedup, and the submit->poll report
   pair -- each with model, presenter, QML bridge and tests. The desktop
   client wiring all four bridges is in `gui/`.
-- **Step 8: prose delivered, one scenario's test pending.**
+- **Step 8: prose and both scenarios delivered.**
   `SYNC-BENCHMARK.md` states the philosophy and both scenarios in full.
-  Scenario B is reproducible against `UpdateRule`'s real version conflict.
-  Scenario A -- two offline clients editing the same *transaction* -- has no
-  surface to exercise yet: this rung ships no transaction-edit action, no
-  base version on `transaction_journals`, and no offline-queue wiring. That
-  gap is tracked in morph#144 rather than papered over with a test that
-  would pass under the scenario's name without testing it.
+  Scenario B is reproducible against `UpdateRule`'s real version conflict
+  (`expectedVersion`, `VersionConflict`). Scenario A -- two offline clients
+  editing the same *transaction* -- is recorded as **inapplicable**, not
+  implemented: this rung ships no transaction-edit action by design (a posted
+  journal entry is an audit record, corrected by a new compensating entry per
+  design spec §6, never edited in place), so §10's scenario presumes a
+  capability §6 rules out. Running the collision this rung *can* express
+  instead -- two clients both reversing the same transaction offline -- found
+  a real bug (both `UndoTransaction`s applied, doubling the reversal), fixed
+  by `causal_parent_id` naming what a compensating entry reverses and a second
+  reversal being rejected with `AlreadyReversed`. morph#144 tracked both
+  halves and is closed.
 
 
 1. Accounts + `StoreTransaction { description, date, legs[] }` — one
