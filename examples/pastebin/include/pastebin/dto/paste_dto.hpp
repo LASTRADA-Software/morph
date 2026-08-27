@@ -68,6 +68,12 @@ struct CreatePaste {
     Visibility visibility = Visibility::Public;
     Editability editability = Editability::Immutable;
 
+    /// @brief Opts the generated form out of auto-submit-on-validity
+    ///        (docs/spec/forms/forms.md, "Explicit submit mode"). Without
+    ///        this, a form bound directly to a live controller would store
+    ///        one paste per typed character.
+    static constexpr bool explicitSubmit = true;
+
     /// @brief Members `schemaJson<CreatePaste>()` must leave out of the derived
     ///        `required` array (`morph::forms`' `optionalFields` convention —
     ///        see `include/morph/forms/forms.hpp`).

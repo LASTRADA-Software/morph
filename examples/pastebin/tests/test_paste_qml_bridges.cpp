@@ -134,6 +134,20 @@ TEST_CASE("Both pastebin bridges expose exactly the surface gui/qml binds, and n
     audit.bind(QStringLiteral("formsController"), forms);
     audit.bind(QStringLiteral("pasteController"), pastes);
 
+    // `submitIfValid` is called from the shipped `MorphForms` renderer's QML
+    // (`src/qt/forms/qml/DynamicForm.qml`'s `submit()` and its auto-submit
+    // path), not from this rung's. `CreatePaste` declares `explicitSubmit =
+    // true` (pastebin/dto/paste_dto.hpp) and the create form is bound with
+    // `controller: root.formsController`, so the renderer's own Submit button
+    // is the sole caller -- this rung's QML names the *controller*, never the
+    // method. The exemption cannot go stale unnoticed: the audit rejects it
+    // the moment `FormsBridge` loses the member, or some scanned `.qml` file
+    // starts binding it again.
+    audit.allowUnbound(QStringLiteral("formsController"), QStringLiteral("submitIfValid"),
+                       QStringLiteral("called by the shipped MorphForms DynamicForm, whose QML this audit does not "
+                                      "scan; this rung's form is bound to the controller and submitted by the "
+                                      "renderer's own explicit Submit button"));
+
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());
     CHECK(findings.isEmpty());

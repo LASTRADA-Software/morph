@@ -42,12 +42,18 @@
 
 #ifdef MORPH_LADDER_QML_URI
 
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QList>
+#include <QObject>
 #include <QQmlApplicationEngine>
 #include <QQmlError>
 #include <QString>
+#include <QVariantMap>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
+
+#include "lims_schemas.hpp"
 
 namespace {
 
@@ -91,6 +97,53 @@ TEST_CASE("lims' result-entry surface loads standalone with no errors", "[lims][
     bool created = false;
     CHECK(firstWarningLoading("ResultEntryView", created) == std::string{});
     REQUIRE(created);
+}
+
+TEST_CASE("SampleView's four schema-driven forms render the shipped renderer's own Submit button",
+          "[lims][gui][qml-smoke]") {
+    // The loads above pass no `schemas` property, so no DynamicForm has a
+    // schema to render and this cannot be observed there. Loaded once more
+    // with the real document instead, which is the only way to see the
+    // consequence of `explicitSubmit = true` in an actual item tree rather
+    // than inferring it from the emitted JSON: DynamicForm loads its Submit
+    // Button through a `Loader { active: form.explicitSubmitMode }`, so a
+    // form whose schema lacked the key would have no such object anywhere
+    // beneath it, not merely a hidden one (docs/spec/forms/forms.md,
+    // "Explicit submit mode").
+    //
+    // Still an engine-load test per examples/TESTING.md presenter rule 6 --
+    // it queries the object tree, and synthesizes no input events.
+    const QJsonDocument document = QJsonDocument::fromJson(QString::fromStdString(lims::gui::limsSchemasJson()).toUtf8());
+    REQUIRE(document.isObject());
+
+    QQmlApplicationEngine engine;
+    engine.setInitialProperties({{QStringLiteral("schemas"), document.object().toVariantMap()}});
+    engine.loadFromModule(MORPH_LADDER_QML_URI, "SampleView");
+    REQUIRE_FALSE(engine.rootObjects().isEmpty());
+
+    // Four forms on this view (RegisterClient, RegisterSample, ReturnForRework,
+    // RejectSample) -- and `sampleBridge` is still null here, so this counts
+    // controls the renderer built, not anything a live controller caused.
+    QObject* const root = engine.rootObjects().front();
+    CHECK(root->findChildren<QObject*>(QStringLiteral("submitButton")).size() == 4);
+}
+
+TEST_CASE("ResultEntryView's two schema-driven forms render the shipped renderer's own Submit button",
+          "[lims][gui][qml-smoke]") {
+    // Same reasoning as SampleView above.
+    const QJsonDocument document = QJsonDocument::fromJson(QString::fromStdString(lims::gui::limsSchemasJson()).toUtf8());
+    REQUIRE(document.isObject());
+
+    QQmlApplicationEngine engine;
+    engine.setInitialProperties({{QStringLiteral("schemas"), document.object().toVariantMap()}});
+    engine.loadFromModule(MORPH_LADDER_QML_URI, "ResultEntryView");
+    REQUIRE_FALSE(engine.rootObjects().isEmpty());
+
+    // Two forms on this view (CaptureConcentration, ResolveConflict) -- and
+    // `resultBridge` is still null here, so this counts controls the renderer
+    // built, not anything a live controller caused.
+    QObject* const root = engine.rootObjects().front();
+    CHECK(root->findChildren<QObject*>(QStringLiteral("submitButton")).size() == 2);
 }
 
 #endif  // MORPH_LADDER_QML_URI

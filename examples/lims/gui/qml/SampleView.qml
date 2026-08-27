@@ -102,23 +102,19 @@ Item {
                 // Both registration forms come straight from
                 // schemaJson<RegisterClient>() / schemaJson<RegisterSample>().
                 // If either DTO grows a field, this file does not change.
+                //
+                // Bound, and safe to bind: both actions declare
+                // `explicitSubmit = true` (lims/dto/sample_dto.hpp), so their
+                // schemas carry `"x-submitMode": "explicit"` and the renderer
+                // never auto-submits — it renders its own Submit button,
+                // gated on the same `ready` state, and that click is the sole
+                // trigger (docs/spec/forms/forms.md, "Explicit submit mode").
                 DynamicForm {
                     id: clientForm
                     Layout.fillWidth: true
                     actionType: "RegisterClient"
                     schema: page.schemas["RegisterClient"] || ({})
-                    // Left unbound deliberately: a bound DynamicForm
-                    // auto-submits once its required fields are engaged,
-                    // which here would register a client per keystroke.
-                    // `ready` is the submit gate and `previewLine` is the
-                    // exact body the button hands over.
-                    controller: null
-                }
-                Button {
-                    Layout.fillWidth: true
-                    text: "Register client"
-                    enabled: page.sampleBridge !== null && clientForm.ready
-                    onClicked: page.sampleBridge.submitIfValid("RegisterClient", clientForm.previewLine)
+                    controller: page.sampleBridge
                 }
 
                 Label {
@@ -132,13 +128,7 @@ Item {
                     Layout.fillWidth: true
                     actionType: "RegisterSample"
                     schema: page.schemas["RegisterSample"] || ({})
-                    controller: null
-                }
-                Button {
-                    Layout.fillWidth: true
-                    text: "Register sample"
-                    enabled: page.sampleBridge !== null && sampleForm.ready
-                    onClicked: page.sampleBridge.submitIfValid("RegisterSample", sampleForm.previewLine)
+                    controller: page.sampleBridge
                 }
 
                 RowLayout {
@@ -211,19 +201,24 @@ Item {
                 // their own schema rather than from a shared hand-built text
                 // field — which is also what keeps the "a reason is required"
                 // rule in one place (the DTO's own validate()) instead of
-                // duplicated as an `enabled:` expression here.
+                // duplicated as an `enabled:` expression here. Both actions
+                // declare `explicitSubmit = true`, so each carries its own
+                // gated Submit button — see the registration forms above for
+                // why binding the controller directly is safe.
+                //
+                // Each form is still gated on the sample's current lifecycle
+                // state: that is not something the schema can express (it
+                // does not know which sample is attached), so it is applied
+                // to the whole form rather than to a button — `enabled` on a
+                // Frame propagates to every child, the Submit button
+                // included.
                 DynamicForm {
                     id: reworkForm
                     Layout.fillWidth: true
                     actionType: "ReturnForRework"
                     schema: page.schemas["ReturnForRework"] || ({})
-                    controller: null
-                }
-                Button {
-                    Layout.fillWidth: true
-                    text: "Return for rework"
-                    enabled: page.sampleState === "to-be-verified" && reworkForm.ready
-                    onClicked: page.sampleBridge.submitIfValid("ReturnForRework", reworkForm.previewLine)
+                    controller: page.sampleBridge
+                    enabled: page.sampleState === "to-be-verified"
                 }
 
                 DynamicForm {
@@ -231,14 +226,8 @@ Item {
                     Layout.fillWidth: true
                     actionType: "RejectSample"
                     schema: page.schemas["RejectSample"] || ({})
-                    controller: null
-                }
-                Button {
-                    Layout.fillWidth: true
-                    text: "Reject"
-                    enabled: (page.sampleState === "registered" || page.sampleState === "received")
-                             && rejectForm.ready
-                    onClicked: page.sampleBridge.submitIfValid("RejectSample", rejectForm.previewLine)
+                    controller: page.sampleBridge
+                    enabled: page.sampleState === "registered" || page.sampleState === "received"
                 }
             }
         }

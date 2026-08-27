@@ -132,25 +132,21 @@ Item {
                 anchors.fill: parent
                 spacing: 6
 
+                // Bound, and safe to bind: `CaptureConcentration` declares
+                // `explicitSubmit = true` (lims/dto/result_dto.hpp), so its
+                // schema carries `"x-submitMode": "explicit"` and the
+                // renderer never auto-submits — it renders its own Submit
+                // button, enabled only while the form is ready (which is the
+                // renderer's own verdict on the served x-rules, including
+                // `exactlyOneOf` — why there is one button and not one per
+                // branch of the sum), and that click is the sole trigger
+                // (docs/spec/forms/forms.md, "Explicit submit mode").
                 DynamicForm {
                     id: captureForm
                     Layout.fillWidth: true
                     actionType: "CaptureConcentration"
                     schema: page.schemas["CaptureConcentration"] || ({})
-                    // Unbound on purpose: a bound DynamicForm auto-submits
-                    // the moment its required fields are engaged, which for a
-                    // lab reading would file a result mid-keystroke.
-                    controller: null
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    text: "Capture"
-                    // `ready` is the renderer's own verdict on the served
-                    // x-rules — including `exactlyOneOf`, which is why there
-                    // is one button here and not one per branch of the sum.
-                    enabled: page.resultBridge !== null && captureForm.ready
-                    onClicked: page.resultBridge.submitIfValid("CaptureConcentration", captureForm.previewLine)
+                    controller: page.resultBridge
                 }
             }
         }
@@ -237,21 +233,17 @@ Item {
         // like every other typed-field action, rather than from a
         // hand-written note field beside two buttons — which is also what
         // keeps "a reason is required" in the DTO's own validate() instead of
-        // duplicated as an `enabled:` expression here.
+        // duplicated as an `enabled:` expression here. `ResolveConflict`
+        // declares `explicitSubmit = true`, so the form carries its own
+        // gated Submit button — see the capture form above for why binding
+        // the controller directly is safe.
         DynamicForm {
             id: resolveForm
             Layout.fillWidth: true
             visible: conflictList.count > 0
             actionType: "ResolveConflict"
             schema: page.schemas["ResolveConflict"] || ({})
-            controller: null
-        }
-        Button {
-            Layout.fillWidth: true
-            visible: conflictList.count > 0
-            text: "Resolve conflict"
-            enabled: page.resultBridge !== null && resolveForm.ready
-            onClicked: page.resultBridge.submitIfValid("ResolveConflict", resolveForm.previewLine)
+            controller: page.resultBridge
         }
 
         Label {

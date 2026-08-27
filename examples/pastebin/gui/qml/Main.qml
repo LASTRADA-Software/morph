@@ -128,28 +128,19 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 spacing: 8
 
+                // Bound, and safe to bind: `CreatePaste` declares
+                // `explicitSubmit = true` (pastebin/dto/paste_dto.hpp), so
+                // its schema carries `"x-submitMode": "explicit"` and the
+                // renderer never auto-submits — it renders its own Submit
+                // button, enabled only while the form is ready, and that
+                // click is the sole trigger (docs/spec/forms/forms.md,
+                // "Explicit submit mode").
                 DynamicForm {
                     id: createForm
                     Layout.fillWidth: true
                     actionType: "CreatePaste"
                     schema: root.schemas["CreatePaste"] || ({})
-                    // Deliberately *not* `controller: root.formsController`.
-                    // DynamicForm auto-submits the moment its required fields
-                    // are engaged and on every keystroke after that — right for
-                    // the calculator-shaped actions it was written against,
-                    // catastrophic for CreatePaste, which would store one paste
-                    // per typed character. Left unbound, the form is a pure
-                    // renderer/validator: `ready` is its submit gate and
-                    // `previewLine` is the exact JSON body it assembled, which
-                    // the button below hands to the controller on demand.
-                    controller: null
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    text: "Create paste"
-                    enabled: root.formsController !== null && createForm.ready
-                    onClicked: root.formsController.submitIfValid("CreatePaste", createForm.previewLine)
+                    controller: root.formsController
                 }
 
                 RowLayout {
