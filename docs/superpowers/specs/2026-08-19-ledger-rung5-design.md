@@ -21,6 +21,11 @@ spec (`docs/superpowers/specs/2026-08-16-kanban-rung4-design.md`, unmerged),
 quoted or restated rather than assumed, since that file does not exist on
 `master` yet.
 
+**Update: PR #121 has since merged.** Rung 4 (kanban) and its design spec
+are both on `master` now; the parallel-construction rationale above is
+historical context for why this branch was cut before that merge, not a
+description of the tree's current state.
+
 **Scope**: steps 1–7 of the README's build order (accounts + transactions
 with the per-currency zero-sum invariant, multi-currency, budgets, rules +
 cascade-journaling, undo-as-compensation, CSV/OFX import with dedup,

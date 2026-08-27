@@ -68,12 +68,13 @@ later rungs consume earlier answers (5 reuses 4's cascade-journaling answer,
 | 3 | [`polls`](polls) | [Rallly](https://github.com/lukevella/rallly) | Shared instances, anonymous principals, undo, event polling |
 | 4 | [`kanban`](kanban) | [Kanboard](https://github.com/kanboard/kanboard) | Strand ordering under concurrency, RBAC, offline queue + replay, action cascades |
 | 5* | [`ledger`](ledger) | [Firefly III](https://github.com/firefly-iii/firefly-iii), [Actual Budget](https://github.com/actualbudget/actual) | Exact `Rational` arithmetic under invariants, multi-currency, sync-philosophy benchmark |
-| 6* | [`lims`](lims) | [SENAITE](https://github.com/senaite/senaite.core), [InvenTree](https://github.com/inventree/InvenTree), [ODK Central](https://github.com/getodk/central) | Unit algebra, versioned schema-driven forms, offline entities with conflict detection |
+| 6 | [`lims`](lims) | [SENAITE](https://github.com/senaite/senaite.core), [InvenTree](https://github.com/inventree/InvenTree), [ODK Central](https://github.com/getodk/central) | Unit algebra, versioned schema-driven forms, offline entities with conflict detection |
 | 7* | [`crm`](crm) | [EspoCRM](https://github.com/espocrm/espocrm), [Tryton](https://github.com/tryton/tryton), [Frappe](https://github.com/frappe/frappe) | Metadata-driven forms, dynamic logic, per-field authz; **7b** (gated): runtime custom fields |
 | 8* | [`forge`](forge) | [Gogs](https://github.com/gogs/gogs), [Gitea/Forgejo](https://github.com/go-gitea/gitea), GitLab architecture | Everything at once: orgs/permissions, notifications at scale, webhooks, out-of-protocol sidecars |
 
 \* = design annex: README is the deliverable; construction is a post-rung-4
-decision (ledger first in line; forge → load script; crm → 7b spike).
+decision (ledger under construction; lims built; forge → load script; crm →
+7b spike).
 
 ## Cross-cutting stress map
 

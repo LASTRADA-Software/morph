@@ -1,10 +1,11 @@
 # lims — rung 6 of the [application ladder](../LADDER.md)
 
-**Status: design annex** ([round-7 program decision](../LADDER.md)) — this
-README is the deliverable; construction is a post-rung-4 decision, and the
-rung's sharpest content (forms conformance D1–D8, journal payload
-evolution) runs earlier as no-app spikes. A lightweight Laboratory
-Information Management System:
+**Status: built** — the rung named a design annex under the [round-7
+program decision](../LADDER.md) has since been constructed: §1–§7 below are
+all implemented, with 130 `TEST_CASE`s across [`tests/`](tests) and a full
+QML GUI under [`gui/qml/`](gui/qml); see [Definition of
+done](#definition-of-done) for what that does and does not mean. A
+lightweight Laboratory Information Management System:
 register samples, assign analyses, capture results with real units and
 detection limits on versioned forms, verify and publish, keep a regulatory
 audit trail — with offline data capture in the field. The deepest test of
@@ -189,7 +190,8 @@ transitions; journal as regulatory audit.
 ## Resolved design decisions
 
 Recorded as they are taken, per the [`LADDER.md`](../LADDER.md) discipline
-rule. §1–§3 are built; §4–§7 are not yet.
+rule. §1–§7 are all built, with 130 `TEST_CASE`s across
+[`tests/`](tests) and a full QML GUI under [`gui/qml/`](gui/qml).
 
 ### 1. Analysis identity and analysis version are separate tables (§1)
 
@@ -475,10 +477,15 @@ so nobody discovers the omission.
 action id and a result that does not parse. It cannot catch a payload that
 parses into something *else* — a renamed field decodes to a default, silently,
 so a trail reconstructed across a rename is confidently wrong rather than
-visibly incomplete. That is morph#174, and this rung does **not**
-close it: the README names this rung the owner of the ladder's payload-evolution
-answer, and shipping a half-considered scheme that rungs 5 and 7 must then
-live with would be worse than filing the diagnosis with the options laid out.
+visibly incomplete. That was morph#174's diagnosis, and the framework has
+since answered it — `journal::replay()` now stamps every entry with a
+payload-shape fingerprint and refuses to replay across a mismatch instead of
+degrading to defaults (`docs/spec/journal/journal.md`). This rung's own
+reconstruction above does not go through `journal::replay()` — it decodes
+each entry's stored result with `ActionTraits<X>::resultFromJson` directly —
+so it still has the gap the framework itself no longer has; adopting
+`journal::replay()`'s fingerprint check here is unmade work, not an unmade
+decision.
 
 ### 18. Conditional logic is declared once and evaluated twice, and this rung proves it (§5)
 
@@ -750,33 +757,42 @@ files no uploaded report contained. Fixed here.
   what rung 7's runtime custom fields run into head-on.
 - **[morph#174](https://github.com/LASTRADA-Software/morph/issues/174)
   — a journal entry from an older build decodes leniently to defaults, with no
-  signal.** `ActionTraits::fromJson` reads with `error_on_unknown_keys = false`,
-  so a renamed field is dropped and the new one takes its default; `LogEntry::v`
-  versions the *line format*, not the application payload. An audit trail
-  reconstructed across such a rename reports the wrong state with full
-  confidence. **This rung was named the owner of the ladder's answer and has
-  not closed it** — the finding carries the diagnosis, a measured repro, and
-  three options with the trade-off that decides between them.
+  signal.** **Closed at the framework level; this rung's own audit
+  reconstruction has not adopted it.** `journal::replay()` now stamps every
+  entry with `morph::model::payloadFingerprint<Action>()` and throws
+  `SchemaMismatchError` when a recorded entry's shape disagrees with what the
+  running build decodes it as, instead of silently degrading to defaults (see
+  `docs/spec/journal/journal.md`, "Payload schema fingerprint"). This rung's
+  own `SampleModel`/`ResultModel` audit-trail reconstruction
+  (`sample_model.cpp`) calls `ActionTraits<X>::resultFromJson` directly rather
+  than `journal::replay()`, so it still has no fingerprint check and a renamed
+  field still decodes to its default with no signal — the finding entry below,
+  §17 in "What that does not cover, stated plainly," is accordingly still
+  live for this rung specifically, even though the framework question it
+  raised is answered.
 - **A schema's `required` array can silently contradict its own `x-rules`.**
-  `schemaJson`'s required-by-default rule put both `value` and `qualifier`
-  in `required` while the `exactlyOneOf` entry beside them said at most one
-  may be engaged — an unsatisfiable form, and nothing in `morph::forms`
-  detects it. The sanctioned escape (`optionalFields`) works and is used
-  here, but it is opt-in and invisible: the contradiction compiles, renders,
-  and only shows up as "the client's payload is rejected by the server".
-  `mergeSchemaExtras` already walks `formRules` when it emits `x-rules`, so
-  it has everything it needs either to drop a field named in an
-  `exactlyOneOf`/`mutuallyExclusive`/`atLeastOneOf` rule from `required`, or
-  to fail loudly. `docs/spec/forms/forms.md` documents the two features in
-  separate sections and never mentions their interaction. Guarded here by a
-  test asserting `required` is exactly `["analysisVersionId"]`.
+  **Closed (morph#165).** `schemaJson`'s required-by-default rule put both
+  `value` and `qualifier` in `required` while the `exactlyOneOf` entry beside
+  them said at most one may be engaged — an unsatisfiable form. `schemaJson<A>()`
+  now rejects exactly this at generation, throwing
+  `morph::forms::UnsatisfiableFormError` from `detail::rejectUnsatisfiableRules`
+  (called from `mergeSchemaExtras`, the one place both halves are in hand), so
+  the contradiction is a loud generation-time error instead of a silent one —
+  documented in `docs/spec/forms/forms.md`, "Unsatisfiable declarations", whose
+  worked example is this rung's own `CaptureConcentration`. The sanctioned
+  escape (`optionalFields`) is still what makes the rule the only gate on the
+  pair; `CaptureConcentration`'s own doc comment
+  (`include/lims/dto/result_dto.hpp`) explains why it is still needed even
+  though omitting it is now a loud error rather than a silent one. Guarded
+  here by a test asserting `required` is exactly `["analysisVersionId"]`.
 - **[morph#175](https://github.com/LASTRADA-Software/morph/issues/175)
   — the three shipped `IOfflineQueue`s disagree about repeated idempotency
-  keys.** `InMemoryOfflineQueue` admits the duplicate; `FileOfflineQueue` and
-  `SqliteOfflineQueue` dedup; the interface contract says none of them should,
-  and the spec's `SqliteOfflineQueue` section claims a parity with
-  `InMemoryOfflineQueue` that does not exist. Three-implementation repro in the
-  finding.
+  keys.** **Closed.** `InMemoryOfflineQueue` admits the duplicate;
+  `FileOfflineQueue` and `SqliteOfflineQueue` dedup — a deliberate
+  strengthening the base contract permits but did not document. The
+  interface header (`include/morph/offline/offline_queue.hpp`) now states the
+  hit semantics explicitly: a dedup hit is first-write-wins with silent
+  payload loss, matching what `docs/spec/offline/offline.md` already said.
 - **[morph#197](https://github.com/LASTRADA-Software/morph/issues/197)
   — the offline write path has no model-side seam.** Rule 1 says all domain
   logic lives in models; the offline spec says enqueue-on-failure is the
@@ -794,13 +810,17 @@ files no uploaded report contained. Fixed here.
   `morph_offline_sqlite_tests` target fails identically, which is why the
   durable queue had never been built here before.
 - **[morph#176](https://github.com/LASTRADA-Software/morph/issues/176)
-  — `x-rules` has one client-side evaluator and no shared corpus.** The spec
-  makes client/server parity the reason the vocabulary is closed, but the only
-  client-side implementation is JavaScript inside `DynamicForm.qml`, each side
-  is tested against its own expectations, and the renderer conformance kit's
-  scope note does not list `x-rules` at all. A non-QML client — which is what
-  this rung's field devices are — must reimplement the whole vocabulary,
-  vacuity asymmetry and fail-closed rule included.
+  — `x-rules` has one client-side evaluator and no shared corpus.** **Closed.**
+  A shared corpus now pins the compiled evaluator
+  (`morph::forms::allRulesSatisfied`) to the QML one: one checked-in file,
+  `src/qt/forms/tests/data/rule_corpus.json`, is driven through both —
+  `tests/test_forms_rule_corpus.cpp` on the compiled side,
+  `tst_DynamicFormRuleCorpus.qml` on the client side — so a rule kind added to
+  one evaluator and not the other now fails a shared test instead of shipping
+  silently divergent (`tests/forms_rule_corpus.hpp`,
+  `tests/test_forms_rule_agreement.cpp`). A non-QML client still has to
+  reimplement the vocabulary; the corpus is what keeps that reimplementation
+  honest against the compiled evaluator's behavior.
 - **[morph#173](https://github.com/LASTRADA-Software/morph/issues/173)
   — a ladder test whose name contains a semicolon never gets its
   `ladder-<rung>` label.** `morph_add_rung`'s re-labelling step iterates
@@ -810,18 +830,23 @@ files no uploaded report contained. Fixed here.
   12 pre-existing ones repo-wide are still affected.
 - **[morph#199](https://github.com/LASTRADA-Software/morph/issues/199)
   — a `Quantity`'s exact decimal can only be rendered with its unit appended.**
-  `morph::units::toString` always concatenates the unit; the decimal-only
-  formatter is in `morph::units::detail`, and `std::format("{}", rational)`
-  prints the *fraction* (`"12/5"`), not the decimal. A table that places the
-  number and the unit separately has to take the suffix back off a string that
-  just had it put on.
+  **Closed.** `toDecimalString(quantity)` (`include/morph/util/quantity.hpp`)
+  is now the public decimal-only renderer — the exact numeric half of
+  `toString`, no unit suffix, `"N/A"` for an empty quantity — so a view that
+  places the number and the unit separately (a table with the unit in its
+  column header, a right-aligned suffix) asks for the two halves independently
+  instead of concatenating them and chopping the suffix back off.
 - **[morph#201](https://github.com/LASTRADA-Software/morph/issues/201)
-  — `Model::onBackendChanged()` runs with no session.** The offline spec names
-  it as *the* seam for rich replay outcomes, but `switchBackend` posts it onto
-  the model's strand where `session::current()` is null, so a replay that must
-  know who is replaying cannot use it. Found by driving replay through
-  `switchBackend` rather than calling the hook directly — the §7 suite's own
-  helper had been supplying a session the framework never does.
+  — `Model::onBackendChanged()` runs with no session.** **Closed as a
+  documentation correction, not a code gap.** `LocalBackend` never consults an
+  authorizer at all, so no version of this hook could ever carry a *verified*
+  principal — a session-plumbing fix was the wrong ask. `switchBackend` still
+  posts the hook onto the model's strand where `session::current()` is null,
+  and `docs/spec/offline/offline.md`'s "Conflict resolution on replay" section
+  now says so explicitly instead of implying the seam can authenticate a
+  replay. Found by driving replay through `switchBackend` rather than calling
+  the hook directly — the §7 suite's own helper had been supplying a session
+  the framework never does.
 - **`scripts/coverage.sh`'s rung list had drifted from CMake's.** ledger and
   lims were both missing, so neither reached any uploaded report — and rung
   5's codecov component, with a target derived from a genuinely careful
