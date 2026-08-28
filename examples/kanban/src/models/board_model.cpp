@@ -267,6 +267,30 @@ void BoardModel::logAction(const Action& action, const Result& result, std::stri
     _log->flush();
 }
 
+template <typename Action>
+void BoardModel::logFailure(const Action& action, const std::string& error) const {
+    if (!_log) {
+        return;
+    }
+    ::morph::journal::LogEntry entry;
+    entry.modelType = "BoardModel";
+    entry.entityKey = _projectIdStr.value_or(std::string{});
+    entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
+    entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+    entry.schema = ::morph::model::detail::actionPayloadSchema<Action>();
+    // No `result` -- there was none. `error` carries the rejecting
+    // exception's text, matching LogEntry's own documented success/failure
+    // shape (`morph/journal/action_log.hpp`).
+    entry.error = error;
+    entry.outcome = ::morph::journal::Outcome::Failed;
+    if (const auto* ctx = ::morph::session::current()) {
+        entry.principal = ctx->principal;
+    }
+    entry.timestampMs = nowMs();
+    _log->append(std::move(entry));
+    _log->flush();
+}
+
 void BoardModel::requireRoleOn(std::uint64_t projectDbId, Role minimum) const {
     const auto& principal = requireOwner();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
@@ -311,217 +335,242 @@ GetBoardResult BoardModel::execute(const GetBoardState& /*action*/) {
 }
 
 GetBoardResult BoardModel::execute(const CreateColumn& action) {
-    if (!action.validate()) {
-        throw ValidationError{"CreateColumn: a bounded, non-empty name is required"};
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"CreateColumn: a bounded, non-empty name is required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"CreateColumn: handler was never attached via OpenBoard"};
+        }
+        requireRole(Role::Member);
+        auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+        const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        auto project = loadProjectById(mapper.Get(), projectDbId);
+
+        auto existing = mapper->Query<db::ColumnRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::project>, "=", projectDbId)
+                            .All();
+
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+        db::ColumnRecord rec;
+        rec.project = project;
+        rec.name = action.name;
+        rec.wipLimit = action.wipLimit;
+        rec.sortOrder = static_cast<std::int64_t>(existing.size());
+        mapper->Create(rec);
+
+        db::BoardEventRecord event;
+        event.project = project;
+        event.kind = "column";
+        event.summary = "column created";
+        event.createdAtMs = nowMs();
+        mapper->Create(event);
+
+        transaction.Commit();
+
+        auto result = buildState(mapper.Get(), project);
+        logAction(action, result);
+        return result;
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"CreateColumn: handler was never attached via OpenBoard"};
-    }
-    requireRole(Role::Member);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
-    auto project = loadProjectById(mapper.Get(), projectDbId);
-
-    auto existing = mapper->Query<db::ColumnRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::project>, "=", projectDbId)
-                        .All();
-
-    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-    db::ColumnRecord rec;
-    rec.project = project;
-    rec.name = action.name;
-    rec.wipLimit = action.wipLimit;
-    rec.sortOrder = static_cast<std::int64_t>(existing.size());
-    mapper->Create(rec);
-
-    db::BoardEventRecord event;
-    event.project = project;
-    event.kind = "column";
-    event.summary = "column created";
-    event.createdAtMs = nowMs();
-    mapper->Create(event);
-
-    transaction.Commit();
-
-    auto result = buildState(mapper.Get(), project);
-    logAction(action, result);
-    return result;
 }
 
 GetBoardResult BoardModel::execute(const CreateSwimlane& action) {
-    if (!action.validate()) {
-        throw ValidationError{"CreateSwimlane: a bounded, non-empty name is required"};
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"CreateSwimlane: a bounded, non-empty name is required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"CreateSwimlane: handler was never attached via OpenBoard"};
+        }
+        requireRole(Role::Member);
+        auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+        const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        auto project = loadProjectById(mapper.Get(), projectDbId);
+
+        auto existing = mapper->Query<db::SwimlaneRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::project>, "=", projectDbId)
+                            .All();
+
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+        db::SwimlaneRecord rec;
+        rec.project = project;
+        rec.name = action.name;
+        rec.sortOrder = static_cast<std::int64_t>(existing.size());
+        mapper->Create(rec);
+
+        db::BoardEventRecord event;
+        event.project = project;
+        event.kind = "swimlane";
+        event.summary = "swimlane created";
+        event.createdAtMs = nowMs();
+        mapper->Create(event);
+
+        transaction.Commit();
+
+        auto result = buildState(mapper.Get(), project);
+        logAction(action, result);
+        return result;
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"CreateSwimlane: handler was never attached via OpenBoard"};
-    }
-    requireRole(Role::Member);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
-    auto project = loadProjectById(mapper.Get(), projectDbId);
-
-    auto existing = mapper->Query<db::SwimlaneRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::project>, "=", projectDbId)
-                        .All();
-
-    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-    db::SwimlaneRecord rec;
-    rec.project = project;
-    rec.name = action.name;
-    rec.sortOrder = static_cast<std::int64_t>(existing.size());
-    mapper->Create(rec);
-
-    db::BoardEventRecord event;
-    event.project = project;
-    event.kind = "swimlane";
-    event.summary = "swimlane created";
-    event.createdAtMs = nowMs();
-    mapper->Create(event);
-
-    transaction.Commit();
-
-    auto result = buildState(mapper.Get(), project);
-    logAction(action, result);
-    return result;
 }
 
 GetBoardResult BoardModel::execute(const CreateTask& action) {
-    if (!action.validate()) {
-        throw ValidationError{"CreateTask: engaged columnId/swimlaneId and a bounded title are required"};
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"CreateTask: engaged columnId/swimlaneId and a bounded title are required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"CreateTask: handler was never attached via OpenBoard"};
+        }
+        requireRole(Role::Member);
+        auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+        const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        auto project = loadProjectById(mapper.Get(), projectDbId);
+
+        // C2 fix: re-check both destination FKs belong to this project before
+        // trusting them -- a Member of a different project must not be able to
+        // create a task pointing at this project's column/swimlane by id
+        // (design spec §2's "trust nothing read before this call" discipline,
+        // already applied to MoveTaskPosition's destination but previously
+        // missing here).
+        requireColumnBelongsToProject(mapper.Get(), project, action.columnId);
+        requireSwimlaneBelongsToProject(mapper.Get(), project, action.swimlaneId);
+
+        auto existing = mapper->Query<db::TaskRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=",
+                                   static_cast<std::uint64_t>(*action.columnId))
+                            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=",
+                                   static_cast<std::uint64_t>(*action.swimlaneId))
+                            .All();
+
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+        db::TaskRecord rec;
+        rec.project = project;
+        rec.column = static_cast<std::uint64_t>(*action.columnId);
+        rec.swimlane = static_cast<std::uint64_t>(*action.swimlaneId);
+        rec.title = action.title;
+        rec.position = static_cast<std::int64_t>(existing.size());
+        rec.createdAtMs = nowMs();
+        mapper->Create(rec);
+
+        db::BoardEventRecord event;
+        event.project = project;
+        event.kind = "task";
+        event.summary = "task created";
+        event.createdAtMs = nowMs();
+        mapper->Create(event);
+
+        transaction.Commit();
+
+        auto result = buildState(mapper.Get(), project);
+        logAction(action, result);
+        return result;
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"CreateTask: handler was never attached via OpenBoard"};
-    }
-    requireRole(Role::Member);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
-    auto project = loadProjectById(mapper.Get(), projectDbId);
-
-    // C2 fix: re-check both destination FKs belong to this project before
-    // trusting them -- a Member of a different project must not be able to
-    // create a task pointing at this project's column/swimlane by id
-    // (design spec §2's "trust nothing read before this call" discipline,
-    // already applied to MoveTaskPosition's destination but previously
-    // missing here).
-    requireColumnBelongsToProject(mapper.Get(), project, action.columnId);
-    requireSwimlaneBelongsToProject(mapper.Get(), project, action.swimlaneId);
-
-    auto existing = mapper->Query<db::TaskRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=",
-                               static_cast<std::uint64_t>(*action.columnId))
-                        .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=",
-                               static_cast<std::uint64_t>(*action.swimlaneId))
-                        .All();
-
-    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-    db::TaskRecord rec;
-    rec.project = project;
-    rec.column = static_cast<std::uint64_t>(*action.columnId);
-    rec.swimlane = static_cast<std::uint64_t>(*action.swimlaneId);
-    rec.title = action.title;
-    rec.position = static_cast<std::int64_t>(existing.size());
-    rec.createdAtMs = nowMs();
-    mapper->Create(rec);
-
-    db::BoardEventRecord event;
-    event.project = project;
-    event.kind = "task";
-    event.summary = "task created";
-    event.createdAtMs = nowMs();
-    mapper->Create(event);
-
-    transaction.Commit();
-
-    auto result = buildState(mapper.Get(), project);
-    logAction(action, result);
-    return result;
 }
 
 GetBoardResult BoardModel::execute(const AddComment& action) {
-    if (!action.validate()) {
-        throw ValidationError{"AddComment: an engaged taskId and non-empty body are required"};
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"AddComment: an engaged taskId and non-empty body are required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"AddComment: handler was never attached via OpenBoard"};
+        }
+        requireRole(Role::Member);
+        const auto& principal = requireOwner();
+        auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+        const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        auto project = loadProjectById(mapper.Get(), projectDbId);
+
+        // C2 fix: without this, a Member of a different project could attach a
+        // comment to any task on the server by id, which then surfaces in that
+        // task's *other* project's board view (buildState's comment list).
+        requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
+
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+        db::CommentRecord rec;
+        rec.task = static_cast<std::uint64_t>(*action.taskId);
+        rec.principal = principal;
+        rec.body = action.body;
+        rec.createdAtMs = nowMs();
+        mapper->Create(rec);
+
+        db::BoardEventRecord event;
+        event.project = project;
+        event.kind = "comment";
+        event.summary = "comment added";
+        event.createdAtMs = nowMs();
+        mapper->Create(event);
+
+        transaction.Commit();
+
+        auto result = buildState(mapper.Get(), project);
+        logAction(action, result);
+        return result;
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"AddComment: handler was never attached via OpenBoard"};
-    }
-    requireRole(Role::Member);
-    const auto& principal = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
-    auto project = loadProjectById(mapper.Get(), projectDbId);
-
-    // C2 fix: without this, a Member of a different project could attach a
-    // comment to any task on the server by id, which then surfaces in that
-    // task's *other* project's board view (buildState's comment list).
-    requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
-
-    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-    db::CommentRecord rec;
-    rec.task = static_cast<std::uint64_t>(*action.taskId);
-    rec.principal = principal;
-    rec.body = action.body;
-    rec.createdAtMs = nowMs();
-    mapper->Create(rec);
-
-    db::BoardEventRecord event;
-    event.project = project;
-    event.kind = "comment";
-    event.summary = "comment added";
-    event.createdAtMs = nowMs();
-    mapper->Create(event);
-
-    transaction.Commit();
-
-    auto result = buildState(mapper.Get(), project);
-    logAction(action, result);
-    return result;
 }
 
 Ack BoardModel::execute(const AddAttachment& action) {
-    if (!action.validate()) {
-        throw ValidationError{
-            "AddAttachment: an engaged taskId, non-empty filename/contentType/storageKey, and a non-negative "
-            "sizeBytes are required"};
+    try {
+        if (!action.validate()) {
+            throw ValidationError{
+                "AddAttachment: an engaged taskId, non-empty filename/contentType/storageKey, and a non-negative "
+                "sizeBytes are required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"AddAttachment: handler was never attached via OpenBoard"};
+        }
+        // Same gate as AddComment -- attachments are task-content, like
+        // comments, not a board-administration feature like CreateRule/DeleteRule
+        // (which gate at Role::Manager).
+        requireRole(Role::Member);
+        const auto& principal = requireOwner();
+        auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+        const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        auto project = loadProjectById(mapper.Get(), projectDbId);
+
+        // Same C2 fix AddComment/ApplyTagMutation already apply: without this, a
+        // Member of a different project could attach metadata to any task on the
+        // server by id.
+        requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
+
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+        db::AttachmentRecord rec;
+        rec.task = static_cast<std::uint64_t>(*action.taskId);
+        rec.filename = action.filename;
+        rec.contentType = action.contentType;
+        rec.sizeBytes = action.sizeBytes;
+        rec.storageKey = action.storageKey;
+        rec.uploadedBy = principal;
+        rec.uploadedAtMs = nowMs();
+        mapper->Create(rec);
+
+        db::BoardEventRecord event;
+        event.project = project;
+        event.kind = "attachment";
+        event.summary = "attachment added";
+        event.createdAtMs = nowMs();
+        mapper->Create(event);
+
+        transaction.Commit();
+
+        logAction(action, Ack{});
+        return Ack{};
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"AddAttachment: handler was never attached via OpenBoard"};
-    }
-    // Same gate as AddComment -- attachments are task-content, like
-    // comments, not a board-administration feature like CreateRule/DeleteRule
-    // (which gate at Role::Manager).
-    requireRole(Role::Member);
-    const auto& principal = requireOwner();
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
-    auto project = loadProjectById(mapper.Get(), projectDbId);
-
-    // Same C2 fix AddComment/ApplyTagMutation already apply: without this, a
-    // Member of a different project could attach metadata to any task on the
-    // server by id.
-    requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
-
-    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-    db::AttachmentRecord rec;
-    rec.task = static_cast<std::uint64_t>(*action.taskId);
-    rec.filename = action.filename;
-    rec.contentType = action.contentType;
-    rec.sizeBytes = action.sizeBytes;
-    rec.storageKey = action.storageKey;
-    rec.uploadedBy = principal;
-    rec.uploadedAtMs = nowMs();
-    mapper->Create(rec);
-
-    db::BoardEventRecord event;
-    event.project = project;
-    event.kind = "attachment";
-    event.summary = "attachment added";
-    event.createdAtMs = nowMs();
-    mapper->Create(event);
-
-    transaction.Commit();
-
-    logAction(action, Ack{});
-    return Ack{};
 }
 
 GetAttachmentsResult BoardModel::execute(const GetAttachments& action) {
@@ -561,80 +610,91 @@ GetAttachmentsResult BoardModel::execute(const GetAttachments& action) {
 }
 
 Ack BoardModel::execute(const RemoveAttachment& action) {
-    if (!action.validate()) {
-        throw ValidationError{"RemoveAttachment: an engaged attachmentId is required"};
-    }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"RemoveAttachment: handler was never attached via OpenBoard"};
-    }
-    // Same gate as AddAttachment.
-    requireRole(Role::Member);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
-    auto project = loadProjectById(mapper.Get(), projectDbId);
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"RemoveAttachment: an engaged attachmentId is required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"RemoveAttachment: handler was never attached via OpenBoard"};
+        }
+        // Same gate as AddAttachment.
+        requireRole(Role::Member);
+        auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+        const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        auto project = loadProjectById(mapper.Get(), projectDbId);
 
-    auto rows = mapper->Query<db::AttachmentRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::AttachmentRecord::id>, "=",
-                           static_cast<std::uint64_t>(*action.attachmentId))
-                    .All();
-    if (rows.empty()) {
-        throw NotFound{"attachment not found"};
+        auto rows = mapper->Query<db::AttachmentRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::AttachmentRecord::id>, "=",
+                               static_cast<std::uint64_t>(*action.attachmentId))
+                        .All();
+        if (rows.empty()) {
+            throw NotFound{"attachment not found"};
+        }
+        // The attachment's own task must belong to the attached project -- same
+        // cross-tenant re-check discipline as DeleteRule's own project-scoped
+        // lookup, adapted here since AttachmentRecord has no direct project FK
+        // (it belongs to a task, which belongs to a project).
+        requireTaskBelongsToProject(mapper.Get(), project,
+                                    TaskId{static_cast<std::int64_t>(rows.front().task.Value())});
+
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+        mapper->Delete(rows.front());
+        transaction.Commit();
+
+        logAction(action, Ack{});
+        return Ack{};
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    // The attachment's own task must belong to the attached project -- same
-    // cross-tenant re-check discipline as DeleteRule's own project-scoped
-    // lookup, adapted here since AttachmentRecord has no direct project FK
-    // (it belongs to a task, which belongs to a project).
-    requireTaskBelongsToProject(mapper.Get(), project, TaskId{static_cast<std::int64_t>(rows.front().task.Value())});
-
-    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-    mapper->Delete(rows.front());
-    transaction.Commit();
-
-    logAction(action, Ack{});
-    return Ack{};
 }
 
 CreateRuleResult BoardModel::execute(const CreateRule& action) {
-    if (!action.validate()) {
-        throw ValidationError{
-            "CreateRule: engaged projectId/triggerColumnId and a bounded, non-empty mutationValue are required"};
+    try {
+        if (!action.validate()) {
+            throw ValidationError{
+                "CreateRule: engaged projectId/triggerColumnId and a bounded, non-empty mutationValue are required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"CreateRule: handler was never attached via OpenBoard"};
+        }
+        // Rule creation is a structural, board-policy change -- the same gate
+        // ProjectAdminModel applies to column/role administration (design spec
+        // §3), not Role::Member's day-to-day bar CreateColumn/CreateTask use.
+        requireRole(Role::Manager);
+        auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+        const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        auto project = loadProjectById(mapper.Get(), projectDbId);
+
+        // The rule's trigger column must belong to this project -- same "trust
+        // nothing read before this call" discipline requireColumnBelongsToProject
+        // already applies to CreateTask/MoveTaskPosition's destination column.
+        requireColumnBelongsToProject(mapper.Get(), project, action.triggerColumnId);
+
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+        db::RuleRecord rec;
+        rec.project = project;
+        rec.triggerEvent = std::string{ruleTriggerEventToString(RuleTriggerEvent::TaskMovedToColumn)};
+        // Task 13's deliberately-left-undone mapping: CreateRule carries a
+        // concrete triggerColumnId, but RuleRecord stores the general
+        // conditionField/conditionValue shape -- "columnId" / the column id as
+        // text is this rung's only supported condition (RuleTriggerEvent has
+        // exactly one member), so this mapping needs no per-trigger-kind
+        // dispatch today.
+        rec.conditionField = "columnId";
+        rec.conditionValue = std::to_string(*action.triggerColumnId);
+        rec.mutationType = std::string{ruleMutationTypeToString(action.mutationType)};
+        rec.mutationValue = action.mutationValue;
+        mapper->Create(rec);
+        transaction.Commit();
+
+        CreateRuleResult result{.ruleId = RuleId{static_cast<std::int64_t>(rec.id.Value())}};
+        logAction(action, result);
+        return result;
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"CreateRule: handler was never attached via OpenBoard"};
-    }
-    // Rule creation is a structural, board-policy change -- the same gate
-    // ProjectAdminModel applies to column/role administration (design spec
-    // §3), not Role::Member's day-to-day bar CreateColumn/CreateTask use.
-    requireRole(Role::Manager);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
-    auto project = loadProjectById(mapper.Get(), projectDbId);
-
-    // The rule's trigger column must belong to this project -- same "trust
-    // nothing read before this call" discipline requireColumnBelongsToProject
-    // already applies to CreateTask/MoveTaskPosition's destination column.
-    requireColumnBelongsToProject(mapper.Get(), project, action.triggerColumnId);
-
-    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-    db::RuleRecord rec;
-    rec.project = project;
-    rec.triggerEvent = std::string{ruleTriggerEventToString(RuleTriggerEvent::TaskMovedToColumn)};
-    // Task 13's deliberately-left-undone mapping: CreateRule carries a
-    // concrete triggerColumnId, but RuleRecord stores the general
-    // conditionField/conditionValue shape -- "columnId" / the column id as
-    // text is this rung's only supported condition (RuleTriggerEvent has
-    // exactly one member), so this mapping needs no per-trigger-kind
-    // dispatch today.
-    rec.conditionField = "columnId";
-    rec.conditionValue = std::to_string(*action.triggerColumnId);
-    rec.mutationType = std::string{ruleMutationTypeToString(action.mutationType)};
-    rec.mutationValue = action.mutationValue;
-    mapper->Create(rec);
-    transaction.Commit();
-
-    CreateRuleResult result{.ruleId = RuleId{static_cast<std::int64_t>(rec.id.Value())}};
-    logAction(action, result);
-    return result;
 }
 
 GetRulesResult BoardModel::execute(const GetRules& action) {
@@ -674,58 +734,68 @@ GetRulesResult BoardModel::execute(const GetRules& action) {
 }
 
 Ack BoardModel::execute(const DeleteRule& action) {
-    if (!action.validate()) {
-        throw ValidationError{"DeleteRule: ruleId is required"};
-    }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"DeleteRule: handler was never attached via OpenBoard"};
-    }
-    // Same Manager-only gate as CreateRule.
-    requireRole(Role::Manager);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
-    auto project = loadProjectById(mapper.Get(), projectDbId);
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"DeleteRule: ruleId is required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"DeleteRule: handler was never attached via OpenBoard"};
+        }
+        // Same Manager-only gate as CreateRule.
+        requireRole(Role::Manager);
+        auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+        const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        auto project = loadProjectById(mapper.Get(), projectDbId);
 
-    auto rows =
-        mapper->Query<db::RuleRecord>()
-            .Where(::Lightweight::FieldNameOf<&db::RuleRecord::id>, "=", static_cast<std::uint64_t>(*action.ruleId))
-            .Where(::Lightweight::FieldNameOf<&db::RuleRecord::project>, "=", project.id.Value())
-            .All();
-    if (rows.empty()) {
-        throw NotFound{"rule does not belong to this project"};
+        auto rows = mapper->Query<db::RuleRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::RuleRecord::id>, "=",
+                               static_cast<std::uint64_t>(*action.ruleId))
+                        .Where(::Lightweight::FieldNameOf<&db::RuleRecord::project>, "=", project.id.Value())
+                        .All();
+        if (rows.empty()) {
+            throw NotFound{"rule does not belong to this project"};
+        }
+
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+        mapper->Delete(rows.front());
+        transaction.Commit();
+
+        logAction(action, Ack{});
+        return Ack{};
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-
-    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-    mapper->Delete(rows.front());
-    transaction.Commit();
-
-    logAction(action, Ack{});
-    return Ack{};
 }
 
 ApplyTagMutationResult BoardModel::execute(const ApplyTagMutation& action) {
-    if (!action.validate()) {
-        throw ValidationError{"ApplyTagMutation: engaged taskId and a bounded, non-empty tag are required"};
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"ApplyTagMutation: engaged taskId and a bounded, non-empty tag are required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"ApplyTagMutation: handler was never attached via OpenBoard"};
+        }
+        // Same gate as AddComment/MoveTaskPosition -- see rule_dto.hpp's
+        // ApplyTagMutation doc comment for why this action carries its own RBAC
+        // rather than trusting evaluateRules' caller unconditionally.
+        requireRole(Role::Member);
+        applyTagMutationImpl(action);
+        // Ordinary, non-cascaded call site (a direct client dispatch of this
+        // action) -- empty causalParentId, the default `logAction` already gives
+        // every other action in this file. `evaluateRules` below never reaches
+        // this overload: it calls `applyTagMutationImpl` directly and logs once,
+        // itself, with the triggering move's causal id -- calling through this
+        // `execute()` overload instead would journal the same mutation twice
+        // (once here unconditionally, once again with the causal link), which
+        // `morph::journal::replay()` would then dispatch twice, breaking the
+        // "exactly once" invariant design spec §9 requires of a cascade.
+        logAction(action, ApplyTagMutationResult{});
+        return ApplyTagMutationResult{};
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"ApplyTagMutation: handler was never attached via OpenBoard"};
-    }
-    // Same gate as AddComment/MoveTaskPosition -- see rule_dto.hpp's
-    // ApplyTagMutation doc comment for why this action carries its own RBAC
-    // rather than trusting evaluateRules' caller unconditionally.
-    requireRole(Role::Member);
-    applyTagMutationImpl(action);
-    // Ordinary, non-cascaded call site (a direct client dispatch of this
-    // action) -- empty causalParentId, the default `logAction` already gives
-    // every other action in this file. `evaluateRules` below never reaches
-    // this overload: it calls `applyTagMutationImpl` directly and logs once,
-    // itself, with the triggering move's causal id -- calling through this
-    // `execute()` overload instead would journal the same mutation twice
-    // (once here unconditionally, once again with the causal link), which
-    // `morph::journal::replay()` would then dispatch twice, breaking the
-    // "exactly once" invariant design spec §9 requires of a cascade.
-    logAction(action, ApplyTagMutationResult{});
-    return ApplyTagMutationResult{};
 }
 
 void BoardModel::applyTagMutationImpl(const ApplyTagMutation& action) {
@@ -765,234 +835,239 @@ void BoardModel::applyTagMutationImpl(const ApplyTagMutation& action) {
 }
 
 GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
-    if (!action.validate()) {
-        throw ValidationError{
-            "MoveTaskPosition: engaged taskId/columnId/swimlaneId and a non-negative position "
-            "are required"};
-    }
-    if (!_projectIdStr.has_value()) {
-        throw NotFound{"MoveTaskPosition: handler was never attached via OpenBoard"};
-    }
-    // Design spec §1: the role gate must run unconditionally, before the
-    // ledger lookup below -- a demoted caller replaying a known opId must
-    // not retrieve the stored result their current role could no longer
-    // produce.
-    requireRole(Role::Member);
-    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
-    auto project = loadProjectById(mapper.Get(), projectDbId);
+    try {
+        if (!action.validate()) {
+            throw ValidationError{
+                "MoveTaskPosition: engaged taskId/columnId/swimlaneId and a non-negative position "
+                "are required"};
+        }
+        if (!_projectIdStr.has_value()) {
+            throw NotFound{"MoveTaskPosition: handler was never attached via OpenBoard"};
+        }
+        // Design spec §1: the role gate must run unconditionally, before the
+        // ledger lookup below -- a demoted caller replaying a known opId must
+        // not retrieve the stored result their current role could no longer
+        // produce.
+        requireRole(Role::Member);
+        auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+        const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        auto project = loadProjectById(mapper.Get(), projectDbId);
 
-    // Design spec §1: ledger lookup, after the role gate above, before any
-    // re-validation.
-    if (!action.opId.empty()) {
-        auto existingOp = mapper->Query<db::AppliedOpRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::project>, "=", projectDbId)
-                              .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::opId>, "=", action.opId)
-                              .All();
-        if (!existingOp.empty()) {
-            GetBoardResult replayed;
-            if (auto err = glz::read_json(replayed, std::string{existingOp.front().resultJson.Value()}); err) {
-                throw ::kanban::KanbanError{"MoveTaskPosition: corrupt ledger entry"};
+        // Design spec §1: ledger lookup, after the role gate above, before any
+        // re-validation.
+        if (!action.opId.empty()) {
+            auto existingOp = mapper->Query<db::AppliedOpRecord>()
+                                  .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::project>, "=", projectDbId)
+                                  .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::opId>, "=", action.opId)
+                                  .All();
+            if (!existingOp.empty()) {
+                GetBoardResult replayed;
+                if (auto err = glz::read_json(replayed, std::string{existingOp.front().resultJson.Value()}); err) {
+                    throw ::kanban::KanbanError{"MoveTaskPosition: corrupt ledger entry"};
+                }
+                // Design spec §4 (corrected): a ledger hit means this call
+                // performed nothing new -- it only returned a previously-stored
+                // result -- so there is nothing to journal here. Verified against
+                // a live `FileActionLog` capture during real `RemoteServer`
+                // dispatch: the framework's own auto-append does not produce a
+                // second entry on this path, so logging a replay unconditionally
+                // was `BoardModel`'s own self-inflicted duplicate, not something
+                // the framework required compensating for.
+                return replayed;
             }
-            // Design spec §4 (corrected): a ledger hit means this call
-            // performed nothing new -- it only returned a previously-stored
-            // result -- so there is nothing to journal here. Verified against
-            // a live `FileActionLog` capture during real `RemoteServer`
-            // dispatch: the framework's own auto-append does not produce a
-            // second entry on this path, so logging a replay unconditionally
-            // was `BoardModel`'s own self-inflicted duplicate, not something
-            // the framework required compensating for.
-            return replayed;
         }
-    }
 
-    // C2 fix: without this, a Member of a different project could move any
-    // task on the server by id -- the checks below only ever verified the
-    // *destination* column/swimlane belong to this project, never the task
-    // being moved. Checked right after the ledger-hit branch and before the
-    // destination checks, so a Member of another project cannot move this
-    // project's task at all, regardless of what destination they name.
-    requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
+        // C2 fix: without this, a Member of a different project could move any
+        // task on the server by id -- the checks below only ever verified the
+        // *destination* column/swimlane belong to this project, never the task
+        // being moved. Checked right after the ledger-hit branch and before the
+        // destination checks, so a Member of another project cannot move this
+        // project's task at all, regardless of what destination they name.
+        requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
 
-    requireColumnBelongsToProject(mapper.Get(), project, action.columnId);
+        requireColumnBelongsToProject(mapper.Get(), project, action.columnId);
 
-    // WIP-limit check: count tasks already in the target column, excluding
-    // this task itself (a same-column reorder must not count against its
-    // own limit).
-    auto targetColumnRows = mapper->Query<db::ColumnRecord>()
-                                .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::id>, "=",
-                                       static_cast<std::uint64_t>(*action.columnId))
+        // WIP-limit check: count tasks already in the target column, excluding
+        // this task itself (a same-column reorder must not count against its
+        // own limit).
+        auto targetColumnRows = mapper->Query<db::ColumnRecord>()
+                                    .Where(::Lightweight::FieldNameOf<&db::ColumnRecord::id>, "=",
+                                           static_cast<std::uint64_t>(*action.columnId))
+                                    .All();
+        auto targetColumn = targetColumnRows.front();
+        if (targetColumn.wipLimit.Value() > 0) {
+            auto currentInColumn = mapper->Query<db::TaskRecord>()
+                                       .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=",
+                                              static_cast<std::uint64_t>(*action.columnId))
+                                       .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>,
+                                              "!=", static_cast<std::uint64_t>(*action.taskId))
+                                       .All();
+            if (static_cast<std::int64_t>(currentInColumn.size()) + 1 > targetColumn.wipLimit.Value()) {
+                throw Conflict{"MoveTaskPosition: target column is at its WIP limit"};
+            }
+        }
+
+        auto swimlaneRows = mapper->Query<db::SwimlaneRecord>()
+                                .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::id>, "=",
+                                       static_cast<std::uint64_t>(*action.swimlaneId))
+                                .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::project>, "=", projectDbId)
                                 .All();
-    auto targetColumn = targetColumnRows.front();
-    if (targetColumn.wipLimit.Value() > 0) {
-        auto currentInColumn = mapper->Query<db::TaskRecord>()
-                                   .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=",
-                                          static_cast<std::uint64_t>(*action.columnId))
-                                   .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>,
-                                          "!=", static_cast<std::uint64_t>(*action.taskId))
-                                   .All();
-        if (static_cast<std::int64_t>(currentInColumn.size()) + 1 > targetColumn.wipLimit.Value()) {
-            throw Conflict{"MoveTaskPosition: target column is at its WIP limit"};
+        if (swimlaneRows.empty()) {
+            // Same cross-strand re-check as requireColumnBelongsToProject, for
+            // the swimlane half of the destination -- design spec §2's "trust
+            // nothing read before this call, re-check inside the transaction"
+            // discipline applies equally to both halves of (columnId, swimlaneId).
+            throw NotFound{"swimlane does not belong to this project"};
         }
-    }
+        auto targetSwimlane = swimlaneRows.front();
 
-    auto swimlaneRows = mapper->Query<db::SwimlaneRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::id>, "=",
-                                   static_cast<std::uint64_t>(*action.swimlaneId))
-                            .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::project>, "=", projectDbId)
+        auto taskRows = mapper->Query<db::TaskRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=",
+                                   static_cast<std::uint64_t>(*action.taskId))
                             .All();
-    if (swimlaneRows.empty()) {
-        // Same cross-strand re-check as requireColumnBelongsToProject, for
-        // the swimlane half of the destination -- design spec §2's "trust
-        // nothing read before this call, re-check inside the transaction"
-        // discipline applies equally to both halves of (columnId, swimlaneId).
-        throw NotFound{"swimlane does not belong to this project"};
-    }
-    auto targetSwimlane = swimlaneRows.front();
-
-    auto taskRows =
-        mapper->Query<db::TaskRecord>()
-            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=", static_cast<std::uint64_t>(*action.taskId))
-            .All();
-    if (taskRows.empty()) {
-        throw NotFound{"MoveTaskPosition: task not found"};
-    }
-    auto task = taskRows.front();
-
-    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-
-    // The task's (column, swimlane) before this move -- captured before
-    // `task.column`/`task.swimlane` are overwritten below, so the source-side
-    // renumbering query a few lines down can still tell which pair to
-    // re-tighten. A same-(column, swimlane) reorder has source == destination
-    // and needs no separate pass (the destination pass below already covers
-    // it, and re-running an identical renumber over the same rows would be
-    // redundant, not incorrect, but is skipped entirely for clarity).
-    const auto sourceColumnId = task.column.Value();
-    const auto sourceSwimlaneId = task.swimlane.Value();
-    const bool movesAcrossColumnOrSwimlane = sourceColumnId != static_cast<std::uint64_t>(*action.columnId) ||
-                                             sourceSwimlaneId != static_cast<std::uint64_t>(*action.swimlaneId);
-
-    // Position renumbering (design spec §2): delete-then-recreate every task
-    // in the destination (column, swimlane), never an in-place index shift
-    // -- mirrors polls::PollModel::applyVotes()'s vote-replacement idiom.
-    auto destinationTasks =
-        mapper->Query<db::TaskRecord>()
-            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=",
-                   static_cast<std::uint64_t>(*action.columnId))
-            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=",
-                   static_cast<std::uint64_t>(*action.swimlaneId))
-            .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "!=", static_cast<std::uint64_t>(*action.taskId))
-            .OrderBy(::Lightweight::FieldNameOf<&db::TaskRecord::position>)
-            .All();
-
-    // Assigning the loaded parent records here (rather than the raw FK
-    // integers) is a style choice, not a correctness requirement: both
-    // `targetColumn`/`targetSwimlane` are already loaded in scope from the
-    // ownership checks above, so reusing them avoids a redundant re-fetch a
-    // bare-integer assignment would otherwise need to name the same rows by
-    // id. `Light::BelongsTo::operator=(S&&)` (a bare key value) now marks
-    // the field modified correctly, same as `operator=(ReferencedRecord&)` --
-    // LASTRADA-Software/Lightweight#551 fixed the prior silent-modification-
-    // loss bug on that path (its variadic converting-constructor overload
-    // previously left `_modified` false, so `mapper->Update(task)` below
-    // would have silently omitted `column_id`/`swimlane_id` from its `SET`
-    // clause and the move would not have persisted). `CreateTask`'s
-    // `rec.column = static_cast<std::uint64_t>(...)` a few lines up uses the
-    // bare-integer form directly, since it has no already-loaded record to
-    // reuse and feeds a fresh `Create()` call either way.
-    task.column = targetColumn;
-    task.swimlane = targetSwimlane;
-    std::int64_t pos = 0;
-    for (auto& t : destinationTasks) {
-        if (pos == action.position) {
-            ++pos;
+        if (taskRows.empty()) {
+            throw NotFound{"MoveTaskPosition: task not found"};
         }
-        t.position = pos++;
-        mapper->Update(t);
-    }
-    task.position = std::min(action.position, pos);
-    mapper->Update(task);
+        auto task = taskRows.front();
 
-    // Source-side renumbering: a cross-(column, swimlane) move leaves a gap
-    // behind in the pair the task departed -- the destination-only pass above
-    // never touches those rows, since they never match its
-    // (columnId, swimlaneId) WHERE clause. Without this, design spec §2's
-    // "position is dense within its (columnId, swimlaneId) pair" invariant
-    // holds for the destination but silently drifts for the source (e.g.
-    // moving the task that sat at position 2 out of a 5-task column leaves
-    // the other four at {0, 1, 3, 4} forever, not renumbered to {0, 1, 2, 3},
-    // until some *other* move happens to touch that same pair again). A
-    // same-(column, swimlane) reorder has source == destination, so this
-    // pass is skipped for it -- the destination pass already renumbered every
-    // row in that pair, including what would otherwise be a redundant second
-    // pass over the identical rows.
-    if (movesAcrossColumnOrSwimlane) {
-        auto sourceTasks = mapper->Query<db::TaskRecord>()
-                               .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=", sourceColumnId)
-                               .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=", sourceSwimlaneId)
-                               .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>,
-                                      "!=", static_cast<std::uint64_t>(*action.taskId))
-                               .OrderBy(::Lightweight::FieldNameOf<&db::TaskRecord::position>)
-                               .All();
-        std::int64_t sourcePos = 0;
-        for (auto& t : sourceTasks) {
-            t.position = sourcePos++;
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+
+        // The task's (column, swimlane) before this move -- captured before
+        // `task.column`/`task.swimlane` are overwritten below, so the source-side
+        // renumbering query a few lines down can still tell which pair to
+        // re-tighten. A same-(column, swimlane) reorder has source == destination
+        // and needs no separate pass (the destination pass below already covers
+        // it, and re-running an identical renumber over the same rows would be
+        // redundant, not incorrect, but is skipped entirely for clarity).
+        const auto sourceColumnId = task.column.Value();
+        const auto sourceSwimlaneId = task.swimlane.Value();
+        const bool movesAcrossColumnOrSwimlane = sourceColumnId != static_cast<std::uint64_t>(*action.columnId) ||
+                                                 sourceSwimlaneId != static_cast<std::uint64_t>(*action.swimlaneId);
+
+        // Position renumbering (design spec §2): delete-then-recreate every task
+        // in the destination (column, swimlane), never an in-place index shift
+        // -- mirrors polls::PollModel::applyVotes()'s vote-replacement idiom.
+        auto destinationTasks = mapper->Query<db::TaskRecord>()
+                                    .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=",
+                                           static_cast<std::uint64_t>(*action.columnId))
+                                    .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=",
+                                           static_cast<std::uint64_t>(*action.swimlaneId))
+                                    .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>,
+                                           "!=", static_cast<std::uint64_t>(*action.taskId))
+                                    .OrderBy(::Lightweight::FieldNameOf<&db::TaskRecord::position>)
+                                    .All();
+
+        // Assigning the loaded parent records here (rather than the raw FK
+        // integers) is a style choice, not a correctness requirement: both
+        // `targetColumn`/`targetSwimlane` are already loaded in scope from the
+        // ownership checks above, so reusing them avoids a redundant re-fetch a
+        // bare-integer assignment would otherwise need to name the same rows by
+        // id. `Light::BelongsTo::operator=(S&&)` (a bare key value) now marks
+        // the field modified correctly, same as `operator=(ReferencedRecord&)` --
+        // LASTRADA-Software/Lightweight#551 fixed the prior silent-modification-
+        // loss bug on that path (its variadic converting-constructor overload
+        // previously left `_modified` false, so `mapper->Update(task)` below
+        // would have silently omitted `column_id`/`swimlane_id` from its `SET`
+        // clause and the move would not have persisted). `CreateTask`'s
+        // `rec.column = static_cast<std::uint64_t>(...)` a few lines up uses the
+        // bare-integer form directly, since it has no already-loaded record to
+        // reuse and feeds a fresh `Create()` call either way.
+        task.column = targetColumn;
+        task.swimlane = targetSwimlane;
+        std::int64_t pos = 0;
+        for (auto& t : destinationTasks) {
+            if (pos == action.position) {
+                ++pos;
+            }
+            t.position = pos++;
             mapper->Update(t);
         }
-    }
+        task.position = std::min(action.position, pos);
+        mapper->Update(task);
 
-    db::BoardEventRecord event;
-    event.project = project;
-    event.kind = "move";
-    event.summary = "task moved";
-    event.createdAtMs = nowMs();
-    mapper->Create(event);
-
-    auto result = buildState(mapper.Get(), project);
-
-    if (!action.opId.empty()) {
-        std::string resultJson;
-        if (auto err = glz::write_json(result, resultJson); err) {
-            throw KanbanError{"MoveTaskPosition: failed to serialize result for the applied-ops ledger"};
+        // Source-side renumbering: a cross-(column, swimlane) move leaves a gap
+        // behind in the pair the task departed -- the destination-only pass above
+        // never touches those rows, since they never match its
+        // (columnId, swimlaneId) WHERE clause. Without this, design spec §2's
+        // "position is dense within its (columnId, swimlaneId) pair" invariant
+        // holds for the destination but silently drifts for the source (e.g.
+        // moving the task that sat at position 2 out of a 5-task column leaves
+        // the other four at {0, 1, 3, 4} forever, not renumbered to {0, 1, 2, 3},
+        // until some *other* move happens to touch that same pair again). A
+        // same-(column, swimlane) reorder has source == destination, so this
+        // pass is skipped for it -- the destination pass already renumbered every
+        // row in that pair, including what would otherwise be a redundant second
+        // pass over the identical rows.
+        if (movesAcrossColumnOrSwimlane) {
+            auto sourceTasks = mapper->Query<db::TaskRecord>()
+                                   .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=", sourceColumnId)
+                                   .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=", sourceSwimlaneId)
+                                   .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>,
+                                          "!=", static_cast<std::uint64_t>(*action.taskId))
+                                   .OrderBy(::Lightweight::FieldNameOf<&db::TaskRecord::position>)
+                                   .All();
+            std::int64_t sourcePos = 0;
+            for (auto& t : sourceTasks) {
+                t.position = sourcePos++;
+                mapper->Update(t);
+            }
         }
-        db::AppliedOpRecord op;
-        op.project = project;
-        op.opId = action.opId;
-        op.resultJson = resultJson;
-        op.createdAtMs = nowMs();
-        mapper->Create(op);
+
+        db::BoardEventRecord event;
+        event.project = project;
+        event.kind = "move";
+        event.summary = "task moved";
+        event.createdAtMs = nowMs();
+        mapper->Create(event);
+
+        auto result = buildState(mapper.Get(), project);
+
+        if (!action.opId.empty()) {
+            std::string resultJson;
+            if (auto err = glz::write_json(result, resultJson); err) {
+                throw KanbanError{"MoveTaskPosition: failed to serialize result for the applied-ops ledger"};
+            }
+            db::AppliedOpRecord op;
+            op.project = project;
+            op.opId = action.opId;
+            op.resultJson = resultJson;
+            op.createdAtMs = nowMs();
+            mapper->Create(op);
+        }
+
+        transaction.Commit();
+        logAction(action, result);
+
+        // Design spec §9: evaluateRules is called after the move's own commit,
+        // before returning, and mints this move's own stable causal identity from
+        // `event.id` -- the `BoardEventRecord` row `mapper->Create(event)` just
+        // assigned above. A DB-backed autoincrement id is a genuinely stable,
+        // cross-restart identity (unlike `LogEntry::seq`, which is sink-local and
+        // re-stamped on every forward -- see `docs/spec/journal/journal.md`'s
+        // Invariants section and this design spec's §9), and this move's event
+        // row already exists in this exact transaction regardless of whether any
+        // rule ends up matching it. `evaluateRules` itself checks
+        // `morph::journal::isReplaying()` and no-ops during replay, so a
+        // replayed MoveTaskPosition entry never re-derives or reuses this id for
+        // a second firing.
+        const std::string moveCausalId = "boardEvent:" + std::to_string(event.id.Value());
+        evaluateRules(action.taskId, action.columnId, moveCausalId);
+
+        // Rebuilt after evaluateRules (rather than returning the pre-cascade
+        // `result` captured above) so a caller sees a rule's fired mutation --
+        // e.g. a freshly added tag -- in the very state this call returns,
+        // instead of only on the next GetBoardState poll. The ledger's own
+        // resultJson (written a few lines above, inside the same transaction)
+        // deliberately keeps the pre-cascade snapshot: a ledger replay is a
+        // "nothing new happened, return what happened before" path that never
+        // re-evaluates rules (see the opId-hit branch above), so a ledger hit
+        // returning the pre-cascade board state is correct, not stale -- it is
+        // reporting the same fact the original call's ledger row recorded.
+        return buildState(mapper.Get(), project);
+    } catch (const KanbanError& error) {
+        logFailure(action, error.what());
+        throw;
     }
-
-    transaction.Commit();
-    logAction(action, result);
-
-    // Design spec §9: evaluateRules is called after the move's own commit,
-    // before returning, and mints this move's own stable causal identity from
-    // `event.id` -- the `BoardEventRecord` row `mapper->Create(event)` just
-    // assigned above. A DB-backed autoincrement id is a genuinely stable,
-    // cross-restart identity (unlike `LogEntry::seq`, which is sink-local and
-    // re-stamped on every forward -- see `docs/spec/journal/journal.md`'s
-    // Invariants section and this design spec's §9), and this move's event
-    // row already exists in this exact transaction regardless of whether any
-    // rule ends up matching it. `evaluateRules` itself checks
-    // `morph::journal::isReplaying()` and no-ops during replay, so a
-    // replayed MoveTaskPosition entry never re-derives or reuses this id for
-    // a second firing.
-    const std::string moveCausalId = "boardEvent:" + std::to_string(event.id.Value());
-    evaluateRules(action.taskId, action.columnId, moveCausalId);
-
-    // Rebuilt after evaluateRules (rather than returning the pre-cascade
-    // `result` captured above) so a caller sees a rule's fired mutation --
-    // e.g. a freshly added tag -- in the very state this call returns,
-    // instead of only on the next GetBoardState poll. The ledger's own
-    // resultJson (written a few lines above, inside the same transaction)
-    // deliberately keeps the pre-cascade snapshot: a ledger replay is a
-    // "nothing new happened, return what happened before" path that never
-    // re-evaluates rules (see the opId-hit branch above), so a ledger hit
-    // returning the pre-cascade board state is correct, not stale -- it is
-    // reporting the same fact the original call's ledger row recorded.
-    return buildState(mapper.Get(), project);
 }
 
 void BoardModel::evaluateRules(TaskId movedTask, ColumnId newColumn, const std::string& triggerCausalId) {

@@ -275,6 +275,22 @@ private:
     template <typename Action, typename Result>
     void logAction(const Action& action, const Result& result, std::string causalParentId = {}) const;
 
+    /// @brief Records a rejected @p action as a `LogEntry` with
+    ///        `Outcome::Failed` and @p error, if a log is attached; no-op
+    ///        otherwise. The refused-attempt counterpart to `logAction`
+    ///        above: every `execute()` overload that mutates state catches
+    ///        its own `LedgerError` hierarchy around the whole body and
+    ///        calls this before rethrowing, so a `ZeroSumViolation`,
+    ///        `AlreadyReversed`, `VersionConflict`, or any other refusal
+    ///        leaves the same audit trace a success does -- see
+    ///        `lims::SelfJournal::recordFailure` for the identical rationale
+    ///        this mirrors (`include/lims/core/self_journal.hpp`).
+    /// @tparam Action Concrete action type.
+    /// @param action The rejected action.
+    /// @param error The rejecting exception's `what()`.
+    template <typename Action>
+    void logFailure(const Action& action, const std::string& error) const;
+
     /// @brief Shared mutation behind both `execute(SetCategory)` and the
     ///        cascade path inside `execute(StoreTransaction)`: links
     ///        `action.accountId` to `action.categoryId`

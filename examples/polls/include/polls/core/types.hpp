@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <string>
 
 #include "errors.hpp"
@@ -154,6 +155,44 @@ template <>
 struct glz::meta<polls::PollEventId> {
     static constexpr auto value = &polls::PollEventId::value;
     static constexpr std::string_view name = "PollEventId";
+};
+
+/// @brief Stable payload-shape tag for `OptionId`, so a journal fingerprint
+///        can tell it apart from every other custom-codec type.
+///
+/// The `glz::meta` specialisation above is what makes `OptionId` serialisable
+/// at all, and it is also what makes it *opaque* to
+/// `morph::model::payloadShape`: a type whose meta names a value rather than
+/// an object has no reflected members to decompose, so it renders as the bare
+/// `x` -- indistinguishable from `PollEventId` below, or from any other such
+/// type in the same payload (`morph/core/payload_shape_tag.hpp`;
+/// `docs/spec/journal/journal.md`, "Custom-codec types name themselves").
+/// `GetPollStateResult` (`dto/poll_dto.hpp`) carries both an `OptionId` and a
+/// `PollEventId` as sibling fields, so without declared tags the two would be
+/// interchangeable in that struct's fingerprint despite naming unrelated
+/// entities -- the same risk `ledger::LEDGER_DEFINE_STRONG_ID_SHAPE_TAG`
+/// closes for that rung's ids (`examples/ledger/include/ledger/core/types.hpp`),
+/// which this mirrors.
+///
+/// The tag is spelled here rather than derived from `glz::name_v`, which is
+/// compiler-dependent -- a journal readable only by the build that wrote it
+/// is the worse failure. `polls.`-namespaced so it cannot collide with
+/// another rung's tag.
+template <>
+struct morph::model::PayloadShapeTag<polls::OptionId> {
+    /// @brief This id's stable shape name.
+    /// @return The tag.
+    static constexpr std::string_view name() noexcept { return "polls.optionId"; }
+};
+
+/// @brief Stable payload-shape tag for `PollEventId` -- see
+///        `morph::model::PayloadShapeTag<polls::OptionId>` above for the
+///        rationale.
+template <>
+struct morph::model::PayloadShapeTag<polls::PollEventId> {
+    /// @brief This id's stable shape name.
+    /// @return The tag.
+    static constexpr std::string_view name() noexcept { return "polls.pollEventId"; }
 };
 
 /// @brief Reflects `VoteChoice` as its enumerator names rather than a bare

@@ -61,6 +61,17 @@ private:
     template <typename Action, typename Result>
     void logAction(const Action& action, const Result& result, std::string causalParentId = {}) const;
 
+    /// @brief Records a rejected @p action as a `LogEntry` with
+    ///        `Outcome::Failed` and @p error, if a log is attached; no-op
+    ///        otherwise -- the refused-attempt counterpart to `logAction`
+    ///        above. See `LedgerModel::logFailure`'s identical doc comment
+    ///        for the rationale (`ledger_model.hpp`).
+    /// @tparam Action Concrete action type.
+    /// @param action The rejected action.
+    /// @param error The rejecting exception's `what()`.
+    template <typename Action>
+    void logFailure(const Action& action, const std::string& error) const;
+
     std::optional<std::string> _entityKeyStr;
     std::shared_ptr<::morph::journal::IActionLog> _log;
 };
