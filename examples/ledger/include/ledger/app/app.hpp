@@ -147,9 +147,10 @@ public:
     ///
     /// The internal client used to issue this pass's dispatches stays alive
     /// until every dispatched `RunReportJob` has actually settled, success or
-    /// failure -- see the implementation's own comment for why deregistering
-    /// it any earlier would race the backend's still-pending dispatches and
-    /// silently drop the pass.
+    /// failure, *and* the completions carrying those callbacks have been torn
+    /// down -- see the implementation's own comment for why deregistering it
+    /// any earlier would race either the backend's still-pending dispatches
+    /// (dropping the pass) or this `App`'s own teardown (a freed bridge).
     void runPendingReportsOnce();
 
     /// @brief Whether any `RunReportJob` dispatched by a previous
@@ -165,6 +166,13 @@ public:
     /// Destroying the `App` in that window leaves those callbacks queued
     /// against objects it owned. Pump on this until it is `false`, then
     /// destroy.
+    ///
+    /// The count falls only once the pass's internal client has been released
+    /// as well, not merely once the last callback body has run: an owner that
+    /// destroys this `App` the moment it reads `false` would otherwise be
+    /// destroying `_reportBridge` with a `BridgeHandler` still to deregister
+    /// from it, from whichever thread drops the last completion reference.
+    /// See `DispatchTicket` in `app.cpp`.
     ///
     /// A teardown that does *not* wait is still safe for the data -- the
     /// aggregation either committed or it did not, and an uncommitted job is

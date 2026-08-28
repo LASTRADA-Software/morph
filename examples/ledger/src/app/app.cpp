@@ -15,8 +15,10 @@
 // come up serving no models at all. Same reason, same comment, as bookmarks'
 // own app.cpp.
 #include <Lightweight/SqlStatement.hpp>
+#include <atomic>
 #include <cstdint>
 #include <exception>
+#include <memory>
 #include <morph/core/logger.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
@@ -71,6 +73,60 @@ constexpr std::int64_t kServiceTokenExpiresAtMs = 4102444800000;  // 2100-01-01T
 ///        bridges (ledger, budget, rule, report), so this is dozens of
 ///        concurrent clients, not a limit a real session will meet.
 constexpr std::size_t kMaxLiveModels = 256;
+
+/// @brief One dispatched `RunReportJob`'s share of the pass: it keeps the
+///        pass's internal client alive, and it is what `reportsInFlight()`
+///        actually counts.
+///
+/// The count cannot be lowered from inside the `.then()`/`.onError()` bodies
+/// instead, which is what every other rung's runner still does. Those bodies
+/// run while the completion still owns the closures that captured `handler`,
+/// so `reportsInFlight()` reads `false` with the handler still alive and the
+/// completion state still to be torn down -- on whichever thread happens to
+/// drop its last reference, which for a `SimulatedRemoteBackend` dispatch is
+/// routinely a pool thread rather than the Qt one. An owner draining on that
+/// seam ("pump until it is `false`, then destroy") then destroys
+/// `_reportBridge` with `~BridgeHandler` still to run, and that destructor
+/// reaches straight into the freed bridge to deregister its instance.
+///
+/// `BridgeHandler`'s own `CallbackToken` guard does not close this: it is
+/// explicitly advisory across threads (`morph/core/callback_scope.hpp`,
+/// "Boundary of the guarantee"), and here the bridge dies on the Qt thread
+/// while the last completion reference is dropped on a pool thread.
+///
+/// Releasing `handler` *before* the decrement, inside one destructor, is what
+/// makes the seam mean what it claims: a thread that reads the count at zero
+/// has, through that decrement's own release/acquire pairing, already
+/// observed the handler destroyed. Raising the count in the constructor
+/// rather than at the call site keeps the two halves impossible to
+/// unbalance -- a dispatch that throws before any callback is attached
+/// still lowers it, because the ticket on the loop's stack is destroyed
+/// either way.
+struct DispatchTicket {
+    /// @brief Raises the in-flight count for the dispatch this ticket covers.
+    /// @param client The pass's internal client, co-owned until every ticket
+    ///        for that pass is gone.
+    /// @param counter The `App`'s in-flight counter, held by value so a
+    ///        ticket outliving the `App` is still safe.
+    DispatchTicket(std::shared_ptr<::morph::bridge::BridgeHandler<LedgerModel>> client,
+                   std::shared_ptr<std::atomic<int>> counter)
+        : handler{std::move(client)}, inFlight{std::move(counter)} {
+        inFlight->fetch_add(1);
+    }
+
+    ~DispatchTicket() {
+        handler.reset();
+        inFlight->fetch_sub(1);
+    }
+
+    DispatchTicket(const DispatchTicket&) = delete;
+    DispatchTicket& operator=(const DispatchTicket&) = delete;
+    DispatchTicket(DispatchTicket&&) = delete;
+    DispatchTicket& operator=(DispatchTicket&&) = delete;
+
+    std::shared_ptr<::morph::bridge::BridgeHandler<LedgerModel>> handler;
+    std::shared_ptr<std::atomic<int>> inFlight;
+};
 
 }  // namespace
 
@@ -188,9 +244,13 @@ void App::runPendingReportsOnce() {
     // `handler` destroyed synchronously here would deregister its instance (a
     // synchronous "deregister" in ~BridgeHandler) and race those pending
     // dispatches, which would then find the instance missing and fail instead
-    // of ever running RunReportJob -- silently dropping the pass. Capturing `handler` in every completion below closes
-    // that window: the instance is released only once every dispatch this pass issued has settled, whichever of
-    // .then()/.onError() that turns out to be for each.
+    // of ever running RunReportJob -- silently dropping the pass. Co-owning it
+    // through the `DispatchTicket` every completion below captures closes that
+    // window at both ends: the instance is released once every dispatch this
+    // pass issued has settled *and* its completion has been torn down, and
+    // `reportsInFlight()` does not read `false` until that has happened -- see
+    // DispatchTicket for why the difference between those two moments is the
+    // whole point.
     //
     // Constructing it per pass rather than once in the constructor also keeps
     // an idle server from holding a live model instance between passes.
@@ -200,14 +260,14 @@ void App::runPendingReportsOnce() {
     // must still be able to decrement the counter safely.
     auto inFlight = _reportsInFlight;
     for (const auto& [jobId, ledgerId] : pending) {
-        // The raise has to precede the dispatch -- a completion delivered
-        // from a worker thread could otherwise lower a count this loop had
-        // not raised yet -- which leaves a window the `catch` below closes.
-        inFlight->fetch_add(1);
+        // Constructed before the dispatch -- a completion delivered from a
+        // worker thread could otherwise lower a count this loop had not
+        // raised yet -- and destroyed at the end of this iteration on the
+        // throwing path, where no callback was ever attached to hold it.
+        auto ticket = std::make_shared<DispatchTicket>(handler, inFlight);
         try {
             handler->execute(RunReportJob{.jobId = ReportJobId{jobId}, .ledgerId = LedgerId{ledgerId}})
-                .then([handler, inFlight, jobId](RunReportJobResult result) {
-                    inFlight->fetch_sub(1);
+                .then([ticket, jobId](RunReportJobResult result) {
                     if (result.status == ReportStatus::Failed) {
                         // The aggregation threw and recorded itself Failed.
                         // Not an error of the dispatch -- which is why it
@@ -216,8 +276,7 @@ void App::runPendingReportsOnce() {
                         ::morph::log::logError("[ledger::App] report job " + std::to_string(jobId) + " failed");
                     }
                 })
-                .onError([handler, inFlight, jobId](const std::exception_ptr& error) {
-                    inFlight->fetch_sub(1);
+                .onError([ticket, jobId](const std::exception_ptr& error) {
                     // The dispatch itself failed, so the row is untouched and
                     // still Pending: the next pass retries it. Logged rather
                     // than swallowed because a pass that can never dispatch
@@ -232,11 +291,11 @@ void App::runPendingReportsOnce() {
                 });
         } catch (const std::exception& e) {
             // `execute()` threw instead of returning a `Completion`, so
-            // neither callback above was ever attached and nothing else will
-            // ever lower the count the line above raised. Leaving it raised
-            // wedges `reportsInFlight()` at `true` permanently, and with it
-            // every consumer that drains on it.
-            inFlight->fetch_sub(1);
+            // neither callback above was ever attached and nothing else
+            // co-owns `ticket`: it dies with this iteration and lowers the
+            // count itself. Leaving it raised would wedge
+            // `reportsInFlight()` at `true` permanently, and with it every
+            // consumer that drains on it.
             ::morph::log::logError("[ledger::App] RunReportJob dispatch for job " + std::to_string(jobId) +
                                    " threw: " + e.what());
         }
