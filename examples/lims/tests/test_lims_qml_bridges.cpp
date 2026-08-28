@@ -108,6 +108,50 @@ struct Emissions {
     return settled && ok;
 }
 
+/// @brief Registers a client and a sample through @p bridge the way the
+///        shipped forms do — two `submitIfValid` calls — leaving the bridge
+///        attached to the new sample.
+///
+/// Waits for `sampleChanged`, not just `RegisterSample`'s `replyReceived`:
+/// the reply fires first, from inside `submitIfValid`'s success arm, but the
+/// `sample` property is not populated until the `refresh()` that same arm
+/// dispatches resolves in its own turn.
+/// @param bridge The bridge to drive.
+[[nodiscard]] bool registerSampleViaBridge(lims::gui::SampleBridge& bridge) {
+    int clientReplies = 0;
+    bool clientOk = false;
+    const auto clientConn = QObject::connect(&bridge, &lims::gui::SampleBridge::replyReceived,
+                                             [&](const QString& type, bool succeeded, const QString&) {
+                                                 if (type == QStringLiteral("RegisterClient")) {
+                                                     clientOk = succeeded;
+                                                     ++clientReplies;
+                                                 }
+                                             });
+    bridge.submitIfValid(QStringLiteral("RegisterClient"), QStringLiteral(R"({"name":"Waterworks Ltd"})"));
+    const bool clientSettled = pumpUntil([&] { return clientReplies == 1; });
+    QObject::disconnect(clientConn);
+    if (!clientSettled || !clientOk) {
+        return false;
+    }
+
+    bool sampleOk = false;
+    const auto sampleConn = QObject::connect(&bridge, &lims::gui::SampleBridge::replyReceived,
+                                             [&](const QString& type, bool succeeded, const QString&) {
+                                                 if (type == QStringLiteral("RegisterSample")) {
+                                                     sampleOk = succeeded;
+                                                 }
+                                             });
+    int changes = 0;
+    const auto changedConn =
+        QObject::connect(&bridge, &lims::gui::SampleBridge::sampleChanged, [&changes] { ++changes; });
+    const auto body = QStringLiteral(R"({"clientId":%1,"reference":"WW-1"})").arg(bridge.clientId());
+    bridge.submitIfValid(QStringLiteral("RegisterSample"), body);
+    const bool sampleSettled = pumpUntil([&] { return changes == 1; });
+    QObject::disconnect(sampleConn);
+    QObject::disconnect(changedConn);
+    return sampleSettled && sampleOk;
+}
+
 /// @brief Whether @p object's metaobject declares a signal named @p name.
 ///
 /// This is what makes a QML `Connections { function onFoo() }` binding
@@ -163,16 +207,8 @@ TEST_CASE("The sample property bag carries every key the QML reads", "[lims][gui
     auto rig = makeAuthedRig("alice");
     lims::gui::SampleBridge bridge{rig->bridge(0), rig->executor()};
 
-    Emissions registered;
-    QObject::connect(&bridge, &lims::gui::SampleBridge::clientRegistered, [&registered] { ++registered.count; });
-    bridge.registerClient(QStringLiteral("Waterworks Ltd"));
-    REQUIRE(pumpUntil([&] { return registered.count == 1; }));
+    REQUIRE(registerSampleViaBridge(bridge));
     CHECK(bridge.clientId() >= 1);
-
-    Emissions changed;
-    QObject::connect(&bridge, &lims::gui::SampleBridge::sampleChanged, [&changed] { ++changed.count; });
-    bridge.registerSample(bridge.clientId(), QStringLiteral("WW-1"));
-    REQUIRE(pumpUntil([&] { return changed.count == 1; }));
 
     const auto sample = bridge.sample();
     // Main.qml reads id/state/version; SampleView.qml reads state. A missing
@@ -224,19 +260,14 @@ TEST_CASE("A result row carries the exact decimal, not a rounded number", "[lims
     const auto nitrate =
         catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
 
-    Emissions registered;
-    QObject::connect(&sampleBridge, &lims::gui::SampleBridge::clientRegistered, [&registered] { ++registered.count; });
-    sampleBridge.registerClient(QStringLiteral("Waterworks Ltd"));
-    REQUIRE(pumpUntil([&] { return registered.count == 1; }));
+    REQUIRE(registerSampleViaBridge(sampleBridge));
 
     Emissions changed;
     QObject::connect(&sampleBridge, &lims::gui::SampleBridge::sampleChanged, [&changed] { ++changed.count; });
-    sampleBridge.registerSample(sampleBridge.clientId(), QStringLiteral("WW-1"));
-    REQUIRE(pumpUntil([&] { return changed.count == 1; }));
     sampleBridge.receiveSample();
-    REQUIRE(pumpUntil([&] { return changed.count == 2; }));
+    REQUIRE(pumpUntil([&] { return changed.count == 1; }));
     sampleBridge.startWork();
-    REQUIRE(pumpUntil([&] { return changed.count == 3; }));
+    REQUIRE(pumpUntil([&] { return changed.count == 2; }));
 
     // Exactly Main.qml's own two lines: attach, then re-read. This surface
     // announces no attach of its own, so the listing arriving *is* the
@@ -298,18 +329,13 @@ TEST_CASE("A no-number result names which claim it is, rather than showing a bla
     const auto lead =
         catalog.execute(lims::DefineAnalysis{.name = "Lead", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
 
-    Emissions registered;
-    QObject::connect(&sampleBridge, &lims::gui::SampleBridge::clientRegistered, [&registered] { ++registered.count; });
-    sampleBridge.registerClient(QStringLiteral("Waterworks Ltd"));
-    REQUIRE(pumpUntil([&] { return registered.count == 1; }));
+    REQUIRE(registerSampleViaBridge(sampleBridge));
     Emissions changed;
     QObject::connect(&sampleBridge, &lims::gui::SampleBridge::sampleChanged, [&changed] { ++changed.count; });
-    sampleBridge.registerSample(sampleBridge.clientId(), QStringLiteral("WW-1"));
-    REQUIRE(pumpUntil([&] { return changed.count == 1; }));
     sampleBridge.receiveSample();
-    REQUIRE(pumpUntil([&] { return changed.count == 2; }));
+    REQUIRE(pumpUntil([&] { return changed.count == 1; }));
     sampleBridge.startWork();
-    REQUIRE(pumpUntil([&] { return changed.count == 3; }));
+    REQUIRE(pumpUntil([&] { return changed.count == 2; }));
 
     Emissions listed;
     QObject::connect(&resultBridge, &lims::gui::ResultBridge::resultsListed, [&listed] { ++listed.count; });
@@ -440,10 +466,87 @@ TEST_CASE("A form body submitted through the schema path reaches the model", "[l
     CHECK(payload.contains(QStringLiteral("clientId")));
 }
 
+TEST_CASE(
+    "Registering a client and a sample through the form path leaves the shared handler "
+    "attached and clientId populated",
+    "[lims][gui][qml-bridge][forms]") {
+    // `SamplePresenter::submitIfValid` routes `RegisterClient` to the plain
+    // handler (the one action here with no key at all) and `RegisterSample` to
+    // the shared one, decoding `RegisterClient`'s reply to emit
+    // `clientRegistered` since the form path carries only raw JSON. This case
+    // drives both through `submitIfValid` -- the only path a real
+    // `DynamicForm` submits through -- and asserts both effects downstream of
+    // the dispatch: `clientId` gets set, and the shared handler ends up
+    // attached, so the follow-up `refresh()` (and the `sampleChanged` re-wiring
+    // `Main.qml`'s `onSampleChanged` depends on) succeeds instead of failing
+    // with "handler not bound".
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    lims::gui::SampleBridge bridge{rig->bridge(0), rig->executor()};
+
+    Emissions registered;
+    QObject::connect(&bridge, &lims::gui::SampleBridge::clientRegistered, [&registered] { ++registered.count; });
+    QString clientPayload;
+    bool clientOk = false;
+    int clientReplies = 0;
+    QObject::connect(&bridge, &lims::gui::SampleBridge::replyReceived,
+                     [&](const QString& type, bool succeeded, const QString& text) {
+                         if (type != QStringLiteral("RegisterClient")) {
+                             return;
+                         }
+                         clientOk = succeeded;
+                         clientPayload = text;
+                         ++clientReplies;
+                     });
+
+    bridge.submitIfValid(QStringLiteral("RegisterClient"), QStringLiteral(R"({"name":"Waterworks Ltd"})"));
+    REQUIRE(pumpUntil([&] { return clientReplies == 1; }));
+    INFO("RegisterClient reply: " << clientPayload.toStdString());
+    REQUIRE(clientOk);
+
+    // `SampleView.qml:127`'s "Latest client id" label reads exactly this
+    // property, so `clientRegistered` firing on the form path is what keeps it
+    // off its `-1` default.
+    REQUIRE(pumpUntil([&] { return registered.count == 1; }));
+    CHECK(bridge.clientId() >= 1);
+
+    Emissions changed;
+    QObject::connect(&bridge, &lims::gui::SampleBridge::sampleChanged, [&changed] { ++changed.count; });
+    QString samplePayload;
+    bool sampleOk = false;
+    int sampleReplies = 0;
+    QObject::connect(&bridge, &lims::gui::SampleBridge::replyReceived,
+                     [&](const QString& type, bool succeeded, const QString& text) {
+                         if (type != QStringLiteral("RegisterSample")) {
+                             return;
+                         }
+                         sampleOk = succeeded;
+                         samplePayload = text;
+                         ++sampleReplies;
+                     });
+
+    const auto body = QStringLiteral(R"({"clientId":%1,"reference":"WW-1"})").arg(bridge.clientId());
+    bridge.submitIfValid(QStringLiteral("RegisterSample"), body);
+    REQUIRE(pumpUntil([&] { return sampleReplies == 1; }));
+    INFO("RegisterSample reply: " << samplePayload.toStdString());
+    REQUIRE(sampleOk);
+
+    // The success arm re-reads the attached sample (`SamplePresenter::
+    // submitIfValid`'s `refresh()` call), which reaches the model only because
+    // `RegisterSample` just attached the shared handler: `sampleChanged` firing
+    // here is what `Main.qml`'s `onSampleChanged` cross-wiring needs to attach
+    // the result surface.
+    REQUIRE(pumpUntil([&] { return changed.count >= 1; }));
+    CHECK(bridge.sample().value(QStringLiteral("state")).toString() == QStringLiteral("registered"));
+    CHECK(bridge.lastError().isEmpty());
+}
+
 TEST_CASE("A model's refusal of a form body comes back as the model's own message", "[lims][gui][qml-bridge][forms]") {
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     lims::gui::SampleBridge bridge{rig->bridge(0), rig->executor()};
+
+    REQUIRE(registerSampleViaBridge(bridge));
 
     QString actionType;
     bool ok = true;
@@ -456,17 +559,6 @@ TEST_CASE("A model's refusal of a form body comes back as the model's own messag
                          payload = text;
                          ++replies;
                      });
-
-    Emissions registered;
-    QObject::connect(&bridge, &lims::gui::SampleBridge::clientRegistered, [&registered] { ++registered.count; });
-    bridge.registerClient(QStringLiteral("Waterworks Ltd"));
-    REQUIRE(pumpUntil([&] { return registered.count == 1; }));
-    REQUIRE(replies == 0);
-
-    Emissions changed;
-    QObject::connect(&bridge, &lims::gui::SampleBridge::sampleChanged, [&changed] { ++changed.count; });
-    bridge.registerSample(bridge.clientId(), QStringLiteral("WW-1"));
-    REQUIRE(pumpUntil([&] { return changed.count == 1; }));
 
     // The sample is `registered`; rework is a `ToBeVerified → InProgress`
     // edge, so the model refuses it. The point is not that the model refuses

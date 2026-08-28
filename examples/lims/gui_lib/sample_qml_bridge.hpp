@@ -68,16 +68,6 @@ public:
     /// @param bodyJson The form's assembled JSON body.
     Q_INVOKABLE void submitIfValid(const QString& actionType, const QString& bodyJson);
 
-    /// @brief Registers a client. Emits `clientRegistered`, or `failed`.
-    /// @param name The client's name.
-    Q_INVOKABLE void registerClient(const QString& name);
-
-    /// @brief Logs a new sample and attaches to it. Emits `sampleChanged`, or
-    ///        `failed`.
-    /// @param clientId  The owning client, as its plain number.
-    /// @param reference The lab's reference for the container.
-    Q_INVOKABLE void registerSample(qlonglong clientId, const QString& reference);
-
     /// @brief Attaches to an existing sample. Emits `sampleChanged`, or
     ///        `failed`.
     /// @param sampleId The sample, as its plain number.

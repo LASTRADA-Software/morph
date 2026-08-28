@@ -46,14 +46,16 @@ using morph::ladder::testkit::pumpUntil;
     return rig;
 }
 
-/// @brief Registers a client and a sample through @p presenter, leaving it
-///        attached.
+/// @brief Registers a client and a sample through @p presenter's
+///        `submitIfValid` -- the one path both actions have, now that
+///        `RegisterClient`/`RegisterSample` are schema-driven forms rather
+///        than typed calls -- leaving the presenter attached.
 /// @param presenter The presenter to drive.
 /// @return The registered sample's view.
 lims::SampleView registerSampleVia(lims::gui::SamplePresenter& presenter) {
     lims::RegisterClientResult client;
     bool gotClient = false;
-    QString failure;
+    QString clientFailure;
     auto clientConn = QObject::connect(&presenter, &lims::gui::SamplePresenter::clientRegistered,
                                        [&](lims::RegisterClientResult result) {
                                            client = result;
@@ -61,14 +63,18 @@ lims::SampleView registerSampleVia(lims::gui::SamplePresenter& presenter) {
                                        });
     // Connected so a refusal surfaces as its own message rather than as an
     // unexplained pump timeout.
-    auto failConn = QObject::connect(&presenter, &lims::gui::SamplePresenter::failed,
-                                     [&](QString text) { failure = std::move(text); });
-    presenter.registerClient(QStringLiteral("Waterworks Ltd"));
-    REQUIRE(pumpUntil([&] { return gotClient || !failure.isEmpty(); }));
-    INFO("registerClient failed: " << failure.toStdString());
+    auto replyConn = QObject::connect(&presenter, &lims::gui::SamplePresenter::replyReceived,
+                                      [&](QString actionType, bool ok, QString payload) {
+                                          if (actionType == QStringLiteral("RegisterClient") && !ok) {
+                                              clientFailure = std::move(payload);
+                                          }
+                                      });
+    presenter.submitIfValid(QStringLiteral("RegisterClient"), QStringLiteral(R"({"name":"Waterworks Ltd"})"));
+    REQUIRE(pumpUntil([&] { return gotClient || !clientFailure.isEmpty(); }));
+    INFO("RegisterClient failed: " << clientFailure.toStdString());
     REQUIRE(gotClient);
     QObject::disconnect(clientConn);
-    QObject::disconnect(failConn);
+    QObject::disconnect(replyConn);
 
     lims::SampleView sample;
     bool gotSample = false;
@@ -77,7 +83,8 @@ lims::SampleView registerSampleVia(lims::gui::SamplePresenter& presenter) {
             sample = std::move(view);
             gotSample = true;
         });
-    presenter.registerSample(client.clientId, QStringLiteral("WW-1"));
+    const auto body = QStringLiteral(R"({"clientId":%1,"reference":"WW-1"})").arg(*client.clientId);
+    presenter.submitIfValid(QStringLiteral("RegisterSample"), body);
     REQUIRE(pumpUntil([&] { return gotSample; }));
     QObject::disconnect(sampleConn);
     return sample;
@@ -153,7 +160,7 @@ TEST_CASE("SamplePresenter reports busy() while an action is in flight", "[lims]
     lims::gui::SamplePresenter presenter{rig->bridge(0), rig->executor()};
 
     CHECK_FALSE(presenter.busy());
-    presenter.registerClient(QStringLiteral("Waterworks Ltd"));
+    presenter.submitIfValid(QStringLiteral("RegisterClient"), QStringLiteral(R"({"name":"Waterworks Ltd"})"));
     // Local mode runs the model on a worker thread and posts the completion
     // back, so the dispatch is genuinely outstanding here — this is the
     // property `settle()`-style waits depend on.

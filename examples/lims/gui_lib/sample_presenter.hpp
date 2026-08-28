@@ -40,17 +40,16 @@ namespace lims::gui {
 /// and `RegisterClient` carries no key at all — dispatching it there fails
 /// with "handler not bound" (confirmed empirically here, and the same
 /// conclusion `polls::gui::PollPresenter` reached for `CreatePoll`). So that
-/// one action runs on a plain `NoSharing` handler, which registers a fresh
-/// instance on construction and is bound immediately.
+/// one action alone runs on a plain `NoSharing` handler, which registers a
+/// fresh instance on construction and is bound immediately.
 ///
 /// `RegisterSample` needs no such help even though it too arrives before any
 /// key exists: it is **result-keyed**, so `BridgeHandler::execute`'s
 /// `ResultKeyed` branch runs it on an anonymous instance and promotes that
-/// instance to the id the result names, before the completion resolves. An
-/// earlier draft of this class dispatched it on the plain handler and then
-/// re-attached the shared one by hand — a reimplementation of that branch,
-/// removed once `test_backend_matrix.cpp` proved the framework's own path
-/// works in all three deployment modes.
+/// instance to the id the result names, before the completion resolves —
+/// `test_backend_matrix.cpp` proves the framework's own path works in all
+/// three deployment modes, so it runs on the shared `_handler` like every
+/// other attached action.
 class SamplePresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
 public:
@@ -58,17 +57,6 @@ public:
     /// @param executor The executor `Completion` callbacks land on.
     /// @param parent   Optional `QObject` parent.
     SamplePresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent = nullptr);
-
-    /// @brief Registers a client samples can belong to. Emits
-    ///        `clientRegistered`, or `failed`.
-    /// @param name The client's name.
-    void registerClient(const QString& name);
-
-    /// @brief Logs a new sample and attaches this handler to it. Emits
-    ///        `sampleChanged`, or `failed`.
-    /// @param clientId  The owning client.
-    /// @param reference The lab's reference for the container.
-    void registerSample(ClientId clientId, const QString& reference);
 
     /// @brief Attaches to an existing sample. Emits `sampleChanged`, or
     ///        `failed`.
@@ -95,12 +83,14 @@ public:
     ///        schema-driven path the shipped `DynamicForm` submits through.
     ///
     /// Routed to the right handler by action type, which is the one thing a
-    /// generic `executeJson` cannot work out for itself here: the two
-    /// registration actions carry no key and must go to the plain handler,
-    /// everything else to the attached shared one (see the class doc
+    /// generic `executeJson` cannot work out for itself here: `RegisterClient`
+    /// carries no key and must go to the plain handler, everything else —
+    /// `RegisterSample` included — to the shared one (see the class doc
     /// comment). An action this surface does not own is refused rather than
     /// dispatched, so a typo in a QML `actionType` string surfaces as an
-    /// error instead of a silent no-op.
+    /// error instead of a silent no-op. `RegisterClient`'s reply is also
+    /// decoded to emit `clientRegistered`, so the form path leaves
+    /// `SampleBridge::clientId` in the same state the typed call used to.
     /// @param actionType One of `RegisterClient`, `RegisterSample`,
     ///        `RejectSample`, `ReturnForRework`.
     /// @param bodyJson The form's assembled JSON body.
@@ -113,7 +103,7 @@ signals:
     /// @param payload The result JSON on success, the error text on failure.
     void replyReceived(QString actionType, bool ok, QString payload);
 
-    /// @brief `RegisterClient` succeeded.
+    /// @brief A `RegisterClient` submission succeeded.
     /// @param result The new client's id.
     void clientRegistered(lims::RegisterClientResult result);
 
@@ -145,8 +135,8 @@ private:
     void dispatchTransition(Action action);
 
 #ifndef Q_MOC_RUN
-    /// @brief Plain handler for the two key-less actions — see the class doc
-    ///        comment. Never used for anything attached.
+    /// @brief Plain handler for `RegisterClient`, the one key-less action —
+    ///        see the class doc comment. Never used for anything attached.
     ::morph::bridge::BridgeHandler<SampleModel> _creator;
 
     /// @brief The shared, keyed handler every attached action runs on.
