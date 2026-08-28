@@ -1195,12 +1195,12 @@ ReportJobId LedgerModel::execute(const SubmitReport& action) {
 }
 
 RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
-    // The layering gate, not an authorization one -- see
-    // kReportRunnerPrincipal's own @warning. What it actually buys with an
-    // allow-all authorizer installed is that a *client* dispatching
-    // RunReportJob by mistake (or a presenter reaching for it because it is
-    // registered and therefore visible) fails loudly instead of quietly
-    // completing a job the runner owns.
+    // A genuine authorization boundary -- see kReportRunnerPrincipal's own
+    // doc comment: no client can obtain a validly signed token for this
+    // principal, so this re-check (the model's own, independent of whatever
+    // RemoteServer's authorizer already verified -- docs/spec/security.md)
+    // is what actually keeps a client dispatching RunReportJob, by mistake or
+    // otherwise, from completing a job the runner owns.
     const auto* ctx = morph::session::current();
     if (ctx == nullptr || ctx->principal != kReportRunnerPrincipal) {
         throw Forbidden{"RunReportJob: only the report runner may run a report job"};
