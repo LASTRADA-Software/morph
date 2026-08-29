@@ -12,6 +12,7 @@
 #include <string_view>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "session.hpp"
 
 /// @file session/session_auth.hpp
@@ -385,12 +386,17 @@ public:
     /// recommended wiring").
     /// @param secret Shared secret (same value the verifier uses).
     /// @param mac    MAC primitive (required — no default under this build option).
-    explicit TokenIssuer(std::string secret, MacFunction mac) : _secret{std::move(secret)}, _mac{std::move(mac)} {}
+    ///               Stored and invoked for this issuer's whole lifetime, so
+    ///               anything the callable refers to must outlive the issuer.
+    explicit TokenIssuer(std::string secret, MacFunction mac MORPH_LIFETIMEBOUND)
+        : _secret{std::move(secret)}, _mac{std::move(mac)} {}
 #else
     /// @brief Constructs an issuer over @p secret using @p mac.
     /// @param secret Shared secret (same value the verifier uses).
-    /// @param mac    MAC primitive; defaults to `hmacSha256`.
-    explicit TokenIssuer(std::string secret, MacFunction mac = hmacSha256)
+    /// @param mac    MAC primitive; defaults to `hmacSha256`. Stored and
+    ///               invoked for this issuer's whole lifetime, so anything the
+    ///               callable refers to must outlive the issuer.
+    explicit TokenIssuer(std::string secret, MacFunction mac MORPH_LIFETIMEBOUND = hmacSha256)
         : _secret{std::move(secret)}, _mac{std::move(mac)} {}
 #endif
 
@@ -430,12 +436,17 @@ public:
     /// recommended wiring").
     /// @param secret Shared secret (same value the issuer used).
     /// @param mac    MAC primitive (required — no default under this build option).
-    explicit TokenVerifier(std::string secret, MacFunction mac) : _secret{std::move(secret)}, _mac{std::move(mac)} {}
+    ///               Stored and invoked for this verifier's whole lifetime, so
+    ///               anything the callable refers to must outlive the verifier.
+    explicit TokenVerifier(std::string secret, MacFunction mac MORPH_LIFETIMEBOUND)
+        : _secret{std::move(secret)}, _mac{std::move(mac)} {}
 #else
     /// @brief Constructs a verifier over @p secret using @p mac.
     /// @param secret Shared secret (same value the issuer used).
-    /// @param mac    MAC primitive; defaults to `hmacSha256`.
-    explicit TokenVerifier(std::string secret, MacFunction mac = hmacSha256)
+    /// @param mac    MAC primitive; defaults to `hmacSha256`. Stored and
+    ///               invoked for this verifier's whole lifetime, so anything the
+    ///               callable refers to must outlive the verifier.
+    explicit TokenVerifier(std::string secret, MacFunction mac MORPH_LIFETIMEBOUND = hmacSha256)
         : _secret{std::move(secret)}, _mac{std::move(mac)} {}
 #endif
 
@@ -522,19 +533,31 @@ public:
     /// default fails to compile. See `docs/spec/security.md` ("MAC-primitive
     /// recommended wiring").
     /// @param secret Shared secret used to verify tokens.
-    /// @param mac    MAC primitive (required — no default under this build option).
-    /// @param clock  Time source (ms since epoch) for expiry; defaults to system time.
-    /// @param policy Optional per-request policy over verified claims.
-    explicit SigningAuthorizer(std::string secret, MacFunction mac, Clock clock = systemClockMs, Policy policy = {})
+    /// @param mac    MAC primitive (required — no default under this build
+    ///               option). Forwarded into this authorizer's `TokenVerifier`
+    ///               and invoked for its whole lifetime, so anything the
+    ///               callable refers to must outlive it.
+    /// @param clock  Time source (ms since epoch) for expiry; defaults to system
+    ///               time. Stored and invoked for this authorizer's whole
+    ///               lifetime, so anything the callable refers to must outlive it.
+    /// @param policy Optional per-request policy over verified claims. Stored and
+    ///               invoked on the same terms as @p clock.
+    explicit SigningAuthorizer(std::string secret, MacFunction mac MORPH_LIFETIMEBOUND,
+                               Clock clock MORPH_LIFETIMEBOUND = systemClockMs, Policy policy MORPH_LIFETIMEBOUND = {})
         : _verifier{std::move(secret), std::move(mac)}, _clock{std::move(clock)}, _policy{std::move(policy)} {}
 #else
     /// @brief Constructs the authorizer.
     /// @param secret Shared secret used to verify tokens.
-    /// @param mac    MAC primitive; defaults to `hmacSha256`.
-    /// @param clock  Time source (ms since epoch) for expiry; defaults to system time.
-    /// @param policy Optional per-request policy over verified claims.
-    explicit SigningAuthorizer(std::string secret, MacFunction mac = hmacSha256, Clock clock = systemClockMs,
-                               Policy policy = {})
+    /// @param mac    MAC primitive; defaults to `hmacSha256`. Forwarded into
+    ///               this authorizer's `TokenVerifier` and invoked for its whole
+    ///               lifetime, so anything the callable refers to must outlive it.
+    /// @param clock  Time source (ms since epoch) for expiry; defaults to system
+    ///               time. Stored and invoked for this authorizer's whole
+    ///               lifetime, so anything the callable refers to must outlive it.
+    /// @param policy Optional per-request policy over verified claims. Stored and
+    ///               invoked on the same terms as @p clock.
+    explicit SigningAuthorizer(std::string secret, MacFunction mac MORPH_LIFETIMEBOUND = hmacSha256,
+                               Clock clock MORPH_LIFETIMEBOUND = systemClockMs, Policy policy MORPH_LIFETIMEBOUND = {})
         : _verifier{std::move(secret), std::move(mac)}, _clock{std::move(clock)}, _policy{std::move(policy)} {}
 #endif
 

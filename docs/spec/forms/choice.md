@@ -327,6 +327,13 @@ and nothing more. That leaves gaps neither the client nor the server closes:
   or an options action that doesn't accept the named input all compile
   cleanly and fail only when a client fetches.
 
+## Lifetime annotations
+
+`operator*` returns a reference into the `Choice` and marks its implicit object
+parameter `MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`), so dereferencing a
+temporary and keeping the result is a diagnostic rather than a dangling read. See
+[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - **[forms.md](forms.md)** — how a `Choice` member becomes *required* (the

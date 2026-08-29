@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "../attributes.hpp"
 #include "executor.hpp"
 #include "logger.hpp"
 
@@ -46,8 +47,13 @@ struct ModelIdHash {
 class StrandExecutor {
 public:
     /// @brief Constructs the strand executor wrapping @p base.
-    /// @param base Underlying executor that actually runs the tasks.
-    explicit StrandExecutor(IExecutor& base) : _base{&base} {}
+    /// @param base Underlying executor that actually runs the tasks. Borrowed,
+    ///             not owned: it must outlive this `StrandExecutor` *and* keep
+    ///             running tasks until the destructor's wait has completed —
+    ///             destroying it first deadlocks (see
+    ///             `docs/spec/concurrency_and_lifetimes.md`, "Destruction
+    ///             ordering").
+    explicit StrandExecutor(IExecutor& base MORPH_LIFETIMEBOUND) : _base{&base} {}
 
     /// @brief Blocks until all in-flight tasks have completed, then destroys the executor.
     ///

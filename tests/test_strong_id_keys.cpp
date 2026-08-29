@@ -15,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <memory>
+#include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -41,7 +42,7 @@ struct SikNameId {
 
     [[nodiscard]] bool hasValue() const noexcept { return value.has_value(); }
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-    [[nodiscard]] const std::string& operator*() const noexcept { return *value; }
+    [[nodiscard]] const std::string& operator*() const noexcept MORPH_LIFETIMEBOUND { return *value; }
     [[nodiscard]] auto operator<=>(const SikNameId&) const noexcept = default;
 };
 

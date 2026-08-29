@@ -20,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/attributes.hpp>
 #include <morph/forms/choice.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/quantity.hpp>
@@ -239,7 +240,8 @@ namespace {
 // exactly what forms.hpp's `annotateNestedAggregateRef` resolves in
 // production: a `$ref` into `$defs` (2+ uses) or the node itself, inlined
 // (exactly one use).
-const glz::generic_u64& resolveNestedSchema(const glz::generic_u64& dom, const glz::generic_u64& propertyOrItems) {
+const glz::generic_u64& resolveNestedSchema(const glz::generic_u64& dom,
+                                            const glz::generic_u64& propertyOrItems MORPH_LIFETIMEBOUND) {
     if (propertyOrItems.contains("$ref")) {
         constexpr std::string_view kPrefix = "#/$defs/";
         std::string const ref = propertyOrItems["$ref"].get<std::string>();

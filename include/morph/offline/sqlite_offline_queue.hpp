@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "../core/observability.hpp"
 #include "offline_queue.hpp"
 
@@ -36,7 +37,11 @@ inline const sqlite3_destructor_type kSqliteTransient = reinterpret_cast<sqlite3
 ///        including when an exception unwinds past it.
 class StatementGuard {
 public:
-    explicit StatementGuard(sqlite3_stmt* stmt) : _stmt{stmt} {}
+    /// @brief Takes over finalization of @p stmt.
+    /// @param stmt Statement to finalize on destruction. Borrowed for the
+    ///             guard's whole lifetime — it is `sqlite3_finalize`d, not
+    ///             copied, so it must stay valid until the guard is destroyed.
+    explicit StatementGuard(sqlite3_stmt* stmt MORPH_LIFETIMEBOUND) : _stmt{stmt} {}
     ~StatementGuard() { sqlite3_finalize(_stmt); }
 
     StatementGuard(const StatementGuard&) = delete;

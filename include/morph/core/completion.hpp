@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "callback_scope.hpp"
 #include "executor.hpp"
 #include "logger.hpp"
@@ -228,8 +229,9 @@ public:
     /// the callback is posted immediately.
     ///
     /// @param handler Callable receiving the result by value.
-    /// @return `*this` for chaining.
-    Completion& then(std::function<void(T)> handler) {
+    /// @return `*this` for chaining — a reference into this `Completion`, valid
+    ///         only for as long as it is.
+    Completion& then(std::function<void(T)> handler) MORPH_LIFETIMEBOUND {
         if (_state != nullptr) {
             _state->attachThen(std::move(handler));
         }
@@ -243,8 +245,9 @@ public:
     /// is posted immediately. Attaching this handler suppresses orphan logging.
     ///
     /// @param handler Callable receiving the exception pointer.
-    /// @return `*this` for chaining.
-    Completion& onError(std::function<void(std::exception_ptr)> handler) {
+    /// @return `*this` for chaining — a reference into this `Completion`, valid
+    ///         only for as long as it is.
+    Completion& onError(std::function<void(std::exception_ptr)> handler) MORPH_LIFETIMEBOUND {
         if (_state != nullptr) {
             _state->attachOnError(std::move(handler));
         }
@@ -266,8 +269,9 @@ public:
     ///                generation is captured, so a later `reset()` retires this
     ///                attachment.
     /// @param handler Callable receiving the result by value.
-    /// @return `*this` for chaining.
-    Completion& then(const CallbackScope& scope, std::function<void(T)> handler) {
+    /// @return `*this` for chaining — a reference into this `Completion`, valid
+    ///         only for as long as it is.
+    Completion& then(const CallbackScope& scope, std::function<void(T)> handler) MORPH_LIFETIMEBOUND {
         return then(scope.token(), std::move(handler));
     }
 
@@ -280,8 +284,9 @@ public:
     /// @param token   Gate observing some receiver's `CallbackScope`. A
     ///                default-constructed token suppresses unconditionally.
     /// @param handler Callable receiving the result by value.
-    /// @return `*this` for chaining.
-    Completion& then(CallbackToken token, std::function<void(T)> handler) {
+    /// @return `*this` for chaining — a reference into this `Completion`, valid
+    ///         only for as long as it is.
+    Completion& then(CallbackToken token, std::function<void(T)> handler) MORPH_LIFETIMEBOUND {
         return then(std::function<void(T)>{token.guard(std::move(handler))});
     }
 
@@ -297,8 +302,10 @@ public:
     ///
     /// @param scope   Receiver-owned gate; observed weakly.
     /// @param handler Callable receiving the exception pointer.
-    /// @return `*this` for chaining.
-    Completion& onError(const CallbackScope& scope, std::function<void(std::exception_ptr)> handler) {
+    /// @return `*this` for chaining — a reference into this `Completion`, valid
+    ///         only for as long as it is.
+    Completion& onError(const CallbackScope& scope,
+                        std::function<void(std::exception_ptr)> handler) MORPH_LIFETIMEBOUND {
         return onError(scope.token(), std::move(handler));
     }
 
@@ -309,8 +316,9 @@ public:
     /// @param token   Gate observing some receiver's `CallbackScope`. A
     ///                default-constructed token suppresses unconditionally.
     /// @param handler Callable receiving the exception pointer.
-    /// @return `*this` for chaining.
-    Completion& onError(CallbackToken token, std::function<void(std::exception_ptr)> handler) {
+    /// @return `*this` for chaining — a reference into this `Completion`, valid
+    ///         only for as long as it is.
+    Completion& onError(CallbackToken token, std::function<void(std::exception_ptr)> handler) MORPH_LIFETIMEBOUND {
         return onError(std::function<void(std::exception_ptr)>{token.guard(std::move(handler))});
     }
 
@@ -322,16 +330,18 @@ public:
     /// values, or a `shared_ptr` it keeps alive itself.
     ///
     /// @param handler Callable receiving the result by value.
-    /// @return `*this` for chaining.
-    Completion& thenDetached(std::function<void(T)> handler) { return then(std::move(handler)); }
+    /// @return `*this` for chaining — a reference into this `Completion`, valid
+    ///         only for as long as it is.
+    Completion& thenDetached(std::function<void(T)> handler) MORPH_LIFETIMEBOUND { return then(std::move(handler)); }
 
     /// @brief Registers an error callback whose lifetime is deliberately unmanaged.
     ///
     /// The `onError` counterpart of `thenDetached()`.
     ///
     /// @param handler Callable receiving the exception pointer.
-    /// @return `*this` for chaining.
-    Completion& onErrorDetached(std::function<void(std::exception_ptr)> handler) {
+    /// @return `*this` for chaining — a reference into this `Completion`, valid
+    ///         only for as long as it is.
+    Completion& onErrorDetached(std::function<void(std::exception_ptr)> handler) MORPH_LIFETIMEBOUND {
         return onError(std::move(handler));
     }
 

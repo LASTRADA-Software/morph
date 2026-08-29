@@ -708,6 +708,21 @@ make teardown order-independent.)
   `ModelTraits<Model>::typeId()`, so the invariant holds by construction; the
   hazard only exists for callers that invoke the registry directly.
 
+## Lifetime annotations
+
+`BridgeHandler`'s constructors mark `Bridge& bridge` and `IExecutor* guiExec`
+`MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`), and `binding()` marks its implicit
+object parameter.
+
+The `Bridge&` annotation is a deliberate over-approximation. It states "must
+outlive", while [Lifetime & ownership](#lifetime--ownership) above says the bridge
+must outlive all *use* and that mis-ordered *destruction* is defined behaviour.
+`[[clang::lifetimebound]]` has no way to carve destruction out, so a bridge
+destroyed before a live handler — legal, and still asserted by
+`tests/test_switch_backend.cpp` — reads to Clang as a use-after-scope. The
+carve-out remains part of the contract; the attribute simply cannot say it. See
+[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - [`backend.md`](backend.md) — `IBackend`, `LocalBackend`,

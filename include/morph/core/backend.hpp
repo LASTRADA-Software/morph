@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "../session/session.hpp"
 #include "completion.hpp"
 #include "model.hpp"
@@ -563,8 +564,14 @@ struct ClientTimeoutError : std::runtime_error {
 class LocalBackend : public detail::IBackend {
 public:
     /// @brief Constructs the backend using @p workerPool to run model actions.
-    /// @param workerPool Executor (typically a `ThreadPoolExecutor`) for model work.
-    explicit LocalBackend(::morph::exec::IExecutor& workerPool) : _strand{workerPool} {}
+    /// @param workerPool Executor (typically a `ThreadPoolExecutor`) for model
+    ///                   work. Borrowed, not owned: it is handed to this
+    ///                   backend's `StrandExecutor`, so it must outlive the
+    ///                   backend *and* keep running tasks until teardown
+    ///                   completes — destroying it first deadlocks (see
+    ///                   `docs/spec/concurrency_and_lifetimes.md`, "Destruction
+    ///                   ordering").
+    explicit LocalBackend(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND) : _strand{workerPool} {}
 
     /// @brief Creates a model instance via @p factory and registers it.
     ///

@@ -5,6 +5,7 @@
 #include <QMetaObject>
 #include <functional>
 #include <memory>
+#include <morph/attributes.hpp>
 #include <morph/core/executor.hpp>
 #include <utility>
 
@@ -56,8 +57,9 @@ public:
     /// Defaults to `QCoreApplication::instance()`, preserving the previous
     /// GUI-thread-only behaviour. Passing `nullptr` (e.g. when constructed
     /// before `QCoreApplication` exists) makes `post()` a no-op, matching
-    /// `QMetaObject::invokeMethod`'s own handling of a null target.
-    explicit QtExecutor(QObject* context = QCoreApplication::instance())
+    /// `QMetaObject::invokeMethod`'s own handling of a null target. Borrowed,
+    /// not owned: a non-null @p context must outlive this executor.
+    explicit QtExecutor(QObject* context MORPH_LIFETIMEBOUND = QCoreApplication::instance())
         : _context{context}, _alive{std::make_shared<char>()} {}
 
     QtExecutor(const QtExecutor&) = delete;

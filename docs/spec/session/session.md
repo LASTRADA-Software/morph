@@ -482,6 +482,15 @@ See [security.md](../security.md) for the complete threat model and hardening
 checklist (TLS, message-size bounds, control-message authorization, secret
 rotation).
 
+## Lifetime annotations
+
+`TokenIssuer`, `TokenVerifier` and `SigningAuthorizer` mark their `MacFunction
+mac` — and `SigningAuthorizer` its `Clock clock` and `Policy policy` — with
+`MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`). These are by-value
+`std::function`s, so the callable is owned; the contract the annotation records is
+that whatever the callable refers to must outlive the issuer/verifier/authorizer
+that invokes it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - [security.md](../security.md) — **the authentication subsystem**: signed bearer

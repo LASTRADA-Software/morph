@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "../core/model.hpp"
 #include "../core/registry.hpp"
 #include "action_log.hpp"
@@ -124,8 +125,10 @@ public:
     /// references to surviving elements on rehash).
     /// @param actionType `LogEntry::actionType` to match.
     /// @param fromSchema `LogEntry::schema` to match.
-    /// @return Pointer to the migration, or `nullptr` if none is registered.
-    [[nodiscard]] const Migration* find(std::string_view actionType, std::string_view fromSchema) const {
+    /// @return Pointer to the migration, or `nullptr` if none is registered —
+    ///         into this registry, so valid only for as long as it is.
+    [[nodiscard]] const Migration* find(std::string_view actionType,
+                                        std::string_view fromSchema) const MORPH_LIFETIMEBOUND {
         auto iter = _migrations.find(Key{std::string{actionType}, std::string{fromSchema}});
         return iter == _migrations.end() ? nullptr : &iter->second;
     }

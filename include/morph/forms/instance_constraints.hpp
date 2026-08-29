@@ -55,6 +55,7 @@
 #include <string_view>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "../util/quantity.hpp"
 #include "../util/rational.hpp"
 #include "forms.hpp"
@@ -197,8 +198,9 @@ class InstanceConstraints {
 public:
     /// @brief Declares (or replaces, by field name) one field's constraint.
     /// @param constraint The constraint to record.
-    /// @return `*this`, so declarations can be chained.
-    InstanceConstraints& declare(FieldConstraint constraint) {
+    /// @return `*this`, so declarations can be chained — a reference into this
+    ///         `InstanceConstraints`, valid only for as long as it is.
+    InstanceConstraints& declare(FieldConstraint constraint) MORPH_LIFETIMEBOUND {
         for (auto& existing : _fields) {
             if (existing.field == constraint.field) {
                 existing = std::move(constraint);
@@ -212,8 +214,9 @@ public:
     /// @brief The constraint declared for @p field, if any.
     /// @param field The wire (JSON) field name to look up.
     /// @return A pointer to the entry, or `nullptr` when the field is
-    ///         unconstrained. Invalidated by any later `declare()`.
-    [[nodiscard]] const FieldConstraint* forField(std::string_view field) const noexcept {
+    ///         unconstrained — into this `InstanceConstraints`, so valid only
+    ///         for as long as it is. Invalidated by any later `declare()`.
+    [[nodiscard]] const FieldConstraint* forField(std::string_view field) const noexcept MORPH_LIFETIMEBOUND {
         for (const auto& entry : _fields) {
             if (entry.field == field) {
                 return &entry;
@@ -227,8 +230,9 @@ public:
     [[nodiscard]] bool empty() const noexcept { return _fields.empty(); }
 
     /// @brief Every declared constraint, in declaration order.
-    /// @return The constraint entries.
-    [[nodiscard]] const std::vector<FieldConstraint>& fields() const noexcept { return _fields; }
+    /// @return The constraint entries — a reference into this
+    ///         `InstanceConstraints`, valid only for as long as it is.
+    [[nodiscard]] const std::vector<FieldConstraint>& fields() const noexcept MORPH_LIFETIMEBOUND { return _fields; }
 
     /// @brief Rewrites @p schema so the framework's own keys carry this
     ///        instance's values.

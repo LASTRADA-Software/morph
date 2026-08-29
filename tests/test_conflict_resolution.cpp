@@ -15,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <functional>
+#include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -51,7 +52,8 @@ public:
     using ConflictChecker = std::function<bool(const std::string&)>;
     using ConflictResolver = std::function<std::string(const std::string&)>;
 
-    OrderModel(morph::offline::IOfflineQueue& queue, ConflictChecker check, ConflictResolver resolve)
+    OrderModel(morph::offline::IOfflineQueue& queue MORPH_LIFETIMEBOUND, ConflictChecker check MORPH_LIFETIMEBOUND,
+               ConflictResolver resolve MORPH_LIFETIMEBOUND)
         : _queue{queue}, _check{std::move(check)}, _resolve{std::move(resolve)} {}
 
     [[nodiscard]] int execute(const OrderQueryAction&) const { return notifyCount; }
@@ -117,7 +119,17 @@ static std::shared_ptr<morph::bridge::detail::HandlerBinding> makeOrderBinding(m
     binding->modelFactory = [&queue, check = std::move(check),
                              resolve =
                                  std::move(resolve)]() mutable -> std::unique_ptr<morph::model::detail::IModelHolder> {
-        return std::make_unique<morph::model::detail::ModelHolder<OrderModel>>(queue, check, resolve);
+        // The model is built here and moved into the holder, rather than
+        // forwarding (queue, check, resolve) through `ModelHolder`'s variadic
+        // constructor. Forwarding makes the holder's constructor template the
+        // place where `queue`'s reference escapes into a member, and Clang then
+        // asks for `[[clang::lifetimebound]]` on that *shared* parameter pack —
+        // an annotation that is right for this instantiation and wrong for the
+        // many that move a self-contained model in, where it turns every
+        // `ModelHolder<M>(prvalue...)` into a false dangling report. Binding the
+        // reference here keeps the contract stated where it actually holds:
+        // OrderModel's own constructor, just above.
+        return std::make_unique<morph::model::detail::ModelHolder<OrderModel>>(OrderModel{queue, check, resolve});
     };
     return binding;
 }

@@ -131,6 +131,12 @@ so swapping one strong id for another would replay clean while writing the
 wrong key. See [`journal/journal.md`](../journal/journal.md) for the fingerprint
 itself.
 
+## Lifetime annotations
+
+`get()` and `operator*` return a reference to the wrapped value and mark their
+implicit object parameter `MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`). See
+[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - **[`../detail/fixed_string.hpp`](../../../include/morph/detail/fixed_string.hpp)**
