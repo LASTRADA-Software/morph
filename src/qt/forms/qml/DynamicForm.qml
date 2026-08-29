@@ -3,6 +3,7 @@
 // A form rendered purely from one action's JSON Schema:
 //   x-order          -> field order          required  -> asterisk + submit gate
 //   ExtUnits         -> unit suffix          minimum/maximum -> input hints
+//   multipleOf       -> value must be an exact multiple (1 = "whole number")
 //   x-decimalPlaces  -> quantity fields (decimal input -> exact {num,den,dp})
 //   x-optionsAction  -> combo box (options fetched by executing that action)
 //   x-unitAlternatives -> unit selector with exact recalculation on switch
@@ -117,6 +118,25 @@ Frame {
         if (typeof num !== "number" || typeof den !== "number" || den === 0)
             return undefined
         return num / den
+    }
+
+    // Whether `value` breaks a declared `multipleOf` (morph#310). An absent or
+    // non-positive step is no constraint at all, matching JSON Schema, which
+    // requires `multipleOf` to be strictly positive.
+    //
+    // The comparison is a double quotient with a tolerance, like every other
+    // numeric gate in this file: the bound itself arrived through JSON.parse,
+    // so exactness was already lost before this function saw it. The exact
+    // check is the model's `allFieldBoundsSatisfied`, which divides the same
+    // two values as exact `Rational`s (see forms.md, "Per-field scalar
+    // bounds"). The tolerance is relative so a large quotient is judged on the
+    // same terms as a small one.
+    function violatesMultipleOf(value, step) {
+        if (step === undefined || !(step > 0))
+            return false
+        const quotient = value / step
+        const nearest = Math.round(quotient)
+        return Math.abs(quotient - nearest) > 1e-9 * Math.max(1, Math.abs(quotient))
     }
 
     // Three-way compare of two integers held as decimal strings: -1, 0, 1.
@@ -304,8 +324,19 @@ Frame {
                     // array of strings, rather than silently misencoding.
                     isArray: types.indexOf("array") !== -1,
                     required: required.indexOf(name) !== -1,
+                    // `resolveRef` merges the property node *over* the `$def`
+                    // it points at, so these three read a per-field bound
+                    // declared through `FieldMeta` (morph#310) as readily as
+                    // one glaze stamped on the shared type definition -- which
+                    // is what makes a bound on one `Quantity` member leave a
+                    // sibling of the same type alone.
                     minimum: p.minimum,
                     maximum: p.maximum,
+                    // `multipleOf = 1` is how "whole number" is spelled: the
+                    // constraint a `Quantity` cannot carry in its type, since
+                    // `Quantity<U, Dec>` requires `Dec >= 1` and therefore
+                    // always represents tenths exactly.
+                    multipleOf: p.multipleOf,
                     // Exact decimal-string companions for a bound a double
                     // cannot hold. `p.minimum`/`p.maximum` reached this object
                     // through JSON.parse (every app does
@@ -843,6 +874,8 @@ Frame {
                     return null
                 if (f.instanceMaximum !== undefined && value > f.instanceMaximum)
                     return null
+                if (violatesMultipleOf(value, f.multipleOf))
+                    return null
             }
             return rationalJson(canonicalText, unit, f.canonDp)
         }
@@ -868,6 +901,8 @@ Frame {
             } else if (f.maximum !== undefined && value > f.maximum) {
                 return null
             }
+            if (violatesMultipleOf(value, f.multipleOf))
+                return null
             return normalised
         }
         if (f.isBoolean) {
