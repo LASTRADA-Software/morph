@@ -200,5 +200,6 @@ instances caches decorated schemas itself if it needs to.
 | Spec | Why |
 |---|---|
 | [forms.md](forms.md) | `schemaJson<A>()`, the key vocabulary these keys join, and `reconcileDeclaredPrecision` / `checkQuantityBounds` — the type-driven precision and bounds seams this one complements. |
-| [quantity_type.md](../util/quantity_type.md) | `Quantity`, `declaredDecimals`, and `UnitTraits<E>::bounds` — the compile-time counterpart of `minimum`/`maximum`. |
+| [forms.md — Per-field scalar bounds](forms.md#per-field-scalar-bounds--minimum--maximum--multipleof) | `FieldMeta::minimum`/`maximum`/`multipleOf` — the **compile-time, per-field** counterpart of these keys. A compiled bound is the type's own floor and this decoration narrows it; the two are checked together, never one instead of the other. |
+| [quantity_type.md](../util/quantity_type.md) | `Quantity`, `declaredDecimals`, and `UnitTraits<E>::bounds` — the per-*unit* compile-time bound, which is why a per-field one needed a separate vocabulary. |
 | [rational.md](../util/rational.md) | The exact `Rational` bounds are compared against, and the `{num,den,dp}` wire shape `x-minimum`/`x-maximum` reuse. |

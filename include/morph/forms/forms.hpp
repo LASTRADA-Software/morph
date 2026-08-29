@@ -61,6 +61,14 @@
 ///   tree to any depth) evaluated identically by the schema, the client, and
 ///   the server. See `morph::forms::allRulesSatisfied` below and
 ///   docs/spec/forms/forms.md.
+/// - **`minimum` / `maximum` / `multipleOf`** — for a field whose
+///   `fieldMetadata` entry declares them (`morph::forms::FieldMeta`): a
+///   per-field scalar bound, stamped on the property node as the standard
+///   JSON-Schema keys of those names. `multipleOf: 1` is how "whole number"
+///   is spelled. `morph::forms::allFieldBoundsSatisfied` evaluates the same
+///   declaration in C++, so an action's `validate()` enforces exactly what
+///   the client was served. Bounds are per *field*, unlike
+///   `UnitTraits::bounds`, which is per unit.
 /// - **`x-computed` / `x-readonly`** — for a member listed as the destination
 ///   of an action's `computedFields` declaration: the field is derived from
 ///   sibling inputs (named in `x-computed.inputs`) and must not be rendered as
@@ -136,7 +144,9 @@
 #include <compare>
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <glaze/glaze.hpp>
+#include <limits>
 #include <memory>
 #include <morph/detail/fixed_string.hpp>
 #include <optional>
@@ -150,13 +160,15 @@
 #include <vector>
 
 #include "../util/quantity.hpp"
+#include "../util/rational.hpp"
 #include "choice.hpp"
 #include "layout.hpp"
 
 namespace morph::forms {
 
-/// @brief Per-field presentation overrides: label, help, placeholder,
-///        read-only, hidden (docs/spec/forms/forms.md, "Field metadata").
+/// @brief Per-field presentation overrides and scalar bounds: label, help,
+///        placeholder, read-only, hidden, `minimum`/`maximum`/`multipleOf`
+///        (docs/spec/forms/forms.md, "Field metadata").
 ///
 /// An action opts in with a `static constexpr std::array<FieldMeta, N>`
 /// (or, for the `describe<>()` sugar, a `static const` array defined
@@ -164,9 +176,22 @@ namespace morph::forms {
 /// mirroring the existing `optionalFields` convention. Every member other
 /// than `field` defaults to "not declared": an empty `label`/`help`/
 /// `placeholder` means "infer the title, omit the rest"; `readOnly`/`hidden`
-/// default to `false`. `mergeSchemaExtras` looks up the entry (if any)
+/// default to `false`; a disengaged `minimum`/`maximum`/`multipleOf` emits
+/// nothing and checks nothing. `mergeSchemaExtras` looks up the entry (if any)
 /// matching each reflected member by wire key and patches the property node;
 /// an entry naming a field that does not exist on the action is ignored.
+///
+/// @par Bounds are per **field**, and are not presentation
+/// The three numeric members are the one part of this type that is *not*
+/// presentation: `morph::forms::allFieldBoundsSatisfied` evaluates them as a
+/// C++ predicate, so an action whose `validate()` calls it enforces the same
+/// declaration the schema advertises — the "the DTO *is* the form definition"
+/// rule (`examples/IMPLEMENTATION.md` rule 3) applied to a scalar bound, which
+/// the `formRules` vocabulary cannot express because every comparison node
+/// there takes two member pointers, never a literal (morph#310). They are
+/// keyed by field rather than by unit precisely so a floor declared for one
+/// `Quantity` member does not constrain a sibling of the same type —
+/// `UnitTraits::bounds` is per-unit and cannot make that distinction.
 struct FieldMeta {
     /// @brief Wire key of the member this entry describes.
     std::string_view field;
@@ -202,6 +227,33 @@ struct FieldMeta {
     ///        "Field metadata is not a security control").
     bool hidden{false};
 
+    /// @brief Inclusive lower bound on the field's numeric value; emitted as
+    ///        the standard JSON-Schema `minimum`. Disengaged means "no floor".
+    ///
+    /// For a `Quantity` member this bounds the **scalar value the field
+    /// denotes**, in the canonical unit — not the `{num,den,dp}` object the
+    /// member serialises as.
+    std::optional<::morph::math::Rational> minimum{};
+
+    /// @brief Inclusive upper bound on the field's numeric value; emitted as
+    ///        the standard JSON-Schema `maximum`. Disengaged means "no
+    ///        ceiling". Same canonical-unit reading as `minimum`.
+    std::optional<::morph::math::Rational> maximum{};
+
+    /// @brief The field's value must be an exact integer multiple of this;
+    ///        emitted as the standard JSON-Schema `multipleOf`. Disengaged
+    ///        means "any value".
+    ///
+    /// `multipleOf = 1` is how integrality is spelled — the constraint
+    /// `Quantity` cannot carry in its type, since `Quantity<U, Dec>` requires
+    /// `Dec >= 1` and therefore always represents tenths exactly.
+    ///
+    /// A non-positive value is **ignored** (neither emitted nor checked),
+    /// matching JSON Schema, which requires `multipleOf` to be strictly
+    /// positive: a zero divisor has no meaning and a negative one divides
+    /// exactly the same set of values as its magnitude.
+    std::optional<::morph::math::Rational> multipleOf{};
+
     /// @brief Returns a copy with `placeholder` set to @p text.
     /// @param text The placeholder hint.
     /// @return The updated descriptor.
@@ -224,6 +276,34 @@ struct FieldMeta {
     [[nodiscard]] constexpr FieldMeta withHidden() const noexcept {
         FieldMeta copy = *this;
         copy.hidden = true;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `minimum` set to @p bound.
+    /// @param bound Inclusive lower bound, in the field's canonical unit.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withMinimum(::morph::math::Rational bound) const noexcept {
+        FieldMeta copy = *this;
+        copy.minimum = bound;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `maximum` set to @p bound.
+    /// @param bound Inclusive upper bound, in the field's canonical unit.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withMaximum(::morph::math::Rational bound) const noexcept {
+        FieldMeta copy = *this;
+        copy.maximum = bound;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `multipleOf` set to @p step.
+    /// @param step Divisor the value must be an exact integer multiple of;
+    ///             non-positive values are ignored (see the member).
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withMultipleOf(::morph::math::Rational step) const noexcept {
+        FieldMeta copy = *this;
+        copy.multipleOf = step;
         return copy;
     }
 };
@@ -1833,6 +1913,110 @@ struct IsStdVector<std::vector<T, Alloc>> : std::true_type {
 template <typename T>
 concept ReflectableAggregate = glz::reflectable<T> || glz::glaze_object_t<T>;
 
+/// @brief Concept: an integral member whose every value is exactly
+///        representable as a `math::Rational` numerator, so a declared
+///        `FieldMeta` bound can be *checked* against it in C++.
+///
+/// That is every signed integer type, plus every unsigned one narrower than
+/// `std::int64_t`. A `std::uint64_t` member is deliberately excluded: half its
+/// range has no `Rational` spelling, and silently checking the other half
+/// would be a bound that holds for some values of a field and not others.
+/// Such a member still *carries* its declared bound into the served schema —
+/// only the C++ predicate stands aside (docs/spec/forms/forms.md, "Per-field
+/// scalar bounds").
+template <typename T>
+concept BoundCheckableInteger =
+    std::integral<T> && !std::same_as<T, bool> && (std::signed_integral<T> || std::numeric_limits<T>::digits < 64);
+
+/// @brief Writes one declared bound onto a property node under @p key.
+///
+/// An integral bound is emitted as an integer, not as a `double`: that is what
+/// glaze's own `minimum`/`maximum` are, so `annotateExactNumericBounds` then
+/// gives a bound beyond 2^53 the same `x-exactMinimum`/`x-exactMaximum`
+/// companion it gives a compiled one, with nothing here to special-case. A
+/// non-integral bound has no exact JSON-number spelling and is emitted as its
+/// quotient — the renderer's live gate is an approximation either way, and
+/// `allFieldBoundsSatisfied` is the exact check (docs/spec/forms/forms.md,
+/// "Per-instance constraints" makes the same trade for `x-minimum`).
+/// @param property Property node to annotate in place.
+/// @param key      Schema key to write: `"minimum"`, `"maximum"` or `"multipleOf"`.
+/// @param bound    The declared bound.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+inline void emitDeclaredBound(glz::generic_u64& property, const std::string& key,
+                              const ::morph::math::Rational& bound) {
+    if (bound.isInteger()) {
+        property[key] = bound.numerator;
+    } else {
+        property[key] = static_cast<double>(bound.numerator) / static_cast<double>(bound.denominator);
+    }
+}
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
+/// @brief Whether @p meta declares any of the three numeric bounds.
+/// @param meta The field descriptor to inspect.
+/// @return `true` when at least one of `minimum`/`maximum`/`multipleOf` is engaged.
+[[nodiscard]] constexpr bool declaresAnyBound(const FieldMeta& meta) noexcept {
+    return meta.minimum.has_value() || meta.maximum.has_value() || meta.multipleOf.has_value();
+}
+
+/// @brief Whether a `multipleOf` declaration is usable — JSON Schema requires
+///        it to be strictly positive, and a zero divisor has no meaning.
+/// @param meta The field descriptor to inspect.
+/// @return `true` when `multipleOf` is engaged and greater than zero.
+[[nodiscard]] constexpr bool hasUsableMultipleOf(const FieldMeta& meta) noexcept {
+    return meta.multipleOf.has_value() && !meta.multipleOf->isZero() && !meta.multipleOf->isNegative();
+}
+
+/// @brief Stamps whichever of `minimum`/`maximum`/`multipleOf` @p meta
+///        declares onto @p property.
+///
+/// A free function rather than three more branches inside
+/// `annotateBasicMemberProperty`, which is already long enough that
+/// clang-tidy's cognitive-complexity check is the next thing to fire (the same
+/// reasoning `annotateSubmitMode` was split out for).
+/// @param property Property node to annotate in place.
+/// @param meta     The field's declared metadata.
+inline void annotateDeclaredBounds(glz::generic_u64& property, const FieldMeta& meta) {
+    if (meta.minimum.has_value()) {
+        emitDeclaredBound(property, "minimum", *meta.minimum);
+    }
+    if (meta.maximum.has_value()) {
+        emitDeclaredBound(property, "maximum", *meta.maximum);
+    }
+    if (hasUsableMultipleOf(meta)) {
+        emitDeclaredBound(property, "multipleOf", *meta.multipleOf);
+    }
+}
+
+/// @brief Whether @p value satisfies every bound @p meta declares.
+///
+/// The comparisons run on the exact `math::Rational`, never on a `double`, so
+/// the C++ verdict is the one the schema's rounded numbers only approximate.
+/// `multipleOf` uses `checkedDiv` rather than `dividedBy`: a saturated
+/// quotient comes back from the latter as a *successful* `±INT64_MAX/1`, which
+/// is an integer and would be read as "yes, a multiple". An unrepresentable
+/// quotient is not a multiple this function can vouch for, so it is refused.
+/// @param meta  The field's declared metadata.
+/// @param value The field's current value, in its canonical unit.
+/// @return `true` when the value is within `[minimum, maximum]` and an exact
+///         integer multiple of `multipleOf`, for whichever of the three are declared.
+[[nodiscard]] constexpr bool satisfiesDeclaredBounds(const FieldMeta& meta,
+                                                     const ::morph::math::Rational& value) noexcept {
+    if (meta.minimum.has_value() && std::is_lt(value <=> *meta.minimum)) {
+        return false;
+    }
+    if (meta.maximum.has_value() && std::is_gt(value <=> *meta.maximum)) {
+        return false;
+    }
+    if (hasUsableMultipleOf(meta)) {
+        auto const quotient = ::morph::math::checkedDiv(value, *meta.multipleOf);
+        if (!quotient.has_value() || !quotient->isInteger()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// @brief Applies the title/`FieldMeta`/`Quantity`/`Choice`/widget/
 ///        ranged-bounds annotations to one property node. Shared by
 ///        `mergeSchemaExtras`'s top-level pass and `annotateNestedAggregate`
@@ -1869,6 +2053,7 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
         if (!fieldMeta->i18nKey.empty()) {
             property["x-i18nKey"] = std::string{fieldMeta->i18nKey};
         }
+        annotateDeclaredBounds(property, *fieldMeta);
     }
 
     if constexpr (units::isQuantity<Member>) {
@@ -2708,6 +2893,65 @@ template <typename A>
         }
     });
     return allEngaged;
+}
+
+/// @brief Whether every numeric member of @p action satisfies the
+///        `minimum`/`maximum`/`multipleOf` its `A::fieldMetadata` entry
+///        declares.
+///
+/// The evaluating half of the per-field bounds vocabulary: `schemaJson<A>()`
+/// serves the same three declarations as JSON-Schema keys, so a client can
+/// gate on them, and this is what the server checks — one declaration, two
+/// consumers, no second source of truth (`examples/IMPLEMENTATION.md` rule 3).
+/// Intended as (part of) the action's `validate()`, which puts it on every
+/// dispatch path `ActionValidator<A>::ready` already guards.
+///
+/// **An unengaged `EmptyCapableField` is vacuously satisfied**, exactly as the
+/// `formRules` comparison kinds are: a form still being filled in must not
+/// fail a bound on a field that has no value yet, and whether the field has to
+/// be filled at all is `required`/`allRequiredEngaged`'s question. A field
+/// with no empty state is always checked.
+///
+/// Bounds are read from these member kinds and no others: `Quantity` (its
+/// engaged `math::Rational`, in the canonical unit), a bare `math::Rational`,
+/// and an integral member satisfying `detail::BoundCheckableInteger`. A
+/// declaration on a member of any other type — a `std::string`, a `bool`, a
+/// `std::uint64_t` — is inert here; the schema still advertises it.
+/// @tparam A     Action type (a reflectable aggregate).
+/// @param action Draft whose fields are checked.
+/// @return `true` when no declared bound is violated, and trivially `true`
+///         for an action that declares no `fieldMetadata`.
+template <typename A>
+[[nodiscard]] bool allFieldBoundsSatisfied(const A& action) noexcept {
+    if constexpr (!detail::HasFieldMetadata<A>) {
+        static_cast<void>(action);
+        return true;
+    } else {
+        bool satisfied = true;
+        detail::forEachNamedMember(action, [&]<std::size_t I>(std::string_view name, const auto& member) {
+            using Member = std::remove_cvref_t<decltype(member)>;
+            const FieldMeta* meta = detail::findFieldMeta<A>(name);
+            if (meta == nullptr || !detail::declaresAnyBound(*meta)) {
+                return;
+            }
+            if constexpr (units::isQuantity<Member>) {
+                if (member.hasValue() && !detail::satisfiesDeclaredBounds(*meta, *member)) {
+                    satisfied = false;
+                }
+            } else if constexpr (std::same_as<Member, ::morph::math::Rational>) {
+                if (!detail::satisfiesDeclaredBounds(*meta, member)) {
+                    satisfied = false;
+                }
+            } else if constexpr (detail::BoundCheckableInteger<Member>) {
+                const ::morph::math::Rational value{static_cast<std::int64_t>(member),
+                                                    ::morph::math::DecimalPlaces{0}};
+                if (!detail::satisfiesDeclaredBounds(*meta, value)) {
+                    satisfied = false;
+                }
+            }
+        });
+        return satisfied;
+    }
 }
 
 /// @brief Generates the JSON Schema for action type @p A, ready for a

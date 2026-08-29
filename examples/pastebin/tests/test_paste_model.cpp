@@ -41,10 +41,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <glaze/glaze.hpp>
 #include <iterator>
 #include <memory>
 #include <morph/core/registry.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/forms/forms.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <mutex>
 #include <optional>
@@ -413,6 +415,42 @@ TEST_CASE("CreatePaste's validate() rejects a fractional burnAfterReads", "[past
         CHECK(budget.hasValue());
         CHECK(budget.value()->isInteger());
     }
+}
+
+TEST_CASE("The burn-budget rules reach the served CreatePaste schema", "[pastebin][model][forms]") {
+    // `IMPLEMENTATION.md` rule 3: the DTO *is* the form definition, and there
+    // is no second source of truth. Until morph#310 there was one here — the
+    // three conditions above (>= 1, non-negative, whole) lived only in
+    // `validate()`, server-side, with nothing a client could gate on. The form
+    // therefore auto-fired into a guaranteed rejection, and the only remaining
+    // way to stop it was a hand-written QML conditional, which
+    // `examples/TESTING.md` presenter rule 6 forbids.
+    //
+    // `FieldMeta::minimum`/`::multipleOf` are the vocabulary that closes it:
+    // one declaration on the DTO, served as standard JSON-Schema keys and
+    // evaluated by the same `validate()` the model already runs.
+    auto const schema = morph::forms::schemaJson<pastebin::CreatePaste>();
+    auto parsed = glz::read_json<glz::generic>(schema);
+    REQUIRE(parsed.has_value());
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+    auto const& properties = parsed.value()["properties"];
+    REQUIRE(properties.contains("burnAfterReads"));
+    auto const& burn = properties["burnAfterReads"];
+    // ">= 1" — which is also what refuses 0 and every negative budget.
+    REQUIRE(burn.contains("minimum"));
+    CHECK(burn["minimum"].get<double>() == 1.0);
+    // "is a whole number", in the JSON-Schema spelling.
+    REQUIRE(burn.contains("multipleOf"));
+    CHECK(burn["multipleOf"].get<double>() == 1.0);
+    // Per *field*, not per unit: `PasteView::readCount` is the same `Reads`
+    // type over the same `Unit::count` and legitimately starts at 0, which is
+    // why `UnitTraits::bounds` could not have carried this.
+    auto viewParsed = glz::read_json<glz::generic>(morph::forms::schemaJson<pastebin::PasteView>());
+    REQUIRE(viewParsed.has_value());
+    auto const& readCount = viewParsed.value()["properties"]["readCount"];
+    CHECK_FALSE(readCount.contains("minimum"));
+    CHECK_FALSE(readCount.contains("multipleOf"));
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 }
 
 TEST_CASE("An over-length syntax is rejected, not silently truncated into the column", "[pastebin][model]") {
