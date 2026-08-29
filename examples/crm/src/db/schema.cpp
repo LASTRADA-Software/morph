@@ -197,6 +197,20 @@ LIGHTWEIGHT_SQL_MIGRATION(20260829000002, "Create crm_account_custom_values tabl
                            {"account_id", "field_name"});
 }
 
+LIGHTWEIGHT_SQL_MIGRATION(20260829000004, "Add per-field authz and choice options to crm_custom_field_defs") {
+    // AddNotRequiredColumn (nullable), not AddRequiredColumn — Lightweight's
+    // AlterTable has no "required column with a default" primitive, and any
+    // pre-existing row (none yet in this still-unreleased rung, but the
+    // migration itself must be written as if there could be) would have
+    // nothing to backfill a NOT NULL column with. CustomFieldDefRecord's own
+    // fields are nullable to match; the model translates a null read back to
+    // Role::Member / "" the same way it already does for OpportunityRecord's
+    // nullable expectedCloseValue columns.
+    plan.AlterTable("crm_custom_field_defs")
+        .AddNotRequiredColumn("min_role_to_edit", Integer())
+        .AddNotRequiredColumn("choice_options_json", NVarchar(1024));
+}
+
 LIGHTWEIGHT_SQL_MIGRATION(20260828000011, "Create crm_opportunity_replayed_ops table") {
     // Idempotency-key enforcement is the replay consumer's job, not the
     // queue's (docs/spec/offline/offline.md), and this is where this consumer

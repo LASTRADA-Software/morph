@@ -2,6 +2,7 @@
 #include "crm/models/account_model.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <algorithm>
 #include <glaze/glaze.hpp>
 #include <map>
 #include <morph/session/session.hpp>
@@ -77,15 +78,99 @@ void saveCustomValues(Lightweight::DataMapper& mapper, const db::AccountRecord& 
 /// `EXTENSION-BAG-SPIKE.md`'s identical finding for `EB_UpdateContact`) — a
 /// bag-carrying action's model is responsible for re-checking this against
 /// the live registry, since the compiled type has no way to.
-void requireCustomFieldsPresent(Lightweight::DataMapper& mapper, const std::map<std::string, CrmCustomValue>& extra) {
-    auto defs = mapper.Query<db::CustomFieldDefRecord>()
+/// @brief One custom field's live definition, decoded once for the whole
+///        validate pass.
+struct LiveCustomFieldDef {
+    CustomFieldType type = CustomFieldType::Text;
+    bool required = false;
+    Role minRoleToEdit = Role::Member;
+    std::vector<std::string> choiceOptions;
+};
+
+/// @brief Every custom field currently defined on `Account`, keyed by name.
+std::map<std::string, LiveCustomFieldDef> loadCustomFieldDefs(Lightweight::DataMapper& mapper) {
+    std::map<std::string, LiveCustomFieldDef> defs;
+    auto rows = mapper.Query<db::CustomFieldDefRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::CustomFieldDefRecord::entity>, "=",
                            static_cast<int>(CustomFieldEntity::Account))
                     .All();
-    for (const auto& def : defs) {
-        if (def.required.Value() && !extra.contains(std::string{def.name.Value().ToStringView()})) {
-            throw ValidationError{"required custom field '" + std::string{def.name.Value().ToStringView()} +
-                                  "' is missing"};
+    for (const auto& row : rows) {
+        LiveCustomFieldDef def{
+            .type = static_cast<CustomFieldType>(row.type.Value()),
+            .required = row.required.Value(),
+            .minRoleToEdit =
+                row.minRoleToEdit.Value().has_value() ? static_cast<Role>(*row.minRoleToEdit.Value()) : Role::Member,
+        };
+        if (row.choiceOptionsJson.Value().has_value()) {
+            static_cast<void>(
+                glz::read_json(def.choiceOptions, std::string{row.choiceOptionsJson.Value()->ToStringView()}));
+        }
+        defs.emplace(std::string{row.name.Value().ToStringView()}, std::move(def));
+    }
+    return defs;
+}
+
+/// @brief Validates @p extra against @p defs (7b): every key must name a
+///        live definition (an unrecognised key is rejected, not silently
+///        stored -- the written 7b decision for what happens once a field is
+///        deleted while a client still submits it, custom_field_dto.hpp's
+///        own doc comment), every required definition must have a value,
+///        and a Choice-typed value must name one of its declared options.
+///
+/// Money/Number/Boolean/Text type-matching is intentionally not re-checked
+/// here beyond what CrmCustomValue's own JSON shape already constrains --
+/// the framework's own lenient decode is the only type enforcement this
+/// pass adds; a submitted value of the wrong JSON kind for its declared
+/// type is out of this pass's scope, same as the original step-9
+/// requireCustomFieldsPresent only ever checked presence.
+/// @throws ValidationError if any of the above checks fails.
+void validateCustomFields(const std::map<std::string, LiveCustomFieldDef>& defs,
+                          const std::map<std::string, CrmCustomValue>& extra) {
+    for (const auto& [name, value] : extra) {
+        const auto found = defs.find(name);
+        if (found == defs.end()) {
+            throw ValidationError{"custom field '" + name + "' is not defined"};
+        }
+        if (found->second.type == CustomFieldType::Choice) {
+            if (!value.holds<std::string>() ||
+                std::ranges::find(found->second.choiceOptions, value.get<std::string>()) ==
+                    found->second.choiceOptions.end()) {
+                throw ValidationError{"custom field '" + name + "' must be one of its declared options"};
+            }
+        }
+    }
+    for (const auto& [name, def] : defs) {
+        if (def.required && !extra.contains(name)) {
+            throw ValidationError{"required custom field '" + name + "' is missing"};
+        }
+    }
+}
+
+/// @brief Requires minRoleToEdit for every custom field whose value in
+///        @p extra actually differs from @p before -- the same "round-trip
+///        is not a change" rule UpdateAccount::industry's own write-guard
+///        already uses, extended to custom fields (7b).
+///
+/// A field with no prior value counts as changed the instant any value is
+/// submitted for it -- there is no "unchanged" state to compare against.
+void requireCustomFieldRoleForChanges(AccountId accountId, const std::map<std::string, LiveCustomFieldDef>& defs,
+                                      const std::map<std::string, CrmCustomValue>& before,
+                                      const std::map<std::string, CrmCustomValue>& extra) {
+    for (const auto& [name, value] : extra) {
+        const auto beforeFound = before.find(name);
+        // glz::generic_u64 has no operator== of its own — compared by
+        // re-serialising both sides to JSON text instead, the same
+        // deliberately simple equality test entryNamesAccount()'s own DOM
+        // comparisons already use elsewhere in this file (compare the JSON,
+        // not a bespoke structural walk).
+        const bool changed = beforeFound == before.end() ||
+                             glz::write_json(beforeFound->second).value_or("") != glz::write_json(value).value_or("");
+        if (!changed) {
+            continue;
+        }
+        const auto defFound = defs.find(name);
+        if (defFound != defs.end() && defFound->second.minRoleToEdit != Role::Viewer) {
+            requireRole(accountId, defFound->second.minRoleToEdit);
         }
     }
 }
@@ -212,7 +297,13 @@ CreateAccountResult AccountModel::execute(const CreateAccount& action) {
     }
 
     Lightweight::DataMapper mapper;
-    requireCustomFieldsPresent(mapper, action.extra);
+    // No per-field authz check here (7b): minRoleToEdit gates *changing* a
+    // custom value on an *existing* account, and neither an account id nor
+    // an account-role row exists yet at CreateAccount time — the creator is
+    // implicitly the one setting the account's own initial state. Only
+    // UpdateAccount's own call site below re-checks minRoleToEdit, where a
+    // prior value and a real account/role both exist to compare against.
+    validateCustomFields(loadCustomFieldDefs(mapper), action.extra);
 
     db::AccountRecord row;
     row.name = Lightweight::SqlAnsiString<128>{action.name};
@@ -258,7 +349,14 @@ UpdateAccountResult AccountModel::execute(const UpdateAccount& action) {
         requireRole(action.accountId, Role::Manager);
     }
 
-    requireCustomFieldsPresent(mapper, action.extra);
+    const auto customFieldDefs = loadCustomFieldDefs(mapper);
+    validateCustomFields(customFieldDefs, action.extra);
+    // Per-field write-guard, extended to custom fields (7b) — same
+    // "resubmitting an unchanged value is not a change" rule industry's own
+    // guard above uses, checked against each field's own declared
+    // minRoleToEdit rather than one fixed threshold.
+    requireCustomFieldRoleForChanges(action.accountId, customFieldDefs, loadCustomValues(mapper, action.accountId),
+                                     action.extra);
 
     row.name = Lightweight::SqlAnsiString<128>{action.name};
     row.industry = Lightweight::SqlAnsiString<64>{action.industry};

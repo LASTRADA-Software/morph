@@ -201,6 +201,20 @@ struct CustomFieldDefRecord {
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"name"}> name;                               // 2
     Light::Field<int, Light::SqlRealName{"type"}> type{0};                                                 // 3
     Light::Field<bool, Light::SqlRealName{"required"}> required{false};                                    // 4
+    /// @brief `Role`'s underlying integer (7b: per-field authz). Nullable —
+    ///        `AlterTable` has no "required column with a default"
+    ///        primitive (`schema.cpp`'s own migration comment); the model
+    ///        reads a null back as `Role::Member`.
+    Light::Field<std::optional<int>, Light::SqlRealName{"min_role_to_edit"}> minRoleToEdit;  // 5
+    /// @brief JSON array of allowed values for a `CustomFieldType::Choice`
+    ///        field (7b); absent for every other type. Text, not a native
+    ///        array column — the same reason `AccountCustomValueRecord::
+    ///        valueJson` and `OpportunityConflictRecord::payload` store
+    ///        opaque JSON as text: Lightweight has no array/JSON column
+    ///        type. Nullable for the same `AlterTable` reason as
+    ///        `minRoleToEdit`; the model reads a null back as `"[]"`.
+    Light::Field<std::optional<Light::SqlDynamicAnsiString<1024>>, Light::SqlRealName{"choice_options_json"}>
+        choiceOptionsJson;  // 6
 };
 
 /// @brief One account's value for one custom field — the persisted

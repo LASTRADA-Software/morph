@@ -22,6 +22,7 @@ class CustomFieldModel {
 public:
     AddCustomFieldResult execute(const AddCustomField& action);
     ListCustomFieldsResult execute(const ListCustomFields& action);
+    DeleteCustomFieldResult execute(const DeleteCustomField& action);
 
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
         _journal.attach(std::move(log), std::move(entityKey));
@@ -38,3 +39,4 @@ private:
 BRIDGE_REGISTER_MODEL(crm::CustomFieldModel, "CustomFieldModel")
 BRIDGE_REGISTER_ACTION(crm::CustomFieldModel, crm::AddCustomField, "AddCustomField")
 BRIDGE_REGISTER_ACTION(crm::CustomFieldModel, crm::ListCustomFields, "ListCustomFields", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(crm::CustomFieldModel, crm::DeleteCustomField, "DeleteCustomField")

@@ -12,10 +12,10 @@
 //                    the custom value verbatim, the same "journal needs no
 //                    framework change" finding the spike already proved?
 //
-// Explicitly not covered here — named in custom_field_dto.hpp's own doc
-// comment and crm/README.md's §9 design decisions, not silently assumed:
-// per-field authz on custom fields, delete-a-field races, and unit/Choice-
-// backed custom values.
+// This file covers step 9's own scope only (core mechanism). The three
+// items step 9 named out of scope — per-field authz on custom fields,
+// delete-a-field races, and unit/Choice-backed custom values — are 7b and
+// live in test_custom_fields_7b.cpp instead.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>

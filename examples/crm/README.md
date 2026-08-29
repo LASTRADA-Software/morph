@@ -418,12 +418,64 @@ schemas/layouts). Build order (each step is a usable milestone):
    - **Required custom-field enforcement lives in the model, not
      `validate()`** — `CreateAccount::validate()`/`UpdateAccount::validate()`
      check only what a bag-free action already checked; `AccountModel`'s own
-     `requireCustomFieldsPresent()` queries the live `CustomFieldDefRecord`
+     `validateCustomFields()` queries the live `CustomFieldDefRecord`
      table and throws before any row is touched. `schemaJson<A>()`'s compiled
      `required` array cannot express a runtime-registered field's
      required-ness (the same limit `EXTENSION-BAG-SPIKE.md`'s
      `EB_UpdateContact::validate()` names), so this check has nowhere else to
      live.
+
+   **7b — the three items above named out of scope, built:**
+
+   - **Per-field authz.** `AddCustomField::minRoleToEdit` (default
+     `Role::Member`) gates *changing* a custom value on an *existing*
+     account, enforced by `requireCustomFieldRoleForChanges()` with the same
+     "resubmitting the current value is not a change" rule
+     `UpdateAccount::industry`'s own write-guard already uses — compared by
+     re-serialising both sides to JSON text (`glz::generic_u64` has no
+     `operator==` of its own), the same "compare the JSON, not a bespoke
+     structural walk" idiom `entryNamesAccount()` already uses elsewhere in
+     this file. Deliberately **not** checked on `CreateAccount`: neither an
+     account id nor an account-role row exists yet at creation time, so
+     there is nothing to compare a "change" against — the creator implicitly
+     sets the account's own initial custom-field state, the same way they
+     set `name`/`industry`/`website` with no role check either.
+   - **Delete-a-field-while-in-use.** `DeleteCustomField` cascade-deletes
+     every account's stored value for the field in the same transaction —
+     no orphaned rows. Once gone, `validateCustomFields()`'s own "every key
+     must name a live definition" check means a client that still submits
+     the deleted key (a stale open form, a queued offline edit, a journal
+     replay of an old payload) is rejected with a clear `ValidationError`,
+     not silently ignored (which would let the client believe its edit
+     landed) or stored as an unreachable orphan (which would grow the table
+     with data nothing can ever query or clean up). This was an explicit
+     three-way choice, decided with the user before building rather than
+     picked unilaterally: reject was chosen over silently-drop specifically
+     because a rejected write tells the field client its edit needs
+     attention, where a silent drop would not.
+   - **Money- and Choice-backed values.** `CustomFieldType::Money` reuses
+     `Money = Quantity<CrmUnit::usd, 2>` verbatim — crm has exactly one unit
+     family, so no generic unit-metadata system was needed, only a new
+     `CustomFieldType` enumerator; a `Money` custom value is written/read as
+     its ordinary `Quantity` JSON shape directly into the `CrmCustomValue`
+     DOM, no bespoke wire format. `CustomFieldType::Choice` adds
+     `AddCustomField::choiceOptions` (a fixed, admin-declared list, stored as
+     JSON text — the same "no native array/JSON column" reason
+     `AccountCustomValueRecord::valueJson` and
+     `OpportunityConflictRecord::payload` already store opaque JSON as text);
+     `validateCustomFields()` rejects a submitted value unless it is a
+     string matching one of the declared options — the referential
+     re-validation `EXTENSION-BAG-SPIKE.md`'s own finding doc calls for.
+     `Number`/`Boolean`/`Text` type-matching beyond what `CrmCustomValue`'s
+     own JSON shape already constrains is intentionally still not checked —
+     unchanged from step 9's own scope, and not one of the three items 7b
+     set out to close.
+   - **`AddCustomField`/`DeleteCustomField` still have no role check of
+     their own**, even after `minRoleToEdit` exists. `minRoleToEdit` gates
+     *changing a value on an account* (account-scoped), not *declaring or
+     removing the field* (schema-wide) — crm still has no global-admin role
+     concept anywhere in the rung, so this gap named in step 9 is
+     unchanged by 7b, not accidentally left open.
 10. *(stretch)* Saved views/filters as stored definitions executed by list
     actions. Report builders, dashboards, email sync, and workflow timers
     are **out of scope** — every researched product implements these as
