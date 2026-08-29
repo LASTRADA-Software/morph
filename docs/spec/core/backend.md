@@ -32,6 +32,7 @@ and react to backend changes.
 - [Error types](#error-types)
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
+  - [Per-model execute ordering](#per-model-execute-ordering)
 - [Server-side observability](#server-side-observability)
 - [Serving action schemas](#serving-action-schemas)
 - [`PayloadCompleteness` — enforcing the action-evolution policy](#payloadcompleteness--enforcing-the-action-evolution-policy)
@@ -364,7 +365,14 @@ server.
    hook allows all, so behaviour is unchanged unless an ownership-enforcing
    authorizer overrides it; `env.session` already carries the verified principal
    stamped in step 2, so the hook compares the recorded owner against it.
-5. **Dispatch on the strand.** Posts to the model's strand a task that installs a
+5. **Await this model's execute turn.** If this request took an execute-ordering
+   ticket (see [Per-model execute ordering](#per-model-execute-ordering) below),
+   block — on this pool thread, never on a strand — until every `execute` for
+   the same `modelId` that the transport handed in earlier has already made its
+   own strand post. Every rejection above this point released its ticket
+   without ever waiting here, so a "model not found"/"unauthorized"/"server
+   busy" reply for one request can never be what a later one is stuck behind.
+6. **Dispatch on the strand.** Posts to the model's strand a task that installs a
    `ScopedContext` from the (now possibly rewritten) `env.session`, calls
    `dispatch(modelType, actionType, *holder, body)` on the server's dispatcher,
    and replies `ok` with the serialised result. Any `std::exception` thrown by
@@ -376,7 +384,8 @@ server.
    external `shared_ptr` could drop first, leaving the dispatcher dangling (a
    use-after-free) or the reply lost so a client `Completion` hangs forever. The
    task reads the dispatcher via `self->_dispatcher`, never a bare reference
-   capture. See concurrency_and_lifetimes.md.
+   capture. See concurrency_and_lifetimes.md. The ticket is released as soon as
+   this post has been made, not when the strand task finishes.
 
 Any envelope that fails to decode produces `err` carrying the decode
 exception's message. An unrecognised `kind` produces `err "unknown envelope
@@ -450,6 +459,101 @@ points emit `executeInFlight`, and its strand task emits
 `ActionDispatcher::dispatch` call. All are no-ops unless a sink is installed
 via `morph::observe::setMetricSink`/`setTraceSink` — see
 [observability.md](observability.md).
+
+### Per-model execute ordering
+
+`handle()` posts every envelope to a shared worker pool, so two `execute`
+envelopes for the *same* model, sent back-to-back on one connection, are raced
+by two pool threads through identical pre-strand work
+(decode/authorize/authenticate/registry lookup). Whichever finishes that work
+first reaches `_strand.post(mid, ...)` first. `StrandExecutor` serialises what
+it is given, but it can only serialise it in the order it is given — so with
+more than one pool worker free, the model could observe two actions in the
+opposite order from the one they were sent in. That is a correctness problem
+for any model whose actions are not commutative, and it is invisible in a quiet
+run: it needs two workers genuinely concurrent to appear at all.
+
+`RemoteServer` closes it with a per-model ticket gate (`_executeGates`,
+`takeExecuteTicket`, `awaitExecuteTurn`, `releaseExecuteTicket` — all private
+to `remote.hpp`). The guarantee is:
+
+> For one `modelId`, the order in which `_strand.post` is called equals the
+> order in which `handle()` was called for those requests.
+
+**Where the order is captured.** A ticket is taken *synchronously inside
+`handle()`*, on whatever thread the transport calls it from, before anything is
+posted to the pool. That thread is where true arrival order still exists;
+everything after the pool post is concurrent by construction, so an ordering
+decided any later would be deciding it from an order that had already been
+lost. To know whether a ticket is needed, `handle()` cheaply peeks at the
+envelope's `kind` and `modelId` and throws the decode away. The peek is
+best-effort and changes nothing else: a message that fails to decode, or is not
+an `execute`, or names no `modelId`, simply takes no ticket, and
+`dispatchMessage` still performs the real decode on the pool thread and
+produces the canonical error reply for malformed input exactly as it would
+otherwise.
+
+**Where the order is enforced.** The ticket is waited on at one point only —
+immediately before `_strand.post` — and released immediately after that call
+returns. It deliberately does **not** span the strand task: once the post has
+happened in the right order, `StrandExecutor` owns the sequencing from there,
+and holding the ticket any longer would stall a different request's pre-strand
+work for no ordering benefit. The wait itself happens on a pool thread and
+blocks nothing else; a strand is never blocked by this gate.
+
+**Why the fast-reject path stays fast.** The obvious fix — move the whole
+pre-strand pipeline onto the model's strand — was tried and reverted, per
+`remote.hpp`'s own design notes: it collapses the fast-reject path into the
+same queue as the slow model's in-flight work, breaking the guarantee that a
+lookup against a since-reclaimed `modelId` resolves without waiting on some
+other, still-busy model (`tests/test_remote_connection_scope.cpp`, "an
+in-flight execute completes safely across a disconnect"). Gating only the
+moment of the post leaves a rejection returning at full speed.
+
+That is also why the release discipline matters: **every path that took a
+ticket must release it**, including the ones that never reach the strand (model
+not found, unauthorized, over limit, a validation throw). `dispatchExecute`
+funnels all of those through one `rejectAndRelease` helper so the rule cannot
+be missed at an individual call site. A ticket taken and never released would
+stall every later ticket for that model permanently.
+
+**Bookkeeping.** A gate is `{nextTicket, nextToRun, condition_variable}`, held
+in a map keyed by `ModelId` under a dedicated mutex. The entry is created on
+demand by the first ticket and **erased** once `nextToRun` catches up with
+`nextTicket` — a model with no in-flight `execute` leaves no trace, so the map
+does not grow across the server's lifetime. A waiter holds the gate by
+`shared_ptr` so a release that erases the entry mid-wait cannot pull it out
+from under it, and `awaitExecuteTurn` returns immediately if the entry is
+already gone.
+
+**What is not ordered.** Only same-model requests, and only relative to
+`handle()` call order:
+
+- **Across models, nothing is ordered** — that is the point of per-model
+  strands, and the gate is per-`modelId` for the same reason.
+- **Across threads, "send order" means "`handle()` call order"**. A single
+  transport connection delivers messages on one thread, so for one client the
+  two coincide. Two connections calling `handle()` concurrently for the same
+  model have no send order between them to preserve, and get whichever
+  interleaving the gate mutex hands out.
+- **Completion order is not constrained.** The gate orders the *posts*; how
+  long each action then takes on the strand is the strand's business.
+- **One path takes a ticket without releasing it**: an `execute` refused by the
+  shutdown gate in `dispatchMessage` (`err "server shutting down"`, see
+  [Graceful shutdown](#graceful-shutdown-beginshutdown--drainedwithin)) returns
+  before `dispatchExecute` is reached, and so before any `rejectAndRelease`.
+  This is benign only because `beginShutdown()` is irreversible: every later
+  `execute` is refused at the same gate and none of them ever reaches
+  `awaitExecuteTurn`, so nothing is left waiting — what remains is a leaked
+  map entry on a server that is shutting down. It is nonetheless the one
+  violation of the release rule stated above, and it is recorded here rather
+  than smoothed over: that invariant is what makes the rest of this section
+  true.
+
+`tests/test_remote_execute_ordering.cpp` pins the guarantee, forcing the
+interleaving deterministically (a two-thread pool plus an authorizer that
+sleeps for one call only) rather than waiting for a loaded machine to produce
+it by chance.
 
 ### Protocol-version negotiation
 
@@ -1226,7 +1330,12 @@ round-trip; model and GUI authors must not assume any two share a thread:
 
 On the server side, `RemoteServer` runs authorize/authenticate and the model
 lookup on the pool thread that `dispatchMessage` runs on, then runs
-`ActionDispatcher::dispatch` (and the `ScopedContext`) on the model strand.
+`ActionDispatcher::dispatch` (and the `ScopedContext`) on the model strand. A
+third thread is involved before either: `handle()`'s own calling thread — the
+transport's — is where an `execute`'s ordering ticket is taken, and the pool
+thread may then block briefly on that ticket before posting to the strand (see
+[Per-model execute ordering](#per-model-execute-ordering)). The strand itself
+is never blocked by that wait.
 Completion *callbacks* (`.then`/`.onError`) are delivered via the `cbExec`
 executor passed to `execute`, independent of all of the above.
 
@@ -1316,7 +1425,7 @@ thread to marshal onto.
 |---|---|
 | `RemoteServer(workerPool, dispatcher, registry)` | Allow-all authorizer. |
 | `RemoteServer(workerPool, authorizer, dispatcher, registry)` | Custom authorizer; null → allow-all. |
-| `handle(msg, reply)` | Async: posts to pool, decodes, dispatches, calls `reply` once. Unscoped (`cid == 0`). Thread-safe. |
+| `handle(msg, reply)` | Async: posts to pool, decodes, dispatches, calls `reply` once. Unscoped (`cid == 0`). Thread-safe. For an `execute` naming a `modelId`, takes that model's ordering ticket on the calling thread before posting — see [Per-model execute ordering](#per-model-execute-ordering). |
 | `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. Thread-safe. |
 | `handleInline(msg)` | Sync: runs `dispatchMessage` on the calling thread and returns the reply JSON; intended for `register`/`deregister` only. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Unscoped. |
 | `openConnection()` | Returns a fresh non-zero `ConnectionId` and opens an empty scope for it. Thread-safe. |
