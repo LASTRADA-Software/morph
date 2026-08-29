@@ -46,6 +46,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Same terms as rung-filter-lint below, and ci.yml's deprecation-lint and
+      # test-type-name-lint: a lint gate nobody tests reports green whether or
+      # not it still detects anything. The section-citation check (morph#316)
+      # exists because this very script carried a check that could not fail, so
+      # it is asserted to still fail before it is trusted to pass.
+      - name: Self-test the spec-citation checker
+        run: bash scripts/test_check_spec_citations.sh
+
       - name: Run prose-vs-manifest lint
         run: bash scripts/check_spec_citations.sh
 
