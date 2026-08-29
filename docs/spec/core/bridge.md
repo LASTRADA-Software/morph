@@ -13,6 +13,7 @@ that only know action names at runtime.
 - [`HandlerBinding`](#handlerbinding)
 - [`Bridge`](#bridge)
 - [`BridgeHandler<Model>`](#bridgehandlermodel)
+- [Registration readiness — `isBound()` / `whenBound()`](#registration-readiness--isbound--whenbound)
 - [`ActionExecuteRegistry`](#actionexecuteregistry)
   - [Why the key carries the sharing policy](#why-the-key-carries-the-sharing-policy)
 - [`BRIDGE_REGISTER_ACTION` and `registerActionExecutorOnce`](#bridge_register_action-and-registeractionexecutoronce)
@@ -64,7 +65,14 @@ struct HandlerBinding {
     std::string typeId;
     std::function<std::unique_ptr<IModelHolder>()> modelFactory;
     std::string contextKey;
+    // … shared-instance fields (`shared`, `primary`) — see shared_instances.md
     std::atomic<uint64_t> currentId{0};
+
+    // Registration-settled seam — see "Registration readiness" below.
+    std::mutex registrationMtx;
+    bool registrationInFlight = false;
+    std::vector<std::pair<std::function<void(bool)>,
+                          std::function<void(std::exception_ptr)>>> registrationWaiters;
 };
 ```
 
@@ -74,6 +82,17 @@ One record per registered model instance. `typeId` is the string
 backend. `contextKey` is an optional stable identity (e.g. account id) that
 travels in the `register` wire envelope for remote backends. `currentId` is
 the `ModelId` value the active backend assigned; 0 = unbound.
+
+The last three fields are the state behind
+[`isBound()` / `whenBound()`](#registration-readiness--isbound--whenbound).
+`registrationInFlight` is `true` from the moment `registerHandlerImpl` hands
+the binding's initial registration to `IBackend::registerModelAsync` (and that
+call returns `true`) until the resulting `onRegistered`/`onError` callback
+resolves; `registrationWaiters` holds the callbacks queued while it is.
+Both are guarded by `registrationMtx` — deliberately a mutex of the binding's
+own, not `Bridge::_mtx` or `_attachMtx`, because a waiter may be queued or
+resolved from either the registering thread or the backend's reply-delivering
+thread and must never block on the bridge's own locks.
 
 ## `Bridge`
 
@@ -428,6 +447,108 @@ if none is registered, the error is logged via `morph::log::logError`
 
 **`guiExecutor()`** returns the executor passed at construction.
 
+## Registration readiness — `isBound()` / `whenBound()`
+
+A handler built over a backend that offers `registerModelAsync` comes back
+**unbound**: `registerHandlerImpl` returns as soon as the request is sent, and
+`currentId` stays `0` until the reply arrives (`backend.md`,
+["Asynchronous registration"](backend.md#asynchronous-registration--registermodelasync)).
+`executeVia` fails fast with `"handler not bound"` for anything dispatched in
+that window. The window is unavoidable — it is a network round trip — so the
+contract this pair provides is not that it can be closed, but that a caller can
+**observe** it without reaching into the framework's internals.
+
+That is the point of these two being public API. `HandlerBinding` is an
+internal-linkage record ([`HandlerBinding`](#handlerbinding) above): the state
+that answers "is this handler usable yet" lives in a struct callers are not
+supposed to name, so before these seams existed the only ways to answer it were
+to poll `binding->currentId` directly — which is what the WASM spike and the
+testkit did — or to guess with a timer. Both couple caller code to a field
+whose synchronisation is the bridge's business.
+
+**`isBound()`** is the synchronous, point-in-time answer: a lock-free atomic
+read of `currentId != 0`. It is a *snapshot*, not a guarantee — the binding can
+become bound (or, via `deregisterHandler`, unbound) the instant after it
+returns. Correct uses are ones where a stale answer is harmless: a poll from a
+UI timer, an assertion in a test, a readiness gate that will be re-consulted.
+`Bridge::isBound(binding)` is the free-function form; `BridgeHandler::isBound()`
+forwards to it.
+
+**`whenBound()`** is the awaitable counterpart, and exists so that a caller
+wanting to dispatch the moment registration settles does not have to invent a
+polling loop for it. It returns `Completion<bool>`, delivered on the handler's
+GUI executor like every other completion the class hands out, and resolves on
+exactly one of three paths:
+
+| Binding state when called | Resolution |
+|---|---|
+| Already bound | `true`, immediately (before the function returns). |
+| An async registration is in flight | `true` once `onRegistered` fires; the registration's failure via `.onError(...)` if `onError` fires instead. |
+| Nothing in flight and still unbound | `false`, immediately. |
+
+The third row is the one worth stating explicitly, because "false" and "an
+error" are different answers to different questions. `false` means *there is
+nothing to wait for* — no async registration was ever started for this binding,
+so the completion resolves rather than hanging forever on a reply that is not
+coming. It is reachable in two ways: a `shared` binding (`registerSharedHandler`
+files the binding but dispatches nothing, since a shared registration waits for
+a primary), and the narrow window before `registerHandlerImpl` has run at all,
+which the pre-built-binding `registerHandler` overload exposes by handing the
+caller the `shared_ptr` first. An ordinary non-shared handler is always either
+bound or mid-registration by the time anyone can observe it, so it never sees
+`false`.
+
+Three ordering rules make the above hold, and each exists because the obvious
+implementation would be wrong:
+
+- **`registrationInFlight` is set *before* the backend call, not after.** No
+  backend documented here invokes `onRegistered` synchronously from inside
+  `registerModelAsync`, but one could; setting the flag afterwards would leave
+  a window in which the registration has already resolved while a concurrent
+  `whenBound()` still reads "nothing in flight" and answers `false`.
+- **`whenBound()` re-checks `isBound()` under `registrationMtx` after its
+  lock-free check.** The resolving callback binds the id and settles the
+  waiters as two steps; a caller landing between them would otherwise queue a
+  waiter onto a list that has already been drained, and wait forever.
+- **The synchronous fallback settles waiters too.** When `registerModelAsync`
+  returns `false` and `registerHandlerImpl` falls back to
+  `registerModelWithContext`, it routes through the same
+  `resolveRegistrationWaiters` rather than clearing the flag directly — a
+  `whenBound()` call that raced into the window while the flag was still `true`
+  has a real `Completion` outstanding, and nothing else would ever settle it.
+
+Waiters are settled **exactly once**, by whichever callback resolves first: the
+resolver swaps the waiter list out under `registrationMtx`, clears
+`registrationInFlight`, and invokes the callbacks outside the lock. This covers
+the stale-reply case too — a success callback whose id is discarded (because a
+`switchBackend()` already moved past this registration, or because the `Bridge`
+itself is gone) still settles the waiters, since the binding's *initial
+registration attempt* has finished either way and nothing further is coming to
+settle them. Note that a discarded reply settles waiters through the failure
+arm, and the only failure it has to report is the absence of a result, so what
+reaches `.onError(...)` on that path is a **null** `exception_ptr` rather than a
+diagnostic: treat a `whenBound()` error as "registration did not complete", not
+as a value to rethrow.
+
+Scope limits worth knowing, because each is a question `whenBound()` looks like
+it answers and does not:
+
+- **It tracks the initial registration only.** `registerHandlerImpl` is the
+  sole writer of `registrationInFlight`. Re-registration by `switchBackend()`
+  and by the reconnect handler is synchronous and never sets it, so
+  `whenBound()` says nothing about a backend swap or a reconnect in progress.
+- **It does not track the shared attach path.** `attachHandler`/`ensureBound`
+  and their async counterparts bind a shared handler without going through
+  `registerHandlerImpl`, so for an `AllowShared` handler `whenBound()` is only
+  ever `isBound()` in awaitable clothing: `true` if the attach has already
+  landed, `false` immediately if it has not, never a wait. Gate a shared
+  handler on the `Completion` its own keyed `execute()` returns, which does
+  carry the attach ([shared_instances.md](shared_instances.md)).
+- **`true` means bound, not reachable.** It reports that the backend assigned
+  this binding an id, not that the transport is still up; the socket can drop
+  the moment after.
+
+
 ## `ActionExecuteRegistry`
 
 Process-level singleton (`instance()`). Maps a **three-part key** —
@@ -610,6 +731,13 @@ publishes (`HandlerBinding::contextKey`/`primary`, which every other reader
 takes that lock for); `ensureBoundAsync`'s publishes only the atomic
 `currentId` and needs no lock at all.
 
+`whenBound()` synchronises on the *binding's* `registrationMtx`, never on a
+`Bridge` mutex, and never holds it across a callback: the resolver swaps the
+waiter list out under the lock and invokes the callbacks after releasing it.
+That is what lets a waiter be queued from a GUI thread and settled from a
+backend's transport thread without either blocking on the bridge's own locks —
+see [Registration readiness](#registration-readiness--isbound--whenbound).
+
 `subscribe`/`unsubscribe` mutate the bridge's subscription registry under
 `_subMtx`. Callbacks never run under that mutex: `publishResult` snapshots the
 matching sinks under the lock and invokes them outside it, marshalled to the
@@ -675,6 +803,8 @@ make teardown order-independent.)
 | `executeDeadline` | `std::chrono::milliseconds executeDeadline() const` | Returns the installed deadline; `0` when disabled. |
 | `setPrincipal` | `void setPrincipal(session::Principal)` | Installs the verified `Principal`, readable outside a dispatch. Pass `Principal{}` to clear (sign-out). |
 | `currentPrincipal` | `session::Principal currentPrincipal() const` | Returns a snapshot of the installed `Principal`; default-constructed if none was ever set. |
+| `isBound` | `[[nodiscard]] static bool isBound(const shared_ptr<HandlerBinding>&) noexcept` | Lock-free `currentId != 0`. Point-in-time snapshot; see [Registration readiness](#registration-readiness--isbound--whenbound). |
+| `whenBound` | `[[nodiscard]] Completion<bool> whenBound(const shared_ptr<HandlerBinding>&, IExecutor* cbExec)` | Resolves `true` once the binding's initial registration settles, `false` immediately when nothing is in flight, or the registration's error via `onError`. Delivered on `cbExec`. Waiters settle exactly once. |
 | `pendingCalls` | `[[nodiscard]] size_t pendingCalls() const noexcept` | Count of `executeVia()` dispatches not yet resolved. Relaxed atomic load; see the `Bridge` section above. |
 
 ### `BridgeHandler<Model>`
@@ -693,6 +823,8 @@ make teardown order-independent.)
 | `attach(key)` | `void attach(const PrimaryKeyOf<Model>&)` | Attaches/re-points a shared handler. |
 | `primary()` | `optional<PrimaryKeyOf<Model>> primary()` | The handler's current primary, or empty. |
 | `instances()` | `Completion<vector<PrimaryKeyOf<Model>>> instances()` | Snapshot of live shared keys. |
+| `isBound` | `[[nodiscard]] bool isBound() const noexcept` | Forwards to `Bridge::isBound(binding())`. `false` while an async registration is still outstanding. |
+| `whenBound` | `[[nodiscard]] Completion<bool> whenBound()` | Forwards to `Bridge::whenBound(binding(), guiExecutor())`. The supported way to gate a first dispatch on registration settling — see [Registration readiness](#registration-readiness--isbound--whenbound). |
 | `guiExecutor` | `IExecutor* guiExecutor() const noexcept` | Returns the callback executor. |
 | `binding` | `const shared_ptr<HandlerBinding>& binding() const` | Returns the underlying binding. |
 
@@ -703,7 +835,10 @@ make teardown order-independent.)
 | `typeId` | `string` | `ModelTraits<Model>::typeId()`. |
 | `modelFactory` | `function<unique_ptr<IModelHolder>()>` | Factory for re-registration on backend switch. |
 | `contextKey` | `string` | Stable identity for remote backends (optional, empty by default). |
-| `currentId` | `atomic<uint64_t>` | Backend-assigned model id; 0 = unbound. |
+| `currentId` | `atomic<uint64_t>` | Backend-assigned model id; 0 = unbound. Read lock-free by `isBound()`. |
+| `registrationMtx` | `mutex` | Guards the two fields below. The binding's own lock, not `Bridge::_mtx`/`_attachMtx`: it is taken from the backend's reply-delivering thread as well as the registering one. |
+| `registrationInFlight` | `bool` | `true` from just before `registerModelAsync` is called until its callback settles. The synchronous fallback path never leaves it set. |
+| `registrationWaiters` | `vector<pair<function<void(bool)>, function<void(exception_ptr)>>>` | `whenBound()` callbacks queued while a registration is in flight; invoked and cleared exactly once, by the same call that clears `registrationInFlight`. |
 
 ## Design decisions
 

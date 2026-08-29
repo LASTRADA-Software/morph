@@ -176,7 +176,9 @@ this feature existed. If it returns `true`, the binding is returned **unbound**
 (`currentId == 0`) — `executeVia` fails fast with "handler not bound" for any
 call made before `onRegistered` fires, so a caller using the async path must
 wait for registration (e.g. gate its UI on it) rather than fire an action
-immediately after constructing the handler.
+immediately after constructing the handler. `BridgeHandler::isBound()` and
+`whenBound()` are the public seams for doing that without polling the binding's
+`currentId` directly — see `bridge.md`, "Registration readiness".
 
 **Staleness guard.** The success callback captures a `weak_ptr<IBackend>`
 pinned to the backend the request was issued against, plus the Bridge's
