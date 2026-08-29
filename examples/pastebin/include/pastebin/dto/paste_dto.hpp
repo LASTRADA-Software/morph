@@ -3,7 +3,9 @@
 
 #include <array>
 #include <cstddef>
+#include <morph/forms/forms.hpp>
 #include <morph/util/datetime.hpp>
+#include <morph/util/rational.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -91,41 +93,68 @@ struct CreatePaste {
     static constexpr std::array<std::string_view, 4> optionalFields{"expiresAt", "burnAfterReads", "visibility",
                                                                     "editability"};
 
+    /// @brief The burn budget's own rules, declared where the schema can serve
+    ///        them (`morph::forms::FieldMeta`, morph#310).
+    ///
+    /// `minimum = 1` and `multipleOf = 1` are the whole of the burn-budget
+    /// rule: at least one read, and a whole number of them. Both are checked
+    /// by `validate()` below through `allFieldBoundsSatisfied` — the same
+    /// declaration, not a second copy of it — and both reach the client as
+    /// standard JSON-Schema `minimum`/`multipleOf` on `burnAfterReads`.
+    ///
+    /// Before this existed the rule was enforced only here, server-side: the
+    /// schema-driven create form had nothing to gate on, so it auto-fired into
+    /// a guaranteed rejection and the client could not say why in advance.
+    /// That was a second source of truth in all but name
+    /// (`examples/IMPLEMENTATION.md` rule 3), and the alternatives were both
+    /// closed — `UnitTraits::bounds` is per *unit*, so a floor of 1 would also
+    /// have constrained `PasteView::readCount`, which legitimately starts at
+    /// 0; and a hand-written QML conditional is forbidden by
+    /// `examples/TESTING.md` presenter rule 6.
+    ///
+    /// Note that "no burn limit" is still spelled by leaving the field empty:
+    /// an unengaged `Quantity` is vacuously within its bounds, and
+    /// `optionalFields` above keeps it out of `required`.
+    static constexpr std::array<::morph::forms::FieldMeta, 1> fieldMetadata{
+        ::morph::forms::FieldMeta{.field = "burnAfterReads",
+                                  .minimum = ::morph::math::Rational{1, ::morph::math::DecimalPlaces{1}},
+                                  .multipleOf = ::morph::math::Rational{1, ::morph::math::DecimalPlaces{1}}},
+    };
+
     [[nodiscard]] bool validate() const noexcept {
         if (content.empty() || syntax.empty() || syntax.size() > kMaxSyntaxBytes) {
             return false;
         }
-        // Reads' own doc comment (units.hpp) puts the whole-number constraint
-        // on this DTO to enforce, not on the type — `Quantity` requires
-        // `DeclaredDecimals >= 1`, so `Reads` represents tenths exactly and
-        // `2.5` is a perfectly ordinary value of it, one that survives the
-        // wire codec (a `Rational` travels as its own num/den pair) and
-        // arrives here intact. This is where the premise stops being an
-        // aspiration: without the `isInteger()` test below, a fractional
-        // budget was accepted and then quietly rewritten into a *different*
-        // budget by `paste_model.cpp`'s `countOf`, whose `math::floor` turned
-        // 5/2 into 2 on the way into the row — the create reported success and
-        // `GetPaste` reported the budget as 2. That is the same silent
-        // data-loss class `kMaxSyntaxBytes` exists to prevent (see its doc
-        // comment) reaching the row through a different door, and it gets the
-        // same answer: refuse the input rather than rewrite it. A rung that
-        // ever *wants* "2.5 means 2" must say so in `Reads` (whose declared
-        // precision is the only honest place for it), not by letting a
-        // conversion helper decide.
+        // The burn-budget rule, evaluated from the `fieldMetadata` declaration
+        // above rather than restated here — which is the point: the client is
+        // served the identical `minimum`/`multipleOf`, so the two cannot drift.
         //
-        // A budget of 0 (or negative) is a third guise of "accepted, then
-        // behaves as something else": both are whole numbers, but
-        // PasteModel::execute(GetPaste)'s burn check
+        // What the two bounds each buy, since neither is arbitrary:
+        //
+        // `multipleOf = 1` — Reads' own doc comment (units.hpp) puts the
+        // whole-number constraint on this DTO to enforce, not on the type:
+        // `Quantity` requires `DeclaredDecimals >= 1`, so `Reads` represents
+        // tenths exactly and `2.5` is a perfectly ordinary value of it, one
+        // that survives the wire codec (a `Rational` travels as its own
+        // num/den pair) and arrives here intact. Without the integrality
+        // check, a fractional budget was accepted and then quietly rewritten
+        // into a *different* budget by `paste_model.cpp`'s `countOf`, whose
+        // `math::floor` turned 5/2 into 2 on the way into the row — the create
+        // reported success and `GetPaste` reported the budget as 2. That is
+        // the same silent data-loss class `kMaxSyntaxBytes` exists to prevent
+        // (see its doc comment) reaching the row through a different door, and
+        // it gets the same answer: refuse the input rather than rewrite it. A
+        // rung that ever *wants* "2.5 means 2" must say so in `Reads` (whose
+        // declared precision is the only honest place for it), not by letting
+        // a conversion helper decide.
+        //
+        // `minimum = 1` — a budget of 0 (or negative) is a third guise of
+        // "accepted, then behaves as something else": both are whole numbers,
+        // but PasteModel::execute(GetPaste)'s burn check
         // (`readCount >= *burnAfterReads`) is already true before the first
         // read ever happens, so the paste is born unreadable — accepted by
         // `validate()`, then permanently `Burned` on the very first `GetPaste`.
-        if (burnAfterReads.hasValue()) {
-            const auto& budget = *burnAfterReads.value();
-            if (!budget.isInteger() || budget.isZero() || budget.isNegative()) {
-                return false;
-            }
-        }
-        return true;
+        return ::morph::forms::allFieldBoundsSatisfied(*this);
     }
 };
 
