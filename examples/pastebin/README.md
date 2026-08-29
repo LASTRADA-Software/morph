@@ -342,8 +342,10 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
 - [x] **Burn-after-read and expiry work**, with the atomicity mechanism, its
   `RETURNING` limitation and the ladder-wide journal position documented above.
 - [x] **Model unit tests**, following [`../bank/tests`](../bank/tests)
-  conventions: 40 cases (`grep -c '^TEST_CASE' tests/test_paste_model.cpp`)
-  covering the burn/expiry edges, the `CreatePaste` validation rules, the
+  conventions: 41 cases (`grep -c '^TEST_CASE' tests/test_paste_model.cpp`)
+  covering the burn/expiry edges, the `CreatePaste` validation rules
+  (including the whole-number `burnAfterReads` rule and its declared
+  `minimum`/`multipleOf` bounds reaching the served schema), the
   hostile-content corpus replay, size limits, duplicate create, id
   collisions, the fail-open security delta and `hello` version negotiation.
 - [x] **Findings filed rather than worked around** — this rung's actual
@@ -383,8 +385,9 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   produced it (`<ns>-NNN-<kebab-slug>.md`) precisely because the flat sequence
   did not survive parallel branches — two disjoint series were allocated
   independently and both merged, so the same number came to mean different
-  things on different branches. `docs/findings/` holds only `r5-001`…`r5-004`
-  today, and the bare numbers this rung's prose used to carry (`017`, `018`,
+  things on different branches. Every file in `docs/findings/` today carries
+  a namespaced id (`r4-001`, `r4-002`, `r5-001`…`r5-004`), and the bare
+  numbers this rung's prose used to carry (`017`, `018`,
   `021`, `023`, `026`) resolve to no file at all. They have been replaced
   throughout by a description of the gap and a pointer to the code that closes
   it, which is what a reader actually needs and what survives a renumbering.

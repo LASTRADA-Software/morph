@@ -2,7 +2,7 @@
 
 **Status: built** — the rung named a design annex under the [round-7
 program decision](../LADDER.md) has since been constructed: §1–§7 below are
-all implemented, with 130 `TEST_CASE`s across [`tests/`](tests) and a full
+all implemented, with 139 `TEST_CASE`s across [`tests/`](tests) and a full
 QML GUI under [`gui/qml/`](gui/qml); see [Definition of
 done](#definition-of-done) for what that does and does not mean. A
 lightweight Laboratory Information Management System:
@@ -190,7 +190,7 @@ transitions; journal as regulatory audit.
 ## Resolved design decisions
 
 Recorded as they are taken, per the [`LADDER.md`](../LADDER.md) discipline
-rule. §1–§7 are all built, with 130 `TEST_CASE`s across
+rule. §1–§7 are all built, with 139 `TEST_CASE`s across
 [`tests/`](tests) and a full QML GUI under [`gui/qml/`](gui/qml).
 
 ### 1. Analysis identity and analysis version are separate tables (§1)
