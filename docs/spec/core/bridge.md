@@ -14,6 +14,7 @@ that only know action names at runtime.
 - [`Bridge`](#bridge)
 - [`BridgeHandler<Model>`](#bridgehandlermodel)
 - [`ActionExecuteRegistry`](#actionexecuteregistry)
+  - [Why the key carries the sharing policy](#why-the-key-carries-the-sharing-policy)
 - [`BRIDGE_REGISTER_ACTION` and `registerActionExecutorOnce`](#bridge_register_action-and-registeractionexecutoronce)
 - [`MemberPointerTraits`](#memberpointertraits)
 - [Subscription semantics](#subscription-semantics)
@@ -355,7 +356,11 @@ handler's binding and GUI executor. Default session is attached
 automatically by the bridge.
 
 **`executeJson(actionType, bodyJson)`** type-erased variant. Looks up the
-executor in `ActionExecuteRegistry::instance()` and dispatches. The
+executor in `ActionExecuteRegistry::instance()` — under *this handler's own*
+`Sharing` policy, not unconditionally under `NoSharing`, so the executor casts
+the `void* this` back to the instantiation it actually is (see
+[Why the key carries the sharing policy](#why-the-key-carries-the-sharing-policy)) —
+and dispatches. The
 registry's executor deserializes the JSON body via
 `ActionTraits<Action>::fromJson`, then — before invoking the handler —
 **reconciles Quantity precision, overwrites any declared computed fields
@@ -425,22 +430,51 @@ if none is registered, the error is logged via `morph::log::logError`
 
 ## `ActionExecuteRegistry`
 
-Process-level singleton (`instance()`). Maps `(modelTypeId, actionTypeId)`
-pairs to `Executor` values (`std::function<Completion<string>(void*,
-string_view)>`). The backing store is
-`unordered_map<pair<string,string>, Executor, morph::model::detail::PairKeyHash>` —
-the same `PairKeyHash` the server-side `ActionDispatcher` uses to key its
-`(modelId, actionId)` map. Populated by
+Process-level singleton (`instance()`). Maps a **three-part key** —
+`(modelTypeId, actionTypeId, typeid(Sharing))` — to `Executor` values
+(`std::function<Completion<string>(void*, string_view)>`). The backing store is
+`unordered_map<Key, Executor, KeyHash>`, where `Key` is
+`{string modelId; string actionId; std::type_index sharing;}` and `KeyHash`
+mixes the `type_index`'s `hash_code()` into the `morph::model::detail::PairKeyHash`
+the server-side `ActionDispatcher` uses over the two strings alone. Populated by
 `registerActionExecutorOnce<Model, Action>()`, which
 `BRIDGE_REGISTER_ACTION` calls during static initialization.
 
-**`execute(modelId, actionId, handler, bodyJson)`** looks up the executor and
-invokes it. The executor `static_cast`s the `void*` back to
-`BridgeHandler<Model>*`, deserializes the JSON body, reconciles Quantity fields
-to their declared precision, enforces `ActionValidator<Action>::ready` (throwing
-`std::invalid_argument` on failure), calls `handler->execute<Action>()`, and
-serializes the result back to JSON. Throws `std::runtime_error` if no executor is
-registered for the pair.
+### Why the key carries the sharing policy
+
+This registry is the one place in the framework that recovers a typed handler
+from a `void*`, and `BridgeHandler<Model, Sharing>` is a class template over
+its sharing policy: `BridgeHandler<M, NoSharing>` and
+`BridgeHandler<M, AllowShared>` are unrelated types. An executor that
+`static_cast`s to one of them and is handed the other produces a pointer to the
+wrong type — and, concretely, one whose `kShared` constant answers for the
+wrong instantiation. `kShared` is what decides whether a payload- or
+result-keyed action performs its attach-or-promote step, so the failure of a
+single `NoSharing`-only executor is not a crash or a thrown error but a shared
+handler whose keyed action silently never acquires its instance.
+
+Type erasure removes the compiler's ability to catch that, so the key restores
+it by hand: `registerAction` files **one executor per sharing policy the
+framework defines**, and `execute` is a template on `Sharing` so each call site
+names the entry matching its own handler. `BridgeHandler::executeJson` passes
+its own `Sharing` (see [`BridgeHandler<Model>`](#bridgehandlermodel) above), so
+the match holds by construction for every in-framework call site.
+
+Both executors are built from the same generic-lambda template, instantiated
+once for each tag, so their bodies cannot drift apart — the difference between
+them is exactly the type named in the `static_cast` and nothing else. The cost
+is one extra closure per registered action at static-init time, not per call.
+
+**`execute<Sharing>(modelId, actionId, handler, bodyJson)`** looks up the
+executor and invokes it. The executor `static_cast`s the `void*` back to
+`BridgeHandler<Model, Sharing>*`, deserializes the JSON body, reconciles
+Quantity fields to their declared precision, enforces
+`ActionValidator<Action>::ready` (throwing `std::invalid_argument` on failure),
+calls `handler->execute<Action>()`, and serializes the result back to JSON.
+Throws `std::runtime_error` if no executor is registered for the key — which
+includes a correctly registered action requested with a sharing tag other than
+`NoSharing`/`AllowShared`, since only those two are ever filed (see
+[Limitations](#limitations)).
 
 **Requirement**: every translation unit calling `BRIDGE_REGISTER_ACTION`
 must include `bridge.hpp` (directly or transitively), because
@@ -621,8 +655,8 @@ make teardown order-independent.)
 | Member | Signature | Notes |
 |---|---|---|
 | `instance` | `static ActionExecuteRegistry& instance()` | Process-level singleton. |
-| `registerAction` | `template<Model, Action> void registerAction(string_view modelId, string_view actionId)` | Registers an executor that deserializes JSON → `ActionTraits::fromJson`, calls `BridgeHandler<Model>::execute<>`, serializes result back. Defined out-of-line after `BridgeHandler`. |
-| `execute` | `Completion<string> execute(string_view modelId, string_view actionId, void* handler, string_view bodyJson) const` | Lookup + invoke. Throws `runtime_error` on unknown pair. |
+| `registerAction` | `template<Model, Action> void registerAction(string_view modelId, string_view actionId)` | Registers an executor that deserializes JSON → `ActionTraits::fromJson`, calls `BridgeHandler<Model, Sharing>::execute<>`, serializes result back. Files **two** entries — one per sharing tag (`NoSharing`, `AllowShared`) — from one generic-lambda template. Defined out-of-line after `BridgeHandler`. |
+| `execute` | `template<Sharing> Completion<string> execute(string_view modelId, string_view actionId, void* handler, string_view bodyJson) const` | Lookup + invoke, under the caller's own sharing policy. Key is `(modelId, actionId, typeid(Sharing))`. Throws `runtime_error` on an unknown key. |
 
 ### `Bridge`
 
@@ -685,7 +719,8 @@ make teardown order-independent.)
 | Action readiness | **`ActionValidator<Action>::ready(snapshot)`** | Framework-agnostic validation — each action struct defines its own required-field semantics. The bridge never interprets action fields. |
 | Local-path validation enforcement | **`localOp` checks `ActionValidator<Action>::ready` before `Model::execute`** | Closes the gap where an `Action` built by hand and dispatched via `BridgeHandler::execute<Action>()` (without a client-side gate) reached the model unvalidated; mirrors `ActionDispatcher::registerAction`'s server-side runner (`registry.md`). Backward compatible: `ready()` defaults to `true` for actions with no validator. |
 | Subscription keys | **`string_view` into static storage** | `ActionTraits::typeId()` returns `constexpr` string literals with static duration. The `unordered_map` holds non-owning keys; no allocation, no lifetime issues. |
-| `executeJson` | **Separate registry, not a vtable** | The action type is unknown at the call site. A flat `unordered_map<(modelId, actionId), Executor, PairKeyHash>` lets any translation unit register its actions without central registration or RTTI. |
+| `executeJson` | **Separate registry, not a vtable** | The action type is unknown at the call site. A flat `unordered_map` keyed on registered ids lets any translation unit register its actions without central registration or RTTI. |
+| Executor keying | **`(modelId, actionId, typeid(Sharing))` — one executor per sharing policy** | The executor is the only place a typed handler is recovered from a `void*`, and `BridgeHandler<M, NoSharing>` / `BridgeHandler<M, AllowShared>` are unrelated types. A single `NoSharing`-only executor handed a shared handler would `static_cast` to the wrong instantiation, so its `kShared` — which gates a payload-/result-keyed action's attach-or-promote step — would answer for the wrong one and that step would silently never run. No runtime type information survives to check it by then, so the key carries the distinction instead: two entries per action, built from one generic-lambda template so they cannot diverge, and `execute` templated on `Sharing` so each call site selects its own. Costs one closure per registered action at static-init time, not per call. |
 | `registerActionExecutorOnce` | **`inline` definition in header** | The function is forward-declared in `registry.hpp` (`morph::model::detail`) but defined `inline` in `bridge.hpp`, after `ActionExecuteRegistry`. `inline` lets that definition be instantiated in every TU that transitively includes `bridge.hpp` without an ODR/link violation. The registration runs from the anonymous-namespace initializer the macro emits. Because the definition lives only in `bridge.hpp`, any TU expanding `BRIDGE_REGISTER_ACTION` must include it (directly or transitively) or the link fails with an unresolved symbol. |
 | `pendingCalls()` counter placement | **One `std::atomic<size_t>` on `Bridge`, not per-`HandlerBinding` or per-backend** | Issue #45 asks for client-side quiescence — "has everything settled" — which is a property of the `Bridge` as a whole (the thing the GUI actually holds one of), not of any single handler or backend. A per-binding counter would force a caller wanting a global "still loading" signal to sum across every live `BridgeHandler`; a per-backend counter (mirroring `LocalBackend::_inFlight`/`RemoteServer`'s `_inFlightExecutes`, both server/backend-side) would miss calls dispatched before a `switchBackend()` mid-flight. Incrementing/decrementing directly in `executeVia()` — the one chokepoint every dispatch path (`execute<Action>`, `executeJson`) funnels through — needs no cooperation from `IBackend` implementations at all. |
 
@@ -701,12 +736,24 @@ make teardown order-independent.)
   error rather than being transparently retried.
 - **`ActionExecuteRegistry::execute` trusts its `void* handler`.** The
   type-erased entry point takes a `void*` that each registered executor
-  `static_cast`s back to `BridgeHandler<Model>*` for the model type it was
-  registered under. Passing a handler whose model type does not match the
-  `modelId` is undefined behaviour — there is no runtime type check. In
-  practice `BridgeHandler::executeJson` always passes `this` with a matching
-  `ModelTraits<Model>::typeId()`, so the invariant holds by construction; the
-  hazard only exists for callers that invoke the registry directly.
+  `static_cast`s back to `BridgeHandler<Model, Sharing>*` for the model type
+  and sharing policy it was registered under. Passing a handler whose model
+  type does not match the `modelId`, or whose sharing policy does not match the
+  `Sharing` template argument, is undefined behaviour — there is no runtime
+  type check on either half. In practice `BridgeHandler::executeJson` always
+  passes `this` with a matching `ModelTraits<Model>::typeId()` *and* its own
+  `Sharing`, so the invariant holds by construction; the hazard only exists for
+  callers that invoke the registry directly.
+- **The sharing half of the key is a closed set of two by convention, not by
+  construction.** `registerAction` enumerates `NoSharing` and `AllowShared`
+  explicitly, but `BridgeHandler`'s `Sharing` parameter is unconstrained:
+  nothing rejects `BridgeHandler<M, MyOwnTag>` at compile time. Such a handler
+  behaves as `NoSharing` everywhere (`kShared` is
+  `is_same_v<Sharing, AllowShared>`) *except* `executeJson`, which throws
+  "unknown action for executeJson" for an action that *is* registered, because
+  no executor was ever filed under its `type_index`. A concept constraining
+  `Sharing` to the two tags would make that a compile error instead; none
+  exists today.
 
 ## Cross-references
 

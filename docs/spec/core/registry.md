@@ -750,6 +750,7 @@ class ActionExecuteRegistry {  // namespace morph::bridge, declared in bridge.hp
     using Executor = std::function<::morph::async::Completion<std::string>(void*, std::string_view)>;
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId);
+    template <typename Sharing>
     [[nodiscard]] ::morph::async::Completion<std::string> execute(
         std::string_view modelId, std::string_view actionId,
         void* handler, std::string_view bodyJson) const;
@@ -761,7 +762,44 @@ class ActionExecuteRegistry {  // namespace morph::bridge, declared in bridge.hp
   out-of-line in `bridge.hpp` (after `BridgeHandler` is fully defined) so the
   executor can safely cast the `void*` handler and call its methods. `execute`
   and `instance()` are defined inline in `bridge.hpp`.
-- `execute` throws `std::runtime_error` for unknown pairs.
+- `execute` throws `std::runtime_error` for unknown keys.
+
+#### The key is a triple, not a pair — `(modelId, actionId, typeid(Sharing))`
+
+Unlike the other two registries, this one is **not** keyed on the string id
+pair alone. Its map key is a three-field record — `modelId`, `actionId`, and a
+`std::type_index` naming the *sharing policy* of the handler the executor will
+be handed — and `execute` is a template on that policy, so a call site names
+which of the entries it wants by naming its own `Sharing` type. `KeyHash`
+mixes the `type_index`'s `hash_code()` into the same `PairKeyHash` the other
+registries use over the two strings.
+
+The reason is that the executor is the one place in the framework that
+recovers a typed handler from a `void*`. `BridgeHandler<Model, Sharing>` is a
+class *template* over its sharing policy (`morph::bridge::NoSharing` or
+`morph::bridge::AllowShared` — [shared_instances.md](shared_instances.md)),
+and the two instantiations are unrelated types. An executor built for one
+`static_cast`s to that one; handed a handler of the other, it would produce a
+pointer to the wrong type, and the handler's `kShared` — the compile-time
+constant that decides whether a payload- or result-keyed action performs its
+attach-or-promote step — would answer for the wrong instantiation. The
+observable failure is silent: a shared handler's keyed action would simply
+skip the step that gives it an instance, with no diagnostic anywhere. Keying
+on the policy makes the mismatch unrepresentable instead of merely unlikely,
+which is the only defence available when the type has already been erased.
+
+`registerAction` therefore files **two** entries per registered action, one per
+sharing tag the framework defines, both built from a single generic-lambda
+template so their bodies cannot drift apart. The cost is one extra closure per
+registered action — paid once at static-init time, not per call.
+
+A consequence worth stating: because the two entries are enumerated by
+`registerAction` rather than created on demand, a `BridgeHandler` instantiated
+on some *third*, user-defined sharing tag has no entry at all. Its
+`executeJson` throws `"unknown action for executeJson: …"` for an action that
+is perfectly well registered. The sharing tags are a closed set of two by
+construction; nothing in the type system says so (see
+[Limitations](#limitations)).
 
 ### Static-init helpers
 
@@ -1071,7 +1109,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `ActionDescription` | struct | `{schema, required}` for one action: `forms::schemaJson<A>()` plus `x-payloadFingerprint`/`x-payloadShape`, and the `required` names read back out of it. |
 | `actionDescription<A>()` | function template | The process-lifetime `ActionDescription` for `A`; `buildActionDescription<A>()` is the uncached builder behind it. |
 | `ModelRegistryFactory` | class | Maps `modelId` → factory; server-side model instantiation. |
-| `ActionExecuteRegistry` | class | Maps `(modelId, actionId)` → type-erased executor through `BridgeHandler`; client/schema-driven execute. |
+| `ActionExecuteRegistry` | class | Maps `(modelId, actionId, typeid(Sharing))` → type-erased executor through `BridgeHandler`; client/schema-driven execute. Two entries per action, one per sharing policy — see ["The key is a triple"](#the-key-is-a-triple-not-a-pair--modelid-actionid-typeidsharing). |
 
 ### Macros
 
@@ -1086,7 +1124,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 
 | Symbol | Purpose |
 |---|---|
-| `PairKeyHash` | Hash functor for `std::pair<std::string, std::string>` keys used by `ActionDispatcher` and `ActionExecuteRegistry`. |
+| `PairKeyHash` | Hash functor for `std::pair<std::string, std::string>` keys. Used directly by `ActionDispatcher`, and as the string half of `ActionExecuteRegistry`'s own `KeyHash`, which mixes the sharing policy's `type_index` into it. |
 | `actionLoggable<A>()` | Returns `ActionTraits<A>::loggable` if present, else `Loggable::Yes`. |
 | `actionPayloadSchema<A>()` | Returns `ActionTraits<A>::payloadSchema()` if present, else `""` (unstamped). |
 | `ParseError` | `std::runtime_error` subclass thrown on JSON codec failure. |
@@ -1139,7 +1177,7 @@ quiesced with respect to dispatch, before exposing them.
 |---|---|---|
 | Two registrations for the same `(modelId, actionId)` (or same `modelId`) | **Silent last-write-wins.** `ActionDispatcher::registerAction` does `_runners[key] = ...` and `_coalesce[key] = ...`; `ModelRegistryFactory::registerModel` does `insert_or_assign`. No diagnostic; the surviving entry is whichever initialiser ran last, and static-init order across TUs is unspecified. | `registry.hpp` |
 | Two **distinct C++ types** registered under one string id | Same silent overwrite — the string id, not the type, is the key. The second type's runner/factory shadows the first. This is the collision hazard behind the string-vocabulary limitation below. | `registry.hpp` |
-| `dispatch` / `execute` with an unknown `(modelId, actionId)` | Throws `std::runtime_error` **at runtime** — `"unknown action: …"` from `ActionDispatcher::dispatch`, `"unknown action for executeJson: …"` from `ActionExecuteRegistry::execute`. The string-keyed remote path has **no compile-time completeness check** — a pair that was never registered is only discovered when a request for it arrives. | `ActionDispatcher::dispatch`, `ActionExecuteRegistry::execute` |
+| `dispatch` / `execute` with an unknown key | Throws `std::runtime_error` **at runtime** — `"unknown action: …"` from `ActionDispatcher::dispatch` for an unknown `(modelId, actionId)`, `"unknown action for executeJson: …"` from `ActionExecuteRegistry::execute` for an unknown `(modelId, actionId, typeid(Sharing))` — which includes a *registered* action reached from a handler on a sharing tag other than `NoSharing`/`AllowShared`. The string-keyed remote path has **no compile-time completeness check** — a pair that was never registered is only discovered when a request for it arrives. | `ActionDispatcher::dispatch`, `ActionExecuteRegistry::execute` |
 | `dispatch` when the decoded action fails `ActionValidator<Action>::ready(...)` | Throws `morph::model::ValidationError` (a `std::runtime_error` subclass) **before** `Model::execute` runs — the action is never executed. Actions with no validator (the common case) are unaffected: `ready()` defaults to `true`. | `ActionDispatcher::registerAction`'s runner |
 | `create` with an unknown model id | Throws `std::runtime_error("unknown model type: …")` at runtime. | `ModelRegistryFactory::create` |
 | `coalesce` for an unknown pair | Does **not** throw — defaults to `false` (every entry kept). | `ActionDispatcher::coalesce` |
@@ -1193,6 +1231,14 @@ testing obligation, not a compile-time guarantee.
   registers a runner but skips the executor, or a partial refactor), one path
   works and the other throws "unknown action" for the *same* logical action, with
   no signal that the two are meant to stay in lockstep.
+- **The sharing-policy half of `ActionExecuteRegistry`'s key is a closed set of
+  two by convention, not by construction.** `registerAction` enumerates
+  `NoSharing` and `AllowShared` explicitly, but `BridgeHandler`'s `Sharing`
+  template parameter is unconstrained — nothing rejects
+  `BridgeHandler<M, MyOwnTag>` at compile time, and such a handler behaves as
+  `NoSharing` everywhere *except* `executeJson`, which throws "unknown action"
+  for an action that is registered. A concept constraining `Sharing` to the two
+  tags would turn that runtime surprise into a compile error; none exists today.
 
 ## Cross-references
 
