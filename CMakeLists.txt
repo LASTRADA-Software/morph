@@ -211,6 +211,7 @@ target_sources(morph
     BASE_DIRS include
     FILES
         include/morph/version.hpp
+        include/morph/attributes.hpp
         include/morph/core/logger.hpp
         include/morph/core/observability.hpp
         include/morph/core/executor.hpp

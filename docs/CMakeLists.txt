@@ -32,6 +32,16 @@ set(DOXYGEN_FULL_PATH_NAMES        YES)
 set(DOXYGEN_STRIP_FROM_PATH        "${PROJECT_SOURCE_DIR}/include")
 set(DOXYGEN_CREATE_SUBDIRS         YES)
 
+# Erase the attribute macros before the parser sees a signature. Doxygen does
+# not expand macros by default, so `MORPH_LIFETIMEBOUND` would otherwise sit in
+# the middle of every annotated declaration and be parsed as part of it.
+# EXPAND_ONLY_PREDEF keeps expansion to exactly the names listed here, so no
+# other macro in the headers changes how it is rendered.
+set(DOXYGEN_ENABLE_PREPROCESSING   YES)
+set(DOXYGEN_MACRO_EXPANSION        YES)
+set(DOXYGEN_EXPAND_ONLY_PREDEF     YES)
+set(DOXYGEN_PREDEFINED             "MORPH_LIFETIMEBOUND=")
+
 # ── Strictness: every public symbol must be documented ──────────────────────
 set(DOXYGEN_EXTRACT_ALL            NO)
 set(DOXYGEN_EXTRACT_LOCAL_CLASSES  NO)
