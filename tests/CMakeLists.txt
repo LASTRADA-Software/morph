@@ -90,6 +90,7 @@ add_executable(morph_tests
     test_forms_rule_agreement.cpp
     test_forms_rule_corpus.cpp
     test_forms_layout.cpp
+    test_forms_field_bounds.cpp
     test_forms_instance_constraints.cpp
     test_widget_hints.cpp
     test_datetime.cpp

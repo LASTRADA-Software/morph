@@ -296,6 +296,9 @@ struct FieldMeta {
     bool readOnly{false};
     bool hidden{false};
     std::string_view i18nKey{};             // "" = derive the key stem; see below
+    std::optional<math::Rational> minimum{};     // disengaged = no floor
+    std::optional<math::Rational> maximum{};     // disengaged = no ceiling
+    std::optional<math::Rational> multipleOf{};  // disengaged = any value
 };
 
 struct RecordMeasurement {
@@ -373,6 +376,94 @@ The plain `FieldMeta{.field = "sampleId", ...}` literal form is unaffected by
 either restriction (it never references the enclosing class) and stays a
 single in-class `static constexpr` array.
 
+### Per-field scalar bounds — `minimum` / `maximum` / `multipleOf`
+
+The three numeric members are the one part of `FieldMeta` that is **not**
+presentation. They declare a bound on one field's value, and one declaration
+drives both halves of it: `schemaJson<A>()` serves them as the standard
+JSON-Schema keys of the same names, and `allFieldBoundsSatisfied<A>(action)`
+evaluates them in C++ so an action's `validate()` enforces the identical
+numbers the client was shown.
+
+```cpp
+struct CreatePaste {
+    Reads burnAfterReads;                  // Quantity<Unit::count, 1>; empty = no burn limit
+
+    static constexpr std::array<morph::forms::FieldMeta, 1> fieldMetadata{
+        morph::forms::FieldMeta{.field = "burnAfterReads",
+                                .minimum    = math::Rational{1, math::DecimalPlaces{1}},
+                                .multipleOf = math::Rational{1, math::DecimalPlaces{1}}},
+    };
+
+    [[nodiscard]] bool validate() const noexcept {
+        return morph::forms::allFieldBoundsSatisfied(*this);
+    }
+};
+```
+
+`FieldMeta::withMinimum(r)` / `::withMaximum(r)` / `::withMultipleOf(r)` return
+modified copies, so a `describe<>()`-built entry can carry a bound too.
+
+**Why this is not part of the `x-rules` vocabulary.** Every comparison node
+there — `greater`, `greaterOrEqual`, `less`, `lessOrEqual` — takes **two member
+pointers of the same action**; only `equals` accepts a literal, and it
+expresses equality alone. So "at least 1" had no right-hand operand to name,
+and integrality had no spelling at all. `x-rules` is also, by its own title,
+the *cross-field* vocabulary: a bound on a single field's value is a property
+of that field, and belongs on its property node beside `title` and
+`x-decimalPlaces` rather than in a rule node whose `fields` array would hold
+one entry.
+
+**Why not `UnitTraits::bounds`.** That is a decode-side check keyed by
+**unit**, not by field ([`checkQuantityBounds`](#pre-decode-wire-validation--checkquantitybounds)),
+so a floor declared for `CreatePaste::burnAfterReads` would equally constrain
+`PasteView::readCount` — the same `Quantity` type over the same unit, which
+legitimately starts at 0. It also has no integrality vocabulary, and never
+touches `schemaJson<A>()`.
+
+**Where the keys land, and why it matters.** On the **property node**, beside
+the `$ref` — never in the `$def` the `$ref` points at. Two members of the same
+`Quantity` type share one `$def`, so a bound written there would leak onto both
+and reintroduce exactly the per-unit behaviour above. The shipped renderer's
+`resolveRef` merges the property node **over** the resolved definition, so it
+reads a per-field bound with no special case (see
+[Where the keys physically land](#where-the-keys-physically-land--ref-resolution-is-mandatory)).
+
+For a `Quantity` member the bound is on **the scalar value the field denotes,
+in the canonical unit** — not on the `{num,den,dp}` object the member
+serialises as. That is the reading both the shipped renderer (which compares
+the entered value only while the canonical unit is selected) and
+`allFieldBoundsSatisfied` (which compares the engaged `math::Rational`) apply.
+
+**What the C++ predicate checks.** `allFieldBoundsSatisfied` reads bounds from
+three member kinds and no others: a `Quantity` (its engaged `Rational`), a bare
+`math::Rational`, and an integral member every value of which is exactly
+representable as a `Rational` numerator — every signed integer type, plus every
+unsigned one narrower than 64 bits. A declaration on any other member — a
+`std::string`, a `bool`, a `std::uint64_t` — is inert in C++; the schema still
+advertises it. An **unengaged** `EmptyCapableField` is vacuously satisfied,
+exactly as the `x-rules` comparison kinds are: a form still being filled in
+must not fail a bound on a field that has no value yet, and whether the field
+must be filled at all is `required`/`allRequiredEngaged`'s question.
+
+**Exactness.** The C++ comparisons run on the exact `Rational`, never on a
+`double`; `multipleOf` uses `math::checkedDiv`, so a quotient too large to
+represent is refused rather than silently saturating into an integer. The
+*served* number is a JSON number and therefore an approximation for a
+non-integral bound — an integral bound is emitted as an integer and picks up
+the usual [`x-exactMinimum`/`x-exactMaximum`](#exact-numeric-bounds--x-exactminimum--x-exactmaximum)
+companion above 2^53. As everywhere else in this contract, the live client gate
+is an approximation and the model is the floor.
+
+`multipleOf` must be **strictly positive**, as JSON Schema requires: a zero
+divisor has no meaning and a negative one divides the same set of values as its
+magnitude. A non-positive declaration is ignored — neither emitted nor checked.
+
+A per-*instance* `x-minimum`/`x-maximum` written by
+[`InstanceConstraints`](#per-instance-constraints--values-that-live-in-data)
+composes with a compiled bound rather than replacing it: the renderer checks
+both, so an instance range narrows the declared one and never widens it.
+
 ### Field metadata is not a security control
 
 `x-readonly` and `x-hidden` are presentation only. The field still travels in
@@ -392,13 +483,17 @@ member of the action at all.
 | `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all; the field remains part of the action payload. Emitted only when `true`. |
 | `x-i18nKey` | property node (sibling of `$ref`) | string | An explicit message-key **stem** override, from `FieldMeta::i18nKey`. Omitted when empty. Not a complete key by itself — see [Localisation — message keys and the catalog seam](#localisation--message-keys-and-the-catalog-seam) for how a renderer expands it per text slot. |
 | `x-widget` | property node (sibling of `$ref`) | string | Control-selection override, from `FieldMeta::widget`. Omitted when empty. Full mechanism, precedence over a type's own derived `widget()`, and design rationale are in [Widget hints](#widget-hints--multiline--ranged). |
+| `minimum` | property node (sibling of `$ref`) | number | Inclusive lower bound on the field's value, from `FieldMeta::minimum`. Omitted when not declared. Standard JSON-Schema vocabulary, not an `x-*` key — see [Per-field scalar bounds](#per-field-scalar-bounds--minimum--maximum--multipleof). |
+| `maximum` | property node (sibling of `$ref`) | number | Inclusive upper bound, from `FieldMeta::maximum`. Omitted when not declared. |
+| `multipleOf` | property node (sibling of `$ref`) | number | The field's value must be an exact integer multiple of this, from `FieldMeta::multipleOf`. `1` is how "whole number" is spelled. Omitted when not declared, or when the declared value is not strictly positive. |
 
-All seven keys are additive and non-breaking, extending the renderer-contract
+All ten keys are additive and non-breaking, extending the renderer-contract
 table below without renaming or retyping any existing key, per this program's
 versioning stance (see "Design principle" above). A
 renderer that ignores them falls back to today's behavior exactly: it shows
-the raw wire key as the caption, no helper/placeholder text, and every field
-editable and visible.
+the raw wire key as the caption, no helper/placeholder text, every field
+editable and visible, and no scalar bound gated client-side (the model still
+refuses an out-of-bounds value).
 
 ## Layout & grouping — sections, tabs, spans
 
@@ -496,9 +591,11 @@ a form from a morph action schema. Standard JSON-Schema keywords (`type`,
 `properties`, `$defs`, `$ref`, numeric bounds, …) are emitted by
 glaze and behave per the JSON-Schema 2020-12 spec; the table below covers the
 keys morph either **synthesises** (`required`, `title`, `description` when a
-`FieldMeta::help` is declared, the `x-*` extensions) or **relies on glaze to
+`FieldMeta::help` is declared, `minimum`/`maximum`/`multipleOf` when a
+`FieldMeta` declares them, the `x-*` extensions) or **relies on glaze to
 stamp** (`format`, `ExtUnits`, `description` when no `FieldMeta::help` overrides
-it). A renderer that ignores an `x-*` key
+it, `minimum`/`maximum` for a scalar member's own type range). A renderer that
+ignores an `x-*` key
 still produces a usable form — it just loses the affordance that key carries
 (unit selector, field order, combo box, decimal step).
 
@@ -572,6 +669,9 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-widget` | property node (sibling of `$ref`) | string | The preferred control id: `"textarea"`, `"slider"`, `"radio"`, `"combo"`, `"password"`, `"checkbox"`, … A `fieldMetadata`-shaped override (a `.field`/`.widget` entry, read structurally — see [widget_hints.md](widget_hints.md)) wins; else the field type's own `widget()` (`Multiline`, `Ranged`). **Advisory** — a renderer that lacks the named control falls back to the type-default control (text area → text field, slider → numeric input, radio → combo). Omitted when neither a wrapper type nor an override supplies one. |
 | `x-min` | property node (sibling of `$ref`) | number | Slider lower bound, from `Ranged::min()`. Emitted only for a `Ranged` field. Distinct from glaze's schema `minimum` (a *validation* bound, when present) — `x-min` is the *control track* start and is never enforced. |
 | `x-max` | property node (sibling of `$ref`) | number | Slider upper bound, from `Ranged::max()`. Emitted only for a `Ranged` field. |
+| `minimum` | `$def` (glaze's own bound for the member's scalar type), **or** the property node when the field declares `FieldMeta::minimum` | number | Inclusive lower bound the renderer must refuse values below. The property node wins over the `$def` on merge, which is what makes a declared bound per-*field* rather than per-type — see [Per-field scalar bounds](#per-field-scalar-bounds--minimum--maximum--multipleof). For a `Quantity` property it bounds the scalar value in the **canonical** unit, not the `{num,den,dp}` object. |
+| `maximum` | as `minimum` | number | Inclusive upper bound, same sources and same reading. |
+| `multipleOf` | property node (sibling of `$ref`) | number, strictly positive | The value must be an exact integer multiple of this; `1` means "whole number". Emitted only from `FieldMeta::multipleOf` — glaze never stamps it. A renderer that ignores it loses the client-side gate only; the model still refuses. |
 | `x-exactMinimum` | wherever `minimum` sits (property node, or the `$def` reached through its `$ref`) | string | Exact decimal spelling of `minimum`, emitted **only** when the bound's magnitude exceeds 2^53 — i.e. when an IEEE-754 double cannot hold it. See [Exact numeric bounds](#exact-numeric-bounds--x-minimumtext--x-maximumtext). |
 | `x-exactMaximum` | wherever `maximum` sits | string | Exact decimal spelling of `maximum`, under the same condition. |
 | `x-step` | property node (sibling of `$ref`) | number | Slider / numeric increment, from `Ranged::step()`. Emitted only for a `Ranged` field. For a `Quantity` the entry granularity remains `x-decimalPlaces` (above); `x-step` is not emitted for `Quantity`. |
@@ -891,7 +991,15 @@ executable form of this document's "normative" claim.
 **Scope note.** The corpus above covers exactly the keys this document's
 renderer contract currently defines, plus the `x-widget`/`SlotRegistry` keys
 below — informally, "**Tier-1**": the per-action `x-*` schema vocabulary this
-document specifies. It does **not** include a wizard/app-shell fixture
+document specifies. Two numeric-bound families sit in the contract table but
+outside the five-fixture corpus, each carrying its own matched C++/QML pair
+instead: `x-exactMinimum`/`x-exactMaximum`
+(`tests/test_forms_exact_bounds.cpp` + `tst_DynamicFormExactBounds.qml`) and
+the declared `minimum`/`maximum`/`multipleOf`
+(`tests/test_forms_field_bounds.cpp` + `tst_DynamicFormFieldBounds.qml`). Both
+are additive per-field keys that no corpus fixture declares, so adding one
+changes no fixture's generated schema — which is why the drift guard has
+nothing to say about them and a dedicated pair does. It does **not** include a wizard/app-shell fixture
 (`w-*`/`app-*`): although the emitters for those "**Tier-2**" keys (the
 wizard/app-shell layer built atop Tier-1, one level up the composition —
 [workflows_navigation.md](workflows_navigation.md)) now exist
@@ -1205,6 +1313,15 @@ an unengaged field cannot equal anything, so it returns `false` until the
 field is engaged. A literal passed to `equals` is one of `std::int64_t`,
 `bool`, `std::string`, the exact `math::Rational` (never a `double`), or a
 captured string literal, so it serialises losslessly into `x-rules`.
+
+**Comparing a field to a literal is not this vocabulary's job.** `equals` is
+the only node that takes one, and only for equality — there is deliberately no
+`greaterOrEqual(&A::field, 1)`. A bound on a single field's value is a property
+of that field, not a relation between two of them, and is declared on its
+`FieldMeta` instead: see
+[Per-field scalar bounds](#per-field-scalar-bounds--minimum--maximum--multipleof),
+which also covers integrality (`multipleOf`), a constraint `x-rules` cannot
+express in any form.
 
 A bare string literal — `equals(&A::code, "URGENT")` — is captured **inline**
 as a `detail::LiteralString` (an alias for the project's shared
@@ -1675,9 +1792,12 @@ Two boundaries follow the framework's own:
 | `detail::forEachNamedMember(action, visitor)` | function template | Calls `visitor.operator()<I>(name, member)` for every reflected member of `action` (uses glaze pure reflection). |
 | `detail::mergeSchemaExtras<A>(raw)` | function | Post-processes a glaze-generated schema to inject `required`, `x-decimalPlaces`, `x-order`, `x-unitAlternatives`, `x-optionsAction`, `title`, `description`/`x-placeholder`/`x-readonly`/`x-hidden` etc. onto the property nodes. Called by `schemaJson<A>()`. |
 | `reconcileDeclaredPrecision<A>(action)` | function | **Rounds** every `Quantity` member of `action` in place to its declared precision (`atDeclaredPrecision()`, an exact `Rational` re-rounding — not a retag), so a decoded wire value *equals* the schema's advertised `x-decimalPlaces`, not merely displays at it. Empty members stay empty. No-op for non-`Quantity` members and for action types glaze cannot reflect. Called on both wire dispatch paths (`bridge.hpp`, `registry.hpp`); not on the in-process `localOp` path, which decodes no JSON. |
-| `FieldMeta` | struct | Per-field presentation descriptor: `field`, `label`, `help`, `placeholder`, `widget` (control-selection override, see [Widget hints](#widget-hints--multiline--ranged)), `readOnly`, `hidden`, plus `withPlaceholder`/`withReadOnly`/`withHidden` fluent copies. See "Field metadata" above. |
+| `FieldMeta` | struct | Per-field descriptor: `field`, `label`, `help`, `placeholder`, `widget` (control-selection override, see [Widget hints](#widget-hints--multiline--ranged)), `readOnly`, `hidden`, `i18nKey`, plus the scalar bounds `minimum`/`maximum`/`multipleOf`, and the `withPlaceholder`/`withReadOnly`/`withHidden`/`withMinimum`/`withMaximum`/`withMultipleOf` fluent copies. See "Field metadata" above. |
 | `detail::HasFieldMetadata<A>` | concept | `true` when `A` has a `static constexpr`/`static const` iterable `fieldMetadata`. |
 | `detail::findFieldMeta<A>(name)` | function | Returns the `FieldMeta` entry naming `name`, or `nullptr`. |
+| `detail::BoundCheckableInteger<T>` | concept | `true` for an integral `T` (never `bool`) every value of which is exactly representable as a `Rational` numerator — every signed type, plus every unsigned type narrower than 64 bits. Decides which integral members `allFieldBoundsSatisfied` checks. |
+| `detail::satisfiesDeclaredBounds(meta, value)` | constexpr function | `true` when an exact `Rational` is within `meta`'s declared `minimum`/`maximum` and an exact multiple of its `multipleOf`. The single implementation of the bound semantics. |
+| `detail::annotateDeclaredBounds(property, meta)` | function | Stamps whichever of `minimum`/`maximum`/`multipleOf` `meta` declares onto one property node. Called from `annotateBasicMemberProperty`, so nested aggregates get the same treatment. |
 | `detail::inferTitle(name)` | function | Title-cases a wire key on camelCase/underscore boundaries. |
 | `describe<MemberPtr>(label, help)` | function template | Builds a `FieldMeta` whose `field` is resolved from the pointer-to-member `MemberPtr` at runtime. Not `constexpr` — see "Field metadata" above for why, and for the out-of-line declaration a `describe<>()`-based `fieldMetadata` array needs. |
 
@@ -1694,6 +1814,12 @@ Two boundaries follow the framework's own:
 | Signature | Returns |
 |---|---|
 | `template <typename A> bool allRequiredEngaged(A const&)` | `true` when every required empty-capable field is engaged. |
+
+### `allFieldBoundsSatisfied<A>()`
+
+| Signature | Returns |
+|---|---|
+| `template <typename A> bool allFieldBoundsSatisfied(A const&)` | `true` when no `A::fieldMetadata` bound (`minimum`/`maximum`/`multipleOf`) is violated. Trivially `true` for an action declaring no `fieldMetadata`. An unengaged empty-capable field is vacuously satisfied. `noexcept`. See [Per-field scalar bounds](#per-field-scalar-bounds--minimum--maximum--multipleof). |
 
 ### `EmptyCapableField<T>` concept
 
