@@ -5,6 +5,7 @@
 #include <compare>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
@@ -110,6 +111,59 @@ LIMS_DEFINE_STRONG_ID_WIRE(VerificationId);
 LIMS_DEFINE_STRONG_ID_WIRE(ConflictId);
 
 #undef LIMS_DEFINE_STRONG_ID_WIRE
+
+/// @brief Stable payload-shape tag for each `LIMS_DEFINE_STRONG_ID` type, so a
+///        journal fingerprint can tell one id from another.
+///
+/// The `glz::meta` specialisations above are what make these types
+/// serialisable at all, and they are also what makes them *opaque* to
+/// `morph::model::payloadShape`: a type whose meta names a value rather than an
+/// object has no reflected members to decompose, so it renders as the bare `x`
+/// and every id in a payload looks like every other one
+/// (`morph/core/payload_shape_tag.hpp`; `docs/spec/journal/journal.md`,
+/// "Custom-codec types name themselves").
+///
+/// This is the rung whose journal *is* the product: `SelfJournal`
+/// (`lims/core/self_journal.hpp`) stamps every entry it appends precisely so
+/// the regulatory trail survives a rebuild. Every id here is
+/// `std::optional<std::int64_t>` on the wire, so a retype between two of them
+/// -- `AnalysisId` for the `AnalysisVersionId` a reading was captured under,
+/// `ClientId` for the `SampleId` a queued capture names -- produces
+/// byte-identical JSON that no decode, on any path, can catch. Absent declared
+/// tags the fingerprint was byte-identical too, so `journal::replay()`'s
+/// mismatch gate had nothing to fire on and the recorded integer decoded into
+/// the wrong slot: a reading attributed to the wrong analysis version is a
+/// wrong result with a valid-looking audit trail behind it, which is worse
+/// than no trail.
+///
+/// The tag text is spelled here rather than derived from `glz::name_v`, which
+/// is compiler-dependent -- a journal readable only by the build that wrote it
+/// is the worse failure. It is part of the on-disk fingerprint of every entry
+/// this rung records, so it is an interface: renaming a tag invalidates every
+/// retained journal entry carrying that id, exactly as renaming a field does.
+/// `lims.`-namespaced so it cannot collide with another rung's tag.
+///
+/// One specialisation per id type, generated the same way the structs and
+/// their `glz::meta`s are, then undefined immediately after -- the same shape
+/// as `LEDGER_DEFINE_STRONG_ID_SHAPE_TAG`
+/// (`examples/ledger/include/ledger/core/types.hpp`), which this mirrors.
+#define LIMS_DEFINE_STRONG_ID_SHAPE_TAG(Name, Tag)                        \
+    template <>                                                           \
+    struct morph::model::PayloadShapeTag<lims::Name> {                    \
+        /** @brief This id's stable shape name. @return The tag. */       \
+        static constexpr std::string_view name() noexcept { return Tag; } \
+    }
+
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ClientId, "lims.clientId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(SampleId, "lims.sampleId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(AnalysisId, "lims.analysisId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(AnalysisVersionId, "lims.analysisVersionId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ResultId, "lims.resultId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(WorksheetId, "lims.worksheetId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(VerificationId, "lims.verificationId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ConflictId, "lims.conflictId");
+
+#undef LIMS_DEFINE_STRONG_ID_SHAPE_TAG
 
 /// @brief Unit metadata and the exact conversion graph for `LimsUnit`.
 ///

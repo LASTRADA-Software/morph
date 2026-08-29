@@ -4,6 +4,7 @@
 #include <compare>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <optional>
 #include <string_view>
 
@@ -190,3 +191,54 @@ struct glz::meta<kanban::Role> {
     using enum kanban::Role;
     static constexpr auto value = glz::enumerate(Viewer, Member, Manager);
 };
+
+/// @brief Stable payload-shape tag for each strong id above, so a journal
+///        fingerprint can tell one id from another.
+///
+/// The `glz::meta` specialisations above are what make these types
+/// serialisable at all, and they are also what makes them *opaque* to
+/// `morph::model::payloadShape`: a type whose meta names a value rather than an
+/// object has no reflected members to decompose, so it renders as the bare `x`
+/// and every id in a payload looks like every other one
+/// (`morph/core/payload_shape_tag.hpp`; `docs/spec/journal/journal.md`,
+/// "Custom-codec types name themselves").
+///
+/// This rung's centrepiece is made of ids. `MoveTaskPosition{TaskId, ColumnId,
+/// SwimlaneId}` -- design spec §1's exactly-once action, and the one the
+/// offline queue replays -- fingerprinted as three interchangeable `x`s, and
+/// `CreateTask{ColumnId, SwimlaneId}` as two, so exchanging two of them --
+/// what an id rename or a copy-paste between adjacent lines produces -- left
+/// the fingerprint untouched and `journal::replay()`'s mismatch gate with
+/// nothing to fire on, while the recorded integers decoded into the wrong
+/// slots. Every one of these ids is `std::optional<std::int64_t>` on the wire,
+/// so the JSON is byte-identical across such a swap and no decode, on any
+/// path, can catch it: the tag is the only place it is visible at all.
+///
+/// The tag text is spelled here rather than derived from `glz::name_v`, which
+/// is compiler-dependent -- a journal readable only by the build that wrote it
+/// is the worse failure. It is part of the on-disk fingerprint of every entry
+/// this rung records, so it is an interface: renaming a tag invalidates every
+/// retained journal entry carrying that id, exactly as renaming a field does.
+/// `kanban.`-namespaced so it cannot collide with another rung's tag.
+///
+/// One specialisation per id type, generated the same way the structs and
+/// their `glz::meta`s are, then undefined immediately after -- the same shape
+/// as `LEDGER_DEFINE_STRONG_ID_SHAPE_TAG`
+/// (`examples/ledger/include/ledger/core/types.hpp`), which this mirrors.
+#define KANBAN_DEFINE_STRONG_ID_SHAPE_TAG(Name, Tag)                      \
+    template <>                                                           \
+    struct morph::model::PayloadShapeTag<kanban::Name> {                  \
+        /** @brief This id's stable shape name. @return The tag. */       \
+        static constexpr std::string_view name() noexcept { return Tag; } \
+    }
+
+KANBAN_DEFINE_STRONG_ID_SHAPE_TAG(ProjectId, "kanban.projectId");
+KANBAN_DEFINE_STRONG_ID_SHAPE_TAG(ColumnId, "kanban.columnId");
+KANBAN_DEFINE_STRONG_ID_SHAPE_TAG(TaskId, "kanban.taskId");
+KANBAN_DEFINE_STRONG_ID_SHAPE_TAG(SwimlaneId, "kanban.swimlaneId");
+KANBAN_DEFINE_STRONG_ID_SHAPE_TAG(TagId, "kanban.tagId");
+KANBAN_DEFINE_STRONG_ID_SHAPE_TAG(RuleId, "kanban.ruleId");
+KANBAN_DEFINE_STRONG_ID_SHAPE_TAG(AttachmentId, "kanban.attachmentId");
+KANBAN_DEFINE_STRONG_ID_SHAPE_TAG(BoardEventId, "kanban.boardEventId");
+
+#undef KANBAN_DEFINE_STRONG_ID_SHAPE_TAG
