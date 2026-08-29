@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('df/db5/structm
 </div><!--header-->
 <div class="contents">
 
-<p>Per-field presentation overrides: label, help, placeholder, read-only, hidden (docs/spec/forms/forms.md, "Field metadata").  
+<p>Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only, hidden, <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> (docs/spec/forms/forms.md, "Field metadata").  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>&gt;</code></p>
@@ -134,6 +134,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ac75e9b025e5ca52e31aa9d997d55e832"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy with <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span> set to <span class="tt">true</span>.  <br /></td></tr>
 <tr class="memitem:a0c5ed2b5c559cea9f71bde47f1e8f4f3" id="r_a0c5ed2b5c559cea9f71bde47f1e8f4f3"><td class="memItemLeft">constexpr <a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a>&#160;</td><td class="memItemRight"><a class="el" href="#a0c5ed2b5c559cea9f71bde47f1e8f4f3">withHidden</a> () const noexcept</td></tr>
 <tr class="memdesc:a0c5ed2b5c559cea9f71bde47f1e8f4f3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy with <span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> set to <span class="tt">true</span>.  <br /></td></tr>
+<tr class="memitem:a4b85c9cd37a578ba3a55f4c788ce8575" id="r_a4b85c9cd37a578ba3a55f4c788ce8575"><td class="memItemLeft">constexpr <a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a>&#160;</td><td class="memItemRight"><a class="el" href="#a4b85c9cd37a578ba3a55f4c788ce8575">withMinimum</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a> bound) const noexcept</td></tr>
+<tr class="memdesc:a4b85c9cd37a578ba3a55f4c788ce8575"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy with <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span> set to <code class="param">bound</code>.  <br /></td></tr>
+<tr class="memitem:a7daa7140f2f62f2eaee2fb2076b124a0" id="r_a7daa7140f2f62f2eaee2fb2076b124a0"><td class="memItemLeft">constexpr <a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7daa7140f2f62f2eaee2fb2076b124a0">withMaximum</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a> bound) const noexcept</td></tr>
+<tr class="memdesc:a7daa7140f2f62f2eaee2fb2076b124a0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy with <span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span> set to <code class="param">bound</code>.  <br /></td></tr>
+<tr class="memitem:a7b48a4b73994d8dd7d8a44b57af51109" id="r_a7b48a4b73994d8dd7d8a44b57af51109"><td class="memItemLeft">constexpr <a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7b48a4b73994d8dd7d8a44b57af51109">withMultipleOf</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a> step) const noexcept</td></tr>
+<tr class="memdesc:a7b48a4b73994d8dd7d8a44b57af51109"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy with <span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> set to <code class="param">step</code>.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
@@ -155,12 +161,20 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a3634033e187d0c6ce5c3c4239b13f602"><td class="mdescLeft">&#160;</td><td class="mdescRight">Displayed but not editable when <span class="tt">true</span>; emits <span class="tt">x-readonly</span>.  <br /></td></tr>
 <tr class="memitem:a8c44a9d16363c47fb2234e6c87b72d6a" id="r_a8c44a9d16363c47fb2234e6c87b72d6a"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a">hidden</a> {false}</td></tr>
 <tr class="memdesc:a8c44a9d16363c47fb2234e6c87b72d6a"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d1/db1/structmorph_1_1forms_1_1Not.html" title="Compound condition: the nested condition does not hold. Nests to any depth, and is usable directly as...">Not</a> shown at all when <span class="tt">true</span>; emits <span class="tt">x-hidden</span>. The field still travels in the payload (see <span class="tt">docs/spec/forms/forms.md</span>, "Field metadata is not a security control").  <br /></td></tr>
+<tr class="memitem:a2a98781c5393d60152664354c102cb45" id="r_a2a98781c5393d60152664354c102cb45"><td class="memItemLeft">std::optional&lt;<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2a98781c5393d60152664354c102cb45">minimum</a> {}</td></tr>
+<tr class="memdesc:a2a98781c5393d60152664354c102cb45"><td class="mdescLeft">&#160;</td><td class="mdescRight">Inclusive lower bound on the field's numeric value; emitted as the standard JSON-Schema <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>. Disengaged means "no floor".  <br /></td></tr>
+<tr class="memitem:ad3acbd03534c05fa104b9cf4d4227e95" id="r_ad3acbd03534c05fa104b9cf4d4227e95"><td class="memItemLeft">std::optional&lt;<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95">maximum</a> {}</td></tr>
+<tr class="memdesc:ad3acbd03534c05fa104b9cf4d4227e95"><td class="mdescLeft">&#160;</td><td class="mdescRight">Inclusive upper bound on the field's numeric value; emitted as the standard JSON-Schema <span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>. Disengaged means "no
+       ceiling". Same canonical-unit reading as <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>.  <br /></td></tr>
+<tr class="memitem:a3740c426ffb300b255ca32b690e8979c" id="r_a3740c426ffb300b255ca32b690e8979c"><td class="memItemLeft">std::optional&lt;<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c">multipleOf</a> {}</td></tr>
+<tr class="memdesc:a3740c426ffb300b255ca32b690e8979c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The field's value must be an exact integer multiple of this; emitted as the standard JSON-Schema <span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span>. Disengaged means "any value".  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Per-field presentation overrides: label, help, placeholder, read-only, hidden (docs/spec/forms/forms.md, "Field metadata"). </p>
-<p>An action opts in with a <span class="tt">static constexpr std::array&lt;<a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html" title="Per-field presentation overrides: label, help, placeholder, read-only, hidden (docs/spec/forms/forms....">FieldMeta</a>, N&gt;</span> (or, for the <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe</a>&lt;&gt;()</span> sugar, a <span class="tt">static const</span> array defined out-of-line — see <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe()</a></span>'s documentation) named <span class="tt">fieldMetadata</span>, mirroring the existing <span class="tt">optionalFields</span> convention. Every member other than <span class="tt"><a class="el" href="#abd2b9a17b80041de6f9aaf7eed9f8b0c" title="Wire key of the member this entry describes.">field</a></span> defaults to "not declared": an empty <span class="tt"><a class="el" href="#a18113d5200a965d0050ad5f3a591b94a" title="Display label; empty infers a title-cased name from field.">label</a></span>/<span class="tt"><a class="el" href="#a61b338589ad21fd57f86d3e20fcf990f" title="Help text; empty omits description.">help</a></span>/ <span class="tt"><a class="el" href="#a02bf72763b3d86624f5ab6ab9ac5f1b4" title="In-control placeholder hint; empty omits x-placeholder.">placeholder</a></span> means "infer the title, omit the rest"; <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span>/<span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> default to <span class="tt">false</span>. <span class="tt">mergeSchemaExtras</span> looks up the entry (if any) matching each reflected member by wire key and patches the property node; an entry naming a field that does not exist on the action is ignored. </p>
+<div class="textblock"><p>Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only, hidden, <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> (docs/spec/forms/forms.md, "Field metadata"). </p>
+<p>An action opts in with a <span class="tt">static constexpr std::array&lt;<a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html" title="Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only,...">FieldMeta</a>, N&gt;</span> (or, for the <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe</a>&lt;&gt;()</span> sugar, a <span class="tt">static const</span> array defined out-of-line — see <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe()</a></span>'s documentation) named <span class="tt">fieldMetadata</span>, mirroring the existing <span class="tt">optionalFields</span> convention. Every member other than <span class="tt"><a class="el" href="#abd2b9a17b80041de6f9aaf7eed9f8b0c" title="Wire key of the member this entry describes.">field</a></span> defaults to "not declared": an empty <span class="tt"><a class="el" href="#a18113d5200a965d0050ad5f3a591b94a" title="Display label; empty infers a title-cased name from field.">label</a></span>/<span class="tt"><a class="el" href="#a61b338589ad21fd57f86d3e20fcf990f" title="Help text; empty omits description.">help</a></span>/ <span class="tt"><a class="el" href="#a02bf72763b3d86624f5ab6ab9ac5f1b4" title="In-control placeholder hint; empty omits x-placeholder.">placeholder</a></span> means "infer the title, omit the rest"; <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span>/<span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> default to <span class="tt">false</span>; a disengaged <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> emits nothing and checks nothing. <span class="tt">mergeSchemaExtras</span> looks up the entry (if any) matching each reflected member by wire key and patches the property node; an entry naming a field that does not exist on the action is ignored.</p>
+<dl class="section user"><dt>Bounds are per <b>field</b>, and are not presentation</dt><dd>The three numeric members are the one part of this type that is <em>not</em> presentation: <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a9cf203c8a58f1739c806a087c222b8b7" title="Whether every numeric member of action satisfies the minimum/maximum/multipleOf its A::fieldMetadata ...">morph::forms::allFieldBoundsSatisfied</a></span> evaluates them as a C++ predicate, so an action whose <span class="tt">validate()</span> calls it enforces the same declaration the schema advertises — the "the DTO *is* the form definition" rule (<span class="tt">examples/IMPLEMENTATION.md</span> rule 3) applied to a scalar bound, which the <span class="tt">formRules</span> vocabulary cannot express because every comparison node there takes two member pointers, never a literal (morph#310). They are keyed by field rather than by unit precisely so a floor declared for one <span class="tt">Quantity</span> member does not constrain a sibling of the same type — <span class="tt">UnitTraits::bounds</span> is per-unit and cannot make that distinction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a6054a51698263cc9944bc66a85d21c87" name="a6054a51698263cc9944bc66a85d21c87"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6054a51698263cc9944bc66a85d21c87">&#9670;&#160;</a></span>withPlaceholder()</h2>
@@ -194,7 +208,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,7 +238,7 @@ Public Attributes</h2></td></tr>
 <p>Returns a copy with <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span> set to <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +268,115 @@ Public Attributes</h2></td></tr>
 <p>Returns a copy with <span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> set to <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4b85c9cd37a578ba3a55f4c788ce8575" name="a4b85c9cd37a578ba3a55f4c788ce8575"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4b85c9cd37a578ba3a55f4c788ce8575">&#9670;&#160;</a></span>withMinimum()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a> morph::forms::FieldMeta::withMinimum </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a></td>          <td class="paramname"><span class="paramname"><em>bound</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns a copy with <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span> set to <code class="param">bound</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">bound</td><td>Inclusive lower bound, in the field's canonical unit. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7daa7140f2f62f2eaee2fb2076b124a0" name="a7daa7140f2f62f2eaee2fb2076b124a0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7daa7140f2f62f2eaee2fb2076b124a0">&#9670;&#160;</a></span>withMaximum()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a> morph::forms::FieldMeta::withMaximum </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a></td>          <td class="paramname"><span class="paramname"><em>bound</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns a copy with <span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span> set to <code class="param">bound</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">bound</td><td>Inclusive upper bound, in the field's canonical unit. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7b48a4b73994d8dd7d8a44b57af51109" name="a7b48a4b73994d8dd7d8a44b57af51109"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7b48a4b73994d8dd7d8a44b57af51109">&#9670;&#160;</a></span>withMultipleOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a> morph::forms::FieldMeta::withMultipleOf </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a></td>          <td class="paramname"><span class="paramname"><em>step</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns a copy with <span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> set to <code class="param">step</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">step</td><td>Divisor the value must be an exact integer multiple of; non-positive values are ignored (see the member). </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +395,7 @@ Public Attributes</h2></td></tr>
 
 <p>Wire key of the member this entry describes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00172">172</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -291,7 +413,7 @@ Public Attributes</h2></td></tr>
 
 <p>Display label; empty infers a title-cased name from <span class="tt"><a class="el" href="#abd2b9a17b80041de6f9aaf7eed9f8b0c" title="Wire key of the member this entry describes.">field</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -309,7 +431,7 @@ Public Attributes</h2></td></tr>
 
 <p>Help text; empty omits <span class="tt">description</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -327,7 +449,7 @@ Public Attributes</h2></td></tr>
 
 <p>In-control placeholder hint; empty omits <span class="tt">x-placeholder</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00178">178</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -346,7 +468,7 @@ Public Attributes</h2></td></tr>
 <p>Explicit message-key <b>stem</b> override for this field's i18n catalog keys; empty means "derive the stem from the action's
        `ActionTraits&lt;A&gt;::typeId()` and this field's wire key" (see <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html#a750186d4fea8cf0fde65d3ec8588b0c5" title="The fully-derived message key for one field text slot.">morph::forms::i18n::fieldKey</a></span>, <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html" title="Stable, schema-derived message-key vocabulary for renderer i18n.">forms/i18n.hpp</a></span>). A non-empty stem replaces only the <span class="tt">&lt;actionTypeId&gt;.&lt;wireField&gt;</span> portion of the key — the per-slot <span class="tt">.<a class="el" href="#a18113d5200a965d0050ad5f3a591b94a" title="Display label; empty infers a title-cased name from field.">label</a></span> / <span class="tt">.<a class="el" href="#a61b338589ad21fd57f86d3e20fcf990f" title="Help text; empty omits description.">help</a></span> / <span class="tt">.<a class="el" href="#a02bf72763b3d86624f5ab6ab9ac5f1b4" title="In-control placeholder hint; empty omits x-placeholder.">placeholder</a></span> suffix is still appended on top of it (see <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec" title="The explicit override key for one field text slot, when the field declares an x-i18nKey stem override...">morph::forms::i18n::explicitFieldKey</a></span>), so <span class="tt">"myKey"</span> expands to <span class="tt">"myKey.label"</span> / <span class="tt">"myKey.help"</span> / <span class="tt">"myKey.placeholder"</span>, never to a single complete key on its own. Emitted as <span class="tt">x-i18nKey</span> only when non-empty. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00215">215</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -365,7 +487,7 @@ Public Attributes</h2></td></tr>
 <p>Widget-selection override; empty means "use the field type's
        own `widget()`, if any". A non-empty value replaces that type-derived default and is emitted as <span class="tt">x-widget</span> (docs/spec/forms/widget_hints.md). Read structurally by <span class="tt">detail::widgetOverride</span>, not through this type by name — see <span class="tt">detail::HasFieldMetadataWidgets</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -383,7 +505,7 @@ Public Attributes</h2></td></tr>
 
 <p>Displayed but not editable when <span class="tt">true</span>; emits <span class="tt">x-readonly</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -401,7 +523,65 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../d1/db1/structmorph_1_1forms_1_1Not.html" title="Compound condition: the nested condition does not hold. Nests to any depth, and is usable directly as...">Not</a> shown at all when <span class="tt">true</span>; emits <span class="tt">x-hidden</span>. The field still travels in the payload (see <span class="tt">docs/spec/forms/forms.md</span>, "Field metadata is not a security control"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2a98781c5393d60152664354c102cb45" name="a2a98781c5393d60152664354c102cb45"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2a98781c5393d60152664354c102cb45">&#9670;&#160;</a></span>minimum</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a>&gt; morph::forms::FieldMeta::minimum {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Inclusive lower bound on the field's numeric value; emitted as the standard JSON-Schema <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>. Disengaged means "no floor". </p>
+<p>For a <span class="tt">Quantity</span> member this bounds the <b>scalar value the field denotes</b>, in the canonical unit — not the <span class="tt">{num,den,dp}</span> object the member serialises as. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad3acbd03534c05fa104b9cf4d4227e95" name="ad3acbd03534c05fa104b9cf4d4227e95"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad3acbd03534c05fa104b9cf4d4227e95">&#9670;&#160;</a></span>maximum</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a>&gt; morph::forms::FieldMeta::maximum {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Inclusive upper bound on the field's numeric value; emitted as the standard JSON-Schema <span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>. Disengaged means "no
+       ceiling". Same canonical-unit reading as <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00241">241</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3740c426ffb300b255ca32b690e8979c" name="a3740c426ffb300b255ca32b690e8979c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3740c426ffb300b255ca32b690e8979c">&#9670;&#160;</a></span>multipleOf</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a>&gt; morph::forms::FieldMeta::multipleOf {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The field's value must be an exact integer multiple of this; emitted as the standard JSON-Schema <span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span>. Disengaged means "any value". </p>
+<p><span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a> = 1</span> is how integrality is spelled — the constraint <span class="tt">Quantity</span> cannot carry in its type, since <span class="tt">Quantity&lt;U, Dec&gt;</span> requires <span class="tt">Dec &gt;= 1</span> and therefore always represents tenths exactly.</p>
+<p>A non-positive value is <b>ignored</b> (neither emitted nor checked), matching JSON Schema, which requires <span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> to be strictly positive: a zero divisor has no meaning and a negative one divides exactly the same set of values as its magnitude. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d9e/concept
 <div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html">HasExplicitSubmit</a> = <span class="keyword">requires</span> {</div>
 <div class="line">    { A::explicitSubmit } -&gt; std::convertible_to&lt;bool&gt;;</div>
 <div class="line">}</div>
-<div class="ttc" id="aconceptmorph_1_1forms_1_1HasExplicitSubmit_html"><div class="ttname"><a href="../../d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html">morph::forms::HasExplicitSubmit</a></div><div class="ttdoc">Concept: action A declares a static constexpr bool explicitSubmit, opting its form out of auto-submit...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l01571">forms.hpp:1571</a></div></div>
+<div class="ttc" id="aconceptmorph_1_1forms_1_1HasExplicitSubmit_html"><div class="ttname"><a href="../../d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html">morph::forms::HasExplicitSubmit</a></div><div class="ttdoc">Concept: action A declares a static constexpr bool explicitSubmit, opting its form out of auto-submit...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l01651">forms.hpp:1651</a></div></div>
 </div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Concept: action <span class="tt">A</span> declares a <span class="tt">static constexpr bool
        explicitSubmit</span>, opting its form out of auto-submit-on-validity. </p>
@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d9e/concept
 <p>A side-effectful action wants this. Auto-submit fires on <em>every</em> keystroke that leaves the form valid, so a <span class="tt">CreatePaste</span> bound directly to a live controller stores one paste per typed character.</p>
 <p>(The template parameter is intentionally left undocumented: clang's -Wdocumentation does not consider a concept a template declaration, so a parameter-doc command here is an error under -Weverything -Werror, which is how the WASM ladder builds. <span class="tt">HasFormRules</span> above omits it for the same reason. Note the command cannot even be <em>named</em> in this comment &ndash; clang parses it inside backticks too.) </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01571">1571</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01651">1651</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

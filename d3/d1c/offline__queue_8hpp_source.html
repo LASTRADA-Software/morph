@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d1c/offline
 <div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span><span class="comment">    /// queue and the journal replay have no shared identity otherwise — the</span></div>
 <div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span><span class="comment">    /// queue&#39;s `id` is queue-local and the journal&#39;s `seq` is journal-local —</span></div>
 <div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span><span class="comment">    /// so a host that replays through both paths must wire this key (see</span></div>
-<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span><span class="comment">    /// `docs/spec/offline/offline.md`, &quot;Idempotency key: deduping against the journal&quot;).</span></div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span><span class="comment">    /// `docs/spec/offline/offline.md`, &quot;`idempotencyKey`: deduping against the journal&quot;).</span></div>
 <div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span><span class="comment">    /// The value is opaque to the queue; a good choice is a stable content hash</span></div>
 <div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="comment">    /// or a client-minted operation id (e.g. a UUID) reused if the same op is</span></div>
 <div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span><span class="comment">    /// re-enqueued.</span></div>
