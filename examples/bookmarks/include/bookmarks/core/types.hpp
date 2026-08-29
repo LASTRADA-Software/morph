@@ -4,9 +4,11 @@
 #include <compare>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <morph/util/datetime.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 /// @file
@@ -208,4 +210,72 @@ template <>
 struct glz::meta<bookmarks::ImportOpId> {
     static constexpr auto value = &bookmarks::ImportOpId::value;
     static constexpr std::string_view name = "ImportOpId";
+};
+
+/// @brief Stable payload-shape tag for `BookmarkId`, so a journal fingerprint
+///        can tell it apart from every other custom-codec type.
+///
+/// The `glz::meta` specialisations above are what make these types
+/// serialisable at all, and they are also what makes them *opaque* to
+/// `morph::model::payloadShape`: a type whose meta names a value rather than an
+/// object has no reflected members to decompose, so it renders as the bare `x`
+/// and every id in a payload looks like every other one
+/// (`morph/core/payload_shape_tag.hpp`; `docs/spec/journal/journal.md`,
+/// "Custom-codec types name themselves").
+///
+/// `BookmarkId`, `TagId` and `Cursor` are all `std::optional<std::int64_t>` on
+/// the wire, so a retype between any two of them produces byte-identical JSON
+/// that no decode, on any path, can catch -- and absent a declared tag the
+/// fingerprint was byte-identical too, so `journal::replay()`'s mismatch gate
+/// had nothing to fire on. The two most easily confused are the two this rung
+/// deliberately keeps apart: `Cursor` is a keyset cursor *over* bookmark row
+/// ids, so "a cursor is just a bookmark id" is a plausible one-line edit, and
+/// `RenameTag::id` names a tag in a rung where nearly every other action's `id`
+/// names a bookmark.
+///
+/// The tag text is spelled here rather than derived from `glz::name_v`, which
+/// is compiler-dependent -- a journal readable only by the build that wrote it
+/// is the worse failure. It is part of the on-disk fingerprint of every entry
+/// carrying that id, so it is an interface: renaming a tag invalidates every
+/// retained entry carrying it, exactly as renaming a field does.
+/// `bookmarks.`-namespaced so it cannot collide with another rung's tag.
+template <>
+struct morph::model::PayloadShapeTag<bookmarks::BookmarkId> {
+    /// @brief This id's stable shape name.
+    /// @return `"bookmarks.bookmarkId"`.
+    static constexpr std::string_view name() noexcept { return "bookmarks.bookmarkId"; }
+};
+
+/// @brief Stable payload-shape tag for `TagId` -- see
+///        `morph::model::PayloadShapeTag<bookmarks::BookmarkId>` above for the
+///        rationale.
+template <>
+struct morph::model::PayloadShapeTag<bookmarks::TagId> {
+    /// @brief This id's stable shape name.
+    /// @return `"bookmarks.tagId"`.
+    static constexpr std::string_view name() noexcept { return "bookmarks.tagId"; }
+};
+
+/// @brief Stable payload-shape tag for `Cursor` -- see
+///        `morph::model::PayloadShapeTag<bookmarks::BookmarkId>` above for the
+///        rationale.
+template <>
+struct morph::model::PayloadShapeTag<bookmarks::Cursor> {
+    /// @brief This cursor's stable shape name.
+    /// @return `"bookmarks.cursor"`.
+    static constexpr std::string_view name() noexcept { return "bookmarks.cursor"; }
+};
+
+/// @brief Stable payload-shape tag for `ImportOpId` -- see
+///        `morph::model::PayloadShapeTag<bookmarks::BookmarkId>` above for the
+///        rationale. String-payloaded rather than integer-payloaded, so a
+///        retype between it and the three ids above would at least change the
+///        recorded JSON; a retype between it and this rung's other
+///        string-payloaded newtype, `AuthToken` (`dto/auth_dto.hpp`), would
+///        not.
+template <>
+struct morph::model::PayloadShapeTag<bookmarks::ImportOpId> {
+    /// @brief This op-id's stable shape name.
+    /// @return `"bookmarks.importOpId"`.
+    static constexpr std::string_view name() noexcept { return "bookmarks.importOpId"; }
 };

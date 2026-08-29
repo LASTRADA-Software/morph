@@ -3,8 +3,10 @@
 
 #include <compare>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 /// @file
@@ -131,4 +133,23 @@ template <>
 struct glz::meta<bookmarks::AuthToken> {
     static constexpr auto value = &bookmarks::AuthToken::value;
     static constexpr std::string_view name = "AuthToken";
+};
+
+/// @brief Stable payload-shape tag for `AuthToken`, for the reason
+///        `bookmarks/core/types.hpp`'s own block gives at length: the
+///        `glz::meta` above leaves nothing for `morph::model::payloadShape` to
+///        decompose, so without this a token field renders as the bare `x` --
+///        the same rendering `ImportOpId`, this rung's other string-payloaded
+///        newtype, would get, which makes a retype between the two invisible
+///        to `journal::replay()`'s mismatch gate even though the recorded
+///        bytes are identical.
+///
+/// The tag is part of the on-disk fingerprint of every entry recording an
+/// action that carries a token, so it is an interface: renaming it invalidates
+/// those entries exactly as renaming a field does.
+template <>
+struct morph::model::PayloadShapeTag<bookmarks::AuthToken> {
+    /// @brief This token's stable shape name.
+    /// @return `"bookmarks.authToken"`.
+    static constexpr std::string_view name() noexcept { return "bookmarks.authToken"; }
 };
