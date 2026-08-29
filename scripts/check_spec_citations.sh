@@ -21,6 +21,11 @@
 #      kind dispatchMessage handles, and every make* factory must appear as a
 #      row in docs/spec/core/wire.md, whose tables claim to be exhaustive and
 #      are what a third-party protocol implementer reads (morph#233).
+#   5. Section-citation check: a citation that names a *section* of a markdown
+#      file -- `<file>.md`, "<Section>" -- must name a section that is really
+#      there. Check 3 stops at the path, so a citation could point a reader at
+#      a heading that was renamed or never written and still lint green
+#      (morph#316).
 #
 # This is a prose lint, not a value check: it does not parse
 # docs/spec/pinned_facts.toml or re-derive expected values (that is
@@ -228,6 +233,133 @@ else
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# 5. Section-citation check
+# ---------------------------------------------------------------------------
+# Check 3 asks whether a cited *path* resolves. It never asks whether the
+# *section* the same citation names is really in that file, so a comment could
+# send a reader to a heading that had been renamed, or that was never written
+# at all, and the drift guard stayed green (morph#316). A section citation is
+# how code points at the *reasoning* behind an invariant -- the part the code
+# cannot express -- so one that resolves to nothing is the exact failure this
+# guard exists to prevent, not a cosmetic typo.
+#
+# Deliberately narrow, per morph#316's own suggested direction: only the
+# backticked `<file>.md`, "<Section>" shape is checked, including its
+# multi-quote `<file>.md`, "<Section>", "<Subsection>" form. The unbackticked
+# prose form (docs/spec/journal/journal.md, "Outcome") is *not* scanned,
+# because there the quoted string is legitimately a table row or a bold label
+# rather than a heading -- requiring a heading match there would manufacture
+# failures for citations that are currently correct. Widening the shape is a
+# separate change that has to teach this check about non-heading anchors first.
+#
+# docs/findings/ citations are out of scope here too: they are a different
+# shape with their own backlog (morph#328).
+#
+# A cited section matches a heading on its normalised text (backticks, bold
+# markers, case and runs of whitespace ignored), and also matches a heading
+# that carries an appended qualifier the citation drops -- `## Foo — bar` and
+# `## Foo (bar)` are both cited as "Foo" throughout the tree, and both spell a
+# complete title followed by a qualifier rather than a different title.
+sections_checked=0
+
+# Every accepted spelling of every heading in $1, normalised for comparison.
+heading_anchors() {
+    local raw
+    raw="$(grep -E '^#{1,6} +' "$1" | sed -E 's/^#{1,6} +//')"
+    {
+        printf '%s\n' "$raw"
+        printf '%s\n' "$raw" | sed -E 's/ +\([^()]*\)$//'
+        printf '%s\n' "$raw" | sed -E 's/ +(—|--) .*$//'
+        printf '%s\n' "$raw" | sed -E 's/ +\([^()]*\)$//' | sed -E 's/ +(—|--) .*$//'
+    } | tr -d '`*' | tr -s ' ' | sed -E 's/^ +//; s/ +$//' | tr '[:upper:]' '[:lower:]' | sort -u
+}
+
+# A citation spells its target either repo-relative (`docs/spec/core/wire.md`),
+# relative to the citing file (a spec cross-referencing its neighbour), rooted
+# at docs/ (SECURITY.md's `spec/security.md`), or by bare basename from code
+# (`backend.md`) -- resolved by unique basename, since an ambiguous one is not
+# a reference a reader could follow either.
+resolve_cited_md() {
+    local from_dir="$1" cited="$2" cand matches
+    for cand in "$cited" "${from_dir}/${cited}" "docs/${cited}"; do
+        if [ -f "$cand" ]; then
+            printf '%s\n' "$cand"
+            return 0
+        fi
+    done
+    matches="$(git ls-files -- "$cited" "*/${cited}" | head -n 3)"
+    if [ "$(printf '%s' "$matches" | grep -c . || true)" = "1" ]; then
+        printf '%s\n' "$matches"
+        return 0
+    fi
+    return 1
+}
+
+while IFS=$'\t' read -r file line cited section; do
+    [ -n "$section" ] || continue
+    sections_checked=$((sections_checked + 1))
+    if ! target="$(resolve_cited_md "$(dirname "$file")" "$cited")"; then
+        echo "::error file=${file},line=${line}::section citation names ${cited}, which does not resolve to a markdown file in the tree"
+        fail=1
+        continue
+    fi
+    normalised="$(printf '%s' "$section" | tr -d '`*' | tr -s ' ' | sed -E 's/^ +//; s/ +$//' | tr '[:upper:]' '[:lower:]')"
+    if ! heading_anchors "$target" | grep -qxF -- "$normalised"; then
+        echo "::error file=${file},line=${line}::dangling section citation: ${target} has no section \"${section}\""
+        fail=1
+    fi
+done < <(
+    git ls-files -z '*.md' '*.hpp' '*.cpp' '*.sh' '*.yml' '*.qml' \
+      | grep -zv '^docs/superpowers/plans/' \
+      | xargs -0 awk '
+    FNR == 1 { flush(); buf = "" }
+    {
+        text = $0
+        # Strip a leading comment marker so a citation Doxygen-wrapped across
+        # two comment lines still reads as one logical line -- which the live
+        # instance morph#316 reported (bridge.hpp) is.
+        sub(/^[ \t]*(\/\/\/?[!<]?|\*|#+)[ \t]?/, "", text)
+        if (buf == "") { buf = text; bufline = FNR; buffile = FILENAME } else { buf = buf " " text }
+        # A citation continues onto the next line exactly when this one ends
+        # on the comma separating the file from its section, or one section
+        # from the next. Spelling the whole prefix out (rather than "ends in a
+        # comma") keeps an unrelated line that happens to end in `",` from
+        # swallowing the line after it and mis-attributing its line number.
+        if (buf ~ /`[^`]+\.md`[ \t]*,([ \t]*"[^"]+"[ \t]*,)*[ \t]*$/) next
+        flush()
+        buf = ""
+    }
+    END { flush() }
+    function flush(   rest, cit, cited, sec) {
+        rest = buf
+        while (match(rest, /`[A-Za-z0-9_\/.-]+\.md`[ \t]*,[ \t]*"[^"]+"([ \t]*,[ \t]*"[^"]+")*/)) {
+            cit = substr(rest, RSTART, RLENGTH)
+            rest = substr(rest, RSTART + RLENGTH)
+            cited = cit
+            sub(/^`/, "", cited)
+            sub(/`.*$/, "", cited)
+            while (match(cit, /"[^"]+"/)) {
+                sec = substr(cit, RSTART + 1, RLENGTH - 2)
+                cit = substr(cit, RSTART + RLENGTH)
+                print buffile "\t" bufline "\t" cited "\t" sec
+            }
+        }
+    }' 2>/dev/null || true
+)
+
+# Same lesson as check 3's floor and check 4's per-category floors, and its own
+# counter rather than a share of either: a regex that stopped matching, a
+# comment-marker shape this awk does not strip, or a glob that went stale would
+# otherwise leave this check reporting green having verified no section at all
+# -- reproducing, inside the fix, the silent pass it was written to close.
+if [ "$sections_checked" -lt 40 ]; then
+    echo "::error::section-citation check only scanned ${sections_checked} cited sections -- expected at least 40; the scan is not finding citations and would pass vacuously"
+    fail=1
+else
+    echo "Section-citation check: ${sections_checked} cited sections scanned."
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo ""
     echo "Prose lint failed. Either restore the missing citation or remove the"
@@ -237,4 +369,4 @@ if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "Prose lint OK: every pinned fact is still cited; no banned terminology found; every cited path resolves."
+echo "Prose lint OK: every pinned fact is still cited; no banned terminology found; every cited path resolves; every cited section exists."

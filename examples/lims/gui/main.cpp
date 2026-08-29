@@ -18,7 +18,8 @@
 /// Everything below the deployment-mode choice is intended to be shared
 /// verbatim with a future `gui_wasm/main_wasm.cpp` — the adapters and the QML
 /// module all live outside this file precisely so the two clients can be one
-/// program with two `main()`s (`examples/TESTING.md`, "same client code").
+/// program with two `main()`s. That is the "same client code" DoD stated in
+/// `examples/TESTING.md`, "Build system and CI".
 ///
 /// @par What Local mode is, and is not
 /// Local mode hosts every model in this process, so this process is the one

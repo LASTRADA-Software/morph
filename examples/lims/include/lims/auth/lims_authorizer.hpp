@@ -83,7 +83,7 @@ public:
     /// compiles either way and says which primitive the rung uses.
     ///
     /// A real deployment injects a vetted implementation through the overload
-    /// below; see `docs/spec/security.md`, "MAC-primitive recommended wiring".
+    /// below; see `docs/spec/security.md`, "Recommended production wiring: a vetted library".
     LimsAuthorizer(std::string secret, RoleLookup roles)
         : ::morph::session::SigningAuthorizer{std::move(secret), ::morph::session::hmacSha256},
           _roles{std::move(roles)} {}

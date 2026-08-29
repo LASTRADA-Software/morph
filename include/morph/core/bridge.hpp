@@ -60,8 +60,7 @@ public:
     /// @brief Registers the executors for `(Model, Action)` under the given string ids.
     ///
     /// Populates one `Executor` per `Sharing` policy the framework defines
-    /// (`NoSharing` and `AllowShared` — see `bridge.md`, "Design decisions",
-    /// "`ActionExecuteRegistry::registerAction` is `Sharing`-aware"), keyed by
+    /// (`NoSharing` and `AllowShared`), keyed by
     /// `(modelId, actionId, typeid(Sharing))`, rather than a single executor
     /// that unconditionally assumes `NoSharing`. A handler whose `Sharing` is
     /// anything else must be dispatched through the *matching* executor: the

@@ -39,7 +39,7 @@ struct QueueItem {
     /// queue and the journal replay have no shared identity otherwise — the
     /// queue's `id` is queue-local and the journal's `seq` is journal-local —
     /// so a host that replays through both paths must wire this key (see
-    /// `docs/spec/offline/offline.md`, "Idempotency key: deduping against the journal").
+    /// `docs/spec/offline/offline.md`, "`idempotencyKey`: deduping against the journal").
     /// The value is opaque to the queue; a good choice is a stable content hash
     /// or a client-minted operation id (e.g. a UUID) reused if the same op is
     /// re-enqueued.

@@ -16,8 +16,8 @@
 /// Everything below the deployment-mode choice is intended to be shared
 /// verbatim with a future `gui_wasm/main_wasm.cpp` — the adapters, the schema
 /// document and the QML module all live outside this file precisely so the
-/// two clients can be one program with two `main()`s (`examples/TESTING.md`,
-/// "same client code").
+/// two clients can be one program with two `main()`s. That is the "same client
+/// code" DoD stated in `examples/TESTING.md`, "Build system and CI".
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
