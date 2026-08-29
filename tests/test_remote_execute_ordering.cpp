@@ -14,13 +14,16 @@
 
 #include "test_support.hpp"
 
-// Regression test for docs/findings/035
-// (remote-server-execute-reordering.md): RemoteServer::handle() posts every
-// envelope to the shared worker pool before any per-model ordering exists, so
-// two `execute` envelopes for the *same* model, sent back-to-back on one
-// connection, can reach the model's own strand out of send order the moment
-// more than one pool worker is free to race the pre-strand work
-// (decode/authorize/authenticate/registry-lookup) ahead of the other.
+// Regression test for the same-model execute reordering `RemoteServer` used
+// to allow: `handle()` posts every envelope to the shared worker pool, so two
+// `execute` envelopes for the *same* model, sent back-to-back on one
+// connection, could reach the model's own strand out of send order the moment
+// more than one pool worker was free to race the pre-strand work
+// (decode/authorize/authenticate/registry-lookup) ahead of the other. The
+// per-model execute-ordering gate that closes it (`_executeGates`,
+// `awaitExecuteTurn`, `releaseExecuteTicket`) lives in
+// `include/morph/core/remote.hpp`, whose comments carry its full design
+// history — including the reverted first attempt.
 //
 // examples/common/testkit/test_fault_proxy.cpp's `FaultProxy::dropReply` test
 // caught this incidentally (it happens to send two calls close together) but
@@ -43,7 +46,7 @@
 // make that progress — DeterministicExecutor only runs one task to
 // completion at a time, so a fix that makes B legitimately wait for A
 // deadlocks it. Real threads are required to exercise the actual blocking
-// wait finding 035's fix introduces.
+// wait the ordering gate introduces.
 
 namespace {
 
@@ -225,7 +228,7 @@ TEST_CASE(
     // SlowFirstAuthorizer guarantees B's authorize() call (and everything
     // after it in B's pre-strand work) finishes before A's does -- A is the
     // first call reaching authorize() program-order, so it is the one held
-    // up. Without finding 035's fix, this is precisely the interleaving that
+    // up. Without the ordering gate, this is precisely the interleaving that
     // lets B's execute reach the model's strand before A's, even though the
     // client sent A first.
     REQUIRE(replyA.await(std::chrono::milliseconds{5000}));

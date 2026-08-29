@@ -245,10 +245,15 @@ int main(int argc, char** argv) {
     std::unique_ptr<polls::gui::PollBridge> pollBridge;
 
     // Built from inside onReady(), never before it: a Remote context is not
-    // usable the line after its constructor returns, and a registration or
-    // attach issued before the socket is up fails permanently with no retry
-    // (docs/findings/017). Identical to bookmarks'/pastebin's own Remote
-    // clients, and — per this file's header comment — load-bearing here for
+    // usable the line after its constructor returns (AppContext's readiness
+    // contract, `examples/common/gui/app_context.hpp`). The two halves are not
+    // symmetric: a plain *registration* issued before the socket is up is
+    // queued and sent once it connects, but a keyed *attach* is not —
+    // `QtWebSocketBackend::attachModelAsync()` fails one immediately with
+    // "disconnected" and never retries it
+    // (`docs/spec/core/backend.md`, "Asynchronous registration",
+    // "Shared/keyed registration"). Identical to bookmarks'/pastebin's own
+    // Remote clients, and — per this file's header comment — load-bearing for
     // a second, distinct reason: `PollBridge`'s handler's *first* network
     // call is `OpenPoll`'s async attach itself, with no prior "registration"
     // step to race, so this is also the point past which that attach is

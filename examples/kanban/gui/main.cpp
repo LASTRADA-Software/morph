@@ -127,8 +127,11 @@ int main(int argc, char** argv) {
 
     // Mirrors AppContext's own doc-comment construction pattern: pick the
     // mode, then build every handler from inside onReady() — a Remote context
-    // is *not* usable the line after its constructor returns
-    // (docs/findings/017).
+    // is *not* usable the line after its constructor returns (AppContext's
+    // readiness contract, gui/app_context.hpp): a registration issued before
+    // the socket connects is queued, and the handler it belongs to stays
+    // unbound until the register reply lands
+    // (`docs/spec/core/backend.md`, "Asynchronous registration").
     ::morph::ladder::gui::AppContext ctx{
         serverUrl ? ::morph::ladder::gui::AppContext::Mode{::morph::ladder::gui::Remote{.url = *serverUrl}}
                   : ::morph::ladder::gui::AppContext::Mode{::morph::ladder::gui::Local{.workers = 4}}};

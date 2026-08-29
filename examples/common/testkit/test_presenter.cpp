@@ -126,8 +126,11 @@ public:
 
     /// @brief Drives the model that always throws, using the three-argument
     ///        track(onOk, onErr) overload so a test can assert the onErr
-    ///        callback itself actually fires. Regression coverage for
-    ///        docs/findings/023: bumpAndFail() above only exercises the
+    ///        callback itself actually fires. Regression coverage for the
+    ///        last-writer-wins `.onError()` attach that overload exists to
+    ///        avoid (since closed in the framework as well —
+    ///        `docs/spec/core/completion.md`,
+    ///        "Failure modes"): bumpAndFail() above only exercises the
     ///        two-argument form, which busy()/idle() alone cannot
     ///        distinguish from the pre-fix bug (the surviving handler in
     ///        both cases is track()'s own, so the counter always cleared
@@ -221,8 +224,14 @@ TEST_CASE("Presenter::track() calls finishOne() even when onOk itself throws", "
 
 TEST_CASE("Presenter::track()'s three-argument overload invokes onErr on the error path",
           "[ladder][testkit][gui][presenter]") {
-    // Regression test for docs/findings/023 (Completion<T>::onError() is
-    // single-slot: a second .onError() attach silently discards the first).
+    // Regression test for track()'s third argument, which exists because a
+    // presenter that pre-attached its own .onError() used to lose it:
+    // Completion<T>::onError() was single-slot, so track()'s own attach
+    // silently discarded the earlier handler. Completion<T> now appends
+    // instead of overwriting (`docs/spec/core/completion.md`,
+    // "Failure modes"), but track() still folds the caller's onErr into the
+    // one handler it attaches, and that is what this test pins.
+    //
     // The test case above ("...calls finishOne() on the error path...") only
     // asserts busy()/idle() — that assertion passed even with the pre-fix
     // bug present, since the surviving .onError() handler was always
