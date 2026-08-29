@@ -42,10 +42,10 @@ guarantees**, for example:
 as planned hardening work under `docs/planned/` (or, once addressed, folded
 into `docs/spec/`) — among them the reference `hmacSha256` not being hardened
 beyond a constant-time compare unless a vetted `MacFunction` is injected (see
-`spec/security.md`, "MAC-primitive recommended wiring"), the self-signed/
-`VerifyNone` TLS example (`tls_peer_verification.md`), absent rate/resource limits
-(`transport_limits.md`), unauthenticated `register` and sequential model ids
-(`instance_authorization.md`), and server-side model leaks on client
-disconnect (`connection_scoped_cleanup.md`). Reports that a documented
-limitation exists are appreciated but are not vulnerabilities; a way to make
-one of them *worse than documented* is.
+`spec/security.md`, "Recommended production wiring: a vetted library"), the
+self-signed/`VerifyNone` TLS example (`tls_peer_verification.md`), absent
+rate/resource limits (`transport_limits.md`), unauthenticated `register` and
+sequential model ids (`instance_authorization.md`), and server-side model
+leaks on client disconnect (`connection_scoped_cleanup.md`). Reports that a
+documented limitation exists are appreciated but are not vulnerabilities; a
+way to make one of them *worse than documented* is.
