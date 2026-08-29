@@ -535,6 +535,41 @@ local-time strings against UTC-stored rows row-by-row. The dual-mode GUI
 test asserts a transaction at 23:30 local time lands in the report for its
 local month even when that crosses a UTC day/month boundary.
 
+**Update: morph#160 (implemented by PR morph#243) superseded this
+section's "off-strand / at submit time" half.** Rung 5's README already
+records the new arrangement under "Who runs the job (morph#160)"; this
+note exists because `examples/ledger/` cites this document 67 times as
+"design spec §N" — eight of them at §9 — and a reader following one of
+those citations should not have to know which PRs landed afterwards. The
+submit→poll *shape* above is what shipped and is unchanged; the two
+decisions about *where and when the job runs* are not, and the tree is
+now the authority on them:
+
+- **The job runs on the ledger's own strand, not off it.** `SubmitReport`
+  writes the `Pending` row and returns the id, and nothing else
+  (`examples/ledger/src/models/ledger_model.cpp`'s
+  `execute(const SubmitReport&)`); a separate `RunReportJob` action,
+  dispatched back at `LedgerModel` by the App-layer runner, performs the
+  aggregation. There is no worker-pool task inside the model and
+  `LedgerModel` owns no executor — the reasoning is in morph#129's closing
+  comment (a model implements actions; scheduling belongs to the App
+  layer).
+- **The snapshot opens at job-start time, not at submit time.**
+  `WalSnapshotGuard` is constructed inside `execute(const RunReportJob&)`,
+  around `computeReportJson` alone. It is still needed — the strand
+  serialises this ledger's own actions and says nothing about
+  `BudgetModel` or any other connection writing the same database — which
+  is exactly what that call site's own comment now records. The params
+  decode moved with it: `SubmitReport` stores `params` verbatim and
+  uninterpreted, and `decodeMonthlyParams` runs inside `RunReportJob`.
+
+The byte-identical-on-rerun reading above survives intact: it was always
+about one job's own idempotent result retrieval, and the job still
+computes once against a pinned view and caches its result. Left as a
+dated closure note rather than a rewrite, per this directory's convention
+— the paragraphs above record what was decided on 2026-08-19, not what
+the tree does today.
+
 ## 10. Sync-philosophy benchmark (step 8 — written deliverable)
 
 Per the README, this is prose plus two reproduced scenarios as tests, not
