@@ -87,10 +87,11 @@ int main(int argc, char* argv[]) {
     // code, not a test) until the async registration completes, then fire
     // one action and log the result to the browser console, where the
     // nightly Playwright smoke (this directory's README) asserts on it.
-    // `BridgeHandler::isBound()` observes the same settlement that used to
-    // require polling `HandlerBinding::currentId` directly (docs/findings/019,
-    // reach-in #3), without this file ever naming
-    // `morph::bridge::detail::HandlerBinding`.
+    // `BridgeHandler::isBound()` observes the same registration settlement
+    // that used to require polling `HandlerBinding::currentId` directly, so
+    // this spike never names `morph::bridge::detail::HandlerBinding` — an
+    // internal record that is deliberately not public API
+    // (`docs/spec/core/bridge.md`, "`HandlerBinding`").
     auto* timer = new QTimer{&app};
     QObject::connect(timer, &QTimer::timeout, [&handler] {
         if (!handler.has_value() || !handler->isBound()) {
