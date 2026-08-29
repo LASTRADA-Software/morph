@@ -381,17 +381,17 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
 
   **On the finding numbers this section used to cite.** The ten findings above
   were filed under a flat global sequence that no longer exists.
-  [`../FINDINGS.md`](../FINDINGS.md) now namespaces every id by the rung that
-  produced it (`<ns>-NNN-<kebab-slug>.md`) precisely because the flat sequence
-  did not survive parallel branches — two disjoint series were allocated
-  independently and both merged, so the same number came to mean different
-  things on different branches. Every file in `docs/findings/` today carries
-  a namespaced id (`r4-001`, `r4-002`, `r5-001`…`r5-004`), and the bare
-  numbers this rung's prose used to carry (`017`, `018`,
-  `021`, `023`, `026`) resolve to no file at all. They have been replaced
-  throughout by a description of the gap and a pointer to the code that closes
-  it, which is what a reader actually needs and what survives a renumbering.
-  No finding file has been invented to make an old citation resolve.
+  That sequence was first namespaced by rung (`<ns>-NNN-<kebab-slug>.md`)
+  because a flat sequence did not survive parallel branches — two disjoint
+  series were allocated independently and both merged, so the same number came
+  to mean different things on different branches. The `docs/findings/`
+  directory has since been retired altogether in favour of GitHub issues (see
+  [`../FINDINGS.md`](../FINDINGS.md)), so the bare numbers this rung's prose
+  used to carry (`017`, `018`, `021`, `023`, `026`) resolve to nothing. They
+  have been replaced throughout by a description of the gap and a pointer to
+  the code that closes it, which is what a reader actually needs and what
+  survives a renumbering. No finding has been invented to make an old citation
+  resolve.
 
 ### Known gaps, stated rather than smoothed over
 
