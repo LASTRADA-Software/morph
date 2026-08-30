@@ -26,21 +26,27 @@ from morph_scenario import (
     tokenize,
 )
 
+import scenario_coverage
+
 from scenario_coverage import (
     MIN_KINDS,
     MIN_MESSAGES,
     Allowlist,
+    AllowlistError,
     Exercised,
     Surface,
+    SurfaceError,
     _repo_root,
     allowlist_problems,
     covers,
     exercised_by,
+    extract_shipped_surface,
     extract_surface,
     floor_violations,
     load_allowlist,
     load_scenarios,
     main as coverage_main,
+    server_half,
 )
 
 
@@ -188,6 +194,16 @@ def _real_header_text() -> str:
     return (_repo_root() / "include" / "morph" / "core" / "remote.hpp").read_text(encoding="utf-8")
 
 
+def _real_wire_text() -> str:
+    """Reads the actual wire.hpp this repository ships."""
+    return (_repo_root() / "include" / "morph" / "core" / "wire.hpp").read_text(encoding="utf-8")
+
+
+def _real_surface():
+    """The surface of the shipped headers, with both scoping rules applied."""
+    return extract_shipped_surface(_real_header_text(), _real_wire_text())
+
+
 class SurfaceExtractionTest(unittest.TestCase):
     def test_finds_every_envelope_kind(self) -> None:
         surface = extract_surface(_FIXTURE_HEADER)
@@ -212,7 +228,7 @@ class SurfaceExtractionTest(unittest.TestCase):
         self.assertTrue(any("kind" in v for v in violations))
 
     def test_floor_accepts_the_real_header(self) -> None:
-        surface = extract_surface(_real_header_text())
+        surface = _real_surface()
         self.assertEqual(floor_violations(surface), [])
         self.assertGreaterEqual(len(surface.kinds), MIN_KINDS)
         self.assertGreaterEqual(
@@ -232,12 +248,93 @@ class SurfaceExtractionTest(unittest.TestCase):
         self.assertIn("some message", surface.exact_messages)
 
     def test_real_header_carries_the_kinds_the_spec_records(self) -> None:
-        surface = extract_surface(_real_header_text())
+        surface = _real_surface()
         self.assertEqual(
             surface.kinds,
             frozenset({"register", "execute", "deregister", "hello",
                        "attach", "assign", "instances", "schemas"}),
         )
+
+
+class ServerHalfScopeTest(unittest.TestCase):
+    def test_refusals_below_the_client_stub_are_not_part_of_the_universe(self) -> None:
+        # SimulatedRemoteBackend throws these on the *client* when it receives
+        # an err reply. They are C++ exceptions; no WebSocket peer can assert
+        # them, so counting them would set unreachable coverage targets.
+        surface = _real_surface()
+        known = surface.exact_messages | surface.message_prefixes
+        for client_side in (
+            "register failed: ",
+            "attach failed: ",
+            "instances failed: ",
+            "instances decode failed: ",
+            "schemas request failed: ",
+        ):
+            self.assertNotIn(client_side, known)
+
+    def test_the_kinds_are_unaffected_by_the_scope(self) -> None:
+        # Every `env.kind ==` comparison lives in the server, so truncating at
+        # the client stub must not lose one.
+        self.assertEqual(_real_surface().kinds, extract_surface(_real_header_text()).kinds)
+
+    def test_a_missing_marker_raises_rather_than_scanning_everything(self) -> None:
+        # A scoping rule that silently degrades to "scan the whole file" is the
+        # same class of bug as the one it exists to fix.
+        with self.assertRaises(SurfaceError) as caught:
+            server_half('reply(makeErr("only the server half here", id));\n')
+        self.assertIn("SimulatedRemoteBackend", str(caught.exception))
+
+    def test_the_wire_header_contributes_the_decode_refusal(self) -> None:
+        # wire::decode throws this and dispatchMessage's catch turns it into an
+        # err reply, so a scenario genuinely can assert it -- but it lives in
+        # wire.hpp, which the tool used never to read.
+        self.assertIn("envelope decode failed: ", _real_surface().message_prefixes)
+        self.assertNotIn(
+            "envelope decode failed: ", extract_surface(_real_header_text()).message_prefixes
+        )
+
+
+# The exact refusal universe the shipped headers yield. Unlike MIN_MESSAGES,
+# which only catches the surface shrinking, this pins the *set*: adding a
+# refusal to remote.hpp or wire.hpp fails this test, and a human then decides
+# whether it needs a scenario or an allowlist entry.
+_REAL_EXACT_MESSAGES = frozenset({
+    "assign requires a typeId",
+    "attach requires a typeId",
+    "connection closed",
+    "envelope decode failed: input exceeds maximum size (",
+    "handleInline does not support execute (reply is asynchronous)",
+    "instances requires a typeId",
+    "model not found",
+    "protocol version unsupported",
+    "register requires a typeId",
+    "schemas requires a typeId",
+    "server busy",
+    "server shutting down",
+    "timeout",
+    "too many models",
+    "unauthorized",
+})
+
+_REAL_MESSAGE_PREFIXES = frozenset({
+    "envelope decode failed: ",
+    "envelope encode failed: ",
+    "payload missing required field(s): ",
+    "protocol negotiation failed: ",
+    "unknown envelope kind: ",
+})
+
+
+class RealRefusalSetTest(unittest.TestCase):
+    def test_real_headers_carry_exactly_these_refusals(self) -> None:
+        surface = _real_surface()
+        self.assertEqual(surface.exact_messages, _REAL_EXACT_MESSAGES)
+        self.assertEqual(surface.message_prefixes, _REAL_MESSAGE_PREFIXES)
+
+    def test_min_messages_sits_just_below_the_true_total(self) -> None:
+        total = len(_REAL_EXACT_MESSAGES) + len(_REAL_MESSAGE_PREFIXES)
+        self.assertEqual(total, 20)
+        self.assertEqual(MIN_MESSAGES, total - 2)
 
 
 _FIXTURE_SCENARIO = '''
@@ -294,6 +391,37 @@ class ExercisedExtractionTest(unittest.TestCase):
         uncovered_kinds, uncovered_messages = covers(surface, exercised_by(self._parsed()))
         self.assertEqual(uncovered_kinds, frozenset({"assign"}))
         self.assertEqual(uncovered_messages, frozenset({"server busy"}))
+
+    def test_a_protocol_none_client_does_not_credit_hello(self) -> None:
+        # The runner skips the `hello` round-trip entirely when `protocol=none`
+        # (morph_scenario.Runner.do_client). Crediting `hello` here would report
+        # the handshake covered by a scenario that deliberately never sends it.
+        scenario = parse_scenario(
+            'client a protocol=none\nsend schemas typeId=X\nexpect err message == "x"\n', "f"
+        )
+        self.assertNotIn("hello", exercised_by([scenario]).kinds)
+
+    def test_a_client_with_no_model_anywhere_does_not_credit_register(self) -> None:
+        # No `model` setting and no `model=` option: the runner resolves an
+        # empty model name and sends no `register` at all.
+        scenario = parse_scenario(
+            'client a\nsend schemas typeId=X\nexpect err message == "x"\n', "f"
+        )
+        self.assertNotIn("register", exercised_by([scenario]).kinds)
+
+    def test_a_client_option_supplies_the_model_the_scenario_lacks(self) -> None:
+        scenario = parse_scenario(
+            'client a model=PasteModel\nsend schemas typeId=X\nexpect err message == "x"\n', "f"
+        )
+        self.assertIn("register", exercised_by([scenario]).kinds)
+
+    def test_a_plain_client_in_a_scenario_with_a_model_credits_both(self) -> None:
+        scenario = parse_scenario(
+            'model PasteModel\nclient a\nsend schemas typeId=X\nexpect err message == "x"\n', "f"
+        )
+        used = exercised_by([scenario])
+        self.assertIn("hello", used.kinds)
+        self.assertIn("register", used.kinds)
 
     def test_load_scenarios_returns_scenarios_in_sorted_order(self) -> None:
         # Minimal valid scenario: every do/send/deregister step must be
@@ -391,6 +519,28 @@ class AllowlistTest(unittest.TestCase):
             any("unknown envelope kind: " in p and "already covered" in p for p in problems)
         )
 
+    def test_malformed_json_raises_rather_than_escaping_as_a_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "allow.json"
+            path.write_text("{not json at all", encoding="utf-8")
+            with self.assertRaises(AllowlistError) as caught:
+                load_allowlist(path)
+        self.assertIn("not valid JSON", str(caught.exception))
+
+    def test_a_non_string_reason_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "allow.json"
+            path.write_text('{"kinds": {"assign": 7}}', encoding="utf-8")
+            with self.assertRaises(AllowlistError):
+                load_allowlist(path)
+
+    def test_a_section_that_is_not_an_object_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "allow.json"
+            path.write_text('{"messages": ["server busy"]}', encoding="utf-8")
+            with self.assertRaises(AllowlistError):
+                load_allowlist(path)
+
     def test_the_shipped_allowlist_parses(self) -> None:
         allowlist = load_allowlist(_repo_root() / "scripts" / "scenario" / "coverage_allowlist.json")
         for reason in list(allowlist.kinds.values()) + list(allowlist.messages.values()):
@@ -398,43 +548,76 @@ class AllowlistTest(unittest.TestCase):
 
 
 class CoverageCliTest(unittest.TestCase):
+    def _fixture_run(self, tmp: str, header_text: str, extra: list[str]) -> int:
+        """Runs the CLI over a throwaway header, empty wire header and corpus."""
+        root = pathlib.Path(tmp)
+        header = root / "remote.hpp"
+        # Every fixture header carries the marker: refusal extraction refuses
+        # to guess a scope without it.
+        header.write_text(header_text + "\n" + scenario_coverage.SERVER_HALF_MARKER + " {};\n",
+                          encoding="utf-8")
+        wire = root / "wire.hpp"
+        wire.write_text("", encoding="utf-8")
+        scenarios = root / "scenarios"
+        scenarios.mkdir()
+        return coverage_main([
+            "--header", str(header), "--wire-header", str(wire),
+            "--scenarios", str(scenarios), *extra,
+        ])
+
     def test_exits_two_when_the_extractor_finds_an_implausible_surface(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            header = pathlib.Path(tmp) / "remote.hpp"
-            header.write_text('if (env.kind == "register") {}\n', encoding="utf-8")
-            scenarios = pathlib.Path(tmp) / "scenarios"
+            code = self._fixture_run(tmp, 'if (env.kind == "register") {}', [])
+        self.assertEqual(code, 2)
+
+    def test_exits_two_when_the_server_half_marker_is_gone(self) -> None:
+        # Without the marker the tool has no honest scope, so it must stop --
+        # not silently count the client stub's throws as wire refusals.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            header = root / "remote.hpp"
+            header.write_text(_FIXTURE_HEADER, encoding="utf-8")
+            wire = root / "wire.hpp"
+            wire.write_text("", encoding="utf-8")
+            scenarios = root / "scenarios"
             scenarios.mkdir()
-            code = coverage_main(["--header", str(header), "--scenarios", str(scenarios)])
+            code = coverage_main([
+                "--header", str(header), "--wire-header", str(wire),
+                "--scenarios", str(scenarios), "--no-floor",
+            ])
         self.assertEqual(code, 2)
 
     def test_exits_one_when_something_is_uncovered_and_unexempt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            header = pathlib.Path(tmp) / "remote.hpp"
-            header.write_text(_FIXTURE_HEADER, encoding="utf-8")
-            scenarios = pathlib.Path(tmp) / "scenarios"
-            scenarios.mkdir()
             allow = pathlib.Path(tmp) / "allow.json"
             allow.write_text('{"kinds": {}, "messages": {}}', encoding="utf-8")
-            code = coverage_main([
-                "--header", str(header), "--scenarios", str(scenarios),
-                "--allowlist", str(allow), "--no-floor",
-            ])
+            code = self._fixture_run(
+                tmp, _FIXTURE_HEADER, ["--allowlist", str(allow), "--no-floor"]
+            )
         self.assertEqual(code, 1)
+
+    def test_exits_two_when_the_allowlist_is_malformed(self) -> None:
+        # A broken allowlist is a broken tool. Exit 1 would tell CI there is a
+        # real coverage gap.
+        with tempfile.TemporaryDirectory() as tmp:
+            allow = pathlib.Path(tmp) / "allow.json"
+            allow.write_text("{oops", encoding="utf-8")
+            code = self._fixture_run(
+                tmp, _FIXTURE_HEADER, ["--allowlist", str(allow), "--no-floor"]
+            )
+        self.assertEqual(code, 2)
 
     def test_exits_zero_when_everything_uncovered_is_exempt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            header = pathlib.Path(tmp) / "remote.hpp"
-            header.write_text('if (env.kind == "register") {}\nreply(makeErr("nope", id));\n', encoding="utf-8")
-            scenarios = pathlib.Path(tmp) / "scenarios"
-            scenarios.mkdir()
             allow = pathlib.Path(tmp) / "allow.json"
             allow.write_text(
                 '{"kinds": {"register": "fixture"}, "messages": {"nope": "fixture"}}', encoding="utf-8"
             )
-            code = coverage_main([
-                "--header", str(header), "--scenarios", str(scenarios),
-                "--allowlist", str(allow), "--no-floor",
-            ])
+            code = self._fixture_run(
+                tmp,
+                'if (env.kind == "register") {}\nreply(makeErr("nope", id));',
+                ["--allowlist", str(allow), "--no-floor"],
+            )
         self.assertEqual(code, 0)
 
 
