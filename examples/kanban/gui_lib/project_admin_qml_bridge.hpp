@@ -43,6 +43,10 @@ class ProjectAdminBridge : public QObject {
     /// @brief The most recent `listRoles` result: every member's role on the
     ///        requested project, each a `{principal, role}` map.
     Q_PROPERTY(QVariantList roles READ roles NOTIFY rolesListed)
+    /// @brief `{actionType: schema}` JSON — everything the QML renderer needs
+    ///        to draw this rung's schema-driven forms. `CONSTANT`: the
+    ///        document is a pure function of the compiled action types.
+    Q_PROPERTY(QString schemasJson READ schemasJson CONSTANT)
 
 public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
@@ -60,10 +64,32 @@ public:
     /// @return The most recent role listing's rows.
     [[nodiscard]] QVariantList roles() const { return _roles; }
 
+    /// @brief The schema document the wrapped forms render from
+    ///        (`kanban_schemas.hpp`).
+    /// @return `{actionType: schema}` JSON.
+    [[nodiscard]] QString schemasJson() const;
+
     /// @brief Mints a session token for `username` and installs it. Emits
     ///        `loggedIn`, or `failed`.
+    ///
+    /// Deliberately **not** `Q_INVOKABLE`: `LoginView.qml` submits through the
+    /// schema renderer now, so nothing in `gui/qml/` calls this, and a QML
+    /// surface nothing binds is exactly what
+    /// `tests/test_kanban_qml_surface.cpp` exists to catch. It stays a plain
+    /// public method for C++ callers that already hold a username.
     /// @param username The identity to log in as.
-    Q_INVOKABLE void login(const QString& username);
+    void login(const QString& username);
+
+    /// @brief Dispatches @p bodyJson as @p actionType's body — the entry point
+    ///        `MorphForms`' `DynamicForm` calls on submit.
+    ///
+    /// Named to match the controller contract the shipped renderer expects
+    /// (`morph::qt::forms::FormsControllerCore::submitIfValid`), so
+    /// `DynamicForm`'s `controller:` binding can point straight at this
+    /// bridge. Emits `replyReceived`.
+    /// @param actionType Registered action type id, as the schema names it.
+    /// @param bodyJson   Fully-assembled JSON body, as `DynamicForm` builds it.
+    Q_INVOKABLE void submitIfValid(const QString& actionType, const QString& bodyJson);
 
     /// @brief Fetches every project the caller belongs to. Emits
     ///        `projectsListed`, or `failed`.
@@ -100,6 +126,16 @@ signals:
     /// @brief Emitted after a successful `login` — see `principal` property.
     /// @param principal The verified username the server echoed back.
     void loggedIn(const QString& principal);
+    /// @brief Emitted once per `submitIfValid`, carrying that form's outcome.
+    ///
+    /// The name `DynamicForm`'s callers already listen for
+    /// (`bookmarks::gui::FormsBridge::replyReceived`), so a view moved between
+    /// rungs binds the same handler.
+    /// @param actionType The action the reply belongs to.
+    /// @param ok         Whether the dispatch succeeded.
+    /// @param payload    Result JSON on success, the error message otherwise.
+    ///                   A successful `Login`'s token is redacted out first.
+    void replyReceived(const QString& actionType, bool ok, const QString& payload);
     /// @brief A `refreshProjects` succeeded — see `projects` property.
     /// @param projects The listing's rows.
     void projectsListed(const QVariantList& projects);

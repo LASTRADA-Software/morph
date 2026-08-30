@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "project_admin_qml_bridge.hpp"
 
+#include "kanban_schemas.hpp"
+
 #include <QString>
 #include <QVariant>
 #include <utility>
@@ -78,9 +80,16 @@ ProjectAdminBridge::ProjectAdminBridge(::morph::bridge::Bridge& bridge, ::morph:
     connect(&_presenter, &ProjectAdminPresenter::memberRoleSet, this, &ProjectAdminBridge::memberRoleSet);
     connect(&_presenter, &ProjectAdminPresenter::memberRemoved, this, &ProjectAdminBridge::memberRemoved);
     connect(&_presenter, &ProjectAdminPresenter::failed, this, &ProjectAdminBridge::failed);
+    connect(&_presenter, &ProjectAdminPresenter::formReplyReceived, this, &ProjectAdminBridge::replyReceived);
 }
 
+QString ProjectAdminBridge::schemasJson() const { return QString::fromStdString(kanbanSchemasJson()); }
+
 void ProjectAdminBridge::login(const QString& username) { _presenter.login(username); }
+
+void ProjectAdminBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
+    _presenter.submitForm(actionType, bodyJson);
+}
 
 void ProjectAdminBridge::refreshProjects() { _presenter.refreshProjects(); }
 

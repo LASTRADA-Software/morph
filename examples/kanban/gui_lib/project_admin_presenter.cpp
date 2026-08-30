@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "project_admin_presenter.hpp"
 
+#include <glaze/glaze.hpp>
 #include <morph/session/session.hpp>
+#include <string>
 #include <utility>
 
 #include "gui/error_text.hpp"
@@ -31,6 +33,58 @@ void ProjectAdminPresenter::login(const QString& username) {
         _authHandler.execute(Login{.username = username.toStdString()}),
         [this](LoginResult result) { onLoginSucceeded(result); },
         [this](const std::exception_ptr& err) { reportError(err); });
+}
+
+void ProjectAdminPresenter::submitForm(const QString& actionType, const QString& bodyJson) {
+    // `executeJson` is the type-erased counterpart of the typed `execute`
+    // calls below: the schema renderer only ever knows an action by the string
+    // the schema names it with. Routing is a single handler today because
+    // `Login` is the only schema-driven form in this rung — see
+    // `kanban_schemas.hpp` and morph#344. When a second model's action joins
+    // the document, this becomes the same actionType->handler table
+    // `bookmarks::gui::BookmarkFormsController::dispatch` already has, and the
+    // unroutable case must report rather than silently drop: QML names types
+    // as strings, so a typo has to arrive somewhere a human reads it.
+    const std::string type = actionType.toStdString();
+    if (type != "Login") {
+        emit formReplyReceived(actionType, false,
+                               QStringLiteral("no model in this client serves action '") + actionType + u'\'');
+        return;
+    }
+    track<std::string>(
+        _authHandler.executeJson(type, bodyJson.toStdString()),
+        [this, actionType](std::string resultJson) {
+            // A successful Login is the one reply this client reads rather
+            // than merely displays: the token has to be installed before
+            // anything else dispatches.
+            // The same glaze reflection the wire used, so nothing here parses
+            // JSON by hand; `read_json` returns a truthy error context on
+            // failure. Named the same way, for the same reason, as
+            // `bookmarks::gui::decodeLoginResult`.
+            LoginResult result;
+            if (glz::read_json(result, resultJson)) {
+                emit formReplyReceived(actionType, false,
+                                       QStringLiteral("login succeeded but its reply could not be decoded"));
+                return;
+            }
+            onLoginSucceeded(result);
+            // The token has already done its one job -- installed onto the
+            // session above -- so it has no reason to leave this function.
+            // `formReplyReceived` reaches every bound QML handler, and one
+            // that rendered `payload` unconditionally would otherwise put a
+            // live bearer credential on screen (and into any screenshot of
+            // it). Re-encoding a redacted copy keeps the signal's shape
+            // unchanged rather than making this a QML surface change. Same
+            // reasoning, and the same redaction, as
+            // `bookmarks::gui::FormsBridge::submitIfValid`.
+            LoginResult redacted = result;
+            redacted.token = AuthToken{};
+            emit formReplyReceived(actionType, true,
+                                   QString::fromStdString(glz::write_json(redacted).value_or("{}")));
+        },
+        [this, actionType](const std::exception_ptr& err) {
+            emit formReplyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
+        });
 }
 
 void ProjectAdminPresenter::refreshProjects() {
