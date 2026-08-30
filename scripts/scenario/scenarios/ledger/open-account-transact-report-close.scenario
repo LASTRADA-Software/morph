@@ -1,0 +1,132 @@
+# ledger (rung 5) — the bookkeeping journey end to end.
+#
+#   sign in -> open two accounts -> record a balanced transaction ->
+#   read the ledger back -> categorise it -> submit a report ->
+#   budget the category -> undo the transaction
+#
+# Sourced from examples/ledger/README.md's "What to implement": accounts and
+# a per-currency zero-sum ledger (steps 1-2), categories and budgets (step 5),
+# background reports (step 9), and journal-backed undo (step 6).
+#
+# Re-runnable against the same database: every id this file uses is captured
+# from the reply that created it, so nothing depends on the database being
+# empty, and no assertion depends on wall-clock time.
+#
+# ── Notes on the wire shapes, which are not guessable from the DTOs ─────────
+#   * every strong id is its bare underlying number on the wire
+#     (ledger/core/types.hpp's LEDGER_DEFINE_STRONG_ID_WIRE), so `ledgerId=$l`
+#     sends `"ledgerId": 7`, and an *empty* id is omitted from the JSON
+#     entirely rather than sent as null;
+#   * enums are their integer values, not their names — AccountKind::Asset is
+#     0 and ::Expense is 1, Currency::EUR is 1;
+#   * a Rational is `{"num","den","dp"}` and arrives *canonicalised*: -250/100
+#     is stored and returned as -5/2 with dp=2, so assertions here name the
+#     canonical form rather than what was sent;
+#   * a Timestamp is an ISO-8601 instant string;
+#   * several actions answer with a bare scalar rather than an object --
+#     CreateCategory, CreateBudget and SubmitReport each return just their new
+#     id — so those captures read `$` (the whole body) rather than `$.field`.
+
+server ws://127.0.0.1:8765
+
+# ── Sign in ────────────────────────────────────────────────────────────────
+# AuthModel is the one model an unauthenticated caller may reach. The token it
+# mints is real and server-signed; every later client installs it.
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+expect ok field principal == "alice"
+
+# ── Open the ledger, carrying the minted session ────────────────────────────
+# NOTE: `client`'s own principal=/token= options are NOT capture-expanded --
+# they take literal text. The credentials a Login just minted have to be
+# installed with a `session` step, which is. See morph#TBD.
+client books model=LedgerModel
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Cash" kind=0 currency=1
+expect ok capture cash=$.id
+expect ok field name == "Cash"
+expect ok field balance.num == 0
+
+do OpenAccount ledgerId=1 name="Coffee" kind=1 currency=1
+expect ok capture coffee=$.id
+
+# ── Record a balanced transaction ───────────────────────────────────────────
+# Two legs in one currency summing to canonical zero — the invariant
+# LedgerModel::execute enforces (ZeroSumViolation otherwise, asserted below).
+do StoreTransaction ledgerId=1 description="flat white" date="2026-08-30T09:15:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-250,"den":1,"dp":2}},{"accountId":$coffee,"amount":{"num":250,"den":1,"dp":2}}]
+# StoreTransaction answers with the whole ledger state, not a receipt: the
+# posted balances ARE the proof the legs landed, which is a stronger assertion
+# than any id would have been.
+# ...and the posted balances prove the legs landed on the right accounts.
+# Pinned against the ids captured above, so other rows in a shared database
+# cannot satisfy this by accident.
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-250"
+expect ok field accounts ~ "\"id\":$coffee,\"name\":\"Coffee\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":250"
+
+# The read is what proves the write landed — not the write's own ok. Balances
+# come back canonicalised: -250/100 is -5/2.
+do GetLedger ledgerId=1
+expect ok field accounts ~ "Cash"
+expect ok field accounts ~ "Coffee"
+
+# ── The zero-sum invariant actually bites ───────────────────────────────────
+# Same shape, legs that do not cancel. Asserting the refusal is what makes the
+# success above mean something.
+do StoreTransaction ledgerId=1 description="unbalanced" date="2026-08-30T09:16:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$coffee,"amount":{"num":250,"den":1,"dp":2}}]
+expect err message ~ "zero"
+
+# ── Categorise, and budget the category ─────────────────────────────────────
+client budgets model=BudgetModel
+session principal=$who token=$token
+
+do CreateCategory ledgerId=1 name="Drinks"
+expect ok capture drinks=$
+
+do LinkAccountToCategory accountId=$coffee categoryId=$drinks
+expect ok
+
+do CreateBudget ledgerId=1 name="August" categoryId=$drinks
+expect ok capture budget=$
+
+do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":5000,"den":1,"dp":2} currency=1
+expect ok
+
+do GetBudgetReport budgetId=$budget month="2026-08"
+expect ok field limit.num == 5000
+expect ok field currency == 1
+
+# ── Submit a report ─────────────────────────────────────────────────────────
+# SubmitReport only enqueues: the job is computed later by the server's own
+# report runner. A scenario cannot wait for that (this runner has no sleeps by
+# design), so this asserts the state it *can* observe synchronously.
+use books
+do SubmitReport ledgerId=1 kind=0 params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
+expect ok capture job=$
+
+do GetReportStatus jobId=$job
+expect ok field status == 0
+
+# ...and the authorization boundary that makes the wait unavoidable:
+# LedgerModel::execute(const RunReportJob&) accepts only the report runner's
+# own principal, so a user client asking to run its own job is refused.
+do RunReportJob jobId=$job ledgerId=1
+expect err message == "RunReportJob: only the report runner may run a report job"
+
+# ── Close out ───────────────────────────────────────────────────────────────
+# UndoTransaction reverses a journal entry by id -- but no action in this
+# rung's wire surface hands a journalId back (StoreTransaction answers with
+# ledger state, GetLedger with accounts), so a client cannot name a real one.
+# What is assertable is the refusal for an id that does not exist, which still
+# pins the action's own not-found path.
+do UndoTransaction ledgerId=1 journalId=999999
+expect err message ~ "journal"
+expect err message !~ "flat white"
+
+# Final read: the ledger is still readable and consistent after everything.
+do GetLedger ledgerId=1
+expect ok field accounts ~ "Cash"
+expect ok field accounts ~ "Coffee"

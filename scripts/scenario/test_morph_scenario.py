@@ -711,16 +711,21 @@ class ActionExtractionTest(unittest.TestCase):
         for rung in SERVER_RUNGS:
             self.assertTrue(actions[rung], f"{rung} registers no actions")
 
-    def test_real_tree_pins_the_known_action_counts(self) -> None:
-        # A set-pin, not a >= check: the floor only catches shrinkage, so an
-        # ADDED action would otherwise be invisible. When this fails, a human
-        # decides whether the new action needs a workflow or an allowlist entry.
+    def test_real_tree_pins_the_known_action_names(self) -> None:
+        # Pins the exact set of action names per rung: a count-only assertion
+        # is blind to renames and to add-plus-remove pairs in the same rung.
+        # The name-set pin catches a rename, an addition, or a swap. When this
+        # fails, a human decides whether the changed action needs a workflow or
+        # an allowlist entry.
         actions = extract_actions(shipped_action_sources(_repo_root()))
-        self.assertEqual(len(actions["pastebin"]), 6)
-        self.assertEqual(len(actions["polls"]), 9)
-        self.assertEqual(len(actions["bookmarks"]), 17)
-        self.assertEqual(len(actions["ledger"]), 17)
-        self.assertEqual(len(actions["kanban"]), 22)
+        self.assertEqual(actions["pastebin"], frozenset({"CreatePaste", "DeletePaste", "EditPaste", "ExpirePaste", "GetPaste", "ListPastes"}))
+        self.assertEqual(actions["polls"], frozenset({"AddComment", "CreatePoll", "FinalizePoll", "GetEventsSince", "GetPollState", "OpenPoll", "SubmitVotes", "UndoLastVoteChange", "UpdateVotes"}))
+        self.assertEqual(actions["bookmarks"], frozenset({"ArchiveBookmark", "BulkEdit", "CreateBookmark", "DeleteBookmark", "EditBookmark", "ExportBookmarks", "GetBookmark", "GetChangesSince", "ImportBookmarks", "ListBookmarks", "ListSharedFeed", "ListTags", "Login", "MergeTags", "RecordMetadata", "RenameTag", "UnarchiveBookmark"}))
+        self.assertEqual(actions["ledger"], frozenset({"CreateBudget", "CreateCategory", "CreateRule", "GetBudgetReport", "GetLedger", "GetReportStatus", "ImportLedgerChunk", "LinkAccountToCategory", "Login", "OpenAccount", "RunReportJob", "SetBudgetLimit", "SetCategory", "StoreTransaction", "SubmitReport", "UndoTransaction", "UpdateRule"}))
+        self.assertEqual(actions["kanban"], frozenset({"AddAttachment", "AddComment", "ApplyTagMutation", "CreateColumn", "CreateProject", "CreateRule", "CreateSwimlane", "CreateTask", "DeleteRule", "GetActivity", "GetAttachments", "GetBoardState", "GetEventsSince", "GetMyProjects", "GetProjectRoles", "GetRules", "Login", "MoveTaskPosition", "OpenBoard", "RemoveAttachment", "RemoveMember", "SetMemberRole"}))
+        # Total count provides a quick sanity check tied to MIN_ACTIONS.
+        total = sum(len(names) for names in actions.values())
+        self.assertEqual(total, 71)
 
 
 if __name__ == "__main__":

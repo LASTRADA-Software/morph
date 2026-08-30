@@ -276,6 +276,12 @@ _ACTION = re.compile(
 # but no longer live; counting it would silently overstate the universe. A
 # per-line truncation is enough here -- no action name legitimately contains
 # `//`.
+#
+# Known limitations: this strips per-line only and is blind to `//` inside
+# string literals; block comments `/* ... */` are not handled at all. Neither
+# occurs in the real examples/ tree today (verified). Both fail *closed* -- they
+# can only drop a registration, never invent one. The name-set pin in
+# test_real_tree_pins_the_known_action_names would catch any drop.
 _LINE_COMMENT = re.compile(r"//.*")
 
 
