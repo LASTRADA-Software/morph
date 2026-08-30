@@ -15,6 +15,7 @@ Standard library only. Needs no server: it reads source and scenario text.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 from dataclasses import dataclass
@@ -192,3 +193,55 @@ def covers(surface: Surface, exercised: Exercised) -> tuple[frozenset[str], froz
         if not any(asserted.startswith(prefix) for asserted in exercised.messages):
             uncovered_messages.add(prefix)
     return frozenset(uncovered_kinds), frozenset(uncovered_messages)
+
+
+@dataclass(frozen=True)
+class Allowlist:
+    """Items deliberately left uncovered, each with a written reason.
+
+    Modelled on `morph::ladder::testkit::QmlSurfaceAudit::allowUnbound`, which
+    established the shape here: a required reason, checked in both directions,
+    so the list can only shrink deliberately.
+    """
+
+    kinds: dict[str, str]
+    messages: dict[str, str]
+
+
+def load_allowlist(path: pathlib.Path) -> Allowlist:
+    """Reads the allowlist JSON. A missing file means an empty allowlist."""
+    if not path.exists():
+        return Allowlist(kinds={}, messages={})
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return Allowlist(kinds=dict(raw.get("kinds", {})), messages=dict(raw.get("messages", {})))
+
+
+def allowlist_problems(allowlist: Allowlist, surface: Surface, exercised: Exercised) -> list[str]:
+    """Audits the allowlist itself, in both directions.
+
+    An exemption is only honest while both halves hold: the item still exists,
+    and it is still uncovered. An entry for something the corpus now covers has
+    outlived its reason; one naming something the header no longer has is a
+    rename that left a stale exemption behind. Either way the list must not be
+    allowed to quietly accumulate.
+    """
+    problems: list[str] = []
+    uncovered_kinds, uncovered_messages = covers(surface, exercised)
+
+    for name, reason in sorted(allowlist.kinds.items()):
+        if not reason.strip():
+            problems.append(f"allowlisted kind '{name}' has no written reason")
+        if name not in surface.kinds:
+            problems.append(f"allowlisted kind '{name}' no longer exists in remote.hpp")
+        elif name not in uncovered_kinds:
+            problems.append(f"allowlisted kind '{name}' is already covered -- drop the exemption")
+
+    known = surface.exact_messages | surface.message_prefixes
+    for name, reason in sorted(allowlist.messages.items()):
+        if not reason.strip():
+            problems.append(f"allowlisted message '{name}' has no written reason")
+        if name not in known:
+            problems.append(f"allowlisted message '{name}' no longer exists in remote.hpp")
+        elif name not in uncovered_messages:
+            problems.append(f"allowlisted message '{name}' is already covered -- drop the exemption")
+    return problems

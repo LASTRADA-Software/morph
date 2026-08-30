@@ -29,13 +29,16 @@ from morph_scenario import (
 from scenario_coverage import (
     MIN_KINDS,
     MIN_MESSAGES,
+    Allowlist,
     Exercised,
     Surface,
     _repo_root,
+    allowlist_problems,
     covers,
     exercised_by,
     extract_surface,
     floor_violations,
+    load_allowlist,
     load_scenarios,
 )
 
@@ -310,6 +313,44 @@ class ExercisedExtractionTest(unittest.TestCase):
             # Verify they are sorted by path.
             self.assertEqual(scenarios[0].path, str(tmp_path / "a_first.scenario"))
             self.assertEqual(scenarios[1].path, str(tmp_path / "b_second.scenario"))
+
+
+class AllowlistTest(unittest.TestCase):
+    _SURFACE = Surface(
+        kinds=frozenset({"execute", "assign"}),
+        exact_messages=frozenset({"server busy", "model not found"}),
+        message_prefixes=frozenset(),
+    )
+    _EXERCISED = Exercised(kinds=frozenset({"execute"}), messages=frozenset({"model not found"}))
+
+    def test_an_entry_for_a_genuinely_uncovered_item_is_accepted(self) -> None:
+        allowlist = Allowlist(kinds={"assign": "no rung uses shared instances yet"},
+                              messages={"server busy": "no server sets a LimitPolicy"})
+        self.assertEqual(allowlist_problems(allowlist, self._SURFACE, self._EXERCISED), [])
+
+    def test_an_entry_for_something_now_covered_is_a_problem(self) -> None:
+        # The exemption has outlived its reason: the corpus covers this now.
+        allowlist = Allowlist(kinds={"assign": "r", "execute": "stale"},
+                              messages={"server busy": "r"})
+        problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
+        self.assertTrue(any("execute" in p and "already covered" in p for p in problems))
+
+    def test_an_entry_naming_something_that_no_longer_exists_is_a_problem(self) -> None:
+        # A rename in remote.hpp left this behind.
+        allowlist = Allowlist(kinds={"assign": "r", "telepathy": "gone"},
+                              messages={"server busy": "r"})
+        problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
+        self.assertTrue(any("telepathy" in p and "no longer" in p for p in problems))
+
+    def test_an_empty_reason_is_a_problem(self) -> None:
+        allowlist = Allowlist(kinds={"assign": ""}, messages={"server busy": "r"})
+        problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
+        self.assertTrue(any("reason" in p for p in problems))
+
+    def test_the_shipped_allowlist_parses(self) -> None:
+        allowlist = load_allowlist(_repo_root() / "scripts" / "scenario" / "coverage_allowlist.json")
+        for reason in list(allowlist.kinds.values()) + list(allowlist.messages.values()):
+            self.assertTrue(reason.strip(), "every entry needs a written reason")
 
 
 if __name__ == "__main__":
