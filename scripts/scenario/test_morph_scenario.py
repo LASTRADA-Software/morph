@@ -27,8 +27,11 @@ from morph_scenario import (
 from scenario_coverage import (
     MIN_KINDS,
     MIN_MESSAGES,
+    Exercised,
     Surface,
     _repo_root,
+    covers,
+    exercised_by,
     extract_surface,
     floor_violations,
 )
@@ -228,6 +231,60 @@ class SurfaceExtractionTest(unittest.TestCase):
             frozenset({"register", "execute", "deregister", "hello",
                        "attach", "assign", "instances", "schemas"}),
         )
+
+
+_FIXTURE_SCENARIO = '''
+model PasteModel
+client alice
+do CreatePaste content="x"
+expect ok field id ~ .
+do GetPaste id=nope
+expect err message == "model not found"
+send instances typeId=PasteModel
+expect err message == "unknown envelope kind: instances"
+deregister
+expect ok
+'''
+
+
+class ExercisedExtractionTest(unittest.TestCase):
+    def _parsed(self):
+        return [parse_scenario(_FIXTURE_SCENARIO, "fixture.scenario")]
+
+    def test_client_counts_as_hello_and_register(self) -> None:
+        used = exercised_by(self._parsed())
+        self.assertIn("hello", used.kinds)
+        self.assertIn("register", used.kinds)
+
+    def test_do_counts_as_execute_and_send_counts_as_its_own_kind(self) -> None:
+        used = exercised_by(self._parsed())
+        self.assertIn("execute", used.kinds)
+        self.assertIn("instances", used.kinds)
+        self.assertIn("deregister", used.kinds)
+
+    def test_collects_only_messages_asserted_on_an_err_reply(self) -> None:
+        used = exercised_by(self._parsed())
+        self.assertEqual(used.messages, frozenset({"model not found", "unknown envelope kind: instances"}))
+
+    def test_a_prefix_message_is_covered_by_an_assertion_carrying_a_suffix(self) -> None:
+        surface = Surface(
+            kinds=frozenset({"execute"}),
+            exact_messages=frozenset({"model not found"}),
+            message_prefixes=frozenset({"unknown envelope kind: "}),
+        )
+        uncovered_kinds, uncovered_messages = covers(surface, exercised_by(self._parsed()))
+        self.assertEqual(uncovered_kinds, frozenset())
+        self.assertEqual(uncovered_messages, frozenset())
+
+    def test_reports_what_the_corpus_never_asserts(self) -> None:
+        surface = Surface(
+            kinds=frozenset({"execute", "assign"}),
+            exact_messages=frozenset({"server busy"}),
+            message_prefixes=frozenset(),
+        )
+        uncovered_kinds, uncovered_messages = covers(surface, exercised_by(self._parsed()))
+        self.assertEqual(uncovered_kinds, frozenset({"assign"}))
+        self.assertEqual(uncovered_messages, frozenset({"server busy"}))
 
 
 if __name__ == "__main__":

@@ -19,6 +19,9 @@ import pathlib
 import re
 from dataclasses import dataclass
 
+import morph_scenario
+from morph_scenario import Scenario
+
 # Floors for the plausibility check. A regex extractor over someone else's
 # source fails *open* -- rename `makeErr` and it finds nothing and cheerfully
 # reports full coverage over an empty universe. The real header currently
@@ -117,3 +120,73 @@ def floor_violations(surface: Surface) -> list[str]:
             "-- the extractor is probably broken, not the header"
         )
     return problems
+
+
+@dataclass(frozen=True)
+class Exercised:
+    """What the scenario corpus actually puts on the wire and asserts on."""
+
+    kinds: frozenset[str]
+    messages: frozenset[str]
+
+
+def load_scenarios(directory: pathlib.Path) -> list[Scenario]:
+    """Parses every `*.scenario` in @p directory through the runner's own parser.
+
+    Deliberately re-uses `morph_scenario.parse_scenario` rather than reading the
+    files here: a second parser could drift from the real one, and then this
+    report would be measuring a format nothing runs.
+    """
+    out: list[Scenario] = []
+    for path in sorted(directory.glob("*.scenario")):
+        out.append(morph_scenario.parse_scenario(path.read_text(encoding="utf-8"), str(path)))
+    return out
+
+
+def exercised_by(scenarios: list[Scenario]) -> Exercised:
+    """Collects the envelope kinds sent and the refusal messages asserted."""
+    kinds: set[str] = set()
+    messages: set[str] = set()
+    for scenario in scenarios:
+        for step in scenario.steps:
+            if step.verb == "client":
+                # `client` opens the socket, says hello, then registers.
+                kinds.update(("hello", "register"))
+            elif step.verb == "do":
+                kinds.add("execute")
+            elif step.verb == "deregister":
+                kinds.add("deregister")
+            elif step.verb == "send" and step.args:
+                kinds.add(step.args[0])
+
+            # A message only counts when it is asserted on an `err` reply: an
+            # `expect ok` step says nothing about a refusal.
+            expects_err = any(
+                a.kind == "compare" and a.path == "@kind" and a.expected_token == "err"
+                for a in step.assertions
+            )
+            if not expects_err:
+                continue
+            for assertion in step.assertions:
+                if assertion.kind != "compare" or assertion.path != "@message" or assertion.op != "==":
+                    continue
+                messages.add(str(morph_scenario.parse_value(assertion.expected_token, {})))
+    return Exercised(kinds=frozenset(kinds), messages=frozenset(messages))
+
+
+def covers(surface: Surface, exercised: Exercised) -> tuple[frozenset[str], frozenset[str]]:
+    """Diffs @p surface against @p exercised.
+
+    @return `(uncovered kinds, uncovered messages)`. An uncovered message is
+            named by its exact string, or by its prefix for the prefix-shaped
+            ones.
+    """
+    uncovered_kinds = surface.kinds - exercised.kinds
+    uncovered_messages: set[str] = set()
+    for message in surface.exact_messages:
+        if message not in exercised.messages:
+            uncovered_messages.add(message)
+    for prefix in surface.message_prefixes:
+        if not any(asserted.startswith(prefix) for asserted in exercised.messages):
+            uncovered_messages.add(prefix)
+    return frozenset(uncovered_kinds), frozenset(uncovered_messages)
