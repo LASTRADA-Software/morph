@@ -9,6 +9,7 @@ the parser's own refusals.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import tempfile
 import unittest
@@ -673,17 +674,20 @@ class CoverageCliTest(unittest.TestCase):
             )
         self.assertEqual(code, 2)
 
-    def test_exits_zero_on_the_protocol_axis_when_everything_uncovered_is_exempt(self) -> None:
+    def test_exits_one_when_the_protocol_axis_is_exempt_but_the_real_workflow_axis_still_gaps(self) -> None:
         # `_fixture_run` isolates the *protocol* axis (its own throwaway header,
-        # wire header and scenario corpus), but `shipped_action_sources` always
-        # reads the real `examples/` tree -- there is no fixture for the
-        # workflow axis. So this exercises only the claim the protocol axis
-        # ever made: fully exempted kinds/messages stop protocol-side
-        # problems from being reported. The real corpus's workflow gap (see
+        # wire header and scenario corpus) but leaves `--examples` at its
+        # default, so the workflow axis still reads the real `examples/` tree
+        # and its real, known gap. (A fixture *can* isolate the workflow axis
+        # too -- see `test_exits_zero_when_both_axes_are_fully_covered_or_exempt`
+        # -- this test deliberately does not, to prove the two gates are
+        # independent: exempting the protocol axis alone must not be enough
+        # for a clean exit when the other axis still has a real gap.) This
+        # exercises the claim the protocol axis makes on its own: fully
+        # exempted kinds/messages stop protocol-side problems from being
+        # reported. The real corpus's workflow gap (see
         # `test_the_real_run_exits_one_for_the_known_workflow_gap`) still
-        # drives the overall exit code to 1 -- two independent gates, and
-        # both must be clean for 0, which is the point of adding the second
-        # one.
+        # drives the overall exit code to 1 -- both gates must be clean for 0.
         with tempfile.TemporaryDirectory() as tmp:
             allow = pathlib.Path(tmp) / "allow.json"
             allow.write_text(
@@ -695,6 +699,83 @@ class CoverageCliTest(unittest.TestCase):
                 ["--allowlist", str(allow), "--no-floor"],
             )
         self.assertEqual(code, 1)
+
+    def test_exits_zero_when_both_axes_are_fully_covered_or_exempt(self) -> None:
+        # The genuine exit-0 path. `shipped_action_sources` used to be
+        # hardwired to the real `examples/` tree -- the one input to `main`
+        # that could not be redirected -- so no fixture could ever produce a
+        # fully clean run, and this tool's success path went untested. With
+        # `--examples` (and the hidden, testing-only `--floors`) it can be
+        # isolated like every other input: a throwaway header, wire header,
+        # scenario corpus AND examples tree, with everything either covered
+        # or allowlisted/floored away.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+
+            # Protocol axis: a one-kind, one-message header. The kind
+            # ("register") ends up genuinely covered below -- every
+            # per-rung workflow scenario's `client` step sends it -- so only
+            # the message ("nope", which no scenario asserts) needs an
+            # exemption.
+            allow = root / "allow.json"
+            allow.write_text('{"messages": {"nope": "fixture"}}', encoding="utf-8")
+            header = root / "remote.hpp"
+            header.write_text(
+                'if (env.kind == "register") {}\nreply(makeErr("nope", id));\n'
+                + scenario_coverage.SERVER_HALF_MARKER
+                + " {};\n",
+                encoding="utf-8",
+            )
+            wire = root / "wire.hpp"
+            wire.write_text(scenario_coverage.DECODE_FUNCTION_MARKER + " {}\n", encoding="utf-8")
+
+            # Workflow axis: one throwaway rung tree per SERVER_RUNGS entry,
+            # each registering one action that a matching per-rung scenario
+            # dispatches -- so every registered action is dispatched and
+            # nothing needs an actions allowlist entry. Each scenario's
+            # `client` step also happens to cover the protocol axis's one
+            # kind, "register".
+            examples = root / "examples"
+            scenarios = root / "scenarios"
+            for rung in scenario_coverage.SERVER_RUNGS:
+                (examples / rung).mkdir(parents=True)
+                (examples / rung / "x.cpp").write_text(
+                    'BRIDGE_REGISTER_ACTION(demo::M, demo::A, "AName")\n', encoding="utf-8"
+                )
+                (scenarios / rung).mkdir(parents=True)
+                (scenarios / rung / "w.scenario").write_text(
+                    "model M\n\nclient alice\n\ndo AName\nexpect ok\n", encoding="utf-8"
+                )
+
+            # None of these fixture scenarios chains captured state, so none
+            # is a workflow by `WORKFLOW_MIN_CHAINED`'s definition -- the real
+            # per-rung floors (8-20) would fail every rung. Authoring five
+            # rungs' worth of genuine multi-step workflows here would be far
+            # more contrived than using the floors-injection path the brief
+            # calls out as acceptable, so every floor is overridden to 0.
+            floors = {rung: 0 for rung in scenario_coverage.SERVER_RUNGS}
+
+            code = coverage_main(
+                [
+                    "--header", str(header),
+                    "--wire-header", str(wire),
+                    "--scenarios", str(scenarios),
+                    "--allowlist", str(allow),
+                    "--examples", str(examples),
+                    "--no-floor",
+                    "--floors", json.dumps(floors),
+                ]
+            )
+        self.assertEqual(code, 0)
+
+    def test_exits_two_when_floors_is_malformed(self) -> None:
+        # `--floors` is testing-only, but a bad value must still fail as a
+        # broken tool (exit 2), not silently fall back to the shipped floors.
+        with tempfile.TemporaryDirectory() as tmp:
+            code = self._fixture_run(
+                tmp, _FIXTURE_HEADER, ["--no-floor", "--floors", "not json"]
+            )
+        self.assertEqual(code, 2)
 
     def test_the_real_run_exits_one_for_the_known_workflow_gap(self) -> None:
         # The shipped corpus dispatches only a fraction of the registered
@@ -731,7 +812,7 @@ class ActionExtractionTest(unittest.TestCase):
         self.assertTrue(any("action" in p for p in problems))
 
     def test_floor_accepts_the_real_examples_tree(self) -> None:
-        actions = extract_actions(shipped_action_sources(_repo_root()))
+        actions = extract_actions(shipped_action_sources(_repo_root() / "examples"))
         self.assertEqual(action_floor_violations(actions), [])
         self.assertEqual(set(actions), set(SERVER_RUNGS))
         for rung in SERVER_RUNGS:
@@ -743,7 +824,7 @@ class ActionExtractionTest(unittest.TestCase):
         # The name-set pin catches a rename, an addition, or a swap. When this
         # fails, a human decides whether the changed action needs a workflow or
         # an allowlist entry.
-        actions = extract_actions(shipped_action_sources(_repo_root()))
+        actions = extract_actions(shipped_action_sources(_repo_root() / "examples"))
         self.assertEqual(actions["pastebin"], frozenset({"CreatePaste", "DeletePaste", "EditPaste", "ExpirePaste", "GetPaste", "ListPastes"}))
         self.assertEqual(actions["polls"], frozenset({"AddComment", "CreatePoll", "FinalizePoll", "GetEventsSince", "GetPollState", "OpenPoll", "SubmitVotes", "UndoLastVoteChange", "UpdateVotes"}))
         self.assertEqual(actions["bookmarks"], frozenset({"ArchiveBookmark", "BulkEdit", "CreateBookmark", "DeleteBookmark", "EditBookmark", "ExportBookmarks", "GetBookmark", "GetChangesSince", "ImportBookmarks", "ListBookmarks", "ListSharedFeed", "ListTags", "Login", "MergeTags", "RecordMetadata", "RenameTag", "UnarchiveBookmark"}))

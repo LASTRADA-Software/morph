@@ -298,17 +298,20 @@ def extract_actions(sources: dict[str, str]) -> dict[str, frozenset[str]]:
     return result
 
 
-def shipped_action_sources(root: pathlib.Path) -> dict[str, str]:
-    """Reads every C++ source under `examples/<rung>/` for each server rung.
+def shipped_action_sources(examples: pathlib.Path) -> dict[str, str]:
+    """Reads every C++ source under `<examples>/<rung>/` for each server rung.
 
-    @param root Repository root.
+    @param examples Directory holding each rung's example tree -- the real
+           run passes the repository's `examples/` directory; a test passes a
+           throwaway directory shaped the same way, since this is the one
+           input to `main` that used to be hardwired to the repo layout.
     @return Rung name to concatenated source text, ready for `extract_actions`.
     @throws SurfaceError if a rung's directory is missing -- a renamed or moved
             rung must break this loudly rather than silently drop its actions.
     """
     sources: dict[str, str] = {}
     for rung in SERVER_RUNGS:
-        directory = root / "examples" / rung
+        directory = examples / rung
         if not directory.is_dir():
             raise SurfaceError(
                 f"rung directory {directory} not found -- SERVER_RUNGS is stale, "
@@ -674,6 +677,7 @@ def _render(
     allowlist: Allowlist,
     actions: dict[str, frozenset[str]],
     facts: list[ScenarioFacts],
+    floors: dict[str, int] | None = None,
 ) -> str:
     """Builds the human-readable report, protocol axis then workflow axis.
 
@@ -684,7 +688,12 @@ def _render(
                       axis's universe).
     @param facts     One entry per parsed scenario (the workflow axis's
                       corpus).
+    @param floors    Per-rung workflow minimums; defaults to `WORKFLOW_FLOORS`.
+                      Mirrors the same hidden, testing-only override
+                      `workflow_problems` accepts, so a fixture's printed
+                      report and its exit code always agree.
     """
+    effective_floors = WORKFLOW_FLOORS if floors is None else floors
     uncovered_kinds, uncovered_messages = covers(surface, exercised)
     gap_kinds = sorted(uncovered_kinds - set(allowlist.kinds))
     gap_messages = sorted(uncovered_messages - set(allowlist.messages))
@@ -740,7 +749,7 @@ def _render(
         undispatched_all = registered - dispatched_registered
         exempt = {name for name in undispatched_all if f"{rung}/{name}" in allowlist.actions}
         undispatched = undispatched_all - exempt
-        floor = WORKFLOW_FLOORS.get(rung, 0)
+        floor = effective_floors.get(rung, 0)
 
         total_registered += len(registered)
         total_dispatched += len(dispatched_registered)
@@ -771,6 +780,27 @@ def _render(
     return "\n".join(lines)
 
 
+def _parse_floors(raw: str) -> dict[str, int]:
+    """Parses the `--floors` JSON object into a per-rung workflow-floor mapping.
+
+    Hidden, testing-only knob: it lets this tool's own fixtures satisfy the
+    workflow floor without authoring dozens of throwaway workflow scenarios
+    per rung. A real run never passes `--floors`, so `workflow_problems` falls
+    back to the shipped `WORKFLOW_FLOORS`.
+
+    @param raw The `--floors` argument text, expected to be a JSON object of
+           rung name to integer floor.
+    @return The parsed mapping.
+    @throws ValueError if @p raw is not JSON, or not shaped as expected.
+    """
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict) or not all(
+        isinstance(key, str) and isinstance(value, int) for key, value in parsed.items()
+    ):
+        raise ValueError("must be a JSON object of rung name -> integer floor")
+    return parsed
+
+
 def main(argv: list[str] | None = None) -> int:
     """Runs the report. Returns a process exit code."""
     root = _repo_root()
@@ -787,11 +817,33 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scenarios", default=str(pathlib.Path(__file__).with_name("scenarios")))
     parser.add_argument("--allowlist", default=str(pathlib.Path(__file__).with_name("coverage_allowlist.json")))
     parser.add_argument(
+        "--examples",
+        default=str(root / "examples"),
+        help="directory holding each rung's example tree, the source of registered actions",
+    )
+    parser.add_argument(
         "--no-floor",
         action="store_true",
         help="skip the plausibility check (for this tool's own fixtures only)",
     )
+    parser.add_argument(
+        "--floors",
+        default=None,
+        help=(
+            "hidden, testing-only: JSON object of rung name -> integer, overriding the "
+            "workflow floors for this tool's own fixtures; real runs never pass this "
+            "and get the shipped WORKFLOW_FLOORS"
+        ),
+    )
     args = parser.parse_args(argv)
+
+    floors: dict[str, int] | None = None
+    if args.floors is not None:
+        try:
+            floors = _parse_floors(args.floors)
+        except ValueError as exc:
+            print(f"scenario_coverage: --floors {exc}", file=sys.stderr)
+            return 2
 
     try:
         header_text = pathlib.Path(args.header).read_text(encoding="utf-8")
@@ -832,7 +884,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        actions = extract_actions(shipped_action_sources(root))
+        actions = extract_actions(shipped_action_sources(pathlib.Path(args.examples)))
     except (OSError, SurfaceError) as exc:
         print(f"scenario_coverage: {exc}", file=sys.stderr)
         return 2
@@ -844,9 +896,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     facts = [scenario_facts(scenario) for scenario in scenarios]
-    flow_problems = workflow_problems(actions, facts, allowlist)
+    flow_problems = workflow_problems(actions, facts, allowlist, floors=floors)
 
-    print(_render(surface, exercised, allowlist, actions, facts))
+    print(_render(surface, exercised, allowlist, actions, facts, floors=floors))
     uncovered_kinds, uncovered_messages = covers(surface, exercised)
     protocol_gap = (uncovered_kinds - set(allowlist.kinds)) or (uncovered_messages - set(allowlist.messages))
     if protocol_gap or flow_problems:
