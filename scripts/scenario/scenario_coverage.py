@@ -15,9 +15,11 @@ Standard library only. Needs no server: it reads source and scenario text.
 
 from __future__ import annotations
 
+import argparse
 import json
 import pathlib
 import re
+import sys
 from dataclasses import dataclass
 
 import morph_scenario
@@ -245,3 +247,94 @@ def allowlist_problems(allowlist: Allowlist, surface: Surface, exercised: Exerci
         elif name not in uncovered_messages:
             problems.append(f"allowlisted message '{name}' is already covered -- drop the exemption")
     return problems
+
+
+def _render(surface: Surface, exercised: Exercised, allowlist: Allowlist) -> str:
+    """Builds the human-readable report."""
+    uncovered_kinds, uncovered_messages = covers(surface, exercised)
+    gap_kinds = sorted(uncovered_kinds - set(allowlist.kinds))
+    gap_messages = sorted(uncovered_messages - set(allowlist.messages))
+    total_messages = len(surface.exact_messages) + len(surface.message_prefixes)
+
+    lines = [
+        "morph scenario coverage",
+        "",
+        f"  envelope kinds : {len(surface.kinds) - len(uncovered_kinds)}/{len(surface.kinds)} covered",
+        f"  refusals       : {total_messages - len(uncovered_messages)}/{total_messages} covered",
+        "",
+    ]
+    if gap_kinds:
+        lines.append("UNCOVERED envelope kinds (no scenario sends these):")
+        lines.extend(f"    {name}" for name in gap_kinds)
+        lines.append("")
+    if gap_messages:
+        lines.append("UNCOVERED refusals (no scenario asserts these):")
+        lines.extend(f"    {name}" for name in gap_messages)
+        lines.append("")
+    if allowlist.kinds or allowlist.messages:
+        lines.append("Exempt, with reasons:")
+        for name, reason in sorted(allowlist.kinds.items()):
+            lines.append(f"    kind {name}: {reason}")
+        for name, reason in sorted(allowlist.messages.items()):
+            lines.append(f"    message {name!r}: {reason}")
+        lines.append("")
+    if not gap_kinds and not gap_messages:
+        lines.append("Every kind and refusal is either covered or exempt.")
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Runs the report. Returns a process exit code."""
+    root = _repo_root()
+    parser = argparse.ArgumentParser(
+        prog="scenario_coverage.py",
+        description="Measure scenario coverage of morph's wire-protocol surface.",
+    )
+    parser.add_argument("--header", default=str(root / "include" / "morph" / "core" / "remote.hpp"))
+    parser.add_argument("--scenarios", default=str(pathlib.Path(__file__).with_name("scenarios")))
+    parser.add_argument("--allowlist", default=str(pathlib.Path(__file__).with_name("coverage_allowlist.json")))
+    parser.add_argument(
+        "--no-floor",
+        action="store_true",
+        help="skip the plausibility check (for this tool's own fixtures only)",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        header_text = pathlib.Path(args.header).read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"scenario_coverage: cannot read {args.header}: {exc}", file=sys.stderr)
+        return 2
+
+    surface = extract_surface(header_text)
+    if not args.no_floor:
+        violations = floor_violations(surface)
+        if violations:
+            for problem in violations:
+                print(f"scenario_coverage: {problem}", file=sys.stderr)
+            return 2
+
+    try:
+        scenarios = load_scenarios(pathlib.Path(args.scenarios))
+    except (OSError, morph_scenario.ScenarioError) as exc:
+        print(f"scenario_coverage: cannot read scenarios: {exc}", file=sys.stderr)
+        return 2
+
+    exercised = exercised_by(scenarios)
+    allowlist = load_allowlist(pathlib.Path(args.allowlist))
+
+    problems = allowlist_problems(allowlist, surface, exercised)
+    if problems:
+        for problem in problems:
+            print(f"scenario_coverage: {problem}", file=sys.stderr)
+        return 2
+
+    print(_render(surface, exercised, allowlist))
+    uncovered_kinds, uncovered_messages = covers(surface, exercised)
+    if (uncovered_kinds - set(allowlist.kinds)) or (uncovered_messages - set(allowlist.messages)):
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

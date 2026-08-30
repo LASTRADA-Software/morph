@@ -172,6 +172,34 @@ if any survives.
 asserts a paste reads back with content it was never created with. Run it to see
 what a failure report looks like.
 
+## Measuring what the corpus covers
+
+A corpus grows by whoever last added a file, and "have we covered everything?"
+has no answer unless the universe is countable. `scenario_coverage.py` makes it
+countable: it enumerates every envelope kind `RemoteServer::dispatchMessage`
+handles and every refusal string it can put on the wire, straight out of
+`include/morph/core/remote.hpp`, then diffs that against what the scenario
+files actually send and assert.
+
+```bash
+python3 scripts/scenario/scenario_coverage.py
+```
+
+Exit `0` if every kind and refusal is covered or exempt, `1` if something is
+uncovered, `2` if the tool itself is broken — a header it cannot read, an
+extraction too small to be believable, or a stale allowlist.
+
+Anything deliberately left uncovered goes in `coverage_allowlist.json` with a
+**written reason**, and is checked in both directions: an entry for something
+now covered, or for something `remote.hpp` no longer has, fails the run. The
+list can only shrink deliberately.
+
+The report is itself a control, so it is built not to pass while measuring
+nothing: it refuses to run if it extracts an implausibly small surface (rename
+`makeErr` and it fails loudly rather than reporting full coverage over an empty
+universe), and `test_morph_scenario.py` drives it against fixtures whose right
+answers are known, including one where the correct exit code is non-zero.
+
 ## Self-test
 
 `test_morph_scenario.py` covers the parser, the value syntax, the path reader

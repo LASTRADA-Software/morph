@@ -40,6 +40,7 @@ from scenario_coverage import (
     floor_violations,
     load_allowlist,
     load_scenarios,
+    main as coverage_main,
 )
 
 
@@ -394,6 +395,47 @@ class AllowlistTest(unittest.TestCase):
         allowlist = load_allowlist(_repo_root() / "scripts" / "scenario" / "coverage_allowlist.json")
         for reason in list(allowlist.kinds.values()) + list(allowlist.messages.values()):
             self.assertTrue(reason.strip(), "every entry needs a written reason")
+
+
+class CoverageCliTest(unittest.TestCase):
+    def test_exits_two_when_the_extractor_finds_an_implausible_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            header = pathlib.Path(tmp) / "remote.hpp"
+            header.write_text('if (env.kind == "register") {}\n', encoding="utf-8")
+            scenarios = pathlib.Path(tmp) / "scenarios"
+            scenarios.mkdir()
+            code = coverage_main(["--header", str(header), "--scenarios", str(scenarios)])
+        self.assertEqual(code, 2)
+
+    def test_exits_one_when_something_is_uncovered_and_unexempt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            header = pathlib.Path(tmp) / "remote.hpp"
+            header.write_text(_FIXTURE_HEADER, encoding="utf-8")
+            scenarios = pathlib.Path(tmp) / "scenarios"
+            scenarios.mkdir()
+            allow = pathlib.Path(tmp) / "allow.json"
+            allow.write_text('{"kinds": {}, "messages": {}}', encoding="utf-8")
+            code = coverage_main([
+                "--header", str(header), "--scenarios", str(scenarios),
+                "--allowlist", str(allow), "--no-floor",
+            ])
+        self.assertEqual(code, 1)
+
+    def test_exits_zero_when_everything_uncovered_is_exempt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            header = pathlib.Path(tmp) / "remote.hpp"
+            header.write_text('if (env.kind == "register") {}\nreply(makeErr("nope", id));\n', encoding="utf-8")
+            scenarios = pathlib.Path(tmp) / "scenarios"
+            scenarios.mkdir()
+            allow = pathlib.Path(tmp) / "allow.json"
+            allow.write_text(
+                '{"kinds": {"register": "fixture"}, "messages": {"nope": "fixture"}}', encoding="utf-8"
+            )
+            code = coverage_main([
+                "--header", str(header), "--scenarios", str(scenarios),
+                "--allowlist", str(allow), "--no-floor",
+            ])
+        self.assertEqual(code, 0)
 
 
 if __name__ == "__main__":
