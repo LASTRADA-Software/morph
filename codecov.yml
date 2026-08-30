@@ -330,6 +330,52 @@ component_management:
           target: 97%
           informational: true
 
+    # Rung 7, crm. Scoped to the rung's models, like ledger's and lims's above
+    # and for the same reason.
+    #
+    # Measured, from `llvm-cov export`'s JSON (covered/total, not the rounded
+    # report percentage) over the full crm suite (176 tests):
+    #
+    #     src/models/account_model.cpp             355/377   94.16%
+    #     src/models/authz.cpp                      28/28   100.00%
+    #     src/models/contact_model.cpp             130/150   86.67%
+    #     src/models/custom_field_model.cpp         94/102   92.16%
+    #     src/models/lead_model.cpp                156/170   91.76%
+    #     src/models/opportunity_model.cpp         397/435   91.26%
+    #     src/models/quote_model.cpp               209/238   87.82%
+    #     src/models/saved_view_model.cpp           84/88    95.45%
+    #     include/crm/models/*.hpp                  15/28    53.57%
+    #     ---------------------------------------------------------
+    #     total                                   1468/1616  90.84%
+    #
+    # Target 89%, a margin below the 90.84% measurement on the same terms as
+    # ledger's and lims's above, and `informational: true` like every other
+    # ladder component (morph#133).
+    #
+    # Unlike those two, this entry does NOT yet carry a per-miss audit
+    # establishing which of the 148 uncovered lines are unreachable-by-design
+    # rather than merely untested. One thing the measurement already shows is
+    # not a coverage artifact, and is recorded here rather than rounded past:
+    # `ContactModel::attachActionLog` and `SavedViewModel::attachActionLog`
+    # are called by no test at all (both headers score 0/4), so those two
+    # models' journaling paths are entirely unverified -- while
+    # AccountModel, LeadModel, OpportunityModel and QuoteModel each have an
+    # explicit "journals its edits against the attached identity" test. That
+    # is the same shape of gap ledger's own first measurement turned up
+    # (a documented obligation nothing executed), and it is open, not closed.
+    - component_id: crm
+      name: "application ladder rung 7 (examples/crm models)"
+      paths:
+        - examples/crm/src/models/**
+        - examples/crm/include/crm/models/**
+      statuses:
+        - type: project
+          target: 89%
+          informational: true
+        - type: patch
+          target: 89%
+          informational: true
+
 # Always post the coverage-comparison comment on a PR, even on the first upload
 # after activation and even when the base report is still processing.
 #

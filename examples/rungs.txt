@@ -41,3 +41,4 @@ polls
 kanban
 ledger
 lims
+crm

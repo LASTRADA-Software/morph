@@ -108,6 +108,7 @@ add_executable(morph_tests
     test_pinned_facts.cpp
     test_version.cpp
     test_callback_scope.cpp
+    test_extension_bag_spike.cpp
 )
 
 target_link_libraries(morph_tests
