@@ -41,9 +41,11 @@ from scenario_coverage import (
     Allowlist,
     AllowlistError,
     Exercised,
+    RungTally,
     ScenarioFacts,
     Surface,
     SurfaceError,
+    _render,
     _repo_root,
     action_floor_violations,
     allowlist_problems,
@@ -57,6 +59,7 @@ from scenario_coverage import (
     load_allowlist,
     load_scenarios,
     main as coverage_main,
+    rung_tallies,
     scenario_facts,
     server_half,
     shipped_action_sources,
@@ -972,6 +975,85 @@ class WorkflowGateTest(unittest.TestCase):
         for rung in WORKFLOW_FLOORS:
             self.assertIn(rung, SERVER_RUNGS)
         self.assertEqual(set(WORKFLOW_FLOORS), set(SERVER_RUNGS))
+
+
+class RungTallyTest(unittest.TestCase):
+    # One rung, three actions: one gets dispatched, one is undispatched but
+    # allowlisted, one is undispatched and unexempt -- the three buckets
+    # `rung_tallies` must partition `registered` into.
+    _ACTIONS = {"demo": frozenset({"Alpha", "Beta", "Gamma"})}
+
+    def test_covers_all_three_buckets_and_the_partition_identity(self) -> None:
+        facts = [
+            ScenarioFacts(rung="demo", path="scenarios/demo/a.scenario",
+                          actions=frozenset({"Alpha"}), chained_steps=0, is_workflow=False),
+        ]
+        allow = Allowlist(kinds={}, messages={}, actions={"demo/Beta": "runner-only principal"})
+        tally = rung_tallies(self._ACTIONS, facts, allow, floors={"demo": 0})["demo"]
+        self.assertEqual(tally.registered, frozenset({"Alpha", "Beta", "Gamma"}))
+        self.assertEqual(tally.dispatched, frozenset({"Alpha"}))
+        self.assertEqual(tally.exempt, frozenset({"Beta"}))
+        self.assertEqual(tally.undispatched, frozenset({"Gamma"}))
+        self.assertEqual(
+            len(tally.dispatched) + len(tally.exempt) + len(tally.undispatched),
+            len(tally.registered),
+        )
+
+    def test_an_allowlisted_action_that_is_also_dispatched_counts_as_dispatched_not_exempt(self) -> None:
+        # The double-count regression this whole tally exists to prevent: an
+        # action can be both allowlisted and dispatched (a scenario may call
+        # it only to assert its refusal, without driving it to completion).
+        # It must land in `dispatched` alone -- counting it in `exempt` too
+        # would put it in two buckets at once and break the partition
+        # identity checked above.
+        facts = [
+            ScenarioFacts(rung="demo", path="scenarios/demo/a.scenario",
+                          actions=frozenset({"Alpha", "Beta"}), chained_steps=0, is_workflow=False),
+        ]
+        allow = Allowlist(kinds={}, messages={}, actions={"demo/Beta": "runner-only principal"})
+        tally = rung_tallies(self._ACTIONS, facts, allow, floors={"demo": 0})["demo"]
+        self.assertIn("Beta", tally.dispatched)
+        self.assertNotIn("Beta", tally.exempt)
+        self.assertEqual(
+            len(tally.dispatched) + len(tally.exempt) + len(tally.undispatched),
+            len(tally.registered),
+        )
+
+
+class ReportGateAgreementTest(unittest.TestCase):
+    # A protocol axis that is trivially fully covered (nothing in the
+    # surface, nothing exercised, nothing to allowlist), so both cases below
+    # isolate the workflow axis: whatever `_render` prints and whatever
+    # `workflow_problems` returns must describe the same gap, or its absence.
+    _SURFACE = Surface(kinds=frozenset(), exact_messages=frozenset(), message_prefixes=frozenset())
+    _EXERCISED = Exercised(kinds=frozenset(), messages=frozenset())
+    _ALLOWLIST = Allowlist(kinds={}, messages={}, actions={})
+    _ACTIONS = {"demo": frozenset({"Alpha", "Beta"})}
+
+    def test_a_real_gap_is_named_by_both_the_gate_and_the_report(self) -> None:
+        facts: list[ScenarioFacts] = []
+        problems = workflow_problems(self._ACTIONS, facts, self._ALLOWLIST, floors={"demo": 0})
+        self.assertTrue(problems)
+        text = _render(
+            self._SURFACE, self._EXERCISED, self._ALLOWLIST, self._ACTIONS, facts, floors={"demo": 0}
+        )
+        self.assertIn("WORKFLOW GAPS", text)
+        self.assertIn("demo", text)
+        self.assertIn("Alpha", text)
+        self.assertIn("Beta", text)
+
+    def test_no_gap_is_named_by_neither_the_gate_nor_the_report(self) -> None:
+        facts = [
+            ScenarioFacts(rung="demo", path="scenarios/demo/a.scenario",
+                          actions=frozenset({"Alpha", "Beta"}), chained_steps=0, is_workflow=False),
+        ]
+        problems = workflow_problems(self._ACTIONS, facts, self._ALLOWLIST, floors={"demo": 0})
+        self.assertEqual(problems, [])
+        text = _render(
+            self._SURFACE, self._EXERCISED, self._ALLOWLIST, self._ACTIONS, facts, floors={"demo": 0}
+        )
+        self.assertNotIn("WORKFLOW GAPS", text)
+        self.assertIn("Every registered action is dispatched and every rung meets its floor.", text)
 
 
 if __name__ == "__main__":

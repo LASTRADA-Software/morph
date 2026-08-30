@@ -444,6 +444,83 @@ WORKFLOW_FLOORS = {
 }
 
 
+@dataclass(frozen=True)
+class RungTally:
+    """One rung's workflow-axis arithmetic, computed once and shared.
+
+    `dispatched`, `exempt` and `undispatched` partition `registered`: every
+    registered action lands in exactly one bucket, so
+    `len(dispatched) + len(exempt) + len(undispatched) == len(registered)`
+    always holds. An action that is both allowlisted and dispatched lands in
+    `dispatched`, not `exempt` -- `exempt` is scoped to the undispatched
+    remainder, because a scenario may legitimately call an allowlisted action
+    (e.g. to assert its refusal) without driving it to completion, and such a
+    call already counts as dispatched.
+    """
+
+    rung: str
+    registered: frozenset[str]
+    dispatched: frozenset[str]
+    exempt: frozenset[str]
+    undispatched: frozenset[str]
+    workflows: int
+    floor: int
+
+
+def rung_tallies(
+    actions: dict[str, frozenset[str]],
+    facts: list[ScenarioFacts],
+    allowlist: Allowlist,
+    floors: dict[str, int] | None = None,
+) -> dict[str, RungTally]:
+    """Computes the workflow-axis arithmetic once per rung, for both callers.
+
+    `workflow_problems` (the gate) and `_render` (the report) used to walk
+    `facts` and recompute this independently; that let the printed report and
+    the exit code disagree if the two implementations ever drifted. Both now
+    call this and share one answer.
+
+    @param actions   Rung name to its registered action names.
+    @param facts     One entry per parsed scenario.
+    @param allowlist Exemptions; `actions` is keyed `"<rung>/<Action>"`.
+    @param floors    Per-rung workflow minimums; defaults to `WORKFLOW_FLOORS`.
+    @return Rung name to its `RungTally`, ordered the same way @p actions was.
+    """
+    effective = WORKFLOW_FLOORS if floors is None else floors
+    result: dict[str, RungTally] = {}
+    for rung, registered in sorted(actions.items()):
+        dispatched_by_scenario: set[str] = set()
+        workflows = 0
+        for fact in facts:
+            if fact.rung != rung:
+                continue
+            dispatched_by_scenario |= fact.actions
+            if fact.is_workflow:
+                workflows += 1
+
+        dispatched = registered & dispatched_by_scenario
+        # Exempt is scoped to the undispatched remainder, not to every
+        # registered action: a scenario may still legitimately call an
+        # allowlisted action (e.g. to assert its refusal) without being able
+        # to drive it to completion, and such a call already counts as
+        # dispatched. Scoping this way keeps the three buckets disjoint, so
+        # dispatched + exempt + undispatched always equals registered.
+        undispatched_all = registered - dispatched
+        exempt = {name for name in undispatched_all if f"{rung}/{name}" in allowlist.actions}
+        undispatched = undispatched_all - exempt
+
+        result[rung] = RungTally(
+            rung=rung,
+            registered=registered,
+            dispatched=frozenset(dispatched),
+            exempt=frozenset(exempt),
+            undispatched=frozenset(undispatched),
+            workflows=workflows,
+            floor=effective.get(rung, 0),
+        )
+    return result
+
+
 def workflow_problems(
     actions: dict[str, frozenset[str]],
     facts: list[ScenarioFacts],
@@ -458,28 +535,13 @@ def workflow_problems(
     @param floors    Per-rung workflow minimums; defaults to `WORKFLOW_FLOORS`.
     @return One message per problem; empty when both gates are satisfied.
     """
-    effective = WORKFLOW_FLOORS if floors is None else floors
     problems: list[str] = []
-
-    for rung, registered in sorted(actions.items()):
-        dispatched: set[str] = set()
-        workflows = 0
-        for fact in facts:
-            if fact.rung != rung:
-                continue
-            dispatched |= fact.actions
-            if fact.is_workflow:
-                workflows += 1
-
-        for name in sorted(registered - dispatched):
-            if f"{rung}/{name}" in allowlist.actions:
-                continue
+    for rung, tally in rung_tallies(actions, facts, allowlist, floors).items():
+        for name in sorted(tally.undispatched):
             problems.append(f"{rung}: action '{name}' is dispatched by no scenario")
-
-        floor = effective.get(rung, 0)
-        if workflows < floor:
+        if tally.workflows < tally.floor:
             problems.append(
-                f"{rung}: {workflows} workflows, floor is {floor} "
+                f"{rung}: {tally.workflows} workflows, floor is {tally.floor} "
                 "(a file counts only if it chains actions through captured state)"
             )
     return problems
@@ -693,7 +755,6 @@ def _render(
                       `workflow_problems` accepts, so a fixture's printed
                       report and its exit code always agree.
     """
-    effective_floors = WORKFLOW_FLOORS if floors is None else floors
     uncovered_kinds, uncovered_messages = covers(surface, exercised)
     gap_kinds = sorted(uncovered_kinds - set(allowlist.kinds))
     gap_messages = sorted(uncovered_messages - set(allowlist.messages))
@@ -730,38 +791,20 @@ def _render(
     total_registered = 0
     total_dispatched = 0
     gap_lines: list[str] = []
-    for rung, registered in sorted(actions.items()):
-        dispatched: set[str] = set()
-        workflows = 0
-        for fact in facts:
-            if fact.rung != rung:
-                continue
-            dispatched |= fact.actions
-            if fact.is_workflow:
-                workflows += 1
-        dispatched_registered = dispatched & registered
-        # Exempt is scoped to the undispatched remainder, not to every
-        # registered action: a scenario may still legitimately call an
-        # allowlisted action (e.g. to assert its refusal) without being able
-        # to drive it to completion, and such a call already counts as
-        # dispatched. Scoping this way keeps the three buckets disjoint, so
-        # dispatched + exempt + undispatched always equals registered.
-        undispatched_all = registered - dispatched_registered
-        exempt = {name for name in undispatched_all if f"{rung}/{name}" in allowlist.actions}
-        undispatched = undispatched_all - exempt
-        floor = effective_floors.get(rung, 0)
-
-        total_registered += len(registered)
-        total_dispatched += len(dispatched_registered)
+    for rung, tally in rung_tallies(actions, facts, allowlist, floors).items():
+        total_registered += len(tally.registered)
+        total_dispatched += len(tally.dispatched)
 
         lines.append(
-            f"  {rung:<10} actions {len(dispatched_registered)}/{len(registered)} dispatched "
-            f"({len(exempt)} exempt), workflows {workflows}/{floor}"
+            f"  {rung:<10} actions {len(tally.dispatched)}/{len(tally.registered)} dispatched "
+            f"({len(tally.exempt)} exempt), workflows {tally.workflows}/{tally.floor}"
         )
-        if undispatched:
-            gap_lines.append(f"    {rung}: {', '.join(sorted(undispatched))} dispatched by no scenario")
-        if workflows < floor:
-            gap_lines.append(f"    {rung}: {workflows} workflows, floor is {floor}")
+        if tally.undispatched:
+            gap_lines.append(
+                f"    {rung}: {', '.join(sorted(tally.undispatched))} dispatched by no scenario"
+            )
+        if tally.workflows < tally.floor:
+            gap_lines.append(f"    {rung}: {tally.workflows} workflows, floor is {tally.floor}")
 
     lines.append("")
     lines.append(f"  total actions dispatched: {total_dispatched}/{total_registered}")
