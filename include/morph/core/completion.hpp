@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -85,7 +86,28 @@ struct CompletionState {
             if (ready) {
                 return;
             }
-            error = exc;
+            // A null `exc` must never reach `error`. Storing one would set
+            // `ready` with `error` still falsy — a state no attach can act on,
+            // because `attachOnError` tests `ready && error` and `attachThen`
+            // tests `ready && value`, so both branches fall through and the
+            // handler is neither fired nor queued. The completion would then
+            // be dead in both directions for every later caller, and silently:
+            // `attachOnError` sets `onErrAttached` on entry, so even the
+            // destructor's orphan logger is suppressed. It would also hand any
+            // *already*-attached handler a null `exception_ptr`, which is UB to
+            // `std::rethrow_exception` — the idiomatic handler body, this
+            // file's own orphan logger included.
+            //
+            // Substituting here rather than at any one producer is deliberate:
+            // `reject(nullptr)` is reachable through the public `Promise<T>`
+            // seam, and around ten sites in the tree forward an
+            // `exception_ptr` straight through (`.onError([state](auto e) {
+            // state->setException(e); })`) without inspecting it, so a guard
+            // at one producer would leave every other one able to reintroduce
+            // the same wedge. See issue #347.
+            error = exc ? exc
+                        : std::make_exception_ptr(
+                              std::runtime_error{"completion rejected with no exception (null exception_ptr)"});
             ready = true;
             if (!onErr.empty()) {
                 auto savedFns = std::move(onErr);
