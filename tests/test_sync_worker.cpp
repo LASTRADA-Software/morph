@@ -420,9 +420,9 @@ TEST_CASE("morph::offline::SyncWorker: an Undelivered replay never exhausts the 
     queue.enqueue("card-move-2");
 
     std::vector<morph::offline::QueueItem> dead;
-    morph::offline::SyncWorker worker{
-        queue, [](const std::string&) { return morph::offline::ReplayOutcome::Undelivered; },
-        [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
+    morph::offline::SyncWorker worker{queue,
+                                      [](const std::string&) { return morph::offline::ReplayOutcome::Undelivered; },
+                                      [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
 
     for (int flap = 0; flap < 5; ++flap) {
         auto result = worker.run();
@@ -436,7 +436,8 @@ TEST_CASE("morph::offline::SyncWorker: an Undelivered replay never exhausts the 
     REQUIRE(queue.size() == 3);
 
     // ...and the work is still replayable once the connection is genuinely back.
-    morph::offline::SyncWorker good{queue, [](const std::string&) { return morph::offline::ReplayOutcome::Succeeded; }};
+    morph::offline::SyncWorker good{queue,
+                                    [](const std::string&) { return morph::offline::ReplayOutcome::Succeeded; }};
     auto const final = good.run();
     CHECK(final.successful == 3);
     REQUIRE(queue.drain().empty());
@@ -467,9 +468,9 @@ TEST_CASE("morph::offline::SyncWorker: a Rejected replay spends the budget exact
     queue.enqueue("refused");
 
     std::vector<morph::offline::QueueItem> dead;
-    morph::offline::SyncWorker worker{
-        queue, [](const std::string&) { return morph::offline::ReplayOutcome::Rejected; },
-        [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
+    morph::offline::SyncWorker worker{queue,
+                                      [](const std::string&) { return morph::offline::ReplayOutcome::Rejected; },
+                                      [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
 
     for (int i = 0; i < 4; ++i) {
         auto const result = worker.run();
@@ -494,12 +495,12 @@ TEST_CASE("morph::offline::SyncWorker: undelivered flaps between rejections do n
 
     bool deliver = false;
     std::vector<morph::offline::QueueItem> dead;
-    morph::offline::SyncWorker worker{
-        queue,
-        [&deliver](const std::string&) {
-            return deliver ? morph::offline::ReplayOutcome::Rejected : morph::offline::ReplayOutcome::Undelivered;
-        },
-        [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
+    morph::offline::SyncWorker worker{queue,
+                                      [&deliver](const std::string&) {
+                                          return deliver ? morph::offline::ReplayOutcome::Rejected
+                                                         : morph::offline::ReplayOutcome::Undelivered;
+                                      },
+                                      [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
 
     for (int rejection = 0; rejection < 4; ++rejection) {
         deliver = false;
@@ -517,8 +518,7 @@ TEST_CASE("morph::offline::SyncWorker: undelivered flaps between rejections do n
     CHECK(dead.front().attempts == 5);
 }
 
-TEST_CASE("morph::offline::SyncWorker: the bool ReplayFunction keeps its exact previous meaning",
-          "[sync][issue343]") {
+TEST_CASE("morph::offline::SyncWorker: the bool ReplayFunction keeps its exact previous meaning", "[sync][issue343]") {
     // `false` must stay "delivered and refused" -- every existing caller is
     // written against that, and silently re-reading it as "undelivered" would
     // turn a poison payload into an item that is retried forever.
