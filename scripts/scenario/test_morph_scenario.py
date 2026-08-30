@@ -24,6 +24,15 @@ from morph_scenario import (
     tokenize,
 )
 
+from scenario_coverage import (
+    MIN_KINDS,
+    MIN_MESSAGES,
+    Surface,
+    _repo_root,
+    extract_surface,
+    floor_violations,
+)
+
 
 class TokenizerTest(unittest.TestCase):
     def test_keeps_quoted_runs_together_with_their_quotes(self) -> None:
@@ -149,6 +158,64 @@ class UrlTest(unittest.TestCase):
         for bad in ("wss://h:1", "ws://h", "http://h:1", "ws://h:x"):
             with self.assertRaises(ScenarioError, msg=bad):
                 parse_ws_url(bad)
+
+
+_FIXTURE_HEADER = '''
+    if (env.kind == "register") {
+    } else if (env.kind == "execute") {
+        reply(makeErr("model not found", env.callId));
+    } else {
+        reply(makeErr("unknown envelope kind: " + env.kind, env.callId));
+    }
+    rejectAndRelease("server busy");
+    throw std::runtime_error("register requires a typeId");
+    const std::string message = "payload missing required field(s): " + missing;
+'''
+
+
+def _real_header_text() -> str:
+    """Reads the actual remote.hpp this repository ships."""
+    return (_repo_root() / "include" / "morph" / "core" / "remote.hpp").read_text(encoding="utf-8")
+
+
+class SurfaceExtractionTest(unittest.TestCase):
+    def test_finds_every_envelope_kind(self) -> None:
+        surface = extract_surface(_FIXTURE_HEADER)
+        self.assertEqual(surface.kinds, frozenset({"register", "execute"}))
+
+    def test_separates_exact_messages_from_prefixes(self) -> None:
+        surface = extract_surface(_FIXTURE_HEADER)
+        self.assertIn("model not found", surface.exact_messages)
+        self.assertIn("server busy", surface.exact_messages)
+        self.assertIn("register requires a typeId", surface.exact_messages)
+        # A message ending in ": " is a prefix -- the runtime value carries a
+        # suffix the source cannot know.
+        self.assertIn("unknown envelope kind: ", surface.message_prefixes)
+        self.assertIn("payload missing required field(s): ", surface.message_prefixes)
+        self.assertNotIn("unknown envelope kind: ", surface.exact_messages)
+
+    def test_floor_rejects_an_implausibly_small_surface(self) -> None:
+        # The whole point: a rename in remote.hpp must break this loudly rather
+        # than report full coverage over an empty universe.
+        violations = floor_violations(extract_surface(_FIXTURE_HEADER))
+        self.assertTrue(violations)
+        self.assertTrue(any("kind" in v for v in violations))
+
+    def test_floor_accepts_the_real_header(self) -> None:
+        surface = extract_surface(_real_header_text())
+        self.assertEqual(floor_violations(surface), [])
+        self.assertGreaterEqual(len(surface.kinds), MIN_KINDS)
+        self.assertGreaterEqual(
+            len(surface.exact_messages) + len(surface.message_prefixes), MIN_MESSAGES
+        )
+
+    def test_real_header_carries_the_kinds_the_spec_records(self) -> None:
+        surface = extract_surface(_real_header_text())
+        self.assertEqual(
+            surface.kinds,
+            frozenset({"register", "execute", "deregister", "hello",
+                       "attach", "assign", "instances", "schemas"}),
+        )
 
 
 if __name__ == "__main__":
