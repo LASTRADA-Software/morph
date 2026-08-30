@@ -142,7 +142,7 @@ Public Member Functions</h2></td></tr>
 <p>This is the signal the journal previously did not have. Before it, the same situation produced a successful reconstruction of a state that was never recorded — a renamed field decoding to its default, reported with as much confidence as a correct one. There is no "degraded" reconstruction to fall back to and no way to tell how much of the entry survived the decode, so this throws rather than warning: an audit trail that cannot be reconstructed faithfully must say so.</p>
 <dl class="section user"><dt>Who handles it</dt><dd>The caller of <span class="tt">replay()</span> / <span class="tt"><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333" title="Drops the most recently appended entry and replays everything that remains against a fresh model inst...">SessionLog::undoLast()</a></span> — application-level reconstruction code, not the framework. The three answers available to it are: register a migration for the pair (see <span class="tt"><a class="el" href="../../dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html" title="Registry of payload migrations, keyed by (actionType, fromSchema).">PayloadMigrationRegistry</a></span>), restore a build whose fingerprint matches, or surface the failure. The framework deliberately offers no fourth. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a20d86b985dd153dbbebe4072deef93b2" name="a20d86b985dd153dbbebe4072deef93b2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a20d86b985dd153dbbebe4072deef93b2">&#9670;&#160;</a></span>SchemaMismatchError()</h2>
@@ -192,7 +192,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>

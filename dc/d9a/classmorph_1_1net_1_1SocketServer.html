@@ -150,7 +150,7 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>Threading</dt><dd>Owns one accept thread plus one thread per accepted connection — there is no shared event loop. <span class="tt">RemoteServer::handle()</span> replies arrive on the server's worker-pool thread and are marshalled back onto the owning connection's own write path, serialized by a per-connection mutex.</dd></dl>
 <dl class="section user"><dt>Lifetime</dt><dd>Holds <span class="tt">RemoteServer&amp; _server</span> by reference, exactly like <span class="tt">QtWebSocketServer</span> — the server's owning <span class="tt">shared_ptr</span> must outlive this object (see <span class="tt">docs/spec/core/backend.md</span>'s Lifetime &amp; ownership section). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a6e68ace78449e4090392a28fa8c86ca1" name="a6e68ace78449e4090392a28fa8c86ca1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6e68ace78449e4090392a28fa8c86ca1">&#9670;&#160;</a></span>Config</h2>
@@ -166,7 +166,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the config struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -206,14 +206,15 @@ Public Member Functions</h2></td></tr>
 <p>Constructs the server; does not start listening. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">server</td><td><span class="tt">RemoteServer</span> instance that processes incoming messages. </td></tr>
+    <tr><td class="paramname">server</td><td><span class="tt">RemoteServer</span> instance that processes incoming messages. Borrowed, not owned: it must outlive this server (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
+              ordering"). </td></tr>
     <tr><td class="paramname">port</td><td>TCP port to listen on. Pass 0 to let the OS pick a free port. </td></tr>
     <tr><td class="paramname">cfg</td><td>Backlog tuning. Default: 64-connection backlog. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -242,7 +243,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Stops accepting and closes every client connection. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +274,7 @@ Public Member Functions</h2></td></tr>
 <p>Starts listening for incoming WebSocket connections. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the server successfully bound to the requested port. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -303,7 +304,7 @@ Public Member Functions</h2></td></tr>
 <p>Returns the port the server is currently bound to. </p>
 <dl class="section return"><dt>Returns</dt><dd>Bound TCP port (OS-assigned when constructed with port 0), or <span class="tt">0</span> before <span class="tt"><a class="el" href="#a301440fb07aa2382ab0fffae6798db3a" title="Starts listening for incoming WebSocket connections.">listen()</a></span> succeeds. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -333,7 +334,7 @@ Public Member Functions</h2></td></tr>
 <p>Stops accepting new connections and closes every client connection. </p>
 <p>Idempotent: safe to call more than once (including implicitly, via the destructor, after an explicit call). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>

@@ -137,6 +137,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d67/flows_8
 <code>#include &lt;type_traits&gt;</code><br />
 <code>#include &lt;unordered_map&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
+<code>#include &quot;../attributes.hpp&quot;</code><br />
 <code>#include &quot;../core/bridge.hpp&quot;</code><br />
 <code>#include &quot;../core/callback_scope.hpp&quot;</code><br />
 <code>#include &quot;../core/logger.hpp&quot;</code><br />
@@ -205,7 +206,7 @@ Functions</h2></td></tr>
 <div class="line"><span class="keyword">struct </span><a class="code hl_struct" href="../../de/d61/structmorph_1_1flows_1_1WizardTraits.html">morph::flows::WizardTraits</a>&lt;W&gt; {                                   \</div>
 <div class="line">    <span class="keyword">static</span> <span class="keyword">constexpr</span> std::string_view typeId() noexcept { <span class="keywordflow">return</span> NAME; } \</div>
 <div class="line">};</div>
-<div class="ttc" id="astructmorph_1_1flows_1_1WizardTraits_html"><div class="ttname"><a href="../../de/d61/structmorph_1_1flows_1_1WizardTraits.html">morph::flows::WizardTraits</a></div><div class="ttdoc">Traits specialisation mapping a Wizard type to its string type-id.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/d67/flows_8hpp_source.html#l00101">flows.hpp:101</a></div></div>
+<div class="ttc" id="astructmorph_1_1flows_1_1WizardTraits_html"><div class="ttname"><a href="../../de/d61/structmorph_1_1flows_1_1WizardTraits.html">morph::flows::WizardTraits</a></div><div class="ttdoc">Traits specialisation mapping a Wizard type to its string type-id.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/d67/flows_8hpp_source.html#l00102">flows.hpp:102</a></div></div>
 </div><!-- fragment -->
 <p>Specialises <span class="tt"><a class="el" href="../../de/d61/structmorph_1_1flows_1_1WizardTraits.html" title="Traits specialisation mapping a Wizard type to its string type-id.">morph::flows::WizardTraits</a>&lt;W&gt;</span> with the string type-id <code class="param">NAME</code>. </p>
 <p>Metadata only: unlike <span class="tt">BRIDGE_REGISTER_ACTION</span>, this performs no static-init registration into any dispatch registry — a wizard is never itself executed, only its steps' already-registered actions are (see docs/spec/forms/workflows_navigation.md). </p><dl class="params"><dt>Parameters</dt><dd>
@@ -216,7 +217,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00492">492</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00495">495</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -261,7 +262,7 @@ template&lt;typename Tuple, typename Visitor&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -310,7 +311,7 @@ template&lt;typename... Steps, typename Visitor&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00126">126</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -348,7 +349,7 @@ template&lt;typename W&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wizard's JSON document. Empty string only if glaze's own JSON writer fails on the assembled DOM (schema generation never throws). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00155">155</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>

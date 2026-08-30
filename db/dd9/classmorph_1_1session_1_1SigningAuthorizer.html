@@ -159,7 +159,7 @@ Public Member Functions</h2></td></tr>
 <p><span class="tt"><a class="el" href="#a998542ab6e7b9aeca272f2a05fc452a5" title="Allows the call iff ctx carries a valid token the policy admits.">authorize</a></span> returns <span class="tt">true</span> only for a token with a valid signature and unexpired claims (and, if a policy is supplied, one the policy admits). <span class="tt"><a class="el" href="#ab46b3d7dabef6cf09d31cf51023762ef" title="Returns the verified principal so the server can make it authoritative.">authenticate</a></span> returns the verified principal so <span class="tt">RemoteServer</span> makes it authoritative. Install it on the server: </p><div class="fragment"><div class="line"><span class="keyword">auto</span> authz = std::make_shared&lt;morph::session::SigningAuthorizer&gt;(sharedSecret);</div>
 <div class="line"><span class="keyword">auto</span> server = std::make_shared&lt;morph::backend::RemoteServer&gt;(pool, authz);</div>
 </div><!-- fragment --> 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00508">508</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00519">519</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="abe59e3f6f1cfa9772a9eaaa0bd003ad4" name="abe59e3f6f1cfa9772a9eaaa0bd003ad4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abe59e3f6f1cfa9772a9eaaa0bd003ad4">&#9670;&#160;</a></span>Policy</h2>
@@ -174,12 +174,12 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 <b>Initial value:</b><div class="fragment"><div class="line"> </div>
 <div class="line">std::function&lt;bool(<span class="keyword">const</span> <a class="code hl_struct" href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html">SessionToken</a>&amp; claims, std::string_view modelType, std::string_view actionType)&gt;</div>
-<div class="ttc" id="astructmorph_1_1session_1_1SessionToken_html"><div class="ttname"><a href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html">morph::session::SessionToken</a></div><div class="ttdoc">Verified claims carried by a session token.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d6a/session__auth_8hpp_source.html#l00286">session_auth.hpp:286</a></div></div>
+<div class="ttc" id="astructmorph_1_1session_1_1SessionToken_html"><div class="ttname"><a href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html">morph::session::SessionToken</a></div><div class="ttdoc">Verified claims carried by a session token.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d6a/session__auth_8hpp_source.html#l00287">session_auth.hpp:287</a></div></div>
 </div><!-- fragment -->
 <p>Optional per-request policy over verified claims. </p>
 <p>Receives the verified token plus the target ids; return <span class="tt">false</span> to deny. The default (empty) admits any validly-signed, unexpired token. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00514">514</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00525">525</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -225,14 +225,14 @@ Public Member Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">secret</td><td>Shared secret used to verify tokens. </td></tr>
-    <tr><td class="paramname">mac</td><td>MAC primitive; defaults to <span class="tt"><a class="el" href="../../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b" title="Reference HMAC-SHA256 MacFunction (the default). Returns raw MAC bytes.">hmacSha256</a></span>. </td></tr>
-    <tr><td class="paramname">clock</td><td>Time source (ms since epoch) for expiry; defaults to system time. </td></tr>
-    <tr><td class="paramname">policy</td><td>Optional per-request policy over verified claims. </td></tr>
+    <tr><td class="paramname">mac</td><td>MAC primitive; defaults to <span class="tt"><a class="el" href="../../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b" title="Reference HMAC-SHA256 MacFunction (the default). Returns raw MAC bytes.">hmacSha256</a></span>. Forwarded into this authorizer's <span class="tt"><a class="el" href="../../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html" title="Verifies signed bearer tokens against a shared secret.">TokenVerifier</a></span> and invoked for its whole lifetime, so anything the callable refers to must outlive it. </td></tr>
+    <tr><td class="paramname">clock</td><td>Time source (ms since epoch) for expiry; defaults to system time. Stored and invoked for this authorizer's whole lifetime, so anything the callable refers to must outlive it. </td></tr>
+    <tr><td class="paramname">policy</td><td>Optional per-request policy over verified claims. Stored and invoked on the same terms as <code class="param">clock</code>. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00536">536</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00559">559</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -282,7 +282,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901">morph::session::IAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00569">569</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,7 +320,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a639b6c6bfe77ba9143b0533788726568">morph::session::IAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00559">559</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00582">582</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>

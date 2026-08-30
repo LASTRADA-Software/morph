@@ -141,7 +141,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Verified claims carried by a session token. </p>
 <p>Serialised to JSON (Glaze) as the signed payload. Extend with app claims as needed — unknown fields are ignored on read, so adding claims is compatible. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a35047bcbf2deef7e0d6295268d09a9b7" name="a35047bcbf2deef7e0d6295268d09a9b7"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a35047bcbf2deef7e0d6295268d09a9b7">&#9670;&#160;</a></span>principal</h2>
@@ -157,7 +157,7 @@ Public Attributes</h2></td></tr>
 
 <p>Authenticated user/principal id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -175,7 +175,7 @@ Public Attributes</h2></td></tr>
 
 <p>Issue time, ms since epoch. If positive, <span class="tt">verify</span> rejects a token whose <span class="tt"><a class="el" href="#afb6785806e6a8a89687140e50bd9f6c5" title="Issue time, ms since epoch. If positive, verify rejects a token whose issuedAtMs is more than kClockS...">issuedAtMs</a></span> is more than <span class="tt"><a class="el" href="../../d3/d6a/session__auth_8hpp.html#a0514fd0c3e0770d0a922742091e073a8" title="Allowed clock skew (ms) between issuer and verifier for the not-before (issuedAtMs) check....">kClockSkewMs</a></span> in the future (not-yet-valid). <span class="tt">0</span> (unset) disables the not-before check. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00292">292</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -193,7 +193,7 @@ Public Attributes</h2></td></tr>
 
 <p>Expiry, ms since epoch. <b>Must be strictly positive</b> — a token must carry a real expiry. <span class="tt">verify</span> treats <span class="tt"><a class="el" href="#ac236bda69845ab2d93db16f42e8557c1" title="Expiry, ms since epoch. Must be strictly positive — a token must carry a real expiry....">expiresAtMs</a> &lt;= 0</span> (including the default <span class="tt">0</span>) as invalid/expired, so a zero token is never an eternal credential. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00297">297</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -211,7 +211,7 @@ Public Attributes</h2></td></tr>
 
 <p>Coarse-grained roles the app can key authorization policy on. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00299">299</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00300">300</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>

@@ -161,7 +161,7 @@ Public Member Functions</h2></td></tr>
 </dd></dl>
 <dl class="section user"><dt>Thread safety</dt><dd><span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> is safe to call from any thread. Concurrent calls are serialised by an internal mutex — the second caller blocks until the first <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> completes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a31349dc8d4338512a2ffc2a8fda90996" name="a31349dc8d4338512a2ffc2a8fda90996"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a31349dc8d4338512a2ffc2a8fda90996">&#9670;&#160;</a></span>ReplayFunction</h2>
@@ -177,7 +177,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Callable that attempts to replay a single queued item. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -196,7 +196,7 @@ Public Member Functions</h2></td></tr>
 <p>Callable invoked when an item exhausts its retry budget, just before it is removed from the queue. </p>
 <p>Receives the exhausted item (payload, idempotencyKey, and its final cumulative attempt count). If unset, <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> keeps the default behavior: log at <span class="tt">morph::log::LogLevel::error</span> and drop. A throwing sink is caught and logged — the item is still removed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,14 +236,14 @@ Public Member Functions</h2></td></tr>
 <p>Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">queue</td><td>Queue to drain on each <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> call. </td></tr>
-    <tr><td class="paramname">replay</td><td>Function called for each pending item. </td></tr>
-    <tr><td class="paramname">deadLetterSink</td><td>Optional hook invoked with the exhausted item instead of the default log-and-drop path when an item exhausts its retry budget. Default: unset. </td></tr>
+    <tr><td class="paramname">queue</td><td>Queue to drain on each <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> call. Borrowed, not owned: it must outlive this worker. </td></tr>
+    <tr><td class="paramname">replay</td><td>Function called for each pending item. Stored and invoked for this worker's whole lifetime, so anything the callable refers to must outlive it. </td></tr>
+    <tr><td class="paramname">deadLetterSink</td><td>Optional hook invoked with the exhausted item instead of the default log-and-drop path when an item exhausts its retry budget. Default: unset. Retained on the same terms as <code class="param">replay</code>. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +276,7 @@ Public Member Functions</h2></td></tr>
 <p>If <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress run() to stop after the current item.">stop()</a></span> was called before <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> acquired the lock, <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> returns immediately with an empty result and resets the stop flag.</p>
 <dl class="section return"><dt>Returns</dt><dd>Counts of successful / failed / dead-lettered replays. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -306,7 +306,7 @@ Public Member Functions</h2></td></tr>
 <p>Signals an in-progress <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> to stop after the current item. </p>
 <p>Thread-safe. The flag is automatically reset at the start of the next <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> call, so stopping is one-shot. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>

@@ -169,7 +169,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p><span class="tt">IBackend</span> adapter that routes all calls through a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> as wire <span class="tt">Envelope</span> messages. </p>
 <p>Intended for testing and in-process simulation of remote execution. <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel()</a></span> and <span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline; safe from any thread.">deregisterModel()</a></span> are processed inline on the calling thread via <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818" title="Synchronously processes a JSON Envelope on the calling thread and returns the reply.">RemoteServer::handleInline</a></span>. <span class="tt"><a class="el" href="#af575c96f8350bdf7745cf45662314bc4" title="Serialises the action, sends it to the server, and returns a Completion.">execute()</a></span> is asynchronous: it sends the message through <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">RemoteServer::handle</a></span> and resolves the returned <span class="tt">Completion</span> when the reply arrives (there is no <span class="tt">std::promise</span> and no blocking wait). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01721">1721</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01736">1736</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a978cad0db6efd8ccd3f33c1bf15be188" name="a978cad0db6efd8ccd3f33c1bf15be188"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a978cad0db6efd8ccd3f33c1bf15be188">&#9670;&#160;</a></span>SimulatedRemoteBackend() <span class="overload">[1/2]</span></h2>
@@ -197,12 +197,13 @@ Public Member Functions</h2></td></tr>
 <p>Constructs the backend targeting <code class="param">server</code>, unscoped. </p>
 <p>Every <span class="tt">register</span>/<span class="tt">deregister</span>/<span class="tt">attach</span>/<span class="tt">assign</span>/<span class="tt">instances</span> call this backend makes uses <span class="tt">ConnectionId{0}</span> — the server's "unscoped" sentinel (<span class="tt">backend.md</span>, "Connection scopes") — exactly as before connection scopes existed. Use the <span class="tt">ConnectionId</span> constructor below to give this backend its own scope instead, so tests can exercise connection-scoped state (rate limiting, connection-drop recovery, shared-instance attach/detach across connections) deterministically without a real socket. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">server</td><td>The <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> instance to forward calls to. </td></tr>
+    <tr><td class="paramname">server</td><td>The <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> instance to forward calls to. Borrowed, not owned: it must outlive this backend — a backend holding a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a>&amp;</span> that has been destroyed is a use-after-free on every call (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
+              ordering"). </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01734">1734</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01754">1754</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -238,13 +239,13 @@ Public Member Functions</h2></td></tr>
 <p>The backend does <b>not</b> call <span class="tt">closeConnection</span> itself on destruction: unlike a real transport, there is no single well-defined "this
 connection is gone" moment to hook here (the caller may want to keep the scope open past this object's lifetime, e.g. to construct a second <span class="tt"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html" title="IBackend adapter that routes all calls through a RemoteServer as wire Envelope messages.">SimulatedRemoteBackend</a></span> against the same scope). Call <span class="tt">closeConnection(cid)</span> explicitly, or destroy <span class="tt">server</span> itself, when the simulated connection should be reclaimed. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">server</td><td>The <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> instance to forward calls to. </td></tr>
+    <tr><td class="paramname">server</td><td>The <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> instance to forward calls to. Borrowed, on the same terms as the constructor above. </td></tr>
     <tr><td class="paramname">cid</td><td>Connection scope, as returned by <span class="tt">server.openConnection()</span>. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01756">1756</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01777">1777</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -292,7 +293,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01768">1768</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01789">1789</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -344,7 +345,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01784">1784</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01805">1805</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -397,7 +398,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01806">1806</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01827">1827</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -456,7 +457,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01833">1833</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01854">1854</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -502,7 +503,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01856">1856</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01877">1877</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -544,7 +545,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01870">1870</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01891">1891</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -579,7 +580,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01907">1907</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01928">1928</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -616,7 +617,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01925">1925</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01946">1946</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -660,7 +661,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01948">1948</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01969">1969</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -708,7 +709,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the deserialized result or an error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01970">1970</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01991">1991</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -737,7 +738,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 
 <p>No-op — models live in <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>, not locally. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02007">2007</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02028">2028</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -772,7 +773,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02011">2011</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02032">2032</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -807,7 +808,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02028">2028</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02049">2049</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

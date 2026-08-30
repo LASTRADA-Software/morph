@@ -159,7 +159,7 @@ Public Member Functions</h2></td></tr>
 <p>A dedicated thread calls the user-supplied probe function at regular intervals. The monitor starts in the <em>online</em> state and transitions to <em>offline</em> only after <span class="tt">failureThreshold</span> consecutive failures. It returns to <em>online</em> after <span class="tt">onlineThreshold</span> consecutive successes.</p>
 <p>The monitor is non-copyable and non-movable. Destroy it to stop monitoring. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a8c76a4cf471cef70d76876ac51bb8ff0" name="a8c76a4cf471cef70d76876ac51bb8ff0"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8c76a4cf471cef70d76876ac51bb8ff0">&#9670;&#160;</a></span>ProbeFunction</h2>
@@ -175,7 +175,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Returns <span class="tt">true</span> when the network is reachable. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>
@@ -193,7 +193,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Called on connectivity state change. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>
@@ -211,7 +211,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,15 +257,15 @@ Public Member Functions</h2></td></tr>
 <p>The monitor starts in the online state. The first <span class="tt">failureThreshold</span> consecutive probe failures must occur before <span class="tt">onOffline</span> is invoked. Callers that know the initial state is offline should use a probe that starts returning <span class="tt">false</span> immediately.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">probe</td><td>Callable that tests connectivity. Must not throw (exceptions are swallowed). </td></tr>
-    <tr><td class="paramname">onOffline</td><td>Called on the probe thread when the monitor goes offline. </td></tr>
-    <tr><td class="paramname">onOnline</td><td>Called on the probe thread when the monitor comes back online. </td></tr>
+    <tr><td class="paramname">probe</td><td>Callable that tests connectivity. Must not throw (exceptions are swallowed). Stored and invoked on the probe thread for this monitor's whole lifetime, so anything the callable refers to must outlive the monitor. </td></tr>
+    <tr><td class="paramname">onOffline</td><td>Called on the probe thread when the monitor goes offline. Retained on the same terms as <code class="param">probe</code>. </td></tr>
+    <tr><td class="paramname">onOnline</td><td>Called on the probe thread when the monitor comes back online. Retained on the same terms as <code class="param">probe</code>. </td></tr>
     <tr><td class="paramname">cfg</td><td>Tuning parameters (interval, thresholds). </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>
@@ -297,7 +297,7 @@ Public Member Functions</h2></td></tr>
 <p>The destructor itself must not run on the probe thread: this spin-wait blocks until <span class="tt">run()</span> sets <span class="tt">_runExited</span>, but <span class="tt">run()</span> cannot reach that store while it is paused lower on the same thread's call stack waiting for a callback (and this destructor, called from within it) to return. A callback that drops the owning object's last reference and thereby triggers this destructor synchronously, on the probe thread, deadlocks here by construction — not a supported lifetime. The supported, documented seam for a self-thread teardown request is calling <span class="tt"><a class="el" href="#ac4251df7c4776d6cd0c68f4751952d45" title="Signals the probe thread to stop and, if possible, joins it.">stop()</a></span> itself from the callback (see its doc comment and <span class="tt">_thread.get_id() ==
 std::this_thread::get_id()</span> below): that only detaches and returns, letting <span class="tt">run()</span> continue and exit on its own; the actual destructor runs later, from a different thread, once the owner is done reacting to the callback. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>
@@ -329,7 +329,7 @@ std::this_thread::get_id()</span> below): that only detaches and returns, lettin
 <p>Reads an atomic flag — safe to call from any thread at any time.</p>
 <dl class="section return"><dt>Returns</dt><dd>Current online state. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>
@@ -360,7 +360,7 @@ std::this_thread::get_id()</span> below): that only detaches and returns, lettin
 <p>Idempotent — subsequent calls are no-ops. If called from inside the probe thread (e.g. from a probe callback), the thread is detached instead of joined to avoid a deadlock; the destructor then spin-waits for it to exit.</p>
 <p>Thread-safe. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00114">114</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00122">122</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>

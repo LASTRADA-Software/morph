@@ -15,6 +15,5 @@ var structmorph_1_1units_1_1Quantity =
     [ "named", "d5/dda/structmorph_1_1units_1_1Quantity.html#a161651d7fca578b928901cdac557051a", null ],
     [ "equation", "d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73", null ],
     [ "operator Quantity< To >", "d5/dda/structmorph_1_1units_1_1Quantity.html#a5252c3cebbc4708d242bcee514b55869", null ],
-    [ "payload", "d5/dda/structmorph_1_1units_1_1Quantity.html#a7a80d984d0cc6760a677a2c4f802d58f", null ],
-    [ "_ctx", "d5/dda/structmorph_1_1units_1_1Quantity.html#a9f35cf343d134f71160e664bd7e95cf2", null ]
+    [ "payload", "d5/dda/structmorph_1_1units_1_1Quantity.html#a7a80d984d0cc6760a677a2c4f802d58f", null ]
 ];

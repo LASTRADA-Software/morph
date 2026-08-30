@@ -187,7 +187,7 @@ Protected Member Functions</h2></td></tr>
     journal_mode=WAL</span> (set once, at construction) gives the durability.</dd></dl>
 <dl class="section user"><dt>Thread safety</dt><dd>All operations serialise on an internal mutex around the connection, so this is safe to share between the application's enqueue-on-failure write path and <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>'s drain/replay read path. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="abc451fbe9de29b202afe66293b668fc5" name="abc451fbe9de29b202afe66293b668fc5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abc451fbe9de29b202afe66293b668fc5">&#9670;&#160;</a></span>SqliteOfflineQueue()</h2>
@@ -231,7 +231,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -260,7 +260,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Closes the underlying SQLite connection. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -305,7 +305,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -354,7 +354,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00172">172</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00177">177</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -386,7 +386,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ad11f945b889e1f6d582a6bbd4fdfeaa5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -423,7 +423,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a1399eda29916d144d93c728f1e0d06e5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00253">253</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -465,7 +465,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -497,7 +497,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ac534551aa850902cd9b8fd45e134ade3">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00273">273</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -529,7 +529,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a5fd0dc329f73f72e5d64689c5956058d">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -571,7 +571,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ab3e24454f2625fcd447f76d9ed0fd820">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00290">290</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>

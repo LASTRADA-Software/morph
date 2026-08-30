@@ -153,7 +153,7 @@ Public Member Functions</h2></td></tr>
 <p>Attach directly via <span class="tt">IModelHolder::attachActionLog</span> — every successfully executed loggable action is appended here in order, regardless of any <span class="tt">ActionLogPolicy::coalesce</span> setting. This full history is the raw material for <span class="tt"><a class="el" href="#a8a0a9e604a71fe05ce39de064e298333" title="Drops the most recently appended entry and replays everything that remains against a fresh model inst...">undoLast()</a></span>. <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> is the one place coalescing actually happens: entries accumulated since the last checkpoint are reduced by <span class="tt">(modelType, entityKey, actionType)</span> — keeping only the latest occurrence where the action's policy says <span class="tt">coalesce == true</span>, keeping every occurrence otherwise — and only that reduced set reaches the durable sink.</p>
 <dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe. A history mutex guards <span class="tt">_all</span> and the watermark; a separate forwarding mutex serializes <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> bodies end to end so concurrent checkpoints forward to the durable sink in append order without blocking ordinary <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></span> calls during the sink's I/O. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00328">328</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="ad7fb2e3940c88d02d4d0fc0c29434e90" name="ad7fb2e3940c88d02d4d0fc0c29434e90"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad7fb2e3940c88d02d4d0fc0c29434e90">&#9670;&#160;</a></span>append()</h2>
@@ -188,7 +188,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00335">335</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -219,7 +219,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,7 +257,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00344">344</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -307,7 +307,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A freshly created holder with the pre-undo state replayed onto it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00384">384</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -349,7 +349,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00434">434</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00437">437</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>

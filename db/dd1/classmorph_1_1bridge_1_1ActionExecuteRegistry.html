@@ -150,7 +150,7 @@ Static Public Member Functions</h2></td></tr>
 <p>Populated automatically by <span class="tt">BRIDGE_REGISTER_ACTION</span> — no action-specific code is required at any call site. Every entry calls through the real <span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a>&lt;Model&gt;::<a class="el" href="#af38507bf8a4df78106479bb101234b6a" title="Looks up and invokes the executor for (modelId, actionId), specialised for the caller&#39;s own Sharing p...">execute</a>&lt;Action&gt;()</span> (so sessions, backend switches, and completions all behave exactly as they do for hand-written call sites), unlike <span class="tt">morph::model::detail::ActionDispatcher</span>, which calls <span class="tt">Model::execute</span> directly against an already-owned model holder and is only ever used server-side.</p>
 <p>HARD REQUIREMENT (other direction of the same constraint documented on <span class="tt">morph::model::detail::registerActionExecutorOnce</span> in <span class="tt"><a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a></span>): registration into this registry happens via <span class="tt">registerActionExecutorOnce&lt;Model, Action&gt;</span>, which <span class="tt">BRIDGE_REGISTER_ACTION</span> calls unconditionally but which is only defined here, in <span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></span>. Every translation unit that calls <span class="tt">BRIDGE_REGISTER_ACTION</span> must therefore include this header (directly or transitively), or that translation unit's static initializer will fail to link. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a053dc5bfc617902b5a2debb208be722d" name="a053dc5bfc617902b5a2debb208be722d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a053dc5bfc617902b5a2debb208be722d">&#9670;&#160;</a></span>Executor</h2>
@@ -166,7 +166,7 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Deserialises <span class="tt">bodyJson</span>, dispatches through the handler's <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span>, and resolves with the JSON-encoded result. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -220,7 +220,7 @@ Sharing&gt;</span> instantiation, so <span class="tt">kShared</span> resolves in
 <p>Builds one executor per <span class="tt">Sharing</span> policy the framework defines (<span class="tt"><a class="el" href="../../d8/d38/structmorph_1_1bridge_1_1NoSharing.html" title="BridgeHandler sharing policy: private, one instance per handler.">NoSharing</a></span>, <span class="tt"><a class="el" href="../../dd/dfb/structmorph_1_1bridge_1_1AllowShared.html" title="BridgeHandler sharing policy: joins the shared instance directory.">AllowShared</a></span>) from the same generic-lambda template, <span class="tt">static_cast</span>ing <span class="tt">handlerVoid</span> to the matching <span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a>&lt;Model,
 Sharing&gt;*</span> in each — see issue #68 / bridge.md's design-decision entry for why a single <span class="tt"><a class="el" href="../../d8/d38/structmorph_1_1bridge_1_1NoSharing.html" title="BridgeHandler sharing policy: private, one instance per handler.">NoSharing</a></span>-only executor is unsound for a shared handler. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l02267">2267</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l02281">2281</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -287,7 +287,7 @@ template&lt;typename Sharing&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -317,7 +317,7 @@ template&lt;typename Sharing&gt; </div>
 <p>Returns the process-level singleton registry. </p>
 <dl class="section return"><dt>Returns</dt><dd>Reference to the singleton <span class="tt"><a class="el" href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html" title="Type-erased, JSON-in/JSON-out execute path for actions whose concrete C++ type is only known by its r...">ActionExecuteRegistry</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

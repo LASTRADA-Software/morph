@@ -152,10 +152,10 @@ Public Member Functions</h2></td></tr>
 <div class="line">    <span class="keywordflow">return</span> rewriteKey(payload, <span class="stringliteral">&quot;state&quot;</span>, <span class="stringliteral">&quot;stateCode&quot;</span>);</div>
 <div class="line">});</div>
 <div class="line"><span class="keyword">auto</span> holder = morph::journal::replay(<span class="stringliteral">&quot;Sample&quot;</span>, log.entries(), registry, dispatcher, migrations);</div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1PayloadMigrationRegistry_html"><div class="ttname"><a href="../../dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html">morph::journal::PayloadMigrationRegistry</a></div><div class="ttdoc">Registry of payload migrations, keyed by (actionType, fromSchema).</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00105">journal.hpp:105</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1PayloadMigrationRegistry_html_a9999146cf4c8c65f3f80b757d0d547d8"><div class="ttname"><a href="#a9999146cf4c8c65f3f80b757d0d547d8">morph::journal::PayloadMigrationRegistry::add</a></div><div class="ttdeci">void add(std::string_view actionType, std::string_view fromSchema, Migration migration)</div><div class="ttdoc">Registers migration for entries of actionType stamped with fromSchema. Replaces any migration already...</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00116">journal.hpp:116</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1PayloadMigrationRegistry_html"><div class="ttname"><a href="../../dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html">morph::journal::PayloadMigrationRegistry</a></div><div class="ttdoc">Registry of payload migrations, keyed by (actionType, fromSchema).</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00106">journal.hpp:106</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1PayloadMigrationRegistry_html_a9999146cf4c8c65f3f80b757d0d547d8"><div class="ttname"><a href="#a9999146cf4c8c65f3f80b757d0d547d8">morph::journal::PayloadMigrationRegistry::add</a></div><div class="ttdeci">void add(std::string_view actionType, std::string_view fromSchema, Migration migration)</div><div class="ttdoc">Registers migration for entries of actionType stamped with fromSchema. Replaces any migration already...</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00117">journal.hpp:117</a></div></div>
 </div><!-- fragment --> 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a554f4b39d861af89bcbcffaf2a5f0aa7" name="a554f4b39d861af89bcbcffaf2a5f0aa7"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a554f4b39d861af89bcbcffaf2a5f0aa7">&#9670;&#160;</a></span>Migration</h2>
@@ -171,7 +171,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Rewrites one recorded payload JSON into the current shape. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00109">109</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +218,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,9 +257,9 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>Pointer to the migration, or <span class="tt">nullptr</span> if none is registered. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Pointer to the migration, or <span class="tt">nullptr</span> if none is registered — into this registry, so valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00128">128</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00130">130</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -288,7 +288,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Removes every registered migration. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -318,7 +318,7 @@ Public Member Functions</h2></td></tr>
 <p>Returns how many migrations are registered. </p>
 <dl class="section return"><dt>Returns</dt><dd>The registration count. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>

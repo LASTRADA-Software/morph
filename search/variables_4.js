@@ -1,13 +1,9 @@
 var searchData=
 [
-  ['data_0',['data',['../df/d52/structmorph_1_1detail_1_1FixedString.html#aebc33aa747fd583741693029ac3b799e',1,'morph::detail::FixedString']]],
-  ['deadlettered_1',['deadLettered',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73',1,'morph::offline::SyncResult']]],
-  ['decimalplaces_2',['decimalPlaces',['../d8/daf/structmorph_1_1forms_1_1FieldConstraint.html#a60acec849417087575f3dc5162413d8d',1,'morph::forms::FieldConstraint::decimalPlaces'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#a75fabddd91c6c69a9707e0ba9ef067c2',1,'morph::math::Rational::decimalPlaces']]],
-  ['declareddecimals_3',['declaredDecimals',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a6d6488fb98a7ce62fe51d68f7bda45fb',1,'morph::units::Quantity']]],
-  ['defaultdecimals_4',['defaultDecimals',['../d8/dab/structmorph_1_1units_1_1UnitMeta.html#a203bee57f41561c4ff8881cd64fda9f0',1,'morph::units::UnitMeta']]],
-  ['den_5',['den',['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#a26c9d2102cd4c458fffdb95bee645234',1,'morph::units::UnitAlternative::den'],['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0c94599c99335c3379941683babb03e9',1,'morph::math::Rational::Wire::den']]],
-  ['denominator_6',['denominator',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ad6c59c25744a54b8f27699e4c3c43800',1,'morph::math::Rational']]],
-  ['display_7',['display',['../d8/dab/structmorph_1_1units_1_1UnitMeta.html#a3b276e041fdefe30b6105e3835f9573f',1,'morph::units::UnitMeta']]],
-  ['dp_8',['dp',['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a78d32fb54074ac3bbec65a64bdfdbdd8',1,'morph::math::Rational::Wire']]],
-  ['drainoutbox_9',['drainOutbox',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a46bff3ee88485624fe3b6c9184ad0906',1,'morph::journal::OutboxRelay']]]
+  ['endspan_0',['endSpan',['../d5/d5e/structmorph_1_1observe_1_1TraceSink.html#a64f1ad957ef8edd30cdc13b62482b618',1,'morph::observe::TraceSink']]],
+  ['entitykey_1',['entityKey',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a253bed67a42a440ad432356b338f5b48',1,'morph::journal::LogEntry']]],
+  ['error_2',['error',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a646cb97e461dcd84d20260cecab748a8',1,'morph::journal::LogEntry']]],
+  ['escape_5fcontrol_5fcharacters_3',['escape_control_characters',['../de/d8d/structmorph_1_1wire_1_1detail_1_1EscapingWriteOpts.html#a1a6dcefb059cb3a297fd5fd916521691',1,'morph::wire::detail::EscapingWriteOpts::escape_control_characters'],['../da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts.html#a2755c7e8ad562866813940f4d4218398',1,'morph::journal::detail::EscapingWriteOpts::escape_control_characters'],['../de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html#a189724b1bcf426227de6c8894cd41073',1,'morph::session::detail::EscapingWriteOpts::escape_control_characters']]],
+  ['executetimeout_4',['executeTimeout',['../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c',1,'morph::backend::LimitPolicy']]],
+  ['expiresatms_5',['expiresAtMs',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ac236bda69845ab2d93db16f42e8557c1',1,'morph::session::SessionToken']]]
 ];

@@ -163,7 +163,7 @@ Public Member Functions</h2></td></tr>
 <p><b>Boundary of the guarantee.</b> The check assumes this executor is destroyed on the same thread that runs its context's event loop, which holds for every owner in this repository. Destroying one from another thread while its loop is mid-delivery still needs external synchronisation: this closes the "torn
 down with events still queued" hole, not a genuine cross-thread race. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a4f32eb604dfa5c0ea08bc945e4a2391b" name="a4f32eb604dfa5c0ea08bc945e4a2391b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4f32eb604dfa5c0ea08bc945e4a2391b">&#9670;&#160;</a></span>QtExecutor()</h2>
@@ -191,12 +191,12 @@ down with events still queued" hole, not a genuine cross-thread race. </p>
 <p>Constructs an executor that posts tasks to <code class="param">context's</code> thread. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">context</td><td><span class="tt">QObject</span> whose owning thread's event loop runs posted tasks; <span class="tt">QMetaObject::invokeMethod</span> dispatches to whichever thread <span class="tt">context-&gt;thread()</span> reports at the time each task is posted, so tasks posted after <span class="tt">context</span> is moved to a different thread run there. Defaults to <span class="tt">QCoreApplication::instance()</span>, preserving the previous GUI-thread-only behaviour. Passing <span class="tt">nullptr</span> (e.g. when constructed before <span class="tt">QCoreApplication</span> exists) makes <span class="tt"><a class="el" href="#a2d369ad4c6f855ff345339374b451b1f" title="Posts fn to the Qt event loop for execution on the context&#39;s thread.">post()</a></span> a no-op, matching <span class="tt">QMetaObject::invokeMethod</span>'s own handling of a null target. </td></tr>
+    <tr><td class="paramname">context</td><td><span class="tt">QObject</span> whose owning thread's event loop runs posted tasks; <span class="tt">QMetaObject::invokeMethod</span> dispatches to whichever thread <span class="tt">context-&gt;thread()</span> reports at the time each task is posted, so tasks posted after <span class="tt">context</span> is moved to a different thread run there. Defaults to <span class="tt">QCoreApplication::instance()</span>, preserving the previous GUI-thread-only behaviour. Passing <span class="tt">nullptr</span> (e.g. when constructed before <span class="tt">QCoreApplication</span> exists) makes <span class="tt"><a class="el" href="#a2d369ad4c6f855ff345339374b451b1f" title="Posts fn to the Qt event loop for execution on the context&#39;s thread.">post()</a></span> a no-op, matching <span class="tt">QMetaObject::invokeMethod</span>'s own handling of a null target. Borrowed, not owned: a non-null <code class="param">context</code> must outlive this executor. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +236,7 @@ down with events still queued" hole, not a genuine cross-thread race. </p>
 
 <p>Implements <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
 
 </div>
 </div>
