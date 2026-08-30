@@ -9,6 +9,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "../attributes.hpp"
 #include "../core/logger.hpp"
 #include "../core/observability.hpp"
 #include "offline_queue.hpp"
@@ -81,12 +82,17 @@ public:
     using DeadLetterSink = std::function<void(const QueueItem& poisoned)>;
 
     /// @brief Constructs a worker that drains @p queue using @p replay.
-    /// @param queue          Queue to drain on each `run()` call.
-    /// @param replay         Function called for each pending item.
+    /// @param queue          Queue to drain on each `run()` call. Borrowed, not
+    ///                       owned: it must outlive this worker.
+    /// @param replay         Function called for each pending item. Stored and
+    ///                       invoked for this worker's whole lifetime, so
+    ///                       anything the callable refers to must outlive it.
     /// @param deadLetterSink Optional hook invoked with the exhausted item
     ///                       instead of the default log-and-drop path when an
     ///                       item exhausts its retry budget. Default: unset.
-    SyncWorker(IOfflineQueue& queue, ReplayFunction replay, DeadLetterSink deadLetterSink = nullptr)
+    ///                       Retained on the same terms as @p replay.
+    SyncWorker(IOfflineQueue& queue MORPH_LIFETIMEBOUND, ReplayFunction replay MORPH_LIFETIMEBOUND,
+               DeadLetterSink deadLetterSink MORPH_LIFETIMEBOUND = nullptr)
         : _queue{queue}, _replay{std::move(replay)}, _deadLetterSink{std::move(deadLetterSink)} {}
 
     /// @brief Drains the queue, replaying each item via the replay function.

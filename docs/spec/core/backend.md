@@ -1466,6 +1466,14 @@ not a behavior change to the existing loopback-only default.
 | `WsFrameReader` reassembles fragments | Accumulates continuation frames and returns only the completed message | Fragmentation is not an exotic case: a peer fragments whenever a message exceeds its outgoing frame size, and Qt's `QWebSocket` defaults that to 512 KiB. Rejecting fragments broke interop with the transport this project ships, for every payload past that size. Control frames interleaved between fragments pass through untouched, and the reassembled total is bounded by `wire::kMaxEnvelopeBytes` so a stream of tiny continuations cannot grow the buffer without limit. |
 | `SocketBackend` runs reconnect handlers on a dedicated thread | Not inline from the I/O thread's connect path | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the I/O thread's read loop can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. |
 
+## Lifetime annotations
+
+`LocalBackend`'s `IExecutor& workerPool`, `RemoteServer`'s `workerPool`,
+`dispatcher` and `registry`, and `SimulatedRemoteBackend`'s `RemoteServer&` are
+all marked `MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`) — the "must outlive"
+column of the destruction-ordering table, restated where the compiler can check
+it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 | Spec | Relationship |

@@ -354,6 +354,12 @@ to `replay()`'s fingerprint check (morph#245).
 
 See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
 
+## Lifetime annotations
+
+`Timestamp::operator*` returns a reference into the `Timestamp` and marks its
+implicit object parameter `MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`). See
+[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - **`forms.md`** — `Timestamp` satisfies the `EmptyCapableField` concept via

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -93,12 +94,14 @@ public:
     ~AppContext() = default;
 
     /// @brief The bridge every handler in this context is built against.
-    /// @return Reference to the owned `Bridge`.
-    [[nodiscard]] ::morph::bridge::Bridge& bridge() { return *_bridge; }
+    /// @return Reference to the owned `Bridge` — valid only for as long as this
+    ///         `AppContext` is.
+    [[nodiscard]] ::morph::bridge::Bridge& bridge() MORPH_LIFETIMEBOUND { return *_bridge; }
 
     /// @brief The Qt-thread executor every handler delivers callbacks on.
-    /// @return Non-owning pointer to the owned `QtExecutor`.
-    [[nodiscard]] ::morph::exec::IExecutor* executor() { return _qtExecutor.get(); }
+    /// @return Non-owning pointer to the owned `QtExecutor` — valid only for as
+    ///         long as this `AppContext` is.
+    [[nodiscard]] ::morph::exec::IExecutor* executor() MORPH_LIFETIMEBOUND { return _qtExecutor.get(); }
 
     /// @brief Whether the transport is up and handlers may now be built.
     ///

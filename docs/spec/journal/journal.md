@@ -1327,6 +1327,14 @@ Honest boundaries of the current design:
   "field added" from "field renamed" by comparing two digests), not an
   oversight; the skew test above pins both halves.
 
+## Lifetime annotations
+
+`MigrationRegistry::find()` returns a pointer into the registry's own map and
+marks its implicit object parameter `MORPH_LIFETIMEBOUND`
+(`morph/attributes.hpp`), restating the "valid until the entry is replaced or the
+registry is destroyed" rule where the compiler can check the second half of it.
+See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - **`wire.md`** — `wire::decode`'s `error_on_unknown_keys = false` stance and

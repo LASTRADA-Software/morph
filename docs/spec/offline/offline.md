@@ -938,6 +938,18 @@ Honest boundaries of what ships today:
 | No sleep after final attempt | **`retryDelay` skipped on last iteration** | Wasting 2s after we already know we're giving up serves no purpose. |
 | Conflict resolution lives in the model | **`SyncWorker` has no conflict hook; models reconcile in `onBackendChanged()`** | The framework cannot know whether a payload was superseded — only the domain model can. Keeping `SyncWorker`'s contract a plain `bool` avoids baking a conflict model into the framework; hosts that need merge/discard drain the queue inside `onBackendChanged()` instead (see [Conflict resolution on replay](#conflict-resolution-on-replay)). |
 
+## Lifetime annotations
+
+`SyncWorker`'s `IOfflineQueue& queue` is marked `MORPH_LIFETIMEBOUND`
+(`morph/attributes.hpp`) — the queue must outlive the worker draining it.
+
+The callbacks are annotated too: `NetworkMonitor`'s `probe`/`onOffline`/`onOnline`
+and `SyncWorker`'s `replay`/`deadLetterSink`. Those are taken *by value*, so the
+`std::function` itself is owned rather than borrowed; what the annotation
+documents is that anything the stored callable refers to must outlive the object,
+which matters here precisely because the callable runs on the probe thread (or on
+whatever thread calls `run()`) for that object's whole life. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - **`bridge.md`** — `Bridge::switchBackend` is the mechanism the coordinator's

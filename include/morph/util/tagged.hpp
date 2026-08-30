@@ -45,6 +45,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "../attributes.hpp"
 #include "../detail/fixed_string.hpp"
 
 namespace morph::util {
@@ -77,14 +78,16 @@ struct Tagged {
     [[nodiscard]] constexpr bool hasValue() const noexcept { return true; }
 
     /// @brief Read access to the wrapped value.
-    /// @return The underlying scalar.
-    [[nodiscard]] constexpr const T& get() const noexcept { return value; }
+    /// @return The underlying scalar — a reference into this `Tagged`, valid
+    ///         only for as long as it is.
+    [[nodiscard]] constexpr const T& get() const noexcept MORPH_LIFETIMEBOUND { return value; }
 
     /// @brief Unchecked access to the wrapped value, mirroring `Quantity`'s
     ///        and `Choice`'s `operator*` for consistency across the
     ///        empty-capable-field family.
-    /// @return The underlying scalar.
-    [[nodiscard]] constexpr const T& operator*() const noexcept { return value; }
+    /// @return The underlying scalar — a reference into this `Tagged`, valid
+    ///         only for as long as it is.
+    [[nodiscard]] constexpr const T& operator*() const noexcept MORPH_LIFETIMEBOUND { return value; }
 
     /// @brief Equality on the wrapped value.
     /// @param other Tagged value to compare against (same `T`/`Tag`).

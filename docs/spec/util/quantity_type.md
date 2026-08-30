@@ -1142,6 +1142,12 @@ identically (morph#245).
 
 See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
 
+## Lifetime annotations
+
+`value()` and `operator*` return references into the `Quantity`'s payload and mark
+their implicit object parameter `MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`), as
+does `detail::nodeValue()`'s `ASTNode&` in the provenance renderer. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - **[`rational.md`](rational.md)** — the payload type, and the one to read

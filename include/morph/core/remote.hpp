@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
 #include "backend.hpp"
@@ -202,13 +203,21 @@ class RemoteServer : public std::enable_shared_from_this<RemoteServer> {
 public:
     /// @brief Constructs a server backed by @p workerPool with allow-all authorization.
     ///
-    /// @param workerPool Pool used to process messages asynchronously.
-    /// @param dispatcher Action dispatcher; defaults to the process-level singleton.
-    /// @param registry   Model factory registry; defaults to the process-level singleton.
-    explicit RemoteServer(
-        ::morph::exec::IExecutor& workerPool,
-        ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
-        ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry())
+    /// @param workerPool Pool used to process messages asynchronously. Borrowed,
+    ///                   not owned: it must outlive this server — and, because
+    ///                   the server's `StrandExecutor` is built on it, keep
+    ///                   running until teardown completes (see
+    ///                   `docs/spec/concurrency_and_lifetimes.md`, "Destruction
+    ///                   ordering").
+    /// @param dispatcher Action dispatcher; defaults to the process-level
+    ///                   singleton. Borrowed: it must outlive this server.
+    /// @param registry   Model factory registry; defaults to the process-level
+    ///                   singleton. Borrowed: it must outlive this server.
+    explicit RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
+                          ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
+                              ::morph::model::detail::defaultDispatcher(),
+                          ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
+                              ::morph::model::detail::defaultRegistry())
         : _pool{workerPool},
           _strand{workerPool},
           _dispatcher{dispatcher},
@@ -217,13 +226,19 @@ public:
 
     /// @brief Constructs a server with a custom authorizer.
     ///
-    /// @param workerPool Pool used to process messages asynchronously.
+    /// @param workerPool Pool used to process messages asynchronously. Borrowed,
+    ///                   on the same terms as the constructor above.
     /// @param authorizer Authorizer consulted for every `execute` envelope.
-    /// @param dispatcher Action dispatcher; defaults to the process-level singleton.
-    /// @param registry   Model factory registry; defaults to the process-level singleton.
-    RemoteServer(::morph::exec::IExecutor& workerPool, std::shared_ptr<::morph::session::IAuthorizer> authorizer,
-                 ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
-                 ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry())
+    /// @param dispatcher Action dispatcher; defaults to the process-level
+    ///                   singleton. Borrowed: it must outlive this server.
+    /// @param registry   Model factory registry; defaults to the process-level
+    ///                   singleton. Borrowed: it must outlive this server.
+    RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
+                 std::shared_ptr<::morph::session::IAuthorizer> authorizer,
+                 ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
+                     ::morph::model::detail::defaultDispatcher(),
+                 ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
+                     ::morph::model::detail::defaultRegistry())
         : _pool{workerPool},
           _strand{workerPool},
           _dispatcher{dispatcher},
@@ -1730,8 +1745,13 @@ public:
     /// state (rate limiting, connection-drop recovery, shared-instance
     /// attach/detach across connections) deterministically without a real
     /// socket.
-    /// @param server The `RemoteServer` instance to forward calls to.
-    explicit SimulatedRemoteBackend(RemoteServer& server) : _server{server} {}
+    /// @param server The `RemoteServer` instance to forward calls to. Borrowed,
+    ///               not owned: it must outlive this backend — a backend holding
+    ///               a `RemoteServer&` that has been destroyed is a
+    ///               use-after-free on every call (see
+    ///               `docs/spec/concurrency_and_lifetimes.md`, "Destruction
+    ///               ordering").
+    explicit SimulatedRemoteBackend(RemoteServer& server MORPH_LIFETIMEBOUND) : _server{server} {}
 
     /// @brief Constructs the backend targeting @p server, scoped to @p cid.
     ///
@@ -1751,9 +1771,10 @@ public:
     /// second `SimulatedRemoteBackend` against the same scope). Call
     /// `closeConnection(cid)` explicitly, or destroy `server` itself, when
     /// the simulated connection should be reclaimed.
-    /// @param server The `RemoteServer` instance to forward calls to.
+    /// @param server The `RemoteServer` instance to forward calls to. Borrowed,
+    ///               on the same terms as the constructor above.
     /// @param cid    Connection scope, as returned by `server.openConnection()`.
-    SimulatedRemoteBackend(RemoteServer& server, ConnectionId cid) : _server{server}, _cid{cid} {}
+    SimulatedRemoteBackend(RemoteServer& server MORPH_LIFETIMEBOUND, ConnectionId cid) : _server{server}, _cid{cid} {}
 
     /// @brief Registers the model type on the server and returns its assigned id.
     ///

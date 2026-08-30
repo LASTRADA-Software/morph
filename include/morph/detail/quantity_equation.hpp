@@ -17,6 +17,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "../util/rational.hpp"
 
 namespace morph::units::detail {
@@ -46,9 +47,10 @@ namespace morph::units::detail {
 [[nodiscard]] inline bool isAtomNode(const ASTNode& node) { return isLeafNode(node) || isConversionNode(node); }
 
 /// @brief The value a node contributes (leaf value, else the step result).
-/// @param node The node.
+/// @param node The node. Borrowed: the returned reference points into it, so it
+///             must outlive every use of the result.
 /// @return The node's optional value.
-[[nodiscard]] inline const std::optional<morph::math::Rational>& nodeValue(const ASTNode& node) {
+[[nodiscard]] inline const std::optional<morph::math::Rational>& nodeValue(const ASTNode& node MORPH_LIFETIMEBOUND) {
     return isLeafNode(node) ? node.current.lhs : node.current.result;
 }
 

@@ -510,6 +510,15 @@ state; the log is emitted only when the state itself is finally destroyed with a
   callback-only.
 - Transformation / composition — see [Limitations](#limitations).
 
+## Lifetime annotations
+
+Every fluent method — `then`, `onError`, their scope- and token-gated overloads,
+`thenDetached`, `onErrorDetached` — returns `*this`, and each marks its implicit
+object parameter `MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`). Chaining on a
+temporary stays legal, since the whole chain runs inside one full-expression;
+what the annotation catches is binding the returned reference to something that
+outlives the `Completion`. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - [`executor.md`](executor.md) — `IExecutor` and its implementations; `cbExec`

@@ -36,6 +36,7 @@
 #include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <morph/attributes.hpp>
 #include <morph/core/payload_shape_tag.hpp>
 #include <mutex>
 #include <optional>
@@ -397,9 +398,10 @@ struct Timestamp {
 
     /// @brief Unchecked access to the engaged instant (UB when empty, exactly
     ///        like `std::optional` — the unchecked contract is the point).
-    /// @return The engaged instant.
+    /// @return The engaged instant — a reference into this `Timestamp`, valid
+    ///         only for as long as it is.
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-    [[nodiscard]] constexpr const DateTime& operator*() const noexcept { return *value; }
+    [[nodiscard]] constexpr const DateTime& operator*() const noexcept MORPH_LIFETIMEBOUND { return *value; }
 
     /// @brief Ordering/equality on the payload; empty sorts before engaged.
     /// @param other Timestamp to compare against.

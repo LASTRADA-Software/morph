@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "../forms/forms.hpp"
 #include "../session/session.hpp"
 #include "backend.hpp"
@@ -1901,9 +1902,15 @@ public:
 
     /// @brief Constructs and registers the handler using the default model factory.
     ///
-    /// @param bridge   The bridge to register on.
-    /// @param guiExec  Executor used to deliver `Completion` callbacks (e.g. the GUI thread).
-    BridgeHandler(Bridge& bridge, ::morph::exec::IExecutor* guiExec)
+    /// @param bridge   The bridge to register on. Borrowed, not owned: it must
+    ///                 outlive every *call* made on this handler. Destruction
+    ///                 order itself is unconstrained — `~BridgeHandler` detects
+    ///                 an already-destroyed bridge through its `CallbackToken`
+    ///                 and deregisters nothing (see "Lifetime & ownership" in
+    ///                 `docs/spec/core/bridge.md`).
+    /// @param guiExec  Executor used to deliver `Completion` callbacks (e.g. the
+    ///                 GUI thread). Borrowed: it must outlive this handler.
+    BridgeHandler(Bridge& bridge MORPH_LIFETIMEBOUND, ::morph::exec::IExecutor* guiExec MORPH_LIFETIMEBOUND)
         : _bridge{bridge}, _bridgeAlive{bridge.liveness()}, _guiExec{guiExec}, _binding{makeBinding(bridge)} {
         static_assert(!kShared || ::morph::model::KeyedModel<Model>,
                       "BridgeHandler<Model, AllowShared> requires Model to declare a PrimaryKey alias");
@@ -1911,10 +1918,13 @@ public:
 
     /// @brief Constructs the handler with a pre-built binding (for dependency injection).
     ///
-    /// @param bridge   The bridge to register on.
-    /// @param guiExec  Executor for callback delivery.
+    /// @param bridge   The bridge to register on. Borrowed, on the same terms as
+    ///                 the constructor above.
+    /// @param guiExec  Executor for callback delivery. Borrowed: it must outlive
+    ///                 this handler.
     /// @param binding  Pre-built binding whose factory captures injected dependencies.
-    BridgeHandler(Bridge& bridge, ::morph::exec::IExecutor* guiExec, std::shared_ptr<detail::HandlerBinding> binding)
+    BridgeHandler(Bridge& bridge MORPH_LIFETIMEBOUND, ::morph::exec::IExecutor* guiExec MORPH_LIFETIMEBOUND,
+                  std::shared_ptr<detail::HandlerBinding> binding)
         : _bridge{bridge}, _bridgeAlive{bridge.liveness()}, _guiExec{guiExec}, _binding{std::move(binding)} {
         _bridge.registerHandler(_binding);
     }
@@ -2245,8 +2255,12 @@ public:
 
     /// @brief Returns the underlying `HandlerBinding`.
     ///
-    /// @return Shared pointer to the binding owned by this handler.
-    [[nodiscard]] const std::shared_ptr<detail::HandlerBinding>& binding() const { return _binding; }
+    /// @return Shared pointer to the binding owned by this handler — a reference
+    ///         into the handler, valid only for as long as it is. Copy it to
+    ///         keep the binding past that point.
+    [[nodiscard]] const std::shared_ptr<detail::HandlerBinding>& binding() const MORPH_LIFETIMEBOUND {
+        return _binding;
+    }
 
 private:
     Bridge& _bridge;

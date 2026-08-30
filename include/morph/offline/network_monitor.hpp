@@ -8,6 +8,8 @@
 #include <mutex>
 #include <thread>
 
+#include "../attributes.hpp"
+
 namespace morph::offline {
 
 /// @brief Configuration for `NetworkMonitor`.
@@ -53,11 +55,17 @@ public:
     /// Callers that know the initial state is offline should use a probe that
     /// starts returning `false` immediately.
     ///
-    /// @param probe     Callable that tests connectivity. Must not throw (exceptions are swallowed).
+    /// @param probe     Callable that tests connectivity. Must not throw
+    ///                  (exceptions are swallowed). Stored and invoked on the
+    ///                  probe thread for this monitor's whole lifetime, so
+    ///                  anything the callable refers to must outlive the monitor.
     /// @param onOffline Called on the probe thread when the monitor goes offline.
-    /// @param onOnline  Called on the probe thread when the monitor comes back online.
+    ///                  Retained on the same terms as @p probe.
+    /// @param onOnline  Called on the probe thread when the monitor comes back
+    ///                  online. Retained on the same terms as @p probe.
     /// @param cfg       Tuning parameters (interval, thresholds).
-    NetworkMonitor(ProbeFunction probe, Callback onOffline, Callback onOnline, Config cfg = Config{})
+    NetworkMonitor(ProbeFunction probe MORPH_LIFETIMEBOUND, Callback onOffline MORPH_LIFETIMEBOUND,
+                   Callback onOnline MORPH_LIFETIMEBOUND, Config cfg = Config{})
         : _probe{std::move(probe)},
           _onOffline{std::move(onOffline)},
           _onOnline{std::move(onOnline)},

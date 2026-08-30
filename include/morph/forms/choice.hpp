@@ -47,6 +47,7 @@
 #include <string_view>
 #include <type_traits>
 
+#include "../attributes.hpp"
 #include "../detail/fixed_string.hpp"
 
 namespace morph::forms {
@@ -123,9 +124,10 @@ struct Choice {
 
     /// @brief Unchecked access to the selected value (UB when empty, exactly
     ///        like `std::optional` — the unchecked contract is the point).
-    /// @return The selected value.
+    /// @return The selected value — a reference into this `Choice`, valid only
+    ///         for as long as it is.
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-    [[nodiscard]] constexpr const T& operator*() const noexcept { return *value; }
+    [[nodiscard]] constexpr const T& operator*() const noexcept MORPH_LIFETIMEBOUND { return *value; }
 
     /// @brief Equality on the payload; empty equals only empty.
     /// @param other Choice to compare against.

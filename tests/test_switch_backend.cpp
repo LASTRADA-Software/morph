@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
+#include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -304,7 +305,7 @@ namespace {
 /// nested rollback-failure log path.
 class FlakyBackend : public morph::backend::detail::IBackend {
 public:
-    FlakyBackend(morph::exec::IExecutor& pool, int failOnCallNumber, bool deregisterThrows = false)
+    FlakyBackend(morph::exec::IExecutor& pool MORPH_LIFETIMEBOUND, int failOnCallNumber, bool deregisterThrows = false)
         : _inner{pool}, _failOnCallNumber{failOnCallNumber}, _deregisterThrows{deregisterThrows} {}
 
     morph::exec::detail::ModelId registerModel(
@@ -410,16 +411,30 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  rollback still rethrows orig
 
 // ── BridgeHandler destructor: bridge destroyed first (dead-liveness-token branch) ─────────────
 
+// Takes ownership of a bridge and destroys it on return.
+//
+// The destruction is spelled out of line because this file's one case for it is
+// the single place in the tree where morph's contract and the attribute on
+// `BridgeHandler`'s `Bridge&` genuinely disagree. bridge.md's "Lifetime &
+// ownership" allows destroying the bridge *before* a live handler — the
+// handler's liveness token turns its destructor into a no-op, and that carve-out
+// is what the case below asserts. `[[clang::lifetimebound]]` has no way to say
+// "except for destruction", so with the bridge held in a local `unique_ptr` and
+// released in the same function, Clang reports the case as a use-after-scope. It
+// is right about the code and wrong about morph. Handing the bridge to a
+// function that destroys it keeps the mis-ordering the case is about, and the
+// assertion below is unchanged: a handler destructor that dereferenced the dead
+// bridge would still fault here, and under ASan loudly.
+static void releaseBridge(std::unique_ptr<morph::bridge::Bridge> bridge) { bridge.reset(); }
+
 TEST_CASE("morph::bridge::BridgeHandler destructor is a no-op when the bridge is already destroyed",
           "[bridge][lifetime]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     std::unique_ptr<morph::bridge::BridgeHandler<CountModel>> handler;
-    {
-        auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<morph::backend::LocalBackend>(pool));
-        handler = std::make_unique<morph::bridge::BridgeHandler<CountModel>>(*bridge, &cbExec);
-        // bridge destroyed here while handler still lives — its liveness token expires.
-    }
+    auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<morph::backend::LocalBackend>(pool));
+    handler = std::make_unique<morph::bridge::BridgeHandler<CountModel>>(*bridge, &cbExec);
+    releaseBridge(std::move(bridge));  // bridge destroyed while handler still lives — its liveness token expires.
     REQUIRE_NOTHROW(handler.reset());  // handler dtor must not dereference the dangling Bridge&
 }
 

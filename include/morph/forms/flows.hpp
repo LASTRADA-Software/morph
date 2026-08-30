@@ -37,6 +37,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "../attributes.hpp"
 #include "../core/bridge.hpp"
 #include "../core/callback_scope.hpp"
 #include "../core/logger.hpp"
@@ -205,8 +206,10 @@ public:
     ///                fails (e.g. `BackendChangedError` mid-flight). When
     ///                absent, the error is logged via `morph::log::logError`,
     ///                matching `BridgeHandler`'s own no-`errSink` default.
-    explicit FlowSession(::morph::bridge::BridgeHandler<Model>& handler,
-                         std::function<void(std::exception_ptr)> onError = nullptr)
+    ///                Stored and invoked for this session's whole lifetime, so
+    ///                anything the callable refers to must outlive the session.
+    explicit FlowSession(::morph::bridge::BridgeHandler<Model>& handler MORPH_LIFETIMEBOUND,
+                         std::function<void(std::exception_ptr)> onError MORPH_LIFETIMEBOUND = nullptr)
         : _handler{handler}, _onError{std::move(onError)} {
         beginStep();
     }

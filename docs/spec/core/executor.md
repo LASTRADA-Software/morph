@@ -478,6 +478,13 @@ These are honest, known gaps — accepted trade-offs, not bugs:
   track active models — but a bursty model re-allocates a `Strand` every time its
   queue empties and refills, instead of reusing one long-lived strand per key.
 
+## Lifetime annotations
+
+`StrandExecutor`'s constructor marks its `IExecutor& base` `MORPH_LIFETIMEBOUND`
+(`morph/attributes.hpp`), so Clang diagnoses a call site that hands it a base
+executor which does not outlive the strand — the deadlock described above, caught
+at compile time instead of at teardown. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 - [`completion.md`](completion.md) — `Completion<T>` marshals its `.then` /

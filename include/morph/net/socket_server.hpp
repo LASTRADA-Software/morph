@@ -10,6 +10,7 @@
 #include <thread>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "detail/tcp_socket.hpp"
 #include "detail/ws_frame.hpp"
 #include "detail/ws_handshake.hpp"
@@ -47,12 +48,15 @@ public:
 
     /// @brief Constructs the server; does not start listening.
     /// @param server `RemoteServer` instance that processes incoming messages.
+    ///               Borrowed, not owned: it must outlive this server (see
+    ///               `docs/spec/concurrency_and_lifetimes.md`, "Destruction
+    ///               ordering").
     /// @param port   TCP port to listen on. Pass 0 to let the OS pick a free port.
     /// @param cfg    Backlog tuning. Default: 64-connection backlog.
     // Copy/move are implicitly deleted by the non-copyable/non-movable
     // std::mutex/std::thread members below — no explicit `= delete` needed
     // (matches the rest of the codebase's convention, e.g. `LocalBackend`).
-    SocketServer(::morph::backend::RemoteServer& server, std::uint16_t port, Config cfg = {})
+    SocketServer(::morph::backend::RemoteServer& server MORPH_LIFETIMEBOUND, std::uint16_t port, Config cfg = {})
         : _server{server}, _requestedPort{port}, _cfg{cfg} {}
 
     /// @brief Stops accepting and closes every client connection.
@@ -173,7 +177,8 @@ private:
         // handle(). closeConnection() is idempotent, so the redundant call
         // during close() (which joins these threads) is harmless.
         struct ScopeGuard {
-            ScopeGuard(::morph::backend::RemoteServer& srv, ::morph::backend::ConnectionId connectionId)
+            ScopeGuard(::morph::backend::RemoteServer& srv MORPH_LIFETIMEBOUND,
+                       ::morph::backend::ConnectionId connectionId)
                 : server{srv}, cid{connectionId} {}
             ~ScopeGuard() { server.closeConnection(cid); }
             ScopeGuard(const ScopeGuard&) = delete;

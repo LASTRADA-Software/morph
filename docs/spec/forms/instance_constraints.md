@@ -195,6 +195,14 @@ its result varies per instance. The compiled half is still memoised, so the
 per-call cost is a DOM round trip, not schema generation. A model serving many
 instances caches decorated schemas itself if it needs to.
 
+## Lifetime annotations
+
+`declare()` (returns `*this`), `forField()` (returns a pointer into `_fields`) and
+`fields()` all mark their implicit object parameter `MORPH_LIFETIMEBOUND`
+(`morph/attributes.hpp`). This is the compiler-checkable half of the invalidation
+note on `forField()`: the pointer is into the constraints object, and outlives
+neither it nor a later `declare()`. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+
 ## Cross-references
 
 | Spec | Why |

@@ -59,6 +59,7 @@
 #include <unordered_map>
 #endif
 
+#include "../attributes.hpp"
 #include "../detail/fixed_string.hpp"
 #include "rational.hpp"
 
@@ -694,8 +695,11 @@ struct Quantity {
     }
 
     /// @brief The payload, for pattern-matching / `->` access.
-    /// @return Const reference to the optional payload.
-    [[nodiscard]] constexpr const std::optional<math::Rational>& value() const noexcept { return payload; }
+    /// @return Const reference to the optional payload — into this `Quantity`,
+    ///         so valid only for as long as it is.
+    [[nodiscard]] constexpr const std::optional<math::Rational>& value() const noexcept MORPH_LIFETIMEBOUND {
+        return payload;
+    }
 
     /// @brief The payload if engaged, otherwise a caller-supplied fallback.
     /// @param fallback Value to return when empty.
@@ -706,9 +710,10 @@ struct Quantity {
 
     /// @brief Unchecked access to the engaged value (UB when empty, exactly like
     ///        `std::optional::operator*`).
-    /// @return The engaged exact value.
+    /// @return The engaged exact value — a reference into this `Quantity`,
+    ///         valid only for as long as it is.
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-    [[nodiscard]] constexpr const math::Rational& operator*() const noexcept { return *payload; }
+    [[nodiscard]] constexpr const math::Rational& operator*() const noexcept MORPH_LIFETIMEBOUND { return *payload; }
 
     /// @brief Retags the value's *runtime* precision (the exact value itself is
     ///        unchanged — precision only affects rounding and formatting).

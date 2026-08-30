@@ -21,6 +21,7 @@ sequence.
 - [Gating callbacks on a receiver's lifetime — `CallbackScope`](#gating-callbacks-on-a-receivers-lifetime--callbackscope)
 - [Synchronisation specifics per subsystem](#synchronisation-specifics-per-subsystem)
 - [`Completion` / `CompletionState` thread-safety](#completion--completionstate-thread-safety)
+- [`MORPH_LIFETIMEBOUND` — the "must outlive" rules, told to the compiler](#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler)
 - [Quick cheat-sheet](#quick-cheat-sheet)
 - [Cross-references](#cross-references)
 
@@ -517,6 +518,54 @@ and only read afterward. The contract is: *construct the `Completion` handle
 `Completion` object before posting the strand/transport task that resolves the
 state. Guarding `cbExec` with `mtx` would be redundant given that ordering, so it
 is deliberately left unguarded.
+
+## `MORPH_LIFETIMEBOUND` — the "must outlive" rules, told to the compiler
+
+Every rule in this document that reads *X must outlive Y* is, in the code, a
+reference or pointer parameter that a constructor stores, or an accessor that
+hands out a reference into `*this`. `morph/attributes.hpp` gives that shape a
+name:
+
+```cpp
+#define MORPH_LIFETIMEBOUND [[clang::lifetimebound]]   // [[msvc::lifetimebound]] on MSVC; empty on GCC
+```
+
+Applied to a parameter it says the return value may refer to that parameter's
+referent; applied after a member function's parameter list it says the same of
+`*this`; applied to a constructor parameter it says the constructed object keeps
+referring to the argument. The attribute generates no code and changes no
+behaviour — it lets Clang diagnose a call site that breaks a rule this document
+already states in prose, and it is what keeps `-Weverything` from asking for the
+annotation on every declaration that visibly needs one (Clang 23's
+`-Wlifetime-safety-intra-tu-*-suggestions`).
+
+**Where it is not the whole truth.** Three places are worth knowing, because the
+attribute is coarser than morph's actual contracts:
+
+- **`BridgeHandler`'s `Bridge&` is annotated, but the contract is narrower.**
+  [Above](#bridge-vs-bridgehandler--teardown-is-now-order-independent), destroying
+  the bridge *before* a live handler is defined behaviour — the handler's liveness
+  token turns its destructor into a no-op. `lifetimebound` cannot say "except for
+  destruction", so it reads as the stricter "must outlive, period". The annotation
+  is right about every *use*; the destruction carve-out is still real, and
+  `tests/test_switch_backend.cpp` still asserts it.
+- **Callbacks taken by value carry the annotation too** — `NetworkMonitor`'s
+  `probe`, `SyncWorker`'s `replay`, `SigningAuthorizer`'s `clock`. The
+  `std::function` itself is *owned*, not borrowed; what must outlive the object is
+  whatever the stored callable refers to. Clang asks for the annotation on these
+  because of how libc++ represents `std::function`, and the contract the
+  annotation ends up documenting — "anything the callable captures by reference
+  must outlive the object it is handed to" — is one these subsystems genuinely
+  have, since the callable runs on a probe or replay thread for the object's whole
+  life.
+- **`ModelHolder`'s forwarding constructor is deliberately *not* annotated.**
+  Whether the arguments are borrowed depends entirely on the `Model` being built,
+  and one attribute covers every instantiation: annotating it turns
+  `ModelHolder<M>(prvalue…)` — the ordinary case, where the model owns everything
+  it was handed — into a false dangling report, and Clang rejects the annotation
+  outright (`-Wlifetime-safety-lifetimebound-violation`). A model that *does* keep
+  a reference states so on its own constructor, and is built before it is handed
+  to the holder.
 
 ## Quick cheat-sheet
 
