@@ -1,11 +1,20 @@
 # crm — rung 7 of the [application ladder](../LADDER.md)
 
-**Status: 7a under construction** (green-lit 2026-08-28 by direct decision,
-ahead of a formal ladder-wide findings-scoreboard review — see
-[`../LADDER.md`](../LADDER.md) for the program's general post-rung-4 gate).
-This README remains the design record; the rung's defining framework
-question (runtime custom fields) was already answered by the standalone
-**extension-bag spike** (complete — see
+**Status: server-side complete, no client.** Build order steps 1–10 and
+7b's three follow-on items are built and tested (`src/`, `include/`,
+`tests/`). crm is the only built rung with no `gui/` and no `gui_wasm/`, so the
+parts of the definition of done that name a rendering client are not met.
+Two smaller items also fall short of what this README asks for: lists ship
+unpaginated, and the deleted-field lifecycle has one of its three arrival
+paths under test. All three are set out in
+[What is not built](#what-is-not-built), and the definition of done below is
+annotated bullet by bullet.
+
+Construction was green-lit 2026-08-28 by direct decision, ahead of a formal
+ladder-wide findings-scoreboard review — see [`../LADDER.md`](../LADDER.md)
+for the program's general post-rung-4 gate. This README remains the design
+record; the rung's defining framework question (runtime custom fields) was
+already answered by the standalone **extension-bag spike** (complete — see
 [`EXTENSION-BAG-SPIKE.md`](EXTENSION-BAG-SPIKE.md): yes, reachable today with
 no framework change). A mini-Salesforce: accounts, contacts, leads,
 opportunities in a pipeline, quotes with exact pricing, per-field
@@ -13,10 +22,11 @@ permissions, field-level audit history — and, as the endgame, runtime custom
 fields. This rung tests whether morph can carry *metadata-driven* production
 business software, the defining property of the Salesforce/SAP class.
 
-Per review, the rung is split: **7a** = steps 1–8 (a conventional CRM on
+Per review, the rung was split: **7a** = steps 1–8 (a conventional CRM on
 compiled types), **7b** = steps 9–10 (runtime custom fields), with an
 explicit **go/no-go gate** between them — the extension-bag question has a
-different risk profile, and a negative answer must not stall the ladder.
+different risk profile, and a negative answer must not stall the ladder. The
+gate was passed on the spike's answer, and both halves are built.
 
 ## Reference implementations
 
@@ -590,11 +600,67 @@ execute → warnings + confirmation token → re-execute; and **record merge**
 instances — two attached handler sets, one survivor), the hardest
 journal + instance-directory interaction in the ladder.
 
+## What is not built
+
+Three things this README asks for that the rung does not currently have.
+Each is listed with why it was left, so the gap is a decision on the record
+rather than an omission a reader has to discover.
+
+- **No client — no `gui/`, no `gui_wasm/`.** Every other built rung ships a
+  `gui/`; pastebin, bookmarks and polls also ship a `gui_wasm/`. The
+  server-side halves of the form story *are* built and tested —
+  `crm::gui::crmSchemasJson()` serves every form action's schema, and
+  `crm::gui::updateAccountSchemaJsonFor()` shapes it per caller — but
+  nothing consumes them. Two "expected strain points" below therefore stay
+  open, because only a renderer can confront them: the **explicit-submit /
+  presenter-gated form mode** (which that section requires *before any form
+  ships*), and the **child-table control for quote lines**. The recursive
+  line-item validation those lines also need does exist, server-side, in
+  `QuoteModel` (`test_quote_model.cpp`).
+- **Lists are unpaginated.** Step 1 asks for filters/pagination and the
+  strain points make keyset-cursor lists the ladder idiom, with a test for
+  cursor stability while another client renames or deletes rows mid-walk.
+  `ListAccounts`' own doc comment (`dto/account_dto.hpp`) records the
+  decision taken instead: no rung has a cursor convention yet, and step 1
+  stays consistent with the ladder rather than inventing the first one
+  alone. Filters ship; pagination and its stability test do not.
+- **The deleted-field lifecycle has one of three arrival paths under
+  test.** The strain points name three ways a write naming a just-deleted
+  custom field can arrive: a stale open form, a queued offline edit, and
+  journal replay of an old payload. All three would pass through the single
+  enforcement point `validateCustomFields()`, and the live-submit path is
+  tested ("Submitting a deleted field's key is rejected, not silently
+  dropped or stored"). The other two are not exercised. The offline path is
+  structurally unreachable today — the outbox carries only
+  `QueuedOpportunityUpdate` and custom fields exist only on `Account` — and
+  replay is worth a test of its own rather than an argument, because §8
+  already records that replay mutates rows directly instead of going
+  through `execute()`.
+
+The two review-added features in the **"7-later" bucket** (duplicate
+detection on create, record merge) are deferred by the delivery review
+itself, not by this build, and neither gates 7a or 7b.
+
 ## Definition of done
 
-- A rep works a lead → conversion → opportunity → quote → won, entirely on
-  generated forms, on desktop and WASM, local and remote.
-- A second user with a restricted role sees the same records with fields
-  hidden/read-only, enforced server-side.
-- An admin adds a custom field at runtime; existing clients render it on
-  next schema fetch; its values persist, validate, and journal.
+Current state per bullet. The rung is server-complete; the two bullets that
+name a rendering client are unmet for the reason above.
+
+- **Not met** — no client. *A rep works a lead → conversion → opportunity →
+  quote → won, entirely on generated forms, on desktop and WASM, local and
+  remote.* Every action behind that flow is built and tested end to end
+  (`test_lead_model.cpp`, `test_convert_lead.cpp`, `test_pipeline.cpp`,
+  `test_quote_model.cpp`), and the forms are served; there is no renderer to
+  work them on, on either platform.
+- **Met.** *A second user with a restricted role sees the same records with
+  fields hidden/read-only, enforced server-side.* The served schema is
+  shaped per caller (`test_authz_schema.cpp`) **and** the field is re-checked
+  independently on write, so a client that ignores `x-readonly` is still
+  refused (`test_account_authz.cpp`); history is redacted on the same terms
+  (`test_account_history.cpp`).
+- **Partly met.** *An admin adds a custom field at runtime; existing clients
+  render it on next schema fetch; its values persist, validate, and journal.*
+  The schema grows to carry the new field, and its values persist, validate
+  and journal (`test_custom_fields.cpp`, `test_custom_fields_7b.cpp`). The
+  render-on-next-fetch half is untested, for the same reason as the first
+  bullet.

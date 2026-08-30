@@ -15,12 +15,15 @@ finished deliverables (requirements studies whose sharpest content the
 spikes convert into CI at a fraction of construction cost); building any of
 them is a separate decision taken *after* rung 4 with the
 [finding pipeline](FINDINGS.md) scoreboard in hand — **crm (rung 7) was
-green-lit for 7a construction on 2026-08-28** by direct decision rather than
+green-lit for construction on 2026-08-28** by direct decision rather than
 waiting on that scoreboard review, once its own defining framework question
-was independently answered by the extension-bag spike (below). Ledger
-(rung 5) remains the strongest *unbuilt* candidate — the only other annex
-rung with a genuinely app-shaped core; forge's framework content still ships
-as its load script against synthetic models. The program's
+was independently answered by the extension-bag spike (below). Both halves
+(7a and 7b) are now **built server-side, with no client** — see
+[`crm/README.md`](crm/README.md)'s "What is not built" for that gap and two
+smaller ones. Ledger (rung 5) remains the strongest *unbuilt* candidate —
+the only other annex rung with a genuinely app-shaped core; forge's
+framework content still ships as its load script against synthetic models.
+The program's
 product is **findings fixed, not apps shipped** — see
 [`FINDINGS.md`](FINDINGS.md) for what counts, triage, the fix budget, exit
 criteria, and the demotion policy.
@@ -83,10 +86,10 @@ later rungs consume earlier answers (5 reuses 4's cascade-journaling answer,
 | 8* | [`forge`](forge) | [Gogs](https://github.com/gogs/gogs), [Gitea/Forgejo](https://github.com/go-gitea/gitea), GitLab architecture | Everything at once: orgs/permissions, notifications at scale, webhooks, out-of-protocol sidecars |
 
 \* = design annex: README is the deliverable; construction is a post-rung-4
-decision (ledger under construction; lims built; forge → load script; crm 7a
-under construction — its own defining framework question was independently
-resolved by the extension-bag spike, so it carries no `*` here even though
-7b's go/no-go gate is still separate).
+decision (ledger under construction; lims built; forge → load script; crm
+built server-side, no client — its own defining framework question was
+independently resolved by the extension-bag spike, which is why it carries
+no `*` here; 7b's go/no-go gate was passed on that answer).
 
 ## Cross-cutting stress map
 
