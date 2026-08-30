@@ -120,8 +120,9 @@ TEST_CASE("morph::async::Completion::makeSettleable: reject(nullptr) still reach
     REQUIRE(errorFired);
 }
 
-TEST_CASE("morph::async::Completion::makeSettleable: reject(nullptr) hands an already-attached handler a real exception",
-          "[completion][promise][issue347]") {
+TEST_CASE(
+    "morph::async::Completion::makeSettleable: reject(nullptr) hands an already-attached handler a real exception",
+    "[completion][promise][issue347]") {
     // The other half of the same defect: a handler attached *before* the null
     // rejection did fire, but with a null `exception_ptr` — and
     // `std::rethrow_exception` requires a non-null argument, so the idiomatic
