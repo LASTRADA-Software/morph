@@ -11,7 +11,7 @@ ship a server.
 - [Why "all use cases" is the wrong target](#why-all-use-cases-is-the-wrong-target)
 - [The measurable universe, as it stands today](#the-measurable-universe-as-it-stands-today)
 - [Architecture](#architecture)
-- [Piece 1 — `coverage.py`](#piece-1--coveragepy)
+- [Piece 1 — `scenario_coverage.py`](#piece-1--coveragepy)
 - [Piece 2 — the protocol sweep](#piece-2--the-protocol-sweep)
 - [Piece 3 — fixture knobs](#piece-3--fixture-knobs)
 - [Piece 4 — rung breadth](#piece-4--rung-breadth)
@@ -57,7 +57,11 @@ builds an arbitrary envelope. Nobody has used it for these. They are also
 precisely the kinds `docs/spec/core/wire.md` omits (morph#233), so scenarios
 are the natural place to pin the real shape.
 
-**Distinct server refusals: ~21. Exercised: 4.**
+**Distinct server refusals: 20. Exercised: 4.**
+
+(13 exact strings plus 7 prefix-shaped ones, measured by prototyping the
+extractor against the header. The buckets below are the shape of the gap;
+the report itself is the authoritative breakdown once it exists.)
 
 | Status | Messages |
 |---|---|
@@ -91,19 +95,19 @@ Two new files beside the two that exist, sharing the runner's parser.
 scripts/scenario/
   morph_scenario.py     (exists)  drives one scenario
   mutate_scenario.py    (exists)  proves assertions are load-bearing
-  coverage.py           (new)     measures protocol coverage; gates CI
+  scenario_coverage.py  (new)     measures protocol coverage; gates CI
   run_all.sh            (new)     server lifecycle + fan-out; one entry point
   scenarios/*.scenario  (grows)
 ```
 
-`coverage.py` imports `morph_scenario` and reuses `Scenario.parse`,
+`scenario_coverage.py` imports `morph_scenario` and reuses `Scenario.parse`,
 `Step` and `Assertion`. There is no second parser, so a change to the scenario
 format cannot silently desync the runner from the thing measuring it.
 
 Standard library only, matching the existing constraint: no build step, no
 dependencies, no `pip install`.
 
-## Piece 1 — `coverage.py`
+## Piece 1 — `scenario_coverage.py`
 
 ### What it does
 
@@ -156,7 +160,7 @@ Two guards, both mandatory:
   recorded above (8 kinds, 18+ refusals) and **fails loudly** below them. A
   refactor in `remote.hpp` must break this script, not quietly satisfy it.
 - **A fixture with a known-wrong answer.** `test_morph_scenario.py` gains cases
-  driving `coverage.py` against a synthetic header and a synthetic scenario
+  driving `scenario_coverage.py` against a synthetic header and a synthetic scenario
   where the correct output is known, including one where an item is uncovered
   and the exit code must be non-zero.
 
@@ -268,7 +272,7 @@ with Qt on and therefore already produces every `ladder_<rung>_server`.
 4. run `mutate_scenario.py` over each;
 5. tear the server down.
 
-Then `coverage.py` once, over the whole corpus, as the gate.
+Then `scenario_coverage.py` once, over the whole corpus, as the gate.
 
 `scripts/scenario/**` must join that job's changed-paths filter, or a
 scenario-only change will not run the thing it changed.
@@ -277,8 +281,8 @@ scenario-only change will not run the thing it changed.
 
 | What | How |
 |---|---|
-| `coverage.py` extraction | Fixture header with known kinds/refusals; assert the exact extracted set |
-| `coverage.py` gating | Fixture where one item is uncovered; assert non-zero exit |
+| `scenario_coverage.py` extraction | Fixture header with known kinds/refusals; assert the exact extracted set |
+| `scenario_coverage.py` gating | Fixture where one item is uncovered; assert non-zero exit |
 | Allowlist both-directions check | Fixture with a stale entry, and one with an entry for a covered item; both must fail |
 | Plausibility floor | Fixture header with `makeErr` renamed away; must fail, not report full coverage |
 | New scenarios | `mutate_scenario.py` in CI — an assertion that cannot fail is a surviving mutant |
