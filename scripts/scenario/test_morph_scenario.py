@@ -29,6 +29,7 @@ from morph_scenario import (
 import scenario_coverage
 
 from scenario_coverage import (
+    DECODE_FUNCTION_MARKER,
     MIN_KINDS,
     MIN_MESSAGES,
     Allowlist,
@@ -39,6 +40,7 @@ from scenario_coverage import (
     _repo_root,
     allowlist_problems,
     covers,
+    decode_body,
     exercised_by,
     extract_shipped_surface,
     extract_surface,
@@ -247,6 +249,20 @@ class SurfaceExtractionTest(unittest.TestCase):
         surface = extract_surface(multiline_call)
         self.assertIn("some message", surface.exact_messages)
 
+    def test_drops_an_exact_message_that_extends_a_known_prefix(self) -> None:
+        # A literal that starts with a collected prefix is not a separate
+        # refusal -- it is the first fragment of a `"prefix" + runtime_value`
+        # concatenation that the regex also happened to match as a standalone
+        # literal. No assertion could ever equal it, so it must not survive
+        # into exact_messages, while the real prefix it extends still must.
+        fixture = (
+            'throw std::runtime_error("failed: " + reason);\n'
+            'throw std::runtime_error("failed: with extra detail appended");\n'
+        )
+        surface = extract_surface(fixture)
+        self.assertIn("failed: ", surface.message_prefixes)
+        self.assertNotIn("failed: with extra detail appended", surface.exact_messages)
+
     def test_real_header_carries_the_kinds_the_spec_records(self) -> None:
         surface = _real_surface()
         self.assertEqual(
@@ -294,6 +310,42 @@ class ServerHalfScopeTest(unittest.TestCase):
         )
 
 
+class DecodeBodyScopeTest(unittest.TestCase):
+    def test_decode_body_excludes_encode_and_negotiation(self) -> None:
+        # `encode`'s throw fires only when nothing has been sent yet, and
+        # `interpretHelloReply`'s throw runs on the client inspecting a reply
+        # it already received -- neither is wire-observable, so decode_body
+        # must not carry either string into its scanned text.
+        body = decode_body(_real_wire_text())
+        self.assertNotIn("envelope encode failed: ", body)
+        self.assertNotIn("protocol negotiation failed: ", body)
+        self.assertIn("envelope decode failed: ", body)
+
+    def test_wire_header_contributes_exactly_the_decode_refusal(self) -> None:
+        # Scoped to decode's body, wire.hpp must yield exactly one entry: the
+        # prefix `envelope decode failed: `. `envelope encode failed: ` and
+        # `protocol negotiation failed: ` are not server refusals a scenario
+        # could ever assert, and must appear in neither set.
+        surface = _real_surface()
+        for not_observable in ("envelope encode failed: ", "protocol negotiation failed: "):
+            self.assertNotIn(not_observable, surface.exact_messages)
+            self.assertNotIn(not_observable, surface.message_prefixes)
+
+    def test_a_missing_decode_marker_raises_naming_the_marker(self) -> None:
+        # A scoping rule that silently degrades to "scan the whole file" is
+        # the same class of bug as the one it exists to fix: a rename of
+        # decode's signature must stop the run, loudly, naming the marker it
+        # could not find.
+        with self.assertRaises(SurfaceError) as caught:
+            decode_body("no decode function anywhere in this text\n")
+        self.assertIn(DECODE_FUNCTION_MARKER, str(caught.exception))
+
+    def test_unbalanced_braces_after_the_marker_also_raise(self) -> None:
+        broken = DECODE_FUNCTION_MARKER + " {\n    if (true) {\n"
+        with self.assertRaises(SurfaceError):
+            decode_body(broken)
+
+
 # The exact refusal universe the shipped headers yield. Unlike MIN_MESSAGES,
 # which only catches the surface shrinking, this pins the *set*: adding a
 # refusal to remote.hpp or wire.hpp fails this test, and a human then decides
@@ -302,7 +354,6 @@ _REAL_EXACT_MESSAGES = frozenset({
     "assign requires a typeId",
     "attach requires a typeId",
     "connection closed",
-    "envelope decode failed: input exceeds maximum size (",
     "handleInline does not support execute (reply is asynchronous)",
     "instances requires a typeId",
     "model not found",
@@ -318,9 +369,7 @@ _REAL_EXACT_MESSAGES = frozenset({
 
 _REAL_MESSAGE_PREFIXES = frozenset({
     "envelope decode failed: ",
-    "envelope encode failed: ",
     "payload missing required field(s): ",
-    "protocol negotiation failed: ",
     "unknown envelope kind: ",
 })
 
@@ -333,7 +382,7 @@ class RealRefusalSetTest(unittest.TestCase):
 
     def test_min_messages_sits_just_below_the_true_total(self) -> None:
         total = len(_REAL_EXACT_MESSAGES) + len(_REAL_MESSAGE_PREFIXES)
-        self.assertEqual(total, 20)
+        self.assertEqual(total, 17)
         self.assertEqual(MIN_MESSAGES, total - 2)
 
 
@@ -549,7 +598,7 @@ class AllowlistTest(unittest.TestCase):
 
 class CoverageCliTest(unittest.TestCase):
     def _fixture_run(self, tmp: str, header_text: str, extra: list[str]) -> int:
-        """Runs the CLI over a throwaway header, empty wire header and corpus."""
+        """Runs the CLI over a throwaway header, empty-bodied wire header and corpus."""
         root = pathlib.Path(tmp)
         header = root / "remote.hpp"
         # Every fixture header carries the marker: refusal extraction refuses
@@ -557,7 +606,11 @@ class CoverageCliTest(unittest.TestCase):
         header.write_text(header_text + "\n" + scenario_coverage.SERVER_HALF_MARKER + " {};\n",
                           encoding="utf-8")
         wire = root / "wire.hpp"
-        wire.write_text("", encoding="utf-8")
+        # Likewise every fixture wire header carries the decode marker, with a
+        # balanced, empty body: it contributes nothing to the surface, but its
+        # absence would make decode_body raise instead of exercising what this
+        # test actually means to check.
+        wire.write_text(scenario_coverage.DECODE_FUNCTION_MARKER + " {}\n", encoding="utf-8")
         scenarios = root / "scenarios"
         scenarios.mkdir()
         return coverage_main([

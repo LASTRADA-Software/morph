@@ -14,9 +14,17 @@ Two scoping rules keep the universe honest, in both directions. Refusals are
 read only from the part of `remote.hpp` above `class SimulatedRemoteBackend`:
 everything below it is the in-process *client* stub, whose throws are C++
 exceptions no WebSocket peer can ever assert, so counting them would set
-unreachable targets. And refusals are also read from `wire.hpp`, because
-`wire::decode` throws where `dispatchMessage`'s catch turns the text into a
-real `err` reply -- a refusal a scenario genuinely can assert.
+unreachable targets. And refusals are also read from `wire.hpp`, but only from
+`wire::decode`'s body: that is the one `wire.hpp` function whose throw
+`dispatchMessage`'s catch turns into a real `err` reply. `encode`'s throw
+never reaches a client (nothing is sent when encoding fails), and
+`interpretHelloReply`'s throw runs on the *client* inspecting a reply it
+already received -- neither is wire-observable, so scanning the rest of the
+file would set unreachable targets the same way the client stub would.
+
+A third rule keeps concatenation from inflating the exact-message set: a
+literal that starts with a known prefix is that prefix's runtime suffix, not
+a standalone message an assertion could ever equal, and is dropped.
 
 See docs/superpowers/specs/2026-08-30-scenario-coverage-design.md.
 
@@ -38,13 +46,13 @@ from morph_scenario import Scenario
 # Floors for the plausibility check. A regex extractor over someone else's
 # source fails *open* -- rename `makeErr` and it finds nothing and cheerfully
 # reports full coverage over an empty universe. The real sources currently
-# yield 8 envelope kinds and 20 refusal messages (15 exact + 5 prefixes:
-# `remote.hpp`'s server half above `class SimulatedRemoteBackend`, plus
-# `wire.hpp`); those sources must never drop below these floors without
-# somebody noticing, so falling short is an error rather than a small number.
-# MIN_KINDS has zero headroom on purpose -- losing an envelope kind is a
-# protocol change a human must notice. MIN_MESSAGES keeps the same small
-# headroom (2) below the true total.
+# yield 8 envelope kinds and 17 refusal messages (14 exact + 3 prefixes:
+# `remote.hpp`'s server half above `class SimulatedRemoteBackend`, plus the
+# body of `wire::decode` in `wire.hpp`); those sources must never drop below
+# these floors without somebody noticing, so falling short is an error rather
+# than a small number. MIN_KINDS has zero headroom on purpose -- losing an
+# envelope kind is a protocol change a human must notice. MIN_MESSAGES keeps
+# the same small headroom (2) below the true total.
 #
 # The floors only catch the surface *shrinking*. A surface that *grows* is
 # caught instead by the two tests that pin the exact extracted sets
@@ -53,13 +61,17 @@ from morph_scenario import Scenario
 # fails them, and a human decides whether it needs a scenario or an allowlist
 # entry.
 MIN_KINDS = 8
-MIN_MESSAGES = 18
+MIN_MESSAGES = 15
 
 _KIND = re.compile(r'env\.kind\s*==\s*"([a-z_]+)"')
 
 # Where the server half of `remote.hpp` ends and the in-process client stub
 # begins. Refusal extraction stops here; see `server_half`.
 SERVER_HALF_MARKER = "class SimulatedRemoteBackend"
+
+# The signature that opens `wire::decode` in `wire.hpp`. Refusal extraction
+# from `wire.hpp` is scoped to this function's body alone; see `decode_body`.
+DECODE_FUNCTION_MARKER = "inline Envelope decode(std::string_view json)"
 
 # Three ways a refusal string reaches the wire, plus the one case where it is
 # built into a local named `message` before being handed to rejectAndRelease
@@ -124,18 +136,68 @@ def server_half(header_text: str) -> str:
     return header_text[:index]
 
 
+def decode_body(wire_text: str) -> str:
+    """Returns the body of `wire::decode`, brace-matched from its signature.
+
+    `decode` is the only function in `wire.hpp` whose thrown text becomes an
+    `err` reply -- `dispatchMessage` wraps its call in a try/catch and turns
+    `exc.what()` into the reply's message. `encode`'s throw fires only when
+    nothing has been sent yet, and `interpretHelloReply`'s throw runs on the
+    *client* inspecting an already-received reply; scanning either into the
+    universe would set unreachable targets. Scoping to `decode`'s body alone
+    keeps both out without naming their strings by hand.
+
+    @throws SurfaceError if @p wire_text does not contain
+            `DECODE_FUNCTION_MARKER`, or if the braces after it never balance.
+            A scoping rule that silently degrades to "scan the whole file" is
+            the same failure this tool exists to prevent, so a rename must
+            stop the run rather than quietly widen the universe.
+    """
+    start = wire_text.find(DECODE_FUNCTION_MARKER)
+    if start < 0:
+        raise SurfaceError(
+            f"cannot find the marker {DECODE_FUNCTION_MARKER!r} that opens wire::decode -- "
+            "it was renamed or removed, and refusal extraction has no safe scope in wire.hpp "
+            "without it"
+        )
+    open_brace = wire_text.index("{", start)
+    depth = 0
+    for i in range(open_brace, len(wire_text)):
+        char = wire_text[i]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return wire_text[open_brace : i + 1]
+    raise SurfaceError(
+        f"found {DECODE_FUNCTION_MARKER!r} but its braces never balance -- wire.hpp is "
+        "malformed or decode's shape changed in a way this scan cannot follow"
+    )
+
+
 def extract_surface(header_text: str, extra_message_text: str = "") -> Surface:
     """Extracts every envelope kind and refusal string from `remote.hpp` text.
 
     Envelope kinds come from @p header_text alone -- every `env.kind ==`
     comparison lives in the server. Refusals come from @p header_text *and*
-    @p extra_message_text, which carries `wire.hpp` in the real run: the
-    `envelope decode failed: ` that `wire::decode` throws becomes an `err`
-    reply through `dispatchMessage`'s catch, so a scenario can assert it.
+    @p extra_message_text, which carries `wire::decode`'s body in the real
+    run: the `envelope decode failed: ` that it throws becomes an `err` reply
+    through `dispatchMessage`'s catch, so a scenario can assert it.
 
     A refusal ending in `": "` is recorded as a *prefix*: the runtime value
     carries a suffix (a type id, an exception's `what()`) that the source
     cannot know, so it can only ever be matched by prefix.
+
+    An exact message that starts with one of the collected prefixes is
+    dropped: such a string is not a separate refusal, it is a concatenation
+    fragment -- the first piece of a `"prefix" + runtime_value + ...` call
+    site that the regex happened to also match as a lone literal (e.g. a
+    second, longer string literal earlier in the same concatenation). No
+    assertion can ever equal a fragment like that, so keeping it would name a
+    permanently unachievable coverage target. This is deliberately general --
+    it drops *any* exact message that extends *any* collected prefix, not one
+    hard-coded string, so the next such fragment is caught for free.
     """
     kinds = frozenset(_KIND.findall(header_text))
     exact: set[str] = set()
@@ -148,6 +210,7 @@ def extract_surface(header_text: str, extra_message_text: str = "") -> Surface:
                 prefixes.add(found)
             else:
                 exact.add(found)
+    exact = {message for message in exact if not any(message.startswith(prefix) for prefix in prefixes)}
     return Surface(
         kinds=kinds,
         exact_messages=frozenset(exact),
@@ -158,10 +221,11 @@ def extract_surface(header_text: str, extra_message_text: str = "") -> Surface:
 def extract_shipped_surface(header_text: str, wire_text: str) -> Surface:
     """Extracts the surface of the real headers, with the scoping rules applied.
 
-    @p header_text is `remote.hpp` in full; only its server half is scanned for
-    refusals. @p wire_text is `wire.hpp`, scanned for refusals only.
+    @p header_text is `remote.hpp` in full; only its server half is scanned
+    for refusals. @p wire_text is `wire.hpp` in full; only the body of
+    `wire::decode` is scanned for refusals -- see `decode_body`.
     """
-    return extract_surface(server_half(header_text), wire_text)
+    return extract_surface(server_half(header_text), decode_body(wire_text))
 
 
 def floor_violations(surface: Surface) -> list[str]:
