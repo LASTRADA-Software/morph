@@ -103,11 +103,8 @@ public:
     ///        §8's replay path, when a queued item cannot even be turned back
     ///        into an `Action` to run `recordFailure` against.
     ///
-    /// Recorded unstamped (no `entry.schema`): there is no `Action` type here
-    /// to derive a fingerprint from, and stamping this build's own fingerprint
-    /// onto a payload it could not decode would misrepresent which shape
-    /// actually wrote it. `lims::SelfJournal::recordRejectedPayload` is the
-    /// same shape, for the same reason.
+    /// The entry is recorded unstamped (no `entry.schema`); the
+    /// `journal-stamp-exempt` marker on the body states why.
     /// @tparam Model Model type the replay ran against; supplies `modelType`.
     /// @param actionType The action-type name the payload claimed to be.
     /// @param payload The undecodable payload, verbatim.
@@ -119,6 +116,15 @@ public:
         if (!_log) {
             return;
         }
+        // journal-stamp-exempt: there is no `Action` type here to derive a
+        // fingerprint from -- this overload exists precisely because the
+        // payload could not be decoded into one. Stamping *this* build's
+        // fingerprint would misrepresent which shape actually wrote the
+        // payload, the opposite of what the field is for. The entry is
+        // recorded unstamped and `Outcome::Failed`, which is the honest
+        // record: undecodable, by this build, at this instant.
+        // `lims::SelfJournal::recordRejectedPayload` is exempt for the
+        // same reason.
         ::morph::journal::LogEntry entry;
         entry.modelType = std::string{::morph::model::ModelTraits<Model>::typeId()};
         entry.entityKey = _entityKey;

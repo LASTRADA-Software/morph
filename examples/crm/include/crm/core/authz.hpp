@@ -40,8 +40,14 @@ enum class Role : std::uint8_t {
             return "member";
         case Role::Manager:
             return "manager";
+        default:
+            // Role is a closed, 3-value uint8_t enum -- every value is
+            // handled above. This arm exists only to satisfy
+            // -Wswitch-default under -Weverything (the switch is already
+            // exhaustive; see kanban::roleToString's identical accepted
+            // pattern).
+            return "viewer";
     }
-    return "viewer";
 }
 
 /// @brief Parses a stored role string back to `Role`.
