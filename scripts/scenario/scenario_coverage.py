@@ -21,22 +21,40 @@ from dataclasses import dataclass
 
 # Floors for the plausibility check. A regex extractor over someone else's
 # source fails *open* -- rename `makeErr` and it finds nothing and cheerfully
-# reports full coverage over an empty universe. These are the counts measured
-# at master 82c0d7bc; the real header must never drop below them without
-# somebody noticing, so falling short is an error rather than a small number.
+# reports full coverage over an empty universe. The real header currently
+# yields 8 kinds and 21 refusal messages (14 exact + 7 prefixes, measured
+# after widening `_MESSAGE_SOURCES` to tolerate multi-line call sites); the
+# real header must never drop below these floors without somebody noticing,
+# so falling short is an error rather than a small number. MIN_KINDS has zero
+# headroom on purpose -- losing an envelope kind is a protocol change a human
+# must notice. MIN_MESSAGES keeps the same small headroom (2) below the true
+# total as before.
 MIN_KINDS = 8
-MIN_MESSAGES = 18
+MIN_MESSAGES = 19
 
-_KIND = re.compile(r'env\.kind\s*==\s*"([a-z]+)"')
+_KIND = re.compile(r'env\.kind\s*==\s*"([a-z_]+)"')
 # Three ways a refusal string reaches the wire, plus the one case where it is
 # built into a local named `message` before being handed to rejectAndRelease
 # (the payload-completeness gate). Over-inclusion is safe: a string that is not
 # really a refusal only makes the report stricter, never weaker.
+#
+# Every pattern tolerates whitespace (including newlines, via re.S) between
+# the open paren/`=` and the string literal: clang-format is free to reflow a
+# call across lines, and a tight regex that assumes the literal sits directly
+# against the paren silently drops the message when that happens. That is
+# this tool's own worst failure mode -- it fails open, reporting full
+# coverage over a shrunken universe instead of erroring.
+#
+# `handleInline does not support execute (reply is asynchronous)` is expected
+# to show up as uncovered once these patterns pick it up: `handleInline` is a
+# synchronous in-process C++ API, not something reachable over the WebSocket
+# wire the scenario runner drives, so the scenario corpus can never exercise
+# it. It belongs in the allowlist a later task introduces.
 _MESSAGE_SOURCES = (
-    re.compile(r'makeErr\("([^"]*)"'),
-    re.compile(r'rejectAndRelease\("([^"]*)"'),
-    re.compile(r'runtime_error\("([^"]*)"'),
-    re.compile(r'const std::string message = "([^"]*)"'),
+    re.compile(r'makeErr\(\s*"([^"]*)"', re.S),
+    re.compile(r'rejectAndRelease\(\s*"([^"]*)"', re.S),
+    re.compile(r'runtime_error\(\s*"([^"]*)"', re.S),
+    re.compile(r'const std::string message\s*=\s*"([^"]*)"', re.S),
 )
 
 

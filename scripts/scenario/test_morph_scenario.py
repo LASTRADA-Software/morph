@@ -209,6 +209,18 @@ class SurfaceExtractionTest(unittest.TestCase):
             len(surface.exact_messages) + len(surface.message_prefixes), MIN_MESSAGES
         )
 
+    def test_extracts_a_message_from_a_call_split_across_lines(self) -> None:
+        # `include/morph/core/remote.hpp` itself has a `makeErr(` call whose
+        # string literal sits on the following line (the `handleInline`
+        # refusal). Against the old tight pattern `makeErr\("([^"]*)"`, which
+        # requires the literal to sit directly against the open paren, this
+        # fixture would find nothing at all -- a clang-format reflow silently
+        # drops a genuine refusal string. The widened pattern must still find
+        # it.
+        multiline_call = 'reply(makeErr(\n        "some message", env.callId));'
+        surface = extract_surface(multiline_call)
+        self.assertIn("some message", surface.exact_messages)
+
     def test_real_header_carries_the_kinds_the_spec_records(self) -> None:
         surface = extract_surface(_real_header_text())
         self.assertEqual(
