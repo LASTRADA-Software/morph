@@ -1551,7 +1551,7 @@ private:
     //
     // The gate orders only the *moment of the `_strand.post()` call itself*,
     // not the pipeline before it: a ticket is handed out synchronously in
-    // `dispatchDecoded` (called directly from `handle()`, which runs on
+    // `handleImpl` (called directly from `handle()`, which runs on
     // whatever single thread the transport calls it from -- in true send
     // order, nothing async yet) for every `execute` with a known `modelId`,
     // *before* posting to `_pool`. `dispatchExecute` waits for its ticket's
@@ -1585,7 +1585,7 @@ private:
 
     /// @brief Hands out the next ticket for @p mid, in call order.
     ///
-    /// Called synchronously from `dispatchDecoded` (i.e. from `handle()`'s
+    /// Called synchronously from `handleImpl` (i.e. from `handle()`'s
     /// own calling thread, before anything is posted anywhere) — the ticket
     /// numbers two calls receive for the same `mid` are therefore always in
     /// the order `handle()` was called, which is the order the transport
