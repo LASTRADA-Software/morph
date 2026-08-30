@@ -13,11 +13,11 @@
 #      "N-part protocol" wording the JSON Envelope superseded (see
 #      docs/spec/core/wire.md, "Envelope").
 #
-#   3. Dangling-reference check: every docs/spec/*.md path, every
-#      morph/*.hpp path, and every cited findings entry mentioned anywhere in
-#      the tree must resolve to a file that exists. Checks 1 and 2 run from a
+#   3. Dangling-reference check: every docs/spec/*.md path and every
+#      morph/*.hpp path mentioned anywhere in the tree must resolve to a file
+#      that exists. Checks 1 and 2 run from a
 #      hand-maintained list outward and so cannot fail for a citation pointing
-#      at nothing (morph#251, morph#235, morph#328).
+#      at nothing (morph#251, morph#235).
 #   4. wire.md table-completeness: every Envelope field, every discriminator
 #      kind dispatchMessage handles, and every make* factory must appear as a
 #      row in docs/spec/core/wire.md, whose tables claim to be exhaustive and
@@ -167,64 +167,6 @@ else
     echo "Dangling-reference check: ${refs_checked} references scanned."
 fi
 
-# Cited findings entries are a third path family, scanned separately from the
-# two above because they rot for a reason of their own: a finding's file is
-# *deleted* when it closes, and its id is retired rather than reused
-# (`examples/FINDINGS.md`, "Allocating an id"), so a citation that outlives its
-# target is the designed outcome of routine work rather than an accident of a
-# directory move. Nothing noticed: seven such citations accumulated across the
-# ladder and the framework's own test suite while this script reported, on
-# every run, that every cited path resolves (morph#328).
-#
-# Two spellings are scanned. A full filename must name a file that is really
-# there. A path that names a finding by its id alone -- no slug -- is reported
-# whatever number it carries: every entry is `<ns>-NNN-<slug>.md`, and the slug
-# is what makes a stale citation look stale instead of resolving silently to
-# the wrong file (`examples/FINDINGS.md`'s "Citing a finding" rule), so a
-# slugless path is never a reference a reader could follow.
-#
-# All of docs/superpowers/ is excluded, not just the dated plans the scans
-# above skip: the design specs filed alongside them deliberately spell an
-# unallocated id as a placeholder, since a finding's number is chosen when its
-# file is written and not when a plan naming it is.
-findings_refs_checked=0
-
-while IFS=: read -r file line ref; do
-    [ -n "$ref" ] || continue
-    findings_refs_checked=$((findings_refs_checked + 1))
-    case "$ref" in
-        *.md)
-            if [ ! -f "$ref" ]; then
-                echo "::error file=${file},line=${line}::dangling reference: ${ref} does not exist"
-                fail=1
-            fi
-            ;;
-        *)
-            echo "::error file=${file},line=${line}::dangling reference: ${ref} names a finding by id alone -- cite the entry's full <ns>-NNN-<slug>.md filename (examples/FINDINGS.md, \"Citing a finding\")"
-            fail=1
-            ;;
-    esac
-done < <(
-    git ls-files -z '*.md' '*.hpp' '*.cpp' '*.sh' '*.yml' '*.qml' \
-      | grep -zv '^docs/superpowers/' \
-      | xargs -0 grep -noE 'docs/findings/([A-Za-z0-9_-]+\.md|[0-9]{3}|[a-z]+[0-9]*-[0-9]{3})' 2>/dev/null || true
-)
-
-# Its own counter and its own floor, never folded into refs_checked above --
-# check 4's lesson, which this family is the most exposed to: a lumped count
-# lets one category parse to nothing while the others carry it over the line,
-# and folded in, this family's four references would disappear into a total
-# already in the hundreds, going blind without moving the number at all. The
-# population is genuinely small, so this floor is a vacuity guard on the scan
-# rather than a coverage target: it must sit below the real count and above
-# zero, and should rise as the count does.
-if [ "$findings_refs_checked" -lt 3 ]; then
-    echo "::error::findings-citation check only scanned ${findings_refs_checked} references -- expected at least 3; the scan is not finding citations and would pass vacuously"
-    fail=1
-else
-    echo "Findings-citation check: ${findings_refs_checked} references scanned."
-fi
-
 # ---------------------------------------------------------------------------
 # 4. wire.md table-completeness check
 # ---------------------------------------------------------------------------
@@ -311,9 +253,6 @@ fi
 # rather than a heading -- requiring a heading match there would manufacture
 # failures for citations that are currently correct. Widening the shape is a
 # separate change that has to teach this check about non-heading anchors first.
-#
-# docs/findings/ citations are out of scope here too: they are a different
-# shape with their own backlog (morph#328).
 #
 # A cited section matches a heading on its normalised text (backticks, bold
 # markers, case and runs of whitespace ignored), and also matches a heading

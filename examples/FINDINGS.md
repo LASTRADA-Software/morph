@@ -16,63 +16,49 @@ A finding is one of:
    that shows the capability structurally cannot exist today (e.g. "no
    holder-swap primitive for in-place undo on a shared instance").
 
-Each finding is a file under `docs/findings/` named
-`<ns>-NNN-<kebab-slug>.md` with:
+Each finding is a **GitHub issue**. Open it with the repro or spec citation,
+what should happen, and what happens instead — and state up front:
 
-```markdown
----
-id: <ns>-NNN
-title: <one line>
-subsystem: <core|bridge|backend|offline|journal|forms|units|session|qt|wire>
-severity: blocker | major | minor | paper-cut
-source: <rung / spike / review round that produced it>
-disposition: open | fix-scheduled | documented-limitation | wontfix
-test: <path to the failing test, or "spec-cited">
----
+- **subsystem** — `core`, `bridge`, `backend`, `offline`, `journal`, `forms`,
+  `units`, `session`, `qt` or `wire`, mirrored by the issue's `area:` label.
+- **severity** — blocker, major, minor, or paper-cut.
+- **source** — the rung, spike or review round that produced it.
+- **test** — the path to the failing test, or "spec-cited".
 
-<repro or spec citation; what should happen; what happens instead.>
-```
+The disposition is the issue's `triage:` label, and the issue's own state is
+whether the finding is still open.
 
-## Allocating an id
+## Identity and citation
 
-Ids are **namespaced by the rung that produced the finding**, not drawn from one
-global sequence: `r5-001-<slug>.md`, `r5-002-<slug>.md`, and so on. The namespace
-is the rung's number (`r0`–`r8`); a finding produced outside any rung — a spike,
-or a whole-branch review — uses `core`.
+The finding's id is its **GitHub issue number**, assigned by GitHub. Cite it as
+`#NNN`, and in prose name the subject as well as the number — "the async
+shared/keyed attach finding (#207)". A bare number is precise but tells a
+reader nothing about whether it still says what the citing text claims.
 
-The namespace exists because a single global sequence **does not survive parallel
-branches**, and did not: two disjoint series were allocated independently and both
-merged, so `001`–`004` came to mean one thing on one branch and something else on
-another. Every one of those commits followed the obvious rule ("take the next
-unused number") correctly — the rule was the problem, not the discipline. A rule
-that every violation already satisfies is not a control.
+**Findings used to be files** under `docs/findings/`, named
+`<ns>-NNN-<kebab-slug>.md` and namespaced by rung. That directory has been
+retired and its remaining entries migrated to issues. Two pieces of reasoning
+from it are worth keeping, because they are why the file scheme existed and
+why it stopped:
 
-Namespacing fixes that at the source: two rungs are worked by different people at
-different times, so their sequences never interleave, and the id a branch picks
-cannot be claimed by a branch it has never seen.
+- **A single global sequence does not survive parallel branches**, and did not:
+  two disjoint series were allocated independently and both merged, so
+  `001`–`004` came to mean one thing on one branch and something else on
+  another. Every one of those commits followed the obvious rule ("take the next
+  unused number") correctly — the rule was the problem, not the discipline.
+  *A rule that every violation already satisfies is not a control.* Rung
+  namespacing (`r4-001`, `r5-001`) fixed that; issue numbers, allocated
+  centrally, remove the question entirely.
+- **Ids are never reused, and a stale citation should look stale.** A citation
+  that outlives its target must fail to resolve rather than silently point at
+  something else. Closed issues stay addressable, which is strictly better than
+  a deleted file — but the hazard survives the move: several code comments were
+  found citing `finding 004`, which had been *renamed* rather than deleted and
+  so resolved, silently, to an unrelated finding.
 
-**Within a namespace:**
-
-- **Allocation** — take the next unused number in *that namespace*, three digits,
-  zero-padded. Only that rung's own files are in scope, so `ls docs/findings/r5-*`
-  is the whole question.
-- **Gaps are permanent.** A deleted or withdrawn finding leaves its number
-  retired; ids are never reused, so a citation that outlives its target fails to
-  resolve rather than silently pointing at a different finding.
-- **Rebasing never renumbers.** An id is assigned once, when the file is created,
-  and is stable for the life of the finding. If two branches in the same namespace
-  do collide — the same rung worked twice in parallel — resolve it the way any
-  other content conflict is resolved, by renumbering the *later* one at merge time
-  and updating its citations, not by renumbering both.
-- **Cross-rung references are fine** and read unambiguously: `r3-007` is precise
-  from anywhere, which a bare `007` never was.
-
-**Citing a finding.** In prose, name the finding by its slug as well as its id
-("the async shared/keyed attach finding (`r3-001`)"). An id alone is precise but
-brittle — it is the part that changed when the two series collided, and a reader
-looking at the wrong branch resolves it to something else entirely. The slug is
-what makes a stale citation *look* stale instead of resolving silently to the
-wrong file.
+Historical citations of the form `docs/findings/NNN` or a bare `finding NNN`
+resolve to nothing and should be rewritten to name the issue or state the fact
+directly.
 
 ## Triage and dispositions
 
@@ -111,8 +97,8 @@ exit half-built; Kanboard's remaining thirty tables exert no gravity here.
 
 The ~40 findings from review rounds 1–7 (preserved in the session review
 reports and folded into the governing docs) are the program's entire
-current output. Back-filling them as `docs/findings/` entries — failing
-tests where expressible — is **the first task of rung 0**, before any app
+current output. Back-filling them as issues — failing tests where
+expressible — is **the first task of rung 0**, before any app
 code. The four LADDER prerequisites and the forms-gap ledger entries are
 findings 001–0NN.
 

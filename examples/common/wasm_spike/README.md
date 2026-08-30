@@ -52,13 +52,11 @@ prerequisites, the two most likely failure modes and their owning findings:
   true` — re-open the *async shared/keyed attach* finding even though this
   spike deliberately avoids the *shared* path; if the *plain* async path also
   aborts, that is a new, more severe finding (the plain path was supposed to
-  already be WASM-safe per `[issue26]`'s native tests) — file it under the
-  `core` namespace this spike allocates in, taking the next unused number in
-  that namespace only (`ls docs/findings/core-*`), per
-  [`examples/FINDINGS.md`](../../FINDINGS.md)'s "Allocating an id" —
-  with a name like `core-NNN-plain-async-registration-aborts-wasm.md`,
-  `severity: blocker`, and this rung's exit criteria (per
-  `examples/FINDINGS.md`) are **not met** until it is at least triaged.
+  already be WASM-safe per `[issue26]`'s native tests) — file it as a GitHub
+  issue per [`examples/FINDINGS.md`](../../FINDINGS.md), titled for the gap
+  ("plain async registration aborts under WASM") with `severity: blocker`,
+  and this rung's exit criteria (per `examples/FINDINGS.md`) are **not met**
+  until it is at least triaged.
 - **"connected" logs but no "result=" ever appears.** The action dispatch
   itself is hanging — check whether `Completion` needs the
   *client-side execute deadline* finding's

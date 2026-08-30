@@ -528,7 +528,7 @@ Known gaps:
   argument (seeding by direct model call would need
   `morph::session::detail::ScopedContext`, the exact detail-namespace reach the
   *testkit reaches into four detail namespaces* finding objects to (recorded on
-  the `application-ladder` branch; not present in `docs/findings/` here), and
+  the `application-ladder` branch; never filed in this repository), and
   the internal-client alternative is rung 4's `action_driver`
   work). Demo data is created through the client.
 - **The offscreen QML smoke test proves loading, not behavior** — see

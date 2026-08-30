@@ -275,8 +275,7 @@ executor, a `Bridge` or a background thread of its own: there is no framework
 seam for that, deliberately
 ([#129](https://github.com/LASTRADA-Software/morph/issues/129) was closed as
 wrong-layer, and
-[`docs/findings/r5-003-no-model-level-background-job-seam.md`](findings/r5-003-no-model-level-background-job-seam.md)
-records it). Background work is orchestration; it belongs at the app layer,
+[#129](https://github.com/LASTRADA-Software/morph/issues/129) is the record). Background work is orchestration; it belongs at the app layer,
 re-entering the model as an ordinary client call — which is exactly what
 pastebin's expiry sweep does.
 

@@ -139,7 +139,7 @@ such justification has been written, and the GUI design spec the QML comments
 point at (`docs/superpowers/specs/2026-08-17-kanban-gui-design.md` §4)
 settles the bridge/property-bag architecture without addressing forms at all.
 Recorded as
-[`r4-002`](../../docs/findings/r4-002-flagship-gui-bypasses-forms.md) (the
+[#344](https://github.com/LASTRADA-Software/morph/issues/344) (the
 flagship-GUI forms-bypass finding) rather than justified after the fact here:
 deciding *which* of rule 2's two justifications applies is a design call this
 rung has not made.
@@ -238,13 +238,14 @@ reads by the caller's project role (not bearer-token validity alone).
 
 ## Findings
 
-Filed under `docs/findings/` per [`FINDINGS.md`](../FINDINGS.md), in this
-rung's own `r4-` namespace:
+Filed as GitHub issues per [`FINDINGS.md`](../FINDINGS.md) (this rung's
+findings were originally `r4-001`/`r4-002` under the retired
+`docs/findings/` directory):
 
-- [`r4-001`](../../docs/findings/r4-001-sync-worker-conflates-undelivered-and-rejected.md)
+- [#343](https://github.com/LASTRADA-Software/morph/issues/343)
   — the replay-attempt budget cannot tell an undelivered replay from a
   rejected one, so reconnect flaps dead-letter work the server never saw.
-- [`r4-002`](../../docs/findings/r4-002-flagship-gui-bypasses-forms.md) —
+- [#344](https://github.com/LASTRADA-Software/morph/issues/344) —
   the flagship GUI is hand-built with no `morph::forms` usage and no rule-2
   justification (see "morph subsystems exercised").
 

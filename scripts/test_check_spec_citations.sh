@@ -5,7 +5,6 @@
 # themselves added to close a citation family nothing could fail for: the
 # section-citation check (check 5, morph#316), which keeps a citation naming a
 # *section* of a markdown file pointing at a section that is really there, and
-# check 3's findings scan (morph#328), which keeps a cited findings entry
 # pointing at an entry that still exists and is named by its slug.
 #
 # A lint gate nobody tests reports green whether or not it still detects
@@ -166,7 +165,7 @@ expect_caught "a spec renaming a section its code comments cite" \
 # testing the wrong scan.
 break_section_scan() {
     awk '
-        /git ls-files -z .\*\.md. .\*\.hpp/ && ++n == 3 {
+        /git ls-files -z .\*\.md. .\*\.hpp/ && ++n == 2 {
             sub(/-z .*\.qml./, "-z NO_SUCH_PATTERN")
         }
         { print }
@@ -176,56 +175,6 @@ break_section_scan() {
 expect_caught "the section-citation scan's own file glob going stale" \
     break_section_scan \
     'section-citation check only scanned 0 cited sections'
-
-# ── Each drift check 3's findings scan claims to catch ───────────────────────
-# A finding's file is deleted when it closes and its id is retired rather than
-# reused, so a citation of one goes stale as a matter of routine -- which is
-# how seven of them accumulated while the lint reported that every cited path
-# resolves (morph#328).
-#
-# The cited paths below are assembled from $findings_dir rather than spelled
-# out, because the checker reads *this* file too: a bogus citation written here
-# in full would be found in the pristine tree and fail every case above before
-# its own mutation ever ran. The bare directory name is not itself a citation
-# and matches nothing.
-readonly findings_dir='docs/findings'
-
-expect_caught "a citation naming a findings entry that does not exist" \
-    "printf '%s\n' '/// See ${findings_dir}/r9-999-a-finding-never-filed.md' >> include/morph/core/logger.hpp" \
-    'r9-999-a-finding-never-filed.md does not exist'
-
-# The legacy, pre-namespace spelling: the four ids this issue found dangling
-# were all cited this way, and none of them can resolve -- every entry carries
-# a namespace and a slug.
-expect_caught "a citation naming a finding by bare id" \
-    "printf '%s\n' '/// See ${findings_dir}/017' >> include/morph/core/logger.hpp" \
-    'names a finding by id alone'
-
-# The slug rule, not merely existence: r5-001 names a finding that really is in
-# the tree, so a check asking only whether *something* with that number exists
-# would wave this through. The slug is what makes a stale citation look stale
-# instead of resolving silently to the wrong file, so a slugless path is a
-# dangling one however live its number.
-expect_caught "a citation naming a live finding by id, without its slug" \
-    "printf '%s\n' '/// See ${findings_dir}/r5-001' >> include/morph/core/logger.hpp" \
-    'names a finding by id alone'
-
-# The findings scan's own vacuity guard, blinded the same way as the section
-# scan's above -- and it is the family most exposed to a silent blinding, since
-# it contributes four references to a total already in the hundreds and could
-# stop matching without moving any other number in the output.
-break_findings_scan() {
-    awk '
-        /git ls-files -z .\*\.md. .\*\.hpp/ && ++n == 2 {
-            sub(/-z .*\.qml./, "-z NO_SUCH_PATTERN")
-        }
-        { print }
-    ' "$checker" > mutated && mv mutated "$checker"
-}
-
-expect_caught "the findings scan's own file glob going stale" \
-    break_findings_scan \
-    'findings-citation check only scanned 0 references'
 
 # ── The false positives it must not manufacture ──────────────────────────────
 # Headings across this tree carry an appended qualifier that citations of them
@@ -245,4 +194,4 @@ if [ "$failures" -ne 0 ]; then
     exit 1
 fi
 
-printf '\nscripts/check_spec_citations.sh detects every section-citation and findings-citation drift it claims to.\n'
+printf '\nscripts/check_spec_citations.sh detects every section-citation drift it claims to.\n'
