@@ -57,11 +57,17 @@ builds an arbitrary envelope. Nobody has used it for these. They are also
 precisely the kinds `docs/spec/core/wire.md` omits (morph#233), so scenarios
 are the natural place to pin the real shape.
 
-**Distinct server refusals: 20. Exercised: 4.**
+**Distinct server refusals: 17. Exercised: 4.**
 
-(13 exact strings plus 7 prefix-shaped ones, measured by prototyping the
-extractor against the header. The buckets below are the shape of the gap;
-the report itself is the authoritative breakdown once it exists.)
+(14 exact strings plus 3 prefix-shaped ones. This number was 20 in an earlier
+draft, from a hand-prototyped extractor; the shipped `scenario_coverage.py` is
+now the authoritative count, and it is smaller for two good reasons. Five
+strings came from `SimulatedRemoteBackend`, which throws them *client*-side on
+receiving an err — no WebSocket client can ever assert those. One was a
+concatenation fragment, not a message. Both are now excluded by construction
+rather than by hand. The one addition runs the other way: `envelope decode
+failed: ` is thrown in `wire.hpp`, not `remote.hpp`, and the first draft missed
+it entirely.)
 
 | Status | Messages |
 |---|---|
