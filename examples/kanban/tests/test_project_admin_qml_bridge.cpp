@@ -331,11 +331,10 @@ TEST_CASE("ProjectAdminBridge::submitIfValid logs in through the schema path and
     CHECK(bridge.principal() == QStringLiteral("alice"));
     QVariantList rows;
     bool listed = false;
-    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectsListed,
-                     [&](const QVariantList& projects) {
-                         rows = projects;
-                         listed = true;
-                     });
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectsListed, [&](const QVariantList& projects) {
+        rows = projects;
+        listed = true;
+    });
     bridge.refreshProjects();
     REQUIRE(pumpUntil([&] { return listed; }));
 

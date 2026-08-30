@@ -79,8 +79,7 @@ void ProjectAdminPresenter::submitForm(const QString& actionType, const QString&
             // `bookmarks::gui::FormsBridge::submitIfValid`.
             LoginResult redacted = result;
             redacted.token = AuthToken{};
-            emit formReplyReceived(actionType, true,
-                                   QString::fromStdString(glz::write_json(redacted).value_or("{}")));
+            emit formReplyReceived(actionType, true, QString::fromStdString(glz::write_json(redacted).value_or("{}")));
         },
         [this, actionType](const std::exception_ptr& err) {
             emit formReplyReceived(actionType, false, ::morph::ladder::gui::errorText(err));

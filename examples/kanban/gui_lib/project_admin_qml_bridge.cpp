@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "project_admin_qml_bridge.hpp"
 
-#include "kanban_schemas.hpp"
-
 #include <QString>
 #include <QVariant>
 #include <utility>
 
 #include "gui/id_qml.hpp"
+#include "kanban_schemas.hpp"
 
 namespace kanban::gui {
 
