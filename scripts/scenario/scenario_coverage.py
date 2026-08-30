@@ -686,7 +686,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     try:
-        scenarios = load_scenarios(pathlib.Path(args.scenarios))
+        scenarios = load_scenarios(pathlib.Path(args.scenarios), recursive=True)
     except (OSError, morph_scenario.ScenarioError) as exc:
         print(f"scenario_coverage: cannot read scenarios: {exc}", file=sys.stderr)
         return 2

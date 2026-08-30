@@ -809,5 +809,21 @@ class WorkflowClassificationTest(unittest.TestCase):
             self.assertEqual(len(load_scenarios(root, recursive=True)), 2)
 
 
+class CorpusLayoutTest(unittest.TestCase):
+    def test_every_shipped_scenario_lives_under_a_rung_directory(self) -> None:
+        # The rung is the parent directory name, and that is how per-rung action
+        # coverage is attributed. A file loose in scenarios/ would be counted
+        # against no rung at all and silently excluded from every floor.
+        root = _repo_root() / "scripts" / "scenario" / "scenarios"
+        loose = sorted(p.name for p in root.glob("*.scenario"))
+        self.assertEqual(loose, [], "scenario files must live in scenarios/<rung>/")
+
+    def test_every_rung_directory_names_a_real_server_rung(self) -> None:
+        root = _repo_root() / "scripts" / "scenario" / "scenarios"
+        found = sorted(p.name for p in root.iterdir() if p.is_dir())
+        for name in found:
+            self.assertIn(name, SERVER_RUNGS, f"scenarios/{name}/ is not a rung that ships a server")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
