@@ -250,6 +250,92 @@ def floor_violations(surface: Surface) -> list[str]:
     return problems
 
 
+# Rungs that ship a `ladder_<rung>_server`, and so can be driven by a scenario.
+# `lims` and `crm` are deliberately absent: neither ships a server (crm ships no
+# client either -- see its README's "What is not built"), so no scenario can
+# reach them. lims's missing server is filed separately.
+SERVER_RUNGS = ("pastebin", "bookmarks", "polls", "kanban", "ledger")
+
+# Plausibility floor for the whole action universe, measured at 71. Same
+# purpose as MIN_KINDS/MIN_MESSAGES: if the macro is renamed, this extractor
+# silently finds nothing and would report full workflow coverage over an empty
+# universe. Falling short is a statement about the tool, not the tree.
+MIN_ACTIONS = 65
+
+# `\s*` between the parts, so a registration reflowed across lines by
+# clang-format is still found. The third argument is the wire action name --
+# the string a scenario's `do` line uses -- which is why it, not the C++ type,
+# is what gets extracted.
+_ACTION = re.compile(
+    r'BRIDGE_REGISTER_ACTION\(\s*[\w:]+\s*,\s*[\w:]+\s*,\s*"([^"]+)"'
+)
+
+# Strips a trailing `//...` comment from each line before `_ACTION` runs.
+# Unlike the message patterns (where over-inclusion is harmless noise), a
+# commented-out registration is a real action name still present in the text
+# but no longer live; counting it would silently overstate the universe. A
+# per-line truncation is enough here -- no action name legitimately contains
+# `//`.
+_LINE_COMMENT = re.compile(r"//.*")
+
+
+def extract_actions(sources: dict[str, str]) -> dict[str, frozenset[str]]:
+    """Extracts each rung's registered action names from its C++ text.
+
+    @param sources Rung name to the concatenated text of that rung's sources.
+    @return Rung name to the set of wire action names it registers.
+    """
+    result: dict[str, frozenset[str]] = {}
+    for rung, text in sources.items():
+        live = "\n".join(_LINE_COMMENT.sub("", line) for line in text.splitlines())
+        result[rung] = frozenset(_ACTION.findall(live))
+    return result
+
+
+def shipped_action_sources(root: pathlib.Path) -> dict[str, str]:
+    """Reads every C++ source under `examples/<rung>/` for each server rung.
+
+    @param root Repository root.
+    @return Rung name to concatenated source text, ready for `extract_actions`.
+    @throws SurfaceError if a rung's directory is missing -- a renamed or moved
+            rung must break this loudly rather than silently drop its actions.
+    """
+    sources: dict[str, str] = {}
+    for rung in SERVER_RUNGS:
+        directory = root / "examples" / rung
+        if not directory.is_dir():
+            raise SurfaceError(
+                f"rung directory {directory} not found -- SERVER_RUNGS is stale, "
+                "or a rung moved; refusing to report coverage over a partial tree"
+            )
+        chunks = [
+            path.read_text(encoding="utf-8", errors="replace")
+            for path in sorted(directory.rglob("*"))
+            if path.is_file() and path.suffix in {".cpp", ".hpp"}
+        ]
+        sources[rung] = "\n".join(chunks)
+    return sources
+
+
+def action_floor_violations(actions: dict[str, frozenset[str]]) -> list[str]:
+    """Reports every way the action universe is too small to be believable.
+
+    @param actions Rung name to its registered action names.
+    @return One message per problem; empty when the extraction is plausible.
+    """
+    problems: list[str] = []
+    total = sum(len(names) for names in actions.values())
+    if total < MIN_ACTIONS:
+        problems.append(
+            f"found {total} registered actions, expected at least {MIN_ACTIONS} "
+            "-- the extractor is probably broken, not the examples tree"
+        )
+    for rung, names in sorted(actions.items()):
+        if not names:
+            problems.append(f"rung '{rung}' registers no actions -- extraction is broken for it")
+    return problems
+
+
 @dataclass(frozen=True)
 class Exercised:
     """What the scenario corpus actually puts on the wire and asserts on."""

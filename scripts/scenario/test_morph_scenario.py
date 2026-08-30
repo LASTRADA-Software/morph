@@ -30,18 +30,22 @@ import scenario_coverage
 
 from scenario_coverage import (
     DECODE_FUNCTION_MARKER,
+    MIN_ACTIONS,
     MIN_KINDS,
     MIN_MESSAGES,
+    SERVER_RUNGS,
     Allowlist,
     AllowlistError,
     Exercised,
     Surface,
     SurfaceError,
     _repo_root,
+    action_floor_violations,
     allowlist_problems,
     covers,
     decode_body,
     exercised_by,
+    extract_actions,
     extract_shipped_surface,
     extract_surface,
     floor_violations,
@@ -49,6 +53,7 @@ from scenario_coverage import (
     load_scenarios,
     main as coverage_main,
     server_half,
+    shipped_action_sources,
 )
 
 
@@ -672,6 +677,50 @@ class CoverageCliTest(unittest.TestCase):
                 ["--allowlist", str(allow), "--no-floor"],
             )
         self.assertEqual(code, 0)
+
+
+_FIXTURE_ACTIONS = '''
+BRIDGE_REGISTER_ACTION(demo::PasteModel, demo::CreatePaste, "CreatePaste")
+BRIDGE_REGISTER_ACTION(demo::PasteModel, demo::GetPaste, "GetPaste", ::morph::model::Loggable::No)
+  BRIDGE_REGISTER_ACTION(
+      demo::PasteModel, demo::ListPastes, "ListPastes")
+// BRIDGE_REGISTER_ACTION(demo::PasteModel, demo::NotReal, "NotReal")
+'''
+
+
+class ActionExtractionTest(unittest.TestCase):
+    def test_extracts_the_registered_action_names(self) -> None:
+        actions = extract_actions({"demo": _FIXTURE_ACTIONS})
+        self.assertEqual(actions["demo"], frozenset({"CreatePaste", "GetPaste", "ListPastes"}))
+
+    def test_extraction_spans_a_registration_split_across_lines(self) -> None:
+        # Same failure mode the message regexes had: a reflowed call site must
+        # not silently vanish from the universe.
+        actions = extract_actions({"demo": _FIXTURE_ACTIONS})
+        self.assertIn("ListPastes", actions["demo"])
+
+    def test_floor_rejects_an_implausibly_small_action_universe(self) -> None:
+        problems = action_floor_violations({"demo": frozenset({"CreatePaste"})})
+        self.assertTrue(problems)
+        self.assertTrue(any("action" in p for p in problems))
+
+    def test_floor_accepts_the_real_examples_tree(self) -> None:
+        actions = extract_actions(shipped_action_sources(_repo_root()))
+        self.assertEqual(action_floor_violations(actions), [])
+        self.assertEqual(set(actions), set(SERVER_RUNGS))
+        for rung in SERVER_RUNGS:
+            self.assertTrue(actions[rung], f"{rung} registers no actions")
+
+    def test_real_tree_pins_the_known_action_counts(self) -> None:
+        # A set-pin, not a >= check: the floor only catches shrinkage, so an
+        # ADDED action would otherwise be invisible. When this fails, a human
+        # decides whether the new action needs a workflow or an allowlist entry.
+        actions = extract_actions(shipped_action_sources(_repo_root()))
+        self.assertEqual(len(actions["pastebin"]), 6)
+        self.assertEqual(len(actions["polls"]), 9)
+        self.assertEqual(len(actions["bookmarks"]), 17)
+        self.assertEqual(len(actions["ledger"]), 17)
+        self.assertEqual(len(actions["kanban"]), 22)
 
 
 if __name__ == "__main__":
