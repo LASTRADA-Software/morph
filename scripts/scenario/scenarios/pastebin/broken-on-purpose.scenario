@@ -2,7 +2,7 @@
 # can look at rather than a claim in a README.
 #
 #   morph_scenario.py --server ws://127.0.0.1:<port> \
-#       scripts/scenario/scenarios/pastebin_broken.scenario   # exits 1
+#       scripts/scenario/scenarios/pastebin/broken-on-purpose.scenario   # exits 1
 #
 # Step 2 creates a paste, step 3 reads it back and asserts content the paste
 # was never created with. Everything else here is correct, so the report has

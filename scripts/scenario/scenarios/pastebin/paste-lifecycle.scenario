@@ -2,7 +2,7 @@
 #
 #   ladder_pastebin_server                 # note the port it prints
 #   scripts/scenario/morph_scenario.py --server ws://127.0.0.1:<port> \
-#       scripts/scenario/scenarios/pastebin.scenario
+#       scripts/scenario/scenarios/pastebin/paste-lifecycle.scenario
 #
 # Re-runnable against the same database: nothing here depends on the database
 # being empty, and no assertion depends on wall-clock time.
