@@ -470,16 +470,20 @@ and calls a caller-supplied `ReplayFunction` for each item.
 | Field | Type | Default | Purpose |
 |---|---|---|---|
 | `successful` | `int` | `0` | Items replayed and removed from the queue. |
-| `failed` | `int` | `0` | Items that failed and remain in the queue for retry. |
+| `failed` | `int` | `0` | Items that were delivered, refused, and remain in the queue for retry — each having spent one attempt. |
+| `undelivered` | `int` | `0` | Items whose replay never reached the peer. They remain queued with their attempt count unchanged. Items left queued by a run are `failed + undelivered`. |
 | `deadLettered` | `int` | `0` | Items that exhausted their retry budget and were dropped — handed to the `DeadLetterSink` if one is set, otherwise logged at `morph::log::LogLevel::error`. |
 
 ### `SyncWorker` API
 
 | Member | Signature | Notes |
 |---|---|---|
-| `ReplayFunction` | `std::function<bool(const std::string&)>` | Return `true` → success, `false` → failure. Throwing is treated as failure. |
+| `ReplayOutcome` | `enum class { Succeeded, Rejected, Undelivered }` | What one replay achieved. `Undelivered` charges nothing (see below); `Rejected` is what `false` has always meant. |
+| `DetailedReplayFunction` | `std::function<ReplayOutcome(const std::string&)>` | The three-outcome replay callable. The only form that can report `Undelivered`. |
+| `ReplayFunction` | `std::function<bool(const std::string&)>` | Two-outcome callable, unchanged. `true` → `Succeeded`, `false` → `Rejected`. Throwing is treated as `Rejected`. |
 | `DeadLetterSink` | `std::function<void(const QueueItem&)>` | Invoked with the exhausted item, just before it is removed, when an item hits the retry cap. Optional — default unset. |
 | ctor | `SyncWorker(IOfflineQueue&, ReplayFunction, DeadLetterSink = nullptr)` | References the queue and the replay callable; the sink is an optional third argument. |
+| ctor | `SyncWorker(IOfflineQueue&, DetailedReplayFunction, DeadLetterSink = nullptr)` | Same, taking the three-outcome callable. The two overloads are unambiguous — `ReplayOutcome` is a scoped enum, so neither return type implicitly converts to the other. The boolean overload adapts into this one, so `run()` implements a single contract. |
 | `run()` | `SyncResult run()` | Drains the queue and replays each item. Concurrent calls are serialised by an internal mutex. Returns immediately if `stop()` was called before acquiring the lock. Emits the `queueDepth` metric once, with the drained item count, before replaying (see [observability.md](../core/observability.md)). |
 | `stop()` | `void stop()` | Signals an in-progress `run()` to stop after the current item. One-shot — the flag resets at the start of the next `run()`. |
 
@@ -492,7 +496,28 @@ and calls a caller-supplied `ReplayFunction` for each item.
   `setAttempts()` as the default no-op keeps the count purely in-memory
   (the original behavior — it resets whenever a fresh `SyncWorker` is
   constructed).
-- After every failed attempt, the new cumulative count is written back
+- **Only a *delivered* failure spends an attempt.** `ReplayOutcome::Undelivered`
+  leaves the item queued with its count untouched — the in-memory map and
+  `setAttempts()` are both skipped, because a durable budget advanced on one
+  side still walks the item towards the sink across a restart.
+
+  This is the distinction the budget is spent on, and it is not a knob on the
+  cap. Without it, a transport failure and a server-side rejection are charged
+  identically, so five reconnect flaps — each replaying into a connection that
+  drops before the server commits anything — exhaust the budget of every queued
+  item and drop them all, through the same `DeadLetterSink` call and the same
+  user-facing "could not be synced" state a genuine rejection produces. Work the
+  server never saw is then reported as work that could not be applied, and the
+  payload is gone unless the host's sink persisted it. Two shipped conditions
+  make that reachable rather than theoretical: `ReconnectCoordinator::onOnline()`
+  holds its mutex for the whole retry loop, so a flap back offline cannot
+  preempt an in-progress replay; and nothing in the framework wires a
+  `NetworkMonitor` transition to `SyncWorker::stop()`. See issue #343.
+
+  A caller that cannot tell the two apart must report `Rejected`. "I don't know"
+  is not `Undelivered`: reading it that way retries a genuinely poisonous
+  payload forever, which is the failure the cap exists to bound.
+- After every *charged* failure, the new cumulative count is written back
   through `setAttempts()` (a no-op unless the queue overrides it), so a
   persisting queue's next `drain()` — this run, or after a restart — sees the
   updated value.
