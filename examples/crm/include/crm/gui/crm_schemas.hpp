@@ -78,7 +78,12 @@ namespace crm::gui {
 
     std::uint64_t nextOrder = 0;
     if (dom.contains("properties") && dom["properties"].holds<glz::generic_u64::object_t>()) {
-        nextOrder = static_cast<std::uint64_t>(dom["properties"].get<glz::generic_u64::object_t>().size());
+        // No cast: `size()` returns `std::size_t`, which is the same type as
+        // `std::uint64_t` on the 64-bit targets this header is built for, so an
+        // explicit cast is a no-op GCC rejects under -Wuseless-cast. Were
+        // `std::size_t` ever narrower, the assignment widens implicitly and
+        // safely -- unsigned to wider unsigned preserves the value.
+        nextOrder = dom["properties"].get<glz::generic_u64::object_t>().size();
     }
 
     for (const auto& field : fields) {

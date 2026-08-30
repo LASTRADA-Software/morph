@@ -64,6 +64,22 @@ namespace crm {
 using CrmCustomValue = ::glz::generic_u64;
 
 /// @brief A custom field's declared value type.
+///
+/// The `Money` enumerator has the same spelling as `crm::Money` (the
+/// `Quantity<CrmUnit::usd, 2>` alias in `core/types.hpp`) on purpose: it names
+/// exactly that type. GCC's -Wshadow reports an enumerator that matches a
+/// namespace-scope name even for a *scoped* enum, where the collision it warns
+/// about cannot occur -- `CustomFieldType::Money` is never found by unqualified
+/// lookup, so it can never be mistaken for the alias. Renaming either side to
+/// satisfy the diagnostic would cost more than it buys: the enumerator's
+/// spelling is the wire representation (`glz::enumerate` below serialises it by
+/// name), and the alias is used across the rung's DTOs, entity and tests.
+/// Suppressed locally, in the same shape `morph::OpaqueIdGenerator` suppresses
+/// -Wuseless-cast. Clang does not warn here.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
 enum class CustomFieldType : std::uint8_t {
     Text,     ///< A string value.
     Number,   ///< A numeric value.
@@ -74,6 +90,9 @@ enum class CustomFieldType : std::uint8_t {
     /// @brief A string value constrained to `AddCustomField::choiceOptions`.
     Choice,
 };
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 /// @brief The entity a custom field definition applies to.
 ///
