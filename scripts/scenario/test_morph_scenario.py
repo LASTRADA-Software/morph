@@ -9,6 +9,8 @@ the parser's own refusals.
 
 from __future__ import annotations
 
+import pathlib
+import tempfile
 import unittest
 
 from morph_scenario import (
@@ -34,6 +36,7 @@ from scenario_coverage import (
     exercised_by,
     extract_surface,
     floor_violations,
+    load_scenarios,
 )
 
 
@@ -238,6 +241,7 @@ model PasteModel
 client alice
 do CreatePaste content="x"
 expect ok field id ~ .
+expect ok message == "this must not be counted"
 do GetPaste id=nope
 expect err message == "model not found"
 send instances typeId=PasteModel
@@ -265,6 +269,7 @@ class ExercisedExtractionTest(unittest.TestCase):
     def test_collects_only_messages_asserted_on_an_err_reply(self) -> None:
         used = exercised_by(self._parsed())
         self.assertEqual(used.messages, frozenset({"model not found", "unknown envelope kind: instances"}))
+        self.assertNotIn("this must not be counted", used.messages)
 
     def test_a_prefix_message_is_covered_by_an_assertion_carrying_a_suffix(self) -> None:
         surface = Surface(
@@ -285,6 +290,26 @@ class ExercisedExtractionTest(unittest.TestCase):
         uncovered_kinds, uncovered_messages = covers(surface, exercised_by(self._parsed()))
         self.assertEqual(uncovered_kinds, frozenset({"assign"}))
         self.assertEqual(uncovered_messages, frozenset({"server busy"}))
+
+    def test_load_scenarios_returns_scenarios_in_sorted_order(self) -> None:
+        # Minimal valid scenario: every do/send/deregister step must be
+        # followed by at least one expect line.
+        minimal_scenario = (
+            "model TestModel\n"
+            "client test\n"
+            "do GetPaste id=x\n"
+            "expect ok field id == x\n"
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = pathlib.Path(tmpdir)
+            # Write files in reverse alphabetical order to verify sorting.
+            (tmp_path / "b_second.scenario").write_text(minimal_scenario)
+            (tmp_path / "a_first.scenario").write_text(minimal_scenario)
+            scenarios = load_scenarios(tmp_path)
+            self.assertEqual(len(scenarios), 2)
+            # Verify they are sorted by path.
+            self.assertEqual(scenarios[0].path, str(tmp_path / "a_first.scenario"))
+            self.assertEqual(scenarios[1].path, str(tmp_path / "b_second.scenario"))
 
 
 if __name__ == "__main__":

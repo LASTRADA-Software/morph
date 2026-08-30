@@ -170,6 +170,8 @@ def exercised_by(scenarios: list[Scenario]) -> Exercised:
             for assertion in step.assertions:
                 if assertion.kind != "compare" or assertion.path != "@message" or assertion.op != "==":
                     continue
+                # An empty captures dict: a $var inside an expected message would raise,
+                # not silently mis-measure; no corpus message uses one today.
                 messages.add(str(morph_scenario.parse_value(assertion.expected_token, {})))
     return Exercised(kinds=frozenset(kinds), messages=frozenset(messages))
 
