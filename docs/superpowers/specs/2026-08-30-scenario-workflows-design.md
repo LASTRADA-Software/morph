@@ -68,8 +68,8 @@ below the bar this design sets for a journey.
 ## What counts as a workflow
 
 "More than one call" has to be mechanical, or the gate is an opinion. A
-scenario counts as a workflow when **a later step consumes a value an earlier
-step captured**:
+scenario counts as a workflow when **a later `do` step consumes a value an
+earlier step captured**:
 
 ```
 do CreatePaste content="draft"
@@ -82,6 +82,16 @@ expect ok field content == "draft"
 Threading state is what separates a journey from a list. A file that dispatches
 ten actions with no `$capture` reference between them is ten one-shot calls
 sharing a socket, and the metric must say so.
+
+**Only `do` steps count towards the chaining.** `client` and `session` steps
+also take `$capture` references — installing a login token is exactly that —
+and counting them was a real loophole, found by review and confirmed by
+running it: three `client`/`session` pairs reusing one token, plus four
+mutually independent `do` calls, scored `actions=4, chained=3` and qualified,
+with zero action-to-action threading. That is the cheapest file an author
+under floor pressure can write, so the rule is action-to-action or it is
+nothing. The shipped ledger workflow keeps 8 chained steps of its 10 under the
+tightened rule, so nothing real was lost.
 
 The workflow metric therefore records, per scenario file: how many distinct
 actions it dispatches, and how many steps consume a captured value. A file
@@ -179,6 +189,15 @@ Both are subject to the same allowlist discipline the protocol axis already
 uses: an action that genuinely cannot be driven from a scenario gets an entry
 with a written reason, checked in both directions so it cannot outlive its
 justification.
+
+**An action exemption is retired by success, not by dispatch.** The entry
+claims the action cannot be driven to completion, so a scenario calling it
+purely to assert its refusal is the reason's *evidence*, not a contradiction of
+it — while a `do` that expects `ok` is precisely what the reason said was
+impossible, and retires the entry. Both shipped entries are of the first kind:
+the ledger workflow dispatches `RunReportJob` and `UndoTransaction` to pin
+their refusals, and remains exempt. The report labels such entries as recorded
+but granting no exemption, so their reasons stay visible without being counted.
 
 At least one such entry is already known: `ledger::RunReportJob` refuses any
 principal but the report runner's, so a client scenario cannot dispatch it.
