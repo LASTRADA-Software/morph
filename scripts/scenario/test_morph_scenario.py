@@ -347,6 +347,49 @@ class AllowlistTest(unittest.TestCase):
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("reason" in p for p in problems))
 
+    def test_an_empty_reason_on_a_message_entry_is_a_problem(self) -> None:
+        allowlist = Allowlist(kinds={}, messages={"server busy": ""})
+        problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
+        self.assertTrue(any("reason" in p for p in problems))
+
+    def test_a_message_entry_naming_something_that_no_longer_exists_is_a_problem(self) -> None:
+        # A rename in remote.hpp left this behind.
+        allowlist = Allowlist(kinds={}, messages={"telepathic link severed": "gone"})
+        problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
+        self.assertTrue(any("telepathic link severed" in p and "no longer" in p for p in problems))
+
+    def test_a_message_entry_for_something_now_covered_is_a_problem(self) -> None:
+        # The exemption has outlived its reason: the corpus covers this now.
+        allowlist = Allowlist(kinds={}, messages={"model not found": "stale"})
+        problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
+        self.assertTrue(any("model not found" in p and "already covered" in p for p in problems))
+
+    def test_a_prefix_shaped_message_entry_genuinely_uncovered_is_accepted(self) -> None:
+        surface = Surface(
+            kinds=frozenset({"execute"}),
+            exact_messages=frozenset(),
+            message_prefixes=frozenset({"unknown envelope kind: "}),
+        )
+        exercised = Exercised(kinds=frozenset({"execute"}), messages=frozenset({"model not found"}))
+        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "no scenario sends a bad kind"})
+        self.assertEqual(allowlist_problems(allowlist, surface, exercised), [])
+
+    def test_a_prefix_shaped_message_entry_already_covered_is_a_problem(self) -> None:
+        surface = Surface(
+            kinds=frozenset({"execute"}),
+            exact_messages=frozenset(),
+            message_prefixes=frozenset({"unknown envelope kind: "}),
+        )
+        exercised = Exercised(
+            kinds=frozenset({"execute"}),
+            messages=frozenset({"unknown envelope kind: frobnicate"}),
+        )
+        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "stale"})
+        problems = allowlist_problems(allowlist, surface, exercised)
+        self.assertTrue(
+            any("unknown envelope kind: " in p and "already covered" in p for p in problems)
+        )
+
     def test_the_shipped_allowlist_parses(self) -> None:
         allowlist = load_allowlist(_repo_root() / "scripts" / "scenario" / "coverage_allowlist.json")
         for reason in list(allowlist.kinds.values()) + list(allowlist.messages.values()):
