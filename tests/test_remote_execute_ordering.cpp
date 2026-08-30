@@ -319,3 +319,153 @@ TEST_CASE(
     REQUIRE(replyA.env.kind == "ok");
     CHECK(replyA.env.body == "5");
 }
+
+namespace {
+
+/// @brief Wraps a real executor and holds back exactly one task -- the first
+///        posted after `holdNextPost()` -- until `releaseHeld()` forwards it.
+///
+/// `RemoteServer` posts each `handle()` call's dispatch work to the executor it
+/// was constructed with (and routes `_strand` through the same one), so
+/// intercepting a single post is enough to decide *which* of two concurrent
+/// requests reaches `dispatchMessage` first. That is what makes the shutdown
+/// interleaving below deterministic instead of a nanoseconds-wide race between
+/// two pool threads reading `_shuttingDown`: without it the window is real but
+/// far too narrow to hit on demand (400 jittered attempts did not).
+class HoldOnePostExecutor : public morph::exec::IExecutor {
+public:
+    explicit HoldOnePostExecutor(morph::exec::IExecutor& inner) : _inner{inner} {}
+
+    /// @brief Forwards @p task, unless it is the one post `holdNextPost()` armed.
+    /// @param task Callable to execute.
+    void post(std::function<void()> task) override {
+        {
+            std::scoped_lock const lock{_mtx};
+            if (_armed) {
+                _armed = false;
+                _held = std::move(task);
+                return;
+            }
+        }
+        _inner.post(std::move(task));
+    }
+
+    /// @brief Arms the interception: the next `post()` is captured, not forwarded.
+    void holdNextPost() {
+        std::scoped_lock const lock{_mtx};
+        _armed = true;
+    }
+
+    /// @brief Forwards the captured task. No-op if nothing was captured.
+    void releaseHeld() {
+        std::function<void()> task;
+        {
+            std::scoped_lock const lock{_mtx};
+            task = std::move(_held);
+            _held = nullptr;
+        }
+        if (task) {
+            _inner.post(std::move(task));
+        }
+    }
+
+private:
+    morph::exec::IExecutor& _inner;
+    std::mutex _mtx;
+    bool _armed = false;
+    std::function<void()> _held;
+};
+
+}  // namespace
+
+TEST_CASE(
+    "an execute refused by the shutdown gate releases the execute-ordering "
+    "ticket it took, so a later ticket already waiting on it is not stranded",
+    "[remote][execute-ordering][shutdown]") {
+    // Regression test for #348. `handleImpl` takes the ordering ticket on the
+    // transport thread, in send order; `dispatchMessage`'s shutdown gate then
+    // returns *before* `dispatchExecute`, which is the only place a ticket is
+    // released. Because the pool may run the two posted tasks in either order,
+    // the later ticket can pass the gate while the earlier one is still
+    // upstream of it -- and if the earlier one is then refused and drops its
+    // ticket, the later one waits in `awaitExecuteTurn` on a `cv.wait` with no
+    // deadline, forever.
+    //
+    // The interleaving, forced rather than raced:
+    //   A  handle() -> ticket 0; its pool task is intercepted before it runs.
+    //   B  handle() -> ticket 1; runs, passes the gate, blocks in
+    //      awaitExecuteTurn(mid, 1) waiting for ticket 0.
+    //   .. beginShutdown()
+    //   A  released; reaches the gate, now closed, and is refused.
+    // A must release ticket 0 on that path or B never completes.
+    //
+    // Heap-allocated because a regression strands a pool worker in a wait with
+    // no deadline: ~ThreadPoolExecutor would then block forever in join(),
+    // turning a clean assertion failure into a whole-binary hang. On the
+    // failing path the fixture is deliberately leaked instead (see below) --
+    // the run is already reporting a failure, and a leak is a far more useful
+    // outcome than a hang.
+    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(2);
+    auto gated = std::make_unique<HoldOnePostExecutor>(*pool);
+    auto server = std::make_shared<morph::backend::RemoteServer>(*gated, eroDispatcher(), eroRegistry());
+
+    WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("ERO_CounterModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+    REQUIRE(regReply.env.kind == "ok");
+    const auto modelId = regReply.env.modelId;
+    REQUIRE(modelId != 0U);
+
+    morph::wire::Envelope reqA;
+    reqA.kind = "execute";
+    reqA.callId = 1;
+    reqA.modelId = modelId;
+    reqA.modelType = "ERO_CounterModel";
+    reqA.actionType = "ERO_AddAction";
+    reqA.body = R"({"by":7})";
+
+    morph::wire::Envelope reqB = reqA;
+    reqB.callId = 2;
+    reqB.body = R"({"by":11})";
+
+    // A takes ticket 0 but does not run: its dispatch task is held.
+    gated->holdNextPost();
+    WaitReply replyA;
+    server->handle(morph::wire::encode(reqA), std::ref(replyA));
+
+    // B takes ticket 1 and runs all the way to awaitExecuteTurn(mid, 1), where
+    // it waits for ticket 0. `_inFlightExecutes` is incremented immediately
+    // before that wait, so `health().inFlight == 1` is a deterministic signal
+    // that B is parked there rather than a sleep hoping that it is.
+    WaitReply replyB;
+    server->handle(morph::wire::encode(reqB), std::ref(replyB));
+    REQUIRE(morph::testing::waitUntil([&] { return server->health().inFlight == 1; }));
+    REQUIRE_FALSE(replyB.ready.load());
+
+    server->beginShutdown();
+    gated->releaseHeld();
+
+    // A is refused by the now-closed gate...
+    REQUIRE(replyA.await());
+    CHECK(replyA.env.kind == "err");
+    CHECK(replyA.env.message == "server shutting down");
+
+    // ...and must have released ticket 0 on the way out. B passed the gate
+    // before shutdown, so it is still owed its dispatch.
+    bool const bCompleted = replyB.await(std::chrono::milliseconds{5000});
+    if (!bCompleted) {
+        // See the note above: B's pool thread is stuck in a deadline-less wait
+        // and can never be joined.
+        (void)server.get();
+        (void)gated.release();
+        (void)pool.release();
+    }
+    REQUIRE(bCompleted);
+    CHECK(replyB.env.kind == "ok");
+    CHECK(replyB.env.body == "11");
+
+    // The same stranded wait also holds `_inFlightExecutes` above zero for
+    // good, because it is incremented before the wait -- so a regression here
+    // breaks graceful shutdown as well as this one caller.
+    CHECK(server->drainedWithin(std::chrono::milliseconds{2000}));
+}

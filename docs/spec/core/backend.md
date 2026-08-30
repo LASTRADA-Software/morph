@@ -538,22 +538,40 @@ already gone.
   interleaving the gate mutex hands out.
 - **Completion order is not constrained.** The gate orders the *posts*; how
   long each action then takes on the strand is the strand's business.
-- **One path takes a ticket without releasing it**: an `execute` refused by the
-  shutdown gate in `dispatchMessage` (`err "server shutting down"`, see
-  [Graceful shutdown](#graceful-shutdown-beginshutdown--drainedwithin)) returns
-  before `dispatchExecute` is reached, and so before any `rejectAndRelease`.
-  This is benign only because `beginShutdown()` is irreversible: every later
-  `execute` is refused at the same gate and none of them ever reaches
-  `awaitExecuteTurn`, so nothing is left waiting — what remains is a leaked
-  map entry on a server that is shutting down. It is nonetheless the one
-  violation of the release rule stated above, and it is recorded here rather
-  than smoothed over: that invariant is what makes the rest of this section
-  true.
+**The release rule binds the shutdown gate too.** An `execute` refused by the
+shutdown gate in `dispatchMessage` (`err "server shutting down"`, see
+[Graceful shutdown](#graceful-shutdown-beginshutdown--drainedwithin)) returns
+before `dispatchExecute` is reached, and so before any `rejectAndRelease`. That
+branch therefore releases the ticket itself, on the way out.
+
+This was previously read as a benign exception to the rule — the argument being
+that `beginShutdown()` is irreversible, so every later `execute` is refused at
+the same gate and none of them ever reaches `awaitExecuteTurn`. The argument is
+wrong, and the difference is a permanently stranded caller rather than a leaked
+map entry. Tickets are taken in send order *on the transport thread*, but the
+pool is free to run the two posted tasks in either order. So a later ticket can
+pass the gate while the earlier one is still upstream of it, and be parked in
+`awaitExecuteTurn` — a `cv.wait` with no deadline — by the time the earlier one
+is refused. Dropping the earlier ticket then costs three things at once:
+
+- the later caller never receives a reply at all (with no `executeTimeout`
+  configured), or a spurious `err "timeout"` for a call that never ran (with
+  one);
+- a pool worker is blocked for the process's remaining lifetime; and
+- `drainedWithin()` can never succeed, because `_inFlightExecutes` is
+  incremented immediately *before* that wait — so the defect breaks the very
+  graceful-shutdown sequence during which it fires.
+
+The release rule stated above therefore holds without exception, which is what
+makes the rest of this section true.
 
 `tests/test_remote_execute_ordering.cpp` pins the guarantee, forcing the
 interleaving deterministically (a two-thread pool plus an authorizer that
 sleeps for one call only) rather than waiting for a loaded machine to produce
-it by chance.
+it by chance. Its shutdown-gate case forces the interleaving above the same
+way, holding back one request's pool task through a wrapping executor so the
+"later ticket passed the gate, earlier ticket did not" ordering is decided
+rather than raced.
 
 ### Protocol-version negotiation
 
@@ -699,7 +717,10 @@ envelope is rejected with `err "server shutting down"` (checked once, at the
 top of `dispatchMessage`, before any other validation — including the
 shutdown check happening before authorization or registry lookups run);
 `deregister` (and any other envelope kind) is still served so clients can
-tear down cleanly during the drain window. Idempotent, and irreversible —
+tear down cleanly during the drain window. A refused `execute` releases any
+execute-ordering ticket it took on the way out; see
+[Per-model execute ordering](#per-model-execute-ordering) for why that
+matters more than it looks. Idempotent, and irreversible —
 there is no un-shutdown; a restarted service constructs a fresh
 `RemoteServer`. `beginShutdown()` also flips `health()`'s `ready` to `false`
 and, if a handler is installed via `setHealthHandler()`, re-invokes it with

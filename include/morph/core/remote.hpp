@@ -951,6 +951,27 @@ private:
         // still tear its models down cleanly during the drain window.
         if ((env.kind == "register" || env.kind == "execute" || env.kind == "attach") &&
             _shuttingDown.load(std::memory_order_acquire)) {
+            // Release before replying. This is an early return that follows
+            // `handleImpl`'s ticket-taking site, so `takeExecuteTicket`'s
+            // contract binds it exactly as it binds `dispatchExecute`'s
+            // rejection branches -- and it is upstream of `dispatchExecute`,
+            // the only other place a ticket is released, so nothing further
+            // down will do it for us.
+            //
+            // Not merely a leaked map entry on a dying server (which is what
+            // this branch was previously believed to cost): tickets are taken
+            // in send order on the transport thread, but the pool is free to
+            // run the two posted tasks in either order. A *later* ticket that
+            // passed this gate before `beginShutdown()` is already parked in
+            // `awaitExecuteTurn`, on a `cv.wait` with no deadline, waiting for
+            // this one -- so dropping it strands that caller permanently, holds
+            // a pool worker forever, and (because `_inFlightExecutes` is
+            // incremented before that wait) makes `drainedWithin()` unable to
+            // ever succeed. See `tests/test_remote_execute_ordering.cpp`'s
+            // shutdown-gate case, which forces that interleaving.
+            if (executeTicket) {
+                releaseExecuteTicket(executeTicket->first, executeTicket->second);
+            }
             reply(::morph::wire::encode(::morph::wire::makeErr("server shutting down", env.callId)));
             return;
         }
@@ -1223,9 +1244,11 @@ private:
     // (see docs/spec/security.md), so it is deliberately not broken up.
     //
     // `executeTicket`, when engaged, is this call's finding-035 execute-
-    // ordering ticket from `handleImpl`. Every early-return branch below
-    // that follows the ticket-taking site must release it (via
-    // `releaseExecuteTicket`) before returning — an unreleased ticket
+    // ordering ticket from `handleImpl`. Every early-return branch that
+    // follows the ticket-taking site must release it (via
+    // `releaseExecuteTicket`) before returning — both the branches below and
+    // `dispatchMessage`'s shutdown gate, which returns before this function
+    // is entered — an unreleased ticket
     // permanently stalls every later ticket for the same model. The one
     // path that actually reaches the strand releases it via
     // `awaitExecuteTurn` + `releaseExecuteTicket` bracketing the pre-existing
@@ -1626,9 +1649,12 @@ private:
     /// out early (model not found, unauthorized, over limit, a decode/
     /// validation throw). A ticket that is taken but never released would
     /// permanently stall every later ticket for the same `mid`; this is why
-    /// every early-return branch in `dispatchExecute` that follows
-    /// `takeExecuteTicket` must call this before returning, not just the
-    /// branch that reaches the strand.
+    /// every early-return branch that follows `takeExecuteTicket` must call
+    /// this before returning, not just the branch that reaches the strand.
+    /// That includes `dispatchMessage`'s shutdown gate, which returns before
+    /// `dispatchExecute` is reached at all — it was the one branch that did
+    /// not, and stranding the ticket there left a later same-model `execute`
+    /// waiting on it forever (issue #348).
     /// @param mid    The model @p ticket was taken for.
     /// @param ticket The ticket to release.
     void releaseExecuteTicket(::morph::exec::detail::ModelId mid, std::uint64_t ticket) {
