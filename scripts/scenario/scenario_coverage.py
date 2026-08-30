@@ -367,21 +367,34 @@ WORKFLOW_MIN_CHAINED = 3
 
 @dataclass(frozen=True)
 class ScenarioFacts:
-    """What one scenario file dispatches, and whether it is a workflow."""
+    """What one scenario file dispatches, and whether it is a workflow.
+
+    `succeeded` is the subset of `actions` the file dispatches with an
+    `expect ok` on the reply -- an action it drives to completion, rather than
+    merely calls to assert a refusal. The action allowlist is audited against
+    it; see `action_allowlist_problems`.
+    """
 
     rung: str
     path: str
     actions: frozenset[str]
     chained_steps: int
     is_workflow: bool
+    succeeded: frozenset[str] = frozenset()
 
 
 def scenario_facts(scenario: Scenario) -> ScenarioFacts:
     """Summarises one parsed scenario for the workflow axis.
 
-    A step counts as *chained* when one of its arguments references a name an
-    earlier step captured. That is what distinguishes a journey from a list:
-    threading state means each step depends on what the last one returned.
+    A step counts as *chained* only when it is a `do` step whose arguments
+    reference a name an earlier step captured. That is what distinguishes a
+    journey from a list: threading state through the rung's *domain actions*
+    means each dispatch depends on what the last one returned. Chaining on any
+    other verb is deliberately not counted -- a `session principal=$who
+    token=$token` step reuses one login's credentials rather than carrying a
+    result forward, so a file that installs the same token on three clients
+    and then fires four unrelated `do` calls would otherwise qualify while
+    threading nothing at all between its actions.
 
     @param scenario A scenario already parsed by `morph_scenario.parse_scenario`.
     @return Its rung, dispatched actions, chained-step count and workflow verdict.
@@ -390,14 +403,23 @@ def scenario_facts(scenario: Scenario) -> ScenarioFacts:
     rung = path.parent.name if path.parent.name != "scenarios" else ""
 
     actions: set[str] = set()
+    succeeded: set[str] = set()
     captured: set[str] = set()
     chained = 0
     for step in scenario.steps:
-        if step.verb == "do" and step.args:
+        is_do = step.verb == "do" and bool(step.args)
+        if is_do:
             actions.add(step.args[0])
+            if any(
+                assertion.kind == "compare"
+                and assertion.path == "@kind"
+                and assertion.expected_token == "ok"
+                for assertion in step.assertions
+            ):
+                succeeded.add(step.args[0])
         # Read references before recording this step's own captures: a step
         # cannot chain off a value it produces itself.
-        if any(
+        if is_do and any(
             name in captured
             for arg in step.args
             for name in _referenced_captures(arg)
@@ -414,6 +436,7 @@ def scenario_facts(scenario: Scenario) -> ScenarioFacts:
         actions=frozenset(actions),
         chained_steps=chained,
         is_workflow=is_workflow,
+        succeeded=frozenset(succeeded),
     )
 
 
@@ -733,6 +756,67 @@ def allowlist_problems(allowlist: Allowlist, surface: Surface, exercised: Exerci
     return problems
 
 
+def action_allowlist_problems(
+    allowlist: Allowlist,
+    actions: dict[str, frozenset[str]],
+    facts: list[ScenarioFacts],
+) -> list[str]:
+    """Audits the `actions` section of the allowlist, in both directions.
+
+    The companion to `allowlist_problems`, which audits the protocol axis; this
+    one needs the workflow axis's universe and corpus, which the protocol audit
+    never sees. Same three checks: a written reason, an entry that still names
+    something real, and an entry that has not outlived its justification.
+
+    What retires an action exemption is deliberately *success*, not dispatch.
+    An entry here claims the action cannot be driven to completion by any
+    WebSocket client -- the server refuses every principal but its own, or no
+    action on the wire hands back the id it needs. A scenario that calls such
+    an action precisely to assert that refusal is the exemption's evidence, not
+    its refutation, so being dispatched leaves the entry standing. An action
+    that some scenario dispatches with an `expect ok` *has* been driven to
+    completion, which is exactly what the reason said was impossible, and the
+    entry must go.
+
+    @param allowlist Exemptions; `actions` is keyed `"<rung>/<Action>"`.
+    @param actions   Rung name to its registered action names.
+    @param facts     One entry per parsed scenario.
+    @return One message per problem; empty when every entry is honest.
+    """
+    succeeded: dict[str, set[str]] = {rung: set() for rung in actions}
+    for fact in facts:
+        if fact.rung in succeeded:
+            succeeded[fact.rung] |= set(fact.succeeded)
+
+    problems: list[str] = []
+    for key, reason in sorted(allowlist.actions.items()):
+        if not reason.strip():
+            problems.append(f"allowlisted action '{key}' has no written reason")
+        rung, separator, name = key.partition("/")
+        if not separator or not rung or not name:
+            problems.append(
+                f"allowlisted action '{key}' is not keyed '<rung>/<Action>'"
+            )
+            continue
+        if rung not in actions:
+            problems.append(
+                f"allowlisted action '{key}' names rung '{rung}', which registers no actions "
+                "-- the rung was renamed or does not ship a server"
+            )
+            continue
+        if name not in actions[rung]:
+            problems.append(
+                f"allowlisted action '{key}' is no longer registered by '{rung}' "
+                "-- a rename left the exemption behind"
+            )
+        elif name in succeeded[rung]:
+            problems.append(
+                f"allowlisted action '{key}' is driven to success by a scenario "
+                "-- drop the exemption"
+            )
+    return problems
+
+
 def _render(
     surface: Surface,
     exercised: Exercised,
@@ -791,9 +875,11 @@ def _render(
     total_registered = 0
     total_dispatched = 0
     gap_lines: list[str] = []
+    granting: set[str] = set()
     for rung, tally in rung_tallies(actions, facts, allowlist, floors).items():
         total_registered += len(tally.registered)
         total_dispatched += len(tally.dispatched)
+        granting |= {f"{rung}/{name}" for name in tally.exempt}
 
         lines.append(
             f"  {rung:<10} actions {len(tally.dispatched)}/{len(tally.registered)} dispatched "
@@ -808,11 +894,29 @@ def _render(
 
     lines.append("")
     lines.append(f"  total actions dispatched: {total_dispatched}/{total_registered}")
+    # Split the allowlist's action entries by whether they actually granted an
+    # exemption in the tallies above. `exempt` is scoped to the undispatched
+    # remainder, so an entry whose action *is* dispatched (a scenario calling
+    # it only to assert its refusal) grants nothing and is counted in no rung's
+    # "(n exempt)". Printing every entry under one "exempt" heading claimed
+    # exemptions the arithmetic never granted; the two groups are labelled
+    # apart so the list and the counts cannot be read as disagreeing.
     if allowlist.actions:
-        lines.append("")
-        lines.append("Actions exempt, with reasons:")
-        for name, reason in sorted(allowlist.actions.items()):
-            lines.append(f"    {name}: {reason}")
+        granted = [(k, r) for k, r in sorted(allowlist.actions.items()) if k in granting]
+        recorded = [(k, r) for k, r in sorted(allowlist.actions.items()) if k not in granting]
+        if granted:
+            lines.append("")
+            lines.append("Actions exempt, with reasons:")
+            for name, reason in granted:
+                lines.append(f"    {name}: {reason}")
+        if recorded:
+            lines.append("")
+            lines.append(
+                "Actions recorded as undrivable, granting no exemption "
+                "(a scenario already dispatches them, to assert their refusal):"
+            )
+            for name, reason in recorded:
+                lines.append(f"    {name}: {reason}")
     if gap_lines:
         lines.append("")
         lines.append("WORKFLOW GAPS:")
@@ -939,6 +1043,12 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     facts = [scenario_facts(scenario) for scenario in scenarios]
+    stale_exemptions = action_allowlist_problems(allowlist, actions, facts)
+    if stale_exemptions:
+        for problem in stale_exemptions:
+            print(f"scenario_coverage: {problem}", file=sys.stderr)
+        return 2
+
     flow_problems = workflow_problems(actions, facts, allowlist, floors=floors)
 
     print(_render(surface, exercised, allowlist, actions, facts, floors=floors))

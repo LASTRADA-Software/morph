@@ -215,15 +215,20 @@ independent calls that happen to share a socket. `scenario_coverage.py` also
 measures that, per rung, against the registered `BRIDGE_REGISTER_ACTION`
 surface under `examples/<rung>/`.
 
-A scenario file counts as a **workflow** only when a later step's arguments
-reference a name an earlier step `capture`d — one step consuming another's
-captured state — and it does so at least `WORKFLOW_MIN_CHAINED` times across
-at least `WORKFLOW_MIN_ACTIONS` distinct actions. A file that fires several
-unrelated calls, or that re-reads the same captured id without threading it
-into a *new* action, does not qualify: format demonstrations and CRUD smoke
-tests are deliberately excluded, because what a workflow is meant to exercise
-— strand ordering, exactly-once replay, second-call authorization — only
-shows up when steps genuinely depend on each other's results.
+A scenario file counts as a **workflow** only when a later **`do`** step's
+arguments reference a name an earlier step `capture`d — one dispatched action
+consuming another's captured state — and it does so at least
+`WORKFLOW_MIN_CHAINED` times across at least `WORKFLOW_MIN_ACTIONS` distinct
+actions. Chaining on any other verb does not count: a `session
+principal=$who token=$token` step reuses one sign-in's credentials rather than
+carrying a result forward, so a file that installs the same token on three
+clients and then fires four unrelated `do` calls threads nothing between its
+actions and is not a workflow. A file that fires several unrelated calls, or
+that re-reads the same captured id without threading it into a *new* action,
+does not qualify either: format demonstrations and CRUD smoke tests are
+deliberately excluded, because what a workflow is meant to exercise — strand
+ordering, exactly-once replay, second-call authorization — only shows up when
+steps genuinely depend on each other's results.
 
 Two conditions must hold per rung, from `scenarios/<rung>/`:
 
@@ -240,6 +245,23 @@ action on the wire ever hands back the id it needs — is not a coverage gap to
 close but a fact about the rung, and gets an entry in `coverage_allowlist.json`
 under `"actions"`, keyed `"<rung>/<Action>"`, with the same **written reason**
 requirement as `kinds` and `messages`.
+
+That section is audited in both directions too: an entry with no written
+reason, one not keyed `"<rung>/<Action>"`, one naming a rung that registers
+nothing, or one naming an action its rung no longer registers all fail the run
+as a broken tool (exit `2`). What retires such an entry is *success*, not
+dispatch: the entry claims the action cannot be driven to completion, so a
+scenario that calls it precisely to assert its refusal is the reason's
+evidence and leaves it standing, while a scenario that dispatches it with an
+`expect ok` has done what the reason said was impossible and the entry must
+go. An entry whose action *is* dispatched grants no exemption — `exempt` is
+scoped to the actions no scenario dispatches at all — so the report lists it
+apart from the entries the per-rung `(n exempt)` count actually reflects.
+
+`scenario_coverage.py --floors` is a **testing-only** override for this tool's
+own fixtures (it lets them satisfy a floor without authoring dozens of
+throwaway workflow files); CI and any real run pass it nothing and get the
+shipped `WORKFLOW_FLOORS`.
 
 ## Self-test
 

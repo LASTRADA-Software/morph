@@ -42,7 +42,7 @@ expect ok field principal == "alice"
 # ── Open the ledger, carrying the minted session ────────────────────────────
 # NOTE: `client`'s own principal=/token= options are NOT capture-expanded --
 # they take literal text. The credentials a Login just minted have to be
-# installed with a `session` step, which is. See morph#TBD.
+# installed with a `session` step, which is. See morph#360.
 client books model=LedgerModel
 session principal=$who token=$token
 
