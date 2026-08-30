@@ -34,9 +34,12 @@ from scenario_coverage import (
     MIN_KINDS,
     MIN_MESSAGES,
     SERVER_RUNGS,
+    WORKFLOW_MIN_ACTIONS,
+    WORKFLOW_MIN_CHAINED,
     Allowlist,
     AllowlistError,
     Exercised,
+    ScenarioFacts,
     Surface,
     SurfaceError,
     _repo_root,
@@ -52,6 +55,7 @@ from scenario_coverage import (
     load_allowlist,
     load_scenarios,
     main as coverage_main,
+    scenario_facts,
     server_half,
     shipped_action_sources,
 )
@@ -726,6 +730,83 @@ class ActionExtractionTest(unittest.TestCase):
         # Total count provides a quick sanity check tied to MIN_ACTIONS.
         total = sum(len(names) for names in actions.values())
         self.assertEqual(total, 71)
+
+
+_FLAT_LIST = '''
+model PasteModel
+client alice
+do CreatePaste content="a"
+expect ok capture one=$.id
+do ListPastes
+expect ok field pastes ~ .
+do GetPaste id=fixed-not-captured
+expect err message == "GetPaste: no such paste"
+'''
+
+_REAL_WORKFLOW = '''
+model PasteModel
+client alice
+do CreatePaste content="a"
+expect ok capture id=$.id
+do GetPaste id=$id
+expect ok field content == "a"
+do EditPaste id=$id content="b"
+expect ok
+do ListPastes
+expect ok field pastes ~ $id
+do DeletePaste id=$id
+expect ok
+'''
+
+
+class WorkflowClassificationTest(unittest.TestCase):
+    def test_a_flat_list_of_calls_is_not_a_workflow(self) -> None:
+        # Three distinct actions, but nothing consumes the captured id, so this
+        # is three one-shot calls sharing a socket.
+        facts = scenario_facts(parse_scenario(_FLAT_LIST, "scenarios/pastebin/flat.scenario"))
+        self.assertEqual(facts.chained_steps, 0)
+        self.assertFalse(facts.is_workflow)
+
+    def test_a_threaded_sequence_is_a_workflow(self) -> None:
+        facts = scenario_facts(parse_scenario(_REAL_WORKFLOW, "scenarios/pastebin/w.scenario"))
+        self.assertGreaterEqual(facts.chained_steps, WORKFLOW_MIN_CHAINED)
+        self.assertTrue(facts.is_workflow)
+
+    def test_records_the_actions_and_the_rung(self) -> None:
+        facts = scenario_facts(parse_scenario(_REAL_WORKFLOW, "scenarios/pastebin/w.scenario"))
+        self.assertEqual(
+            facts.actions,
+            frozenset({"CreatePaste", "GetPaste", "EditPaste", "ListPastes", "DeletePaste"}),
+        )
+        self.assertEqual(facts.rung, "pastebin")
+
+    def test_a_file_directly_in_scenarios_has_no_rung(self) -> None:
+        facts = scenario_facts(parse_scenario(_REAL_WORKFLOW, "scenarios/loose.scenario"))
+        self.assertEqual(facts.rung, "")
+
+    def test_enough_chaining_but_too_few_actions_is_not_a_workflow(self) -> None:
+        # Guards WORKFLOW_MIN_ACTIONS independently of WORKFLOW_MIN_CHAINED:
+        # create-then-read-repeatedly threads state but goes nowhere.
+        text = (
+            'model PasteModel\nclient alice\n'
+            'do CreatePaste content="a"\nexpect ok capture id=$.id\n'
+            'do GetPaste id=$id\nexpect ok field content == "a"\n'
+            'do GetPaste id=$id\nexpect ok field readCount.num == 2\n'
+            'do GetPaste id=$id\nexpect ok field readCount.num == 3\n'
+        )
+        facts = scenario_facts(parse_scenario(text, "scenarios/pastebin/x.scenario"))
+        self.assertGreaterEqual(facts.chained_steps, WORKFLOW_MIN_CHAINED)
+        self.assertEqual(len(facts.actions), 2)
+        self.assertFalse(facts.is_workflow)
+
+    def test_load_scenarios_recurses_when_asked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "pastebin").mkdir()
+            (root / "pastebin" / "a.scenario").write_text(_REAL_WORKFLOW, encoding="utf-8")
+            (root / "b.scenario").write_text(_REAL_WORKFLOW, encoding="utf-8")
+            self.assertEqual(len(load_scenarios(root)), 1)
+            self.assertEqual(len(load_scenarios(root, recursive=True)), 2)
 
 
 if __name__ == "__main__":

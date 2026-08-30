@@ -350,15 +350,96 @@ class Exercised:
     messages: frozenset[str]
 
 
-def load_scenarios(directory: pathlib.Path) -> list[Scenario]:
-    """Parses every `*.scenario` in @p directory through the runner's own parser.
+# What separates a workflow from a list of calls. Set by measuring the corpus,
+# not guessed: at three-and-two both shipped files qualify, and they are format
+# demonstrations rather than journeys. Four-and-three puts the bar just above
+# them -- the shortest qualifying shape is roughly
+# `sign in -> create -> edit -> read back`. Both halves are load-bearing and
+# neither implies the other: a file reading the same id four times threads
+# state without going anywhere, and a file firing four unrelated actions goes
+# nowhere while threading nothing.
+WORKFLOW_MIN_ACTIONS = 4
+WORKFLOW_MIN_CHAINED = 3
+
+
+@dataclass(frozen=True)
+class ScenarioFacts:
+    """What one scenario file dispatches, and whether it is a workflow."""
+
+    rung: str
+    path: str
+    actions: frozenset[str]
+    chained_steps: int
+    is_workflow: bool
+
+
+def scenario_facts(scenario: Scenario) -> ScenarioFacts:
+    """Summarises one parsed scenario for the workflow axis.
+
+    A step counts as *chained* when one of its arguments references a name an
+    earlier step captured. That is what distinguishes a journey from a list:
+    threading state means each step depends on what the last one returned.
+
+    @param scenario A scenario already parsed by `morph_scenario.parse_scenario`.
+    @return Its rung, dispatched actions, chained-step count and workflow verdict.
+    """
+    path = pathlib.PurePath(scenario.path)
+    rung = path.parent.name if path.parent.name != "scenarios" else ""
+
+    actions: set[str] = set()
+    captured: set[str] = set()
+    chained = 0
+    for step in scenario.steps:
+        if step.verb == "do" and step.args:
+            actions.add(step.args[0])
+        # Read references before recording this step's own captures: a step
+        # cannot chain off a value it produces itself.
+        if any(
+            name in captured
+            for arg in step.args
+            for name in _referenced_captures(arg)
+        ):
+            chained += 1
+        for assertion in step.assertions:
+            if assertion.kind == "capture" and assertion.capture_name:
+                captured.add(assertion.capture_name)
+
+    is_workflow = len(actions) >= WORKFLOW_MIN_ACTIONS and chained >= WORKFLOW_MIN_CHAINED
+    return ScenarioFacts(
+        rung=rung,
+        path=scenario.path,
+        actions=frozenset(actions),
+        chained_steps=chained,
+        is_workflow=is_workflow,
+    )
+
+
+def _referenced_captures(token: str) -> list[str]:
+    """Returns every `$name` / `${name}` reference in @p token.
+
+    Uses the runner's own `_VARIABLE` pattern so the two cannot disagree about
+    what a capture reference looks like.
+    """
+    return [
+        braced or bare
+        for braced, bare in morph_scenario._VARIABLE.findall(token)  # noqa: SLF001
+    ]
+
+
+def load_scenarios(directory: pathlib.Path, recursive: bool = False) -> list[Scenario]:
+    """Parses every `*.scenario` under @p directory through the runner's parser.
 
     Deliberately re-uses `morph_scenario.parse_scenario` rather than reading the
     files here: a second parser could drift from the real one, and then this
     report would be measuring a format nothing runs.
+
+    @param directory Directory to read.
+    @param recursive When true, descends into per-rung subdirectories.
+    @return The parsed scenarios, ordered by path.
     """
+    pattern = "**/*.scenario" if recursive else "*.scenario"
     out: list[Scenario] = []
-    for path in sorted(directory.glob("*.scenario")):
+    for path in sorted(directory.glob(pattern)):
         out.append(morph_scenario.parse_scenario(path.read_text(encoding="utf-8"), str(path)))
     return out
 
