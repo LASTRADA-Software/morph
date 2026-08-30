@@ -190,9 +190,10 @@ files actually send and assert.
 python3 scripts/scenario/scenario_coverage.py
 ```
 
-Exit `0` if every kind and refusal is covered or exempt, `1` if something is
-uncovered, `2` if the tool itself is broken — a header it cannot read, an
-extraction too small to be believable, or a stale allowlist.
+Exit `0` if every kind and refusal is covered or exempt *and* the workflow
+axis below is satisfied, `1` if either axis has a real gap, `2` if the tool
+itself is broken — a header it cannot read, an extraction too small to be
+believable, or a stale allowlist.
 
 Anything deliberately left uncovered goes in `coverage_allowlist.json` with a
 **written reason**, and is checked in both directions: an entry for something
@@ -204,6 +205,41 @@ nothing: it refuses to run if it extracts an implausibly small surface (rename
 `makeErr` and it fails loudly rather than reporting full coverage over an empty
 universe), and `test_morph_scenario.py` drives it against fixtures whose right
 answers are known, including one where the correct exit code is non-zero.
+
+### The workflow axis
+
+Protocol coverage answers "did some scenario ever send this envelope kind or
+assert this refusal?" — it says nothing about whether scenarios exercise real
+*journeys* through a rung's domain actions, as opposed to a flat list of
+independent calls that happen to share a socket. `scenario_coverage.py` also
+measures that, per rung, against the registered `BRIDGE_REGISTER_ACTION`
+surface under `examples/<rung>/`.
+
+A scenario file counts as a **workflow** only when a later step's arguments
+reference a name an earlier step `capture`d — one step consuming another's
+captured state — and it does so at least `WORKFLOW_MIN_CHAINED` times across
+at least `WORKFLOW_MIN_ACTIONS` distinct actions. A file that fires several
+unrelated calls, or that re-reads the same captured id without threading it
+into a *new* action, does not qualify: format demonstrations and CRUD smoke
+tests are deliberately excluded, because what a workflow is meant to exercise
+— strand ordering, exactly-once replay, second-call authorization — only
+shows up when steps genuinely depend on each other's results.
+
+Two conditions must hold per rung, from `scenarios/<rung>/`:
+
+- every registered action is dispatched (appears in some scenario's `do`
+  step) by some file in that rung's directory;
+- the rung has at least as many qualifying workflow files as its floor in
+  `WORKFLOW_FLOORS` (`pastebin` 8, `polls` 10, `bookmarks` 12, `ledger` 15,
+  `kanban` 20) — floors scaled to how finite that rung's space of meaningful
+  journeys is, not quotas: a rung may carry more.
+
+An action that genuinely cannot be driven by any WebSocket client — because
+the server refuses every principal but its own internal caller, or because no
+action on the wire ever hands back the id it needs — is not a coverage gap to
+close but a fact about the rung, and gets an entry in `coverage_allowlist.json`
+under `"actions"`, keyed `"<rung>/<Action>"`, with the same **written reason**
+requirement as `kinds` and `messages`.
 
 ## Self-test
 

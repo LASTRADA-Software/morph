@@ -426,6 +426,62 @@ def _referenced_captures(token: str) -> list[str]:
     ]
 
 
+# Minimum number of qualifying workflows per rung, scaled to how finite that
+# rung's space of meaningful journeys is. pastebin's six actions admit a
+# near-exhaustive set; kanban's twenty-two do not, so its floor targets the
+# important journeys rather than the closure. See the design spec, "How many,
+# per rung". Floors, not quotas -- a rung may carry more, and deleting
+# workflows below the floor is meant to fail CI rather than erode quietly.
+WORKFLOW_FLOORS = {
+    "pastebin": 8,
+    "polls": 10,
+    "bookmarks": 12,
+    "ledger": 15,
+    "kanban": 20,
+}
+
+
+def workflow_problems(
+    actions: dict[str, frozenset[str]],
+    facts: list[ScenarioFacts],
+    allowlist: Allowlist,
+    floors: dict[str, int] | None = None,
+) -> list[str]:
+    """Reports unexercised actions and rungs below their workflow floor.
+
+    @param actions   Rung name to its registered action names.
+    @param facts     One entry per parsed scenario.
+    @param allowlist Exemptions; `actions` is keyed `"<rung>/<Action>"`.
+    @param floors    Per-rung workflow minimums; defaults to `WORKFLOW_FLOORS`.
+    @return One message per problem; empty when both gates are satisfied.
+    """
+    effective = WORKFLOW_FLOORS if floors is None else floors
+    problems: list[str] = []
+
+    for rung, registered in sorted(actions.items()):
+        dispatched: set[str] = set()
+        workflows = 0
+        for fact in facts:
+            if fact.rung != rung:
+                continue
+            dispatched |= fact.actions
+            if fact.is_workflow:
+                workflows += 1
+
+        for name in sorted(registered - dispatched):
+            if f"{rung}/{name}" in allowlist.actions:
+                continue
+            problems.append(f"{rung}: action '{name}' is dispatched by no scenario")
+
+        floor = effective.get(rung, 0)
+        if workflows < floor:
+            problems.append(
+                f"{rung}: {workflows} workflows, floor is {floor} "
+                "(a file counts only if it chains actions through captured state)"
+            )
+    return problems
+
+
 def load_scenarios(directory: pathlib.Path, recursive: bool = False) -> list[Scenario]:
     """Parses every `*.scenario` under @p directory through the runner's parser.
 
@@ -533,6 +589,7 @@ class Allowlist:
 
     kinds: dict[str, str]
     messages: dict[str, str]
+    actions: dict[str, str]
 
 
 class AllowlistError(Exception):
@@ -562,7 +619,7 @@ def load_allowlist(path: pathlib.Path) -> Allowlist:
     `json.loads` escape would exit 1, and CI reads 1 as "a real gap".
     """
     if not path.exists():
-        return Allowlist(kinds={}, messages={})
+        return Allowlist(kinds={}, messages={}, actions={})
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -576,6 +633,7 @@ def load_allowlist(path: pathlib.Path) -> Allowlist:
     return Allowlist(
         kinds=_allowlist_section(raw.get("kinds", {}), "kinds", path),
         messages=_allowlist_section(raw.get("messages", {}), "messages", path),
+        actions=_allowlist_section(raw.get("actions", {}), "actions", path),
     )
 
 
@@ -610,8 +668,23 @@ def allowlist_problems(allowlist: Allowlist, surface: Surface, exercised: Exerci
     return problems
 
 
-def _render(surface: Surface, exercised: Exercised, allowlist: Allowlist) -> str:
-    """Builds the human-readable report."""
+def _render(
+    surface: Surface,
+    exercised: Exercised,
+    allowlist: Allowlist,
+    actions: dict[str, frozenset[str]],
+    facts: list[ScenarioFacts],
+) -> str:
+    """Builds the human-readable report, protocol axis then workflow axis.
+
+    @param surface   The protocol surface extracted from the headers.
+    @param exercised What the scenario corpus puts on the wire and asserts on.
+    @param allowlist Exemptions for both axes.
+    @param actions   Rung name to its registered action names (the workflow
+                      axis's universe).
+    @param facts     One entry per parsed scenario (the workflow axis's
+                      corpus).
+    """
     uncovered_kinds, uncovered_messages = covers(surface, exercised)
     gap_kinds = sorted(uncovered_kinds - set(allowlist.kinds))
     gap_messages = sorted(uncovered_messages - set(allowlist.messages))
@@ -641,6 +714,60 @@ def _render(surface: Surface, exercised: Exercised, allowlist: Allowlist) -> str
         lines.append("")
     if not gap_kinds and not gap_messages:
         lines.append("Every kind and refusal is either covered or exempt.")
+
+    lines.append("")
+    lines.append("workflow coverage")
+    lines.append("")
+    total_registered = 0
+    total_dispatched = 0
+    gap_lines: list[str] = []
+    for rung, registered in sorted(actions.items()):
+        dispatched: set[str] = set()
+        workflows = 0
+        for fact in facts:
+            if fact.rung != rung:
+                continue
+            dispatched |= fact.actions
+            if fact.is_workflow:
+                workflows += 1
+        dispatched_registered = dispatched & registered
+        # Exempt is scoped to the undispatched remainder, not to every
+        # registered action: a scenario may still legitimately call an
+        # allowlisted action (e.g. to assert its refusal) without being able
+        # to drive it to completion, and such a call already counts as
+        # dispatched. Scoping this way keeps the three buckets disjoint, so
+        # dispatched + exempt + undispatched always equals registered.
+        undispatched_all = registered - dispatched_registered
+        exempt = {name for name in undispatched_all if f"{rung}/{name}" in allowlist.actions}
+        undispatched = undispatched_all - exempt
+        floor = WORKFLOW_FLOORS.get(rung, 0)
+
+        total_registered += len(registered)
+        total_dispatched += len(dispatched_registered)
+
+        lines.append(
+            f"  {rung:<10} actions {len(dispatched_registered)}/{len(registered)} dispatched "
+            f"({len(exempt)} exempt), workflows {workflows}/{floor}"
+        )
+        if undispatched:
+            gap_lines.append(f"    {rung}: {', '.join(sorted(undispatched))} dispatched by no scenario")
+        if workflows < floor:
+            gap_lines.append(f"    {rung}: {workflows} workflows, floor is {floor}")
+
+    lines.append("")
+    lines.append(f"  total actions dispatched: {total_dispatched}/{total_registered}")
+    if allowlist.actions:
+        lines.append("")
+        lines.append("Actions exempt, with reasons:")
+        for name, reason in sorted(allowlist.actions.items()):
+            lines.append(f"    {name}: {reason}")
+    if gap_lines:
+        lines.append("")
+        lines.append("WORKFLOW GAPS:")
+        lines.extend(gap_lines)
+    else:
+        lines.append("")
+        lines.append("Every registered action is dispatched and every rung meets its floor.")
     return "\n".join(lines)
 
 
@@ -704,9 +831,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"scenario_coverage: {problem}", file=sys.stderr)
         return 2
 
-    print(_render(surface, exercised, allowlist))
+    try:
+        actions = extract_actions(shipped_action_sources(root))
+    except (OSError, SurfaceError) as exc:
+        print(f"scenario_coverage: {exc}", file=sys.stderr)
+        return 2
+    if not args.no_floor:
+        action_problems = action_floor_violations(actions)
+        if action_problems:
+            for problem in action_problems:
+                print(f"scenario_coverage: {problem}", file=sys.stderr)
+            return 2
+
+    facts = [scenario_facts(scenario) for scenario in scenarios]
+    flow_problems = workflow_problems(actions, facts, allowlist)
+
+    print(_render(surface, exercised, allowlist, actions, facts))
     uncovered_kinds, uncovered_messages = covers(surface, exercised)
-    if (uncovered_kinds - set(allowlist.kinds)) or (uncovered_messages - set(allowlist.messages)):
+    protocol_gap = (uncovered_kinds - set(allowlist.kinds)) or (uncovered_messages - set(allowlist.messages))
+    if protocol_gap or flow_problems:
         return 1
     return 0
 

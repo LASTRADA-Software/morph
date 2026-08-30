@@ -34,6 +34,7 @@ from scenario_coverage import (
     MIN_KINDS,
     MIN_MESSAGES,
     SERVER_RUNGS,
+    WORKFLOW_FLOORS,
     WORKFLOW_MIN_ACTIONS,
     WORKFLOW_MIN_CHAINED,
     Allowlist,
@@ -58,6 +59,7 @@ from scenario_coverage import (
     scenario_facts,
     server_half,
     shipped_action_sources,
+    workflow_problems,
 )
 
 
@@ -512,42 +514,42 @@ class AllowlistTest(unittest.TestCase):
 
     def test_an_entry_for_a_genuinely_uncovered_item_is_accepted(self) -> None:
         allowlist = Allowlist(kinds={"assign": "no rung uses shared instances yet"},
-                              messages={"server busy": "no server sets a LimitPolicy"})
+                              messages={"server busy": "no server sets a LimitPolicy"}, actions={})
         self.assertEqual(allowlist_problems(allowlist, self._SURFACE, self._EXERCISED), [])
 
     def test_an_entry_for_something_now_covered_is_a_problem(self) -> None:
         # The exemption has outlived its reason: the corpus covers this now.
         allowlist = Allowlist(kinds={"assign": "r", "execute": "stale"},
-                              messages={"server busy": "r"})
+                              messages={"server busy": "r"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("execute" in p and "already covered" in p for p in problems))
 
     def test_an_entry_naming_something_that_no_longer_exists_is_a_problem(self) -> None:
         # A rename in remote.hpp left this behind.
         allowlist = Allowlist(kinds={"assign": "r", "telepathy": "gone"},
-                              messages={"server busy": "r"})
+                              messages={"server busy": "r"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("telepathy" in p and "no longer" in p for p in problems))
 
     def test_an_empty_reason_is_a_problem(self) -> None:
-        allowlist = Allowlist(kinds={"assign": ""}, messages={"server busy": "r"})
+        allowlist = Allowlist(kinds={"assign": ""}, messages={"server busy": "r"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("reason" in p for p in problems))
 
     def test_an_empty_reason_on_a_message_entry_is_a_problem(self) -> None:
-        allowlist = Allowlist(kinds={}, messages={"server busy": ""})
+        allowlist = Allowlist(kinds={}, messages={"server busy": ""}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("reason" in p for p in problems))
 
     def test_a_message_entry_naming_something_that_no_longer_exists_is_a_problem(self) -> None:
         # A rename in remote.hpp left this behind.
-        allowlist = Allowlist(kinds={}, messages={"telepathic link severed": "gone"})
+        allowlist = Allowlist(kinds={}, messages={"telepathic link severed": "gone"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("telepathic link severed" in p and "no longer" in p for p in problems))
 
     def test_a_message_entry_for_something_now_covered_is_a_problem(self) -> None:
         # The exemption has outlived its reason: the corpus covers this now.
-        allowlist = Allowlist(kinds={}, messages={"model not found": "stale"})
+        allowlist = Allowlist(kinds={}, messages={"model not found": "stale"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("model not found" in p and "already covered" in p for p in problems))
 
@@ -558,7 +560,7 @@ class AllowlistTest(unittest.TestCase):
             message_prefixes=frozenset({"unknown envelope kind: "}),
         )
         exercised = Exercised(kinds=frozenset({"execute"}), messages=frozenset({"model not found"}))
-        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "no scenario sends a bad kind"})
+        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "no scenario sends a bad kind"}, actions={})
         self.assertEqual(allowlist_problems(allowlist, surface, exercised), [])
 
     def test_a_prefix_shaped_message_entry_already_covered_is_a_problem(self) -> None:
@@ -571,7 +573,7 @@ class AllowlistTest(unittest.TestCase):
             kinds=frozenset({"execute"}),
             messages=frozenset({"unknown envelope kind: frobnicate"}),
         )
-        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "stale"})
+        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "stale"}, actions={})
         problems = allowlist_problems(allowlist, surface, exercised)
         self.assertTrue(
             any("unknown envelope kind: " in p and "already covered" in p for p in problems)
@@ -601,7 +603,9 @@ class AllowlistTest(unittest.TestCase):
 
     def test_the_shipped_allowlist_parses(self) -> None:
         allowlist = load_allowlist(_repo_root() / "scripts" / "scenario" / "coverage_allowlist.json")
-        for reason in list(allowlist.kinds.values()) + list(allowlist.messages.values()):
+        for reason in list(allowlist.kinds.values()) + list(allowlist.messages.values()) + list(
+            allowlist.actions.values()
+        ):
             self.assertTrue(reason.strip(), "every entry needs a written reason")
 
 
@@ -669,7 +673,17 @@ class CoverageCliTest(unittest.TestCase):
             )
         self.assertEqual(code, 2)
 
-    def test_exits_zero_when_everything_uncovered_is_exempt(self) -> None:
+    def test_exits_zero_on_the_protocol_axis_when_everything_uncovered_is_exempt(self) -> None:
+        # `_fixture_run` isolates the *protocol* axis (its own throwaway header,
+        # wire header and scenario corpus), but `shipped_action_sources` always
+        # reads the real `examples/` tree -- there is no fixture for the
+        # workflow axis. So this exercises only the claim the protocol axis
+        # ever made: fully exempted kinds/messages stop protocol-side
+        # problems from being reported. The real corpus's workflow gap (see
+        # `test_the_real_run_exits_one_for_the_known_workflow_gap`) still
+        # drives the overall exit code to 1 -- two independent gates, and
+        # both must be clean for 0, which is the point of adding the second
+        # one.
         with tempfile.TemporaryDirectory() as tmp:
             allow = pathlib.Path(tmp) / "allow.json"
             allow.write_text(
@@ -680,7 +694,15 @@ class CoverageCliTest(unittest.TestCase):
                 'if (env.kind == "register") {}\nreply(makeErr("nope", id));',
                 ["--allowlist", str(allow), "--no-floor"],
             )
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 1)
+
+    def test_the_real_run_exits_one_for_the_known_workflow_gap(self) -> None:
+        # The shipped corpus dispatches only a fraction of the registered
+        # actions and no rung yet meets its workflow floor -- authoring the
+        # rest is later work (see WORKFLOW_FLOORS). This pins today's real,
+        # honest exit code so a future change that silently flips it to 0
+        # gets noticed rather than assumed to mean the gap was closed.
+        self.assertEqual(coverage_main([]), 1)
 
 
 _FIXTURE_ACTIONS = '''
@@ -823,6 +845,52 @@ class CorpusLayoutTest(unittest.TestCase):
         found = sorted(p.name for p in root.iterdir() if p.is_dir())
         for name in found:
             self.assertIn(name, SERVER_RUNGS, f"scenarios/{name}/ is not a rung that ships a server")
+
+
+class WorkflowGateTest(unittest.TestCase):
+    _ACTIONS = {"demo": frozenset({"Alpha", "Beta", "Gamma"})}
+
+    def _facts(self, count: int, actions: frozenset) -> list:
+        return [
+            ScenarioFacts(rung="demo", path=f"scenarios/demo/{i}.scenario",
+                          actions=actions, chained_steps=2, is_workflow=True)
+            for i in range(count)
+        ]
+
+    def test_reports_an_action_no_scenario_dispatches(self) -> None:
+        facts = self._facts(1, frozenset({"Alpha", "Beta"}))
+        problems = workflow_problems(self._ACTIONS, facts, Allowlist(kinds={}, messages={}, actions={}),
+                                     floors={"demo": 1})
+        self.assertTrue(any("Gamma" in p for p in problems))
+
+    def test_an_allowlisted_action_is_not_reported(self) -> None:
+        facts = self._facts(1, frozenset({"Alpha", "Beta"}))
+        allow = Allowlist(kinds={}, messages={}, actions={"demo/Gamma": "runner-only principal"})
+        problems = workflow_problems(self._ACTIONS, facts, allow, floors={"demo": 1})
+        self.assertFalse(any("Gamma" in p for p in problems))
+
+    def test_reports_a_rung_below_its_workflow_floor(self) -> None:
+        facts = self._facts(2, frozenset({"Alpha", "Beta", "Gamma"}))
+        problems = workflow_problems(self._ACTIONS, facts, Allowlist(kinds={}, messages={}, actions={}),
+                                     floors={"demo": 5})
+        self.assertTrue(any("floor" in p and "demo" in p for p in problems))
+
+    def test_non_workflow_files_do_not_count_towards_the_floor(self) -> None:
+        # Five files that are flat lists must not satisfy a floor of 5.
+        flat = [
+            ScenarioFacts(rung="demo", path=f"scenarios/demo/{i}.scenario",
+                          actions=frozenset({"Alpha", "Beta", "Gamma"}),
+                          chained_steps=0, is_workflow=False)
+            for i in range(5)
+        ]
+        problems = workflow_problems(self._ACTIONS, flat, Allowlist(kinds={}, messages={}, actions={}),
+                                     floors={"demo": 5})
+        self.assertTrue(any("floor" in p for p in problems))
+
+    def test_the_shipped_floors_name_only_real_rungs(self) -> None:
+        for rung in WORKFLOW_FLOORS:
+            self.assertIn(rung, SERVER_RUNGS)
+        self.assertEqual(set(WORKFLOW_FLOORS), set(SERVER_RUNGS))
 
 
 if __name__ == "__main__":
