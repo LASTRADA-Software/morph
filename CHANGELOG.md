@@ -83,6 +83,17 @@ API surface).
 
 ### Fixed
 
+- An `execute` refused by `RemoteServer`'s shutdown gate took a per-model
+  execute-ordering ticket and never released it, stranding a same-model
+  `execute` that had already passed the gate. Tickets are taken in send order
+  on the transport thread, but the pool may run the two posted tasks in either
+  order, so the later ticket can be parked in `awaitExecuteTurn` — a wait with
+  no deadline — by the time the earlier one is refused. That caller then never
+  received a reply (or a spurious `err "timeout"` where `executeTimeout` was
+  configured), a pool worker was blocked for the rest of the process's life,
+  and `drainedWithin()` could never succeed — so the defect broke the very
+  graceful-shutdown sequence during which it fired. The gate now releases the
+  ticket before replying.
 - `CustomerModel::execute(ListAccounts)` dereferenced `QuerySingle`'s optional
   unchecked (inherited verbatim from the old `AccountModel`); it now throws
   `NotFound`.
