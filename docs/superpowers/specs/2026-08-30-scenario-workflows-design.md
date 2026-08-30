@@ -56,9 +56,14 @@ Measured at master, by extracting every `BRIDGE_REGISTER_ACTION(Model, Action,
 | ledger | 1 (`Login` only) | 17 |
 | **total** | **8** | **71** |
 
-And **zero** of those eight sit in a threaded sequence: the three shipped files
-are short runs of independent calls. Two rungs that ship a server have no
-scenario at all.
+Two rungs that ship a server have no scenario at all, and `polls` has none of
+its nine actions exercised.
+
+The three shipped files *do* thread state — `pastebin.scenario` chains twice,
+`bookmarks_login.scenario` six times — so the gap is not "nobody captures
+anything". It is that each file dispatches only three distinct actions. They
+are demonstrations of the format, correct and useful as such, and they sit just
+below the bar this design sets for a journey.
 
 ## What counts as a workflow
 
@@ -80,9 +85,20 @@ sharing a socket, and the metric must say so.
 
 The workflow metric therefore records, per scenario file: how many distinct
 actions it dispatches, and how many steps consume a captured value. A file
-qualifies at **three or more distinct actions with at least two capture
-consumptions** — enough to rule out `create → read` alone counting as a
-journey, without demanding every file be long.
+qualifies at **four or more distinct actions with at least three capture
+consumptions**.
+
+Both halves are load-bearing and neither implies the other. A file that reads
+the same id four times threads state without going anywhere; a file that fires
+four unrelated actions goes nowhere while threading nothing.
+
+The bar was set by measuring the existing corpus, not guessed. At three-and-two
+both shipped files qualify, which is the wrong answer: `pastebin.scenario`
+(3 actions, 2 chained) and `bookmarks_login.scenario` (3 actions, 6 chained)
+are format demonstrations, not the journeys this design is about. Four-and-three
+puts the bar just above them — the shortest thing that counts is roughly
+`sign in → create → edit → read back`, which is the shortest sequence anyone
+would call a workflow.
 
 ## How many, per rung
 
