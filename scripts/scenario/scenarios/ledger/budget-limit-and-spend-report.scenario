@@ -1,0 +1,132 @@
+# ledger (rung 5) — a monthly limit, the spending measured against it, and
+# the month boundary that separates one from the next.
+#
+# examples/ledger/README.md's "What to implement" step 3: monthly limits and
+# spent-so-far aggregation, summed exactly in Rational arithmetic rather than
+# in floating point. The report is the read that proves every earlier write
+# landed on the right side of the right month.
+#
+# The month boundary is the assertion worth having. A report that summed the
+# whole ledger, or that compared dates as strings without parsing them, would
+# still produce a plausible number for August and would be caught here by the
+# September figure.
+#
+# ── Two behaviours that are not guessable, and are asserted as they are ──
+# A month with no limit row set does not report a limit of zero and does not
+# refuse. `BudgetModel::execute(GetBudgetReport)` sets **limit = spent** in
+# that case ("no limit was ever set, which reports as a limit equal to what
+# was spent"), and falls back to Currency::USD -- 0 on the wire -- for the
+# report currency, because the currency is read off the limit row that does
+# not exist. So an unlimited month always reads as exactly on budget, in
+# dollars, whatever the ledger is denominated in.
+#
+# Both are asserted below rather than avoided: they are what a client
+# rendering a progress bar will actually receive, and a scenario that only
+# ever asked about months with limits would never have shown them.
+#
+# Re-runnable: the accounts, category and budget are all created here.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Budgeted cash" kind=0 currency=1
+expect ok capture cash=$.id
+
+do OpenAccount ledgerId=1 name="Budgeted groceries" kind=1 currency=1
+expect ok capture groceries=$.id
+
+client budgets model=BudgetModel
+session principal=$who token=$token
+
+do CreateCategory ledgerId=1 name="Budgeted food"
+expect ok capture food=$
+
+do LinkAccountToCategory accountId=$groceries categoryId=$food
+expect ok
+
+do CreateBudget ledgerId=1 name="Budgeted month" categoryId=$food
+expect ok capture budget=$
+
+do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":30000,"den":1,"dp":2} currency=1
+expect ok
+
+# ── Before any spending ───────────────────────────────────────────────────
+do GetBudgetReport budgetId=$budget month="2026-08"
+expect ok field limit.num == 30000
+expect ok field spent.num == 0
+expect ok field currency == 1
+
+# ── Two entries in August ─────────────────────────────────────────────────
+use books
+
+do StoreTransaction ledgerId=1 description="weekly shop" date="2026-08-07T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-4250,"den":1,"dp":2}},{"accountId":$groceries,"amount":{"num":4250,"den":1,"dp":2}}]
+expect ok
+
+do StoreTransaction ledgerId=1 description="market" date="2026-08-21T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1175,"den":1,"dp":2}},{"accountId":$groceries,"amount":{"num":1175,"den":1,"dp":2}}]
+expect ok
+
+# ── ...summed exactly ─────────────────────────────────────────────────────
+# 42.50 + 11.75 = 54.25, and it comes back as 5425/100 rather than as
+# anything a double would have produced.
+use budgets
+
+do GetBudgetReport budgetId=$budget month="2026-08"
+expect ok field limit.num == 30000
+expect ok field spent.num == 5425
+expect ok field spent.dp == 2
+expect ok field currency == 1
+
+# ── One entry in September, which August must not see ────────────────────
+use books
+
+do StoreTransaction ledgerId=1 description="september shop" date="2026-09-03T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-9900,"den":1,"dp":2}},{"accountId":$groceries,"amount":{"num":9900,"den":1,"dp":2}}]
+expect ok
+
+use budgets
+
+do GetBudgetReport budgetId=$budget month="2026-08"
+expect ok field spent.num == 5425
+
+# September has spending but no limit, so its limit mirrors its spending and
+# its currency falls back to USD.
+do GetBudgetReport budgetId=$budget month="2026-09"
+expect ok field spent.num == 9900
+expect ok field limit.num == 9900
+expect ok field currency == 0
+
+# ── Setting September's limit changes September and not August ───────────
+do SetBudgetLimit budgetId=$budget month="2026-09" limit={"num":12000,"den":1,"dp":2} currency=1
+expect ok
+
+do GetBudgetReport budgetId=$budget month="2026-09"
+expect ok field limit.num == 12000
+expect ok field spent.num == 9900
+
+do GetBudgetReport budgetId=$budget month="2026-08"
+expect ok field limit.num == 30000
+expect ok field spent.num == 5425
+
+# ── A month with neither limit nor spending ──────────────────────────────
+# limit mirrors spent here too, and both are zero, so this is the one case
+# where the mirroring is invisible.
+do GetBudgetReport budgetId=$budget month="2026-07"
+expect ok field limit.num == 0
+expect ok field spent.num == 0
+expect ok field currency == 0
+
+# ── The refusals ─────────────────────────────────────────────────────────
+do GetBudgetReport budgetId=999999 month="2026-08"
+expect err message == "GetBudgetReport: no such budget"
+
+do GetBudgetReport budgetId=$budget month="not-a-month"
+expect err message == "action failed validation: BudgetModel/GetBudgetReport"
+
+# August is unchanged by either refusal.
+do GetBudgetReport budgetId=$budget month="2026-08"
+expect ok field limit.num == 30000
+expect ok field spent.num == 5425

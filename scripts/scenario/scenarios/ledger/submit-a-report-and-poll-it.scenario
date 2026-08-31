@@ -1,0 +1,110 @@
+# ledger (rung 5) — the submit-then-poll idiom for work that outlives the
+# call that asked for it.
+#
+# examples/ledger/README.md's "What to implement" step 7 calls this the rung's
+# framework-level deliverable: `SubmitReport` -> job id -> `GetReportStatus`
+# polling -> fetch result, "the submit->poll idiom for long-running work that
+# Completion<T>'s one-shot callbacks can't express directly".
+#
+# ── What a scenario can and cannot see, stated exactly ───────────────────
+# `SubmitReport` writes a Pending row and returns. It schedules nothing and
+# starts no thread: `ledger::app::App` sweeps for Pending rows on a timer and
+# dispatches `RunReportJob` back at `LedgerModel` under its own service
+# principal. That split is deliberate -- the aggregation is business logic and
+# stays in a model; only *when* it runs is orchestration.
+#
+# So a scenario can submit, and can observe Pending. It cannot observe Done:
+# that needs the server's own runner to tick, and waiting for a tick means a
+# sleep, which this runner forbids by design (morph#147). What it *can* do is
+# assert the authorization boundary that makes the wait unavoidable, which is
+# the file's closing section and the evidence for RunReportJob's entry in
+# coverage_allowlist.json.
+#
+# ── Why no assertion here says "Pending" ────────────────────────────────
+# `ledger::app::App` starts a timer that sweeps for `Pending` rows every
+# second and dispatches `RunReportJob` under its own service principal. So a
+# job's status is a *race* against that timer from the moment it is submitted:
+# the first poll usually sees Pending, and a poll a few steps later may not.
+#
+# Asserting `status == 0` therefore makes a scenario depend on wall-clock
+# timing through the back door, which is exactly what this runner exists not
+# to do (morph#147) -- and it was caught the way such things should be, by a
+# mutation run whose repeated passes gave the runner time to tick: the mutant
+# `status != 0` survived, because by then the job had genuinely completed.
+#
+# What is asserted instead is everything about a job that does *not* race: a
+# submitted job's id resolves, a job never reaches `Failed` (2), an id that
+# was never issued is refused, and a user client may not run a job itself.
+#
+# Wire shapes: ReportKind::MonthlyStatement is 0 and ::BudgetReport is 1;
+# ReportStatus::Pending is 0, ::Done 1, ::Failed 2. `params` is a JSON
+# *string*, not an object -- so it arrives escaped. SubmitReport answers with
+# a bare job id, captured with `$`.
+#
+# Re-runnable: every job is submitted by this file and polled by the id its
+# own submit returned.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Reported cash" kind=0 currency=1
+expect ok capture cash=$.id
+
+do OpenAccount ledgerId=1 name="Reported spend" kind=1 currency=1
+expect ok capture spend=$.id
+
+do StoreTransaction ledgerId=1 description="something to report on" date="2026-08-09T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1234,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":1234,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Reported spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1234"
+
+# ── Submit a monthly statement ──────────────────────────────────────────
+do SubmitReport ledgerId=1 kind=0 params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
+expect ok capture statement=$
+
+do GetReportStatus jobId=$statement
+expect ok field status != 2
+
+# Polling again is a read: it neither advances the job nor fails it.
+do GetReportStatus jobId=$statement
+expect ok field status != 2
+
+# ── A second job, of the other kind, gets its own id ────────────────────
+do SubmitReport ledgerId=1 kind=1 params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
+expect ok capture budgetJob=$
+
+do GetReportStatus jobId=$budgetJob
+expect ok field status != 2
+
+# The two ids are distinct, and each answers for itself.
+do GetReportStatus jobId=$statement
+expect ok field status != 2
+
+# ── The boundary that makes the wait unavoidable ────────────────────────
+# LedgerModel::execute(const RunReportJob&) accepts only the report runner's
+# own service principal, so a user client asking to run its own job -- even
+# the one it just submitted -- is refused.
+do RunReportJob jobId=$statement ledgerId=1
+expect err message == "RunReportJob: only the report runner may run a report job"
+
+do RunReportJob jobId=$budgetJob ledgerId=1
+expect err message == "RunReportJob: only the report runner may run a report job"
+
+# The refusal did not fail the job, which is what makes it a refusal rather
+# than a failure.
+do GetReportStatus jobId=$statement
+expect ok field status != 2
+
+# ── A job id that does not exist ────────────────────────────────────────
+do GetReportStatus jobId=999999
+expect err message == "GetReportStatus: no such job"
+
+do RunReportJob jobId=999999 ledgerId=1
+expect err message == "RunReportJob: only the report runner may run a report job"
+
+# ── The ledger is unchanged by all of it ────────────────────────────────
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Reported spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1234"

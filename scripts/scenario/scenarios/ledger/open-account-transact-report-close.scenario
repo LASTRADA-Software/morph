@@ -101,14 +101,19 @@ expect ok field currency == 1
 
 # ── Submit a report ─────────────────────────────────────────────────────────
 # SubmitReport only enqueues: the job is computed later by the server's own
-# report runner. A scenario cannot wait for that (this runner has no sleeps by
-# design), so this asserts the state it *can* observe synchronously.
+# report runner, which App sweeps for once a second. A scenario cannot wait
+# for that (this runner has no sleeps by design) and must not assert against
+# it either, so this asserts only what does not race with the sweep.
 use books
 do SubmitReport ledgerId=1 kind=0 params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
 expect ok capture job=$
 
+# Not `status == 0`: `ledger::app::App` sweeps for Pending jobs once a second
+# and runs them, so a job's status races that timer from the moment it is
+# submitted. What does not race is that a submitted job's id resolves and that
+# a job never lands in Failed (2).
 do GetReportStatus jobId=$job
-expect ok field status == 0
+expect ok field status != 2
 
 # ...and the authorization boundary that makes the wait unavoidable:
 # LedgerModel::execute(const RunReportJob&) accepts only the report runner's

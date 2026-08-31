@@ -1,0 +1,148 @@
+# ledger (rung 5) — two editors, one rule, and the optimistic-concurrency
+# check that stops the second from overwriting the first.
+#
+# examples/ledger/README.md's step 8: this is Scenario B of the rung's
+# sync-philosophy write-up, and the README says it outright -- *"Scenario B is
+# reproducible against UpdateRule's real version conflict (expectedVersion,
+# VersionConflict)"*. Scenario A, two clients editing the same transaction, is
+# recorded there as inapplicable: this rung ships no transaction-edit action
+# by design, since a posted journal entry is an audit record corrected by a
+# compensating entry rather than edited in place.
+#
+# So this is the one place in the rung where two offline edits genuinely
+# collide, and the file drives it with two clients on two sockets, which is
+# the shape the collision actually has.
+#
+# ── What `expectedVersion` being optional means ──────────────────────────
+# It is a std::optional, so a client that omits it is saying "I have not read
+# this rule, apply my change regardless" -- last-writer-wins. Omitting it is
+# not the same as passing the current version, and both are exercised, because
+# a client library that quietly filled it in would change the semantics of
+# every call that left it out.
+#
+# Re-runnable: the rule is created here, so its version starts at 1 in every
+# run.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client editorOne model=RuleModel
+session principal=$who token=$token
+
+# CreateRule answers with a bare rule id, so the capture reads `$`.
+do CreateRule ledgerId=1 trigger=0 matchText="corner shop" action=0 actionValue="Groceries"
+expect ok capture rule=$
+
+# ── Both editors read the rule at version 1 ──────────────────────────────
+# There is no GetRule action, so "reading" it is what CreateRule just told us:
+# a new rule is at version 1. The update's own reply carries the version it
+# produced, which is what a real client would hold.
+client editorTwo model=RuleModel
+session principal=$who token=$token
+
+# ── The first editor writes, and the version advances ────────────────────
+use editorOne
+
+do UpdateRule ruleId=$rule matchText="corner shop ltd" actionValue="Groceries" expectedVersion=1
+expect ok field id == $rule
+expect ok field matchText == "corner shop ltd"
+expect ok field version == 2
+
+# ── The second editor writes against the version it read, and is refused ─
+use editorTwo
+
+do UpdateRule ruleId=$rule matchText="CORNER SHOP" actionValue="Household" expectedVersion=1
+expect err message == "update rejected: the record changed since it was read"
+
+# The first editor's write survived intact -- the refusal wrote nothing.
+use editorOne
+
+do UpdateRule ruleId=$rule matchText="corner shop ltd" actionValue="Groceries" expectedVersion=2
+expect ok field matchText == "corner shop ltd"
+expect ok field actionValue == "Groceries"
+expect ok field version == 3
+
+# ── The second editor re-reads and retries, which is the whole point ─────
+use editorTwo
+
+do UpdateRule ruleId=$rule matchText="CORNER SHOP" actionValue="Household" expectedVersion=3
+expect ok field matchText == "CORNER SHOP"
+expect ok field actionValue == "Household"
+expect ok field version == 4
+
+# ── A version from the future is refused too, not accepted as "newer" ────
+do UpdateRule ruleId=$rule matchText="from the future" actionValue="Household" expectedVersion=99
+expect err message == "update rejected: the record changed since it was read"
+
+# ── Omitting the version is last-writer-wins, deliberately ───────────────
+do UpdateRule ruleId=$rule matchText="no version claimed" actionValue="Household"
+expect ok field matchText == "no version claimed"
+expect ok field version == 5
+
+# ...and the next versioned write has to name 5, so the unversioned write did
+# advance the counter rather than sidestepping it.
+use editorOne
+
+do UpdateRule ruleId=$rule matchText="back to normal" actionValue="Groceries" expectedVersion=4
+expect err message == "update rejected: the record changed since it was read"
+
+do UpdateRule ruleId=$rule matchText="back to normal" actionValue="Groceries" expectedVersion=5
+expect ok field version == 6
+expect ok field matchText == "back to normal"
+
+# ── A rule that does not exist ───────────────────────────────────────────
+do UpdateRule ruleId=999999 matchText="ghost" actionValue="Groceries"
+expect err message == "UpdateRule: no such rule"
+
+# ── The rule the conflict resolved to is the one that fires ─────────────
+# A version conflict that left the wrong text in place would be invisible in
+# the replies above -- both editors got an `ok` for something. What settles it
+# is dispatching against the rule: a transaction whose description matches the
+# *surviving* matchText re-categorises the account, and one matching the
+# overwritten text does not.
+client books model=LedgerModel
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Conflicted cash" kind=0 currency=1
+expect ok capture cash=$.id
+
+do OpenAccount ledgerId=1 name="Conflicted spend" kind=1 currency=1
+expect ok capture spend=$.id
+
+client budgets model=BudgetModel
+session principal=$who token=$token
+
+do CreateCategory ledgerId=1 name="Conflicted survivor $cash"
+expect ok capture survivor=$
+
+do CreateCategory ledgerId=1 name="Conflicted loser $cash"
+expect ok capture loser=$
+
+do CreateBudget ledgerId=1 name="Conflicted survivor budget $cash" categoryId=$survivor
+expect ok capture survivorBudget=$
+
+do SetBudgetLimit budgetId=$survivorBudget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency=1
+expect ok
+
+# Point the surviving rule at the surviving category, under its current
+# version -- which the conflicts above are what determined.
+use editorOne
+
+do UpdateRule ruleId=$rule matchText="CORNER-$cash" actionValue="Conflicted survivor $cash" expectedVersion=6
+expect ok field version == 7
+expect ok field matchText == "CORNER-$cash"
+
+use books
+
+do SetCategory accountId=$spend categoryId=$loser ruleId=$rule ruleVersion=7
+expect ok
+
+do StoreTransaction ledgerId=1 description="CORNER-$cash shop" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1200,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":1200,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Conflicted spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1200"
+
+use budgets
+
+do GetBudgetReport budgetId=$survivorBudget month="2026-08"
+expect ok field spent.num == 1200
