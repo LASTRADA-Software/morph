@@ -90,10 +90,19 @@ expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,
 # what makes this observable at all. The balance moves by the first row's 1.00
 # and stops there.
 #
-# This is a real partial application, asserted as it behaves. It is not
-# unrecoverable -- the content hash below is what makes the corrected
-# re-upload safe -- but a client that reported "import failed" and left it at
-# that would be telling the user something untrue.
+# This is a partial application, and it is **deliberate**, not an oversight:
+# `execute(ImportLedgerChunk)`'s own comment records the ruling and the reason
+# (ledger_model.cpp, "No single Lightweight::SqlTransaction wraps this whole
+# loop"). `storeJournalImpl` opens and commits its own transaction per row, and
+# `SqlTransaction`'s constructor/destructor toggle `SQL_ATTR_AUTOCOMMIT` on the
+# connection directly -- so nesting one around the loop would have the inner
+# `Commit()` end the outer transaction and silently break rollback-on-throw for
+# every row after the first. Each row is therefore posted as its own complete,
+# zero-sum journal entry, and a throw stops the chunk without unwinding it.
+#
+# So this file pins the ruling rather than reporting a defect. What a client
+# has to do about it is the next section: the content hash makes the corrected
+# re-upload safe, which is what keeps a half-applied chunk recoverable.
 do ImportLedgerChunk ledgerId=1 counterAccountId=$spend opId="untouched-2-$cash" csvChunk="date,description,account_id,amount\n2026-08-05T00:00:00.000Z,a good row $cash,$cash,-1.00\n2026-08-06,a bad date $cash,$cash,-2.00\n"
 expect err message == "ImportLedgerChunk: malformed date"
 
