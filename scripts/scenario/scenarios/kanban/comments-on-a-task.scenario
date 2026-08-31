@@ -1,0 +1,101 @@
+# kanban (rung 4) — the comment thread on a card.
+#
+# Kanboard's own entity set, which examples/kanban/README.md takes as its
+# subset, has comments alongside tasks; here they are part of `GetBoardResult`
+# rather than a separate read, so a comment is visible to everyone who can see
+# the board.
+#
+# Two things are worth pinning, and neither is visible with one comment:
+#
+#   * the author is the *verified* principal, not a field the client sends --
+#     `AddComment` carries only a task id and a body;
+#   * comments come back in the order they were written.
+#
+# Re-runnable: the project is created here.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture aliceToken=$.token
+expect ok capture alice=$.principal
+
+do Login username=bob
+expect ok capture bobToken=$.token
+expect ok capture bob=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$alice token=$aliceToken
+
+do CreateProject name="Discussion"
+expect ok capture project=$.id
+
+do SetMemberRole projectId=$project principal=bob role=Member
+expect ok
+
+client hers model=BoardModel
+session principal=$alice token=$aliceToken
+
+do OpenBoard projectId=$project
+expect ok
+
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Needs discussion"
+expect ok capture task=$.tasks[0].id
+expect ok field comments == []
+
+# ── Her comment, attributed to her ───────────────────────────────────────
+do AddComment taskId=$task body="I think this needs a design first"
+expect ok field comments ~ "\"taskId\":$task,\"principal\":\"alice\",\"body\":\"I think this needs a design first\""
+
+# ── His, on the same task ────────────────────────────────────────────────
+client his model=BoardModel
+session principal=$bob token=$bobToken
+
+do OpenBoard projectId=$project
+expect ok field comments ~ "\"principal\":\"alice\""
+
+do AddComment taskId=$task body="Agreed, I will write one"
+expect ok field comments ~ "\"taskId\":$task,\"principal\":\"bob\",\"body\":\"Agreed, I will write one\""
+
+# ── In the order they were written ───────────────────────────────────────
+do GetBoardState
+expect ok field comments[0].principal == alice
+expect ok field comments[0].body == "I think this needs a design first"
+expect ok field comments[1].principal == bob
+expect ok field comments[1].body == "Agreed, I will write one"
+
+# ── ...and she sees his ─────────────────────────────────────────────────
+use hers
+
+do GetBoardState
+expect ok field comments ~ "\"principal\":\"bob\",\"body\":\"Agreed, I will write one\""
+
+# ── A second task has its own thread ────────────────────────────────────
+do CreateTask columnId=$todo swimlaneId=$lane title="Undiscussed"
+expect ok capture quiet=$.tasks[1].id
+
+do AddComment taskId=$quiet body="First word here"
+expect ok field comments ~ "\"taskId\":$quiet,\"principal\":\"alice\",\"body\":\"First word here\""
+expect ok field comments ~ "\"taskId\":$task,\"principal\":\"alice\""
+
+# ── The refusals ────────────────────────────────────────────────────────
+do AddComment taskId=$task body=""
+expect err message == "action failed validation: BoardModel/AddComment"
+
+do AddComment taskId=999999 body="On a task that is not here"
+expect err message == "task does not belong to this project"
+
+# Neither refusal added anything.
+do GetBoardState
+expect ok field comments !~ "On a task that is not here"
+expect ok field comments[1].body == "Agreed, I will write one"
+
+# ── The comment is in both streams, as each of them says things ─────────
+do GetActivity
+expect ok field events ~ "\"actionType\":\"AddComment\",\"principal\":\"bob\""
+expect ok field events ~ "\"actionType\":\"AddComment\",\"principal\":\"alice\""

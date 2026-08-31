@@ -1,0 +1,133 @@
+# kanban (rung 4) — the activity feed, derived rather than duplicated.
+#
+# examples/kanban/README.md's build order step 5: "Kanboard's
+# project_activities table is a journal cousin: derive the stream *from the
+# morph journal* instead of a parallel table." So `GetActivity` is not a read
+# of an events table this rung maintains -- it is a projection of what the
+# framework's own action log recorded, which is why each entry names an
+# `actionType` that is a real registered action name and a `principal` the
+# server verified rather than one the client asserted.
+#
+# The two streams are deliberately different and both are asserted here, side
+# by side, because it is easy to assume they are the same thing:
+#
+#   * `GetEventsSince` is the *client sync* cursor -- coarse `kind` strings
+#     ("column", "task", "move"), monotonic ids, meant to be polled;
+#   * `GetActivity` is the *audit* feed -- the action's own type name, the
+#     principal who ran it, and a timestamp.
+#
+# A refused action is where they part company, and the result is not what you
+# would guess: the audit feed **includes it**, because the journal records a
+# failed attempt as faithfully as a successful one, while the sync stream does
+# not, because nothing changed. `ActivityEvent` carries no outcome field
+# though -- only actionType, principal, timestamp and a summary built from the
+# first two -- so a reader of the feed cannot tell a refused move from a move
+# that happened. Asserted below as it behaves.
+#
+# Re-runnable: the project is created here, and the activity feed is scoped to
+# that project's own board.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture aliceToken=$.token
+expect ok capture alice=$.principal
+
+do Login username=bob
+expect ok capture bobToken=$.token
+expect ok capture bob=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$alice token=$aliceToken
+
+do CreateProject name="Audit"
+expect ok capture project=$.id
+
+do SetMemberRole projectId=$project principal=bob role=Member
+expect ok
+
+client board model=BoardModel
+session principal=$alice token=$aliceToken
+
+do OpenBoard projectId=$project
+expect ok
+
+# A board nobody has touched has nothing to report.
+do GetActivity
+expect ok field events == []
+
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do CreateColumn name="Done" wipLimit=1
+expect ok capture done=$.columns[1].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Audited"
+expect ok capture task=$.tasks[0].id
+
+# ── Each action appears under its own registered name ────────────────────
+do GetActivity
+expect ok field events ~ "\"actionType\":\"CreateColumn\",\"principal\":\"alice\""
+expect ok field events ~ "\"actionType\":\"CreateSwimlane\",\"principal\":\"alice\""
+expect ok field events ~ "\"actionType\":\"CreateTask\",\"principal\":\"alice\""
+expect ok field events ~ "\"summary\":\"CreateTask by alice\""
+
+# ── A second principal is attributed to himself ─────────────────────────
+client his model=BoardModel
+session principal=$bob token=$bobToken
+
+do OpenBoard projectId=$project
+expect ok
+
+do MoveTaskPosition taskId=$task columnId=$done swimlaneId=$lane position=0
+expect ok
+
+use board
+
+do GetActivity
+expect ok field events ~ "\"actionType\":\"MoveTaskPosition\",\"principal\":\"bob\""
+expect ok field events ~ "\"actionType\":\"CreateTask\",\"principal\":\"alice\""
+
+# ── A refused action is in neither stream ───────────────────────────────
+# Done has a WIP limit of one and already holds the task, so this move is
+# rejected. Nothing about it should reach an audit feed as though it happened.
+do CreateTask columnId=$todo swimlaneId=$lane title="Second"
+expect ok capture second=$.tasks[1].id
+
+do MoveTaskPosition taskId=$second columnId=$done swimlaneId=$lane position=0
+expect err message == "MoveTaskPosition: target column is at its WIP limit"
+
+# The refused move is in the audit feed, indistinguishable from bob's real
+# one: same shape, no outcome, and a summary that reads like it succeeded.
+do GetActivity
+expect ok field events ~ "\"actionType\":\"MoveTaskPosition\",\"principal\":\"bob\""
+expect ok field events ~ "\"actionType\":\"MoveTaskPosition\",\"principal\":\"alice\""
+expect ok field events ~ "\"summary\":\"MoveTaskPosition by alice\""
+expect ok field events !~ "outcome"
+expect ok field events !~ "WIP"
+
+# ...and it is *not* in the sync stream, which carries only changes that
+# happened: exactly one move event, bob's.
+do GetEventsSince lastEventId=0
+expect ok field events ~ "\"kind\":\"move\""
+expect ok field events !~ "\"kind\":\"move\".*\"kind\":\"move\""
+
+# The board agrees with the sync stream, not with the audit feed: the second
+# task never left Todo.
+do GetBoardState
+expect ok field tasks ~ "\"id\":$second,\"columnId\":$todo"
+
+# ── The two streams describe the same history differently ───────────────
+# The sync stream names shapes of change; the audit stream names actions and
+# actors. Neither is derivable from the other, which is why the rung has both.
+do GetEventsSince lastEventId=0
+expect ok field events ~ "\"kind\":\"column\",\"summary\":\"column created\""
+expect ok field events !~ "CreateColumn"
+expect ok field events !~ "alice"
+
+do GetActivity
+expect ok field events ~ "CreateColumn"
+expect ok field events !~ "\"kind\":\"column\""

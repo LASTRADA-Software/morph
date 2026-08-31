@@ -201,7 +201,9 @@ def find_server(rung: str, build_dir: pathlib.Path | None) -> pathlib.Path:
         candidate = build_dir / "examples" / rung / name
         if not candidate.is_file():
             raise DriverError(f"{candidate} does not exist -- is {rung}'s server built?")
-        return candidate
+        # Absolute, because the server is spawned with its own cwd: a relative
+        # path would be resolved against that directory instead of this one.
+        return candidate.resolve()
     found = sorted(repo_root().glob(f"build/*/examples/{rung}/{name}"))
     if not found:
         raise DriverError(
@@ -214,7 +216,7 @@ def find_server(rung: str, build_dir: pathlib.Path | None) -> pathlib.Path:
     if len(found) > 1:
         listed = "\n  ".join(str(path) for path in found)
         raise DriverError(f"several candidates for {name}; pass --build-dir:\n  {listed}")
-    return found[0]
+    return found[0].resolve()
 
 
 #: How many lines of a server's own output to keep for a failure report. The
@@ -250,9 +252,19 @@ class ServerProcess:
         self._drainer: threading.Thread | None = None
 
     def __enter__(self) -> "ServerProcess":
+        # cwd is the run's own temp directory, not the caller's. A rung server
+        # writes files there that no environment variable relocates: kanban
+        # puts its action log at `current_path() / "kanban_actions.jsonl"` and
+        # its attachment storage beside it. Left alone, those land in whatever
+        # directory the driver was invoked from and *accumulate across runs* --
+        # which is not merely untidy. `GetActivity` reads that log back, and a
+        # fresh database restarts project ids at 1, so run two's project 1
+        # inherits run one's project 1 activity and the feed reports work that
+        # never happened on this board.
         self._process = subprocess.Popen(  # noqa: S603
             [str(self.binary)],
             env=RUNGS[self.rung].environment(self.db_path),
+            cwd=str(self.db_path.parent),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

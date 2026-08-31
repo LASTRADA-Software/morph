@@ -1,0 +1,105 @@
+# kanban (rung 4) — one client action cascading into a second mutation.
+#
+# examples/kanban/README.md's build order step 6, and the rung's
+# framework-level claim: "One client action cascades into further model
+# mutations. Cascades are journaled with a causal parent-id, and rule
+# evaluation is suppressed during replay."
+#
+# From a socket, what is observable is the cascade itself: a `MoveTaskPosition`
+# that the client sent with no mention of tags comes back with a tag on the
+# task, because a rule on the destination column added it. The reply to the
+# move *already carries* it -- the cascade runs inside the same action, not on
+# a later tick, which is why nothing here waits for anything.
+#
+# Both mutation types are driven, because they are opposites and a rules
+# engine that ignored `mutationType` would pass a test of either alone.
+#
+# Re-runnable: the project is created here.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Cascade"
+expect ok capture project=$.id
+
+client board model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$project
+expect ok
+
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do CreateColumn name="Doing" wipLimit=0
+expect ok capture doing=$.columns[1].id
+
+do CreateColumn name="Done" wipLimit=0
+expect ok capture done=$.columns[2].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+# ── A rule that tags on arrival in Done, and one that untags in Doing ──
+do CreateRule projectId=$project triggerColumnId=$done mutationType=AddTag mutationValue=shipped
+expect ok capture tagRule=$.ruleId
+
+do CreateRule projectId=$project triggerColumnId=$doing mutationType=RemoveTag mutationValue=shipped
+expect ok capture untagRule=$.ruleId
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Cascading"
+expect ok capture task=$.tasks[0].id
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$todo,\"swimlaneId\":$lane,\"title\":\"Cascading\",\"position\":0,\"tags\":\\[\\]"
+
+# ── A move into a column with no rule changes no tags ──────────────────
+do MoveTaskPosition taskId=$task columnId=$doing swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$doing,\"swimlaneId\":$lane,\"title\":\"Cascading\",\"position\":0,\"tags\":\\[\\]"
+
+# ── A move into Done fires the rule, in the move's own reply ───────────
+# The client sent no tag. The tag is the cascade.
+do MoveTaskPosition taskId=$task columnId=$done swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$done,\"swimlaneId\":$lane,\"title\":\"Cascading\",\"position\":0,\"tags\":\\[\"shipped\"\\]"
+
+do GetBoardState
+expect ok field tasks ~ "\"tags\":\\[\"shipped\"\\]"
+
+# ── ...and moving back to Doing fires the opposite rule ────────────────
+do MoveTaskPosition taskId=$task columnId=$doing swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$doing,\"swimlaneId\":$lane,\"title\":\"Cascading\",\"position\":0,\"tags\":\\[\\]"
+
+do GetBoardState
+expect ok field tasks !~ "shipped"
+
+# ── Firing the same rule twice does not double the tag ─────────────────
+do MoveTaskPosition taskId=$task columnId=$done swimlaneId=$lane position=0
+expect ok field tasks ~ "\"tags\":\\[\"shipped\"\\]"
+
+do MoveTaskPosition taskId=$task columnId=$done swimlaneId=$lane position=0
+expect ok field tasks ~ "\"tags\":\\[\"shipped\"\\]"
+expect ok field tasks !~ "\"shipped\",\"shipped\""
+
+# ── A rule fires for whichever task arrives ────────────────────────────
+do CreateTask columnId=$todo swimlaneId=$lane title="Second cascader"
+expect ok capture second=$.tasks[1].id
+
+do MoveTaskPosition taskId=$second columnId=$done swimlaneId=$lane position=1
+expect ok field tasks ~ "\"id\":$second,\"columnId\":$done,\"swimlaneId\":$lane,\"title\":\"Second cascader\",\"position\":1,\"tags\":\\[\"shipped\"\\]"
+
+# ── Deleting the rule stops the cascade ────────────────────────────────
+do DeleteRule ruleId=$tagRule
+expect ok
+
+do MoveTaskPosition taskId=$second columnId=$doing swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$second,\"columnId\":$doing,\"swimlaneId\":$lane,\"title\":\"Second cascader\",\"position\":0,\"tags\":\\[\\]"
+
+do MoveTaskPosition taskId=$second columnId=$done swimlaneId=$lane position=1
+expect ok field tasks ~ "\"id\":$second,\"columnId\":$done,\"swimlaneId\":$lane,\"title\":\"Second cascader\",\"position\":1,\"tags\":\\[\\]"
+
+# The other rule is untouched and still fires.
+do MoveTaskPosition taskId=$task columnId=$doing swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$doing,\"swimlaneId\":$lane,\"title\":\"Cascading\",\"position\":0,\"tags\":\\[\\]"

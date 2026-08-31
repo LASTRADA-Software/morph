@@ -75,8 +75,11 @@ seeded with nothing.
 
 | Directory | Server | What it covers |
 |---|---|---|
-| `pastebin/` | `ladder_pastebin_server` | paste lifecycle, privacy, hostile envelopes |
-| `bookmarks/` | `ladder_bookmarks_server` | sign-in, session handling, forged and borrowed tokens |
+| `pastebin/` | `ladder_pastebin_server` | paste lifecycle, burn-after-reads, expiry, listing privacy and pagination; the envelope kinds a typed client never sends, and malformed frames |
+| `bookmarks/` | `ladder_bookmarks_server` | sign-in and forged tokens, CRUD, archive, atomic bulk edit, tag rename/merge, filters, the changes-since poll, import/export, two users and a shared feed; the live-model cap |
+| `polls/` | `ladder_polls_server` | the shared-instance showcase: create/open/vote/finalize, two participants converging, principal-scoped undo, the event cursor and instance rebirth |
+| `kanban/` | `ladder_kanban_server` | projects and boards, moves and WIP limits, per-project RBAC across three roles, rules and their cascades, comments, attachments, both event streams |
+| `ledger/` | `ladder_ledger_server` | per-currency zero-sum bookkeeping, categories and budgets, rules and version conflicts, CSV import, submit-then-poll reporting, two books |
 
 The rung a scenario belongs to is its parent directory name — that is how
 per-rung action coverage is attributed, so a file loose in `scenarios/` is
@@ -325,12 +328,17 @@ python3 scripts/scenario/test_morph_scenario.py
   waiting for the port and tearing down belong to whatever runs it.
 - **No schema validation of inputs.** [morph#171](https://github.com/LASTRADA-Software/morph/issues/171)
   proposed checking a scenario's inputs against the server's served JSON Schema
-  before sending. morph does not serve schemas over the wire: `schemaJson<A>()`
-  and `Bridge::schemasJson()` are compile-time, in-process APIs, and no envelope
-  `kind` exposes them to a remote client. See
-  [morph#234](https://github.com/LASTRADA-Software/morph/issues/234). Until one
-  does, this runner sends what the file says, which is also what makes
-  deliberately malformed payloads expressible.
+  before sending. The runner does not do that, and this entry used to say it
+  *could* not, because "morph does not serve schemas over the wire … no
+  envelope `kind` exposes them to a remote client". That is not true: the
+  `schemas` kind serves exactly that document, and
+  `scenarios/pastebin/wire-kinds-and-typeid-refusals.scenario` reads
+  `PasteModel`'s out of a live server, `required` array, declared bounds and
+  all. What remains true is the narrower statement: this runner sends what the
+  file says without consulting it, which is also what makes deliberately
+  malformed payloads expressible. Validating against the served schema is
+  therefore now *possible* and merely not done — see
+  [morph#234](https://github.com/LASTRADA-Software/morph/issues/234).
 - **It does not replace the C++ tests.** Model behaviour is tested in-process
   and stays there. This covers the seam those tests assume away.
 

@@ -1,0 +1,115 @@
+# kanban (rung 4) — two people dragging cards on the same board.
+#
+# examples/kanban/README.md's build order step 2 names this as what
+# MoveTaskPosition exists to test: "two users dragging tasks on the same board
+# concurrently is a precise test of per-model strand ordering: actions
+# serialize, positions stay consistent, both clients converge on the next
+# poll".
+#
+# `BoardModel` is keyed by project id and shared, so both connections attach
+# to the *same* server-side instance -- which is exactly what an in-process
+# rig with one handler cannot tell apart from one caller talking to itself.
+# Two sockets, two registered handlers, one board.
+#
+# What is asserted is convergence, not concurrency: this runner sends one
+# request at a time and waits for its reply, by design, so nothing here races.
+# Every step is a request whose reply the next assertion reads.
+#
+# Re-runnable: the project is created here, and both clients are given
+# Manager-equivalent access through an explicit role grant.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture aliceToken=$.token
+expect ok capture alice=$.principal
+
+do Login username=bob
+expect ok capture bobToken=$.token
+expect ok capture bob=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$alice token=$aliceToken
+
+do CreateProject name="Convergence"
+expect ok capture project=$.id
+
+do SetMemberRole projectId=$project principal=bob role=Member
+expect ok
+
+do GetProjectRoles projectId=$project
+expect ok field roles ~ "\"principal\":\"bob\",\"role\":\"Member\""
+expect ok field roles ~ "\"principal\":\"alice\",\"role\":\"Manager\""
+
+# ── Both open the same board ─────────────────────────────────────────────
+client hers model=BoardModel
+session principal=$alice token=$aliceToken
+
+do OpenBoard projectId=$project
+expect ok capture boardName=$.name
+
+client his model=BoardModel
+session principal=$bob token=$bobToken
+
+do OpenBoard projectId=$project
+expect ok field name == $boardName
+expect ok field projectId == $project
+
+# ── She builds the board ─────────────────────────────────────────────────
+use hers
+
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do CreateColumn name="Doing" wipLimit=0
+expect ok capture doing=$.columns[1].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Hers"
+expect ok capture hersTask=$.tasks[0].id
+
+# ── He sees all of it, without reopening ─────────────────────────────────
+use his
+
+do GetBoardState
+expect ok field columns ~ "\"id\":$todo,\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":1"
+expect ok field tasks ~ "\"id\":$hersTask,\"columnId\":$todo,\"swimlaneId\":$lane,\"title\":\"Hers\""
+
+# ── He adds his own, and moves hers ──────────────────────────────────────
+do CreateTask columnId=$todo swimlaneId=$lane title="His"
+expect ok capture hisTask=$.tasks[1].id
+
+do MoveTaskPosition taskId=$hersTask columnId=$doing swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$hersTask,\"columnId\":$doing,\"swimlaneId\":$lane"
+
+# ── ...and she converges on the next read ────────────────────────────────
+use hers
+
+do GetBoardState
+expect ok field tasks ~ "\"id\":$hisTask,\"columnId\":$todo,\"swimlaneId\":$lane,\"title\":\"His\""
+expect ok field tasks ~ "\"id\":$hersTask,\"columnId\":$doing,\"swimlaneId\":$lane"
+expect ok field columns ~ "\"id\":$todo,\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":1"
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":0,\"taskCount\":1"
+
+# ── They share one event log, in the order they acted ────────────────────
+do GetEventsSince lastEventId=0
+expect ok field events ~ "\"kind\":\"task\""
+expect ok field events ~ "\"kind\":\"move\""
+
+# ── ...and one activity stream, attributed per principal ─────────────────
+do GetActivity
+expect ok field events ~ "\"actionType\":\"CreateTask\",\"principal\":\"alice\""
+expect ok field events ~ "\"actionType\":\"CreateTask\",\"principal\":\"bob\""
+expect ok field events ~ "\"actionType\":\"MoveTaskPosition\",\"principal\":\"bob\""
+
+# ── She moves his task back, and he sees that too ────────────────────────
+do MoveTaskPosition taskId=$hisTask columnId=$doing swimlaneId=$lane position=1
+expect ok field tasks ~ "\"id\":$hisTask,\"columnId\":$doing,\"swimlaneId\":$lane"
+
+use his
+
+do GetBoardState
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":0,\"taskCount\":2"
+expect ok field columns ~ "\"id\":$todo,\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":0"

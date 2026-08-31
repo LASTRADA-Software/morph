@@ -1,0 +1,133 @@
+# kanban (rung 4) — the keyed handler, before it is pointed at anything.
+#
+# `BoardModel` is keyed by project id and shared -- `BRIDGE_MODEL_KEY` on
+# `OpenBoard::projectId`, `AllowShared` -- so registering it gets you a handler
+# attached to no board at all. Every other action needs one, and this file
+# drives each of them in that state.
+#
+# ── What it answers, which is not what it should ───────────────────────
+# **Every** action answers with the bare text `stoull`.
+#
+# Two of them look like they should not. `GetActivity` and `GetRules` each
+# open with a `_projectIdStr.has_value()` check whose message is exactly the
+# right one -- "handler was never attached via OpenBoard", the shape
+# `polls::PollModel` uses and the message a client could act on. That check
+# never fires: on an unattached handler the optional is *engaged, with an
+# empty string*, so `has_value()` is true and control falls through to
+# `requireRole`, which reaches `std::stoull("")` and throws
+# `std::invalid_argument`. Its `what()` is the string `stoull`, and that is
+# what goes on the wire, as though it were a domain error.
+#
+# So the guard is written, is correct, and is dead -- which is worse than not
+# having one, because reading the source suggests the good message exists.
+#
+# Asserted here as it behaves, per action, because that is what a client
+# receives today and because fixing it then has to come through this file.
+#
+# Re-runnable: this file creates one project and never touches anyone else's.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Unopened"
+expect ok capture project=$.id
+
+# ── A freshly registered handler, pointed at nothing ───────────────────
+client fresh model=BoardModel
+session principal=$who token=$token
+
+do GetBoardState
+expect err message == "stoull"
+
+do CreateColumn name="Todo" wipLimit=0
+expect err message == "stoull"
+
+do CreateSwimlane name="Lane"
+expect err message == "stoull"
+
+do CreateTask columnId=1 swimlaneId=1 title="Nowhere"
+expect err message == "stoull"
+
+do MoveTaskPosition taskId=1 columnId=1 swimlaneId=1 position=0
+expect err message == "stoull"
+
+do AddComment taskId=1 body="Into the void"
+expect err message == "stoull"
+
+do GetEventsSince lastEventId=0
+expect err message == "stoull"
+
+# ...including the two whose own has_value() guard has the right message and
+# never reaches it.
+do GetActivity
+expect err message == "stoull"
+expect err message !~ "OpenBoard"
+
+do GetRules projectId=$project
+expect err message == "stoull"
+expect err message !~ "OpenBoard"
+
+# ── Validation still runs first ────────────────────────────────────────
+# A malformed action is refused for being malformed, not for the handler being
+# unattached -- so the attach check is not the outermost gate.
+do CreateColumn name=""
+expect err message == "action failed validation: BoardModel/CreateColumn"
+
+do AddComment taskId=1 body=""
+expect err message == "action failed validation: BoardModel/AddComment"
+
+do GetEventsSince lastEventId=-1
+expect err message == "action failed validation: BoardModel/GetEventsSince"
+
+# ── Opening it fixes all of them ───────────────────────────────────────
+do OpenBoard projectId=$project
+expect ok field projectId == $project
+
+do GetBoardState
+expect ok field projectId == $project
+expect ok field columns == []
+
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Somewhere"
+expect ok capture task=$.tasks[0].id
+
+do AddComment taskId=$task body="Now it lands"
+expect ok field comments ~ "\"principal\":\"alice\",\"body\":\"Now it lands\""
+
+do GetActivity
+expect ok field events ~ "\"actionType\":\"CreateTask\",\"principal\":\"alice\""
+
+do GetRules projectId=$project
+expect ok field rules == []
+
+do GetEventsSince lastEventId=0
+expect ok field events ~ "\"kind\":\"task\""
+
+# ── ...and re-opening at another project re-points the same handler ────
+use admin
+
+do CreateProject name="Second board"
+expect ok capture second=$.id
+
+use fresh
+
+do OpenBoard projectId=$second
+expect ok field projectId == $second
+expect ok field name == "Second board"
+expect ok field columns == []
+expect ok field tasks == []
+
+# The first board's contents are not this handler's any more.
+do GetBoardState
+expect ok field tasks !~ "Somewhere"
+expect ok field columns !~ "\"id\":$todo,"

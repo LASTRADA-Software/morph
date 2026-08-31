@@ -875,13 +875,18 @@ class CoverageCliTest(unittest.TestCase):
             )
         self.assertEqual(code, 2)
 
-    def test_the_real_run_exits_one_for_the_known_workflow_gap(self) -> None:
-        # The shipped corpus dispatches only a fraction of the registered
-        # actions and no rung yet meets its workflow floor -- authoring the
-        # rest is later work (see WORKFLOW_FLOORS). This pins today's real,
-        # honest exit code so a future change that silently flips it to 0
-        # gets noticed rather than assumed to mean the gap was closed.
-        self.assertEqual(coverage_main([]), 1)
+    def test_the_real_run_is_green_on_both_axes(self) -> None:
+        # This replaces `test_the_real_run_exits_one_for_the_known_workflow_gap`,
+        # which pinned exit 1 while the corpus was still being written and said
+        # in its own comment that authoring the rest was later work. That work
+        # is done: every registered action is dispatched, every rung meets its
+        # floor, and every envelope kind and refusal is covered or exempt with
+        # a written reason.
+        #
+        # The assertion is kept, with the number flipped, for the same reason
+        # it existed: a change that silently makes the shipped corpus stop
+        # covering its own surface should fail here rather than pass quietly.
+        self.assertEqual(coverage_main([]), 0)
 
 
 _FIXTURE_ACTIONS = '''

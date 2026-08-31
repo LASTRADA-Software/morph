@@ -1,0 +1,143 @@
+# kanban (rung 4) — two boards in one database, and every id that must not
+# cross between them.
+#
+# `BoardModel` is keyed and shared per project, so two boards are two
+# instances. What that does *not* do on its own is stop a caller attached to
+# board A from naming board B's column, swimlane or task -- ids are a global
+# autoincrement, so B's ids are perfectly well-formed numbers that name real
+# rows. The check has to be in the model, per action, and this file drives
+# every action that takes an id to confirm it is.
+#
+# One caller, Manager on both projects, deliberately: this is about *project*
+# scoping, not about roles. A refusal here that turned out to be an
+# authorization refusal would be the wrong one, so the messages are asserted
+# exactly.
+#
+# Re-runnable: both projects are created here.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Alpha"
+expect ok capture alpha=$.id
+
+do CreateProject name="Beta"
+expect ok capture beta=$.id
+
+# ── Board A ────────────────────────────────────────────────────────────
+client boardA model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$alpha
+expect ok field name == "Alpha"
+
+do CreateColumn name="A todo" wipLimit=0
+expect ok capture aTodo=$.columns[0].id
+
+do CreateSwimlane name="A lane"
+expect ok capture aLane=$.swimlanes[0].id
+
+do CreateTask columnId=$aTodo swimlaneId=$aLane title="A task"
+expect ok capture aTask=$.tasks[0].id
+
+# ── Board B ────────────────────────────────────────────────────────────
+client boardB model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$beta
+expect ok field name == "Beta"
+expect ok field columns == []
+expect ok field tasks == []
+
+do CreateColumn name="B todo" wipLimit=0
+expect ok capture bTodo=$.columns[0].id
+
+do CreateSwimlane name="B lane"
+expect ok capture bLane=$.swimlanes[0].id
+
+do CreateTask columnId=$bTodo swimlaneId=$bLane title="B task"
+expect ok capture bTask=$.tasks[0].id
+
+# ── Neither board's read shows the other's rows ────────────────────────
+do GetBoardState
+expect ok field columns ~ "\"id\":$bTodo,"
+expect ok field columns !~ "\"id\":$aTodo,"
+expect ok field tasks ~ "\"id\":$bTask,"
+expect ok field tasks !~ "\"id\":$aTask,"
+expect ok field swimlanes !~ "\"id\":$aLane,"
+
+use boardA
+
+do GetBoardState
+expect ok field columns ~ "\"id\":$aTodo,"
+expect ok field columns !~ "\"id\":$bTodo,"
+expect ok field tasks ~ "\"id\":$aTask,"
+expect ok field tasks !~ "\"id\":$bTask,"
+
+# ── ...and every action that takes an id refuses the other's ───────────
+do CreateTask columnId=$bTodo swimlaneId=$aLane title="Wrong column"
+expect err message == "column does not belong to this project"
+
+do CreateTask columnId=$aTodo swimlaneId=$bLane title="Wrong swimlane"
+expect err message == "swimlane does not belong to this project"
+
+do MoveTaskPosition taskId=$aTask columnId=$bTodo swimlaneId=$aLane position=0
+expect err message == "column does not belong to this project"
+
+do MoveTaskPosition taskId=$bTask columnId=$aTodo swimlaneId=$aLane position=0
+expect err message == "task does not belong to this project"
+
+do AddComment taskId=$bTask body="Across the boundary"
+expect err message == "task does not belong to this project"
+
+do ApplyTagMutation taskId=$bTask mutationType=AddTag tag=crossed
+expect err message == "task does not belong to this project"
+
+do AddAttachment taskId=$bTask filename="x.txt" contentType="text/plain" sizeBytes=1 storageKey="k"
+expect err message == "task does not belong to this project"
+
+do GetAttachments taskId=$bTask
+expect err message == "task does not belong to this project"
+
+do CreateRule projectId=$alpha triggerColumnId=$bTodo mutationType=AddTag mutationValue=crossed
+expect err message == "column does not belong to this project"
+
+# ── Not one of them changed either board ───────────────────────────────
+do GetBoardState
+expect ok field tasks ~ "\"id\":$aTask,\"columnId\":$aTodo,\"swimlaneId\":$aLane,\"title\":\"A task\",\"position\":0,\"tags\":\\[\\]"
+expect ok field comments == []
+
+use boardB
+
+do GetBoardState
+expect ok field tasks ~ "\"id\":$bTask,\"columnId\":$bTodo,\"swimlaneId\":$bLane,\"title\":\"B task\",\"position\":0,\"tags\":\\[\\]"
+expect ok field comments == []
+
+do GetAttachments taskId=$bTask
+expect ok field attachments == []
+
+# ── A rule on one board does not fire on the other ─────────────────────
+do CreateColumn name="B done" wipLimit=0
+expect ok capture bDone=$.columns[1].id
+
+do CreateRule projectId=$beta triggerColumnId=$bDone mutationType=AddTag mutationValue=beta-only
+expect ok capture bRule=$.ruleId
+
+do MoveTaskPosition taskId=$bTask columnId=$bDone swimlaneId=$bLane position=0
+expect ok field tasks ~ "\"id\":$bTask,\"columnId\":$bDone,\"swimlaneId\":$bLane,\"title\":\"B task\",\"position\":0,\"tags\":\\[\"beta-only\"\\]"
+
+use boardA
+
+do CreateColumn name="A done" wipLimit=0
+expect ok capture aDone=$.columns[1].id
+
+do MoveTaskPosition taskId=$aTask columnId=$aDone swimlaneId=$aLane position=0
+expect ok field tasks ~ "\"id\":$aTask,\"columnId\":$aDone,\"swimlaneId\":$aLane,\"title\":\"A task\",\"position\":0,\"tags\":\\[\\]"
+
+do GetRules projectId=$alpha
+expect ok field rules == []

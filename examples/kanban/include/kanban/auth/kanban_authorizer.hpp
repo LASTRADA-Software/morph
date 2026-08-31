@@ -76,6 +76,58 @@ inline constexpr std::size_t kMaxPrincipalBytes = 64;
 class KanbanAuthorizer : public ::morph::session::SigningAuthorizer {
 public:
     using SigningAuthorizer::SigningAuthorizer;
+
+    /// @brief Model type id of the one model a tokenless caller may execute on.
+    static constexpr std::string_view kAnonymousModelType = "AuthModel";
+    /// @brief Action type id of the one action a tokenless caller may execute.
+    static constexpr std::string_view kAnonymousActionType = "Login";
+
+    /// @brief `SigningAuthorizer::authorize`, with exactly one carve-out:
+    ///        `AuthModel`/`Login` is admitted without a token.
+    ///
+    /// The same chicken-and-egg deadlock `bookmarks::auth::BookmarksAuthorizer`
+    /// documents and closes, in the rung that inherited its shape but not its
+    /// carve-out: `SigningAuthorizer::authorize()` verifies `Context::token` on
+    /// **every** `execute` and returns `false` when there is none -- including
+    /// for `Login`, which is the only way to obtain a token. Without this,
+    /// every action a fresh remote client can send is answered
+    /// `err "unauthorized"`, login included, and `ladder_kanban_server` is
+    /// unusable to any client that does not already hold a token minted out of
+    /// band. `ladder_kanban_headless` says so in as many words: it takes the
+    /// token on its command line, because it cannot ask the server for one.
+    ///
+    /// Found the same way bookmarks' was -- by driving a real
+    /// `ladder_kanban_server` from an out-of-process client
+    /// (`scripts/scenario/`). Nothing had exercised `Login` *over a server*
+    /// before: `tests/journeys/test_kanban_journeys.cpp` calls
+    /// `AuthModel::execute()` directly, which never consults an authorizer,
+    /// and then installs a token it mints itself with the rung's own
+    /// `TokenIssuer`.
+    ///
+    /// The carve-out is as narrow as it can be -- one model type, one action
+    /// type, both compared exactly -- and gives away nothing that was not
+    /// already reachable. `AuthModel` is stateless, holds no database, and
+    /// `execute(const Login&)` rejects an invalid principal and refuses the
+    /// reserved `system:` namespace outright, so an anonymous caller can mint
+    /// a token for a username it names and nothing more, which is what a
+    /// dev-mode login *is*. Every other model and action still requires a
+    /// validly signed, unexpired token; in particular `BoardModel::
+    /// requireRole()` still reads a principal `RemoteServer` only stamps when
+    /// `authenticate()` vouches for it, so no role check is weakened.
+    ///
+    /// @param ctx        Per-call session (its `token` is verified for
+    ///                   everything but the carve-out).
+    /// @param modelType  Target model type id.
+    /// @param actionType Target action type id.
+    /// @return `true` to allow dispatch, `false` to reject.
+    [[nodiscard]] bool authorize(const ::morph::session::Context& ctx,
+                                 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                 std::string_view modelType, std::string_view actionType) const override {
+        if (modelType == kAnonymousModelType && actionType == kAnonymousActionType) {
+            return true;
+        }
+        return SigningAuthorizer::authorize(ctx, modelType, actionType);
+    }
 };
 
 /// @brief Installs the process-wide `TokenIssuer` `Login` mints tokens from.

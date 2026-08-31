@@ -303,6 +303,17 @@ class Client:
         `callId` correlation is the protocol's own matching rule; a reply for a
         different call is a protocol violation worth reporting rather than
         silently accepting.
+
+        **One reply legitimately carries no `callId` at all.** When
+        `morph::wire::decode` cannot parse the frame, the server has no
+        envelope to read a `callId` out of, so it answers
+        `err "envelope decode failed: ..."` with `callId` 0. That is a real
+        reply to this request and the only one it will get -- refusing it as a
+        mismatch would make the decode-failure path unassertable from a
+        scenario, which is precisely the path
+        `scenarios/pastebin/malformed-envelope.scenario` exists to pin. It is
+        accepted only in that exact shape: an `err` whose message names a
+        decode failure. A zero `callId` on anything else is still a violation.
         """
         self.socket.send_text(json.dumps(envelope))
         want = envelope["callId"]
@@ -314,7 +325,12 @@ class Client:
         if not isinstance(decoded, dict):
             raise TransportError(f"{self.name}: server sent a non-object envelope: {raw[:200]!r}")
         got = decoded.get("callId")
-        if got != want:
+        undecodable = (
+            got == 0
+            and decoded.get("kind") == "err"
+            and str(decoded.get("message", "")).startswith("envelope decode failed")
+        )
+        if got != want and not undecodable:
             raise TransportError(f"{self.name}: reply callId {got} does not match request callId {want}")
         body_text = decoded.get("body", "")
         body: Any = None

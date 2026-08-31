@@ -1,0 +1,131 @@
+# kanban (rung 4) — the rule record's own lifecycle.
+#
+# examples/kanban/README.md's build order step 6: Kanboard's
+# event -> condition -> mutation rules. This rung's shape is narrow and
+# concrete -- the trigger is always "a task moved into *this* column", and the
+# mutation is always add or remove a tag -- so a rule is
+# (project, triggerColumn, mutationType, mutationValue) and nothing else.
+#
+# This file is the record: created, listed, deleted, and refused. What a rule
+# *does* when it fires is a-rule-fires-when-a-task-lands-in-its-column.scenario.
+#
+# `CreateRule` answers with just its new rule id, and `DeleteRule` with an
+# empty ack -- neither returns the board, unlike the older action family.
+#
+# ── A `projectId` that is required and then ignored ────────────────────
+# `GetRules` carries a `projectId` and `validate()` insists it be present --
+# but the query is built from the *attached* board's id
+# (`BoardModel::execute(const GetRules&)` reads `_projectIdStr`), so the field
+# is never consulted. Asking a handler attached to project A for project B's
+# rules answers with A's, silently and successfully.
+#
+# Pinned below as it behaves. The handler is keyed by project and role-checked
+# per board, so this discloses nothing a caller could not already read -- but a
+# client that trusted the argument would be reading the wrong board and would
+# have no way to tell.
+#
+# Re-runnable: the project is created here, so it starts with no rules.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Rules"
+expect ok capture project=$.id
+
+do CreateProject name="Other rules"
+expect ok capture other=$.id
+
+client board model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$project
+expect ok
+
+do CreateColumn name="Doing" wipLimit=0
+expect ok capture doing=$.columns[0].id
+
+do CreateColumn name="Done" wipLimit=0
+expect ok capture done=$.columns[1].id
+
+# A project with no rules yet.
+do GetRules projectId=$project
+expect ok field rules == []
+
+# ── Two rules, on two different trigger columns ────────────────────────
+do CreateRule projectId=$project triggerColumnId=$done mutationType=AddTag mutationValue=shipped
+expect ok capture shipRule=$.ruleId
+
+do CreateRule projectId=$project triggerColumnId=$doing mutationType=RemoveTag mutationValue=shipped
+expect ok capture unshipRule=$.ruleId
+
+do GetRules projectId=$project
+expect ok field rules ~ "\"id\":$shipRule,\"triggerColumnId\":$done,\"mutationType\":\"AddTag\",\"mutationValue\":\"shipped\""
+expect ok field rules ~ "\"id\":$unshipRule,\"triggerColumnId\":$doing,\"mutationType\":\"RemoveTag\",\"mutationValue\":\"shipped\""
+
+# ── The projectId argument is ignored ──────────────────────────────────
+# This handler is attached to `$project`, and asking it for `$other`'s rules
+# answers with `$project`'s. A second board, opened on its own connection, is
+# how a client actually reads another project.
+do GetRules projectId=$other
+expect ok field rules ~ "\"id\":$shipRule,"
+expect ok field rules ~ "\"id\":$unshipRule,"
+
+client otherBoard model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$other
+expect ok field projectId == $other
+
+do GetRules projectId=$other
+expect ok field rules == []
+
+# ...and it answers the same for the *first* project's id, for the same reason.
+do GetRules projectId=$project
+expect ok field rules == []
+
+use board
+
+# ── Delete one ─────────────────────────────────────────────────────────
+do DeleteRule ruleId=$unshipRule
+expect ok field @body == "{}"
+
+do GetRules projectId=$project
+expect ok field rules ~ "\"id\":$shipRule,"
+expect ok field rules !~ "\"id\":$unshipRule,"
+
+# ── Deleting it again is refused: the rule is not this project's any more
+# because it is nobody's. The message names the project relation rather than
+# saying "not found", which is the same refusal a rule from another project
+# would get -- so a client cannot use it to probe for rule ids.
+do DeleteRule ruleId=$unshipRule
+expect err message == "rule does not belong to this project"
+
+do DeleteRule ruleId=999999
+expect err message == "rule does not belong to this project"
+
+# ── The refusals on create ─────────────────────────────────────────────
+do CreateRule projectId=$project triggerColumnId=$done mutationType=AddTag mutationValue=""
+expect err message == "action failed validation: BoardModel/CreateRule"
+
+do CreateRule projectId=$project triggerColumnId=999999 mutationType=AddTag mutationValue=nope
+expect err message == "column does not belong to this project"
+
+# None of the refusals changed the list.
+do GetRules projectId=$project
+expect ok field rules ~ "\"id\":$shipRule,"
+expect ok field rules !~ "nope"
+
+# ── The surviving rule still fires ─────────────────────────────────────
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$doing swimlaneId=$lane title="Rule subject"
+expect ok capture task=$.tasks[0].id
+
+do MoveTaskPosition taskId=$task columnId=$done swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$done,\"swimlaneId\":$lane,\"title\":\"Rule subject\",\"position\":0,\"tags\":\\[\"shipped\"\\]"

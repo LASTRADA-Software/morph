@@ -1,0 +1,93 @@
+# kanban (rung 4) — the polling cursor, lifted from polls and applied to a
+# board.
+#
+# examples/kanban/README.md's build order step 1 says to "lift GetEventsSince
+# polling from polls", and this rung's copy has the same two properties worth
+# asserting and the same negative one:
+#
+#   * every event after the cursor is returned;
+#   * no event at or before the cursor is returned;
+#   * a negative cursor is refused rather than silently matching nothing --
+#     the DTO's own comment says why (it would static_cast to a huge unsigned
+#     value in the `id > lastEventId` comparison), and names polls' identical
+#     guard as its precedent.
+#
+# Board events carry a `kind` per shape of change -- "column", "swimlane",
+# "task", "move" -- so this file also pins which action produces which.
+#
+# Re-runnable: the project is created here, so its event ids start fresh from
+# whatever the table is up to, and every cursor is captured.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Cursor"
+expect ok capture project=$.id
+
+client board model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$project
+expect ok
+
+# A board with no history: nothing is after the beginning.
+do GetEventsSince lastEventId=0
+expect ok field events == []
+
+# ── One change of each kind ──────────────────────────────────────────────
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do GetEventsSince lastEventId=0
+expect ok field events ~ "\"kind\":\"column\",\"summary\":\"column created\""
+expect ok capture afterColumn=$.events[0].id
+
+# The event at the cursor is not redelivered.
+do GetEventsSince lastEventId=$afterColumn
+expect ok field events == []
+
+do CreateColumn name="Done" wipLimit=0
+expect ok capture done=$.columns[1].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do GetEventsSince lastEventId=$afterColumn
+expect ok field events ~ "\"kind\":\"swimlane\",\"summary\":\"swimlane created\""
+expect ok field events ~ "\"kind\":\"column\""
+expect ok capture afterLane=$.events[1].id
+
+do GetEventsSince lastEventId=$afterLane
+expect ok field events == []
+
+# ── A task, then a move ──────────────────────────────────────────────────
+do CreateTask columnId=$todo swimlaneId=$lane title="Cursor task"
+expect ok capture task=$.tasks[0].id
+
+do GetEventsSince lastEventId=$afterLane
+expect ok field events ~ "\"kind\":\"task\",\"summary\":\"task created\""
+expect ok field events !~ "swimlane created"
+expect ok capture afterTask=$.events[0].id
+
+do MoveTaskPosition taskId=$task columnId=$done swimlaneId=$lane position=0
+expect ok
+
+do GetEventsSince lastEventId=$afterTask
+expect ok field events ~ "\"kind\":\"move\",\"summary\":\"task moved\""
+expect ok field events !~ "task created"
+
+# ── Both ends of the log ─────────────────────────────────────────────────
+do GetEventsSince lastEventId=999999999
+expect ok field events == []
+
+do GetEventsSince lastEventId=-1
+expect err message == "action failed validation: BoardModel/GetEventsSince"
+
+# The refusal cost nothing: the log still reads.
+do GetEventsSince lastEventId=$afterTask
+expect ok field events ~ "\"kind\":\"move\""

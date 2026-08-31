@@ -1,0 +1,88 @@
+# kanban (rung 4) — the column that says no.
+#
+# examples/kanban/README.md's build order step 3: WIP limit enforcement,
+# server-side validation rejecting a move, with the client rendering the typed
+# error. The limit is the whole point of a kanban board, and it is enforced on
+# the *move*, not on the create -- so a column can be filled past its limit by
+# creating tasks directly into it, and this file pins which of the two doors
+# the check is on.
+#
+# The other assertion worth having is that a refused move leaves the source
+# column's count alone: an implementation that removed the task first and then
+# checked the destination would lose it.
+#
+# Re-runnable: the project is created here.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Limits"
+expect ok capture project=$.id
+
+client board model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$project
+expect ok
+
+do CreateColumn name="Backlog" wipLimit=0
+expect ok capture backlog=$.columns[0].id
+
+do CreateColumn name="Doing" wipLimit=1
+expect ok capture doing=$.columns[1].id
+expect ok field columns ~ "\"name\":\"Doing\",\"wipLimit\":1,\"taskCount\":0"
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$backlog swimlaneId=$lane title="First"
+expect ok capture first=$.tasks[0].id
+
+do CreateTask columnId=$backlog swimlaneId=$lane title="Second"
+expect ok capture second=$.tasks[1].id
+
+# ── The first move fills the limit ───────────────────────────────────────
+do MoveTaskPosition taskId=$first columnId=$doing swimlaneId=$lane position=0
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":1,\"taskCount\":1"
+expect ok field columns ~ "\"id\":$backlog,\"name\":\"Backlog\",\"wipLimit\":0,\"taskCount\":1"
+
+# ── The second is refused, by name ───────────────────────────────────────
+do MoveTaskPosition taskId=$second columnId=$doing swimlaneId=$lane position=0
+expect err message == "MoveTaskPosition: target column is at its WIP limit"
+
+# The refused task is still in Backlog: it was not removed and then rejected.
+do GetBoardState
+expect ok field tasks ~ "\"id\":$second,\"columnId\":$backlog,\"swimlaneId\":$lane"
+expect ok field columns ~ "\"id\":$backlog,\"name\":\"Backlog\",\"wipLimit\":0,\"taskCount\":1"
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":1,\"taskCount\":1"
+
+# ── Making room lets it through ──────────────────────────────────────────
+do MoveTaskPosition taskId=$first columnId=$backlog swimlaneId=$lane position=0
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":1,\"taskCount\":0"
+
+do MoveTaskPosition taskId=$second columnId=$doing swimlaneId=$lane position=0
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":1,\"taskCount\":1"
+expect ok field tasks ~ "\"id\":$second,\"columnId\":$doing,\"swimlaneId\":$lane"
+
+# ── The limit is on the move, not on the create ──────────────────────────
+# A task created straight into a full column is accepted, and the count goes
+# past the limit. Asserted as it behaves: the check lives in
+# execute(MoveTaskPosition), and CreateTask does not consult it.
+do CreateTask columnId=$doing swimlaneId=$lane title="Created past the limit"
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":1,\"taskCount\":2"
+
+# ...and now even a move *out* and back is blocked, because the column is over.
+do MoveTaskPosition taskId=$first columnId=$doing swimlaneId=$lane position=0
+expect err message == "MoveTaskPosition: target column is at its WIP limit"
+
+# ── A limit of zero means unlimited, not "nothing allowed" ───────────────
+do MoveTaskPosition taskId=$first columnId=$backlog swimlaneId=$lane position=0
+expect ok field columns ~ "\"id\":$backlog,\"name\":\"Backlog\",\"wipLimit\":0,\"taskCount\":1"
+
+do CreateTask columnId=$backlog swimlaneId=$lane title="Backlog fills freely"
+expect ok field columns ~ "\"id\":$backlog,\"name\":\"Backlog\",\"wipLimit\":0,\"taskCount\":2"

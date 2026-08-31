@@ -1,0 +1,70 @@
+# pastebin (rung 1) — an envelope the server cannot decode at all.
+#
+# Every other refusal in this corpus is the server declining something it
+# understood. This one is the layer below: `morph::wire::decode` failing on
+# the frame's own JSON, before any kind, model or action is known.
+#
+# ── How a malformed envelope is expressible at all ─────────────────────
+# The runner builds envelopes from the field table in `wire.hpp`, so it cannot
+# emit syntactically invalid JSON. It does not have to: the envelope is a
+# *typed* structure, so a well-formed JSON string where a number belongs is
+# enough. `modelId` is a `std::uint64_t`, and `"abc"` is not one.
+#
+# The reply's `callId` is **zero**, not the one this frame carried -- which
+# follows from the failure: the callId lives inside the envelope that could not
+# be decoded, so the server has nothing to echo. A client correlating replies
+# by callId therefore cannot match this reply to its request, and has to treat
+# a zero callId as "the last thing I sent was rejected outright".
+#
+# Not a workflow, and not counted as one.
+#
+# Re-runnable: nothing here writes anything.
+
+model PasteModel
+
+client prober
+
+# ── A string where the envelope wants a number ─────────────────────────
+# The exact message, asserted in full rather than by prefix. Three things make
+# that reasonable rather than brittle:
+#
+#   * it is deterministic -- the runner writes the envelope's fields in a
+#     fixed order, so the reported column and the windowed snippet are the
+#     same on every run;
+#   * glaze's newline is escaped by morph's own writer into the literal
+#     four-character sequence \x0a rather than a real newline, so the whole
+#     message is one ASCII line;
+#   * if the envelope ever gains, loses or reorders a field, this line fails
+#     loudly instead of a prefix match quietly continuing to pass against a
+#     different frame.
+send hello modelId="abc"
+expect err message == "envelope decode failed: 1:107: parse_number_failure\\x0a...\", \"shared\": false, \"modelId\": \"abc\", \"modelType\": \"\", \"actionTy...\\x0a                                  ^"
+expect err message ~ "^envelope decode failed: "
+expect err message ~ "parse_number_failure"
+expect err field @callId == 0
+
+# ── The same, on a different numeric field ─────────────────────────────
+send hello protocolVersion="one"
+expect err message ~ "^envelope decode failed: "
+
+# ── ...and on a boolean ────────────────────────────────────────────────
+send hello shared="yes"
+expect err message ~ "^envelope decode failed: "
+
+# ── An object where a string belongs ───────────────────────────────────
+send execute typeId={"not":"a string"}
+expect err message ~ "^envelope decode failed: "
+
+# ── A well-formed envelope with a kind nobody handles is *not* a decode
+# failure: it decodes fine and is refused on its merits ────────────────
+send nonsense
+expect err message !~ "envelope decode failed"
+
+# ── The connection survives all of it ──────────────────────────────────
+# A decode failure is answered, not hung up on -- which is what lets a client
+# with one bad frame recover instead of reconnecting.
+do CreatePaste content="after the malformed frames" syntax=plaintext
+expect ok capture paste=$.id
+
+do GetPaste id=$paste
+expect ok field content == "after the malformed frames"
