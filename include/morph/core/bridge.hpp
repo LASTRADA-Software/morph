@@ -1749,7 +1749,17 @@ private:
             if (ok) {
                 onOk(true);
             } else {
-                onErr(err);
+                // Only the failure callback above supplies an `err`; the
+                // success callback settles through this same arm with a null
+                // one whenever the reply's id was discarded (`applied` false)
+                // and the binding is still unbound. `CompletionState` now
+                // refuses to settle on a null (issue #347), but it can only
+                // substitute a generic message — the meaning of *this*
+                // failure is known here and nowhere else, so name it here.
+                onErr(err ? err
+                          : std::make_exception_ptr(
+                                std::runtime_error{"registration did not complete: the reply was discarded and '" +
+                                                   binding.typeId + "' is still unbound"}));
             }
         }
     }

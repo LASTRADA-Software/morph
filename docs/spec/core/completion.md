@@ -36,7 +36,7 @@ guarded by `std::mutex mtx`.
 |---|---|---|
 | `mtx` | `std::mutex` | Guards all state and callback registration |
 | `value` | `std::optional<T>` | The success value, set once |
-| `error` | `std::exception_ptr` | The error, set once via `setException` |
+| `error` | `std::exception_ptr` | The error, set once via `setException`; never null once `ready` is `true` |
 | `ready` | `bool` | `true` once either `value` or `error` is set |
 | `onOk` | `std::vector<std::function<void(T)>>` | Stored success callbacks, in attachment order; moved out on dispatch |
 | `onErr` | `std::vector<std::function<void(std::exception_ptr)>>` | Stored error callbacks, in attachment order; moved out on dispatch |
@@ -45,7 +45,25 @@ guarded by `std::mutex mtx`.
 
 **Setting a value or exception.** `setValue(T)` and `setException(exception_ptr)`
 are called by the producer. If the state is already `ready`, the call is a no-op
-(only the first result wins). When one or more callbacks are already registered
+(only the first result wins). **A null `exception_ptr` is never
+stored**: `setException(nullptr)` substitutes a `std::runtime_error` and settles
+with that instead, so `ready == true` always implies exactly one of `value` or
+`error` is engaged.
+
+That substitution closes a defect rather than tidying an edge case. Storing the
+null set `ready` while leaving `error` falsy, and neither attach could act on
+the result: `attachOnError` tests `ready && error`, `attachThen` tests `ready &&
+value`, so both fell through and a handler attached afterwards was neither
+fired nor queued — the completion was dead in both directions for every later
+caller, and silently, since `attachOnError` sets `onErrAttached` on entry and so
+suppressed the destructor's orphan logger too. A handler attached *before* such
+a settlement did fire, but with a null `exception_ptr`, which is undefined
+behaviour to `std::rethrow_exception` — the idiomatic handler body, this file's
+own orphan logger included. The guard lives here rather than at any one producer
+because `Completion<T>::Promise::reject()` is public and around ten sites
+forward an `exception_ptr` through untouched (`.onError([state](auto e) {
+state->setException(e); })`), so a per-producer guard would leave every other
+one able to reintroduce it. See issue #347. When one or more callbacks are already registered
 (via `attachThen` / `attachOnError`), a fire-once closure invoking every
 registered callback, in attachment order, is built under the lock and posted to
 the executor outside the lock, so no callback ever runs under the mutex. The
@@ -242,6 +260,15 @@ throw — they are silent by construction.
   attach that matches the settled outcome (or precedes readiness) has any
   effect. This is per-call: it never removes or otherwise disturbs any handler
   already stored from an earlier, matching attach.
+
+  Both arms silently doing nothing is *only* safe because a ready state always
+  has exactly one of `value`/`error` engaged, so at most one arm can mismatch.
+  A `ready` state with neither engaged made **both** arms no-ops, and the
+  completion could then never resolve for anybody — which is what
+  `setException(nullptr)` used to produce before it was made to substitute
+  (issue #347, and see [Setting a value or
+  exception](#setting-a-value-or-exception)). That state is now unreachable,
+  and this bullet depends on it staying so.
 
 - **Null-executor error drop, but no silencing.** With `cbExec == nullptr`, any
   attached or pending error handlers are never delivered — there is no executor

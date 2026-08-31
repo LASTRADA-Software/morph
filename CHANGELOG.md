@@ -94,6 +94,18 @@ API surface).
   and `drainedWithin()` could never succeed — so the defect broke the very
   graceful-shutdown sequence during which it fired. The gate now releases the
   ticket before replying.
+- `Completion<T>` could be settled into a state that never resolved: rejecting
+  with a **null** `std::exception_ptr` set `ready` while leaving `error` falsy,
+  and neither `then()` nor `onError()` can act on that — so a handler attached
+  afterwards was neither fired nor queued, and the orphan logger was suppressed
+  too. A handler attached *before* such a rejection did fire, but with a null
+  `exception_ptr`, which is undefined behaviour to `std::rethrow_exception`.
+  `CompletionState::setException` now substitutes a real exception rather than
+  storing a null, so `ready` always implies exactly one of `value`/`error`.
+  `Bridge`'s registration resolver — which reached this through
+  `whenBound()` when a registration reply's id was discarded — supplies a
+  message naming the binding instead of relying on the generic substitute.
+
 - `CustomerModel::execute(ListAccounts)` dereferenced `QuerySingle`'s optional
   unchecked (inherited verbatim from the old `AccountModel`); it now throws
   `NotFound`.

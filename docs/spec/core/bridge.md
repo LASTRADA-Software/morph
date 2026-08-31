@@ -524,11 +524,22 @@ the stale-reply case too — a success callback whose id is discarded (because a
 `switchBackend()` already moved past this registration, or because the `Bridge`
 itself is gone) still settles the waiters, since the binding's *initial
 registration attempt* has finished either way and nothing further is coming to
-settle them. Note that a discarded reply settles waiters through the failure
-arm, and the only failure it has to report is the absence of a result, so what
-reaches `.onError(...)` on that path is a **null** `exception_ptr` rather than a
-diagnostic: treat a `whenBound()` error as "registration did not complete", not
-as a value to rethrow.
+settle them. A discarded reply settles waiters through the **failure** arm, and
+the only failure it has to report is the absence of a result — so the resolver
+substitutes an exception saying exactly that, naming the binding's `typeId`.
+Treat a `whenBound()` error as "registration did not complete".
+
+That substitution is not cosmetic. This path previously passed a **null**
+`exception_ptr` straight through, which settled the completion `ready` with
+`error` still falsy — a state `attachOnError` cannot act on, so an
+`.onError(...)` attached after the settlement was silently discarded and the
+completion never resolved for that caller, in either direction. `whenBound()`
+resolves through the executor even in `Local` mode, so "attach after settle" is
+an ordinary interleaving rather than an exotic race. `CompletionState` now
+refuses to settle on a null at all
+([completion.md](completion.md#setting-a-value-or-exception)); this site
+supplies the specific message because the meaning of *this* failure is known
+here and nowhere else. See issue #347.
 
 Scope limits worth knowing, because each is a question `whenBound()` looks like
 it answers and does not:
