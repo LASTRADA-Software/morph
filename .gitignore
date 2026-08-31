@@ -13,3 +13,7 @@ bv-clang/
 
 # superpowers subagent-driven-development scratch workspace (ledgers, briefs, review packages)
 /.superpowers/
+
+# Python bytecode caches (scripts/scenario/ is stdlib-only Python).
+__pycache__/
+*.pyc

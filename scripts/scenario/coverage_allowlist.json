@@ -1,0 +1,7 @@
+{
+  "kinds": {},
+  "messages": {
+    "connection closed": "Emitted from the shared-instance attach path (remote.hpp, noteScopeAttachLocked) only when a connection's scope closes concurrently with an attach in flight on it. That is a genuine race; a scenario cannot drive it deterministically, and forcing it with a sleep would reintroduce the wall-clock flakiness this runner exists to avoid (morph#147). See the design spec, 'The measurable universe'.",
+    "handleInline does not support execute (reply is asynchronous)": "handleInline is a synchronous, in-process C++ API used only by morph's own C++ unit tests; it is not an envelope kind or a path any WebSocket client can reach, so no scenario can ever assert this refusal. It was previously excluded by accident -- the message regexes missed its multi-line call site -- and is now excluded on purpose."
+  }
+}
