@@ -11,6 +11,24 @@ API surface).
 
 ### Added
 
+- **An out-of-process scenario corpus covering every ladder rung.**
+  `scripts/scenario/scenarios/` grows from 4 files to 72, and
+  `scripts/scenario/scenario_coverage.py` now exits `0` on both of its axes:
+  all 71 registered actions across the five server rungs are dispatched, every
+  rung meets its workflow floor (pastebin 8, polls 10, bookmarks 12, ledger 15,
+  kanban 20), all 8 envelope kinds are sent, and every refusal is either
+  asserted or exempt with a written reason. Each file is a named journey
+  sourced from its rung's own README, verified against a real
+  `ladder_<rung>_server`, re-run against the database the first pass left
+  behind, and mutation-tested.
+
+- **`scripts/scenario/run_scenarios.py`**, the server lifecycle
+  `morph_scenario.py` deliberately does not own: it starts one server per rung
+  on a fresh SQLite database in its own working directory with the port bound
+  to `0`, runs that rung's whole directory against it, and tears the process
+  group down. `--twice` proves every file is re-runnable, `--mutate` proves its
+  assertions are load-bearing, `--rung` and `--build-dir` narrow the run.
+
 - **A replay outcome that distinguishes undelivered from rejected.**
   `morph::offline::ReplayOutcome` (`Succeeded`/`Rejected`/`Undelivered`) and a
   `SyncWorker::DetailedReplayFunction` overload taking it. Only `Rejected`
@@ -94,6 +112,21 @@ API surface).
   `docs/spec/VERSIONING.md`.
 
 ### Fixed
+
+- **`ladder_kanban_server` refused every client, including at login.**
+  `kanban::auth::KanbanAuthorizer` inherited `SigningAuthorizer` without the
+  anonymous carve-out `bookmarks::auth::BookmarksAuthorizer` carries, so
+  `authorize()` demanded a bearer token for `AuthModel`/`Login` — the one
+  action that mints one. Every action a fresh remote client could send was
+  answered `err "unauthorized"`, login included, leaving the server usable only
+  to a client already holding a token minted out of band (which is why
+  `ladder_kanban_headless` takes one on its command line). It now admits that
+  single model/action pair without a token, compared exactly, exactly as
+  bookmarks does; `Login` still refuses the reserved `system:` principal
+  namespace, so an anonymous caller can mint a token for a name it chooses and
+  nothing more. Found by driving the real server from an out-of-process client
+  — the rung's own tests call `AuthModel::execute()` directly, which never
+  consults an authorizer.
 
 - An `execute` refused by `RemoteServer`'s shutdown gate took a per-model
   execute-ordering ticket and never released it, stranding a same-model

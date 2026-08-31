@@ -313,14 +313,40 @@ does not serve schemas over the wire … no envelope `kind` exposes them to a
 remote client"*. `send schemas typeId=PasteModel` returns the full JSON Schema
 document. That paragraph is corrected in the same pass.
 
+## What actually happened, against this plan
+
+Two of the boundaries below were crossed, both deliberately and with the
+author's agreement, and both are recorded here rather than left contradicting
+the delivered work.
+
+**kanban's authorizer was changed.** The rung could not be driven at all:
+`KanbanAuthorizer` inherited `SigningAuthorizer` without the anonymous
+`AuthModel`/`Login` carve-out `BookmarksAuthorizer` carries, so `authorize()`
+demanded a token for the only action that mints one. Every action a fresh
+remote client could send was answered `unauthorized`. That is a defect in the
+example rather than an obstacle to testing it — the server ships a `Login` no
+remote client can reach — and it was fixed by giving kanban the identical
+carve-out, which bookmarks documents as having found the same way. All 137
+kanban tests still pass. Without it, kanban's 22 actions and floor of 20 were
+unreachable and this plan could not have been completed.
+
+**`morph_scenario.py` learned one new rule.** A reply to an undecodable frame
+carries `callId` 0, because the server has no envelope to read one from. The
+runner correlated strictly by `callId` and so rejected it as a transport
+violation, making the `envelope decode failed:` path unassertable. `Client.rpc`
+now accepts a zero `callId` in exactly that shape — an `err` whose message
+names a decode failure — and nowhere else.
+
+Neither the coverage thresholds nor the workflow floors moved.
+
 ## Out of scope
 
 - **No change to the measurement.** No threshold, floor, or qualification rule
   moves. A corpus that cannot meet a floor is a corpus to finish, not a floor
-  to lower.
-- **No change to the example applications.** Not to add limit-policy knobs that
-  would make a refusal assertable, and not to add actions that would make one
-  reachable.
+  to lower. *(Held.)*
+- **No change to the example applications**, other than the kanban authorizer
+  fix recorded above. In particular: no limit-policy knobs added to make a
+  refusal assertable, and no actions added to make one reachable.
 - **No CI wiring.** Running the corpus in CI needs a build of five servers in a
   job that has none today; that is its own change.
 - **lims and crm.** Rungs 6 and 7 are in `rungs.txt` but not in `SERVER_RUNGS`,
