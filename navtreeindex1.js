@@ -1,5 +1,7 @@
 var NAVTREEINDEX1 =
 {
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0":[2,0,0,16,2,18],
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a898676248ae91890928c1e051a11c4bc":[2,0,0,16,2,23],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a":[2,0,0,16,2,16],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa6b15f2bbb8154ddfb30406de340b8c0":[2,0,0,16,2,14],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aac5c1bf91dcc71dfed8723be6617a40d":[2,0,0,16,2,10],
@@ -247,7 +249,5 @@ var NAVTREEINDEX1 =
 "d7/d9f/classmorph_1_1async_1_1CallbackScope.html#a7c889c6a28f016cd19bf4fbaf87e0e03":[2,0,0,1,0,2],
 "d7/d9f/classmorph_1_1async_1_1CallbackScope.html#a8469d5ce60e4d7c00d6809c4e5888838":[2,0,0,1,0,1],
 "d7/d9f/classmorph_1_1async_1_1CallbackScope.html#aa51de17f42ee6ebe1f0fa27250d5a1bc":[2,0,0,1,0,5],
-"d7/d9f/classmorph_1_1async_1_1CallbackScope.html#aaf2d4181e3e700c9e308e1a2e7959699":[2,0,0,1,0,0],
-"d7/d9f/classmorph_1_1async_1_1CallbackScope.html#ae36f1a1d24f3f19f7624a5319a475065":[2,0,0,1,0,4],
-"d7/d9f/classmorph_1_1async_1_1CallbackScope.html#ae4d395565beddf294a3c60ab71ee7a37":[2,0,0,1,0,3]
+"d7/d9f/classmorph_1_1async_1_1CallbackScope.html#aaf2d4181e3e700c9e308e1a2e7959699":[2,0,0,1,0,0]
 };

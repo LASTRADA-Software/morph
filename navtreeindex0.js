@@ -201,11 +201,13 @@ var NAVTREEINDEX0 =
 "d3/d54/forms__controller__core_8hpp.html":[3,0,0,6,0,0],
 "d3/d54/forms__controller__core_8hpp_source.html":[3,0,0,6,0,0],
 "d3/d55/classmorph_1_1offline_1_1SyncWorker.html":[2,0,0,15,13],
-"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043":[2,0,0,15,13,1],
+"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043":[2,0,0,15,13,2],
 "d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996":[2,0,0,15,13,0],
-"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b":[2,0,0,15,13,3],
-"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a78d2ec58a641c51dbb4c3e8ff3263cbd":[2,0,0,15,13,2],
-"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68":[2,0,0,15,13,4],
+"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b":[2,0,0,15,13,5],
+"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4d41de24c5846fda06cb404e46e71970":[2,0,0,15,13,1],
+"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a78d2ec58a641c51dbb4c3e8ff3263cbd":[2,0,0,15,13,3],
+"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68":[2,0,0,15,13,6],
+"d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ac2ecea3bdc67a9e065c252cfbb7db554":[2,0,0,15,13,4],
 "d3/d58/file__io__ops_8hpp_source.html":[3,0,0,0,5],
 "d3/d68/classmorph_1_1math_1_1WireClampScope.html":[2,0,0,11,3],
 "d3/d68/classmorph_1_1math_1_1WireClampScope.html#aa5b2591743ee0e3f174346b0aadb97c2":[2,0,0,11,3,0],
@@ -247,7 +249,5 @@ var NAVTREEINDEX0 =
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a5b0bba2d347ea69930d4166c541528fd":[2,0,0,16,2,7],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a68b32a73162878f79091c4ebbd808084":[2,0,0,16,2,15],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a72f35dfcfcfb007b05d14185d8ed2f2f":[2,0,0,16,2,5],
-"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a741e68faad6ca0388f2d6c3740a3c784":[2,0,0,16,2,22],
-"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0":[2,0,0,16,2,18],
-"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a898676248ae91890928c1e051a11c4bc":[2,0,0,16,2,23]
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a741e68faad6ca0388f2d6c3740a3c784":[2,0,0,16,2,22]
 };

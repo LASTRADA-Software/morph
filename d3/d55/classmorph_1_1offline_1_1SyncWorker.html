@@ -129,7 +129,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d55/classmo
 <tr class="heading"><td colspan="2"><h2 id="header-pub-types" class="groupheader"><a id="pub-types" name="pub-types"></a>
 Public Types</h2></td></tr>
 <tr class="memitem:a31349dc8d4338512a2ffc2a8fda90996" id="r_a31349dc8d4338512a2ffc2a8fda90996"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a31349dc8d4338512a2ffc2a8fda90996">ReplayFunction</a> = std::function&lt;bool(const std::string&amp; payload)&gt;</td></tr>
-<tr class="memdesc:a31349dc8d4338512a2ffc2a8fda90996"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callable that attempts to replay a single queued item.  <br /></td></tr>
+<tr class="memdesc:a31349dc8d4338512a2ffc2a8fda90996"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callable that attempts to replay a single queued item, reporting only success or failure.  <br /></td></tr>
+<tr class="memitem:a4d41de24c5846fda06cb404e46e71970" id="r_a4d41de24c5846fda06cb404e46e71970"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a4d41de24c5846fda06cb404e46e71970">DetailedReplayFunction</a> = std::function&lt;ReplayOutcome(const std::string&amp; payload)&gt;</td></tr>
+<tr class="memdesc:a4d41de24c5846fda06cb404e46e71970"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callable that attempts to replay a single queued item and reports what it achieved.  <br /></td></tr>
 <tr class="memitem:a28918d4358866a982f54b1e25baa5043" id="r_a28918d4358866a982f54b1e25baa5043"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> = std::function&lt;void(const <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a>&amp; poisoned)&gt;</td></tr>
 <tr class="memdesc:a28918d4358866a982f54b1e25baa5043"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callable invoked when an item exhausts its retry budget, just before it is removed from the queue.  <br /></td></tr>
 </table><table class="memberdecls">
@@ -137,6 +139,8 @@ Public Types</h2></td></tr>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a78d2ec58a641c51dbb4c3e8ff3263cbd" id="r_a78d2ec58a641c51dbb4c3e8ff3263cbd"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a78d2ec58a641c51dbb4c3e8ff3263cbd">SyncWorker</a> (<a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a> &amp;queue, <a class="el" href="#a31349dc8d4338512a2ffc2a8fda90996">ReplayFunction</a> replay, <a class="el" href="#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink=nullptr)</td></tr>
 <tr class="memdesc:a78d2ec58a641c51dbb4c3e8ff3263cbd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>.  <br /></td></tr>
+<tr class="memitem:ac2ecea3bdc67a9e065c252cfbb7db554" id="r_ac2ecea3bdc67a9e065c252cfbb7db554"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ac2ecea3bdc67a9e065c252cfbb7db554">SyncWorker</a> (<a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a> &amp;queue, <a class="el" href="#a4d41de24c5846fda06cb404e46e71970">DetailedReplayFunction</a> replay, <a class="el" href="#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink=nullptr)</td></tr>
+<tr class="memdesc:ac2ecea3bdc67a9e065c252cfbb7db554"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>, which distinguishes an undelivered replay from a rejected one.  <br /></td></tr>
 <tr class="memitem:a44f773b7cdbf93315cfd070e35eaf24b" id="r_a44f773b7cdbf93315cfd070e35eaf24b"><td class="memItemLeft"><a class="el" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a>&#160;</td><td class="memItemRight"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b">run</a> ()</td></tr>
 <tr class="memdesc:a44f773b7cdbf93315cfd070e35eaf24b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the queue, replaying each item via the replay function.  <br /></td></tr>
 <tr class="memitem:abacf4b05a156d5e2664a4fd25bc2cf68" id="r_abacf4b05a156d5e2664a4fd25bc2cf68"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68">stop</a> ()</td></tr>
@@ -147,21 +151,29 @@ Public Member Functions</h2></td></tr>
 <p><span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> drains the queue and calls a caller-supplied replay function for each item. The framework has no knowledge of what "replay" means — that is entirely the caller's domain. Retry semantics are baked in with hard-coded sensible defaults; there are intentionally no setters.</p>
 <dl class="section user"><dt>Retry &amp; dead-letter (built-in defaults)</dt><dd><ul>
 <li>Each item is retried up to <b>5 cumulative attempts</b>. The count is seeded from the larger of the drained <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f" title="Durable retry count for this item, authoritative when the queue persists it.">QueueItem::attempts</a></span> (durable, if the queue persists it) and this worker's own in-memory count, so a queue that overrides <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019" title="Persists an updated attempt count for an item. Default: no-op.">IOfflineQueue::setAttempts()</a></span> makes the budget survive a process restart; a queue that does not (the default no-op) keeps the count purely in-memory, exactly as before.</li>
-<li>After every failed attempt, the new count is written back through <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019" title="Persists an updated attempt count for an item. Default: no-op.">IOfflineQueue::setAttempts()</a></span> (a no-op unless the queue overrides it) so a persisting queue's next <span class="tt">drain()</span> — this run or after a restart — sees the updated value.</li>
+<li><b>Only a <em>delivered</em> failure spends an attempt.</b> A replay reporting <span class="tt">ReplayOutcome::Undelivered</span> leaves the item queued with its count untouched, in memory and on disk alike, so a run of reconnect flaps cannot walk queued work to the dead-letter sink. The boolean <span class="tt"><a class="el" href="#a31349dc8d4338512a2ffc2a8fda90996" title="Callable that attempts to replay a single queued item, reporting only success or failure.">ReplayFunction</a></span> cannot express that outcome; a caller that can tell the two apart should use <span class="tt"><a class="el" href="#a4d41de24c5846fda06cb404e46e71970" title="Callable that attempts to replay a single queued item and reports what it achieved.">DetailedReplayFunction</a></span>.</li>
+<li>After every <em>charged</em> failure, the new count is written back through <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019" title="Persists an updated attempt count for an item. Default: no-op.">IOfflineQueue::setAttempts()</a></span> (a no-op unless the queue overrides it) so a persisting queue's next <span class="tt">drain()</span> — this run or after a restart — sees the updated value.</li>
 <li>Items that fail their 5th cumulative attempt are dropped from the queue. If a <span class="tt"><a class="el" href="#a28918d4358866a982f54b1e25baa5043" title="Callable invoked when an item exhausts its retry budget, just before it is removed from the queue.">DeadLetterSink</a></span> is set, it is invoked with the exhausted item instead of the default log line; if unset, the item is logged at <span class="tt">morph::log::LogLevel::error</span> (the payload appears in the log line) — today's behavior, unchanged.</li>
 <li>Items that succeed reset their attempt counter implicitly (they're removed).</li>
 <li>There is no public knob on the retry cap — if your application needs different retry math, wrap or replace <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>. The framework's promise is "obvious, safe defaults that the GUI never has to think about."</li>
 </ul>
 </dd></dl>
-<dl class="section user"><dt>ReplayFunction contract</dt><dd><ul>
-<li>Return <span class="tt">true</span> → item successfully processed; it is removed from the queue.</li>
-<li>Return <span class="tt">false</span> → item failed; attempt counter incremented; left in queue if under the cap, otherwise dropped (dead-lettered).</li>
-<li>Throw → treated as failure (same path as returning <span class="tt">false</span>).</li>
+<dl class="section user"><dt>Replay contract</dt><dd><span class="tt"><a class="el" href="#a4d41de24c5846fda06cb404e46e71970" title="Callable that attempts to replay a single queued item and reports what it achieved.">DetailedReplayFunction</a></span> (three outcomes — prefer it):<ul>
+<li><span class="tt">ReplayOutcome::Succeeded</span> → removed from the queue.</li>
+<li><span class="tt">ReplayOutcome::Rejected</span> → delivered and refused; attempt counter incremented; left in queue if under the cap, otherwise dropped (dead-lettered).</li>
+<li><span class="tt">ReplayOutcome::Undelivered</span> → never reached the peer; <b>nothing is charged</b> and the item stays queued.</li>
 </ul>
 </dd></dl>
+<p><span class="tt"><a class="el" href="#a31349dc8d4338512a2ffc2a8fda90996" title="Callable that attempts to replay a single queued item, reporting only success or failure.">ReplayFunction</a></span> (two outcomes — unchanged for existing callers):</p><ul>
+<li>Return <span class="tt">true</span> → same as <span class="tt">Succeeded</span>.</li>
+<li>Return <span class="tt">false</span> → same as <span class="tt">Rejected</span>. It is deliberately <em>not</em> read as <span class="tt">Undelivered</span>: every caller written against the boolean form means "this attempt failed", and silently treating that as undelivered would retry a poison payload forever.</li>
+</ul>
+<p>Either form:</p><ul>
+<li>Throw → treated as <span class="tt">Rejected</span>. A throw reports failure but not delivery, and an unknown failure has to be charged for the same reason.</li>
+</ul>
 <dl class="section user"><dt>Thread safety</dt><dd><span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> is safe to call from any thread. Concurrent calls are serialised by an internal mutex — the second caller blocks until the first <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> completes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a31349dc8d4338512a2ffc2a8fda90996" name="a31349dc8d4338512a2ffc2a8fda90996"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a31349dc8d4338512a2ffc2a8fda90996">&#9670;&#160;</a></span>ReplayFunction</h2>
@@ -175,9 +187,29 @@ Public Member Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Callable that attempts to replay a single queued item. </p>
+<p>Callable that attempts to replay a single queued item, reporting only success or failure. </p>
+<p>Retained unchanged for existing callers, and <span class="tt">false</span> keeps meaning exactly what it always did — <span class="tt">ReplayOutcome::Rejected</span>, i.e. one attempt spent. A caller that can tell an undelivered replay from a refused one should use <span class="tt"><a class="el" href="#a4d41de24c5846fda06cb404e46e71970" title="Callable that attempts to replay a single queued item and reports what it achieved.">DetailedReplayFunction</a></span> instead; this overload cannot express the difference and so cannot avoid the dead-lettering it causes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4d41de24c5846fda06cb404e46e71970" name="a4d41de24c5846fda06cb404e46e71970"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4d41de24c5846fda06cb404e46e71970">&#9670;&#160;</a></span>DetailedReplayFunction</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#a4d41de24c5846fda06cb404e46e71970">morph::offline::SyncWorker::DetailedReplayFunction</a> = std::function&lt;ReplayOutcome(const std::string&amp; payload)&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Callable that attempts to replay a single queued item and reports what it achieved. </p>
+<p>The three-outcome counterpart of <span class="tt"><a class="el" href="#a31349dc8d4338512a2ffc2a8fda90996" title="Callable that attempts to replay a single queued item, reporting only success or failure.">ReplayFunction</a></span>: it is the only form that can report <span class="tt">ReplayOutcome::Undelivered</span> and so keep a reconnect flap from spending the item's retry budget. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -196,13 +228,13 @@ Public Member Functions</h2></td></tr>
 <p>Callable invoked when an item exhausts its retry budget, just before it is removed from the queue. </p>
 <p>Receives the exhausted item (payload, idempotencyKey, and its final cumulative attempt count). If unset, <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> keeps the default behavior: log at <span class="tt">morph::log::LogLevel::error</span> and drop. A throwing sink is caught and logged — the item is still removed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00151">151</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a78d2ec58a641c51dbb4c3e8ff3263cbd" name="a78d2ec58a641c51dbb4c3e8ff3263cbd"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a78d2ec58a641c51dbb4c3e8ff3263cbd">&#9670;&#160;</a></span>SyncWorker()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a78d2ec58a641c51dbb4c3e8ff3263cbd">&#9670;&#160;</a></span>SyncWorker() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -243,7 +275,55 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac2ecea3bdc67a9e065c252cfbb7db554" name="ac2ecea3bdc67a9e065c252cfbb7db554"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac2ecea3bdc67a9e065c252cfbb7db554">&#9670;&#160;</a></span>SyncWorker() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::offline::SyncWorker::SyncWorker </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>queue</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#a4d41de24c5846fda06cb404e46e71970">DetailedReplayFunction</a></td>          <td class="paramname"><span class="paramname"><em>replay</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a></td>          <td class="paramname"><span class="paramname"><em>deadLetterSink</em></span><span class="paramdefsep"> = </span><span class="paramdefval">nullptr</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>, which distinguishes an undelivered replay from a rejected one. </p>
+<p>Identical to the overload above except for the replay callable's return type. Only <span class="tt">ReplayOutcome::Rejected</span> spends an attempt, so a reconnect flap that never reached the peer no longer walks queued work towards the dead-letter sink.</p>
+<p>The two overloads are unambiguous: <span class="tt">ReplayOutcome</span> is a scoped enum, so neither return type implicitly converts to the other.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">queue</td><td>Queue to drain on each <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> call. Borrowed, not owned: it must outlive this worker. </td></tr>
+    <tr><td class="paramname">replay</td><td>Function called for each pending item. Stored and invoked for this worker's whole lifetime, so anything the callable refers to must outlive it. </td></tr>
+    <tr><td class="paramname">deadLetterSink</td><td>Optional hook invoked with the exhausted item instead of the default log-and-drop path when an item exhausts its retry budget. Default: unset. Retained on the same terms as <code class="param">replay</code>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +356,7 @@ Public Member Functions</h2></td></tr>
 <p>If <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress run() to stop after the current item.">stop()</a></span> was called before <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> acquired the lock, <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> returns immediately with an empty result and resets the stop flag.</p>
 <dl class="section return"><dt>Returns</dt><dd>Counts of successful / failed / dead-lettered replays. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00204">204</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -306,7 +386,7 @@ Public Member Functions</h2></td></tr>
 <p>Signals an in-progress <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> to stop after the current item. </p>
 <p>Thread-safe. The flag is automatically reset at the start of the next <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> call, so stopping is one-shot. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00281">281</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
