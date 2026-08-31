@@ -304,6 +304,25 @@ go. An entry whose action *is* dispatched grants no exemption — `exempt` is
 scoped to the actions no scenario dispatches at all — so the report lists it
 apart from the entries the per-rung `(n exempt)` count actually reflects.
 
+### In CI
+
+`.github/workflows/drift-guard.yml`'s `scenario-coverage` job runs
+`test_morph_scenario.py` and then `scenario_coverage.py` on every push and
+pull request. Both read source and scenario files only — they compile nothing
+and start nothing — which is what lets them sit in a workflow whose every job
+is fast and dependency-free.
+
+That gate catches the surface drifting away from the corpus: an action
+registered with no scenario reaching it, a refusal added to `remote.hpp` that
+nothing asserts, an allowlist entry left behind after the thing it exempted
+became coverable, or a scenario edited until it no longer qualifies as a
+workflow.
+
+What CI does **not** do is *run* the corpus. `run_scenarios.py` needs the five
+`ladder_<rung>_server` binaries built, which no workflow has today; running it
+is its own change. So a scenario can currently drift from a server's real
+behaviour without CI noticing — only from its *surface*.
+
 `scenario_coverage.py --floors` is a **testing-only** override for this tool's
 own fixtures (it lets them satisfy a floor without authoring dozens of
 throwaway workflow files); CI and any real run pass it nothing and get the
