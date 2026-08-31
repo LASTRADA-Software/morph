@@ -25,16 +25,21 @@ PASTEBIN_PORT=0 QT_QPA_PLATFORM=offscreen \
 
 python3 scripts/scenario/morph_scenario.py \
     --server ws://127.0.0.1:60101 \
-    scripts/scenario/scenarios/pastebin.scenario
+    scripts/scenario/scenarios/pastebin/paste-lifecycle.scenario
 ```
 
-`scenarios/` holds the ones that ship:
+`scenarios/` holds one directory per rung, and one file per workflow:
 
-| File | Server | What it covers |
+| Directory | Server | What it covers |
 |---|---|---|
-| `pastebin.scenario` | `ladder_pastebin_server` | create/read/list, two clients, a private paste, both refusal messages, hand-built hostile envelopes |
-| `bookmarks_login.scenario` | `ladder_bookmarks_server` | a failed sign-in, a retry, a forged token, another principal's token |
-| `pastebin_broken.scenario` | `ladder_pastebin_server` | *meant to fail* — see below |
+| `pastebin/` | `ladder_pastebin_server` | paste lifecycle, privacy, hostile envelopes |
+| `bookmarks/` | `ladder_bookmarks_server` | sign-in, session handling, forged and borrowed tokens |
+
+The rung a scenario belongs to is its parent directory name — that is how
+per-rung action coverage is attributed, so a file loose in `scenarios/` is
+counted against no rung and is refused by the self-test.
+
+`pastebin/broken-on-purpose.scenario` is *meant to fail* — see below.
 
 Exit code `0` if every assertion held, `1` if one did not (the run stops at the
 first failure and prints the state at that point), `2` if the file is malformed
@@ -148,7 +153,7 @@ the other's listing, are exactly the cases an in-process test assumes away.
 `token` and overwrite `principal` before dispatch. `session` sets both from
 values an earlier step captured, so a sign-in that fails, is retried, and only
 then authorizes work is one file — see
-`scenarios/bookmarks_login.scenario`, which also shows a forged token and
+`scenarios/bookmarks/login-retry-and-forged-tokens.scenario`, which also shows a forged token and
 another principal's token being refused. `examples/TESTING.md` notes that a
 failed-then-retried sign-in appears in no in-process rig, because rigs arrive
 already authenticated.
@@ -162,13 +167,13 @@ A scenario that passes proves nothing until you know it *can* fail.
 ```bash
 python3 scripts/scenario/mutate_scenario.py \
     --server ws://127.0.0.1:60101 \
-    scripts/scenario/scenarios/pastebin.scenario
+    scripts/scenario/scenarios/pastebin/paste-lifecycle.scenario
 ```
 
 A surviving mutant is an assertion that is not load-bearing. It exits non-zero
 if any survives.
 
-`scenarios/pastebin_broken.scenario` is a scenario that is *meant* to fail: it
+`scenarios/pastebin/broken-on-purpose.scenario` is a scenario that is *meant* to fail: it
 asserts a paste reads back with content it was never created with. Run it to see
 what a failure report looks like.
 
@@ -185,9 +190,10 @@ files actually send and assert.
 python3 scripts/scenario/scenario_coverage.py
 ```
 
-Exit `0` if every kind and refusal is covered or exempt, `1` if something is
-uncovered, `2` if the tool itself is broken — a header it cannot read, an
-extraction too small to be believable, or a stale allowlist.
+Exit `0` if every kind and refusal is covered or exempt *and* the workflow
+axis below is satisfied, `1` if either axis has a real gap, `2` if the tool
+itself is broken — a header it cannot read, an extraction too small to be
+believable, or a stale allowlist.
 
 Anything deliberately left uncovered goes in `coverage_allowlist.json` with a
 **written reason**, and is checked in both directions: an entry for something
@@ -199,6 +205,63 @@ nothing: it refuses to run if it extracts an implausibly small surface (rename
 `makeErr` and it fails loudly rather than reporting full coverage over an empty
 universe), and `test_morph_scenario.py` drives it against fixtures whose right
 answers are known, including one where the correct exit code is non-zero.
+
+### The workflow axis
+
+Protocol coverage answers "did some scenario ever send this envelope kind or
+assert this refusal?" — it says nothing about whether scenarios exercise real
+*journeys* through a rung's domain actions, as opposed to a flat list of
+independent calls that happen to share a socket. `scenario_coverage.py` also
+measures that, per rung, against the registered `BRIDGE_REGISTER_ACTION`
+surface under `examples/<rung>/`.
+
+A scenario file counts as a **workflow** only when a later **`do`** step's
+arguments reference a name an earlier step `capture`d — one dispatched action
+consuming another's captured state — and it does so at least
+`WORKFLOW_MIN_CHAINED` times across at least `WORKFLOW_MIN_ACTIONS` distinct
+actions. Chaining on any other verb does not count: a `session
+principal=$who token=$token` step reuses one sign-in's credentials rather than
+carrying a result forward, so a file that installs the same token on three
+clients and then fires four unrelated `do` calls threads nothing between its
+actions and is not a workflow. A file that fires several unrelated calls, or
+that re-reads the same captured id without threading it into a *new* action,
+does not qualify either: format demonstrations and CRUD smoke tests are
+deliberately excluded, because what a workflow is meant to exercise — strand
+ordering, exactly-once replay, second-call authorization — only shows up when
+steps genuinely depend on each other's results.
+
+Two conditions must hold per rung, from `scenarios/<rung>/`:
+
+- every registered action is dispatched (appears in some scenario's `do`
+  step) by some file in that rung's directory;
+- the rung has at least as many qualifying workflow files as its floor in
+  `WORKFLOW_FLOORS` (`pastebin` 8, `polls` 10, `bookmarks` 12, `ledger` 15,
+  `kanban` 20) — floors scaled to how finite that rung's space of meaningful
+  journeys is, not quotas: a rung may carry more.
+
+An action that genuinely cannot be driven by any WebSocket client — because
+the server refuses every principal but its own internal caller, or because no
+action on the wire ever hands back the id it needs — is not a coverage gap to
+close but a fact about the rung, and gets an entry in `coverage_allowlist.json`
+under `"actions"`, keyed `"<rung>/<Action>"`, with the same **written reason**
+requirement as `kinds` and `messages`.
+
+That section is audited in both directions too: an entry with no written
+reason, one not keyed `"<rung>/<Action>"`, one naming a rung that registers
+nothing, or one naming an action its rung no longer registers all fail the run
+as a broken tool (exit `2`). What retires such an entry is *success*, not
+dispatch: the entry claims the action cannot be driven to completion, so a
+scenario that calls it precisely to assert its refusal is the reason's
+evidence and leaves it standing, while a scenario that dispatches it with an
+`expect ok` has done what the reason said was impossible and the entry must
+go. An entry whose action *is* dispatched grants no exemption — `exempt` is
+scoped to the actions no scenario dispatches at all — so the report lists it
+apart from the entries the per-rung `(n exempt)` count actually reflects.
+
+`scenario_coverage.py --floors` is a **testing-only** override for this tool's
+own fixtures (it lets them satisfy a floor without authoring dozens of
+throwaway workflow files); CI and any real run pass it nothing and get the
+shipped `WORKFLOW_FLOORS`.
 
 ## Self-test
 

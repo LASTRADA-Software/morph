@@ -3,7 +3,7 @@
 #
 #   BOOKMARKS_TOKEN_SECRET=... BOOKMARKS_PORT=0 ladder_bookmarks_server
 #   morph_scenario.py --server ws://127.0.0.1:<port> \
-#       scripts/scenario/scenarios/bookmarks_login.scenario
+#       scripts/scenario/scenarios/bookmarks/login-retry-and-forged-tokens.scenario
 #
 # A failed sign-in followed by a retry is close to the most common real
 # interaction there is, and examples/TESTING.md notes it appears in no

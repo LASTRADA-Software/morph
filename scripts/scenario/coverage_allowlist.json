@@ -3,5 +3,9 @@
   "messages": {
     "connection closed": "Emitted from the shared-instance attach path (remote.hpp, noteScopeAttachLocked) only when a connection's scope closes concurrently with an attach in flight on it. That is a genuine race; a scenario cannot drive it deterministically, and forcing it with a sleep would reintroduce the wall-clock flakiness this runner exists to avoid (morph#147). See the design spec, 'The measurable universe'.",
     "handleInline does not support execute (reply is asynchronous)": "handleInline is a synchronous, in-process C++ API used only by morph's own C++ unit tests; it is not an envelope kind or a path any WebSocket client can reach, so no scenario can ever assert this refusal. It was previously excluded by accident -- the message regexes missed its multi-line call site -- and is now excluded on purpose."
+  },
+  "actions": {
+    "ledger/RunReportJob": "LedgerModel::execute(const RunReportJob&) refuses any principal but kReportRunnerPrincipal (src/models/ledger_model.cpp:1205-1206, message \"RunReportJob: only the report runner may run a report job\"); it is dispatched by the app's own report runner, never by a user client. A scenario can submit a report and assert Pending, and can assert this refusal when a user client tries to run the job, but cannot drive it to Done -- that needs the server's own runner to tick, and waiting on it would mean a sleep, which this runner forbids by design. See morph#362.",
+    "ledger/UndoTransaction": "UndoTransaction reverses a journal entry by journalId, but no action in the rung's wire surface ever returns one: StoreTransaction answers with ledger state, GetLedger with accounts, and there is no GetJournal. A client can only call UndoTransaction with a journalId it guessed, so only the not-found refusal is assertable, not a real reversal. See morph#362."
   }
 }

@@ -9,6 +9,7 @@ the parser's own refusals.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import tempfile
 import unittest
@@ -30,25 +31,40 @@ import scenario_coverage
 
 from scenario_coverage import (
     DECODE_FUNCTION_MARKER,
+    MIN_ACTIONS,
     MIN_KINDS,
     MIN_MESSAGES,
+    SERVER_RUNGS,
+    WORKFLOW_FLOORS,
+    WORKFLOW_MIN_ACTIONS,
+    WORKFLOW_MIN_CHAINED,
     Allowlist,
     AllowlistError,
     Exercised,
+    RungTally,
+    ScenarioFacts,
     Surface,
     SurfaceError,
+    _render,
     _repo_root,
+    action_allowlist_problems,
+    action_floor_violations,
     allowlist_problems,
     covers,
     decode_body,
     exercised_by,
+    extract_actions,
     extract_shipped_surface,
     extract_surface,
     floor_violations,
     load_allowlist,
     load_scenarios,
     main as coverage_main,
+    rung_tallies,
+    scenario_facts,
     server_half,
+    shipped_action_sources,
+    workflow_problems,
 )
 
 
@@ -503,42 +519,42 @@ class AllowlistTest(unittest.TestCase):
 
     def test_an_entry_for_a_genuinely_uncovered_item_is_accepted(self) -> None:
         allowlist = Allowlist(kinds={"assign": "no rung uses shared instances yet"},
-                              messages={"server busy": "no server sets a LimitPolicy"})
+                              messages={"server busy": "no server sets a LimitPolicy"}, actions={})
         self.assertEqual(allowlist_problems(allowlist, self._SURFACE, self._EXERCISED), [])
 
     def test_an_entry_for_something_now_covered_is_a_problem(self) -> None:
         # The exemption has outlived its reason: the corpus covers this now.
         allowlist = Allowlist(kinds={"assign": "r", "execute": "stale"},
-                              messages={"server busy": "r"})
+                              messages={"server busy": "r"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("execute" in p and "already covered" in p for p in problems))
 
     def test_an_entry_naming_something_that_no_longer_exists_is_a_problem(self) -> None:
         # A rename in remote.hpp left this behind.
         allowlist = Allowlist(kinds={"assign": "r", "telepathy": "gone"},
-                              messages={"server busy": "r"})
+                              messages={"server busy": "r"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("telepathy" in p and "no longer" in p for p in problems))
 
     def test_an_empty_reason_is_a_problem(self) -> None:
-        allowlist = Allowlist(kinds={"assign": ""}, messages={"server busy": "r"})
+        allowlist = Allowlist(kinds={"assign": ""}, messages={"server busy": "r"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("reason" in p for p in problems))
 
     def test_an_empty_reason_on_a_message_entry_is_a_problem(self) -> None:
-        allowlist = Allowlist(kinds={}, messages={"server busy": ""})
+        allowlist = Allowlist(kinds={}, messages={"server busy": ""}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("reason" in p for p in problems))
 
     def test_a_message_entry_naming_something_that_no_longer_exists_is_a_problem(self) -> None:
         # A rename in remote.hpp left this behind.
-        allowlist = Allowlist(kinds={}, messages={"telepathic link severed": "gone"})
+        allowlist = Allowlist(kinds={}, messages={"telepathic link severed": "gone"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("telepathic link severed" in p and "no longer" in p for p in problems))
 
     def test_a_message_entry_for_something_now_covered_is_a_problem(self) -> None:
         # The exemption has outlived its reason: the corpus covers this now.
-        allowlist = Allowlist(kinds={}, messages={"model not found": "stale"})
+        allowlist = Allowlist(kinds={}, messages={"model not found": "stale"}, actions={})
         problems = allowlist_problems(allowlist, self._SURFACE, self._EXERCISED)
         self.assertTrue(any("model not found" in p and "already covered" in p for p in problems))
 
@@ -549,7 +565,7 @@ class AllowlistTest(unittest.TestCase):
             message_prefixes=frozenset({"unknown envelope kind: "}),
         )
         exercised = Exercised(kinds=frozenset({"execute"}), messages=frozenset({"model not found"}))
-        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "no scenario sends a bad kind"})
+        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "no scenario sends a bad kind"}, actions={})
         self.assertEqual(allowlist_problems(allowlist, surface, exercised), [])
 
     def test_a_prefix_shaped_message_entry_already_covered_is_a_problem(self) -> None:
@@ -562,7 +578,7 @@ class AllowlistTest(unittest.TestCase):
             kinds=frozenset({"execute"}),
             messages=frozenset({"unknown envelope kind: frobnicate"}),
         )
-        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "stale"})
+        allowlist = Allowlist(kinds={}, messages={"unknown envelope kind: ": "stale"}, actions={})
         problems = allowlist_problems(allowlist, surface, exercised)
         self.assertTrue(
             any("unknown envelope kind: " in p and "already covered" in p for p in problems)
@@ -592,8 +608,72 @@ class AllowlistTest(unittest.TestCase):
 
     def test_the_shipped_allowlist_parses(self) -> None:
         allowlist = load_allowlist(_repo_root() / "scripts" / "scenario" / "coverage_allowlist.json")
-        for reason in list(allowlist.kinds.values()) + list(allowlist.messages.values()):
+        for reason in list(allowlist.kinds.values()) + list(allowlist.messages.values()) + list(
+            allowlist.actions.values()
+        ):
             self.assertTrue(reason.strip(), "every entry needs a written reason")
+
+
+class ActionAllowlistTest(unittest.TestCase):
+    # One rung, three registered actions. `Alpha` is driven to success, `Beta`
+    # is dispatched only to assert a refusal, `Gamma` is never dispatched --
+    # the three states an `actions` entry can be audited against.
+    _ACTIONS = {"demo": frozenset({"Alpha", "Beta", "Gamma"})}
+    _FACTS = [
+        ScenarioFacts(rung="demo", path="scenarios/demo/a.scenario",
+                      actions=frozenset({"Alpha", "Beta"}), chained_steps=0,
+                      is_workflow=False, succeeded=frozenset({"Alpha"})),
+    ]
+
+    def _problems(self, entries: dict) -> list:
+        return action_allowlist_problems(
+            Allowlist(kinds={}, messages={}, actions=entries), self._ACTIONS, self._FACTS
+        )
+
+    def test_an_entry_for_an_undispatched_action_is_accepted(self) -> None:
+        self.assertEqual(self._problems({"demo/Gamma": "runner-only principal"}), [])
+
+    def test_an_entry_dispatched_only_to_assert_a_refusal_is_accepted(self) -> None:
+        # The shipped shape: the exemption says the action cannot be driven to
+        # completion, and a scenario calling it to assert its refusal is that
+        # claim's evidence, not its refutation.
+        self.assertEqual(self._problems({"demo/Beta": "no wire action hands back its id"}), [])
+
+    def test_an_action_driven_to_success_retires_the_entry(self) -> None:
+        problems = self._problems({"demo/Alpha": "cannot be driven"})
+        self.assertTrue(any("demo/Alpha" in p and "drop the exemption" in p for p in problems))
+
+    def test_an_empty_reason_is_a_problem(self) -> None:
+        problems = self._problems({"demo/Gamma": "   "})
+        self.assertTrue(any("demo/Gamma" in p and "reason" in p for p in problems))
+
+    def test_an_action_that_is_no_longer_registered_is_a_problem(self) -> None:
+        # A rename in the rung's C++ left this entry behind.
+        problems = self._problems({"demo/Telepathy": "gone"})
+        self.assertTrue(any("demo/Telepathy" in p and "no longer registered" in p for p in problems))
+
+    def test_a_key_with_no_rung_separator_is_a_problem(self) -> None:
+        problems = self._problems({"Gamma": "malformed"})
+        self.assertTrue(any("Gamma" in p and "<rung>/<Action>" in p for p in problems))
+
+    def test_a_key_naming_an_unknown_rung_is_a_problem(self) -> None:
+        problems = self._problems({"telepathy/Gamma": "wrong rung"})
+        self.assertTrue(any("telepathy" in p and "rung" in p for p in problems))
+
+    def test_an_empty_reason_is_caught_even_on_a_malformed_key(self) -> None:
+        # Both halves are reported: a bad key must not shadow a missing reason.
+        problems = self._problems({"Gamma": ""})
+        self.assertTrue(any("reason" in p for p in problems))
+        self.assertTrue(any("<rung>/<Action>" in p for p in problems))
+
+    def test_the_shipped_allowlist_passes_its_own_audit(self) -> None:
+        # The real entries must not need editing: both are dispatched, neither
+        # is driven to success.
+        root = _repo_root() / "scripts" / "scenario"
+        allowlist = load_allowlist(root / "coverage_allowlist.json")
+        actions = extract_actions(shipped_action_sources(_repo_root() / "examples"))
+        facts = [scenario_facts(s) for s in load_scenarios(root / "scenarios", recursive=True)]
+        self.assertEqual(action_allowlist_problems(allowlist, actions, facts), [])
 
 
 class CoverageCliTest(unittest.TestCase):
@@ -660,7 +740,20 @@ class CoverageCliTest(unittest.TestCase):
             )
         self.assertEqual(code, 2)
 
-    def test_exits_zero_when_everything_uncovered_is_exempt(self) -> None:
+    def test_exits_one_when_the_protocol_axis_is_exempt_but_the_real_workflow_axis_still_gaps(self) -> None:
+        # `_fixture_run` isolates the *protocol* axis (its own throwaway header,
+        # wire header and scenario corpus) but leaves `--examples` at its
+        # default, so the workflow axis still reads the real `examples/` tree
+        # and its real, known gap. (A fixture *can* isolate the workflow axis
+        # too -- see `test_exits_zero_when_both_axes_are_fully_covered_or_exempt`
+        # -- this test deliberately does not, to prove the two gates are
+        # independent: exempting the protocol axis alone must not be enough
+        # for a clean exit when the other axis still has a real gap.) This
+        # exercises the claim the protocol axis makes on its own: fully
+        # exempted kinds/messages stop protocol-side problems from being
+        # reported. The real corpus's workflow gap (see
+        # `test_the_real_run_exits_one_for_the_known_workflow_gap`) still
+        # drives the overall exit code to 1 -- both gates must be clean for 0.
         with tempfile.TemporaryDirectory() as tmp:
             allow = pathlib.Path(tmp) / "allow.json"
             allow.write_text(
@@ -671,7 +764,486 @@ class CoverageCliTest(unittest.TestCase):
                 'if (env.kind == "register") {}\nreply(makeErr("nope", id));',
                 ["--allowlist", str(allow), "--no-floor"],
             )
+        self.assertEqual(code, 1)
+
+    def _clean_two_axis_run(self, tmp: str, action_entries: dict) -> int:
+        """Runs the CLI over a fixture in which both axes are clean.
+
+        Isolates every input -- header, wire header, scenario corpus, examples
+        tree and floors -- so the run's only impurity is @p action_entries,
+        the `actions` section written into the fixture allowlist. With `{}` the
+        run is clean and exits 0; a caller passing a dishonest entry is asking
+        what the actions audit does with it.
+
+        @param tmp           A throwaway directory to build the fixture in.
+        @param action_entries The allowlist's `actions` section.
+        @return The CLI's exit code.
+        """
+        root = pathlib.Path(tmp)
+
+        # Protocol axis: a one-kind, one-message header. The kind
+        # ("register") ends up genuinely covered below -- every
+        # per-rung workflow scenario's `client` step sends it -- so only
+        # the message ("nope", which no scenario asserts) needs an
+        # exemption.
+        allow = root / "allow.json"
+        allow.write_text(
+            json.dumps({"messages": {"nope": "fixture"}, "actions": action_entries}),
+            encoding="utf-8",
+        )
+        header = root / "remote.hpp"
+        header.write_text(
+            'if (env.kind == "register") {}\nreply(makeErr("nope", id));\n'
+            + scenario_coverage.SERVER_HALF_MARKER
+            + " {};\n",
+            encoding="utf-8",
+        )
+        wire = root / "wire.hpp"
+        wire.write_text(scenario_coverage.DECODE_FUNCTION_MARKER + " {}\n", encoding="utf-8")
+
+        # Workflow axis: one throwaway rung tree per SERVER_RUNGS entry,
+        # each registering one action that a matching per-rung scenario
+        # dispatches -- so every registered action is dispatched and
+        # nothing needs an actions allowlist entry. Each scenario's
+        # `client` step also happens to cover the protocol axis's one
+        # kind, "register".
+        examples = root / "examples"
+        scenarios = root / "scenarios"
+        for rung in scenario_coverage.SERVER_RUNGS:
+            (examples / rung).mkdir(parents=True)
+            (examples / rung / "x.cpp").write_text(
+                'BRIDGE_REGISTER_ACTION(demo::M, demo::A, "AName")\n', encoding="utf-8"
+            )
+            (scenarios / rung).mkdir(parents=True)
+            (scenarios / rung / "w.scenario").write_text(
+                "model M\n\nclient alice\n\ndo AName\nexpect ok\n", encoding="utf-8"
+            )
+
+        # None of these fixture scenarios chains captured state, so none
+        # is a workflow by `WORKFLOW_MIN_CHAINED`'s definition -- the real
+        # per-rung floors (8-20) would fail every rung. Authoring five
+        # rungs' worth of genuine multi-step workflows here would be far
+        # more contrived than using the floors-injection path the brief
+        # calls out as acceptable, so every floor is overridden to 0.
+        floors = {rung: 0 for rung in scenario_coverage.SERVER_RUNGS}
+
+        return coverage_main(
+            [
+                "--header", str(header),
+                "--wire-header", str(wire),
+                "--scenarios", str(scenarios),
+                "--allowlist", str(allow),
+                "--examples", str(examples),
+                "--no-floor",
+                "--floors", json.dumps(floors),
+            ]
+        )
+
+    def test_exits_zero_when_both_axes_are_fully_covered_or_exempt(self) -> None:
+        # The genuine exit-0 path. `shipped_action_sources` used to be
+        # hardwired to the real `examples/` tree -- the one input to `main`
+        # that could not be redirected -- so no fixture could ever produce a
+        # fully clean run, and this tool's success path went untested. With
+        # `--examples` (and the hidden, testing-only `--floors`) it can be
+        # isolated like every other input: a throwaway header, wire header,
+        # scenario corpus AND examples tree, with everything either covered
+        # or allowlisted/floored away.
+        with tempfile.TemporaryDirectory() as tmp:
+            code = self._clean_two_axis_run(tmp, {})
         self.assertEqual(code, 0)
+
+    def test_exits_two_when_an_actions_entry_has_no_written_reason(self) -> None:
+        # An otherwise clean run: the only thing wrong is an actions entry
+        # exempting a live registered action with an empty reason. That used to
+        # pass silently -- the `actions` section was audited by nothing.
+        with tempfile.TemporaryDirectory() as tmp:
+            code = self._clean_two_axis_run(tmp, {"kanban/AName": ""})
+        self.assertEqual(code, 2)
+
+    def test_exits_two_when_an_actions_entry_names_a_nonexistent_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code = self._clean_two_axis_run(tmp, {"kanban/NoSuchAction": "written reason"})
+        self.assertEqual(code, 2)
+
+    def test_exits_two_when_floors_is_malformed(self) -> None:
+        # `--floors` is testing-only, but a bad value must still fail as a
+        # broken tool (exit 2), not silently fall back to the shipped floors.
+        with tempfile.TemporaryDirectory() as tmp:
+            code = self._fixture_run(
+                tmp, _FIXTURE_HEADER, ["--no-floor", "--floors", "not json"]
+            )
+        self.assertEqual(code, 2)
+
+    def test_the_real_run_exits_one_for_the_known_workflow_gap(self) -> None:
+        # The shipped corpus dispatches only a fraction of the registered
+        # actions and no rung yet meets its workflow floor -- authoring the
+        # rest is later work (see WORKFLOW_FLOORS). This pins today's real,
+        # honest exit code so a future change that silently flips it to 0
+        # gets noticed rather than assumed to mean the gap was closed.
+        self.assertEqual(coverage_main([]), 1)
+
+
+_FIXTURE_ACTIONS = '''
+BRIDGE_REGISTER_ACTION(demo::PasteModel, demo::CreatePaste, "CreatePaste")
+BRIDGE_REGISTER_ACTION(demo::PasteModel, demo::GetPaste, "GetPaste", ::morph::model::Loggable::No)
+  BRIDGE_REGISTER_ACTION(
+      demo::PasteModel, demo::ListPastes, "ListPastes")
+// BRIDGE_REGISTER_ACTION(demo::PasteModel, demo::NotReal, "NotReal")
+'''
+
+
+class ActionExtractionTest(unittest.TestCase):
+    def test_extracts_the_registered_action_names(self) -> None:
+        actions = extract_actions({"demo": _FIXTURE_ACTIONS})
+        self.assertEqual(actions["demo"], frozenset({"CreatePaste", "GetPaste", "ListPastes"}))
+
+    def test_extraction_spans_a_registration_split_across_lines(self) -> None:
+        # Same failure mode the message regexes had: a reflowed call site must
+        # not silently vanish from the universe.
+        actions = extract_actions({"demo": _FIXTURE_ACTIONS})
+        self.assertIn("ListPastes", actions["demo"])
+
+    def test_floor_rejects_an_implausibly_small_action_universe(self) -> None:
+        problems = action_floor_violations({"demo": frozenset({"CreatePaste"})})
+        self.assertTrue(problems)
+        self.assertTrue(any("action" in p for p in problems))
+
+    def test_floor_accepts_the_real_examples_tree(self) -> None:
+        actions = extract_actions(shipped_action_sources(_repo_root() / "examples"))
+        self.assertEqual(action_floor_violations(actions), [])
+        self.assertEqual(set(actions), set(SERVER_RUNGS))
+        for rung in SERVER_RUNGS:
+            self.assertTrue(actions[rung], f"{rung} registers no actions")
+
+    def test_real_tree_pins_the_known_action_names(self) -> None:
+        # Pins the exact set of action names per rung: a count-only assertion
+        # is blind to renames and to add-plus-remove pairs in the same rung.
+        # The name-set pin catches a rename, an addition, or a swap. When this
+        # fails, a human decides whether the changed action needs a workflow or
+        # an allowlist entry.
+        actions = extract_actions(shipped_action_sources(_repo_root() / "examples"))
+        self.assertEqual(actions["pastebin"], frozenset({"CreatePaste", "DeletePaste", "EditPaste", "ExpirePaste", "GetPaste", "ListPastes"}))
+        self.assertEqual(actions["polls"], frozenset({"AddComment", "CreatePoll", "FinalizePoll", "GetEventsSince", "GetPollState", "OpenPoll", "SubmitVotes", "UndoLastVoteChange", "UpdateVotes"}))
+        self.assertEqual(actions["bookmarks"], frozenset({"ArchiveBookmark", "BulkEdit", "CreateBookmark", "DeleteBookmark", "EditBookmark", "ExportBookmarks", "GetBookmark", "GetChangesSince", "ImportBookmarks", "ListBookmarks", "ListSharedFeed", "ListTags", "Login", "MergeTags", "RecordMetadata", "RenameTag", "UnarchiveBookmark"}))
+        self.assertEqual(actions["ledger"], frozenset({"CreateBudget", "CreateCategory", "CreateRule", "GetBudgetReport", "GetLedger", "GetReportStatus", "ImportLedgerChunk", "LinkAccountToCategory", "Login", "OpenAccount", "RunReportJob", "SetBudgetLimit", "SetCategory", "StoreTransaction", "SubmitReport", "UndoTransaction", "UpdateRule"}))
+        self.assertEqual(actions["kanban"], frozenset({"AddAttachment", "AddComment", "ApplyTagMutation", "CreateColumn", "CreateProject", "CreateRule", "CreateSwimlane", "CreateTask", "DeleteRule", "GetActivity", "GetAttachments", "GetBoardState", "GetEventsSince", "GetMyProjects", "GetProjectRoles", "GetRules", "Login", "MoveTaskPosition", "OpenBoard", "RemoveAttachment", "RemoveMember", "SetMemberRole"}))
+        # Total count provides a quick sanity check tied to MIN_ACTIONS.
+        total = sum(len(names) for names in actions.values())
+        self.assertEqual(total, 71)
+
+
+_FLAT_LIST = '''
+model PasteModel
+client alice
+do CreatePaste content="a"
+expect ok capture one=$.id
+do ListPastes
+expect ok field pastes ~ .
+do GetPaste id=fixed-not-captured
+expect err message == "GetPaste: no such paste"
+'''
+
+_REAL_WORKFLOW = '''
+model PasteModel
+client alice
+do CreatePaste content="a"
+expect ok capture id=$.id
+do GetPaste id=$id
+expect ok field content == "a"
+do EditPaste id=$id content="b"
+expect ok
+do ListPastes
+expect ok field pastes ~ $id
+do DeletePaste id=$id
+expect ok
+'''
+
+# Four distinct actions and three chained steps -- but every chained step is a
+# `session`, reinstalling one login's credentials on a second and third client,
+# and the four `do` calls are mutually independent. Nothing threads a result
+# from one action into the next, so this is a flat list wearing a workflow's
+# arithmetic: exactly the file the do-only chaining rule exists to refuse.
+_SESSION_CHAINED_FLAT_LIST = '''
+model LedgerModel
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+client one model=LedgerModel
+session principal=$who token=$token
+do GetLedger ledgerId=1
+expect ok field accounts ~ .
+client two model=LedgerModel
+session principal=$who token=$token
+do OpenAccount ledgerId=1 name="Cash" kind=0 currency=1
+expect ok field name == "Cash"
+client three model=BudgetModel
+session principal=$who token=$token
+do CreateCategory ledgerId=1 name="Drinks"
+expect ok
+do GetBudgetReport budgetId=7 month="2026-08"
+expect ok field limit.num == 5000
+'''
+
+
+class WorkflowClassificationTest(unittest.TestCase):
+    def test_a_flat_list_of_calls_is_not_a_workflow(self) -> None:
+        # Three distinct actions, but nothing consumes the captured id, so this
+        # is three one-shot calls sharing a socket.
+        facts = scenario_facts(parse_scenario(_FLAT_LIST, "scenarios/pastebin/flat.scenario"))
+        self.assertEqual(facts.chained_steps, 0)
+        self.assertFalse(facts.is_workflow)
+
+    def test_a_threaded_sequence_is_a_workflow(self) -> None:
+        facts = scenario_facts(parse_scenario(_REAL_WORKFLOW, "scenarios/pastebin/w.scenario"))
+        self.assertGreaterEqual(facts.chained_steps, WORKFLOW_MIN_CHAINED)
+        self.assertTrue(facts.is_workflow)
+
+    def test_records_the_actions_and_the_rung(self) -> None:
+        facts = scenario_facts(parse_scenario(_REAL_WORKFLOW, "scenarios/pastebin/w.scenario"))
+        self.assertEqual(
+            facts.actions,
+            frozenset({"CreatePaste", "GetPaste", "EditPaste", "ListPastes", "DeletePaste"}),
+        )
+        self.assertEqual(facts.rung, "pastebin")
+
+    def test_a_file_directly_in_scenarios_has_no_rung(self) -> None:
+        facts = scenario_facts(parse_scenario(_REAL_WORKFLOW, "scenarios/loose.scenario"))
+        self.assertEqual(facts.rung, "")
+
+    def test_enough_chaining_but_too_few_actions_is_not_a_workflow(self) -> None:
+        # Guards WORKFLOW_MIN_ACTIONS independently of WORKFLOW_MIN_CHAINED:
+        # create-then-read-repeatedly threads state but goes nowhere.
+        text = (
+            'model PasteModel\nclient alice\n'
+            'do CreatePaste content="a"\nexpect ok capture id=$.id\n'
+            'do GetPaste id=$id\nexpect ok field content == "a"\n'
+            'do GetPaste id=$id\nexpect ok field readCount.num == 2\n'
+            'do GetPaste id=$id\nexpect ok field readCount.num == 3\n'
+        )
+        facts = scenario_facts(parse_scenario(text, "scenarios/pastebin/x.scenario"))
+        self.assertGreaterEqual(facts.chained_steps, WORKFLOW_MIN_CHAINED)
+        self.assertEqual(len(facts.actions), 2)
+        self.assertFalse(facts.is_workflow)
+
+    def test_chaining_only_on_non_do_steps_is_not_a_workflow(self) -> None:
+        # Five actions, and three steps that reference an earlier capture --
+        # but all three are `session` steps reusing one login's token, and the
+        # `do` calls thread nothing between themselves. Counting a chained step
+        # on any verb made this qualify; only `do` chaining counts now.
+        facts = scenario_facts(
+            parse_scenario(_SESSION_CHAINED_FLAT_LIST, "scenarios/ledger/fake.scenario")
+        )
+        self.assertGreaterEqual(len(facts.actions), WORKFLOW_MIN_ACTIONS)
+        self.assertEqual(facts.chained_steps, 0)
+        self.assertFalse(facts.is_workflow)
+
+    def test_the_shipped_ledger_scenario_is_still_a_workflow(self) -> None:
+        # The other half of the do-only rule: the corpus's one real journey
+        # chains through `do` steps, so tightening the rule must not cost it.
+        path = (_repo_root() / "scripts" / "scenario" / "scenarios" / "ledger"
+                / "open-account-transact-report-close.scenario")
+        facts = scenario_facts(parse_scenario(path.read_text(encoding="utf-8"), str(path)))
+        self.assertTrue(facts.is_workflow)
+        self.assertGreaterEqual(facts.chained_steps, WORKFLOW_MIN_CHAINED)
+
+    def test_records_which_actions_a_scenario_drives_to_success(self) -> None:
+        # `succeeded` is what the action allowlist is audited against: a `do`
+        # asserted with `expect err` is dispatched but not driven to completion.
+        text = (
+            'model LedgerModel\nclient alice\n'
+            'do GetLedger ledgerId=1\nexpect ok field accounts ~ .\n'
+            'do UndoTransaction ledgerId=1 journalId=999999\nexpect err message ~ "journal"\n'
+        )
+        facts = scenario_facts(parse_scenario(text, "scenarios/ledger/x.scenario"))
+        self.assertEqual(facts.actions, frozenset({"GetLedger", "UndoTransaction"}))
+        self.assertEqual(facts.succeeded, frozenset({"GetLedger"}))
+
+    def test_load_scenarios_recurses_when_asked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "pastebin").mkdir()
+            (root / "pastebin" / "a.scenario").write_text(_REAL_WORKFLOW, encoding="utf-8")
+            (root / "b.scenario").write_text(_REAL_WORKFLOW, encoding="utf-8")
+            self.assertEqual(len(load_scenarios(root)), 1)
+            self.assertEqual(len(load_scenarios(root, recursive=True)), 2)
+
+
+class CorpusLayoutTest(unittest.TestCase):
+    def test_every_shipped_scenario_lives_under_a_rung_directory(self) -> None:
+        # The rung is the parent directory name, and that is how per-rung action
+        # coverage is attributed. A file loose in scenarios/ would be counted
+        # against no rung at all and silently excluded from every floor.
+        root = _repo_root() / "scripts" / "scenario" / "scenarios"
+        loose = sorted(p.name for p in root.glob("*.scenario"))
+        self.assertEqual(loose, [], "scenario files must live in scenarios/<rung>/")
+
+    def test_every_rung_directory_names_a_real_server_rung(self) -> None:
+        root = _repo_root() / "scripts" / "scenario" / "scenarios"
+        found = sorted(p.name for p in root.iterdir() if p.is_dir())
+        for name in found:
+            self.assertIn(name, SERVER_RUNGS, f"scenarios/{name}/ is not a rung that ships a server")
+
+
+class WorkflowGateTest(unittest.TestCase):
+    _ACTIONS = {"demo": frozenset({"Alpha", "Beta", "Gamma"})}
+
+    def _facts(self, count: int, actions: frozenset) -> list:
+        return [
+            ScenarioFacts(rung="demo", path=f"scenarios/demo/{i}.scenario",
+                          actions=actions, chained_steps=2, is_workflow=True)
+            for i in range(count)
+        ]
+
+    def test_reports_an_action_no_scenario_dispatches(self) -> None:
+        facts = self._facts(1, frozenset({"Alpha", "Beta"}))
+        problems = workflow_problems(self._ACTIONS, facts, Allowlist(kinds={}, messages={}, actions={}),
+                                     floors={"demo": 1})
+        self.assertTrue(any("Gamma" in p for p in problems))
+
+    def test_an_allowlisted_action_is_not_reported(self) -> None:
+        facts = self._facts(1, frozenset({"Alpha", "Beta"}))
+        allow = Allowlist(kinds={}, messages={}, actions={"demo/Gamma": "runner-only principal"})
+        problems = workflow_problems(self._ACTIONS, facts, allow, floors={"demo": 1})
+        self.assertFalse(any("Gamma" in p for p in problems))
+
+    def test_reports_a_rung_below_its_workflow_floor(self) -> None:
+        facts = self._facts(2, frozenset({"Alpha", "Beta", "Gamma"}))
+        problems = workflow_problems(self._ACTIONS, facts, Allowlist(kinds={}, messages={}, actions={}),
+                                     floors={"demo": 5})
+        self.assertTrue(any("floor" in p and "demo" in p for p in problems))
+
+    def test_non_workflow_files_do_not_count_towards_the_floor(self) -> None:
+        # Five files that are flat lists must not satisfy a floor of 5.
+        flat = [
+            ScenarioFacts(rung="demo", path=f"scenarios/demo/{i}.scenario",
+                          actions=frozenset({"Alpha", "Beta", "Gamma"}),
+                          chained_steps=0, is_workflow=False)
+            for i in range(5)
+        ]
+        problems = workflow_problems(self._ACTIONS, flat, Allowlist(kinds={}, messages={}, actions={}),
+                                     floors={"demo": 5})
+        self.assertTrue(any("floor" in p for p in problems))
+
+    def test_the_shipped_floors_name_only_real_rungs(self) -> None:
+        for rung in WORKFLOW_FLOORS:
+            self.assertIn(rung, SERVER_RUNGS)
+        self.assertEqual(set(WORKFLOW_FLOORS), set(SERVER_RUNGS))
+
+
+class RungTallyTest(unittest.TestCase):
+    # One rung, three actions: one gets dispatched, one is undispatched but
+    # allowlisted, one is undispatched and unexempt -- the three buckets
+    # `rung_tallies` must partition `registered` into.
+    _ACTIONS = {"demo": frozenset({"Alpha", "Beta", "Gamma"})}
+
+    def test_covers_all_three_buckets_and_the_partition_identity(self) -> None:
+        facts = [
+            ScenarioFacts(rung="demo", path="scenarios/demo/a.scenario",
+                          actions=frozenset({"Alpha"}), chained_steps=0, is_workflow=False),
+        ]
+        allow = Allowlist(kinds={}, messages={}, actions={"demo/Beta": "runner-only principal"})
+        tally = rung_tallies(self._ACTIONS, facts, allow, floors={"demo": 0})["demo"]
+        self.assertEqual(tally.registered, frozenset({"Alpha", "Beta", "Gamma"}))
+        self.assertEqual(tally.dispatched, frozenset({"Alpha"}))
+        self.assertEqual(tally.exempt, frozenset({"Beta"}))
+        self.assertEqual(tally.undispatched, frozenset({"Gamma"}))
+        self.assertEqual(
+            len(tally.dispatched) + len(tally.exempt) + len(tally.undispatched),
+            len(tally.registered),
+        )
+
+    def test_an_allowlisted_action_that_is_also_dispatched_counts_as_dispatched_not_exempt(self) -> None:
+        # The double-count regression this whole tally exists to prevent: an
+        # action can be both allowlisted and dispatched (a scenario may call
+        # it only to assert its refusal, without driving it to completion).
+        # It must land in `dispatched` alone -- counting it in `exempt` too
+        # would put it in two buckets at once and break the partition
+        # identity checked above.
+        facts = [
+            ScenarioFacts(rung="demo", path="scenarios/demo/a.scenario",
+                          actions=frozenset({"Alpha", "Beta"}), chained_steps=0, is_workflow=False),
+        ]
+        allow = Allowlist(kinds={}, messages={}, actions={"demo/Beta": "runner-only principal"})
+        tally = rung_tallies(self._ACTIONS, facts, allow, floors={"demo": 0})["demo"]
+        self.assertIn("Beta", tally.dispatched)
+        self.assertNotIn("Beta", tally.exempt)
+        self.assertEqual(
+            len(tally.dispatched) + len(tally.exempt) + len(tally.undispatched),
+            len(tally.registered),
+        )
+
+
+class ReportGateAgreementTest(unittest.TestCase):
+    # A protocol axis that is trivially fully covered (nothing in the
+    # surface, nothing exercised, nothing to allowlist), so both cases below
+    # isolate the workflow axis: whatever `_render` prints and whatever
+    # `workflow_problems` returns must describe the same gap, or its absence.
+    _SURFACE = Surface(kinds=frozenset(), exact_messages=frozenset(), message_prefixes=frozenset())
+    _EXERCISED = Exercised(kinds=frozenset(), messages=frozenset())
+    _ALLOWLIST = Allowlist(kinds={}, messages={}, actions={})
+    _ACTIONS = {"demo": frozenset({"Alpha", "Beta"})}
+
+    def test_a_real_gap_is_named_by_both_the_gate_and_the_report(self) -> None:
+        facts: list[ScenarioFacts] = []
+        problems = workflow_problems(self._ACTIONS, facts, self._ALLOWLIST, floors={"demo": 0})
+        self.assertTrue(problems)
+        text = _render(
+            self._SURFACE, self._EXERCISED, self._ALLOWLIST, self._ACTIONS, facts, floors={"demo": 0}
+        )
+        self.assertIn("WORKFLOW GAPS", text)
+        self.assertIn("demo", text)
+        self.assertIn("Alpha", text)
+        self.assertIn("Beta", text)
+
+    def test_the_printed_exemption_list_agrees_with_the_per_rung_count(self) -> None:
+        # `Beta` is dispatched (only to assert a refusal), so it grants no
+        # exemption and the rung line says "(0 exempt)". Printing it under
+        # "Actions exempt, with reasons" claimed an exemption the arithmetic
+        # never granted; it is grouped apart now.
+        facts = [
+            ScenarioFacts(rung="demo", path="scenarios/demo/a.scenario",
+                          actions=frozenset({"Alpha", "Beta"}), chained_steps=0,
+                          is_workflow=False, succeeded=frozenset({"Alpha"})),
+        ]
+        allow = Allowlist(kinds={}, messages={}, actions={"demo/Beta": "only its refusal is assertable"})
+        text = _render(
+            self._SURFACE, self._EXERCISED, allow, self._ACTIONS, facts, floors={"demo": 0}
+        )
+        self.assertIn("(0 exempt)", text)
+        self.assertNotIn("Actions exempt, with reasons:", text)
+        self.assertIn("granting no exemption", text)
+        self.assertIn("demo/Beta", text)
+
+    def test_an_entry_that_does_grant_an_exemption_is_printed_as_exempt(self) -> None:
+        # The other half: `Beta` is registered, dispatched by nobody and
+        # allowlisted, so it is counted in the rung's "(1 exempt)" and belongs
+        # under the exempt heading.
+        facts = [
+            ScenarioFacts(rung="demo", path="scenarios/demo/a.scenario",
+                          actions=frozenset({"Alpha"}), chained_steps=0,
+                          is_workflow=False, succeeded=frozenset({"Alpha"})),
+        ]
+        allow = Allowlist(kinds={}, messages={}, actions={"demo/Beta": "no wire action hands back its id"})
+        text = _render(
+            self._SURFACE, self._EXERCISED, allow, self._ACTIONS, facts, floors={"demo": 0}
+        )
+        self.assertIn("(1 exempt)", text)
+        self.assertIn("Actions exempt, with reasons:", text)
+        self.assertNotIn("granting no exemption", text)
+
+    def test_no_gap_is_named_by_neither_the_gate_nor_the_report(self) -> None:
+        facts = [
+            ScenarioFacts(rung="demo", path="scenarios/demo/a.scenario",
+                          actions=frozenset({"Alpha", "Beta"}), chained_steps=0, is_workflow=False),
+        ]
+        problems = workflow_problems(self._ACTIONS, facts, self._ALLOWLIST, floors={"demo": 0})
+        self.assertEqual(problems, [])
+        text = _render(
+            self._SURFACE, self._EXERCISED, self._ALLOWLIST, self._ACTIONS, facts, floors={"demo": 0}
+        )
+        self.assertNotIn("WORKFLOW GAPS", text)
+        self.assertIn("Every registered action is dispatched and every rung meets its floor.", text)
 
 
 if __name__ == "__main__":

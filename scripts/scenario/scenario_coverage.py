@@ -250,6 +250,101 @@ def floor_violations(surface: Surface) -> list[str]:
     return problems
 
 
+# Rungs that ship a `ladder_<rung>_server`, and so can be driven by a scenario.
+# `lims` and `crm` are deliberately absent: neither ships a server (crm ships no
+# client either -- see its README's "What is not built"), so no scenario can
+# reach them. lims's missing server is filed separately.
+SERVER_RUNGS = ("pastebin", "bookmarks", "polls", "kanban", "ledger")
+
+# Plausibility floor for the whole action universe, measured at 71. Same
+# purpose as MIN_KINDS/MIN_MESSAGES: if the macro is renamed, this extractor
+# silently finds nothing and would report full workflow coverage over an empty
+# universe. Falling short is a statement about the tool, not the tree.
+MIN_ACTIONS = 65
+
+# `\s*` between the parts, so a registration reflowed across lines by
+# clang-format is still found. The third argument is the wire action name --
+# the string a scenario's `do` line uses -- which is why it, not the C++ type,
+# is what gets extracted.
+_ACTION = re.compile(
+    r'BRIDGE_REGISTER_ACTION\(\s*[\w:]+\s*,\s*[\w:]+\s*,\s*"([^"]+)"'
+)
+
+# Strips a trailing `//...` comment from each line before `_ACTION` runs.
+# Unlike the message patterns (where over-inclusion is harmless noise), a
+# commented-out registration is a real action name still present in the text
+# but no longer live; counting it would silently overstate the universe. A
+# per-line truncation is enough here -- no action name legitimately contains
+# `//`.
+#
+# Known limitations: this strips per-line only and is blind to `//` inside
+# string literals; block comments `/* ... */` are not handled at all. Neither
+# occurs in the real examples/ tree today (verified). Both fail *closed* -- they
+# can only drop a registration, never invent one. The name-set pin in
+# test_real_tree_pins_the_known_action_names would catch any drop.
+_LINE_COMMENT = re.compile(r"//.*")
+
+
+def extract_actions(sources: dict[str, str]) -> dict[str, frozenset[str]]:
+    """Extracts each rung's registered action names from its C++ text.
+
+    @param sources Rung name to the concatenated text of that rung's sources.
+    @return Rung name to the set of wire action names it registers.
+    """
+    result: dict[str, frozenset[str]] = {}
+    for rung, text in sources.items():
+        live = "\n".join(_LINE_COMMENT.sub("", line) for line in text.splitlines())
+        result[rung] = frozenset(_ACTION.findall(live))
+    return result
+
+
+def shipped_action_sources(examples: pathlib.Path) -> dict[str, str]:
+    """Reads every C++ source under `<examples>/<rung>/` for each server rung.
+
+    @param examples Directory holding each rung's example tree -- the real
+           run passes the repository's `examples/` directory; a test passes a
+           throwaway directory shaped the same way, since this is the one
+           input to `main` that used to be hardwired to the repo layout.
+    @return Rung name to concatenated source text, ready for `extract_actions`.
+    @throws SurfaceError if a rung's directory is missing -- a renamed or moved
+            rung must break this loudly rather than silently drop its actions.
+    """
+    sources: dict[str, str] = {}
+    for rung in SERVER_RUNGS:
+        directory = examples / rung
+        if not directory.is_dir():
+            raise SurfaceError(
+                f"rung directory {directory} not found -- SERVER_RUNGS is stale, "
+                "or a rung moved; refusing to report coverage over a partial tree"
+            )
+        chunks = [
+            path.read_text(encoding="utf-8", errors="replace")
+            for path in sorted(directory.rglob("*"))
+            if path.is_file() and path.suffix in {".cpp", ".hpp"}
+        ]
+        sources[rung] = "\n".join(chunks)
+    return sources
+
+
+def action_floor_violations(actions: dict[str, frozenset[str]]) -> list[str]:
+    """Reports every way the action universe is too small to be believable.
+
+    @param actions Rung name to its registered action names.
+    @return One message per problem; empty when the extraction is plausible.
+    """
+    problems: list[str] = []
+    total = sum(len(names) for names in actions.values())
+    if total < MIN_ACTIONS:
+        problems.append(
+            f"found {total} registered actions, expected at least {MIN_ACTIONS} "
+            "-- the extractor is probably broken, not the examples tree"
+        )
+    for rung, names in sorted(actions.items()):
+        if not names:
+            problems.append(f"rung '{rung}' registers no actions -- extraction is broken for it")
+    return problems
+
+
 @dataclass(frozen=True)
 class Exercised:
     """What the scenario corpus actually puts on the wire and asserts on."""
@@ -258,15 +353,237 @@ class Exercised:
     messages: frozenset[str]
 
 
-def load_scenarios(directory: pathlib.Path) -> list[Scenario]:
-    """Parses every `*.scenario` in @p directory through the runner's own parser.
+# What separates a workflow from a list of calls. Set by measuring the corpus,
+# not guessed: at three-and-two both shipped files qualify, and they are format
+# demonstrations rather than journeys. Four-and-three puts the bar just above
+# them -- the shortest qualifying shape is roughly
+# `sign in -> create -> edit -> read back`. Both halves are load-bearing and
+# neither implies the other: a file reading the same id four times threads
+# state without going anywhere, and a file firing four unrelated actions goes
+# nowhere while threading nothing.
+WORKFLOW_MIN_ACTIONS = 4
+WORKFLOW_MIN_CHAINED = 3
+
+
+@dataclass(frozen=True)
+class ScenarioFacts:
+    """What one scenario file dispatches, and whether it is a workflow.
+
+    `succeeded` is the subset of `actions` the file dispatches with an
+    `expect ok` on the reply -- an action it drives to completion, rather than
+    merely calls to assert a refusal. The action allowlist is audited against
+    it; see `action_allowlist_problems`.
+    """
+
+    rung: str
+    path: str
+    actions: frozenset[str]
+    chained_steps: int
+    is_workflow: bool
+    succeeded: frozenset[str] = frozenset()
+
+
+def scenario_facts(scenario: Scenario) -> ScenarioFacts:
+    """Summarises one parsed scenario for the workflow axis.
+
+    A step counts as *chained* only when it is a `do` step whose arguments
+    reference a name an earlier step captured. That is what distinguishes a
+    journey from a list: threading state through the rung's *domain actions*
+    means each dispatch depends on what the last one returned. Chaining on any
+    other verb is deliberately not counted -- a `session principal=$who
+    token=$token` step reuses one login's credentials rather than carrying a
+    result forward, so a file that installs the same token on three clients
+    and then fires four unrelated `do` calls would otherwise qualify while
+    threading nothing at all between its actions.
+
+    @param scenario A scenario already parsed by `morph_scenario.parse_scenario`.
+    @return Its rung, dispatched actions, chained-step count and workflow verdict.
+    """
+    path = pathlib.PurePath(scenario.path)
+    rung = path.parent.name if path.parent.name != "scenarios" else ""
+
+    actions: set[str] = set()
+    succeeded: set[str] = set()
+    captured: set[str] = set()
+    chained = 0
+    for step in scenario.steps:
+        is_do = step.verb == "do" and bool(step.args)
+        if is_do:
+            actions.add(step.args[0])
+            if any(
+                assertion.kind == "compare"
+                and assertion.path == "@kind"
+                and assertion.expected_token == "ok"
+                for assertion in step.assertions
+            ):
+                succeeded.add(step.args[0])
+        # Read references before recording this step's own captures: a step
+        # cannot chain off a value it produces itself.
+        if is_do and any(
+            name in captured
+            for arg in step.args
+            for name in _referenced_captures(arg)
+        ):
+            chained += 1
+        for assertion in step.assertions:
+            if assertion.kind == "capture" and assertion.capture_name:
+                captured.add(assertion.capture_name)
+
+    is_workflow = len(actions) >= WORKFLOW_MIN_ACTIONS and chained >= WORKFLOW_MIN_CHAINED
+    return ScenarioFacts(
+        rung=rung,
+        path=scenario.path,
+        actions=frozenset(actions),
+        chained_steps=chained,
+        is_workflow=is_workflow,
+        succeeded=frozenset(succeeded),
+    )
+
+
+def _referenced_captures(token: str) -> list[str]:
+    """Returns every `$name` / `${name}` reference in @p token.
+
+    Uses the runner's own `_VARIABLE` pattern so the two cannot disagree about
+    what a capture reference looks like.
+    """
+    return [
+        braced or bare
+        for braced, bare in morph_scenario._VARIABLE.findall(token)  # noqa: SLF001
+    ]
+
+
+# Minimum number of qualifying workflows per rung, scaled to how finite that
+# rung's space of meaningful journeys is. pastebin's six actions admit a
+# near-exhaustive set; kanban's twenty-two do not, so its floor targets the
+# important journeys rather than the closure. See the design spec, "How many,
+# per rung". Floors, not quotas -- a rung may carry more, and deleting
+# workflows below the floor is meant to fail CI rather than erode quietly.
+WORKFLOW_FLOORS = {
+    "pastebin": 8,
+    "polls": 10,
+    "bookmarks": 12,
+    "ledger": 15,
+    "kanban": 20,
+}
+
+
+@dataclass(frozen=True)
+class RungTally:
+    """One rung's workflow-axis arithmetic, computed once and shared.
+
+    `dispatched`, `exempt` and `undispatched` partition `registered`: every
+    registered action lands in exactly one bucket, so
+    `len(dispatched) + len(exempt) + len(undispatched) == len(registered)`
+    always holds. An action that is both allowlisted and dispatched lands in
+    `dispatched`, not `exempt` -- `exempt` is scoped to the undispatched
+    remainder, because a scenario may legitimately call an allowlisted action
+    (e.g. to assert its refusal) without driving it to completion, and such a
+    call already counts as dispatched.
+    """
+
+    rung: str
+    registered: frozenset[str]
+    dispatched: frozenset[str]
+    exempt: frozenset[str]
+    undispatched: frozenset[str]
+    workflows: int
+    floor: int
+
+
+def rung_tallies(
+    actions: dict[str, frozenset[str]],
+    facts: list[ScenarioFacts],
+    allowlist: Allowlist,
+    floors: dict[str, int] | None = None,
+) -> dict[str, RungTally]:
+    """Computes the workflow-axis arithmetic once per rung, for both callers.
+
+    `workflow_problems` (the gate) and `_render` (the report) used to walk
+    `facts` and recompute this independently; that let the printed report and
+    the exit code disagree if the two implementations ever drifted. Both now
+    call this and share one answer.
+
+    @param actions   Rung name to its registered action names.
+    @param facts     One entry per parsed scenario.
+    @param allowlist Exemptions; `actions` is keyed `"<rung>/<Action>"`.
+    @param floors    Per-rung workflow minimums; defaults to `WORKFLOW_FLOORS`.
+    @return Rung name to its `RungTally`, ordered the same way @p actions was.
+    """
+    effective = WORKFLOW_FLOORS if floors is None else floors
+    result: dict[str, RungTally] = {}
+    for rung, registered in sorted(actions.items()):
+        dispatched_by_scenario: set[str] = set()
+        workflows = 0
+        for fact in facts:
+            if fact.rung != rung:
+                continue
+            dispatched_by_scenario |= fact.actions
+            if fact.is_workflow:
+                workflows += 1
+
+        dispatched = registered & dispatched_by_scenario
+        # Exempt is scoped to the undispatched remainder, not to every
+        # registered action: a scenario may still legitimately call an
+        # allowlisted action (e.g. to assert its refusal) without being able
+        # to drive it to completion, and such a call already counts as
+        # dispatched. Scoping this way keeps the three buckets disjoint, so
+        # dispatched + exempt + undispatched always equals registered.
+        undispatched_all = registered - dispatched
+        exempt = {name for name in undispatched_all if f"{rung}/{name}" in allowlist.actions}
+        undispatched = undispatched_all - exempt
+
+        result[rung] = RungTally(
+            rung=rung,
+            registered=registered,
+            dispatched=frozenset(dispatched),
+            exempt=frozenset(exempt),
+            undispatched=frozenset(undispatched),
+            workflows=workflows,
+            floor=effective.get(rung, 0),
+        )
+    return result
+
+
+def workflow_problems(
+    actions: dict[str, frozenset[str]],
+    facts: list[ScenarioFacts],
+    allowlist: Allowlist,
+    floors: dict[str, int] | None = None,
+) -> list[str]:
+    """Reports unexercised actions and rungs below their workflow floor.
+
+    @param actions   Rung name to its registered action names.
+    @param facts     One entry per parsed scenario.
+    @param allowlist Exemptions; `actions` is keyed `"<rung>/<Action>"`.
+    @param floors    Per-rung workflow minimums; defaults to `WORKFLOW_FLOORS`.
+    @return One message per problem; empty when both gates are satisfied.
+    """
+    problems: list[str] = []
+    for rung, tally in rung_tallies(actions, facts, allowlist, floors).items():
+        for name in sorted(tally.undispatched):
+            problems.append(f"{rung}: action '{name}' is dispatched by no scenario")
+        if tally.workflows < tally.floor:
+            problems.append(
+                f"{rung}: {tally.workflows} workflows, floor is {tally.floor} "
+                "(a file counts only if it chains actions through captured state)"
+            )
+    return problems
+
+
+def load_scenarios(directory: pathlib.Path, recursive: bool = False) -> list[Scenario]:
+    """Parses every `*.scenario` under @p directory through the runner's parser.
 
     Deliberately re-uses `morph_scenario.parse_scenario` rather than reading the
     files here: a second parser could drift from the real one, and then this
     report would be measuring a format nothing runs.
+
+    @param directory Directory to read.
+    @param recursive When true, descends into per-rung subdirectories.
+    @return The parsed scenarios, ordered by path.
     """
+    pattern = "**/*.scenario" if recursive else "*.scenario"
     out: list[Scenario] = []
-    for path in sorted(directory.glob("*.scenario")):
+    for path in sorted(directory.glob(pattern)):
         out.append(morph_scenario.parse_scenario(path.read_text(encoding="utf-8"), str(path)))
     return out
 
@@ -360,6 +677,7 @@ class Allowlist:
 
     kinds: dict[str, str]
     messages: dict[str, str]
+    actions: dict[str, str]
 
 
 class AllowlistError(Exception):
@@ -389,7 +707,7 @@ def load_allowlist(path: pathlib.Path) -> Allowlist:
     `json.loads` escape would exit 1, and CI reads 1 as "a real gap".
     """
     if not path.exists():
-        return Allowlist(kinds={}, messages={})
+        return Allowlist(kinds={}, messages={}, actions={})
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -403,6 +721,7 @@ def load_allowlist(path: pathlib.Path) -> Allowlist:
     return Allowlist(
         kinds=_allowlist_section(raw.get("kinds", {}), "kinds", path),
         messages=_allowlist_section(raw.get("messages", {}), "messages", path),
+        actions=_allowlist_section(raw.get("actions", {}), "actions", path),
     )
 
 
@@ -437,8 +756,89 @@ def allowlist_problems(allowlist: Allowlist, surface: Surface, exercised: Exerci
     return problems
 
 
-def _render(surface: Surface, exercised: Exercised, allowlist: Allowlist) -> str:
-    """Builds the human-readable report."""
+def action_allowlist_problems(
+    allowlist: Allowlist,
+    actions: dict[str, frozenset[str]],
+    facts: list[ScenarioFacts],
+) -> list[str]:
+    """Audits the `actions` section of the allowlist, in both directions.
+
+    The companion to `allowlist_problems`, which audits the protocol axis; this
+    one needs the workflow axis's universe and corpus, which the protocol audit
+    never sees. Same three checks: a written reason, an entry that still names
+    something real, and an entry that has not outlived its justification.
+
+    What retires an action exemption is deliberately *success*, not dispatch.
+    An entry here claims the action cannot be driven to completion by any
+    WebSocket client -- the server refuses every principal but its own, or no
+    action on the wire hands back the id it needs. A scenario that calls such
+    an action precisely to assert that refusal is the exemption's evidence, not
+    its refutation, so being dispatched leaves the entry standing. An action
+    that some scenario dispatches with an `expect ok` *has* been driven to
+    completion, which is exactly what the reason said was impossible, and the
+    entry must go.
+
+    @param allowlist Exemptions; `actions` is keyed `"<rung>/<Action>"`.
+    @param actions   Rung name to its registered action names.
+    @param facts     One entry per parsed scenario.
+    @return One message per problem; empty when every entry is honest.
+    """
+    succeeded: dict[str, set[str]] = {rung: set() for rung in actions}
+    for fact in facts:
+        if fact.rung in succeeded:
+            succeeded[fact.rung] |= set(fact.succeeded)
+
+    problems: list[str] = []
+    for key, reason in sorted(allowlist.actions.items()):
+        if not reason.strip():
+            problems.append(f"allowlisted action '{key}' has no written reason")
+        rung, separator, name = key.partition("/")
+        if not separator or not rung or not name:
+            problems.append(
+                f"allowlisted action '{key}' is not keyed '<rung>/<Action>'"
+            )
+            continue
+        if rung not in actions:
+            problems.append(
+                f"allowlisted action '{key}' names rung '{rung}', which registers no actions "
+                "-- the rung was renamed or does not ship a server"
+            )
+            continue
+        if name not in actions[rung]:
+            problems.append(
+                f"allowlisted action '{key}' is no longer registered by '{rung}' "
+                "-- a rename left the exemption behind"
+            )
+        elif name in succeeded[rung]:
+            problems.append(
+                f"allowlisted action '{key}' is driven to success by a scenario "
+                "-- drop the exemption"
+            )
+    return problems
+
+
+def _render(
+    surface: Surface,
+    exercised: Exercised,
+    allowlist: Allowlist,
+    actions: dict[str, frozenset[str]],
+    facts: list[ScenarioFacts],
+    floors: dict[str, int] | None = None,
+) -> str:
+    """Builds the human-readable report, protocol axis then workflow axis.
+
+    @param surface   The protocol surface extracted from the headers.
+    @param exercised What the scenario corpus puts on the wire and asserts on.
+    @param allowlist Exemptions for both axes.
+    @param actions   Rung name to its registered action names (the workflow
+                      axis's universe).
+    @param facts     One entry per parsed scenario (the workflow axis's
+                      corpus).
+    @param floors    Per-rung workflow minimums; defaults to `WORKFLOW_FLOORS`.
+                      Mirrors the same hidden, testing-only override
+                      `workflow_problems` accepts, so a fixture's printed
+                      report and its exit code always agree.
+    """
     uncovered_kinds, uncovered_messages = covers(surface, exercised)
     gap_kinds = sorted(uncovered_kinds - set(allowlist.kinds))
     gap_messages = sorted(uncovered_messages - set(allowlist.messages))
@@ -468,7 +868,84 @@ def _render(surface: Surface, exercised: Exercised, allowlist: Allowlist) -> str
         lines.append("")
     if not gap_kinds and not gap_messages:
         lines.append("Every kind and refusal is either covered or exempt.")
+
+    lines.append("")
+    lines.append("workflow coverage")
+    lines.append("")
+    total_registered = 0
+    total_dispatched = 0
+    gap_lines: list[str] = []
+    granting: set[str] = set()
+    for rung, tally in rung_tallies(actions, facts, allowlist, floors).items():
+        total_registered += len(tally.registered)
+        total_dispatched += len(tally.dispatched)
+        granting |= {f"{rung}/{name}" for name in tally.exempt}
+
+        lines.append(
+            f"  {rung:<10} actions {len(tally.dispatched)}/{len(tally.registered)} dispatched "
+            f"({len(tally.exempt)} exempt), workflows {tally.workflows}/{tally.floor}"
+        )
+        if tally.undispatched:
+            gap_lines.append(
+                f"    {rung}: {', '.join(sorted(tally.undispatched))} dispatched by no scenario"
+            )
+        if tally.workflows < tally.floor:
+            gap_lines.append(f"    {rung}: {tally.workflows} workflows, floor is {tally.floor}")
+
+    lines.append("")
+    lines.append(f"  total actions dispatched: {total_dispatched}/{total_registered}")
+    # Split the allowlist's action entries by whether they actually granted an
+    # exemption in the tallies above. `exempt` is scoped to the undispatched
+    # remainder, so an entry whose action *is* dispatched (a scenario calling
+    # it only to assert its refusal) grants nothing and is counted in no rung's
+    # "(n exempt)". Printing every entry under one "exempt" heading claimed
+    # exemptions the arithmetic never granted; the two groups are labelled
+    # apart so the list and the counts cannot be read as disagreeing.
+    if allowlist.actions:
+        granted = [(k, r) for k, r in sorted(allowlist.actions.items()) if k in granting]
+        recorded = [(k, r) for k, r in sorted(allowlist.actions.items()) if k not in granting]
+        if granted:
+            lines.append("")
+            lines.append("Actions exempt, with reasons:")
+            for name, reason in granted:
+                lines.append(f"    {name}: {reason}")
+        if recorded:
+            lines.append("")
+            lines.append(
+                "Actions recorded as undrivable, granting no exemption "
+                "(a scenario already dispatches them, to assert their refusal):"
+            )
+            for name, reason in recorded:
+                lines.append(f"    {name}: {reason}")
+    if gap_lines:
+        lines.append("")
+        lines.append("WORKFLOW GAPS:")
+        lines.extend(gap_lines)
+    else:
+        lines.append("")
+        lines.append("Every registered action is dispatched and every rung meets its floor.")
     return "\n".join(lines)
+
+
+def _parse_floors(raw: str) -> dict[str, int]:
+    """Parses the `--floors` JSON object into a per-rung workflow-floor mapping.
+
+    Hidden, testing-only knob: it lets this tool's own fixtures satisfy the
+    workflow floor without authoring dozens of throwaway workflow scenarios
+    per rung. A real run never passes `--floors`, so `workflow_problems` falls
+    back to the shipped `WORKFLOW_FLOORS`.
+
+    @param raw The `--floors` argument text, expected to be a JSON object of
+           rung name to integer floor.
+    @return The parsed mapping.
+    @throws ValueError if @p raw is not JSON, or not shaped as expected.
+    """
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict) or not all(
+        isinstance(key, str) and isinstance(value, int) for key, value in parsed.items()
+    ):
+        raise ValueError("must be a JSON object of rung name -> integer floor")
+    return parsed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -487,11 +964,33 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scenarios", default=str(pathlib.Path(__file__).with_name("scenarios")))
     parser.add_argument("--allowlist", default=str(pathlib.Path(__file__).with_name("coverage_allowlist.json")))
     parser.add_argument(
+        "--examples",
+        default=str(root / "examples"),
+        help="directory holding each rung's example tree, the source of registered actions",
+    )
+    parser.add_argument(
         "--no-floor",
         action="store_true",
         help="skip the plausibility check (for this tool's own fixtures only)",
     )
+    parser.add_argument(
+        "--floors",
+        default=None,
+        help=(
+            "hidden, testing-only: JSON object of rung name -> integer, overriding the "
+            "workflow floors for this tool's own fixtures; real runs never pass this "
+            "and get the shipped WORKFLOW_FLOORS"
+        ),
+    )
     args = parser.parse_args(argv)
+
+    floors: dict[str, int] | None = None
+    if args.floors is not None:
+        try:
+            floors = _parse_floors(args.floors)
+        except ValueError as exc:
+            print(f"scenario_coverage: --floors {exc}", file=sys.stderr)
+            return 2
 
     try:
         header_text = pathlib.Path(args.header).read_text(encoding="utf-8")
@@ -513,7 +1012,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     try:
-        scenarios = load_scenarios(pathlib.Path(args.scenarios))
+        scenarios = load_scenarios(pathlib.Path(args.scenarios), recursive=True)
     except (OSError, morph_scenario.ScenarioError) as exc:
         print(f"scenario_coverage: cannot read scenarios: {exc}", file=sys.stderr)
         return 2
@@ -531,9 +1030,31 @@ def main(argv: list[str] | None = None) -> int:
             print(f"scenario_coverage: {problem}", file=sys.stderr)
         return 2
 
-    print(_render(surface, exercised, allowlist))
+    try:
+        actions = extract_actions(shipped_action_sources(pathlib.Path(args.examples)))
+    except (OSError, SurfaceError) as exc:
+        print(f"scenario_coverage: {exc}", file=sys.stderr)
+        return 2
+    if not args.no_floor:
+        action_problems = action_floor_violations(actions)
+        if action_problems:
+            for problem in action_problems:
+                print(f"scenario_coverage: {problem}", file=sys.stderr)
+            return 2
+
+    facts = [scenario_facts(scenario) for scenario in scenarios]
+    stale_exemptions = action_allowlist_problems(allowlist, actions, facts)
+    if stale_exemptions:
+        for problem in stale_exemptions:
+            print(f"scenario_coverage: {problem}", file=sys.stderr)
+        return 2
+
+    flow_problems = workflow_problems(actions, facts, allowlist, floors=floors)
+
+    print(_render(surface, exercised, allowlist, actions, facts, floors=floors))
     uncovered_kinds, uncovered_messages = covers(surface, exercised)
-    if (uncovered_kinds - set(allowlist.kinds)) or (uncovered_messages - set(allowlist.messages)):
+    protocol_gap = (uncovered_kinds - set(allowlist.kinds)) or (uncovered_messages - set(allowlist.messages))
+    if protocol_gap or flow_problems:
         return 1
     return 0
 
