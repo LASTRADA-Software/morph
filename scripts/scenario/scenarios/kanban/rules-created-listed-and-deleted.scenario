@@ -22,7 +22,7 @@
 # Pinned below as it behaves. The handler is keyed by project and role-checked
 # per board, so this discloses nothing a caller could not already read -- but a
 # client that trusted the argument would be reading the wrong board and would
-# have no way to tell.
+# have no way to tell. Filed as morph#369.
 #
 # Re-runnable: the project is created here, so it starts with no rules.
 

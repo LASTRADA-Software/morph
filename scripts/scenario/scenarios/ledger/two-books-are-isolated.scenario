@@ -122,7 +122,10 @@ expect ok field status == 0
 # simply does not check which book the account belongs to. That makes this a
 # missing `WHERE ledger_id = ?` on the leg's account lookup rather than an
 # absent check, and the file pins it so a fix has to come here and change it
-# deliberately.
+# deliberately. Filed as morph#367, which also notes that
+# `UndoTransaction` *does* make the equivalent check
+# ("journal does not belong to this ledger"), and that
+# `ImportLedgerChunk` has the same hole at its own account lookup.
 do StoreTransaction ledgerId=1 description="a leg from the other book" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$first,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$secondSpend,"amount":{"num":100,"den":1,"dp":2}}]
 expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4100"
 # The reply is scoped to book one, so it does not mention the account it just
