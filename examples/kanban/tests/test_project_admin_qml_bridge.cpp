@@ -85,9 +85,14 @@ TEST_CASE("ProjectAdminBridge exposes exactly the surface a login/project-list/m
     REQUIRE(meta->indexOfProperty("principal") >= 0);
     REQUIRE(meta->indexOfProperty("projects") >= 0);
     REQUIRE(meta->indexOfProperty("roles") >= 0);
-    CHECK(meta->propertyCount() - meta->propertyOffset() == 3);
+    REQUIRE(meta->indexOfProperty("schemasJson") >= 0);
+    CHECK(meta->propertyCount() - meta->propertyOffset() == 4);
 
-    REQUIRE(meta->indexOfMethod("login(QString)") >= 0);
+    // `login` is intentionally absent: it is no longer Q_INVOKABLE, because
+    // LoginView.qml submits through the schema renderer and nothing in
+    // gui/qml/ calls it any more.
+    CHECK(meta->indexOfMethod("login(QString)") < 0);
+    REQUIRE(meta->indexOfMethod("submitIfValid(QString,QString)") >= 0);
     REQUIRE(meta->indexOfMethod("refreshProjects()") >= 0);
     REQUIRE(meta->indexOfMethod("createProject(QString)") >= 0);
     REQUIRE(meta->indexOfMethod("listRoles(qlonglong)") >= 0);
@@ -96,6 +101,7 @@ TEST_CASE("ProjectAdminBridge exposes exactly the surface a login/project-list/m
 
     REQUIRE(meta->indexOfSignal("bound()") >= 0);
     REQUIRE(meta->indexOfSignal("loggedIn(QString)") >= 0);
+    REQUIRE(meta->indexOfSignal("replyReceived(QString,bool,QString)") >= 0);
     REQUIRE(meta->indexOfSignal("projectsListed(QVariantList)") >= 0);
     REQUIRE(meta->indexOfSignal("projectCreated(qlonglong,QString)") >= 0);
     REQUIRE(meta->indexOfSignal("rolesListed(QVariantList)") >= 0);
@@ -105,7 +111,7 @@ TEST_CASE("ProjectAdminBridge exposes exactly the surface a login/project-list/m
 
     // Nothing else: an adapter method with no binding site is a stub, and one
     // removed from under a binding is a silent runtime gap.
-    CHECK(ownMethodCount(meta) == 14);
+    CHECK(ownMethodCount(meta) == 15);
 }
 
 TEST_CASE("ProjectAdminBridge::login installs the returned token and updates the principal property",
@@ -287,16 +293,79 @@ TEST_CASE("ProjectAdminBridge::createProject: two overlapping calls each report 
     CHECK(sawAWithA);
 }
 
+TEST_CASE("ProjectAdminBridge::submitIfValid logs in through the schema path and redacts the token",
+          "[kanban][gui][qml-bridge][issue344]") {
+    // LoginView.qml no longer hand-builds a TextField: `DynamicForm` assembles
+    // Login's body from schemaJson<Login>() and calls submitIfValid, so this
+    // is the path the flagship GUI actually takes now. Two things must hold on
+    // it, and the second is new risk this path introduced.
+    DbFixture fixture;
+    // A real issuer, not an authed rig: this case drives login itself rather
+    // than starting from the post-login state, so `AuthModel::execute(Login)`
+    // needs something to mint with.
+    const ScopedTokenIssuer issuer{
+        std::make_shared<morph::session::TokenIssuer>("schema-path-secret", morph::session::hmacSha256)};
+    BackendRig rig{Mode::Local, 1};
+    kanban::gui::ProjectAdminBridge bridge{rig.bridge(0), rig.executor()};
+
+    QString replyPayload;
+    bool ok = false;
+    bool replied = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::replyReceived,
+                     [&](const QString& actionType, bool succeeded, const QString& payload) {
+                         if (actionType != QStringLiteral("Login")) {
+                             return;
+                         }
+                         replyPayload = payload;
+                         ok = succeeded;
+                         replied = true;
+                     });
+
+    // Exactly the body DynamicForm builds for Login's one string member.
+    bridge.submitIfValid(QStringLiteral("Login"), QStringLiteral(R"({"username":"alice"})"));
+    REQUIRE(pumpUntil([&] { return replied; }));
+    CHECK(ok);
+
+    // 1. It really logged in -- the token was installed, which is only
+    //    observable by a subsequent authorized action succeeding.
+    CHECK(bridge.principal() == QStringLiteral("alice"));
+    QVariantList rows;
+    bool listed = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectsListed, [&](const QVariantList& projects) {
+        rows = projects;
+        listed = true;
+    });
+    bridge.refreshProjects();
+    REQUIRE(pumpUntil([&] { return listed; }));
+
+    // 2. ...and the token did NOT ride out on the signal. replyReceived
+    //    broadcasts a result JSON to every bound QML handler, and Login's
+    //    result carries the token -- a seam this rung did not have before the
+    //    schema path existed. submitForm redacts it; this is what proves it,
+    //    rather than the type sweep below, which only sees `QString`.
+    const auto session = rig.bridge(0).defaultSession();
+    REQUIRE_FALSE(session.token.empty());
+    CHECK_FALSE(replyPayload.contains(QString::fromStdString(session.token)));
+}
+
 TEST_CASE("ProjectAdminBridge relays failed() and never emits a raw token on any signal",
           "[kanban][gui][qml-bridge]") {
     // The real defect this rung must not reintroduce: bookmarks' own bridge
     // once serialized a live bearer token onto a generic signal before this
-    // was caught and fixed. ProjectAdminBridge never re-serializes
-    // LoginResult onto a signal at all -- loggedIn(QString) carries only the
-    // principal -- so there is no seam for the token to leak through in the
-    // first place. This case pins that: every signal ProjectAdminBridge
-    // exposes carries only QString/QVariantList/qlonglong/no-argument
-    // payloads, none of which is (or could carry) an AuthToken.
+    // was caught and fixed.
+    //
+    // This rung used to have no seam at all -- loggedIn(QString) carries only
+    // the principal, and nothing re-serialized LoginResult. It does now:
+    // `replyReceived(actionType, ok, payload)` broadcasts a *result JSON*
+    // payload to every bound QML handler, and Login's own result carries the
+    // token. That is why ProjectAdminPresenter::submitForm redacts the token
+    // out of its copy before emitting, and why the next case below asserts
+    // the redaction directly rather than trusting the type sweep here.
+    //
+    // The sweep still earns its place as the structural half: no signal may
+    // carry a type that *is* an AuthToken (or a container that could hold
+    // one). `bool` joins the allowlist for `replyReceived`'s ok flag on
+    // exactly that basis -- it cannot carry a token.
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     kanban::gui::ProjectAdminBridge bridge{rig->bridge(0), rig->executor()};
@@ -310,8 +379,8 @@ TEST_CASE("ProjectAdminBridge relays failed() and never emits a raw token on any
         for (int p = 0; p < method.parameterCount(); ++p) {
             const auto typeId = method.parameterMetaType(p).id();
             INFO("signal: " << method.methodSignature().toStdString());
-            CHECK(
-                (typeId == QMetaType::QString || typeId == QMetaType::QVariantList || typeId == QMetaType::LongLong));
+            CHECK((typeId == QMetaType::QString || typeId == QMetaType::QVariantList ||
+                   typeId == QMetaType::LongLong || typeId == QMetaType::Bool));
         }
     }
 

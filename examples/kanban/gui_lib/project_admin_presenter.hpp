@@ -50,6 +50,21 @@ public:
     /// @param username The identity to log in as.
     void login(const QString& username);
 
+    /// @brief Dispatches @p bodyJson as @p actionType's body through the
+    ///        type-erased `executeJson` path, for the schema-driven forms
+    ///        `DynamicForm` renders.
+    ///
+    /// The schema renderer names action types as strings and hands back an
+    /// assembled JSON body, so this is the entry point it needs — the typed
+    /// `login()` above stays for callers that already have a `QString`
+    /// username. A successful `Login` still installs its token here rather
+    /// than in the QML bridge, so the one place this rung learns an identity
+    /// is unchanged by which of the two paths dispatched it.
+    ///
+    /// @param actionType Registered action type id, as the schema names it.
+    /// @param bodyJson   Fully-assembled JSON body, as `DynamicForm` builds it.
+    void submitForm(const QString& actionType, const QString& bodyJson);
+
     /// @brief Lists every project the caller has any role on. Emits
     ///        `projectsListed` on success, `failed` on error.
     void refreshProjects();
@@ -106,6 +121,18 @@ signals:
     /// @brief Emitted for any action's typed error — @p message is
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);
+
+    /// @brief Emitted once per `submitForm`, carrying that form's outcome.
+    ///
+    /// Separate from `failed` because a form's own view shows its own result
+    /// inline, next to the fields that produced it, rather than through the
+    /// shell's shared error surface.
+    /// @param actionType The action the reply belongs to.
+    /// @param ok         Whether the dispatch succeeded.
+    /// @param payload    Result JSON on success, the error message otherwise.
+    ///                   A successful `Login`'s token is redacted first — see
+    ///                   `submitForm`'s definition.
+    void formReplyReceived(QString actionType, bool ok, QString payload);
 
 private:
     /// @brief Installs @p result's token as the shared `Bridge`'s default

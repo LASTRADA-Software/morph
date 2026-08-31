@@ -122,6 +122,17 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     // reason false in precisely the OFF configure the guard below exists to
     // check. :533 is outside every guard and holds in both.
     audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("refresh"), cppOnly);
+    // `submitIfValid` is the controller contract the *shipped* renderer calls:
+    // LoginView.qml binds `controller: page.projectAdminBridge` on a
+    // `DynamicForm`, and the call site is inside MorphForms'
+    // src/qt/forms/qml/DynamicForm.qml, not under examples/kanban/gui/qml/.
+    // The audit scans this rung's own QML only, so a member invoked by the
+    // framework's QML sweeps as unreferenced however load-bearing it is --
+    // the same limitation as the two C++-only entries above, one layer out.
+    // Deleting it would delete the flagship's only schema-driven form.
+    audit.allowUnbound(
+        QStringLiteral("projectAdminBridge"), QStringLiteral("submitIfValid"),
+        QStringLiteral("called by the shipped MorphForms DynamicForm, whose .qml is outside this rung's tree"));
 #ifndef MORPH_BUILD_OFFLINE_SQLITE
     // `syncStatusChanged` is declared unconditionally (board_qml_bridge.hpp's
     // signals block) while *both* properties naming it as their NOTIFY --

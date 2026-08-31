@@ -124,25 +124,45 @@ Strand ordering under real contention (2), typed server-side validation (3),
 authorization at Kanboard's granularity (4), journal-derived activity + undo
 (5, 6), the full offline stack (7), shared board instances throughout.
 
-**Not exercised: `morph::forms`.** Every screen in `gui/qml/` is hand-built
-Qt Quick. The rung's source trees hold three comment lines mentioning
-`MorphForms`/`FormsController` and no code that uses either, and every input
-is a hand-written `TextField`/`ComboBox`/`SpinBox`
-(`gui/qml/LoginView.qml:63`, `gui/qml/RulesView.qml:89`, `:97`, `:103`,
-`gui/qml/MembersView.qml:56`, `:81`, `:87`,
-`gui/qml/ProjectListView.qml:125`, plus `gui/qml/BoardView.qml`'s
-column/task/comment entry fields and `gui/qml/TaskDetailPopup.qml`'s comment
-field).
-[`IMPLEMENTATION.md`](../IMPLEMENTATION.md)'s rule 2 forbids hand-built input
-widgets by default and requires a written justification here for each one; no
-such justification has been written, and the GUI design spec the QML comments
-point at (`docs/superpowers/specs/2026-08-17-kanban-gui-design.md` §4)
-settles the bridge/property-bag architecture without addressing forms at all.
-Recorded as
-[#344](https://github.com/LASTRADA-Software/morph/issues/344) (the
-flagship-GUI forms-bypass finding) rather than justified after the fact here:
-deciding *which* of rule 2's two justifications applies is a design call this
-rung has not made.
+**`morph::forms`: the login form only.** `gui/qml/LoginView.qml` renders
+`Login` through `morph::forms::schemaJson<Login>()` and the shipped
+`MorphForms` `DynamicForm`, submitting via the renderer's own explicit Submit
+button — the same shape `bookmarks`, `polls`, `lims` and `pastebin` ship. It
+has no hand-written field and no hand-written submit button; if `Login` grows
+a second member, that file does not change.
+
+Every *other* input in this rung is still hand-built Qt Quick, which
+[`IMPLEMENTATION.md`](../IMPLEMENTATION.md)'s rule 2 forbids by default and
+which this README owes a per-element justification for. It does not have one,
+and the honest position is that most of these have no justification available:
+
+| Hand-built input | Action behind it | Rule 2 status |
+|---|---|---|
+| `gui/qml/RulesView.qml:89`, `:97`, `:103` | rule definition | **Unjustified.** Not yet attempted through the renderer. |
+| `gui/qml/MembersView.qml:56`, `:81`, `:87` | `SetMemberRole` / `RemoveMember` | **Unjustified.** A principal string plus a role `enum class` is squarely in the forms palette. |
+| `gui/qml/ProjectListView.qml:125` | `CreateProject` | **Unjustified.** One `std::string name`. |
+| `gui/qml/BoardView.qml` column/task/comment entry | `CreateColumn`, `CreateSwimlane`, `CreateTask`, `AddComment` | **Unjustified.** `schemaJson<A>()` renders all four today — verified, see below. |
+| `gui/qml/BoardView.qml` drag-and-drop board | `MoveTaskPosition` | **Rule 2(a), plausibly.** A drag gesture is not a form somebody fills in; a schema-rendered version of it would be beside the point. Still owes a written finding if kept. |
+
+The claim in that last column is measured, not assumed:
+`morph::forms::schemaJson<A>()` was compiled against this rung's real,
+unmodified DTOs and produces a usable schema for `Login`, `CreateColumn`,
+`CreateSwimlane`, `CreateTask`, `AddComment` and `MoveTaskPosition` alike.
+The rule-3 strong ids are not a blocker — `TaskId` emits as
+`{"type":["integer","null"],…}` under `$defs`, and `DynamicForm` resolves
+`$ref` into `$defs` — and `MoveTaskPosition::optionalFields` is honoured.
+So rule 2's justification (a), "the generated UI *cannot* express the
+interaction", is **not available** for any of the form-shaped rows above.
+
+That leaves converting them, which is tracked as
+[morph#344](https://github.com/LASTRADA-Software/morph/issues/344). Login went
+first because it is the smallest complete instance of the whole path — schema
+document, controller contract, renderer, typed reply — and it establishes the
+pattern the rest follow. The rung's GUI design spec
+(`docs/superpowers/specs/2026-08-17-kanban-gui-design.md` §4) settles the
+two-bridge/property-bag architecture and never mentions forms, schemas or
+`DynamicForm`, so it was never the justification the QML comments treated it
+as.
 
 ## Expected strain points
 

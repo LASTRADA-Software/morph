@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "gui/id_qml.hpp"
+#include "kanban_schemas.hpp"
 
 namespace kanban::gui {
 
@@ -78,9 +79,16 @@ ProjectAdminBridge::ProjectAdminBridge(::morph::bridge::Bridge& bridge, ::morph:
     connect(&_presenter, &ProjectAdminPresenter::memberRoleSet, this, &ProjectAdminBridge::memberRoleSet);
     connect(&_presenter, &ProjectAdminPresenter::memberRemoved, this, &ProjectAdminBridge::memberRemoved);
     connect(&_presenter, &ProjectAdminPresenter::failed, this, &ProjectAdminBridge::failed);
+    connect(&_presenter, &ProjectAdminPresenter::formReplyReceived, this, &ProjectAdminBridge::replyReceived);
 }
 
+QString ProjectAdminBridge::schemasJson() const { return QString::fromStdString(kanbanSchemasJson()); }
+
 void ProjectAdminBridge::login(const QString& username) { _presenter.login(username); }
+
+void ProjectAdminBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
+    _presenter.submitForm(actionType, bodyJson);
+}
 
 void ProjectAdminBridge::refreshProjects() { _presenter.refreshProjects(); }
 
