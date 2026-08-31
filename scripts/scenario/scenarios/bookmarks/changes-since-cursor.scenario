@@ -1,0 +1,139 @@
+# bookmarks (rung 2) — the poll a client uses to learn what changed, and the
+# background job whose writes it exists to deliver.
+#
+# examples/bookmarks/README.md's definition of done: "Metadata auto-fetch
+# demonstrably running as a background job: bookmark appears immediately;
+# title/favicon arrive later, and the minimal GetChangesSince poll action is
+# what a client asks for them with."
+#
+# Two halves, and only one of them is drivable from a socket:
+#
+#   * GetChangesSince is ordinary and is exercised in full here -- first
+#     poll, cursor advance, and each kind of touch that lands after it;
+#   * RecordMetadata is the *worker's* write-back, and BookmarkModel refuses
+#     it from anyone but the metadata-fetch service principal. That principal
+#     is minted inside the app, in the reserved `system:` namespace AuthModel
+#     will not issue a token for, so no client can drive it to completion. Its
+#     refusal is asserted here, which is the closest a wire client gets and is
+#     also the evidence for its coverage_allowlist.json entry.
+#
+# ── The cursor is a pair, and its shape dictates this file's shape ────────
+# `asOf` is a ChangesCursor: {"timestampMs", "lastId"}. A millisecond
+# timestamp alone cannot separate a write landing in the same millisecond as
+# the poll from one that happened strictly before it, so the row id breaks the
+# tie: a row is delivered when its timestamp is *later* than the cursor's, or
+# equal to it with a *higher* id. It is captured whole and sent back whole --
+# a captured value keeps its own type, so `since=$c0` sends the object rather
+# than its text.
+#
+# Out of process, over a loopback socket, consecutive writes genuinely land
+# inside one millisecond. So the timestamp half of that comparison decides
+# nothing here, and **every poll below is asked about a row whose id is above
+# its cursor's `lastId`** -- which makes each one true on the id half alone,
+# whatever the clock did.
+#
+# That is not a workaround for a flaky server; it is what the cursor is
+# documented to guarantee. An earlier draft of this file polled for a change
+# to the row its cursor had just named, and came back empty about half the
+# time -- correctly. There is no assertion of that shape left.
+#
+# Nothing here waits for anything: every change this file polls for is a
+# change this file made.
+#
+# Re-runnable: the principal `poller` is used by no other file here, every
+# cursor is captured from the reply that issued it, and the file deletes what
+# it created.
+
+client auth model=AuthModel
+
+do Login username=poller
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client store model=BookmarkModel
+session principal=$who token=$token
+
+do CreateBookmark url="https://example.com/poll/first" title="First" tags=["poll"]
+expect ok capture first=$.id
+
+# ── The first poll: no cursor at all means "everything ever" ──────────────
+do GetChangesSince
+expect ok field changed ~ "\"id\":$first,"
+expect ok capture c0=$.asOf
+
+# ── Nothing has changed since, so the next poll is empty ─────────────────
+do GetChangesSince since=$c0
+expect ok field changed == []
+
+# ...and asking twice with the same cursor gives the same answer.
+do GetChangesSince since=$c0
+expect ok field changed == []
+
+# ── A create shows up ────────────────────────────────────────────────────
+do CreateBookmark url="https://example.com/poll/second" title="Second" tags=["poll"]
+expect ok capture second=$.id
+
+do GetChangesSince since=$c0
+expect ok field changed ~ "\"id\":$second,"
+expect ok field changed !~ "\"id\":$first,"
+expect ok capture c1=$.asOf
+
+# ── An edit is a touch too ───────────────────────────────────────────────
+# Polled against `c0`, whose `lastId` is the *first* bookmark -- so the
+# second's higher id carries it past the tie-break regardless of the clock.
+do EditBookmark id=$second url="https://example.com/poll/second" title="Second, edited" tags=["poll"]
+expect ok
+
+do GetChangesSince since=$c0
+expect ok field changed ~ "\"id\":$second,"
+expect ok field changed ~ "Second, edited"
+
+# ── ...and so is an archive ──────────────────────────────────────────────
+do ArchiveBookmark id=$second
+expect ok
+
+do GetChangesSince since=$c0
+expect ok field changed ~ "\"id\":$second,"
+
+# ── ...and an unarchive, proven by the read rather than by a poll ────────
+do UnarchiveBookmark id=$second
+expect ok
+
+do GetBookmark id=$second
+expect ok field archiveState == Active
+expect ok field title == "Second, edited"
+
+# ── A cursor at the newest row sees nothing behind it ────────────────────
+# `c1` names the second bookmark, and the first has not been touched since,
+# so it is below the cursor on both halves of the comparison.
+do GetChangesSince since=$c1
+expect ok field changed !~ "\"id\":$first,"
+
+# ── The worker's own write-back, refused ─────────────────────────────────
+# A user client is not the metadata-fetch worker, and saying so is the whole
+# of this rung's answer to "who may write a title the user did not type".
+do RecordMetadata id=$first title="a title the worker would have fetched" faviconPath="/favicon.ico"
+expect err message == "RecordMetadata is dispatched only by the metadata-fetch service principal"
+
+# The refusal wrote nothing.
+do GetBookmark id=$first
+expect ok field title == "First"
+expect ok field title !~ "worker"
+
+do GetChangesSince since=$c1
+expect ok field changed !~ "\"id\":$first,"
+
+# ── Leave the database as it was found ───────────────────────────────────
+do DeleteBookmark id=$first
+expect ok
+
+do DeleteBookmark id=$second
+expect ok
+
+# Anchored to this run's two ids rather than to the listing being empty. An
+# empty-listing assertion is not load-bearing here: a mutation run aborts
+# earlier files mid-way and leaves their rows behind, so "nothing is left"
+# stops being true of the collection while staying true of these two rows.
+do ListBookmarks tag=poll
+expect ok field bookmarks !~ "\"id\":$first,"
+expect ok field bookmarks !~ "\"id\":$second,"

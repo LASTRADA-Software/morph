@@ -1,0 +1,124 @@
+# bookmarks (rung 2) — renaming a tag renames it everywhere it is used.
+#
+# examples/bookmarks/README.md's "What to implement" step 4: tag rename and
+# merge, cascading across bookmarks. There is no CreateTag action -- tags come
+# into being by being named on a bookmark -- so a rename is the only way a tag
+# gets a new name, and it has to reach every bookmark carrying it.
+#
+# Two bookmarks, deliberately: a rename that updated the tag row and the
+# *first* bookmark's join would pass every single-bookmark assertion.
+#
+# ── How this file stays re-runnable, which took some care ─────────────────
+# TagModel has no "get tag by name": ListTags is the only way to a tag's id,
+# and it orders by name. Two things make an index into that list stable here:
+#
+#   1. the principal is `tagsmith`, used by no other file in this directory,
+#      so the list holds only tags this file created;
+#   2. the file **renames the tag back and deletes its bookmarks** at the end,
+#      so the database is left as it was found and the second run sees the
+#      same two tags, in the same order, with the same counts.
+#
+# Without (2) a rerun would find last run's renamed tag *and* create a fresh
+# one, every index would shift, and `bookmarkCount` would keep climbing. Tag
+# rows outlive the bookmarks that created them, with a count of zero, which is
+# why re-creating the same two names each run reproduces the same state
+# exactly rather than accumulating.
+
+client auth model=AuthModel
+
+do Login username=tagsmith
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client store model=BookmarkModel
+session principal=$who token=$token
+
+do CreateBookmark url="https://example.com/rename/1" title="Rename one" tags=["a-keeper","b-before"]
+expect ok capture one=$.id
+
+do CreateBookmark url="https://example.com/rename/2" title="Rename two" tags=["b-before"]
+expect ok capture two=$.id
+
+# The tag filter is the indirection under test: it resolves a *name* to the
+# rows carrying it, so it answers differently before and after the rename.
+do ListBookmarks tag=b-before
+expect ok field bookmarks ~ "\"id\":$one,"
+expect ok field bookmarks ~ "\"id\":$two,"
+
+do ListBookmarks tag=c-after
+expect ok field bookmarks !~ "\"id\":$one,"
+expect ok field bookmarks !~ "\"id\":$two,"
+
+# ── The rename ─────────────────────────────────────────────────────────────
+client tags model=TagModel
+session principal=$who token=$token
+
+do ListTags
+expect ok field tags[0].name == a-keeper
+expect ok field tags[1].name == b-before
+expect ok field tags[1].bookmarkCount.num == 2
+expect ok capture subject=$.tags[1].id
+
+do RenameTag id=$subject name=c-after
+expect ok
+
+do ListTags
+expect ok field tags ~ "\"name\":\"c-after\""
+expect ok field tags !~ "\"name\":\"b-before\""
+
+# ── ...reached both bookmarks ─────────────────────────────────────────────
+use store
+
+do GetBookmark id=$one
+expect ok field tags ~ "\"c-after\""
+expect ok field tags !~ "\"b-before\""
+expect ok field tags ~ "\"a-keeper\""
+
+do GetBookmark id=$two
+expect ok field tags ~ "\"c-after\""
+expect ok field tags !~ "\"b-before\""
+
+do ListBookmarks tag=c-after
+expect ok field bookmarks ~ "\"id\":$one,"
+expect ok field bookmarks ~ "\"id\":$two,"
+
+do ListBookmarks tag=b-before
+expect ok field bookmarks !~ "\"id\":$one,"
+
+# ── The refusals ───────────────────────────────────────────────────────────
+use tags
+
+do RenameTag id=$subject name=""
+expect err message == "action failed validation: TagModel/RenameTag"
+
+do RenameTag id=999999 name=ghost
+expect err message == "no such tag"
+
+use store
+do GetBookmark id=$one
+expect ok field tags ~ "\"c-after\""
+
+# ── Put it back, so the next run finds what this one did ──────────────────
+use tags
+
+do RenameTag id=$subject name=b-before
+expect ok
+
+do ListTags
+expect ok field tags[0].name == a-keeper
+expect ok field tags[1].name == b-before
+
+# ...and the two bookmarks go too, so the counts start from zero next time.
+use store
+
+do DeleteBookmark id=$one
+expect ok
+
+do DeleteBookmark id=$two
+expect ok
+
+use tags
+
+do ListTags
+expect ok field tags[1].name == b-before
+expect ok field tags[1].bookmarkCount.num == 0

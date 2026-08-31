@@ -85,3 +85,32 @@ expect ok field bookmarks !~ "\"id\":$faq,"
 # ── An empty url is refused, so no half-made bookmark exists ───────────────
 do CreateBookmark url="" title="nowhere"
 expect err message == "action failed validation: BookmarkModel/CreateBookmark"
+
+# ── ...and the collection closes the way it opened ────────────────────────
+# Deleting the second bookmark leaves the first, its tags, and the tag rows
+# themselves -- a tag outlives the bookmarks that named it, with a count of
+# zero, which is why this file can run against a database it has already run
+# against.
+do DeleteBookmark id=$faq
+expect ok
+
+do GetBookmark id=$faq
+expect err message == "no such bookmark"
+
+do GetBookmark id=$cpp
+expect ok field title == "C++23"
+expect ok field tags ~ "\"cpp\""
+
+do DeleteBookmark id=$cpp
+expect ok
+
+do ListBookmarks tag=cpp
+expect ok field bookmarks !~ "\"id\":$cpp,"
+expect ok field bookmarks !~ "\"id\":$faq,"
+
+use tags
+
+# The tags survive their bookmarks, counting nothing.
+do ListTags
+expect ok field tags ~ "\"name\":\"cpp\""
+expect ok field tags ~ "\"name\":\"reading\""

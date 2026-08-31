@@ -1,0 +1,125 @@
+# bookmarks (rung 2) — two collections that cannot see each other, and the
+# one place they meet.
+#
+# examples/bookmarks/README.md's definition of done: "Two users on the remote
+# backend with isolated collections and a working shared feed; authorization
+# enforced server-side, not by the client."
+#
+# That criterion needs two authenticated principals on two sockets, which is
+# exactly what no in-process rig has: rigs arrive already authenticated, as
+# one caller. Every assertion here is about the boundary between two of them.
+#
+# ── What "shared" does and does not mean, stated exactly ─────────────────
+# Marking a bookmark Shared puts it in *everyone's* shared feed, including
+# its owner's. It does not make it readable by id: GetBookmark still refuses
+# another principal with "bookmark belongs to a different principal", shared
+# or not. The feed is the only cross-principal read path this rung has, and
+# BookmarkModel's own row-level scoping is what closes every other one.
+#
+# Both halves are asserted, because a plausible wrong implementation --
+# "shared means readable" -- would satisfy the feed assertions alone.
+#
+# Re-runnable: the principals `sharer` and `viewer` are used by no other file
+# here, and both delete what they created.
+
+client auth model=AuthModel
+
+do Login username=sharer
+expect ok capture sharerToken=$.token
+expect ok capture sharer=$.principal
+
+do Login username=viewer
+expect ok capture viewerToken=$.token
+expect ok capture viewer=$.principal
+
+client hers model=BookmarkModel
+session principal=$sharer token=$sharerToken
+
+do CreateBookmark url="https://example.com/feed/open" title="Shared by sharer" tags=["feed"] visibility=Shared
+expect ok capture open=$.id
+
+do CreateBookmark url="https://example.com/feed/closed" title="Private to sharer" tags=["feed"]
+expect ok capture closed=$.id
+
+client his model=BookmarkModel
+session principal=$viewer token=$viewerToken
+
+do CreateBookmark url="https://example.com/feed/theirs" title="Shared by viewer" tags=["feed"] visibility=Shared
+expect ok capture theirs=$.id
+
+# ── The collections are isolated ─────────────────────────────────────────
+# The viewer's own listing holds only the viewer's bookmark -- not the
+# sharer's shared one, and certainly not the sharer's private one.
+do ListBookmarks tag=feed
+expect ok field bookmarks ~ "\"id\":$theirs,"
+expect ok field bookmarks !~ "\"id\":$open,"
+expect ok field bookmarks !~ "\"id\":$closed,"
+
+# ...and reading by id is refused for both, sharing notwithstanding.
+do GetBookmark id=$closed
+expect err message == "bookmark belongs to a different principal"
+
+do GetBookmark id=$open
+expect err message == "bookmark belongs to a different principal"
+
+# Mutating another principal's bookmark is refused the same way.
+do EditBookmark id=$open url="https://example.com/feed/hijacked" title="Hijacked" tags=[]
+expect err message == "bookmark belongs to a different principal"
+
+do DeleteBookmark id=$open
+expect err message == "bookmark belongs to a different principal"
+
+# The refusals changed nothing.
+use hers
+
+do GetBookmark id=$open
+expect ok field title == "Shared by sharer"
+expect ok field visibility == Shared
+
+# ── The feed is where they meet ──────────────────────────────────────────
+client theirFeed model=SharedFeedModel
+session principal=$viewer token=$viewerToken
+
+do ListSharedFeed
+expect ok field bookmarks ~ "\"id\":$open,"
+expect ok field bookmarks ~ "\"id\":$theirs,"
+expect ok field bookmarks !~ "\"id\":$closed,"
+
+client herFeed model=SharedFeedModel
+session principal=$sharer token=$sharerToken
+
+do ListSharedFeed
+expect ok field bookmarks ~ "\"id\":$open,"
+expect ok field bookmarks ~ "\"id\":$theirs,"
+expect ok field bookmarks !~ "\"id\":$closed,"
+
+# ── Unsharing takes it out of everyone's feed ────────────────────────────
+use hers
+
+do EditBookmark id=$open url="https://example.com/feed/open" title="Shared by sharer" tags=["feed"] visibility=Private
+expect ok
+
+use theirFeed
+
+do ListSharedFeed
+expect ok field bookmarks !~ "\"id\":$open,"
+expect ok field bookmarks ~ "\"id\":$theirs,"
+
+# ── Leave the database as it was found ───────────────────────────────────
+use hers
+
+do DeleteBookmark id=$open
+expect ok
+
+do DeleteBookmark id=$closed
+expect ok
+
+use his
+
+do DeleteBookmark id=$theirs
+expect ok
+
+use theirFeed
+
+do ListSharedFeed
+expect ok field bookmarks !~ "\"id\":$theirs,"

@@ -1,0 +1,118 @@
+# bookmarks (rung 2) — merging two tags moves every bookmark and destroys the
+# source.
+#
+# examples/bookmarks/README.md's "What to implement" step 4, the other half of
+# the tag work. A merge has to do three things, and each is asserted here
+# separately because each can fail on its own:
+#
+#   1. every bookmark on the source tag ends up on the target;
+#   2. a bookmark already on *both* is not duplicated or dropped;
+#   3. the source tag itself stops existing.
+#
+# (2) is the case a naive "update the join rows" implementation gets wrong: it
+# would try to write a join row that is already there.
+#
+# ── How this file stays re-runnable ───────────────────────────────────────
+# The principal `tagmerger` is used by no other file here, so ListTags holds
+# only this file's tags. The merge destroys the source tag, and the file
+# deletes its three bookmarks at the end -- so each run recreates the same two
+# tag names, attaches the same three bookmarks, and leaves the same state
+# behind. Tag rows outlive their bookmarks with a count of zero, which is what
+# makes the counts reproduce exactly rather than climb.
+
+client auth model=AuthModel
+
+do Login username=tagmerger
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client store model=BookmarkModel
+session principal=$who token=$token
+
+# Only on the source.
+do CreateBookmark url="https://example.com/merge/source-only" title="Source only" tags=["m-source"]
+expect ok capture sourceOnly=$.id
+
+# On both -- the duplicate-join case.
+do CreateBookmark url="https://example.com/merge/both" title="Both" tags=["m-source","n-target"]
+expect ok capture both=$.id
+
+# Only on the target.
+do CreateBookmark url="https://example.com/merge/target-only" title="Target only" tags=["n-target"]
+expect ok capture targetOnly=$.id
+
+client tags model=TagModel
+session principal=$who token=$token
+
+do ListTags
+expect ok field tags[0].name == m-source
+expect ok field tags[0].bookmarkCount.num == 2
+expect ok field tags[1].name == n-target
+expect ok field tags[1].bookmarkCount.num == 2
+expect ok capture source=$.tags[0].id
+expect ok capture target=$.tags[1].id
+
+# ── Refusals first, while both tags still exist ───────────────────────────
+do MergeTags sourceId=$source targetId=$source
+expect err message == "action failed validation: TagModel/MergeTags"
+
+do MergeTags sourceId=999999 targetId=$target
+expect err message == "no such tag"
+
+do ListTags
+expect ok field tags ~ "\"name\":\"m-source\""
+
+# ── The merge ──────────────────────────────────────────────────────────────
+do MergeTags sourceId=$source targetId=$target
+expect ok
+
+# The source tag is gone, and the target now answers for all three bookmarks.
+do ListTags
+expect ok field tags !~ "\"name\":\"m-source\""
+expect ok field tags[0].name == n-target
+expect ok field tags[0].bookmarkCount.num == 3
+
+# ── Every bookmark landed on the target, and none twice ───────────────────
+use store
+
+do GetBookmark id=$sourceOnly
+expect ok field tags ~ "\"n-target\""
+expect ok field tags !~ "\"m-source\""
+
+do GetBookmark id=$both
+expect ok field tags == ["n-target"]
+
+do GetBookmark id=$targetOnly
+expect ok field tags == ["n-target"]
+
+do ListBookmarks tag=n-target
+expect ok field bookmarks ~ "\"id\":$sourceOnly,"
+expect ok field bookmarks ~ "\"id\":$both,"
+expect ok field bookmarks ~ "\"id\":$targetOnly,"
+
+do ListBookmarks tag=m-source
+expect ok field bookmarks !~ "\"id\":$sourceOnly,"
+
+# ── The merged-away tag cannot be merged again ────────────────────────────
+use tags
+
+do MergeTags sourceId=$source targetId=$target
+expect err message == "no such tag"
+
+# ── Leave the database as it was found ────────────────────────────────────
+use store
+
+do DeleteBookmark id=$sourceOnly
+expect ok
+
+do DeleteBookmark id=$both
+expect ok
+
+do DeleteBookmark id=$targetOnly
+expect ok
+
+use tags
+
+do ListTags
+expect ok field tags[0].name == n-target
+expect ok field tags[0].bookmarkCount.num == 0

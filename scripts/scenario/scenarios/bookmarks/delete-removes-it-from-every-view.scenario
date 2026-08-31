@@ -9,7 +9,16 @@
 # The bookmark is created Shared deliberately: that is the read path with the
 # widest audience, and the one where a leak would matter most.
 #
-# Re-runnable: the bookmark is created here.
+# ── Why the url is made unique before the export is checked ───────────────
+# ExportBookmarks answers with one HTML document for the whole collection, so
+# "the export does not contain this url" is a claim about every row, not about
+# one. A fixed url makes that claim false as soon as any other run of this
+# file leaves a row behind -- which is exactly what a mutation run does, since
+# a mutant that fails aborts before the delete. The bookmark's own id is a
+# value no other run has, so an edit stamps it into the url and the title, and
+# both export assertions become claims about this run alone.
+#
+# Re-runnable: the bookmark is created here, and its url carries its id.
 
 client auth model=AuthModel
 
@@ -27,6 +36,14 @@ do GetBookmark id=$doomed
 expect ok field title == "Transient"
 expect ok field visibility == Shared
 
+# Stamp the id into the url and title, so every assertion below names this run.
+do EditBookmark id=$doomed url="https://example.com/transient-$doomed" title="Transient $doomed" tags=["temp"] visibility=Shared
+expect ok
+
+do GetBookmark id=$doomed
+expect ok field url == "https://example.com/transient-$doomed"
+expect ok field visibility == Shared
+
 do ListBookmarks tag=temp
 expect ok field bookmarks ~ "\"id\":$doomed,"
 
@@ -39,7 +56,8 @@ expect ok field bookmarks ~ "\"id\":$doomed,"
 use store
 
 do ExportBookmarks
-expect ok field html ~ "https://example.com/transient"
+expect ok field html ~ "https://example.com/transient-$doomed"
+expect ok field html ~ ">Transient $doomed</A>"
 
 # ── Delete ─────────────────────────────────────────────────────────────────
 do DeleteBookmark id=$doomed
@@ -52,7 +70,8 @@ do ListBookmarks tag=temp
 expect ok field bookmarks !~ "\"id\":$doomed,"
 
 do ExportBookmarks
-expect ok field html !~ "https://example.com/transient"
+expect ok field html !~ "https://example.com/transient-$doomed"
+expect ok field html !~ ">Transient $doomed</A>"
 
 use feed
 
