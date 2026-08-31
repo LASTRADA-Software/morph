@@ -27,6 +27,7 @@ from morph_scenario import (
     tokenize,
 )
 
+import run_scenarios
 import scenario_coverage
 
 from scenario_coverage import (
@@ -1244,6 +1245,69 @@ class ReportGateAgreementTest(unittest.TestCase):
         )
         self.assertNotIn("WORKFLOW GAPS", text)
         self.assertIn("Every registered action is dispatched and every rung meets its floor.", text)
+
+
+class PortLineTests(unittest.TestCase):
+    """The one line of a server's output the driver has to understand.
+
+    The five ladder servers do not agree on how to print it: four use
+    `ws://127.0.0.1:<port>`, pastebin uses `port <port>`, and kanban prints a
+    *second* line for its attachment side channel that must never be mistaken
+    for the WebSocket one.
+    """
+
+    def test_reads_the_ws_form(self) -> None:
+        self.assertEqual(
+            run_scenarios.parse_port("bookmarks-server: listening on ws://127.0.0.1:46757"), 46757
+        )
+
+    def test_reads_the_bare_port_form(self) -> None:
+        self.assertEqual(run_scenarios.parse_port("pastebin-server: listening on port 41221"), 41221)
+
+    def test_ignores_kanbans_attachment_side_channel(self) -> None:
+        self.assertIsNone(
+            run_scenarios.parse_port(
+                "kanban-server: attachment side channel listening on http://127.0.0.1:5001"
+            )
+        )
+
+    def test_ignores_unrelated_output(self) -> None:
+        self.assertIsNone(run_scenarios.parse_port("kanban-server: migrating schema"))
+
+
+class RungSpecTests(unittest.TestCase):
+    """The driver's rung table, checked against the tool it must agree with."""
+
+    def test_covers_exactly_the_rungs_the_coverage_report_measures(self) -> None:
+        self.assertEqual(set(run_scenarios.RUNGS), set(SERVER_RUNGS))
+
+    def test_every_rung_names_its_port_variable(self) -> None:
+        for rung, spec in run_scenarios.RUNGS.items():
+            with self.subTest(rung=rung):
+                self.assertTrue(spec.port_var.endswith("_PORT"), spec.port_var)
+                self.assertEqual(spec.binary, f"ladder_{rung}_server")
+
+    def test_only_ledger_seeds_and_it_seeds_ledgers(self) -> None:
+        """Ledger is the one rung whose root entity no action can create.
+
+        `ledgers` rows are produced by no registered action, so `OpenAccount
+        ledgerId=1` against a fresh database is refused. Every other rung
+        creates its own root entity over the wire (`CreatePoll`,
+        `CreateProject`, `CreateBookmark`, `CreatePaste`) and must therefore
+        seed nothing -- a rung that quietly gained a seed would be a scenario
+        asserting state no client could have produced.
+        """
+        seeded = {rung for rung, spec in run_scenarios.RUNGS.items() if spec.seed_sql}
+        self.assertEqual(seeded, {"ledger"})
+        for statement in run_scenarios.RUNGS["ledger"].seed_sql:
+            self.assertIn("INSERT OR IGNORE INTO ledgers", statement)
+
+    def test_environment_binds_the_port_to_zero_and_names_the_database(self) -> None:
+        spec = run_scenarios.RUNGS["ledger"]
+        env = spec.environment(pathlib.Path("/tmp/x.db"))
+        self.assertEqual(env["LEDGER_PORT"], "0")
+        self.assertIn("Database=/tmp/x.db", env["LEDGER_DB"])
+        self.assertEqual(env["QT_QPA_PLATFORM"], "offscreen")
 
 
 if __name__ == "__main__":

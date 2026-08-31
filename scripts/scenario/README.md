@@ -28,6 +28,49 @@ python3 scripts/scenario/morph_scenario.py \
     scripts/scenario/scenarios/pastebin/paste-lifecycle.scenario
 ```
 
+## Running a whole rung
+
+`run_scenarios.py` starts the server, runs every file in that rung's
+directory against it, and tears it down — the lifecycle `morph_scenario.py`
+deliberately does not own. It needs the rung servers built:
+
+```bash
+cmake --preset clang-release -B build/ladder-srv -DMORPH_BUILD_LADDER=ON \
+    -DMORPH_LADDER_RUNGS=all -DMORPH_BUILD_NET=ON -DMORPH_BUILD_QT=ON \
+    -DMORPH_BUILD_TESTS=ON
+cmake --build build/ladder-srv --target ladder_pastebin_server ladder_bookmarks_server \
+    ladder_polls_server ladder_kanban_server ladder_ledger_server
+
+python3 scripts/scenario/run_scenarios.py                     # every rung
+python3 scripts/scenario/run_scenarios.py --rung pastebin
+python3 scripts/scenario/run_scenarios.py --rung ledger --twice --mutate
+```
+
+| Flag | Meaning |
+|---|---|
+| `--rung NAME` | Restrict to one rung; repeatable. Default: every rung with a directory. |
+| `--build-dir DIR` | Where the `ladder_<rung>_server` binaries live. Searched under `build/*/` if omitted, and ambiguity is an error rather than an arbitrary pick. |
+| `--mutate` | After a file passes, run `mutate_scenario.py` on it; fail on any survivor. |
+| `--twice` | Run the directory a second time against the same database. |
+| `-v` | Pass `--verbose` through to the runner. |
+
+Each rung gets **one** server for its whole directory, on a fresh SQLite
+database in a temp directory, with its port bound to `0` so runs cannot
+collide. That is why every scenario must be **re-runnable against a database
+it has already run on**: no assertion may depend on the database being empty,
+and listing assertions pin to captured ids rather than to counts. `--twice`
+is what proves it — it reruns the directory against the database the first
+pass left behind and demands the same result.
+
+`broken-on-purpose.scenario` has its verdict inverted: it is meant to fail, so
+a run in which it passes is a failure.
+
+Ledger is seeded with two `ledgers` rows before its scenarios run. That rung
+is the one whose root entity no registered action creates, so `OpenAccount
+ledgerId=1` against a genuinely empty database is refused with `no such
+ledger`. Every other rung creates its own root entity over the wire and is
+seeded with nothing.
+
 `scenarios/` holds one directory per rung, and one file per workflow:
 
 | Directory | Server | What it covers |
