@@ -1,0 +1,78 @@
+# polls (rung 3) — finalizing closes every door that writes, and none that
+# read.
+#
+# examples/polls/README.md's "What to implement" step 4: FinalizePoll is an
+# admin-token-gated state transition after which the poll becomes read-only.
+# "Read-only" is a claim about the *whole* action surface, so this drives
+# every mutating action against a finalized poll and asserts each one's
+# refusal, rather than checking one of them and inferring the rest.
+#
+# The reads are asserted too, and deliberately: a finalized poll that could no
+# longer be read would be a different bug with the same one-line summary.
+#
+# Re-runnable: the poll is created here.
+
+model PollModel
+
+client organizer
+
+do CreatePoll title="Closing time" options=[{"label":"Six"},{"label":"Seven"}]
+expect ok capture poll=$.pollId
+expect ok capture admin=$.adminToken
+
+do OpenPoll pollId=$poll
+expect ok capture six=$.options[0].id
+expect ok capture seven=$.options[1].id
+
+do SubmitVotes participantName=alice votes=[{"optionId":$six,"choice":"Yes"}]
+expect ok
+
+do AddComment participantName=alice body="six suits me"
+expect ok
+
+do GetEventsSince lastEventId=0
+expect ok capture beforeFinalize=$.events[0].id
+
+session principal=organizer token=$admin
+
+do FinalizePoll optionId=$six
+expect ok field finalized == Yes
+expect ok field finalizedOptionId == $six
+
+# ── Every writing door, one at a time ──────────────────────────────────────
+do SubmitVotes participantName=bob votes=[{"optionId":$seven,"choice":"Yes"}]
+expect err message == "poll is finalized"
+
+do UpdateVotes participantName=alice votes=[{"optionId":$seven,"choice":"Yes"}]
+expect err message == "poll is finalized"
+
+do AddComment participantName=bob body="too late"
+expect err message == "poll is finalized"
+
+do UndoLastVoteChange participantName=alice
+expect err message == "poll is finalized"
+
+# Finalizing twice has its own message, distinct from the one every other
+# writing action gets: the second finalize is refused for being redundant, not
+# for the poll being read-only.
+do FinalizePoll optionId=$seven
+expect err message == "poll is already finalized"
+expect err message !~ "^poll is finalized$"
+
+# ── The reads still work, and still say the same thing ─────────────────────
+do GetPollState
+expect ok field finalized == Yes
+expect ok field finalizedOptionId == $six
+expect ok field options[0].yesCount.num == 1
+expect ok field options[1].yesCount.num == 0
+expect ok field comments ~ "six suits me"
+
+do GetEventsSince lastEventId=$beforeFinalize
+expect ok field events !~ "too late"
+
+# ...and a second viewer arriving after the fact sees a finalized poll.
+client latecomer
+
+do OpenPoll pollId=$poll
+expect ok field finalized == Yes
+expect ok field finalizedOptionId == $six

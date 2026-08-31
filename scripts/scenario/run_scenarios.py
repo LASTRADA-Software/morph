@@ -35,7 +35,9 @@ import sqlite3
 import signal
 import subprocess
 import sys
+import collections
 import tempfile
+import threading
 import time
 
 RUNNER = pathlib.Path(__file__).with_name("morph_scenario.py")
@@ -215,12 +217,27 @@ def find_server(rung: str, build_dir: pathlib.Path | None) -> pathlib.Path:
     return found[0]
 
 
+#: How many lines of a server's own output to keep for a failure report. The
+#: rest is discarded as it is read -- see `ServerProcess._drain`.
+LOG_TAIL_LINES = 40
+
+
 class ServerProcess:
     """A running rung server, with its port, as a context manager.
 
     Blocks on the server's stdout until it announces a WebSocket port, so
     there is no sleep-and-hope: the scenario run starts when the server says
     it is listening, and not before.
+
+    **Its output is drained for as long as it runs.** A rung server writes an
+    action-log line per dispatch, and a pipe nobody reads holds about 64 KiB
+    before the writer blocks in `write(2)`. Reading only until the port line
+    and then leaving the pipe alone therefore works fine for one scenario and
+    wedges the server partway through a mutation run, which is exactly how
+    this was found: the corpus passed, and `--mutate` died with "no data
+    within 10.0s" after roughly sixty reruns, on a server that was neither
+    crashed nor refusing -- just blocked forever on a full pipe. A daemon
+    thread consumes every line and keeps only the tail for diagnostics.
     """
 
     def __init__(self, rung: str, binary: pathlib.Path, db_path: pathlib.Path) -> None:
@@ -229,7 +246,8 @@ class ServerProcess:
         self.db_path = db_path
         self.port = 0
         self._process: subprocess.Popen[str] | None = None
-        self._log: list[str] = []
+        self._log: collections.deque[str] = collections.deque(maxlen=LOG_TAIL_LINES)
+        self._drainer: threading.Thread | None = None
 
     def __enter__(self) -> "ServerProcess":
         self._process = subprocess.Popen(  # noqa: S603
@@ -242,6 +260,8 @@ class ServerProcess:
             start_new_session=True,
         )
         self.port = self._await_port()
+        self._drainer = threading.Thread(target=self._drain, daemon=True)
+        self._drainer.start()
         RUNGS[self.rung].seed(self.db_path)
         return self
 
@@ -272,8 +292,26 @@ class ServerProcess:
         return f"ws://127.0.0.1:{self.port}"
 
     def output(self) -> str:
-        """Everything the server printed before it announced its port."""
+        """The last few lines the server printed, for a failure report."""
         return "".join(self._log)
+
+    def _drain(self) -> None:
+        """Consumes the server's output for as long as it runs.
+
+        Keeps only the tail: the point is to stop the pipe filling, not to
+        collect a transcript. Exits when the pipe closes, which is what the
+        server exiting looks like from here.
+        """
+        process = self._process
+        if process is None or process.stdout is None:
+            return
+        try:
+            for line in process.stdout:
+                self._log.append(line)
+        except (ValueError, OSError):
+            # The pipe was closed under us by __exit__. Nothing to report:
+            # the process is on its way out by the time that can happen.
+            return
 
     def _await_port(self) -> int:
         process = self._process

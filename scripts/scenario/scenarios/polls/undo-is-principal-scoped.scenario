@@ -1,0 +1,69 @@
+# polls (rung 3) — A votes, B votes, A undoes, and B's vote survives.
+#
+# This is the rung's headline design record. examples/polls/README.md's
+# "What to implement" step 5 records why UndoLastVoteChange is a *compensating
+# action* rather than SessionLog::undoLast(): undoLast pops the newest entry
+# regardless of who wrote it, so A's undo would have killed B's vote. The
+# README names this exact interleaving as the test whose outcome is the
+# design record.
+#
+# Here it is out of process, on two sockets, which is the shape a real pair of
+# participants has and the shape the in-process interleaving test cannot take.
+#
+# The order is load-bearing: B's vote is the *newest* entry when A undoes. An
+# undo that popped the newest entry would take B's, and the assertion that
+# catches it is the one on B's count after the undo -- not the one on A's.
+#
+# Re-runnable: the poll is created here.
+
+model PollModel
+
+client alice
+
+do CreatePoll title="Whose undo is it" options=[{"label":"Left"},{"label":"Right"}]
+expect ok capture poll=$.pollId
+
+do OpenPoll pollId=$poll
+expect ok capture left=$.options[0].id
+expect ok capture right=$.options[1].id
+
+# ── A votes ────────────────────────────────────────────────────────────────
+do SubmitVotes participantName=alice votes=[{"optionId":$left,"choice":"Yes"}]
+expect ok
+
+# ── B votes, and is now the newest entry in the log ────────────────────────
+client bob
+
+do OpenPoll pollId=$poll
+expect ok
+
+do SubmitVotes participantName=bob votes=[{"optionId":$right,"choice":"Yes"}]
+expect ok
+
+do GetPollState
+expect ok field options[0].yesCount.num == 1
+expect ok field options[1].yesCount.num == 1
+
+# ── A undoes ───────────────────────────────────────────────────────────────
+use alice
+
+do UndoLastVoteChange participantName=alice
+expect ok field restored == Yes
+
+# A's vote is gone...
+do GetPollState
+expect ok field options[0].yesCount.num == 0
+# ...and B's is untouched. This is the assertion the whole design decision is
+# about: a principal-blind undo would have taken this one instead.
+expect ok field options[1].yesCount.num == 1
+expect ok field votes ~ "\"participantName\":\"bob\""
+expect ok field votes !~ "\"participantName\":\"alice\""
+
+# ── An undo with nothing of its own to undo is refused, not silently applied
+# to someone else's change ─────────────────────────────────────────────────
+do UndoLastVoteChange participantName=carol
+expect err message == "nothing to undo for this participant"
+
+# B's vote still stands after that refusal, too.
+do GetPollState
+expect ok field options[1].yesCount.num == 1

@@ -1,0 +1,74 @@
+# bookmarks (rung 2) — archiving hides a bookmark from the default listing
+# without deleting it.
+#
+# examples/bookmarks/README.md's "What to implement" step 1 pairs
+# archive/unarchive with the CRUD, and step 2's filters are where the effect
+# shows: ListBookmarks defaults to ArchiveFilter::ActiveOnly, which is
+# linkding's own convention. So archiving is not a state a client reads --
+# it is a state that changes what listing the client gets, and the only way to
+# observe it is to ask for both listings.
+#
+# Re-runnable: both bookmarks are created here, and every listing assertion is
+# anchored to a captured id rather than to a count.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client store model=BookmarkModel
+session principal=$who token=$token
+
+do CreateBookmark url="https://example.com/keep" title="Keep" tags=["shelf"]
+expect ok capture keep=$.id
+
+do CreateBookmark url="https://example.com/stay" title="Stay" tags=["shelf"]
+expect ok capture stay=$.id
+
+# Both active, both listed by default.
+do ListBookmarks tag=shelf
+expect ok field bookmarks ~ "\"id\":$keep,"
+expect ok field bookmarks ~ "\"id\":$stay,"
+
+do ArchiveBookmark id=$keep
+expect ok
+
+# ── The default listing drops it; the archived listing has it ─────────────
+do ListBookmarks tag=shelf
+expect ok field bookmarks !~ "\"id\":$keep,"
+expect ok field bookmarks ~ "\"id\":$stay,"
+
+do ListBookmarks tag=shelf archiveFilter=ArchivedOnly
+expect ok field bookmarks ~ "\"id\":$keep,"
+expect ok field bookmarks !~ "\"id\":$stay,"
+
+do ListBookmarks tag=shelf archiveFilter=Any
+expect ok field bookmarks ~ "\"id\":$keep,"
+expect ok field bookmarks ~ "\"id\":$stay,"
+
+# ── ...and it is still there, whole, when asked for by id ─────────────────
+# Archiving is not deletion, which is the distinction the two listings alone
+# could not make.
+do GetBookmark id=$keep
+expect ok field title == "Keep"
+expect ok field archiveState == Archived
+expect ok field tags ~ "\"shelf\""
+
+# ── Back again ─────────────────────────────────────────────────────────────
+do UnarchiveBookmark id=$keep
+expect ok
+
+do GetBookmark id=$keep
+expect ok field archiveState == Active
+
+do ListBookmarks tag=shelf
+expect ok field bookmarks ~ "\"id\":$keep,"
+expect ok field bookmarks ~ "\"id\":$stay,"
+
+# ── Both operations are refused for a bookmark that is not there ──────────
+do ArchiveBookmark id=999999
+expect err message == "no such bookmark"
+
+do UnarchiveBookmark id=999999
+expect err message == "no such bookmark"

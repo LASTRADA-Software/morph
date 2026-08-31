@@ -1,0 +1,65 @@
+# pastebin (rung 1) — a burn budget spent one read at a time.
+#
+# examples/pastebin/README.md calls GetPaste "the interesting one": reading
+# increments read_count and may delete the paste, so a read is a write. This
+# walks a budget of three all the way down and past the end, asserting the
+# count after every read rather than only the disappearance at the end --
+# a paste that vanished on read one would otherwise satisfy the same final
+# assertion as one that vanished on read four.
+#
+# Also covers the two ways a budget is refused before it is ever spent. Both
+# come from CreatePaste::fieldMetadata's declared minimum = 1 and
+# multipleOf = 1, served to clients as JSON-Schema keys and checked here on
+# the wire: a budget of zero would make the paste unreadable from birth
+# (readCount >= burnAfterReads is already true), and a fractional budget was
+# once accepted and then quietly rewritten by the model's own floor().
+#
+# Re-runnable: every paste here is created by this file, and nothing asserts
+# on a row count.
+
+model PasteModel
+
+client alice
+
+do CreatePaste content="three reads, then gone" syntax=plaintext burnAfterReads={"num":3,"den":1,"dp":1}
+expect ok capture ember=$.id
+
+do GetPaste id=$ember
+expect ok field readCount.num == 1
+expect ok field content == "three reads, then gone"
+
+do GetPaste id=$ember
+expect ok field readCount.num == 2
+
+do GetPaste id=$ember
+expect ok field readCount.num == 3
+expect ok field burnAfterReads.num == 3
+
+# The budget is spent. The paste is not merely unreadable -- it is deleted,
+# which is why this is "no such paste" and not "burned".
+do GetPaste id=$ember
+expect err message == "GetPaste: no such paste"
+
+do ListPastes cursor="$ember~"
+expect ok field pastes !~ "\"id\":\"$ember\""
+
+# Deleting what the burn already destroyed is a no-op rather than an error.
+do DeletePaste id=$ember
+expect ok
+
+# ── Budgets that are refused before a paste exists at all ──────────────────
+do CreatePaste content="born unreadable" syntax=plaintext burnAfterReads={"num":0,"den":1,"dp":1}
+expect err message == "action failed validation: PasteModel/CreatePaste"
+
+do CreatePaste content="two and a half reads" syntax=plaintext burnAfterReads={"num":5,"den":2,"dp":1}
+expect err message == "action failed validation: PasteModel/CreatePaste"
+
+# A budget of one is the smallest that is legal, and it works.
+do CreatePaste content="exactly one" syntax=plaintext burnAfterReads={"num":1,"den":1,"dp":1}
+expect ok capture spark=$.id
+
+do GetPaste id=$spark
+expect ok field content == "exactly one"
+
+do GetPaste id=$spark
+expect err message == "GetPaste: no such paste"

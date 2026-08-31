@@ -47,7 +47,15 @@ do CreatePaste content="this one is private" syntax=plaintext visibility=Private
 expect ok capture secret=$.id
 
 use bob
-do ListPastes
+# The cursor, not a bare first page: ListPastes is keyset pagination on the id
+# string, twenty rows at a time, so "the paste I just made is listed" is only
+# true of page one while the database holds fewer than twenty public pastes
+# with larger ids. Asking for the page that begins just above this paste's own
+# id makes the assertion hold at any database size -- ids are
+# `adjective-animal-NNN` from two fixed word lists, so appending a byte above
+# '9' names a cursor strictly greater than this id and lower than every id not
+# sharing its `adjective-animal-NN` prefix.
+do ListPastes cursor="$id~"
 # Both halves matter: the second alone would also pass if ListPastes returned
 # nothing at all.
 expect ok field pastes ~ $id

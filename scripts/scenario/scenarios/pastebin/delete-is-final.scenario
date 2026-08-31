@@ -1,0 +1,61 @@
+# pastebin (rung 1) — every door into a deleted paste is closed, and closing
+# it twice is not an error.
+#
+# examples/pastebin/README.md's "What to implement" step 3 pairs DeletePaste
+# with EditPaste as the plain mutations. What a delete has to be is *final*
+# across the whole action surface, not just in the one action that performed
+# it -- so this drives every remaining action at the deleted id and asserts
+# each one's own refusal, rather than asserting the delete's `ok` and stopping.
+#
+# The idempotence at the end is not a nicety: the delete is journaled, and a
+# replayed entry re-runs it. A DeletePaste that failed on a row that is already
+# gone would make replay of a perfectly ordinary history fail.
+#
+# Re-runnable: the paste is created here.
+
+model PasteModel
+
+client alice
+
+do CreatePaste content="here today" syntax=plaintext editability=Editable
+expect ok capture doomed=$.id
+
+do GetPaste id=$doomed
+expect ok field content == "here today"
+
+do ListPastes cursor="$doomed~"
+expect ok field pastes ~ "\"id\":\"$doomed\""
+
+do DeletePaste id=$doomed
+expect ok
+
+# ── Every door, one at a time ───────────────────────────────────────────────
+do GetPaste id=$doomed
+expect err message == "GetPaste: no such paste"
+
+do EditPaste id=$doomed content="gone tomorrow" syntax=plaintext
+expect err message == "EditPaste: no such paste"
+
+do ListPastes cursor="$doomed~"
+expect ok field pastes !~ "\"id\":\"$doomed\""
+
+# ExpirePaste's guard means a row that is not there is simply not deleted --
+# the sweep has nothing to say about it, and says it without failing.
+do ExpirePaste id=$doomed
+expect ok
+
+# ── Deleting twice ─────────────────────────────────────────────────────────
+do DeletePaste id=$doomed
+expect ok
+
+do GetPaste id=$doomed
+expect err message == "GetPaste: no such paste"
+
+# ── An id that never existed answers exactly the same way ──────────────────
+# Which is the point: a deleted paste is indistinguishable from one that was
+# never created, so the listing cannot be used to enumerate deletions.
+do GetPaste id=never-was-a-paste
+expect err message == "GetPaste: no such paste"
+
+do DeletePaste id=never-was-a-paste
+expect ok

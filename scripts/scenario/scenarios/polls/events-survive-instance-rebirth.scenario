@@ -1,0 +1,79 @@
+# polls (rung 3) — every viewer leaves, the instance dies, and the log is
+# still there when someone comes back.
+#
+# examples/polls/README.md's design decision 4, and the definition-of-done
+# criterion it settles: shared instances are destroyed immediately at refcount
+# zero, so an in-instance event list would die the moment all tabs briefly
+# close -- which is exactly what a link shared in a chat produces. The answer
+# was to persist events to a real `poll_events` table keyed by a monotonic
+# sequence, so a reborn instance continues the same sequence rather than
+# starting a new epoch.
+#
+# The test the README names is "attach N, mutate, detach all, attach again,
+# poll with the pre-death cursor". That is this file, and it is only
+# expressible out of process: detaching *every* handler means closing every
+# connection, and an in-process rig's handlers do not live on connections.
+#
+# Re-runnable: the poll is created here, and the cursor is captured before the
+# instance dies rather than assumed.
+
+model PollModel
+
+client first
+
+do CreatePoll title="Nobody is watching" options=[{"label":"Stay"},{"label":"Go"}]
+expect ok capture poll=$.pollId
+
+do OpenPoll pollId=$poll
+expect ok capture stay=$.options[0].id
+expect ok capture go=$.options[1].id
+expect ok capture beforeDeath=$.lastEventId
+
+# ── Two viewers attach to the same poll ────────────────────────────────────
+client second
+
+do OpenPoll pollId=$poll
+expect ok
+
+do SubmitVotes participantName=alice votes=[{"optionId":$stay,"choice":"Yes"}]
+expect ok
+
+use first
+
+do SubmitVotes participantName=bob votes=[{"optionId":$go,"choice":"Yes"}]
+expect ok
+
+do AddComment participantName=bob body="written before everyone left"
+expect ok
+
+# ── Everyone leaves ────────────────────────────────────────────────────────
+# Both connections drop, so the shared instance's refcount reaches zero and it
+# is destroyed. Nothing is asserted about the destruction itself -- what the
+# design decision promises is about what survives it.
+close second
+close first
+
+# ── Someone comes back ─────────────────────────────────────────────────────
+client returning
+
+do OpenPoll pollId=$poll
+expect ok field title == "Nobody is watching"
+# The tallies were rebuilt from the database, not from a live instance.
+expect ok field options[0].yesCount.num == 1
+expect ok field options[1].yesCount.num == 1
+
+# The pre-death cursor still means what it meant: every event written while
+# the instance was alive is delivered to a client that never saw it.
+do GetEventsSince lastEventId=$beforeDeath
+expect ok field events ~ "alice submitted votes"
+expect ok field events ~ "bob submitted votes"
+expect ok field events ~ "bob commented"
+
+# ...and the sequence continued rather than restarting, so an event written
+# after the rebirth still sorts after the ones written before it.
+do AddComment participantName=carol body="written after everyone came back"
+expect ok
+
+do GetEventsSince lastEventId=$beforeDeath
+expect ok field events ~ "carol commented"
+expect ok field events ~ "bob commented"

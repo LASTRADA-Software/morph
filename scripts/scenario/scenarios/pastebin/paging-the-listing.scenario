@@ -1,0 +1,105 @@
+# pastebin (rung 1) — walking the listing a page at a time.
+#
+# examples/pastebin/README.md's "What to implement" step 4: ListPastes returns
+# recent public pastes, paginated by a cursor field. The implementation is
+# keyset pagination on the id string, descending -- the cursor is the last id
+# of the previous page and the next page is strictly below it. The comment on
+# that query says the reason in as many words: "a row created or reclaimed
+# mid-walk can never shift a later page's offset", which is the property an
+# offset-based pager does not have and this file asserts.
+#
+# Twenty-one pastes are created here rather than assumed, so the first page is
+# full and there is genuinely a second one, whatever else is in the database.
+#
+# ── The two constant cursors, and why they are constants ───────────────────
+# Ids are `adjective-animal-NNN` drawn from two fixed 16-word lists
+# (src/models/paste_model.cpp). Every adjective sorts at or below "wild", so:
+#
+#   cursor="zzzz"  is above every id there can ever be -> always page one
+#   cursor="aaaa"  is below every id there can ever be -> always empty
+#
+# Neither depends on what the database holds, which is what lets this file run
+# against a database its earlier runs have already filled.
+#
+# Re-runnable: the twenty-one pastes are created fresh in every run, and every
+# assertion is either an exclusion or is anchored to a captured id.
+
+model PasteModel
+
+client alice
+
+# ── Twenty-one public pastes, so page one is full and page two exists ──────
+do CreatePaste content="page filler 1" syntax=plaintext
+expect ok capture first=$.id
+do CreatePaste content="page filler 2" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 3" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 4" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 5" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 6" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 7" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 8" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 9" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 10" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 11" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 12" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 13" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 14" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 15" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 16" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 17" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 18" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 19" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 20" syntax=plaintext
+expect ok field id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+do CreatePaste content="page filler 21" syntax=plaintext
+expect ok capture last=$.id
+
+# ── Page one ───────────────────────────────────────────────────────────────
+# Full, and it hands back the cursor for the page below it. An unengaged
+# cursor is omitted from the reply entirely rather than sent as null, so the
+# presence of this field is itself the "there is more" signal.
+do ListPastes cursor="zzzz"
+expect ok field pastes[19].id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+expect ok capture next=$.nextCursor
+
+# ── Page two ───────────────────────────────────────────────────────────────
+# The cursor row is *not* repeated: the query is `id < cursor`, strictly. A
+# pager that used `<=` would return it twice and still pass a row-count check.
+do ListPastes cursor=$next
+expect ok field pastes !~ "\"id\":\"$next\""
+expect ok field pastes[0].id ~ "^[a-z]+-[a-z]+-[0-9]+$"
+
+# ── The two ends of the keyspace ───────────────────────────────────────────
+do ListPastes cursor="aaaa"
+expect ok field pastes == []
+
+# ── The captured ids still resolve, and paging did not disturb them ────────
+do GetPaste id=$first
+expect ok field content == "page filler 1"
+
+do GetPaste id=$last
+expect ok field content == "page filler 21"
+
+do DeletePaste id=$first
+expect ok
+
+do GetPaste id=$first
+expect err message == "GetPaste: no such paste"

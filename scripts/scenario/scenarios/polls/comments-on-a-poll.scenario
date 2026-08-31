@@ -1,0 +1,65 @@
+# polls (rung 3) — the comment thread, and what it refuses.
+#
+# examples/polls/README.md's "What to implement" step 3 lists AddComment
+# alongside the vote actions, and for the same reason: a comment is another
+# anonymous, poll-scoped contribution whose only identity is its free-text
+# participantName. It shows up in GetPollState's `comments` and in the event
+# log as its own `kind`, both of which are asserted here.
+#
+# The ordering assertion is the one worth having: comments come back in the
+# order they were written, which a set-backed store would not guarantee and
+# no single-comment test would notice.
+#
+# Re-runnable: the poll is created here.
+
+model PollModel
+
+client alice
+
+do CreatePoll title="Where shall we eat" options=[{"label":"Cafe"},{"label":"Canteen"}]
+expect ok capture poll=$.pollId
+
+do OpenPoll pollId=$poll
+expect ok capture cafe=$.options[0].id
+expect ok capture start=$.lastEventId
+
+do AddComment participantName=alice body="the cafe is closed on Mondays"
+expect ok
+
+client bob
+
+do OpenPoll pollId=$poll
+expect ok
+
+do AddComment participantName=bob body="canteen it is, then"
+expect ok
+
+# Both comments, in the order they were written.
+do GetPollState
+expect ok field comments[0].participantName == alice
+expect ok field comments[0].body == "the cafe is closed on Mondays"
+expect ok field comments[1].participantName == bob
+expect ok field comments[1].body == "canteen it is, then"
+
+# A comment is its own event kind, distinct from a vote.
+do GetEventsSince lastEventId=$start
+expect ok field events ~ "\"kind\":\"comment\""
+expect ok field events ~ "alice commented"
+expect ok field events ~ "bob commented"
+expect ok field events !~ "submitted votes"
+
+# ── Voting and commenting are independent ──────────────────────────────────
+do SubmitVotes participantName=bob votes=[{"optionId":$cafe,"choice":"No"}]
+expect ok
+
+do GetPollState
+expect ok field comments[1].body == "canteen it is, then"
+expect ok field options[0].noCount.num == 1
+
+# ── An empty comment is refused by validate(), so nothing is stored ────────
+do AddComment participantName=bob body=""
+expect err message == "action failed validation: PollModel/AddComment"
+
+do GetPollState
+expect ok field comments[1].body == "canteen it is, then"
+expect ok field comments !~ "\"body\":\"\""

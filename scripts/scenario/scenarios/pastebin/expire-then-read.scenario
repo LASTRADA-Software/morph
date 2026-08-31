@@ -1,0 +1,71 @@
+# pastebin (rung 1) — an expired paste, and the sweep that reclaims it.
+#
+# ExpirePaste is documented as internal-only: dispatched by the app layer's
+# expiry sweep, never by a GUI client (pastebin/dto/paste_dto.hpp). It is a
+# registered action on a reachable model, though, so a scenario can drive the
+# sweep's own step and observe the two distinct states either side of it --
+# which no in-process test of the sweep does, because the sweep and the reader
+# share a process there.
+#
+# The three states, in order, each with its own distinct reply:
+#   1. present but past its expiry  -> GetPaste refuses, "paste has expired"
+#   2. swept                        -> GetPaste refuses, "no such paste"
+#   3. swept again                  -> ExpirePaste is a no-op, not an error
+#
+# ── Why this needs no clock and no sleep ────────────────────────────────────
+# The expiry instant is *sent by the scenario*, in the past. Nothing here
+# waits for time to pass, so this cannot become the kind of flaky timing test
+# morph#147 was. ExpirePaste's own DELETE carries an `expires_at_ms <= now`
+# guard, which is what makes it replay-safe and is also why it must be given a
+# genuinely expired paste to have any effect at all.
+#
+# ── A listing fact that is not guessable ────────────────────────────────────
+# ListPastes filters on `is_private` and nothing else, so an expired paste is
+# still *listed* until the sweep reclaims it, even though it can no longer be
+# read. Both halves are asserted below.
+#
+# Re-runnable: both pastes are created here, with a literal past instant.
+
+model PasteModel
+
+client alice
+
+do CreatePaste content="already stale" syntax=plaintext expiresAt="2020-01-01T00:00:00.000Z"
+expect ok capture stale=$.id
+
+# Unreadable on arrival -- and told apart from a paste that never existed.
+do GetPaste id=$stale
+expect err message == "GetPaste: paste has expired"
+expect err message !~ "no such paste"
+
+# Still listed, though: the listing's only filter is privacy.
+do ListPastes cursor="$stale~"
+expect ok field pastes ~ "\"id\":\"$stale\""
+
+# The sweep's own step.
+do ExpirePaste id=$stale
+expect ok
+
+# Now genuinely gone, and the refusal changes to say so.
+do GetPaste id=$stale
+expect err message == "GetPaste: no such paste"
+expect err message !~ "expired"
+
+do ListPastes cursor="$stale~"
+expect ok field pastes !~ "\"id\":\"$stale\""
+
+# Sweeping what is already swept is a no-op. This is the replay case: the
+# journaled entry carries only the id, so re-running it must be harmless.
+do ExpirePaste id=$stale
+expect ok
+
+# ── The guard bites: the sweep does not touch a paste that has not expired ──
+do CreatePaste content="still fresh" syntax=plaintext expiresAt="2999-12-31T23:59:59.000Z"
+expect ok capture fresh=$.id
+
+do ExpirePaste id=$fresh
+expect ok
+
+# Untouched, which is the whole point of the `expires_at_ms <= now` guard.
+do GetPaste id=$fresh
+expect ok field content == "still fresh"

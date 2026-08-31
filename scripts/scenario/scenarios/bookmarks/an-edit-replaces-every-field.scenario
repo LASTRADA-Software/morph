@@ -1,0 +1,69 @@
+# bookmarks (rung 2) — EditBookmark is a whole-record replace, not a patch.
+#
+# examples/bookmarks/README.md's "What to implement" step 1 lists edit among
+# the CRUD, and the DTO tells the rest: EditBookmark carries url, title,
+# description, notes, tags *and* visibility, every one of them non-optional
+# and every one of them defaulted. So a client that omits `visibility` is not
+# saying "leave it alone" -- it is saying "Private", because that is the
+# member's default and the decode is lenient.
+#
+# That is the sharp edge in this rung's action surface and the one a client
+# author will hit: edit a Shared bookmark without restating its visibility and
+# it silently stops being shared. This file pins it as behaviour rather than
+# discovering it in a shared feed that quietly emptied.
+#
+# Re-runnable: both bookmarks are created here.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client store model=BookmarkModel
+session principal=$who token=$token
+
+do CreateBookmark url="https://example.com/before" title="Before" description="old description" notes="old notes" tags=["one","two"] visibility=Shared
+expect ok capture mark=$.id
+
+do GetBookmark id=$mark
+expect ok field visibility == Shared
+expect ok field tags[0] == one
+expect ok field description == "old description"
+
+# ── Every field restated ───────────────────────────────────────────────────
+do EditBookmark id=$mark url="https://example.com/after" title="After" description="new description" notes="new notes" tags=["three"] visibility=Shared
+expect ok
+
+do GetBookmark id=$mark
+expect ok field url == "https://example.com/after"
+expect ok field title == "After"
+expect ok field description == "new description"
+expect ok field notes == "new notes"
+expect ok field tags[0] == three
+expect ok field tags !~ "one"
+expect ok field visibility == Shared
+
+# ── ...and the fields an edit leaves out are *cleared*, not preserved ──────
+# Same action, with description, notes and visibility simply absent from the
+# body. They come back empty and Private -- their defaults.
+do EditBookmark id=$mark url="https://example.com/after" title="After" tags=["three"]
+expect ok
+
+do GetBookmark id=$mark
+expect ok field description == ""
+expect ok field notes == ""
+expect ok field visibility == Private
+expect ok field title == "After"
+
+# ── The refusals ───────────────────────────────────────────────────────────
+do EditBookmark id=$mark url="" title="After" tags=["three"]
+expect err message == "action failed validation: BookmarkModel/EditBookmark"
+
+do EditBookmark id=999999 url="https://example.com/ghost" title="Ghost" tags=[]
+expect err message == "no such bookmark"
+
+# Neither refusal touched the record.
+do GetBookmark id=$mark
+expect ok field url == "https://example.com/after"
+expect ok field title == "After"

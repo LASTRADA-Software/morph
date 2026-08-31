@@ -1,0 +1,79 @@
+# pastebin (rung 1) — the rung's own definition of done, end to end.
+#
+#   create -> list -> open -> burn -> delete
+#
+# Quoted verbatim from examples/pastebin/README.md's "Definition of done",
+# which names this journey as the one the desktop client was driven through by
+# hand. This is that walkthrough as a file.
+#
+# Re-runnable against the same database: every id is captured from the reply
+# that minted it, and the listing assertion uses a cursor derived from that id
+# rather than a page number or a row count.
+#
+# ── Wire shapes that are not guessable from the DTOs ────────────────────────
+#   * `burnAfterReads` and `readCount` are `Reads`, a `morph::units::Quantity`
+#     with one declared decimal, so they travel as {"num","den","dp"} objects
+#     and not as bare numbers -- `burnAfterReads=1` is a decode failure, and
+#     `burnAfterReads={"num":1,"den":1,"dp":1}` is the whole-number 1;
+#   * `visibility` and `editability` travel as their *names* ("Public",
+#     "Private", "Immutable", "Editable"), not their ordinals, because both
+#     enums carry a glz::meta (pastebin/dto/paste_dto.hpp);
+#   * `ListPastes` is keyset pagination on the id string, descending, with the
+#     cursor row itself excluded (`id < cursor`). Ids are `adj-animal-NNN`
+#     from two fixed 16-word lists whose largest adjective is "wild", so
+#     appending any byte above '9' to a captured id -- "$paste~" -- yields a
+#     cursor that is strictly greater than that id and lower than every id
+#     that does not share its `adj-animal-NN` prefix. The paste therefore
+#     always lands within the first eleven rows of that page, which is what
+#     makes "my paste is listed" an assertion that holds on a database of any
+#     size rather than only on an empty one.
+
+model PasteModel
+
+client alice
+
+# ── create ─────────────────────────────────────────────────────────────────
+do CreatePaste content="the definition of done, as a file" syntax=markdown editability=Editable
+expect ok capture paste=$.id
+
+# ── list ───────────────────────────────────────────────────────────────────
+# The page that begins just above the new paste's own id: it is on it.
+do ListPastes cursor="$paste~"
+expect ok field pastes ~ "\"id\":\"$paste\""
+expect ok field pastes ~ "\"syntax\":\"markdown\""
+
+# ── open ───────────────────────────────────────────────────────────────────
+# The read is what proves the create landed -- not the create's own ok.
+do GetPaste id=$paste
+expect ok field content == "the definition of done, as a file"
+expect ok field syntax == markdown
+expect ok field visibility == Public
+expect ok field editability == Editable
+
+# ── burn ───────────────────────────────────────────────────────────────────
+# A second paste, with a budget of exactly one read. The first read serves it;
+# the second finds nothing, because serving it was also what destroyed it.
+do CreatePaste content="read me once" syntax=plaintext burnAfterReads={"num":1,"den":1,"dp":1}
+expect ok capture ember=$.id
+
+do GetPaste id=$ember
+expect ok field content == "read me once"
+expect ok field readCount.num == 1
+expect ok field burnAfterReads.num == 1
+
+do GetPaste id=$ember
+expect err message == "GetPaste: no such paste"
+
+# ...and a burned paste is gone from the listing too, not merely unreadable.
+do ListPastes cursor="$ember~"
+expect ok field pastes !~ "\"id\":\"$ember\""
+
+# ── delete ─────────────────────────────────────────────────────────────────
+do DeletePaste id=$paste
+expect ok
+
+do GetPaste id=$paste
+expect err message == "GetPaste: no such paste"
+
+do ListPastes cursor="$paste~"
+expect ok field pastes !~ "\"id\":\"$paste\""

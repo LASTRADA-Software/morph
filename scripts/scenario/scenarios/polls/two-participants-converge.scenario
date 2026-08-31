@@ -1,0 +1,59 @@
+# polls (rung 3) — two participants on one poll, each seeing the other's work.
+#
+# examples/polls/README.md calls PollModel "the shared-instance showcase":
+# BridgeHandler<PollModel, AllowShared> means every viewer of a poll attaches
+# to the same server-side instance. The claim that matters to a user is that
+# one participant's vote is visible to the other, and an in-process rig with a
+# single handler cannot test it -- there is only one of everything there.
+#
+# Two sockets, two registered handlers, one poll. Anonymous throughout: this
+# rung has no participant authentication of any kind (README design decision
+# 1), so the identity that scopes a vote is the action's own free-text
+# `participantName`, and knowing the pollId is the entire capability.
+#
+# Re-runnable: the poll is created here.
+
+model PollModel
+
+client organizer
+
+do CreatePoll title="Sprint retro slot" options=[{"label":"Thursday"},{"label":"Friday"}]
+expect ok capture poll=$.pollId
+
+do OpenPoll pollId=$poll
+expect ok capture thursday=$.options[0].id
+expect ok capture friday=$.options[1].id
+
+do SubmitVotes participantName=alice votes=[{"optionId":$thursday,"choice":"Yes"},{"optionId":$friday,"choice":"IfNeedBe"}]
+expect ok
+
+# ── A second participant, on their own connection ──────────────────────────
+client participant
+
+do OpenPoll pollId=$poll
+expect ok field title == "Sprint retro slot"
+
+# Bob sees Alice's vote before casting his own -- the convergence claim.
+do GetPollState
+expect ok field options[0].yesCount.num == 1
+expect ok field options[1].ifNeedBeCount.num == 1
+expect ok field votes ~ "\"participantName\":\"alice\""
+
+do SubmitVotes participantName=bob votes=[{"optionId":$thursday,"choice":"No"},{"optionId":$friday,"choice":"Yes"}]
+expect ok
+
+# ── ...and Alice's connection sees Bob's, without reopening anything ───────
+use organizer
+
+do GetPollState
+expect ok field options[0].yesCount.num == 1
+expect ok field options[0].noCount.num == 1
+expect ok field options[1].yesCount.num == 1
+expect ok field options[1].ifNeedBeCount.num == 1
+expect ok field votes ~ "\"participantName\":\"bob\""
+expect ok field votes ~ "\"participantName\":\"alice\""
+
+# Both participants appear in one shared event log, in the order they acted.
+do GetEventsSince lastEventId=0
+expect ok field events ~ "alice submitted votes"
+expect ok field events ~ "bob submitted votes"

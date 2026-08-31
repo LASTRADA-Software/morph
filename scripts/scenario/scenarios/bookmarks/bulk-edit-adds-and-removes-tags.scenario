@@ -1,0 +1,71 @@
+# bookmarks (rung 2) — one action, many entities, one transaction.
+#
+# examples/bookmarks/README.md's "What to implement" step 3 calls BulkEdit
+# "the first multi-entity atomic action; all-or-nothing against SQLite". This
+# file is the succeeding half of that claim -- what a bulk edit does when
+# every id in it is good. Its failing half is
+# bulk-edit-is-all-or-nothing.scenario.
+#
+# What makes it worth its own file rather than three separate edits is the
+# combination: add tags, remove tags and archive in one action, applied to a
+# set, with one `affected` count answering for all of it.
+#
+# Re-runnable: all three bookmarks are created here.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client store model=BookmarkModel
+session principal=$who token=$token
+
+do CreateBookmark url="https://example.com/bulk/1" title="Bulk one" tags=["draft","batch"]
+expect ok capture one=$.id
+
+do CreateBookmark url="https://example.com/bulk/2" title="Bulk two" tags=["draft","batch"]
+expect ok capture two=$.id
+
+do CreateBookmark url="https://example.com/bulk/3" title="Bulk three" tags=["batch"]
+expect ok capture three=$.id
+
+# ── Add a tag, drop a tag, archive -- all three, in one action ─────────────
+do BulkEdit ids=[$one,$two] addTags=["published"] removeTags=["draft"] archive=Archive
+expect ok field affected.num == 2
+
+# The reads are the proof, one per entity.
+do GetBookmark id=$one
+expect ok field tags ~ "\"published\""
+expect ok field tags !~ "\"draft\""
+expect ok field archiveState == Archived
+
+do GetBookmark id=$two
+expect ok field tags ~ "\"published\""
+expect ok field tags !~ "\"draft\""
+expect ok field archiveState == Archived
+
+# ...and the bookmark that was not named is untouched, which is what makes
+# `affected == 2` mean something.
+do GetBookmark id=$three
+expect ok field tags !~ "\"published\""
+expect ok field archiveState == Active
+
+# ── Archive is its own axis: a bulk edit can leave it alone ───────────────
+# BulkArchiveOp::None is the default, and it means "do not touch the archive
+# state", not "unarchive".
+do BulkEdit ids=[$one] addTags=["revisited"]
+expect ok field affected.num == 1
+
+do GetBookmark id=$one
+expect ok field tags ~ "\"revisited\""
+expect ok field archiveState == Archived
+
+# ── ...and Unarchive brings the whole set back ────────────────────────────
+do BulkEdit ids=[$one,$two] archive=Unarchive
+expect ok field affected.num == 2
+
+do ListBookmarks tag=batch
+expect ok field bookmarks ~ "\"id\":$one,"
+expect ok field bookmarks ~ "\"id\":$two,"
+expect ok field bookmarks ~ "\"id\":$three,"

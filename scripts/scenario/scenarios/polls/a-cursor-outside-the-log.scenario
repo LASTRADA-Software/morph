@@ -1,0 +1,79 @@
+# polls (rung 3) — what the polling cursor does at both ends of the log.
+#
+# examples/polls/README.md's definition of done says "a stale cursor triggers
+# a clean full resync". This file records what the shipped behaviour actually
+# is, which is the honest version of that criterion:
+#
+#   * a cursor from *before* the poll existed -- zero -- returns the whole
+#     log, which is the full resync, and needs no special "stale" signal;
+#   * a cursor from *beyond* the end of the log returns an empty list and is
+#     not an error, which is what lets a client hold a cursor across a server
+#     restart without special-casing anything.
+#
+# Neither is a sleep or a wall-clock wait: both cursors are literal numbers,
+# and the log they are asked about is written by this file.
+#
+# The reason to pin both is that the natural wrong answers are opposite and
+# both plausible -- an out-of-range cursor could as easily have been a refusal
+# ("unknown cursor") or a silent full replay, and a client written against
+# either would break against the other.
+#
+# Re-runnable: the poll is created here.
+
+model PollModel
+
+client alice
+
+do CreatePoll title="Both ends" options=[{"label":"One"},{"label":"Two"}]
+expect ok capture poll=$.pollId
+
+do OpenPoll pollId=$poll
+expect ok capture one=$.options[0].id
+expect ok capture two=$.options[1].id
+expect ok capture start=$.lastEventId
+
+do SubmitVotes participantName=alice votes=[{"optionId":$one,"choice":"Yes"}]
+expect ok
+
+do AddComment participantName=alice body="the only comment"
+expect ok
+
+do UpdateVotes participantName=alice votes=[{"optionId":$two,"choice":"Yes"}]
+expect ok
+
+# ── The low end: zero replays everything this poll ever recorded ───────────
+do GetEventsSince lastEventId=0
+expect ok field events ~ "alice submitted votes"
+expect ok field events ~ "alice commented"
+expect ok field events ~ "alice updated votes"
+expect ok capture newest=$.events[2].id
+
+# ...and it is scoped to this poll, not to the whole table the ids come from.
+expect ok field events !~ "the only comment"
+
+# ── The cursor the poll handed out at the start sees the same three ────────
+do GetEventsSince lastEventId=$start
+expect ok field events ~ "alice submitted votes"
+expect ok field events ~ "alice updated votes"
+
+# ── The newest id is the end: nothing is after it ─────────────────────────
+do GetEventsSince lastEventId=$newest
+expect ok field events == []
+
+# ── The high end: a cursor past the end of the table is empty, not refused ─
+do GetEventsSince lastEventId=999999999
+expect ok field events == []
+
+# ── Below the low end: a negative cursor is refused, not clamped ──────────
+# Worth pinning precisely because clamping is the tempting implementation and
+# the dangerous one: the cursor is cast to an unsigned 64-bit value for the
+# `id > ?` comparison, so a -1 that reached the query would become the largest
+# possible id and match nothing -- a client with a corrupt cursor would poll
+# forever, receiving an empty list and no indication anything was wrong.
+# validate() rejects it at the door instead.
+do GetEventsSince lastEventId=-1
+expect err message == "action failed validation: PollModel/GetEventsSince"
+
+# ...and the log is still readable afterwards, so the refusal cost nothing.
+do GetEventsSince lastEventId=0
+expect ok field events ~ "alice submitted votes"
