@@ -385,3 +385,176 @@ TEST_CASE("morph::offline::SyncWorker: run() over a queue at maxDepth still drai
     // Capacity freed up by the successful replay -- enqueue succeeds again.
     REQUIRE_NOTHROW(queue.enqueue("e"));
 }
+
+// ── Issue #343: an undelivered replay must not spend the retry budget ───────
+//
+// `ReplayFunction` returns `bool`, whose only two outcomes are "remove it" and
+// "charge one attempt". That gives the caller no way to say *"this never
+// reached the server"*, so a transport failure and a server-side rejection are
+// charged to the same 5-attempt budget -- and that budget is durable. Five
+// reconnect flaps therefore dead-letter every queued item, reporting work the
+// server never saw as work that could not be applied, and dropping the payload
+// unless the host's sink persisted it.
+//
+// `ReplayOutcome` adds the missing third outcome. `Undelivered` leaves the
+// item queued and charges nothing; `Rejected` behaves exactly as `false` did.
+
+namespace {
+/// Records every `setAttempts` write so a test can prove the *durable* count
+/// is left alone, not merely the in-memory one.
+struct AttemptRecordingQueue : morph::offline::InMemoryOfflineQueue {
+    void setAttempts(uint64_t itemId, uint32_t attempts) override {
+        writes.emplace_back(itemId, attempts);
+        morph::offline::InMemoryOfflineQueue::setAttempts(itemId, attempts);
+    }
+    std::vector<std::pair<uint64_t, uint32_t>> writes;
+};
+}  // namespace
+
+TEST_CASE("morph::offline::SyncWorker: an Undelivered replay never exhausts the retry budget", "[sync][issue343]") {
+    // The finding's own reproduction: five reconnect flaps, each replaying
+    // into a connection that drops before the server commits anything.
+    morph::offline::InMemoryOfflineQueue queue;
+    queue.enqueue("card-move-0");
+    queue.enqueue("card-move-1");
+    queue.enqueue("card-move-2");
+
+    std::vector<morph::offline::QueueItem> dead;
+    morph::offline::SyncWorker worker{queue,
+                                      [](const std::string&) { return morph::offline::ReplayOutcome::Undelivered; },
+                                      [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
+
+    for (int flap = 0; flap < 5; ++flap) {
+        auto result = worker.run();
+        CHECK(result.successful == 0);
+        CHECK(result.failed == 0);
+        CHECK(result.undelivered == 3);
+        CHECK(result.deadLettered == 0);
+    }
+
+    CHECK(dead.empty());
+    REQUIRE(queue.size() == 3);
+
+    // ...and the work is still replayable once the connection is genuinely back.
+    morph::offline::SyncWorker good{queue,
+                                    [](const std::string&) { return morph::offline::ReplayOutcome::Succeeded; }};
+    auto const final = good.run();
+    CHECK(final.successful == 3);
+    REQUIRE(queue.drain().empty());
+}
+
+TEST_CASE("morph::offline::SyncWorker: an Undelivered replay does not advance the durable attempt count",
+          "[sync][issue343][attempts]") {
+    // The budget survives process restarts via setAttempts(), so "charges no
+    // attempt" has to mean the durable count too -- not just the in-memory map.
+    AttemptRecordingQueue queue;
+    queue.enqueue("payload");
+
+    morph::offline::SyncWorker worker{queue,
+                                      [](const std::string&) { return morph::offline::ReplayOutcome::Undelivered; }};
+    for (int i = 0; i < 5; ++i) {
+        (void)worker.run();
+    }
+
+    CHECK(queue.writes.empty());
+    auto const items = queue.drain();
+    REQUIRE(items.size() == 1);
+    REQUIRE(items.front().attempts == 0);
+}
+
+TEST_CASE("morph::offline::SyncWorker: a Rejected replay spends the budget exactly as `false` always did",
+          "[sync][issue343]") {
+    morph::offline::InMemoryOfflineQueue queue;
+    queue.enqueue("refused");
+
+    std::vector<morph::offline::QueueItem> dead;
+    morph::offline::SyncWorker worker{queue,
+                                      [](const std::string&) { return morph::offline::ReplayOutcome::Rejected; },
+                                      [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
+
+    for (int i = 0; i < 4; ++i) {
+        auto const result = worker.run();
+        CHECK(result.failed == 1);
+        CHECK(result.undelivered == 0);
+        CHECK(result.deadLettered == 0);
+    }
+    auto const fifth = worker.run();
+    CHECK(fifth.deadLettered == 1);
+    REQUIRE(dead.size() == 1);
+    CHECK(dead.front().attempts == 5);
+    REQUIRE(queue.drain().empty());
+}
+
+TEST_CASE("morph::offline::SyncWorker: undelivered flaps between rejections do not shorten the budget",
+          "[sync][issue343]") {
+    // The distinction has to hold when the two interleave, which is the real
+    // shape of a flaky link: a genuine refusal still costs one attempt, and no
+    // number of undelivered attempts in between brings the cap any closer.
+    morph::offline::InMemoryOfflineQueue queue;
+    queue.enqueue("payload");
+
+    bool deliver = false;
+    std::vector<morph::offline::QueueItem> dead;
+    morph::offline::SyncWorker worker{queue,
+                                      [&deliver](const std::string&) {
+                                          return deliver ? morph::offline::ReplayOutcome::Rejected
+                                                         : morph::offline::ReplayOutcome::Undelivered;
+                                      },
+                                      [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
+
+    for (int rejection = 0; rejection < 4; ++rejection) {
+        deliver = false;
+        for (int flap = 0; flap < 3; ++flap) {
+            CHECK(worker.run().undelivered == 1);
+        }
+        deliver = true;
+        CHECK(worker.run().failed == 1);
+    }
+    CHECK(dead.empty());
+
+    deliver = true;
+    CHECK(worker.run().deadLettered == 1);
+    REQUIRE(dead.size() == 1);
+    CHECK(dead.front().attempts == 5);
+}
+
+TEST_CASE("morph::offline::SyncWorker: the bool ReplayFunction keeps its exact previous meaning", "[sync][issue343]") {
+    // `false` must stay "delivered and refused" -- every existing caller is
+    // written against that, and silently re-reading it as "undelivered" would
+    // turn a poison payload into an item that is retried forever.
+    morph::log::ScopedLoggerOverride guard;
+    morph::log::setLogger([](morph::log::LogLevel, std::string_view) {});
+
+    morph::offline::InMemoryOfflineQueue queue;
+    queue.enqueue("poison");
+
+    morph::offline::SyncWorker worker{queue, [](const std::string&) { return false; }};
+    morph::offline::SyncResult result;
+    for (int i = 0; i < 5; ++i) {
+        result = worker.run();
+        CHECK(result.undelivered == 0);
+    }
+    CHECK(result.deadLettered == 1);
+    REQUIRE(queue.drain().empty());
+}
+
+TEST_CASE("morph::offline::SyncWorker: a throwing detailed replay still charges an attempt", "[sync][issue343]") {
+    // Unchanged from the bool contract: a throw is a failure, and the safe
+    // reading of an unknown failure is that it may well have been delivered.
+    // Treating it as undelivered would retry a poison payload forever.
+    morph::log::ScopedLoggerOverride guard;
+    morph::log::setLogger([](morph::log::LogLevel, std::string_view) {});
+
+    morph::offline::InMemoryOfflineQueue queue;
+    queue.enqueue("throws");
+
+    morph::offline::SyncWorker worker{queue, [](const std::string&) -> morph::offline::ReplayOutcome {
+                                          throw std::runtime_error{"replay blew up"};
+                                      }};
+    morph::offline::SyncResult result;
+    for (int i = 0; i < 5; ++i) {
+        result = worker.run();
+    }
+    CHECK(result.deadLettered == 1);
+    REQUIRE(queue.drain().empty());
+}

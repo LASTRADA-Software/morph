@@ -11,6 +11,18 @@ API surface).
 
 ### Added
 
+- **A replay outcome that distinguishes undelivered from rejected.**
+  `morph::offline::ReplayOutcome` (`Succeeded`/`Rejected`/`Undelivered`) and a
+  `SyncWorker::DetailedReplayFunction` overload taking it. Only `Rejected`
+  spends an attempt against the 5-attempt retry budget, so a run of reconnect
+  flaps no longer dead-letters queued work the server never saw — previously a
+  transport failure and a server-side rejection were charged identically, and
+  the budget is durable, so five flaps dropped every queued item through the
+  same `DeadLetterSink` call and the same user-facing "could not be synced"
+  state a genuine rejection produces. `SyncResult` gains `undelivered`. The
+  boolean `ReplayFunction` is unchanged and keeps its exact previous meaning
+  (`false` → `Rejected`); a throw is still charged, from either form.
+
 - Root project docs: `CHANGELOG.md`, `SECURITY.md`, `CONTRIBUTING.md`.
 - Planned specs: connection-scoped model cleanup
   (`docs/planned/connection_scoped_cleanup.md`), graceful shutdown & drain
