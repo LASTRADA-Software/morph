@@ -5,7 +5,7 @@ Docker containers. Used by `ci.yml`'s `linux-compilers`, `linux-sanitizers`,
 and `linux-all-features` jobs whenever a runner is online and idle (see
 **ci.yml integration** below).
 
-Currently running across two hosts:
+Currently running across three hosts:
 
 - the maintainer's Windows machine (Docker Desktop, Linux containers): 4
   containers, each capped at 6 CPUs (`docker run --cpus=6`) on a
@@ -15,9 +15,18 @@ Currently running across two hosts:
   its own `fastcached` daemon (1 CPU/2 GiB/10 GiB-disk), all sized by
   `bootstrap-cloud-node.sh` from the box's actual resources — see
   **Bootstrapping a cloud node with its own fastcached** below.
+- the maintainer's Linux workstation (12 logical processors / 61 GiB, plain
+  Docker Engine): 5 containers at 2 CPU / 6 GiB each, plus a `fastcached`
+  container on 1 CPU / 4 GiB published on the Docker bridge address — 11 of
+  12 processors committed. Started by hand rather than by
+  `bootstrap-cloud-node.sh`, which is written for a dedicated VM it may
+  install Docker on and give the whole box to; see **Running more than one
+  runner** below for the exact commands, and **A workstation that already
+  runs its own fastcached** for why the runners get their own daemon rather
+  than the one already serving the developer's local builds.
 
-Both hosts' runners register to the same repo and are indistinguishable to
-`ci.yml` — a job lands on whichever is online and idle.
+All three hosts' runners register to the same repo and are indistinguishable
+to `ci.yml` — a job lands on whichever is online and idle.
 
 Multiple runners exist so a multi-leg matrix (`linux-compilers` has 4,
 `linux-sanitizers` has 3) actually runs its legs in parallel instead of
@@ -274,6 +283,36 @@ the image needs to know about — size it to (host logical processors) ÷
 itself, and adjust down if the containers are still oversubscribing the
 box under load.
 
+On a **plain Linux Docker Engine** host two more flags are needed, and the
+Linux workstation's 5 containers are started exactly like this:
+
+```bash
+for i in 1 2 3 4 5; do
+  RUNNER_TOKEN=$(gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token')
+  docker run -d \
+    --name "morph-runner-$i" \
+    --restart unless-stopped \
+    --cpus=2 \
+    --memory=6g \
+    --add-host=host.docker.internal:host-gateway \
+    -e RUNNER_TOKEN="$RUNNER_TOKEN" \
+    -e RUNNER_NAME="morph-docker-$i" \
+    -e FASTCACHE_ADDR="host.docker.internal:6674" \
+    morph-runner:latest
+done
+```
+
+- `--add-host=host.docker.internal:host-gateway` — Docker Desktop provides
+  that name automatically, a bare Linux Engine does not, and `ci.yml` sends
+  the literal `host.docker.internal:6674` to every self-hosted job. Without
+  it the address does not resolve and every job silently compiles uncached.
+- `--memory=Ng` — a cap, not a reservation, and worth setting on a machine
+  that is also somebody's desktop: it bounds what a runaway link step can
+  take from the host rather than letting the OOM killer choose.
+
+The registration token is single-use, which is why it is minted inside the
+loop rather than once before it.
+
 ## ci.yml integration
 
 None of `linux-compilers`, `linux-sanitizers`, or `linux-all-features`
@@ -338,6 +377,81 @@ How `host.docker.internal` resolves differs by platform:
   `fastcached` on the same box). A worker started without that flag on a
   Linux host would fail to resolve the address and fall through to
   `sccache` instead (never a hard failure, just a slower cache).
+- **A Linux workstation that already runs `fastcached` for its own
+  builds**: the daemon there is typically bound to `127.0.0.1` and built
+  from source, and neither is usable by a container as-is. See the two
+  subsections below.
+
+### A workstation that already runs its own fastcached
+
+A developer machine's `fastcached` listens on loopback, which inside a
+container means the container itself. Two ways to give the runners a cache
+on such a host, and this repository's Linux workstation uses the second:
+
+1. **Add a listener on the Docker bridge gateway** to the existing daemon —
+   `listeners:` in `fastcached.yaml` supersedes `bind`/`port`, so both
+   endpoints must be spelled out:
+
+   ```yaml
+   listeners:
+     - address: 127.0.0.1
+       port: 6674
+     - address: 172.17.0.1     # what host-gateway resolves to
+       port: 6674
+   ```
+
+   One cache serving both the developer's builds and the runners. Requires
+   the version match described below, which a from-source daemon does not
+   have.
+
+2. **Run a second, containerised daemon** published on the bridge address
+   only, leaving the personal one untouched on loopback:
+
+   ```bash
+   docker volume create fastcached-ci
+   docker run -d --name fastcached-ci --restart unless-stopped \
+     --cpus=1 --memory=4g \
+     -p 172.17.0.1:6674:6674 \
+     -v fastcached-ci:/data \
+     fastcached:0.1.1 \
+     --bind=0.0.0.0 --metrics --metrics-bind=0.0.0.0 \
+     --max-memory=3g --storage=/data/cache --storage-max-disk=20g \
+     --storage-max-value=256m
+   ```
+
+   Two caches on one host, which costs nothing that matters: the runners
+   compile in their own checkouts and share almost no entries with the
+   developer's tree anyway. The two daemons do not collide — one binds
+   `127.0.0.1:6674`, the other `172.17.0.1:6674`.
+
+### The daemon and the launcher have to be version-compatible
+
+`FASTCACHE_AUTO_INSTALL=ON` fetches the newest **released** `fastcache-cc`
+from the `fastcached` project's GitHub Releases. A daemon built from that
+project's `master` can be far ahead of its last release and **refuses that
+client**, which is why the workstation runs a release build rather than the
+one already on the box.
+
+Measured here: `fastcached 0.1.1-599-gea414a2` (a from-source master build)
+against the auto-installed `fastcache-cc` 0.1.1, configuring from inside a
+runner container —
+
+```
+-- [cache] Auto-installed fastcache-cc (/home/runner/.cache/fastcache-cc/0.1.1/Linux-x86_64/fastcache-cc)
+-- [cache] Not using fastcache-cc at host.docker.internal:6674: rejected (unsupported-version
+-- [cache] No other compiler-cache launcher found (sccache, ccache); caching disabled
+```
+
+The same container against a `fastcached` 0.1.1 release build selects it,
+and a second build from a wiped build directory hits the cache
+(`fastcached_get_hits_total` 0 → 3). Note the last line of the failing run:
+on the self-hosted path `ci.yml` deliberately does not install `sccache`,
+so a rejected `fastcache-cc` is not a slower cache, it is **no cache at
+all** — and it says so in the configure log rather than failing, which is
+what makes it easy to miss.
+
+This applies to `bootstrap-cloud-node.sh` too, which builds `fastcached`
+from a `master` checkout.
 
 If a host has no `fastcached` reachable at all (or `FASTCACHE_ADDR` is
 left unset there), the module falls back to `sccache` (already installed
