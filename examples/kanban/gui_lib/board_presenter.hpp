@@ -293,12 +293,13 @@ private:
 
     /// @brief The project `openBoard()` was last called with -- `CreateRule`/
     ///        `GetRules` both carry a `projectId` field their own
-    ///        `validate()` requires engaged, even though `BoardModel::execute()`
-    ///        never reads it back (the handler's own attach state, not the
-    ///        DTO field, names the board -- see `board_model.cpp`'s
-    ///        `execute(const GetRules&)` comment). Kept here purely to
-    ///        satisfy that `validate()` gate; not consulted for RBAC or
-    ///        board-selection, both of which stay attach-state-driven.
+    ///        `validate()` requires engaged, and `BoardModel::execute()`
+    ///        checks it against the handler's attach state, refusing any
+    ///        other project's id (see `board_model.cpp`'s
+    ///        `requireProjectMatchesAttachedBoard`). Holding the id
+    ///        `openBoard()` used is therefore what keeps those two actions
+    ///        answerable; board-selection and RBAC themselves stay
+    ///        attach-state-driven.
     ProjectId _projectId;
 };
 

@@ -12,17 +12,17 @@
 # `CreateRule` answers with just its new rule id, and `DeleteRule` with an
 # empty ack -- neither returns the board, unlike the older action family.
 #
-# ── A `projectId` that is required and then ignored ────────────────────
-# `GetRules` carries a `projectId` and `validate()` insists it be present --
-# but the query is built from the *attached* board's id
-# (`BoardModel::execute(const GetRules&)` reads `_projectIdStr`), so the field
-# is never consulted. Asking a handler attached to project A for project B's
-# rules answers with A's, silently and successfully.
+# ── A `projectId` that is required and then honoured ───────────────────
+# `CreateRule` and `GetRules` each carry a `projectId` their `validate()`
+# insists be present, and a `BoardModel` handler serves exactly one board --
+# the one `OpenBoard` attached it to. The two are checked against each other:
+# an argument naming any other project is refused with "projectId does not
+# match the attached board", the same shape as this file's other
+# cross-project refusals, rather than being answered from (or written onto)
+# the attached board under the other project's name.
 #
-# Pinned below as it behaves. The handler is keyed by project and role-checked
-# per board, so this discloses nothing a caller could not already read -- but a
-# client that trusted the argument would be reading the wrong board and would
-# have no way to tell. Filed as morph#369.
+# Pinned below on both actions. Reading another project means opening a
+# second board on its own connection, which the section further down does.
 #
 # Re-runnable: the project is created here, so it starts with no rules.
 
@@ -67,13 +67,12 @@ do GetRules projectId=$project
 expect ok field rules ~ "\"id\":$shipRule,\"triggerColumnId\":$done,\"mutationType\":\"AddTag\",\"mutationValue\":\"shipped\""
 expect ok field rules ~ "\"id\":$unshipRule,\"triggerColumnId\":$doing,\"mutationType\":\"RemoveTag\",\"mutationValue\":\"shipped\""
 
-# ── The projectId argument is ignored ──────────────────────────────────
-# This handler is attached to `$project`, and asking it for `$other`'s rules
-# answers with `$project`'s. A second board, opened on its own connection, is
-# how a client actually reads another project.
+# ── The projectId argument is checked ──────────────────────────────────
+# This handler is attached to `$project`, so asking it for `$other`'s rules is
+# refused rather than answered with `$project`'s. A second board, opened on
+# its own connection, is how a client reads another project.
 do GetRules projectId=$other
-expect ok field rules ~ "\"id\":$shipRule,"
-expect ok field rules ~ "\"id\":$unshipRule,"
+expect err message == "projectId does not match the attached board"
 
 client otherBoard model=BoardModel
 session principal=$who token=$token
@@ -84,9 +83,11 @@ expect ok field projectId == $other
 do GetRules projectId=$other
 expect ok field rules == []
 
-# ...and it answers the same for the *first* project's id, for the same reason.
+# ...and it refuses the *first* project's id in turn, for the same reason: the
+# refusal is about the argument disagreeing with the attachment, not about
+# which of the two projects is named.
 do GetRules projectId=$project
-expect ok field rules == []
+expect err message == "projectId does not match the attached board"
 
 use board
 
@@ -114,6 +115,12 @@ expect err message == "action failed validation: BoardModel/CreateRule"
 
 do CreateRule projectId=$project triggerColumnId=999999 mutationType=AddTag mutationValue=nope
 expect err message == "column does not belong to this project"
+
+# The same projectId check `GetRules` gets, on the writing half: naming
+# `$other` while attached to `$project` is refused, so a rule can never be
+# created on one board under another board's name.
+do CreateRule projectId=$other triggerColumnId=$done mutationType=AddTag mutationValue=nope
+expect err message == "projectId does not match the attached board"
 
 # None of the refusals changed the list.
 do GetRules projectId=$project

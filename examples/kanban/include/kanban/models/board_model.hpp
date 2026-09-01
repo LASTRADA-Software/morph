@@ -155,9 +155,12 @@ public:
     ///         (an unset `projectId`/`triggerColumnId`, or an empty or
     ///         over-length `mutationValue`).
     /// @throws NotFound if this handler was never attached via `OpenBoard`,
-    ///         or if the attached project no longer exists, or if
-    ///         `action.triggerColumnId` does not belong to the attached
-    ///         project.
+    ///         or if `action.projectId` names a project other than the
+    ///         attached one (the rule is created on the attached board, so an
+    ///         argument naming a different project is refused rather than
+    ///         written onto this one), or if the attached project no longer
+    ///         exists, or if `action.triggerColumnId` does not belong to the
+    ///         attached project.
     /// @throws Forbidden if the caller's role on the attached project is
     ///         below `Role::Manager` -- rule creation is a structural,
     ///         board-policy change, the same gate `ProjectAdminModel` applies
@@ -166,11 +169,15 @@ public:
     CreateRuleResult execute(const CreateRule& action);
 
     /// @brief Lists every automation rule on this handler's attached board.
-    /// @param action Unused -- carries no fields beyond `projectId`, which is
-    ///        not consulted (the handler's own attach state names the board).
+    /// @param action Carries no fields beyond `projectId`, which must name
+    ///        the attached board: the handler's own attach state selects the
+    ///        board, and the argument is checked against it.
     /// @return Every rule on the attached board, in creation order.
+    /// @throws ValidationError if `action.validate()` rejects the request (an
+    ///         unset `projectId`).
     /// @throws NotFound if this handler was never attached via `OpenBoard`,
-    ///         or if the attached project no longer exists.
+    ///         or if `action.projectId` names a project other than the
+    ///         attached one, or if the attached project no longer exists.
     /// @throws Forbidden if the caller's role on the attached project is
     ///         below `Role::Viewer` (i.e. the caller has no role at all).
     GetRulesResult execute(const GetRules& action);
