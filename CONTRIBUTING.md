@@ -36,6 +36,28 @@ type or subsystem. The rules, from `AGENTS.md`:
   file per feature, under 500 lines, present tense only, no changelogs or
   migration notes (git history covers that).
 
+## The changelog
+
+`CHANGELOG.md` tracks notable changes to **morph** — the library, its specs and
+its tooling. Its scope is what a consumer of the framework sees: the same
+surface `docs/spec/VERSIONING.md` defines.
+
+- **A change confined to `examples/` gets no changelog entry.** The application
+  ladder is demonstration code. Adding a rung action, fixing a rung's model,
+  extending a rung's tests, or adding a scenario under
+  `scripts/scenario/scenarios/` changes nothing a morph consumer depends on —
+  git history and the rung's own README carry that record.
+- **A rung change that moves the framework does get one, for the framework
+  part**: the new `include/morph/` seam, the spec that changed, the behaviour a
+  consumer can now rely on. Describe that, not the rung that motivated it.
+- **An entry describes its own change and then stops moving.** Do not re-count
+  or re-word a published entry because later work changed a total it quotes —
+  it remains a true statement about the change it documents.
+
+Practical reason for the first rule: every rung PR appending to the same two
+list heads made `CHANGELOG.md` the only file rung work ever conflicted in,
+serialising independent rungs behind one file.
+
 ## Quality gates
 
 - **Tests:** behavior changes come with Catch2 tests under `tests/`.
