@@ -55,6 +55,33 @@ private:
 
 }  // namespace
 
+TEST_CASE("CreateLedger journals both the book it creates and the one it refuses", "[ledger][journal][outcome]") {
+    morph::ladder::testkit::DbFixture fixture;
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    // No ledger exists yet, so there is no ledger id to key the log by. That
+    // is inherent to the action: `CreateLedger` is the one action on this
+    // model that runs *before* the entity its `entityKey` would name, so its
+    // entry carries the empty key `attachActionLog` was given.
+    model.attachActionLog(log, std::string{});
+
+    const auto book = model.execute(ledger::CreateLedger{.name = "Personal"});
+    REQUIRE(book.id.hasValue());
+
+    REQUIRE_THROWS_AS(model.execute(ledger::CreateLedger{.name = ""}), ledger::ValidationError);
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 2);
+    CHECK(entries.front().actionType == "CreateLedger");
+    CHECK(entries.front().outcome == morph::journal::Outcome::Succeeded);
+    CHECK(entries.front().principal == "alice");
+    CHECK(entries.back().actionType == "CreateLedger");
+    CHECK(entries.back().outcome == morph::journal::Outcome::Failed);
+    CHECK_FALSE(entries.back().error.empty());
+}
+
 TEST_CASE("A ZeroSumViolation leaves a Failed journal entry, not no entry at all", "[ledger][journal][outcome]") {
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;

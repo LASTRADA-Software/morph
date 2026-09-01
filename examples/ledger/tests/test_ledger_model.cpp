@@ -6,6 +6,7 @@
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
+#include <string>
 
 #include "ledger/core/errors.hpp"
 #include "ledger/core/money.hpp"
@@ -38,12 +39,81 @@ private:
 
 }  // namespace
 
+TEST_CASE("CreateLedger bootstraps a book the rest of the action surface can use", "[ledger][model]") {
+    // The whole point of `CreateLedger` (morph#361): every step below goes
+    // through the action surface, so this is exactly what an out-of-process
+    // client can do against an empty database. No `mapper.Create` anywhere --
+    // if this test ever needs one again, the bootstrap gap is back.
+    morph::ladder::testkit::DbFixture fixture;
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    const auto book = model.execute(ledger::CreateLedger{.name = "Personal"});
+    REQUIRE(book.id.hasValue());
+
+    // A fresh book is readable and empty -- not an error, and not somebody
+    // else's accounts.
+    CHECK(model.execute(ledger::GetLedger{.ledgerId = book.id}).accounts.empty());
+
+    auto created = model.execute(ledger::OpenAccount{.ledgerId = book.id,
+                                                     .name = "Checking",
+                                                     .kind = ledger::AccountKind::Asset,
+                                                     .currency = ledger::Currency::USD});
+    CHECK(created.id.hasValue());
+
+    auto result = model.execute(ledger::GetLedger{.ledgerId = book.id});
+    REQUIRE(result.accounts.size() == 1);
+    CHECK(result.accounts[0].name == "Checking");
+}
+
+TEST_CASE("CreateLedger hands out a distinct id per book, and the books stay separate", "[ledger][model]") {
+    morph::ladder::testkit::DbFixture fixture;
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    const auto first = model.execute(ledger::CreateLedger{.name = "Personal"});
+    const auto second = model.execute(ledger::CreateLedger{.name = "Personal"});
+    // Identical names, so the ids cannot be distinct merely because the names
+    // were.
+    REQUIRE(first.id.hasValue());
+    REQUIRE(second.id.hasValue());
+    CHECK(first.id != second.id);
+
+    model.execute(ledger::OpenAccount{.ledgerId = first.id,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    CHECK(model.execute(ledger::GetLedger{.ledgerId = first.id}).accounts.size() == 1);
+    CHECK(model.execute(ledger::GetLedger{.ledgerId = second.id}).accounts.empty());
+}
+
+TEST_CASE("CreateLedger refuses a nameless book and an empty principal", "[ledger][model]") {
+    morph::ladder::testkit::DbFixture fixture;
+
+    ledger::LedgerModel model;
+    {
+        const ScopedPrincipal principal{"alice"};
+        CHECK_THROWS_AS(model.execute(ledger::CreateLedger{.name = ""}), ledger::ValidationError);
+        CHECK_THROWS_AS(model.execute(ledger::CreateLedger{.name = std::string(ledger::kMaxLedgerNameBytes + 1, 'x')}),
+                        ledger::ValidationError);
+    }
+    // The design spec §11 gate every mutating action in this rung carries: a
+    // token that expired between authorize and authenticate dispatches with a
+    // cleared principal, and creating a book under one must not be possible
+    // either.
+    {
+        const ScopedPrincipal nobody{""};
+        CHECK_THROWS_AS(model.execute(ledger::CreateLedger{.name = "Anonymous"}), ledger::EmptyPrincipalError);
+    }
+}
+
 TEST_CASE("OpenAccount creates an account visible in GetLedger", "[ledger][model]") {
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
-    // This rung has no CreateLedger action in scope -- see the task brief's
-    // own note -- so the test seeds the ledgers row directly, mirroring
-    // Task 5's own schema test.
+    // Seeds the `ledgers` row directly rather than dispatching `CreateLedger`
+    // (which exists since morph#361, and has its own cases above): this case
+    // is about `OpenAccount`, and a direct row keeps it from failing for a
+    // reason that belongs to a different action.
     ledger::db::LedgerRecord ledgerRow;
     ledgerRow.name = "Personal";
     mapper.Create(ledgerRow);

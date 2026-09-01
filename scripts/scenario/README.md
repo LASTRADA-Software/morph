@@ -65,11 +65,15 @@ pass left behind and demands the same result.
 `broken-on-purpose.scenario` has its verdict inverted: it is meant to fail, so
 a run in which it passes is a failure.
 
-Ledger is seeded with two `ledgers` rows before its scenarios run. That rung
-is the one whose root entity no registered action creates, so `OpenAccount
-ledgerId=1` against a genuinely empty database is refused with `no such
-ledger`. Every other rung creates its own root entity over the wire and is
-seeded with nothing.
+Ledger is seeded with two `ledgers` rows before its scenarios run — the only
+rung that gets any. They are fixture books for the fourteen ledger files
+written against the fixed ids `1` and `2`, one of which
+(`two-books-are-isolated`) needs two books to exist before its first step.
+They are no longer a statement that a book cannot be created over the wire:
+`CreateLedger` (morph#361) does that, and
+`ledger/bootstrap-a-book-over-the-wire.scenario` names no seeded id at all, so
+it would pass against a database the driver never touched. Every other rung
+creates its own root entity over the wire and is seeded with nothing.
 
 `scenarios/` holds one directory per rung, and one file per workflow:
 
@@ -79,7 +83,7 @@ seeded with nothing.
 | `bookmarks/` | `ladder_bookmarks_server` | sign-in and forged tokens, CRUD, archive, atomic bulk edit, tag rename/merge, filters, the changes-since poll, import/export, two users and a shared feed; the live-model cap |
 | `polls/` | `ladder_polls_server` | the shared-instance showcase: create/open/vote/finalize, two participants converging, principal-scoped undo, the event cursor and instance rebirth |
 | `kanban/` | `ladder_kanban_server` | projects and boards, moves and WIP limits, per-project RBAC across three roles, rules and their cascades, comments, attachments, both event streams |
-| `ledger/` | `ladder_ledger_server` | per-currency zero-sum bookkeeping, categories and budgets, rules and version conflicts, CSV import, submit-then-poll reporting, two books |
+| `ledger/` | `ladder_ledger_server` | bootstrapping a book from nothing, per-currency zero-sum bookkeeping, categories and budgets, rules and version conflicts, CSV import, submit-then-poll reporting, two books |
 
 The rung a scenario belongs to is its parent directory name — that is how
 per-rung action coverage is attributed, so a file loose in `scenarios/` is

@@ -1,0 +1,114 @@
+# ledger (rung 5) — a client with nothing but a socket opens its first book.
+#
+#   sign in -> create a book -> read it back empty -> open two accounts ->
+#   post a balanced entry -> read the balances -> create a *second* book and
+#   watch it stay empty
+#
+# This is the one ledger file that starts from nothing. Every other file in
+# this directory uses `ledgerId=1` or `2`, which the driver seeds
+# (`run_scenarios.py`'s `RungSpec.seed`) — fixture ids, not ids any client
+# produced. Until morph#361 that seed was unavoidable: `ledgers` rows were
+# created by no registered action, so `OpenAccount ledgerId=1` against a
+# genuinely empty database was refused with "OpenAccount: no such ledger" and
+# a fresh `ladder_ledger_server` served a book nobody could open. `CreateLedger`
+# is what closed that, and this file is what proves it: nothing below names a
+# seeded id, so it would pass unchanged against a database the driver never
+# touched.
+#
+# Sourced from examples/ledger/README.md's "What to implement" step 1
+# (accounts and the per-currency zero-sum entry) reached, unlike every
+# sibling file, entirely over the wire.
+#
+# Re-runnable against a database it has already run on: each pass creates its
+# own books and captures their ids, so nothing here depends on the database
+# being empty, on a particular id, or on how many books already exist.
+#
+# ── Wire shapes that are not guessable from the DTOs ────────────────────────
+#   * `CreateLedger` answers with an *object*, `{"id": <n>}`, following
+#     kanban's `CreateProjectResult` — so the capture reads `$.id`, not `$`
+#     the way this rung's `CreateCategory`/`CreateBudget`/`SubmitReport`
+#     bare-scalar replies do;
+#   * every strong id is its bare underlying number on the wire
+#     (ledger/core/types.hpp's LEDGER_DEFINE_STRONG_ID_WIRE);
+#   * enums are their integer values — AccountKind::Asset is 0 and
+#     ::Expense is 1, Currency::EUR is 1;
+#   * a Rational is `{"num","den","dp"}` and comes back canonicalised.
+
+# ── Sign in ────────────────────────────────────────────────────────────────
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+# ── The step that was impossible before morph#361 ───────────────────────────
+do CreateLedger name="Bootstrapped book"
+expect ok capture book=$.id
+
+# A book nobody has posted to is empty — not an error, and not somebody
+# else's accounts. `GetLedger` on a brand-new id is the read that proves
+# `CreateLedger` wrote a real row rather than handing back a number.
+do GetLedger ledgerId=$book
+expect ok field accounts !~ "\"id\""
+
+# ── ...and the whole of step 1 now hangs off it ─────────────────────────────
+do OpenAccount ledgerId=$book name="Wallet" kind=0 currency=1
+expect ok capture wallet=$.id
+expect ok field name == "Wallet"
+
+do OpenAccount ledgerId=$book name="Groceries" kind=1 currency=1
+expect ok capture groceries=$.id
+
+# Two legs in one currency summing to canonical zero. The posted balances are
+# the proof the legs landed on the accounts this file opened in the book this
+# file created — pinned against captured ids, so no other row in a shared
+# database can satisfy them by accident.
+do StoreTransaction ledgerId=$book description="weekly shop" date="2026-08-30T10:00:00.000Z" legs=[{"accountId":$wallet,"amount":{"num":-4250,"den":1,"dp":2}},{"accountId":$groceries,"amount":{"num":4250,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$wallet,\"name\":\"Wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4250"
+expect ok field accounts ~ "\"id\":$groceries,\"name\":\"Groceries\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":4250"
+
+do GetLedger ledgerId=$book
+expect ok field accounts ~ "\"id\":$wallet,"
+expect ok field accounts ~ "\"id\":$groceries,"
+
+# ── A second book is a genuinely separate book ──────────────────────────────
+# Identical shape, deliberately: a `CreateLedger` that returned a constant, or
+# that filed everything under one row, would pass every assertion above and
+# fail here.
+do CreateLedger name="Bootstrapped book"
+expect ok capture other=$.id
+expect ok field id != $book
+
+do GetLedger ledgerId=$other
+expect ok field accounts !~ "\"id\":$wallet,"
+expect ok field accounts !~ "\"id\":$groceries,"
+
+# ── The refusals ───────────────────────────────────────────────────────────
+# A nameless book is rejected before any row is written. Note *which* refusal
+# this is: the dispatcher runs `CreateLedger::validate()` ahead of the model
+# and answers with the framework's own generic text, so the model's
+# `ValidationError{"CreateLedger: a non-empty name..."}` is the in-process
+# message and never reaches a wire client. `validate()` is also what bounds
+# the name to `kMaxLedgerNameBytes` -- exactly the capacity of the column it
+# lands in (the static_assert in src/models/ledger_model.cpp) -- so an
+# over-long name cannot be silently truncated into a book stored under a name
+# the caller never sent.
+do CreateLedger name=""
+expect err message == "action failed validation: LedgerModel/CreateLedger"
+
+# ...and creating a book is not something a caller without a token may do.
+# `LedgerAuthorizer` carves out only `AuthModel`/`Login`; everything else --
+# `CreateLedger` included -- needs a validly signed token, so the refusal
+# comes from the authorizer, before the model is ever entered.
+client anon model=LedgerModel
+do CreateLedger name="No token"
+expect err message == "unauthorized"
+
+# The refused calls left nothing behind: the book this file made is still
+# exactly the two accounts it opened.
+use books
+do GetLedger ledgerId=$book
+expect ok field accounts ~ "\"id\":$wallet,"
+expect ok field accounts !~ "No token"

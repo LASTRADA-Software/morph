@@ -152,8 +152,9 @@ passes while proving nothing.
 ## The journey inventory
 
 Sourced from each rung's README — "What to implement", "Definition of done"
-and "Expected strain points" — not invented. 65 files, matching
-`WORKFLOW_FLOORS` exactly.
+and "Expected strain points" — not invented. 65 files as designed, matching
+`WORKFLOW_FLOORS` exactly; 66 as shipped, ledger having gained one after the
+fact (see its section below).
 
 ### pastebin — 8
 
@@ -206,7 +207,7 @@ The README's own definition of done names the first one verbatim:
 12. `shared-feed-across-two-users` — isolation and the merged feed, the DoD
     criterion.
 
-### ledger — 15
+### ledger — 16
 
 `open-account-transact-report-close` already exists and counts as the first.
 
@@ -225,6 +226,12 @@ The README's own definition of done names the first one verbatim:
 13. `second-undo-is-rejected` — `AlreadyReversed`, the bug morph#144 found.
 14. `set-category-on-a-posted-transaction`.
 15. `two-books-are-isolated`.
+16. `bootstrap-a-book-over-the-wire` — added after this design, by morph#361,
+    which is what made it expressible: `CreateLedger` did not exist when the
+    inventory above was drawn, so every file here names a seeded `ledgerId`.
+    This one names none, and is the file that proves the seed is a fixture
+    convenience rather than a hole in the action surface. `WORKFLOW_FLOORS`
+    moves to 16 with it.
 
 ### kanban — 20
 
