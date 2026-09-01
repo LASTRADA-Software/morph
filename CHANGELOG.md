@@ -128,6 +128,20 @@ API surface).
   — the rung's own tests call `AuthModel::execute()` directly, which never
   consults an authorizer.
 
+- A throw out of `RemoteServer::dispatchExecute` stranded the same per-model
+  execute-ordering ticket the shutdown gate did, by a different route.
+  `dispatchExecute` has no `try`/`catch` of its own and its `rejectAndRelease`
+  helper covers only the explicit early returns, so an exception unwound past
+  all of them into `dispatchMessage`'s outer catch, which replied but released
+  nothing — leaving a later same-model `execute` parked in `awaitExecuteTurn`
+  forever, a pool worker blocked for the rest of the process's life, and
+  `drainedWithin()` unable to succeed. Reachable through documented extension
+  points: `IAuthorizer::authorize`/`authenticate`/`authorizeInstance` are
+  non-`noexcept` virtuals a host implements, and `missingRequiredFields` parses
+  the payload under `PayloadCompleteness::RequireDeclaredFields`. The ticket is
+  now owned by an RAII holder that releases it on every exit path — return,
+  throw, or a branch added later — rather than by a release written out at each
+  call site, which is the convention that had now been missed twice.
 - An `execute` refused by `RemoteServer`'s shutdown gate took a per-model
   execute-ordering ticket and never released it, stranding a same-model
   `execute` that had already passed the gate. Tickets are taken in send order
