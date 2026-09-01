@@ -38,14 +38,38 @@ void ProjectAdminPresenter::login(const QString& username) {
 void ProjectAdminPresenter::submitForm(const QString& actionType, const QString& bodyJson) {
     // `executeJson` is the type-erased counterpart of the typed `execute`
     // calls below: the schema renderer only ever knows an action by the string
-    // the schema names it with. Routing is a single handler today because
-    // `Login` is the only schema-driven form in this rung — see
-    // `kanban_schemas.hpp` and morph#344. When a second model's action joins
-    // the document, this becomes the same actionType->handler table
-    // `bookmarks::gui::BookmarkFormsController::dispatch` already has, and the
-    // unroutable case must report rather than silently drop: QML names types
-    // as strings, so a typo has to arrive somewhere a human reads it.
+    // the schema names it with. This is the actionType->handler table
+    // `bookmarks::gui::BookmarkFormsController::dispatch` already has: two
+    // models behind one controller, and the unroutable case reports rather
+    // than silently dropping — QML names types as strings, so a typo has to
+    // arrive somewhere a human reads it.
     const std::string type = actionType.toStdString();
+    if (type == "CreateProject") {
+        // Decoded here, not merely relayed, so this path emits the *same*
+        // `projectCreated(result, name)` the typed `createProject()` below
+        // does: `ProjectListView.qml`'s existing handler re-lists on it, and a
+        // schema-driven submit that left that signal silent would have made
+        // the pane stop refreshing itself. The name travels captured in this
+        // call's own continuation, never on a shared member — see
+        // `projectCreated`'s own doc comment for the cross-contamination this
+        // avoids, which is no less real for the body having arrived as JSON.
+        CreateProject request;
+        const bool decodedName = !glz::read_json(request, bodyJson.toStdString());
+        track<std::string>(
+            _projectHandler.executeJson(type, bodyJson.toStdString()),
+            [this, actionType,
+             name = decodedName ? QString::fromStdString(request.name) : QString{}](std::string resultJson) {
+                CreateProjectResult result;
+                if (!glz::read_json(result, resultJson)) {
+                    emit projectCreated(std::move(result), name);
+                }
+                emit formReplyReceived(actionType, true, QString::fromStdString(resultJson));
+            },
+            [this, actionType](const std::exception_ptr& err) {
+                emit formReplyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
+            });
+        return;
+    }
     if (type != "Login") {
         emit formReplyReceived(actionType, false,
                                QStringLiteral("no model in this client serves action '") + actionType + u'\'');

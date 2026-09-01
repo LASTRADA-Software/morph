@@ -64,6 +64,29 @@ public:
     ///        Emits `boardOpened` on success, `failed` on error.
     void getBoardState();
 
+    /// @brief Dispatches @p bodyJson as @p actionType's body through the
+    ///        type-erased `executeJson` path, for the schema-driven forms
+    ///        `DynamicForm` renders on the board screen.
+    ///
+    /// The board's own counterpart of `ProjectAdminPresenter::submitForm`, and
+    /// the same shape: the schema renderer knows an action only by the string
+    /// the schema names it with, so the typed calls below cannot serve it.
+    /// Routing is one handler here because every board form belongs to
+    /// `BoardModel`; an action this presenter does not serve is reported back
+    /// through `formReplyReceived` rather than dropped.
+    ///
+    /// Every action it accepts (`CreateColumn`, `CreateSwimlane`,
+    /// `CreateTask`, `AddComment`) returns the full rebuilt board state, so a
+    /// successful reply is decoded and re-emitted as `boardOpened` — the same
+    /// signal the typed calls below emit, which is what keeps
+    /// `BoardBridge::board` and every binding over it live regardless of which
+    /// of the two paths dispatched. `AddComment` additionally re-emits
+    /// `commentAdded`, for the same reason.
+    ///
+    /// @param actionType Registered action type id, as the schema names it.
+    /// @param bodyJson   Fully-assembled JSON body, as `DynamicForm` builds it.
+    void submitForm(const QString& actionType, const QString& bodyJson);
+
     /// @brief Creates a new column on this handler's attached board. Emits
     ///        `boardOpened` (with the board's full post-creation state) on
     ///        success, `failed` on error.
@@ -245,6 +268,16 @@ signals:
     /// @brief `GetAttachments` succeeded.
     /// @param result Every attachment on the requested task, in upload order.
     void attachmentsListed(kanban::GetAttachmentsResult result);
+    /// @brief Emitted once per `submitForm`, carrying that form's outcome.
+    ///
+    /// Separate from `failed` for the same reason as
+    /// `ProjectAdminPresenter::formReplyReceived`: a form's own view shows its
+    /// own result inline, next to the fields that produced it, rather than
+    /// through the shell's shared error surface.
+    /// @param actionType The action the reply belongs to.
+    /// @param ok         Whether the dispatch succeeded.
+    /// @param payload    Result JSON on success, the error message otherwise.
+    void formReplyReceived(QString actionType, bool ok, QString payload);
     /// @brief Emitted for any action's typed error — @p message is
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);

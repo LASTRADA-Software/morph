@@ -97,8 +97,13 @@ public:
 
     /// @brief Creates a project; the caller becomes its first Manager. Emits
     ///        `projectCreated`, or `failed`.
+    ///
+    /// Deliberately **not** `Q_INVOKABLE`, for the same reason as `login`
+    /// above: `ProjectListView.qml` submits `CreateProject` through the schema
+    /// renderer now, so nothing in `gui/qml/` calls this. It stays a plain
+    /// public method for C++ callers that already hold a name.
     /// @param name The new project's name.
-    Q_INVOKABLE void createProject(const QString& name);
+    void createProject(const QString& name);
 
     /// @brief Lists every member's role on a project. Emits `rolesListed`,
     ///        or `failed`.

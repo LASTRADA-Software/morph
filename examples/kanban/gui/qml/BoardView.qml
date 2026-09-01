@@ -8,11 +8,32 @@
 // "{count}" when wipLimit == 0, "{count}/{wipLimit}" otherwise) and a
 // vertical ListView of task-card delegates.
 //
+// Every form on this screen is schema-driven: `CreateColumn`,
+// `CreateSwimlane` and `CreateTask` are rendered from
+// `morph::forms::schemaJson<A>()` through the shipped MorphForms DynamicForm,
+// each with the renderer's own explicit Submit button
+// (examples/IMPLEMENTATION.md rule 2, "schema-driven forms only"). There is no
+// hand-written TextField, SpinBox or submit Button left on this screen.
+//
+// `CreateTask` gets one form instance per column delegate, because its
+// `columnId`/`swimlaneId` are context rather than input: a task is created
+// into the list the user is typing in. Both are declared `hidden` in the DTO's
+// fieldMetadata (kanban/dto/board_dto.hpp) and fed through `setFieldValue`
+// from the delegate that owns the form, which is the only way a hidden
+// required field is ever engaged.
+//
 // Drag-and-drop (§6.2): native Qt Quick Drag attached property + DropArea --
 // no custom mouse-position tracking, no synthesized events. This is the one
 // file in this rung with real logic (the drop-target/position computation),
 // kept inside the laneDelegate component below rather than spread through
 // the rest of the view, per the design spec's own instruction.
+//
+// The drag-and-drop board is also this rung's one input that stays hand-built
+// under rule 2's justification (a): `MoveTaskPosition` is a gesture, not a
+// form somebody fills in. A schema-rendered version of it would be four number
+// fields and a Submit button in place of dragging a card -- see the rung
+// README's "morph subsystems exercised" section for the written justification
+// and for why this is not a forms-subsystem gap.
 //
 // One Repeater (laneModel below) serves both the multi-swimlane and the
 // flat/no-swimlane-chrome case: laneModel is the real swimlanes list when
@@ -39,12 +60,17 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import MorphForms
 
 Item {
     id: page
 
     property var boardBridge: null
     property var projectAdminBridge: null
+
+    /// The bridge's schema document, parsed once. `({})` while unwired, which
+    /// is what the offscreen engine-load smoke test loads.
+    readonly property var schemas: page.boardBridge === null ? ({}) : JSON.parse(page.boardBridge.schemasJson)
 
     /// Emitted when the user wants to leave the board -- Main.qml stops
     /// polling and pops back to the project list.
@@ -125,10 +151,53 @@ Item {
         function onFailed(message) {
             page.report(message, true)
         }
+
+        // The schema renderer's own reply channel. A successful board form
+        // already refreshes the board (BoardPresenter::submitForm re-emits
+        // boardOpened with the rebuilt state), so this only has to report a
+        // failure and clear the form that produced it.
+        //
+        // `createTaskForms` is a list because CreateTask has one form instance
+        // per column: nothing in the reply says which of them submitted, so
+        // they all reset. That clears a title half-typed in a *different*
+        // column, which is the honest cost of one form per column -- and the
+        // alternative (a single board-level form with a column picker) is a
+        // worse screen, not a better one.
+        function onReplyReceived(actionType, ok, payload) {
+            if (!ok) {
+                page.report(payload, true)
+                return
+            }
+            if (actionType === "CreateColumn") {
+                createColumnForm.resetFields()
+            } else if (actionType === "CreateSwimlane") {
+                createSwimlaneForm.resetFields()
+            } else if (actionType === "CreateTask") {
+                for (let i = 0; i < page.createTaskForms.length; ++i)
+                    page.createTaskForms[i].rebind()
+            }
+        }
+    }
+
+    /// Every live CreateTask form, one per rendered column delegate. Registered
+    /// by each delegate on creation and dropped on destruction, so the reply
+    /// handler above has something to reset without reaching into the two
+    /// nested Repeaters' item trees.
+    property var createTaskForms: []
+
+    function registerTaskForm(form) {
+        const next = page.createTaskForms.slice()
+        next.push(form)
+        page.createTaskForms = next
+    }
+
+    function unregisterTaskForm(form) {
+        page.createTaskForms = page.createTaskForms.filter(function (f) { return f !== form })
     }
 
     TaskDetailPopup {
         id: taskPopup
+        objectName: "taskDetailPopup"
         boardBridge: page.boardBridge
     }
 
@@ -246,44 +315,34 @@ Item {
 
         RowLayout {
             Layout.fillWidth: true
+            spacing: 16
 
-            TextField {
-                id: newColumnName
-                Layout.preferredWidth: 160
-                placeholderText: "new column name"
+            DynamicForm {
+                id: createColumnForm
+                objectName: "createColumnForm"
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+                actionType: "CreateColumn"
+                schema: page.schemas["CreateColumn"] || ({})
+                // Bound, and safe to bind: `CreateColumn` declares
+                // `explicitSubmit = true` (kanban/dto/board_dto.hpp), so its
+                // schema carries `"x-submitMode": "explicit"` and the renderer
+                // draws its own Submit button rather than firing the moment
+                // `name` is non-empty (docs/spec/forms/forms.md, "Explicit
+                // submit mode"). `wipLimit` is in the same DTO's
+                // `optionalFields`, so leaving it blank submits no key at all
+                // and the model's own default -- 0, "unlimited" -- applies.
+                controller: page.boardBridge
             }
 
-            SpinBox {
-                id: newColumnWip
-                from: 0
-                to: 999
-                value: 0
-                editable: true
-            }
-
-            Button {
-                text: "Add column"
-                enabled: page.boardBridge !== null && newColumnName.text.length > 0
-                onClicked: {
-                    page.boardBridge.createColumn(newColumnName.text, newColumnWip.value)
-                    newColumnName.text = ""
-                    newColumnWip.value = 0
-                }
-            }
-
-            TextField {
-                id: newSwimlaneName
-                Layout.preferredWidth: 160
-                placeholderText: "new swimlane name"
-            }
-
-            Button {
-                text: "Add swimlane"
-                enabled: page.boardBridge !== null && newSwimlaneName.text.length > 0
-                onClicked: {
-                    page.boardBridge.createSwimlane(newSwimlaneName.text)
-                    newSwimlaneName.text = ""
-                }
+            DynamicForm {
+                id: createSwimlaneForm
+                objectName: "createSwimlaneForm"
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+                actionType: "CreateSwimlane"
+                schema: page.schemas["CreateSwimlane"] || ({})
+                controller: page.boardBridge
             }
         }
 
@@ -369,18 +428,39 @@ Item {
                                                       + ")"
                                             }
 
-                                            TextField {
-                                                id: newTaskTitle
+                                            DynamicForm {
+                                                id: createTaskForm
+                                                objectName: "createTaskForm_"
+                                                            + columnDelegate.modelData.id
                                                 Layout.fillWidth: true
-                                                placeholderText: "new task"
-                                                onAccepted: {
-                                                    if (page.boardBridge && text.length > 0) {
-                                                        page.boardBridge.createTask(
-                                                            String(columnDelegate.modelData.id),
-                                                            String(laneSection.modelData.id), text)
-                                                        text = ""
-                                                    }
+                                                actionType: "CreateTask"
+                                                schema: page.schemas["CreateTask"] || ({})
+                                                controller: page.boardBridge
+
+                                                // The two hidden context
+                                                // fields (see this file's
+                                                // header comment). Seeded on
+                                                // creation and re-seeded after
+                                                // every successful submit,
+                                                // since resetFields() clears
+                                                // hidden fields too.
+                                                function bindContext() {
+                                                    setFieldValue("columnId",
+                                                                  String(columnDelegate.modelData.id))
+                                                    setFieldValue("swimlaneId",
+                                                                  String(laneSection.modelData.id))
                                                 }
+
+                                                function rebind() {
+                                                    resetFields()
+                                                    bindContext()
+                                                }
+
+                                                Component.onCompleted: {
+                                                    createTaskForm.bindContext()
+                                                    page.registerTaskForm(createTaskForm)
+                                                }
+                                                Component.onDestruction: page.unregisterTaskForm(createTaskForm)
                                             }
 
                                             ListView {

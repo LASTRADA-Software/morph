@@ -11,6 +11,23 @@ API surface).
 
 ### Added
 
+- **Every form in the ladder's showcase GUI now renders through
+  `morph::forms`.** `examples/kanban` gains schema-driven `CreateProject`,
+  `CreateColumn`, `CreateSwimlane`, `CreateTask` and `AddComment` forms
+  alongside the `Login` form it already had — six in total, none with a
+  hand-written field or submit button. `BoardBridge` grows the same
+  `schemasJson`/`submitIfValid`/`replyReceived` controller contract
+  `ProjectAdminBridge` has, both serving one schema document
+  (`gui_lib/kanban_schemas.hpp`); the five demoted `Q_INVOKABLE`s stay as plain
+  C++ methods. `CreateTask`'s column/swimlane ids and `AddComment`'s task id are
+  declared `hidden` in their DTOs' `fieldMetadata` and supplied by the view that
+  owns the form, so "type a title in the column you want" survives the
+  conversion with no row id on screen, and `CreateColumn::wipLimit` joins
+  `optionalFields` so a blank WIP limit still means unlimited.
+  `tests/test_gui_forms_render.cpp` drives each form in a real QML engine over a
+  real backend and asserts the controls drawn, the body assembled and the row
+  written.
+
 - **An out-of-process scenario corpus covering every ladder rung.**
   `scripts/scenario/scenarios/` grows from 4 files to 72, and
   `scripts/scenario/scenario_coverage.py` now exits `0` on both of its axes:

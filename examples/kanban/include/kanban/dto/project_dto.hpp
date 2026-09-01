@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <array>
 #include <cstddef>
+#include <morph/forms/forms.hpp>
 #include <string>
 #include <vector>
 
@@ -18,6 +20,17 @@ inline constexpr std::size_t kMaxProjectNameBytes = 200;
 ///        transaction that creates the project.
 struct CreateProject {
     std::string name;
+
+    /// Side-effectful, so the renderer draws its own Submit button instead of
+    /// firing on the first non-empty prefix of a project name -- same
+    /// declaration, for the same reason, as `kanban::Login` (auth_dto.hpp).
+    static constexpr bool explicitSubmit = true;
+
+    /// Carries over the placeholder the hand-built `TextField` this form
+    /// replaced used to show (`gui/qml/ProjectListView.qml`).
+    static constexpr std::array<::morph::forms::FieldMeta, 1> fieldMetadata{
+        ::morph::forms::FieldMeta{.field = "name", .label = "Project name", .placeholder = "new project name"},
+    };
 
     [[nodiscard]] bool validate() const noexcept { return !name.empty() && name.size() <= kMaxProjectNameBytes; }
 };
