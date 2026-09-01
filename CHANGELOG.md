@@ -130,6 +130,17 @@ API surface).
 
 ### Fixed
 
+- **`docs/spec/error_handling.md`'s remote-error table was a subset presenting
+  itself as an enumeration.** It listed 8 refusals where `RemoteServer` emits
+  17, and told a client implementer that `unknown envelope kind` fires for
+  anything that is not `register`/`deregister`/`execute` — where
+  `dispatchMessage` compares `env.kind` against eight values, five of which
+  (`attach`, `assign`, `instances`, `schemas`, `hello`) reach real branches. The
+  section now names all eight kinds, groups every refusal by what a client
+  should do about it (malformed request / refused on the merits / server
+  condition), records which are reachable only under a non-default
+  `LimitPolicy`, and separates the one message no transport can reach.
+
 - **A scenario's `client` step sent `$capture` references literally.**
   `scripts/scenario/morph_scenario.py`'s `client` directive read its
   `principal=`/`token=`/`contextKey=` options raw while `session` ran the same

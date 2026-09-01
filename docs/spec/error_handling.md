@@ -191,18 +191,118 @@ error class for it. The remote path has an analogous plain
 The wire protocol (`wire.hpp`) uses a single `Envelope` struct with a `kind`
 discriminator. Failures come back as `kind == "err"` envelopes carrying a
 free-text `message` and an echoed `callId`. `RemoteServer` (`remote.hpp`)
-produces them:
+produces them.
+
+**The envelope kinds.** `dispatchMessage` compares `env.kind` against **eight**
+values, each with a branch of its own:
+
+    assign  attach  deregister  execute  hello  instances  register  schemas
+
+Anything else is the fall-through, which is what produces `unknown envelope
+kind:`. The request and reply shape of each is tabulated in
+[`core/wire.md`](core/wire.md), "Discriminator values", and what
+`dispatchMessage` does with each in [`core/backend.md`](core/backend.md),
+"`RemoteServer` — server-side message handler"; only the refusals are
+enumerated here.
+
+**The refusals are grouped by what a client should do about them**, not by the
+function they are raised in, because that is the distinction the message text
+does not carry. **The three groups below are exhaustive**, and the arithmetic
+is checkable: `remote.hpp`'s server half plus the body of `wire::decode` carry
+**17** refusal messages (14 fixed, 3 with a runtime suffix). Sixteen of them
+appear in the three tables — nine in group 1, two in group 2, five in group 3 —
+and the seventeenth is `handleInline`'s, which no transport can reach and which
+is called out separately below. The tables add two rows that come from outside
+those two headers: `unknown model type: <id>`, thrown by
+`ModelRegistryFactory::create` in `registry.hpp`, and the `exc.what()`
+passthrough, which carries every application-level refusal.
+
+That count is not a hand tally. `scripts/scenario/scenario_coverage.py`
+extracts it from `remote.hpp`'s server half — the part above
+`class SimulatedRemoteBackend`, since everything below is the in-process client
+stub whose throws no peer ever sees — plus the body of `wire::decode` alone,
+since that is the one `wire.hpp` throw `dispatchMessage`'s `catch` turns into a
+real `err`. Its exact membership is pinned by that tool's self-test
+(`test_real_headers_carry_exactly_these_refusals`, and
+`test_real_header_carries_the_kinds_the_spec_records` for the eight kinds). A
+refusal added to either header fails those tests, and whoever adds it decides
+which group below it belongs in.
+
+### 1. The request is malformed or unsupported
+
+Deterministic for a given request: resending it unchanged produces the same
+refusal.
 
 | Error `message` | Raised in | Cause |
 |---|---|---|
-| `"unauthorized"` | `dispatchExecute` (type-level `authorize` and instance-level `authorizeInstance`) and `dispatchMessage`'s deregister branch (`authorizeInstance` against the recorded owner) | An authorizer hook returned `false` — `authorize` (bad/expired/absent token, or type/action policy denial) or `authorizeInstance` (the caller's principal does not own the target instance) |
+| `"envelope decode failed: <detail>"` | `wire::decode`, caught by `dispatchMessage` | Malformed request JSON |
+| `"unknown envelope kind: <kind>"` | `dispatchMessage`'s final `else` | `kind` is none of the eight listed above |
 | `"register requires a typeId"` | `dispatchMessage` (`register`) | `register` envelope with empty `typeId` |
-| `"unknown model type: <id>"` | `ModelRegistryFactory::create` | `register` for a type-id with no registered factory |
-| `"model not found"` | `dispatchExecute` | `execute` for a `modelId` the server doesn't hold |
-| `"unknown envelope kind: <kind>"` | `dispatchMessage` | `kind` is not `register`/`deregister`/`execute` |
-| `"envelope decode failed: <detail>"` | `wire::decode` in `dispatchMessage` | Malformed request JSON |
-| any handler exception's `exc.what()` | outer `try/catch` in `dispatchMessage`, and the strand lambda in `dispatchExecute` | A throw from `ActionDispatcher::dispatch` or `Model::execute` — its `what()` becomes the `err` message |
-| `"handleInline does not support execute (reply is asynchronous)"` | `handleInline` | An `execute` envelope handled via the synchronous inline path (reply would dangle) |
+| `"attach requires a typeId"` | `dispatchMessage` (`attach`) | `attach` envelope with empty `typeId` |
+| `"assign requires a typeId"` | `dispatchMessage` (`assign`) | `assign` envelope with empty `typeId` |
+| `"instances requires a typeId"` | `dispatchMessage` (`instances`) | `instances` envelope with empty `typeId` |
+| `"schemas requires a typeId"` | `dispatchMessage` (`schemas`) | `schemas` envelope with empty `typeId` |
+| `"protocol version unsupported"` | `dispatchMessage` (`hello`) | `env.protocolVersion` outside the server's negotiated `[min, max]` range |
+| `"payload missing required field(s): <names>"` | `dispatchExecute` | The action payload omits a field its schema declares required. **Only when `PayloadCompleteness::RequireDeclaredFields` is installed**; the default is `Lenient`, under which the check never runs. See `remote.hpp`'s `PayloadCompleteness` on why turning it on is a non-additive wire change |
+
+All five `requires a typeId` refusals are checked *before* authorization, so an
+unauthenticated caller sending an empty `typeId` learns only that the field is
+required. Each is a `throw std::runtime_error`, not a direct `makeErr` — the
+outer `catch` in `dispatchMessage` is what turns it into the `err` reply, which
+is why the message reaches the wire verbatim.
+
+### 2. The request is well-formed and refused on the merits
+
+The server understood it and said no. Retrying identically helps only if the
+server's state or policy changes.
+
+| Error `message` | Raised in | Cause |
+|---|---|---|
+| `"unauthorized"` | Eight sites: `dispatchExecute` (type-level `authorize`, then instance-level `authorizeInstance`); `dispatchMessage`'s `register`, `attach` and `assign` branches (`authorizeRegister`); its `instances` and `schemas` branches (`authorize` with an empty action id); and its `deregister` branch (`authorizeInstance` against the recorded owner) | An authorizer hook returned `false` — a bad, expired or absent token, a type/action policy denial, a caller who may not create or file an instance of this type, a caller who may not *describe* or *enumerate* it, or a caller whose principal does not own the target instance |
+| `"model not found"` | `dispatchExecute` | `execute` for a `modelId` the server does not hold (or no longer holds) |
+| `"unknown model type: <id>"` | `ModelRegistryFactory::create`, surfaced by `dispatchMessage`'s outer `catch` | `register` for a type-id with no registered factory |
+| any handler exception's `exc.what()` | The outer `try/catch` in `dispatchMessage`, and the strand lambda's `catch` in `dispatchExecute` | A throw from `ActionDispatcher::dispatch` or `Model::execute` — its `what()` becomes the `err` message verbatim. This is the channel every application-level refusal travels on |
+
+### 3. Nothing is wrong with the request; the server's condition produced it
+
+Not protocol errors at all. The same request may succeed later, against the
+same server, with nothing changed on the client. A client that treats these as
+permanent failures will discard work it could have retried.
+
+| Error `message` | Raised in | Cause | Reachable when |
+|---|---|---|---|
+| `"server shutting down"` | `dispatchMessage`'s shutdown gate, ahead of every kind | `RemoteServer::shutdown()` has begun draining | Always — no configuration required |
+| `"connection closed"` | `attachExistingLocked` and `acquireSharedInstance` (`noteScopeAttachLocked` returning `false`), and the `register` branch's `scopeAlreadyClosed` path | The connection scope the instance was being attached to closed while the attach was in flight | Always; inherently a race |
+| `"too many models"` | `dispatchMessage`'s `register` branch (advisory pre-check and post-construction re-test) and `acquireSharedInstance`'s re-test under the insert lock | The live-model cap is reached | `LimitPolicy::maxLiveModels != 0` |
+| `"server busy"` | `dispatchExecute` (advisory early shed, then the compare-exchange reservation) | The in-flight execute cap is reached | `LimitPolicy::maxInFlightExecutes != 0` |
+| `"timeout"` | The `TimeoutScheduler` callback armed by `dispatchExecute` | The execute did not reply within the configured budget | `LimitPolicy::executeTimeout > 0` **and** a `TimeoutScheduler` installed — with either missing, no timer is armed |
+
+All three limit-gated rows are unreachable against a **default-configured**
+server, because every `LimitPolicy` field defaults to `0`, meaning unbounded.
+Across the ladder only one of them is live: `bookmarks`, `polls`, `kanban` and
+`ledger` each set `maxLiveModels = 256` and leave every other field at `0`, and
+`pastebin` installs no policy at all. So `too many models` is asserted by a
+real scenario (`scenarios/bookmarks/the-live-model-cap-is-reached.scenario`),
+while `server busy` and `timeout` carry written exemptions in
+`scripts/scenario/coverage_allowlist.json` — as do `server shutting down` and
+`connection closed`, which need no configuration but cannot be driven without
+racing a teardown.
+
+Those four, plus group 1's `payload missing required field(s): ` and the
+`handleInline` message below, are the whole of that allowlist: six exemptions
+against the seventeen extracted refusals, leaving eleven that a scenario
+genuinely asserts against a running server. (The two rows sourced from outside
+`remote.hpp`/`wire::decode` — `unknown model type: <id>` and the `exc.what()`
+passthrough — are outside what that tool measures, so neither count includes
+them.)
+
+### Not on the wire
+
+`"handleInline does not support execute (reply is asynchronous)"` is raised by
+`RemoteServer::handleInline`, a synchronous in-process API used by morph's own
+C++ tests. It is not an envelope kind and no transport reaches it, so no
+WebSocket client can ever observe it. It is listed here because it is a
+`makeErr` message in the same header, not because it is part of the protocol.
 
 **callId echoing.** The `callId` is copied from the request into the `err`
 reply so the client can correlate it. The one exception: when `wire::decode`
