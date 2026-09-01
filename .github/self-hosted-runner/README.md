@@ -16,14 +16,16 @@ Currently running across three hosts:
   `bootstrap-cloud-node.sh` from the box's actual resources — see
   **Bootstrapping a cloud node with its own fastcached** below.
 - the maintainer's Linux workstation (12 logical processors / 61 GiB, plain
-  Docker Engine): 5 containers at 2 CPU / 6 GiB each, plus a `fastcached`
-  container on 1 CPU / 4 GiB published on the Docker bridge address — 11 of
-  12 processors committed. Started by hand rather than by
-  `bootstrap-cloud-node.sh`, which is written for a dedicated VM it may
-  install Docker on and give the whole box to; see **Running more than one
-  runner** below for the exact commands, and **A workstation that already
-  runs its own fastcached** for why the runners get their own daemon rather
-  than the one already serving the developer's local builds.
+  Docker Engine): 5 containers pinned to 2 processors each (`--cpuset-cpus`,
+  not `--cpus` — see below) with a 6 GiB cap, plus a released `fastcached`
+  running as a host service on the Docker bridge address — 10 of 12
+  processors committed to runners, the rest to the host and the cache.
+  Started by hand rather than by `bootstrap-cloud-node.sh`, which is written
+  for a dedicated VM it may install Docker on and give the whole box to; see
+  **Running more than one runner** below for the exact commands, and **A
+  workstation that already runs its own fastcached** for why the runners get
+  their own daemon rather than the one already serving the developer's local
+  builds.
 
 All three hosts' runners register to the same repo and are indistinguishable
 to `ci.yml` — a job lands on whichever is online and idle.
@@ -288,20 +290,37 @@ Linux workstation's 5 containers are started exactly like this:
 
 ```bash
 for i in 1 2 3 4 5; do
+  lo=$(( (i-1)*2 )); hi=$(( lo+1 ))
   RUNNER_TOKEN=$(gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token')
   docker run -d \
     --name "morph-runner-$i" \
     --restart unless-stopped \
-    --cpus=2 \
+    --cpuset-cpus="${lo}-${hi}" \
     --memory=6g \
     --add-host=host.docker.internal:host-gateway \
     -e RUNNER_TOKEN="$RUNNER_TOKEN" \
     -e RUNNER_NAME="morph-docker-$i" \
     -e FASTCACHE_ADDR="host.docker.internal:6674" \
+    -e CMAKE_BUILD_PARALLEL_LEVEL=2 \
     morph-runner:latest
 done
 ```
 
+- `--cpuset-cpus`, **not `--cpus`** — and this one is load bearing. `--cpus=N`
+  is a CFS quota: it throttles the container without changing what it *sees*,
+  so `nproc` inside a 2-CPU container on this 12-processor box still answers
+  **12**. Ninja then starts ~14 parallel compiles per container, five
+  containers make ~70 on 12 processors, and every one of them wants a
+  gigabyte or so of C++23 template instantiation inside a 6 GiB cap.
+  Measured, on the first run configured that way: **32 OOM kills** across the
+  five containers (`memory.events`), five red jobs, and `g++: fatal error:
+  Killed signal terminated program cc1plus` in every one. `--cpuset-cpus`
+  pins actual processors, so `sched_getaffinity` — and therefore `nproc`,
+  ninja, `ctest -j` and `clang-tidy-diff`'s own `-j "$(nproc)"` — all agree
+  with reality. Disjoint sets per container, leaving the top two processors
+  for the host and `fastcached`.
+- `-e CMAKE_BUILD_PARALLEL_LEVEL=2` — belt and braces over the above, since
+  every build step in `ci.yml` goes through `cmake --build --preset`.
 - `--add-host=host.docker.internal:host-gateway` — Docker Desktop provides
   that name automatically, a bare Linux Engine does not, and `ci.yml` sends
   the literal `host.docker.internal:6674` to every self-hosted job. Without
@@ -312,6 +331,11 @@ done
 
 The registration token is single-use, which is why it is minted inside the
 loop rather than once before it.
+
+The Windows host's four containers use `--cpus=6` and carry the same latent
+hazard — 32 logical processors reported to every build inside a 6-CPU
+container. It has not bitten there because those containers are not memory
+capped, so the oversubscription costs wall-clock rather than killed compiles.
 
 ## ci.yml integration
 
@@ -404,20 +428,35 @@ on such a host, and this repository's Linux workstation uses the second:
    the version match described below, which a from-source daemon does not
    have.
 
-2. **Run a second, containerised daemon** published on the bridge address
-   only, leaving the personal one untouched on loopback:
+2. **Run a second daemon, as a host process**, bound to the bridge address
+   only and left on a released version, with the personal one untouched on
+   loopback. This is what the Linux workstation does, as a `systemd --user`
+   unit (`fastcached-ci.service`) running the 0.1.1 release binary:
 
-   ```bash
-   docker volume create fastcached-ci
-   docker run -d --name fastcached-ci --restart unless-stopped \
-     --cpus=1 --memory=4g \
-     -p 172.17.0.1:6674:6674 \
-     -v fastcached-ci:/data \
-     fastcached:0.1.1 \
-     --bind=0.0.0.0 --metrics --metrics-bind=0.0.0.0 \
-     --max-memory=3g --storage=/data/cache --storage-max-disk=20g \
-     --storage-max-value=256m
+   ```yaml
+   # ~/.local/opt/fastcached-0.1.1/fastcached-ci.yaml
+   listeners:
+     - address: 172.17.0.1     # the bridge gateway, not the LAN
+       port: 6674
+   storage_path: /home/<user>/.local/state/fastcached-ci/cache
+   storage_max_disk: 30g
+   storage_max_value: 256m
+   max_memory: 8g
+   metrics: true               # loopback-only, on a port the personal
+   metrics_bind: 127.0.0.1     # daemon does not use, so cache behaviour
+   metrics_port: 9260          # on the runners can actually be measured
    ```
+
+   A daemon rather than a container, deliberately: the runners reach it at
+   `host.docker.internal:6674` either way, and a host process is one less
+   moving part than a container publishing a port back to its own host. Give
+   it **its own `storage_path`** — started without `--config` it would read
+   the personal `fastcached.yaml` and two daemons would write one cache file.
+
+   The Ubuntu release binary links `libyaml-cpp 0.8`; a distribution that
+   ships 0.9 (Arch, for one) can vendor just that library beside the binary
+   and point `LD_LIBRARY_PATH` at it from the unit, rather than installing
+   anything system-wide or building from source.
 
    Two caches on one host, which costs nothing that matters: the runners
    compile in their own checkouts and share almost no entries with the
