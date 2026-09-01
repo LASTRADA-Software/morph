@@ -110,6 +110,7 @@ model  PasteModel              # default typeId every client registers
 # Open a named connection: connect, "hello", "register".
 client alice
 client bob url=ws://127.0.0.1:9000 model=OtherModel principal=bob token=abc123
+client carol principal=$who token=$token   # captures expand here, as in `session`
 use alice                      # switch the current client
 
 # Dispatch an action: an "execute" envelope with these named inputs as its body.
@@ -138,7 +139,7 @@ close bob                      # drop a connection (no expect)
 |---|---|
 | `server <ws-url>` | Default url for clients declared later. `--server` overrides it. |
 | `model <TypeId>` | Default `typeId` clients register. |
-| `client <name> [opt=value ...]` | Opens a connection, sends `hello`, sends `register`. Options: `url`, `model`, `principal`, `token`, `contextKey`, `protocol` (a version number, or `none` to skip the handshake entirely). The new client becomes current. |
+| `client <name> [opt=value ...]` | Opens a connection, sends `hello`, sends `register`. Options: `url`, `model`, `principal`, `token`, `contextKey`, `protocol` (a version number, or `none` to skip the handshake entirely). `principal`, `token` and `contextKey` expand `$capture` references, exactly as `session` does; `url`, `model` and `protocol` do not, and a capture written in one of them is refused by name rather than sent literally. The new client becomes current. |
 | `use <name>` | Makes an existing client current. |
 | `session [principal=<v>] [token=<v>]` | Replaces the current client's session — the step that turns a `Login` result into the credentials every later `execute` carries. |
 | `do <ActionType> [field=value ...]` | Sends `execute` on the current client, with the named fields as the action body. |
@@ -203,6 +204,13 @@ then authorizes work is one file — see
 another principal's token being refused. `examples/TESTING.md` notes that a
 failed-then-retried sign-in appears in no in-process rig, because rigs arrive
 already authenticated.
+
+The credentials may equally be written on the `client` line that opens the
+connection — `client books model=LedgerModel principal=$who token=$token` — and
+mean the same thing as the two-line `client` then `session` form. Until
+morph#360 they did not: `client` read its options raw, so `$token` went to the
+server as six literal characters and the run failed several steps later with a
+bare `unauthorized` that named neither the step nor the cause.
 
 ## Proving a scenario's assertions are real
 

@@ -444,6 +444,50 @@ def parse_value(token: str, captures: dict[str, Any]) -> Any:
     return expanded
 
 
+# The `client` options a scenario would plausibly capture: a principal and a
+# token come out of a `Login` reply, and a contextKey out of whatever names the
+# instance. All three are text on the wire, so a captured number is stringified
+# rather than refused.
+CAPTURED_CLIENT_OPTIONS = ("principal", "token", "contextKey")
+
+# The rest name the connection itself, and are static in every shipped
+# scenario. They are not expanded — a capture in one is refused by name rather
+# than sent literally (morph#360).
+STATIC_CLIENT_OPTIONS = ("url", "model", "protocol")
+
+
+def resolve_client_options(options: dict[str, str], captures: dict[str, Any]) -> dict[str, str]:
+    """Expands `$capture` references in a `client` step's options.
+
+    `session` runs its values through `parse_value`, so `session token=$token`
+    installs the captured token; `client` read its own options raw, so
+    `client books token=$token` sent the six literal characters and the run
+    failed several steps later with a bare `unauthorized` (morph#360). This is
+    the one place both spellings now agree.
+
+    Only the credential options are expanded. A capture in `url`, `model` or
+    `protocol` is refused here, naming the option — those are static in every
+    shipped scenario, and sending `$name` to a server as a model type is never
+    what the author meant.
+    """
+    unknown = set(options) - set(CAPTURED_CLIENT_OPTIONS) - set(STATIC_CLIENT_OPTIONS)
+    if unknown:
+        raise ScenarioError(f"unknown client option(s): {', '.join(sorted(unknown))}")
+    resolved = dict(options)
+    for name in CAPTURED_CLIENT_OPTIONS:
+        if name in resolved:
+            resolved[name] = _stringify(parse_value(resolved[name], captures))
+    for name in STATIC_CLIENT_OPTIONS:
+        value = resolved.get(name, "")
+        found = _VARIABLE.search(value)
+        if found is not None:
+            raise ScenarioError(
+                f"client {name}={value} references the capture {found.group(0)}, and "
+                f"{name} is never expanded — only {', '.join(CAPTURED_CLIENT_OPTIONS)} are"
+            )
+    return resolved
+
+
 def split_assignment(token: str) -> tuple[str, str]:
     name, sep, value = token.partition("=")
     if not sep or not name:
@@ -737,10 +781,9 @@ class Runner:
         name = step.args[0]
         if name in self.clients:
             raise ScenarioError(f"client {name!r} already exists")
-        options = dict(split_assignment(token) for token in step.args[1:])
-        unknown = set(options) - {"url", "model", "protocol", "principal", "token", "contextKey"}
-        if unknown:
-            raise ScenarioError(f"unknown client option(s): {', '.join(sorted(unknown))}")
+        options = resolve_client_options(
+            dict(split_assignment(token) for token in step.args[1:]), self.captures
+        )
         url = options.get("url", self.server_url)
         if not url:
             raise ScenarioError("no server url — add a 'server ws://host:port' line or pass --server")
