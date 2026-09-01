@@ -83,6 +83,33 @@ public:
     ///        not restated per action.
     using PrimaryKey = std::int64_t;
 
+    /// @brief Creates a book and returns its id -- the bootstrap every other
+    ///        action on this model depends on (morph#361).
+    ///
+    ///        The one action here that carries no `ledgerId`, because it is
+    ///        the action that produces one. It is therefore dispatched
+    ///        **keyless** (no `BRIDGE_KEY_FROM` line below this class) and
+    ///        runs on whichever worker the dispatcher picks rather than on a
+    ///        per-book strand: there is no book yet to have a strand. That is
+    ///        `polls::PollModel`'s exact shape -- a model keyed by `pollId`
+    ///        whose `CreatePoll` is registered on it without a key -- and the
+    ///        reason no separate admin model was introduced for this the way
+    ///        `kanban::ProjectAdminModel` holds `CreateProject`.
+    ///
+    ///        Two consequences of running off-strand, both benign here: the
+    ///        insert is a single `DataMapper::Create` into `ledgers`, which
+    ///        touches no row any other action can be mid-way through (nothing
+    ///        can name a book that does not exist yet); and the `LogEntry` it
+    ///        appends carries whatever `entityKey` `attachActionLog` was
+    ///        given, since the id the entry is *about* is only known once the
+    ///        row is written.
+    /// @param action The new book's name.
+    /// @return The new book's id.
+    /// @throws EmptyPrincipalError if no authenticated principal is in scope.
+    /// @throws ValidationError if the name is empty or longer than
+    ///         `kMaxLedgerNameBytes`.
+    CreateLedgerResult execute(const CreateLedger& action);
+
     /// @brief Creates an account in the ledger named by `action.ledgerId`.
     ///        The model's first keyed action -- see the `BRIDGE_KEY_FROM`
     ///        lines below this class, and `PrimaryKey` above for why the key
@@ -388,6 +415,14 @@ private:
 }  // namespace ledger
 
 BRIDGE_REGISTER_MODEL(ledger::LedgerModel, "LedgerModel")
+
+// Deliberately gets no `BRIDGE_KEY_FROM`: `CreateLedger` carries no id at all
+// -- it is what mints one -- so `ActionKeyTraits`'s primary template's
+// `hasKey = false` default is the correct answer, and it is dispatched
+// keyless exactly like `SetCategory` below. See this action's doc comment in
+// the class body for why that is safe.
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::CreateLedger, "CreateLedger")
+
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::OpenAccount, "OpenAccount")
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::GetLedger, "GetLedger", ::morph::model::Loggable::No)
 

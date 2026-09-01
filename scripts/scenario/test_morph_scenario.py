@@ -987,11 +987,13 @@ class ActionExtractionTest(unittest.TestCase):
         self.assertEqual(actions["pastebin"], frozenset({"CreatePaste", "DeletePaste", "EditPaste", "ExpirePaste", "GetPaste", "ListPastes"}))
         self.assertEqual(actions["polls"], frozenset({"AddComment", "CreatePoll", "FinalizePoll", "GetEventsSince", "GetPollState", "OpenPoll", "SubmitVotes", "UndoLastVoteChange", "UpdateVotes"}))
         self.assertEqual(actions["bookmarks"], frozenset({"ArchiveBookmark", "BulkEdit", "CreateBookmark", "DeleteBookmark", "EditBookmark", "ExportBookmarks", "GetBookmark", "GetChangesSince", "ImportBookmarks", "ListBookmarks", "ListSharedFeed", "ListTags", "Login", "MergeTags", "RecordMetadata", "RenameTag", "UnarchiveBookmark"}))
-        self.assertEqual(actions["ledger"], frozenset({"CreateBudget", "CreateCategory", "CreateRule", "GetBudgetReport", "GetLedger", "GetReportStatus", "ImportLedgerChunk", "LinkAccountToCategory", "Login", "OpenAccount", "RunReportJob", "SetBudgetLimit", "SetCategory", "StoreTransaction", "SubmitReport", "UndoTransaction", "UpdateRule"}))
+        # `CreateLedger` joined this set in morph#361: ledger was the one rung
+        # shipping a server whose root aggregate no wire action could create.
+        self.assertEqual(actions["ledger"], frozenset({"CreateBudget", "CreateCategory", "CreateLedger", "CreateRule", "GetBudgetReport", "GetLedger", "GetReportStatus", "ImportLedgerChunk", "LinkAccountToCategory", "Login", "OpenAccount", "RunReportJob", "SetBudgetLimit", "SetCategory", "StoreTransaction", "SubmitReport", "UndoTransaction", "UpdateRule"}))
         self.assertEqual(actions["kanban"], frozenset({"AddAttachment", "AddComment", "ApplyTagMutation", "CreateColumn", "CreateProject", "CreateRule", "CreateSwimlane", "CreateTask", "DeleteRule", "GetActivity", "GetAttachments", "GetBoardState", "GetEventsSince", "GetMyProjects", "GetProjectRoles", "GetRules", "Login", "MoveTaskPosition", "OpenBoard", "RemoveAttachment", "RemoveMember", "SetMemberRole"}))
         # Total count provides a quick sanity check tied to MIN_ACTIONS.
         total = sum(len(names) for names in actions.values())
-        self.assertEqual(total, 71)
+        self.assertEqual(total, 72)
 
 
 _FLAT_LIST = '''

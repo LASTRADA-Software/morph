@@ -112,19 +112,32 @@ class RungSpec:
         return env
 
     def seed(self, db_path: pathlib.Path) -> None:
-        """Inserts the rows no wire action can create.
+        """Inserts the fixture rows a rung's scenarios name by a fixed id.
 
-        Ledger is the one rung with a root entity its own action surface
-        cannot produce: `ledgers` rows are created by no registered action, so
-        `OpenAccount ledgerId=1` against a fresh database is refused with "no
-        such ledger" and every ledger journey is unreachable. Seeding that one
-        row is fixture setup, not a scenario step -- a scenario asserting it
-        could exist would be asserting something no client can do.
+        Ledger is the only rung that gets any, and what they are for changed
+        with morph#361. They used to be unavoidable: `ledgers` rows were
+        created by no registered action, so `OpenAccount ledgerId=1` against a
+        fresh database was refused with "no such ledger" and every ledger
+        journey was unreachable over the wire. `CreateLedger` closed that, and
+        `scenarios/ledger/bootstrap-a-book-over-the-wire.scenario` is the file
+        that proves it -- it names no seeded id at all and would pass against
+        a database this method never touched.
+
+        The two rows stay because fourteen sibling files were written against
+        the fixed ids `1` and `2`, and one of them (`two-books-are-isolated`)
+        needs *two* books that exist before its first step. Keeping them is a
+        deliberate scope line, not an inability: migrating those files to
+        capture their own ids is a change to fourteen files, and each would
+        still have to stay re-runnable against a database it has already run
+        on. Nothing here is any longer a claim that a ledger cannot be created
+        over the wire.
 
         Runs *after* the server has started, so the migrations that create the
         tables have already run. `INSERT OR IGNORE` keeps this idempotent, so
         a rerun against a database that already has the row is a no-op rather
-        than a constraint violation.
+        than a constraint violation -- and, since these rows carry explicit
+        ids, a `CreateLedger` dispatched by a scenario allocates the next free
+        id above them rather than colliding.
 
         @param db_path The SQLite file the server was pointed at.
         """
@@ -166,6 +179,9 @@ RUNGS: dict[str, RungSpec] = {
         port_var="LEDGER_PORT",
         db_var="LEDGER_DB",
         token_secret_var="LEDGER_TOKEN_SECRET",
+        # Fixture books for the fourteen ledger files written against the
+        # fixed ids 1 and 2 -- see `seed`'s doc comment for why they stay now
+        # that `CreateLedger` exists (morph#361).
         seed_sql=(
             "INSERT OR IGNORE INTO ledgers (id, name) VALUES (1, 'Scenario book')",
             "INSERT OR IGNORE INTO ledgers (id, name) VALUES (2, 'Second book')",

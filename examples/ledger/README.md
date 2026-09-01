@@ -46,6 +46,18 @@ Models: `LedgerModel` (accounts + transactions, keyed by ledger/book id),
 (asset/expense/revenue/liability), transaction journal, transaction leg,
 currency, category, budget + budget limit, rule (trigger/action pairs).
 
+**Bootstrapping a book.** `CreateLedger { name }` on `LedgerModel` creates the
+book everything else keys off, and answers `{ id }`. It is the only action
+here that carries no `ledgerId` — it is what mints one — so it is dispatched
+keyless, the same shape `polls::PollModel` gives `CreatePoll`. Any
+authenticated principal may call it; a caller with no token is refused
+`unauthorized` by `LedgerAuthorizer` before the model is entered, and an empty
+principal by the model itself. Added by morph#361: until then a `ledgers` row
+was created by no registered action at all, and a freshly started
+`ladder_ledger_server` against a new database served a book nobody could open
+(`OpenAccount` refused with `OpenAccount: no such ledger`). There is no
+per-book ownership — see morph#382.
+
 Build order (status as of rung 5's implementation, see
 `docs/superpowers/plans/2026-08-19-ledger-rung5.md`):
 

@@ -30,6 +30,13 @@
 
 namespace ledger {
 
+static_assert(decltype(db::LedgerRecord::name)::ValueType{}.capacity() == kMaxLedgerNameBytes,
+              "ledger::kMaxLedgerNameBytes must equal LedgerRecord::name's SqlAnsiString capacity -- otherwise "
+              "CreateLedger either rejects a name that would have fit, or accepts one that gets silently truncated "
+              "on the way into the row (Light::SqlFixedString's constructor is noexcept and truncates rather than "
+              "throwing), so the caller is told 'ok' about a book stored under a name they never sent. Same guard, "
+              "same reason, as kanban's own kMaxProjectNameBytes assertion in src/models/board_model.cpp.");
+
 namespace {
 
 /// @brief Sums every leg posted against @p accountId into a single
@@ -618,6 +625,28 @@ void LedgerModel::logFailure(const Action& action, const std::string& error) con
     _log->flush();
 }
 
+CreateLedgerResult LedgerModel::execute(const CreateLedger& action) {
+    try {
+        const auto* ctx = morph::session::current();
+        if (ctx == nullptr || ctx->principal.empty()) {
+            throw EmptyPrincipalError{};
+        }
+        if (!action.validate()) {
+            throw ValidationError{"CreateLedger: a non-empty name of at most 128 bytes is required"};
+        }
+        Lightweight::DataMapper mapper;
+        db::LedgerRecord ledgerRow;
+        ledgerRow.name = Light::SqlAnsiString<128>{action.name};
+        mapper.Create(ledgerRow);
+        auto result = CreateLedgerResult{.id = LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())}};
+        logAction(action, result);
+        return result;
+    } catch (const LedgerError& error) {
+        logFailure(action, error.what());
+        throw;
+    }
+}
+
 AccountInfo LedgerModel::execute(const OpenAccount& action) {
     try {
         const auto* ctx = morph::session::current();
@@ -628,9 +657,9 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
             throw ValidationError{"OpenAccount: ledgerId and name are required"};
         }
         Lightweight::DataMapper mapper;
-        // The ledger row must already exist -- this rung's scope has no
-        // CreateLedger action (see the design note in the task brief); load it
-        // by primary key rather than fabricating a stub LedgerRecord, since
+        // The ledger row must already exist -- `execute(const CreateLedger&)`
+        // above is what creates one (morph#361). Load it by primary key
+        // rather than fabricating a stub LedgerRecord, since
         // BelongsTo assignment needs the real persisted parent (per
         // polls::db::OptionRecord's own `opt.poll = poll;` usage, where `poll`
         // is a row that has actually round-tripped through Create/Query).

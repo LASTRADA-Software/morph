@@ -38,9 +38,11 @@ using morph::ladder::testkit::pumpUntil;
     return rig;
 }
 
-/// @brief Creates one ledger row directly, bypassing the action surface --
-///        there is no CreateLedger action; a ledger is a row every other
-///        action keys off (same shape test_ledger_reports.cpp uses).
+/// @brief Creates one ledger row directly, bypassing the action surface.
+///        `CreateLedger` exists since morph#361 and is what a real client
+///        uses; these presenter cases seed the row instead so a presenter
+///        failure cannot be a `CreateLedger` failure wearing a disguise (same
+///        shape test_ledger_reports.cpp uses).
 /// @return The new ledger's id.
 [[nodiscard]] ledger::LedgerId seedLedger(std::string name) {
     Lightweight::DataMapper mapper;

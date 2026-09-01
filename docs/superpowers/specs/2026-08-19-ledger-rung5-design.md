@@ -69,6 +69,21 @@ separate from wire DTOs per bank's two-layer architecture):
   table each, following the same `Field<>` + `BelongsTo` shape as bank's
   `AccountRecord`/`TxnRecord` (`examples/bank/include/bank/db/*_entity.hpp`).
 
+**Creating the book itself (morph#361, added after this spec was written).**
+`LedgerModel` also registers `CreateLedger`, the one action on it that carries
+no `ledgerId` — because it is the action that mints one. Until it existed, a
+`ledgers` row was created by no registered action at all, so an out-of-process
+client had no way to reach a usable state: `execute(const OpenAccount&)`
+refuses with `OpenAccount: no such ledger`, and every other action on all
+three models keys on a `ledgerId` that must already exist. It is dispatched
+**keyless** (no `BRIDGE_KEY_FROM`), which is `polls::PollModel`'s exact shape
+for `CreatePoll` on a model otherwise keyed by `pollId`, rather than
+`kanban`'s — where `CreateProject` lives on a separate `ProjectAdminModel`,
+because kanban has per-project RBAC to administer and this rung has none. Any
+authenticated principal may create a book; the empty-principal gate of §11
+applies to it as to every other mutating action, and there is no ownership
+record because there is no per-book role table to write one into (morph#382).
+
 This is a genuine structural upgrade over `bank::db::TxnRecord`
 (`examples/bank/include/bank/db/txn_entity.hpp`), which stores one row per
 transaction with a single `amountMinor`/`currency` pair and an optional

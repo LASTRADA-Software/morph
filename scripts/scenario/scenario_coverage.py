@@ -256,7 +256,7 @@ def floor_violations(surface: Surface) -> list[str]:
 # reach them. lims's missing server is filed separately.
 SERVER_RUNGS = ("pastebin", "bookmarks", "polls", "kanban", "ledger")
 
-# Plausibility floor for the whole action universe, measured at 71. Same
+# Plausibility floor for the whole action universe, measured at 72. Same
 # purpose as MIN_KINDS/MIN_MESSAGES: if the macro is renamed, this extractor
 # silently finds nothing and would report full workflow coverage over an empty
 # universe. Falling short is a statement about the tool, not the tree.
@@ -462,7 +462,12 @@ WORKFLOW_FLOORS = {
     "pastebin": 8,
     "polls": 10,
     "bookmarks": 12,
-    "ledger": 15,
+    # 16, not the design's original 15: morph#361 added `CreateLedger` and
+    # `bootstrap-a-book-over-the-wire.scenario` with it, the one ledger file
+    # that names no seeded id. Raised deliberately -- a floor left at 15 would
+    # let that file be deleted without anything noticing, which is precisely
+    # what it exists to keep from happening again.
+    "ledger": 16,
     "kanban": 20,
 }
 
