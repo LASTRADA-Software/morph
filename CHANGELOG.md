@@ -113,6 +113,18 @@ API surface).
 
 ### Fixed
 
+- **A scenario's `client` step sent `$capture` references literally.**
+  `scripts/scenario/morph_scenario.py`'s `client` directive read its
+  `principal=`/`token=`/`contextKey=` options raw while `session` ran the same
+  values through the capture table, so `client books token=$token` — sign in,
+  then work, the most natural shape there is — put the six characters `$token`
+  on the wire as the bearer token. Nothing rejected the option and nothing
+  warned; the run failed several steps later with a bare `unauthorized`, which
+  reads as a broken authorizer rather than an unsubstituted variable. The two
+  directives now agree: the three credential options expand captures, and a
+  capture written in `url`, `model` or `protocol` — which are not expanded —
+  is refused by name at the step that wrote it rather than sent literally.
+
 - **`ladder_kanban_server` refused every client, including at login.**
   `kanban::auth::KanbanAuthorizer` inherited `SigningAuthorizer` without the
   anonymous carve-out `bookmarks::auth::BookmarksAuthorizer` carries, so

@@ -24,6 +24,7 @@ from morph_scenario import (
     parse_value,
     parse_ws_url,
     read_path,
+    resolve_client_options,
     tokenize,
 )
 
@@ -107,6 +108,61 @@ class ValueSyntaxTest(unittest.TestCase):
     def test_an_uncaptured_variable_is_an_error(self) -> None:
         with self.assertRaises(ScenarioError):
             parse_value("$nope", {})
+
+
+class ClientOptionTest(unittest.TestCase):
+    """`client`'s credential options expand captures, the way `session` does.
+
+    Before morph#360 they did not: `client books token=$token` sent the six
+    literal characters, and the run failed several steps later with a bare
+    `unauthorized` that named neither the step nor the cause.
+    """
+
+    def test_credential_options_expand_a_capture(self) -> None:
+        resolved = resolve_client_options(
+            {"principal": "$who", "token": "$token", "contextKey": "$key"},
+            {"who": "alice", "token": "ey.J.x", "key": "project-1"},
+        )
+        self.assertEqual(resolved["principal"], "alice")
+        self.assertEqual(resolved["token"], "ey.J.x")
+        self.assertEqual(resolved["contextKey"], "project-1")
+
+    def test_a_capture_inside_a_larger_value_expands_too(self) -> None:
+        resolved = resolve_client_options({"principal": '"user $n"'}, {"n": 7})
+        self.assertEqual(resolved["principal"], "user 7")
+
+    def test_a_non_text_capture_is_stringified_for_the_wire(self) -> None:
+        resolved = resolve_client_options({"contextKey": "$id"}, {"id": 12})
+        self.assertEqual(resolved["contextKey"], "12")
+
+    def test_a_bare_word_is_left_alone(self) -> None:
+        resolved = resolve_client_options({"principal": "alice", "model": "LedgerModel"}, {})
+        self.assertEqual(resolved["principal"], "alice")
+        self.assertEqual(resolved["model"], "LedgerModel")
+
+    def test_a_digit_option_stays_the_text_it_was_written_as(self) -> None:
+        resolved = resolve_client_options({"contextKey": "1", "protocol": "1"}, {})
+        self.assertEqual(resolved["contextKey"], "1")
+        self.assertEqual(resolved["protocol"], "1")
+
+    def test_an_uncaptured_reference_fails_here_rather_than_on_a_later_step(self) -> None:
+        with self.assertRaises(ScenarioError) as caught:
+            resolve_client_options({"token": "$token"}, {})
+        self.assertIn("$token", str(caught.exception))
+
+    def test_a_capture_in_a_static_option_is_refused_by_name(self) -> None:
+        for name in ("url", "model", "protocol"):
+            with self.subTest(option=name):
+                with self.assertRaises(ScenarioError) as caught:
+                    resolve_client_options({name: "$x"}, {"x": "whatever"})
+                message = str(caught.exception)
+                self.assertIn(name, message)
+                self.assertIn("$x", message)
+
+    def test_unknown_options_are_still_refused(self) -> None:
+        with self.assertRaises(ScenarioError) as caught:
+            resolve_client_options({"principle": "alice"}, {})
+        self.assertIn("principle", str(caught.exception))
 
 
 class PathTest(unittest.TestCase):
