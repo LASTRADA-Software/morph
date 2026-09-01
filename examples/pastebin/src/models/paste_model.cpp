@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "pastebin/models/paste_model.hpp"
 
+#include "pastebin/models/paste_id_source.hpp"
+
 // The entity is an implementation detail of this TU: `paste_model.hpp` exposes
 // only DTOs, so nothing outside this file ever sees `db::PasteRecord`.
 #include "pastebin/db/paste_entity.hpp"
@@ -125,9 +127,11 @@ namespace {
 }
 
 /// @brief The tiny animal-name id keyspace (MicroBin-style). Deliberately
-///        small — the required tests exercise the id-collision retry path,
-///        which needs collisions to be reachable in a bounded number of
-///        `CreatePaste` calls, not astronomically unlikely.
+///        small — small enough that the keyspace-exhaustion test can occupy
+///        *every* id this generator can spell and require `CreatePaste` to
+///        give up. (The collision-retry test no longer depends on the size:
+///        it scripts the collisions through `pastebin::PasteIdSource` rather
+///        than sampling them — see morph#365.)
 constexpr std::array<std::string_view, 16> kAnimals = {
     "cat", "dog", "fox", "owl", "bee", "ant", "elk", "ram", "yak", "cod", "eel", "hen", "pig", "cow", "bat", "jay",
 };
@@ -186,6 +190,18 @@ constexpr std::string_view kEditPasteSql = R"(UPDATE pastes
 
 }  // namespace
 
+std::string nextPasteId() {
+    // The no-override path is the production path, and it is the same call
+    // `CreatePaste` made before this seam existed: one relaxed load of a null
+    // pointer, then `randomPasteId()`. Nothing outside test code installs an
+    // override — see `include/pastebin/models/paste_id_source.hpp` for why the
+    // seam is a process-global provider rather than a constructor parameter.
+    if (const auto* source = detail::pasteIdSourceSlot().load()) {
+        return (*source)();
+    }
+    return randomPasteId();
+}
+
 CreatePasteResult PasteModel::execute(const CreatePaste& action) {
     if (!action.validate()) {
         throw ValidationError{
@@ -206,7 +222,7 @@ CreatePasteResult PasteModel::execute(const CreatePaste& action) {
     // connections; the primary key is the only authority.
     for (int attempt = 0; attempt < kMaxIdAttempts; ++attempt) {
         db::PasteRecord rec;
-        rec.id = Light::SqlAnsiString<32>{randomPasteId()};
+        rec.id = Light::SqlAnsiString<32>{nextPasteId()};
         rec.content = wideOf(action.content);
         rec.syntax = Light::SqlAnsiString<32>{action.syntax};
         rec.createdAtMs = nowMs();
