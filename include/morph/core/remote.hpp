@@ -360,9 +360,16 @@ private:
             // duplicating that error path here would serve no purpose since
             // this peek's only job is deciding whether to take a ticket.
         }
+        // Owns the ticket for the window between taking it and successfully
+        // handing it to the pool: if `_pool.post` throws, the guard releases it
+        // on the way out instead of stranding it. It is disarmed only once the
+        // post has returned, at which point the posted task — which adopts the
+        // ticket into its own guard in `dispatchMessage` — is its owner.
+        ExecuteTicketGuard ticketGuard{*this, ticket};
         _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
             self->dispatchMessage(msg, reply, cid, ticket);
         });
+        ticketGuard.disarm();
     }
 
 public:
@@ -898,18 +905,114 @@ private:
         reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(body))));
     }
 
+    /// @brief Owns a taken execute-ordering ticket and releases it on every
+    ///        exit path, unless ownership was explicitly handed on.
+    ///
+    /// A ticket handed out by `takeExecuteTicket` must be released exactly once
+    /// by whatever path took it: an unreleased ticket permanently stalls every
+    /// later ticket for the same model, because `awaitExecuteTurn` is a
+    /// `cv.wait` with no deadline. That rule used to be a per-call-site
+    /// convention — `dispatchExecute`'s `rejectAndRelease` helper for its
+    /// explicit early returns, plus one hand-written release in
+    /// `dispatchMessage`'s shutdown gate — and the convention was missed
+    /// twice: by the shutdown gate itself (issue #348), and by every exception
+    /// that unwinds out of `dispatchExecute` past all of its early returns
+    /// (issue #351). The latter is ordinary, documented reachability, not a
+    /// hypothetical: `IAuthorizer::authorize`/`authenticate`/
+    /// `authorizeInstance` are non-`noexcept` virtuals on a public extension
+    /// point, and `missingRequiredFields` parses the payload. Such a throw
+    /// landed in `dispatchMessage`'s outer catch, which replied but released
+    /// nothing, stranding every later same-model `execute` forever.
+    ///
+    /// This holder makes the rule structural instead of remembered: the ticket
+    /// is owned from the moment it is taken until the guard dies, so every exit
+    /// path — `return`, `throw`, and any branch a later change adds — releases
+    /// it. Two members opt out deliberately:
+    ///
+    /// - `release()`, for the paths that want the ticket freed *before* their
+    ///   reply goes out rather than at end of scope, so a slow reply callback
+    ///   never holds a later same-model `execute` up; and
+    /// - `disarm()`, for the one place ownership is genuinely handed on —
+    ///   `handleImpl`, whose posted pool task adopts the ticket in
+    ///   `dispatchMessage`.
+    ///
+    /// Neither copyable nor movable: it is only ever a local of the frame that
+    /// owns the ticket.
+    class ExecuteTicketGuard {
+    public:
+        /// @brief Adopts @p ticket on behalf of @p server.
+        /// @param server Server whose gate map @p ticket belongs to. Borrowed:
+        ///               a guard is always a local of one of that server's own
+        ///               member functions, so it cannot outlive it.
+        /// @param ticket This call's ticket from `takeExecuteTicket`, or
+        ///               `std::nullopt` if it took none (any envelope that is
+        ///               not a well-formed `execute` naming a `modelId`), in
+        ///               which case the guard is inert.
+        ExecuteTicketGuard(RemoteServer& server MORPH_LIFETIMEBOUND,
+                           std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> ticket) noexcept
+            : _server{server}, _ticket{std::move(ticket)} {}
+
+        ExecuteTicketGuard(const ExecuteTicketGuard&) = delete;
+        ExecuteTicketGuard(ExecuteTicketGuard&&) = delete;
+        ExecuteTicketGuard& operator=(const ExecuteTicketGuard&) = delete;
+        ExecuteTicketGuard& operator=(ExecuteTicketGuard&&) = delete;
+
+        /// @brief Releases the ticket if it is still held — the backstop that
+        ///        covers every path which did not release explicitly.
+        ~ExecuteTicketGuard() { release(); }
+
+        /// @brief Releases the held ticket now, letting the next ticket for the
+        ///        same model proceed. Idempotent: a no-op if no ticket was
+        ///        taken, or if it has already been released or disarmed.
+        void release() {
+            if (!_ticket) {
+                return;
+            }
+            auto const held = *_ticket;
+            // Cleared before the release, not after: this guard owes nothing
+            // further from here on, so the destructor cannot release twice
+            // even if `releaseExecuteTicket` itself exits by exception.
+            _ticket.reset();
+            _server.releaseExecuteTicket(held.first, held.second);
+        }
+
+        /// @brief Gives up ownership *without* releasing, for the one path that
+        ///        hands the ticket on to a new owner.
+        void disarm() noexcept { _ticket.reset(); }
+
+        /// @brief Blocks until the held ticket's turn comes (see
+        ///        `awaitExecuteTurn`). A no-op if no ticket is held.
+        void awaitTurn() {
+            if (_ticket) {
+                _server.awaitExecuteTurn(_ticket->first, _ticket->second);
+            }
+        }
+
+    private:
+        RemoteServer& _server;
+        std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> _ticket;
+    };
+
     // One flat switch over the wire's `kind` discriminator. Splitting it would
     // scatter the authorization sequence each branch depends on across helpers,
     // with no reader benefit.
     //
     // `executeTicket`, when engaged, is this call's execute-ordering ticket
-    // from `handleImpl` (finding 035) — forwarded straight through to
-    // `dispatchExecute`, the only branch below that consults it. Every other
-    // `kind` ignores it; `handleImpl` never takes one for a non-`execute`
+    // from `handleImpl` (finding 035), adopted below by an `ExecuteTicketGuard`
+    // that owns it for the rest of this frame — including `dispatchExecute`,
+    // the only branch that does anything with it beyond releasing it. Every
+    // other `kind` ignores it; `handleImpl` never takes one for a non-`execute`
     // envelope in the first place, so it is always `std::nullopt` for those.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0,
                          std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> executeTicket = {}) {
+        // Adopted before anything that can fail, including the decode: from
+        // here on every way out of this function — each early return below,
+        // the outer catch, and any branch a later change adds — releases the
+        // ticket, which is what makes `releaseExecuteTicket`'s stated rule
+        // structurally true rather than a convention each call site has to
+        // remember (issues #348 and #351).
+        ExecuteTicketGuard ticketGuard{*this, std::move(executeTicket)};
         ::morph::wire::Envelope env;
         try {
             env = ::morph::wire::decode(msg);
@@ -951,12 +1054,10 @@ private:
         // still tear its models down cleanly during the drain window.
         if ((env.kind == "register" || env.kind == "execute" || env.kind == "attach") &&
             _shuttingDown.load(std::memory_order_acquire)) {
-            // Release before replying. This is an early return that follows
-            // `handleImpl`'s ticket-taking site, so `takeExecuteTicket`'s
-            // contract binds it exactly as it binds `dispatchExecute`'s
-            // rejection branches -- and it is upstream of `dispatchExecute`,
-            // the only other place a ticket is released, so nothing further
-            // down will do it for us.
+            // Release before replying, rather than leaving it to the guard's
+            // destructor: this reply may be slow (it is a transport write), and
+            // nothing about it is worth making a later same-model `execute`
+            // wait for.
             //
             // Not merely a leaked map entry on a dying server (which is what
             // this branch was previously believed to cost): tickets are taken
@@ -969,9 +1070,7 @@ private:
             // incremented before that wait) makes `drainedWithin()` unable to
             // ever succeed. See `tests/test_remote_execute_ordering.cpp`'s
             // shutdown-gate case, which forces that interleaving.
-            if (executeTicket) {
-                releaseExecuteTicket(executeTicket->first, executeTicket->second);
-            }
+            ticketGuard.release();
             reply(::morph::wire::encode(::morph::wire::makeErr("server shutting down", env.callId)));
             return;
         }
@@ -1220,7 +1319,7 @@ private:
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "execute") {
-                dispatchExecute(std::move(env), reply, executeTicket);
+                dispatchExecute(std::move(env), reply, ticketGuard);
             } else if (env.kind == "hello") {
                 const std::uint32_t minV = _minVersion.load();
                 const std::uint32_t maxV = _maxVersion.load();
@@ -1235,6 +1334,15 @@ private:
                 reply(::morph::wire::encode(::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
             }
         } catch (const std::exception& exc) {
+            // Any throw from the branches above — including one out of
+            // `dispatchExecute`, which has no catch of its own and whose
+            // `authorize`/`authenticate`/`authorizeInstance`/
+            // `missingRequiredFields` steps are all reachable, non-`noexcept`
+            // code — unwinds past every explicit release to here. `ticketGuard`
+            // is what releases the ticket on this path; it is destroyed as this
+            // frame returns. Before it existed, this catch replied and stranded
+            // the ticket, and the next same-model `execute` waited on it
+            // forever (issue #351).
             reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
         }
     }
@@ -1243,30 +1351,28 @@ private:
     // per-instance authorize — whose *order* is the security contract itself
     // (see docs/spec/security.md), so it is deliberately not broken up.
     //
-    // `executeTicket`, when engaged, is this call's finding-035 execute-
-    // ordering ticket from `handleImpl`. Every early-return branch that
-    // follows the ticket-taking site must release it (via
-    // `releaseExecuteTicket`) before returning — both the branches below and
-    // `dispatchMessage`'s shutdown gate, which returns before this function
-    // is entered — an unreleased ticket
-    // permanently stalls every later ticket for the same model. The one
-    // path that actually reaches the strand releases it via
-    // `awaitExecuteTurn` + `releaseExecuteTicket` bracketing the pre-existing
-    // `_strand.post(mid, ...)` call instead of releasing immediately, since
-    // that call site is the entire point of taking a ticket in the first
-    // place — see the class-private members' own doc comment for the full
-    // design (finding 035).
+    // `ticketGuard` owns this call's finding-035 execute-ordering ticket (if
+    // one was taken) on behalf of `dispatchMessage`, which constructed it and
+    // outlives this call. Every path out of this function releases the ticket:
+    // the rejection branches below do it explicitly, through
+    // `rejectAndRelease`, so it is freed before their reply goes out; the one
+    // path that reaches the strand releases it immediately after
+    // `_strand.post(mid, ...)` (that post is the entire point of taking a
+    // ticket, so this path brackets it with `awaitTurn()` rather than
+    // releasing up front); and every *implicit* exit — an exception out of
+    // `authorize`/`authenticate`/`authorizeInstance`/`missingRequiredFields`,
+    // or out of the post itself — is covered by the guard's destructor back in
+    // `dispatchMessage`. See `ExecuteTicketGuard` and the class-private
+    // members' own doc comment for the full design (finding 035, issue #351).
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply,
-                         std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> executeTicket = {}) {
-        // Releases executeTicket (if engaged) exactly once, then calls reply
-        // with an error envelope. Used by every early-return branch below so
-        // the "always release what you took" rule can't be missed at a call
-        // site — this is the only way any of these branches produce a reply.
-        auto rejectAndRelease = [this, &executeTicket, &env, &reply](const char* message) {
-            if (executeTicket) {
-                releaseExecuteTicket(executeTicket->first, executeTicket->second);
-            }
+                         ExecuteTicketGuard& ticketGuard) {
+        // Releases the ticket (if one is held), then calls reply with an error
+        // envelope. Used by every early-return branch below, so a rejection
+        // frees the gate before its reply is written rather than at end of
+        // scope — the guard would release it either way, but not this early.
+        auto rejectAndRelease = [&ticketGuard, &env, &reply](const char* message) {
+            ticketGuard.release();
             reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
         };
         LimitPolicy limits;
@@ -1446,9 +1552,7 @@ private:
         // for as long as *its own* pre-strand work (identical in kind to
         // this one's) takes, not for the duration of whatever the model's
         // strand does with it afterward.
-        if (executeTicket) {
-            awaitExecuteTurn(executeTicket->first, executeTicket->second);
-        }
+        ticketGuard.awaitTurn();
         _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), complete, timeoutHandle]() mutable {
             ::morph::exec::detail::ModelId const targetMid{env.modelId};
             auto const start = std::chrono::steady_clock::now();
@@ -1523,9 +1627,7 @@ private:
         // its entire job), so holding this ticket any longer would only
         // delay a *different* execute's own pre-strand work for no ordering
         // benefit.
-        if (executeTicket) {
-            releaseExecuteTicket(executeTicket->first, executeTicket->second);
-        }
+        ticketGuard.release();
     }
 
     /// @brief Returns the next opaque model id.
@@ -1583,7 +1685,9 @@ private:
     // (live model) or immediately on a "model not found"/other early-return
     // rejection (dead model, unauthorized, over limit, etc. -- none of these
     // ever reach the strand, so their ticket must not block anyone behind
-    // it). This keeps the fast-reject path exactly as fast as it always was
+    // it -- and, on any path that leaves by exception rather than by return,
+    // `ExecuteTicketGuard`'s destructor does the same). This keeps the
+    // fast-reject path exactly as fast as it always was
     // (`test_remote_connection_scope.cpp`'s "an in-flight execute completes
     // safely across a disconnect" test — a lookup against a since-reclaimed
     // modelId must resolve without waiting on some other blocked model's
@@ -1648,13 +1752,28 @@ private:
     /// whether that path went on to `_strand.post()` (a live model) or bailed
     /// out early (model not found, unauthorized, over limit, a decode/
     /// validation throw). A ticket that is taken but never released would
-    /// permanently stall every later ticket for the same `mid`; this is why
-    /// every early-return branch that follows `takeExecuteTicket` must call
-    /// this before returning, not just the branch that reaches the strand.
-    /// That includes `dispatchMessage`'s shutdown gate, which returns before
-    /// `dispatchExecute` is reached at all — it was the one branch that did
-    /// not, and stranding the ticket there left a later same-model `execute`
-    /// waiting on it forever (issue #348).
+    /// permanently stall every later ticket for the same `mid`, since
+    /// `awaitExecuteTurn` waits with no deadline.
+    ///
+    /// **Callers do not carry that rule themselves.** Every ticket is owned by
+    /// an `ExecuteTicketGuard` from the moment `takeExecuteTicket` returns, and
+    /// the guard calls this on destruction unless the path already called it
+    /// explicitly (or handed ownership on with `disarm()`). Call sites that
+    /// release explicitly do so only to free the gate *earlier* than end of
+    /// scope — before writing a reply — never because the release would
+    /// otherwise be missed.
+    ///
+    /// It was a per-call-site discipline until it had been missed twice: by
+    /// `dispatchMessage`'s shutdown gate, which returns before `dispatchExecute`
+    /// is reached at all (issue #348), and by every exception unwinding out of
+    /// `dispatchExecute` past all of its explicit early returns into
+    /// `dispatchMessage`'s outer catch (issue #351). Both stranded a later
+    /// same-model `execute` in `awaitExecuteTurn` forever, blocked a pool
+    /// worker for the process's remaining life, and — because
+    /// `_inFlightExecutes` is incremented just before that wait — left
+    /// `drainedWithin()` unable to succeed. Hence the guard: the rule is now
+    /// structural, and `tests/test_remote_execute_ordering.cpp` pins both
+    /// paths.
     /// @param mid    The model @p ticket was taken for.
     /// @param ticket The ticket to release.
     void releaseExecuteTicket(::morph::exec::detail::ModelId mid, std::uint64_t ticket) {

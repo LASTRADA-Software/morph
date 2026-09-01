@@ -3,13 +3,17 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
+#include <optional>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #include "test_support.hpp"
@@ -468,4 +472,202 @@ TEST_CASE(
     // good, because it is incremented before the wait -- so a regression here
     // breaks graceful shutdown as well as this one caller.
     CHECK(server->drainedWithin(std::chrono::milliseconds{2000}));
+}
+
+namespace {
+
+/// @brief Which of `dispatchExecute`'s user-supplied hooks the armed
+///        authorizer below throws from.
+///
+/// The three are consulted in this order inside `dispatchExecute`
+/// (`remote.hpp`): `authorize` (type-level gate), `authenticate` (principal
+/// stamping), then -- after the registry lookup -- `authorizeInstance` (the
+/// row-level gate). All three are non-`noexcept` virtuals on the public
+/// `morph::session::IAuthorizer` extension point, and each sits *between*
+/// `handleImpl`'s `takeExecuteTicket` and the `releaseExecuteTicket` that
+/// follows `_strand.post`, so a throw from any of them unwinds across the
+/// ticketed region.
+enum class ThrowingHook : std::uint8_t { Authorize, Authenticate, AuthorizeInstance };
+
+/// @brief Allow-all authorizer that throws from one chosen hook, but only
+///        once `arm()` has been called.
+///
+/// Arming is what keeps the interleaving decided rather than raced: the
+/// `register` envelope and request B both run through this authorizer while
+/// it is still a plain allow-all, and only the *held* request A -- released
+/// after B is parked in `awaitExecuteTurn` -- ever sees the throw.
+class ArmedThrowingAuthorizer : public morph::session::IAuthorizer {
+public:
+    /// @brief Constructs an authorizer that will throw from @p hook once armed.
+    /// @param hook The hook to throw from.
+    explicit ArmedThrowingAuthorizer(ThrowingHook hook) : _hook{hook} {}
+
+    /// @brief Arms the throw: every call after this point throws from the
+    ///        configured hook.
+    void arm() { _armed.store(true); }
+
+    /// @brief Type-level gate; throws when armed and configured to.
+    /// @return `true` (allow) whenever it does not throw.
+    [[nodiscard]] bool authorize([[maybe_unused]] const morph::session::Context& ctx,
+                                 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                 [[maybe_unused]] std::string_view modelType,
+                                 [[maybe_unused]] std::string_view actionType) const override {
+        maybeThrow(ThrowingHook::Authorize);
+        return true;
+    }
+
+    /// @brief Principal-stamping hook; throws when armed and configured to.
+    /// @return `std::nullopt` whenever it does not throw.
+    [[nodiscard]] std::optional<std::string> authenticate(
+        [[maybe_unused]] const morph::session::Context& ctx) const override {
+        maybeThrow(ThrowingHook::Authenticate);
+        return std::nullopt;
+    }
+
+    /// @brief Row-level gate; throws when armed and configured to.
+    /// @return `true` (allow) whenever it does not throw.
+    [[nodiscard]] bool authorizeInstance([[maybe_unused]] const morph::session::Context& ctx,
+                                         // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                         [[maybe_unused]] std::string_view modelType,
+                                         [[maybe_unused]] std::string_view actionType,
+                                         [[maybe_unused]] std::uint64_t modelId,
+                                         [[maybe_unused]] std::string_view ownerPrincipal) const override {
+        maybeThrow(ThrowingHook::AuthorizeInstance);
+        return true;
+    }
+
+    /// @brief The message the armed hook throws, which the server must turn
+    ///        into this call's `err` reply.
+    static constexpr std::string_view kThrowMessage = "ero-351: extension point threw";
+
+private:
+    void maybeThrow(ThrowingHook from) const {
+        if (from == _hook && _armed.load()) {
+            throw std::runtime_error{std::string{kThrowMessage}};
+        }
+    }
+
+    ThrowingHook _hook;
+    std::atomic<bool> _armed{false};
+};
+
+/// @brief Runs the "A throws while B is parked on A's ticket" scenario once,
+///        with the throw coming from @p hook.
+/// @param hook Which `IAuthorizer` hook request A's dispatch throws from.
+// The Catch2 assertion macros, not branching logic, are what push this over
+// the cognitive-complexity threshold -- exactly as they do in the sibling
+// TEST_CASEs above, which the checker exempts only because it does not see
+// through TEST_CASE's own generated function.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void runThrowingHookStrandsNothing(ThrowingHook hook) {
+    // Same fixture shape, and the same leak-on-failure reasoning, as the
+    // shutdown-gate case above: a regression parks a pool worker in a wait
+    // with no deadline, so ~ThreadPoolExecutor would hang the whole binary in
+    // join() instead of reporting a failed assertion.
+    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(2);
+    auto gated = std::make_unique<HoldOnePostExecutor>(*pool);
+    auto authorizer = std::make_shared<ArmedThrowingAuthorizer>(hook);
+    auto server = std::make_shared<morph::backend::RemoteServer>(*gated, authorizer, eroDispatcher(), eroRegistry());
+
+    WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("ERO_CounterModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+    REQUIRE(regReply.env.kind == "ok");
+    const auto modelId = regReply.env.modelId;
+    REQUIRE(modelId != 0U);
+
+    morph::wire::Envelope reqA;
+    reqA.kind = "execute";
+    reqA.callId = 1;
+    reqA.modelId = modelId;
+    reqA.modelType = "ERO_CounterModel";
+    reqA.actionType = "ERO_AddAction";
+    reqA.body = R"({"by":7})";
+
+    morph::wire::Envelope reqB = reqA;
+    reqB.callId = 2;
+    reqB.body = R"({"by":11})";
+
+    // A takes ticket 0 but does not run: its dispatch task is held.
+    gated->holdNextPost();
+    WaitReply replyA;
+    server->handle(morph::wire::encode(reqA), std::ref(replyA));
+
+    // B takes ticket 1 and runs, unimpeded (the authorizer is not armed yet),
+    // all the way to awaitExecuteTurn(mid, 1). `_inFlightExecutes` is
+    // incremented immediately before that wait, so `health().inFlight == 1` is
+    // a deterministic signal that B is parked there -- no sleep involved.
+    WaitReply replyB;
+    server->handle(morph::wire::encode(reqB), std::ref(replyB));
+    REQUIRE(morph::testing::waitUntil([&] { return server->health().inFlight == 1; }));
+    REQUIRE_FALSE(replyB.ready.load());
+
+    // Only A's dispatch can reach the authorizer from here on.
+    authorizer->arm();
+    gated->releaseHeld();
+
+    // A's hook throws; dispatchMessage's outer catch turns it into an `err`...
+    REQUIRE(replyA.await());
+    CHECK(replyA.env.kind == "err");
+    CHECK(replyA.env.message == std::string{ArmedThrowingAuthorizer::kThrowMessage});
+
+    // ...and ticket 0 must have been released as that throw unwound out of
+    // dispatchExecute, or B waits on it forever.
+    bool const bCompleted = replyB.await(std::chrono::milliseconds{5000});
+    bool const drained = bCompleted && server->drainedWithin(std::chrono::milliseconds{2000});
+    if (!bCompleted) {
+        // B's pool thread is stuck in a deadline-less wait and can never be
+        // joined; leak the fixture rather than hang the run (see above).
+        (void)server.get();
+        (void)gated.release();
+        (void)pool.release();
+    }
+    REQUIRE(bCompleted);
+    CHECK(replyB.env.kind == "ok");
+    CHECK(replyB.env.body == "11");
+
+    // The stranded wait also holds `_inFlightExecutes` above zero for good,
+    // because it is incremented before the wait -- so a regression here breaks
+    // graceful shutdown as well as this one caller.
+    CHECK(drained);
+}
+
+}  // namespace
+
+TEST_CASE(
+    "a throw out of dispatchExecute releases the execute-ordering ticket it took, "
+    "so a later ticket already waiting on it is not stranded",
+    "[remote][execute-ordering][exceptions]") {
+    // Regression test for #351, the sibling of the shutdown-gate case above
+    // (#348): the same stranded ticket, reached by a different route.
+    // `dispatchExecute` has no try/catch of its own, and its rejectAndRelease
+    // helper only covers the *explicit* early returns; an exception unwinds
+    // past all of them into `dispatchMessage`'s outer catch, which replies but
+    // released nothing. The fix is structural -- the ticket is owned by an
+    // RAII holder for the whole span between `takeExecuteTicket` and the
+    // release that follows `_strand.post`, so every exit path releases it,
+    // including ones nobody has thought of yet.
+    //
+    // The interleaving, forced rather than raced (identical to #348's case):
+    //   A  handle() -> ticket 0; its pool task is intercepted before it runs.
+    //   B  handle() -> ticket 1; runs, passes every gate, parks in
+    //      awaitExecuteTurn(mid, 1) waiting for ticket 0.
+    //   .. the authorizer is armed (so only A can see the throw)
+    //   A  released; its hook throws.
+    //
+    // The three sections below are the three `IAuthorizer` hooks
+    // `dispatchExecute` calls inside the ticketed region. The fourth reachable
+    // throw site named in #351 -- `missingRequiredFields`, under
+    // `PayloadCompleteness::RequireDeclaredFields` -- is *not* separately
+    // exercised here: it is not a user-supplied virtual, so forcing a throw
+    // out of it would mean faulting the dispatcher's own parse rather than
+    // driving a documented extension point. It sits between the same two
+    // points as these three (`remote.hpp`: after `authorizeInstance`, before
+    // the in-flight reservation), so the holder covers it by construction --
+    // as it does any future throw added anywhere in that span, which is the
+    // whole reason the fix is a holder rather than a fourth hand-written
+    // release.
+    SECTION("authorize() throws") { runThrowingHookStrandsNothing(ThrowingHook::Authorize); }
+    SECTION("authenticate() throws") { runThrowingHookStrandsNothing(ThrowingHook::Authenticate); }
+    SECTION("authorizeInstance() throws") { runThrowingHookStrandsNothing(ThrowingHook::AuthorizeInstance); }
 }

@@ -391,7 +391,10 @@ Any envelope that fails to decode produces `err` carrying the decode
 exception's message. An unrecognised `kind` produces `err "unknown envelope
 kind: <kind>"`. Any `std::exception` thrown while handling a decoded envelope is
 caught and returned as an `err` reply carrying `exc.what()` and the request's
-`callId`.
+`callId` — and, for an `execute`, the ordering ticket it took is released as
+that throw unwinds (see [Per-model execute
+ordering](#per-model-execute-ordering)), not only on the explicit rejection
+branches.
 
 **Opaque model ids.** `RemoteServer` assigns each new instance's id by running
 an internal monotonic counter through `detail::OpaqueIdGenerator` — a keyed,
@@ -512,10 +515,29 @@ moment of the post leaves a rejection returning at full speed.
 
 That is also why the release discipline matters: **every path that took a
 ticket must release it**, including the ones that never reach the strand (model
-not found, unauthorized, over limit, a validation throw). `dispatchExecute`
-funnels all of those through one `rejectAndRelease` helper so the rule cannot
-be missed at an individual call site. A ticket taken and never released would
-stall every later ticket for that model permanently.
+not found, unauthorized, over limit, a validation throw). A ticket taken and
+never released would stall every later ticket for that model permanently,
+because `awaitExecuteTurn` waits with no deadline.
+
+**The rule is structural, not a convention.** A ticket is owned by an
+`ExecuteTicketGuard` (private to `remote.hpp`) from the moment
+`takeExecuteTicket` returns: `handleImpl` holds one across the pool post, and
+`dispatchMessage` adopts the ticket into another for the whole of its own frame,
+`dispatchExecute` included. The guard releases on destruction, so *every* exit
+path is covered — each explicit `return`, every exception, and any branch a
+later change adds. Two members opt out deliberately:
+
+- `release()`, called by `dispatchExecute`'s `rejectAndRelease` helper, by the
+  shutdown gate, and immediately after the successful `_strand.post`, so those
+  paths free the gate *before* writing their reply instead of at end of scope;
+  and
+- `disarm()`, used once, in `handleImpl`, where ownership is genuinely handed
+  on to the posted pool task.
+
+It was a per-call-site convention until it had been missed twice — by the
+shutdown gate (issue #348) and by every exception unwinding out of
+`dispatchExecute` (issue #351, below). Both are pinned by regression tests, and
+neither could recur through a hand-written release being forgotten again.
 
 **Bookkeeping.** A gate is `{nextTicket, nextToRun, condition_variable}`, held
 in a map keyed by `ModelId` under a dedicated mutex. The entry is created on
@@ -562,6 +584,21 @@ is refused. Dropping the earlier ticket then costs three things at once:
   incremented immediately *before* that wait — so the defect breaks the very
   graceful-shutdown sequence during which it fires.
 
+**The release rule binds every throw, too.** `dispatchExecute` has no
+`try`/`catch` of its own, and `rejectAndRelease` covers only its *explicit*
+early returns. An exception unwinds past all of them, out of `dispatchExecute`
+entirely, into `dispatchMessage`'s outer catch — which replies `err
+exc.what()` and, before the guard existed, released nothing. That is ordinary
+reachability rather than a hypothetical: `IAuthorizer::authorize`,
+`authenticate` and `authorizeInstance` are non-`noexcept` virtuals on a public
+extension point that a host implements, nothing in their contract forbids
+throwing, and `missingRequiredFields` parses the payload under
+`PayloadCompleteness::RequireDeclaredFields`. All four sit between the
+ticket-taking site and the release. The cost was identical to the shutdown
+gate's, item for item — stranded caller, blocked pool worker, `drainedWithin()`
+unable to succeed — and it is why the release is now owned by
+`ExecuteTicketGuard` rather than written out at each exit (issue #351).
+
 The release rule stated above therefore holds without exception, which is what
 makes the rest of this section true.
 
@@ -571,7 +608,10 @@ sleeps for one call only) rather than waiting for a loaded machine to produce
 it by chance. Its shutdown-gate case forces the interleaving above the same
 way, holding back one request's pool task through a wrapping executor so the
 "later ticket passed the gate, earlier ticket did not" ordering is decided
-rather than raced.
+rather than raced; its throwing-hook case reuses that same wrapping executor
+and arms an authorizer only *after* the later request has parked in
+`awaitExecuteTurn`, so exactly one request — the held, earlier one — throws,
+from `authorize`, `authenticate` or `authorizeInstance` in turn.
 
 ### Protocol-version negotiation
 
