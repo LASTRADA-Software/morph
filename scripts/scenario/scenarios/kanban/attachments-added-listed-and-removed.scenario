@@ -1,0 +1,122 @@
+# kanban (rung 4) — files on a card, by reference.
+#
+# `AddAttachment` records *metadata* -- a filename, a content type, a size and
+# a storage key -- and never the bytes: the server carries an HTTP side
+# channel on its own port for those, which is why `ladder_kanban_server`
+# announces two ports. So a scenario can drive the whole attachment record
+# lifecycle over the WebSocket without moving a byte of file content, which is
+# exactly the seam worth testing here.
+#
+# `uploadedBy` is the assertion that matters: it is not a field the client
+# sends. `AddAttachment` carries no principal, so the server stamps the
+# verified one, and a client cannot claim someone else uploaded a file.
+#
+# Like the rest of the later-added family, both mutations answer with an empty
+# ack rather than the board, so `GetAttachments` is the only proof.
+#
+# Re-runnable: the project is created here.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture aliceToken=$.token
+expect ok capture alice=$.principal
+
+do Login username=bob
+expect ok capture bobToken=$.token
+expect ok capture bob=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$alice token=$aliceToken
+
+do CreateProject name="Attachments"
+expect ok capture project=$.id
+
+do SetMemberRole projectId=$project principal=bob role=Member
+expect ok
+
+client board model=BoardModel
+session principal=$alice token=$aliceToken
+
+do OpenBoard projectId=$project
+expect ok
+
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Has files"
+expect ok capture task=$.tasks[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Has none"
+expect ok capture bare=$.tasks[1].id
+
+# A task with nothing attached.
+do GetAttachments taskId=$task
+expect ok field attachments == []
+
+# ── One attachment ──────────────────────────────────────────────────────
+do AddAttachment taskId=$task filename="design.pdf" contentType="application/pdf" sizeBytes=20481 storageKey="proj/design.pdf"
+expect ok field @body == "{}"
+
+do GetAttachments taskId=$task
+expect ok field attachments ~ "\"taskId\":$task,\"filename\":\"design.pdf\",\"contentType\":\"application/pdf\",\"sizeBytes\":20481,\"storageKey\":\"proj/design.pdf\",\"uploadedBy\":\"alice\""
+expect ok capture design=$.attachments[0].id
+
+# ...and the other task still has none, so the record went where it was told.
+do GetAttachments taskId=$bare
+expect ok field attachments == []
+
+# ── A second, uploaded by somebody else ────────────────────────────────
+client his model=BoardModel
+session principal=$bob token=$bobToken
+
+do OpenBoard projectId=$project
+expect ok
+
+do AddAttachment taskId=$task filename="notes.txt" contentType="text/plain" sizeBytes=64 storageKey="proj/notes.txt"
+expect ok
+
+# The uploader is the verified principal, not anything bob sent.
+do GetAttachments taskId=$task
+expect ok field attachments ~ "\"filename\":\"notes.txt\",\"contentType\":\"text/plain\",\"sizeBytes\":64,\"storageKey\":\"proj/notes.txt\",\"uploadedBy\":\"bob\""
+expect ok field attachments ~ "\"uploadedBy\":\"alice\""
+expect ok capture notes=$.attachments[1].id
+
+# ── Remove one, and only one ───────────────────────────────────────────
+do RemoveAttachment attachmentId=$design
+expect ok field @body == "{}"
+
+do GetAttachments taskId=$task
+expect ok field attachments !~ "design.pdf"
+expect ok field attachments ~ "\"filename\":\"notes.txt\",\"contentType\":\"text/plain\",\"sizeBytes\":64,\"storageKey\":\"proj/notes.txt\",\"uploadedBy\":\"bob\""
+
+# ── The refusals ───────────────────────────────────────────────────────
+do AddAttachment taskId=$task filename="" contentType="text/plain" sizeBytes=1 storageKey="k"
+expect err message == "action failed validation: BoardModel/AddAttachment"
+
+do AddAttachment taskId=$task filename="f" contentType="" sizeBytes=1 storageKey="k"
+expect err message == "action failed validation: BoardModel/AddAttachment"
+
+do AddAttachment taskId=$task filename="f" contentType="text/plain" sizeBytes=-1 storageKey="k"
+expect err message == "action failed validation: BoardModel/AddAttachment"
+
+do AddAttachment taskId=999999 filename="f" contentType="text/plain" sizeBytes=1 storageKey="k"
+expect err message == "task does not belong to this project"
+
+do GetAttachments taskId=999999
+expect err message == "task does not belong to this project"
+
+# Nothing the refusals touched changed.
+do GetAttachments taskId=$task
+expect ok field attachments ~ "notes.txt"
+expect ok field attachments !~ "design.pdf"
+
+# ── Removing the last one empties the list ─────────────────────────────
+do RemoveAttachment attachmentId=$notes
+expect ok
+
+do GetAttachments taskId=$task
+expect ok field attachments == []

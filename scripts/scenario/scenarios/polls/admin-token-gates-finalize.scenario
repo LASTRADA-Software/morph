@@ -1,0 +1,77 @@
+# polls (rung 3) — the admin token is a capability, and only its own poll's.
+#
+# examples/polls/README.md's resolved design decision 1: this rung
+# authenticates nobody. There are no accounts, and CreatePollResult's
+# `participantToken` is verified by nothing at all. Exactly one thing is
+# gated, by exactly one mechanism -- FinalizePoll, against the poll's own
+# `adminToken` column, compared in constant time against
+# `session::current()->token` by PollModel::requireAdmin.
+#
+# What that leaves worth asserting is the *shape* of the capability, which
+# needs two polls to state:
+#
+#   * no token, the participant token, and a made-up token are all refused;
+#   * another poll's admin token is refused too -- the capability names one
+#     poll, not the model.
+#
+# The last one is the case a single-poll test cannot express, and the one that
+# would silently pass if requireAdmin ever compared against "some poll's"
+# token rather than "this poll's".
+#
+# Re-runnable: both polls are created here.
+
+model PollModel
+
+client organizer
+
+do CreatePoll title="First poll" options=[{"label":"A"},{"label":"B"}]
+expect ok capture first=$.pollId
+expect ok capture firstAdmin=$.adminToken
+expect ok capture firstParticipant=$.participantToken
+
+do CreatePoll title="Second poll" options=[{"label":"C"},{"label":"D"}]
+expect ok capture second=$.pollId
+expect ok capture secondAdmin=$.adminToken
+
+do OpenPoll pollId=$first
+expect ok capture optionA=$.options[0].id
+
+# ── No token ───────────────────────────────────────────────────────────────
+do FinalizePoll optionId=$optionA
+expect err message == "admin token required"
+
+# ── The participant token, which the shared link hands to everyone ─────────
+session principal=participant token=$firstParticipant
+
+do FinalizePoll optionId=$optionA
+expect err message == "admin token required"
+
+# ── A token that was never minted ──────────────────────────────────────────
+session principal=attacker token=not-a-real-admin-token
+
+do FinalizePoll optionId=$optionA
+expect err message == "admin token required"
+
+# ── Another poll's admin token: real, minted by this server, wrong poll ────
+session principal=organizer token=$secondAdmin
+
+do FinalizePoll optionId=$optionA
+expect err message == "admin token required"
+
+# Still open after all four refusals.
+do GetPollState
+expect ok field finalized == No
+
+# ── This poll's own admin token ────────────────────────────────────────────
+session principal=organizer token=$firstAdmin
+
+do FinalizePoll optionId=$optionA
+expect ok field finalized == Yes
+expect ok field finalizedOptionId == $optionA
+
+# ...and the second poll is untouched by the first one's finalization.
+client other
+
+do OpenPoll pollId=$second
+expect ok field finalized == No
+expect ok field title == "Second poll"

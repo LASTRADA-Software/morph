@@ -1,0 +1,62 @@
+# pastebin (rung 1) — what "private" does and does not mean on this rung.
+#
+# Two clients, two sockets, two registered model instances. That is what makes
+# this worth a scenario rather than a unit test: the question is whether one
+# caller's private paste reaches another caller's listing, and an in-process
+# rig with a single model instance assumes the answer.
+#
+# The honest answer, which this file pins rather than flatters: on rung 1
+# privacy is *listing* privacy and nothing more. There is no authentication
+# here at all -- no AuthModel, no session, no owner column -- so a private
+# paste is unlisted, not unreadable. Anyone holding the id can read it. That
+# is MicroBin's own model, and the rung README's "What to implement" says so
+# by placing accounts and ownership at rung 2 (bookmarks), not here.
+#
+# A scenario that asserted a second client is *refused* would be asserting a
+# behaviour this rung does not have and does not claim to have.
+#
+# Re-runnable: the listing assertions are exclusions, and no page of any size
+# ever contains a private row -- the filter is in the query, not in the page.
+
+model PasteModel
+
+client alice
+
+do CreatePaste content="alice's notebook" syntax=plaintext visibility=Private
+expect ok capture secret=$.id
+
+do CreatePaste content="alice's announcement" syntax=plaintext
+expect ok capture public=$.id
+
+# The owner reads her own private paste.
+do GetPaste id=$secret
+expect ok field content == "alice's notebook"
+expect ok field visibility == Private
+
+# ── A second connection, with its own model instance ────────────────────────
+client bob
+
+# Bob's listing carries the public paste and not the private one. The cursor
+# is derived from the private id, so this is the page that would contain it.
+do ListPastes cursor="$secret~"
+expect ok field pastes !~ "\"id\":\"$secret\""
+
+do ListPastes cursor="$public~"
+expect ok field pastes ~ "\"id\":\"$public\""
+
+# No page of the listing ever carries a private row, whatever its size.
+do ListPastes cursor="zzzz"
+expect ok field pastes !~ "\"visibility\":\"Private\""
+
+# But the id is the only capability there is on this rung: Bob reads it.
+do GetPaste id=$secret
+expect ok field content == "alice's notebook"
+expect ok field visibility == Private
+
+# ...and so is deleting it. Recorded as the fact it is, not as an aspiration.
+do DeletePaste id=$secret
+expect ok
+
+use alice
+do GetPaste id=$secret
+expect err message == "GetPaste: no such paste"

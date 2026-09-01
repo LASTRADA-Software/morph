@@ -1,0 +1,69 @@
+# polls (rung 3) — the polling cursor advances, and never repeats itself.
+#
+# examples/polls/README.md's "What to implement" step 6 calls GetEventsSince
+# this rung's framework-level deliverable: the Zulip-pattern generic polling
+# action a client uses instead of a subscription. What a client needs from it
+# is exactly two properties, both asserted here:
+#
+#   * every event after the cursor is returned, and
+#   * no event at or before the cursor is returned.
+#
+# The second is the one that matters and the one a naive implementation gets
+# wrong: an off-by-one that used `>=` would redeliver the last event on every
+# poll, and a client that appended what it got would show every change twice.
+#
+# ── Why the cursor is captured rather than written ─────────────────────────
+# Event ids are a table-wide monotonic sequence, not per-poll ordinals -- a
+# poll created into a database that already holds events starts at whatever
+# comes next. GetPollStateResult::lastEventId is the cursor a fresh client is
+# told to start from, and that is what this file uses.
+#
+# Re-runnable: the poll is created here and every cursor is captured.
+
+model PollModel
+
+client alice
+
+do CreatePoll title="Cursor walk" options=[{"label":"A"},{"label":"B"}]
+expect ok capture poll=$.pollId
+
+do OpenPoll pollId=$poll
+expect ok capture a=$.options[0].id
+expect ok capture b=$.options[1].id
+# A poll with no history yet: the cursor a fresh client starts from.
+expect ok capture start=$.lastEventId
+
+# Nothing has happened, so nothing is after the starting cursor.
+do GetEventsSince lastEventId=$start
+expect ok field events == []
+
+# ── One change ─────────────────────────────────────────────────────────────
+do SubmitVotes participantName=alice votes=[{"optionId":$a,"choice":"Yes"}]
+expect ok
+
+do GetEventsSince lastEventId=$start
+expect ok field events ~ "alice submitted votes"
+expect ok capture afterFirst=$.events[0].id
+
+# ── The cursor advances past it ────────────────────────────────────────────
+# Polling again with the id just returned yields nothing: the event at the
+# cursor is *not* redelivered.
+do GetEventsSince lastEventId=$afterFirst
+expect ok field events == []
+
+# ── Two more changes, both delivered, in order, exactly once ───────────────
+do AddComment participantName=alice body="B works better for me"
+expect ok
+
+do UpdateVotes participantName=alice votes=[{"optionId":$b,"choice":"Yes"}]
+expect ok
+
+do GetEventsSince lastEventId=$afterFirst
+expect ok field events ~ "alice commented"
+expect ok field events ~ "alice updated votes"
+expect ok field events !~ "alice submitted votes"
+
+# ── A cursor beyond the end of the log is empty, not an error ──────────────
+# A client that has seen everything asks this on every tick, forever.
+do GetEventsSince lastEventId=999999999
+expect ok field events == []

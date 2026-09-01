@@ -1,0 +1,104 @@
+# kanban (rung 4) — the retry that must not move the card twice.
+#
+# examples/kanban/README.md's definition of done: "Exactly-once proven under
+# reply-frame loss, in tests/test_kanban_offline.cpp's 'Dropping
+# MoveTaskPosition's reply frame and retrying is exactly-once' case." That
+# test injects the loss with a fault proxy; this file drives the same
+# mechanism from the other end -- the client simply sends the move twice under
+# one `opId`, which is what a client that lost a reply actually does.
+#
+# `MoveTaskPosition::opId` is optional (`optionalFields`), so both shapes are
+# exercised: without a key, two sends are two moves; with one, the second is a
+# no-op. That contrast is the whole file -- a server that ignored `opId`
+# entirely would pass every assertion about the first send.
+#
+# The position is what makes the difference visible. Two unkeyed sends that
+# both land put the card where the second one said; a keyed retry leaves it
+# where the first one put it.
+#
+# Re-runnable: the project is created here, and every opId carries an id no
+# earlier run had -- an opId is spent permanently, so a fixed one would be a
+# no-op on the second run and the first assertion would fail.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Retries"
+expect ok capture project=$.id
+
+client board model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$project
+expect ok
+
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do CreateColumn name="Doing" wipLimit=0
+expect ok capture doing=$.columns[1].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Dragged"
+expect ok capture task=$.tasks[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Neighbour"
+expect ok capture neighbour=$.tasks[1].id
+
+# ── Without a key: the second send is a second move ────────────────────
+do MoveTaskPosition taskId=$task columnId=$doing swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$doing,\"swimlaneId\":$lane,\"title\":\"Dragged\",\"position\":0"
+
+do MoveTaskPosition taskId=$task columnId=$todo swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$todo,\"swimlaneId\":$lane,\"title\":\"Dragged\",\"position\":0"
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":0,\"taskCount\":0"
+
+# ── With a key: the retry changes nothing ──────────────────────────────
+do MoveTaskPosition taskId=$task columnId=$doing swimlaneId=$lane position=0 opId="drag-$task"
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$doing,\"swimlaneId\":$lane,\"title\":\"Dragged\",\"position\":0"
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":0,\"taskCount\":1"
+
+# The same frame again -- what a client sends when it never saw the reply.
+# It names a *different* destination, so a server that re-ran it would move
+# the card back and the assertion below would catch it.
+do MoveTaskPosition taskId=$task columnId=$todo swimlaneId=$lane position=1 opId="drag-$task"
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$doing,\"swimlaneId\":$lane,\"title\":\"Dragged\",\"position\":0"
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":0,\"taskCount\":1"
+
+# A third send under the same key is still a no-op.
+do MoveTaskPosition taskId=$task columnId=$todo swimlaneId=$lane position=1 opId="drag-$task"
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$doing,\"swimlaneId\":$lane"
+
+# The independent read agrees, so this is the board and not the reply.
+do GetBoardState
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$doing,\"swimlaneId\":$lane,\"title\":\"Dragged\",\"position\":0"
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":0,\"taskCount\":1"
+expect ok field columns ~ "\"id\":$todo,\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":1"
+
+# ── A different key moves it, with an identical body ───────────────────
+# The key is the operation's identity, not the payload's, so a genuine second
+# drag to the same place is not swallowed.
+do MoveTaskPosition taskId=$task columnId=$todo swimlaneId=$lane position=1 opId="drag-again-$task"
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$todo,\"swimlaneId\":$lane,\"title\":\"Dragged\",\"position\":1"
+
+# ── ...and a key is scoped to its own operation, not to the task ───────
+# The neighbour moves under its own key while the first task's key is spent.
+do MoveTaskPosition taskId=$neighbour columnId=$doing swimlaneId=$lane position=0 opId="drag-$neighbour"
+expect ok field tasks ~ "\"id\":$neighbour,\"columnId\":$doing,\"swimlaneId\":$lane,\"title\":\"Neighbour\",\"position\":0"
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$todo,\"swimlaneId\":$lane"
+
+do GetBoardState
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":0,\"taskCount\":1"
+expect ok field columns ~ "\"id\":$todo,\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":1"
+
+# ── The event log records one move per move that happened ──────────────
+# Not one per frame received: the swallowed retries are not in it.
+do GetEventsSince lastEventId=0
+expect ok field events ~ "\"kind\":\"move\""

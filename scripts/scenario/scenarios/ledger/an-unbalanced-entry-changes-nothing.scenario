@@ -1,0 +1,127 @@
+# ledger (rung 5) — the rejected entry leaves no trace, on any path that
+# reaches the leg columns.
+#
+# examples/ledger/README.md's definition of done opens with a property test:
+# "no sequence of stores/edits/undos ever leaves any journal violating the
+# per-currency zero-sum invariant". The property this file drives is the other
+# half of that, the one a property test over successful calls cannot see: a
+# *refused* entry must leave the books exactly as it found them -- no partial
+# legs, no advanced balance on the account whose leg was well-formed, and no
+# journal row for the description that was refused.
+#
+# `LedgerModel::storeJournalImpl` runs the restatement and the zero-sum check
+# *before* opening its transaction, and its own doc comment says why the check
+# lives there rather than in each caller: undo and CSV import reach the leg
+# columns without going through `execute(StoreTransaction)`. So this file
+# drives the refusal through both doors that a client can reach -- the direct
+# store, and the import -- and asserts the same emptiness after each.
+#
+# ── How this file stays re-runnable ─────────────────────────────────────
+# The import path deduplicates rows by a **content hash** of the row, which
+# outlives the accounts a run creates. A second run uploading the byte-identical
+# CSV row would have it skipped as a duplicate, and the partial-application
+# assertion below -- which depends on that row actually posting -- would fail.
+# So the first account's id is spent as the run's nonce and stamped into every
+# CSV row's description.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Untouched cash" kind=0 currency=1
+expect ok capture cash=$.id
+
+do OpenAccount ledgerId=1 name="Untouched spend" kind=1 currency=1
+expect ok capture spend=$.id
+
+# ── A known-good baseline to measure the refusals against ──────────────
+do StoreTransaction ledgerId=1 description="the only entry that lands" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1000,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":1000,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
+
+# ── Refused: the legs do not cancel ────────────────────────────────────
+do StoreTransaction ledgerId=1 description="short by one euro" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1100,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":1000,"den":1,"dp":2}}]
+expect err message ~ "zero-sum violation in EUR"
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Untouched spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1000"
+
+# ── Refused: one leg names nothing ─────────────────────────────────────
+do StoreTransaction ledgerId=1 description="a leg from nowhere" date="2026-08-03T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-500,"den":1,"dp":2}},{"accountId":999999,"amount":{"num":500,"den":1,"dp":2}}]
+expect err message == "StoreTransaction: no such account"
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
+
+# ── Refused: fewer legs than an entry can have ─────────────────────────
+do StoreTransaction ledgerId=1 description="one leg only" date="2026-08-04T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-500,"den":1,"dp":2}}]
+expect err message == "action failed validation: LedgerModel/StoreTransaction"
+
+do StoreTransaction ledgerId=1 description="no legs at all" date="2026-08-04T00:00:00.000Z" legs=[]
+expect err message == "action failed validation: LedgerModel/StoreTransaction"
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
+
+# ── The other door: the same invariant, reached through the import ─────
+# A CSV row posts a two-leg entry against the row's account and the chunk's
+# counter account, so its legs cancel by construction and the zero-sum check
+# cannot fail. What *can* fail is the counter account, and a chunk whose
+# counter does not exist must post none of its rows -- not the first one and
+# then stop.
+do ImportLedgerChunk ledgerId=1 counterAccountId=999999 opId="untouched-$cash" csvChunk="date,description,account_id,amount\n2026-08-05T00:00:00.000Z,first row $cash,$cash,-1.00\n2026-08-06T00:00:00.000Z,second row $cash,$cash,-2.00\n"
+expect err message == "ImportLedgerChunk: no such account"
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
+
+# ── Where the all-or-nothing stops: a malformed row mid-chunk ──────────
+#
+# The two refusals above leave nothing behind because both are decided before
+# any row is posted -- the counter account is looked up once, up front. A row
+# that is malformed *in the middle of a chunk* is different: rows are posted as
+# they are parsed, so the good row that came first stays.
+#
+# The good row is deliberately first and the malformed one second, which is
+# what makes this observable at all. The balance moves by the first row's 1.00
+# and stops there.
+#
+# This is a partial application, and it is **deliberate**, not an oversight:
+# `execute(ImportLedgerChunk)`'s own comment records the ruling and the reason
+# (ledger_model.cpp, "No single Lightweight::SqlTransaction wraps this whole
+# loop"). `storeJournalImpl` opens and commits its own transaction per row, and
+# `SqlTransaction`'s constructor/destructor toggle `SQL_ATTR_AUTOCOMMIT` on the
+# connection directly -- so nesting one around the loop would have the inner
+# `Commit()` end the outer transaction and silently break rollback-on-throw for
+# every row after the first. Each row is therefore posted as its own complete,
+# zero-sum journal entry, and a throw stops the chunk without unwinding it.
+#
+# So this file pins the ruling rather than reporting a defect. What a client
+# has to do about it is the next section: the content hash makes the corrected
+# re-upload safe, which is what keeps a half-applied chunk recoverable.
+do ImportLedgerChunk ledgerId=1 counterAccountId=$spend opId="untouched-2-$cash" csvChunk="date,description,account_id,amount\n2026-08-05T00:00:00.000Z,a good row $cash,$cash,-1.00\n2026-08-06,a bad date $cash,$cash,-2.00\n"
+expect err message == "ImportLedgerChunk: malformed date"
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1100"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Untouched spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1100"
+
+# ── ...and the corrected chunk imports only what is missing ────────────
+# The content hash recognises the row that already landed, so re-uploading the
+# whole chunk with the date fixed adds the second row and skips the first.
+# That is what makes the partial application above recoverable rather than a
+# source of double-counting.
+do ImportLedgerChunk ledgerId=1 counterAccountId=$spend opId="untouched-3-$cash" csvChunk="date,description,account_id,amount\n2026-08-05T00:00:00.000Z,a good row $cash,$cash,-1.00\n2026-08-06T00:00:00.000Z,a bad date $cash,$cash,-2.00\n"
+expect ok field imported == 1
+expect ok field duplicates == 1
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1300"
+
+# ── ...and the books still take good work afterwards ───────────────────
+do StoreTransaction ledgerId=1 description="the second entry that lands" date="2026-08-07T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-250,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":250,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1550"

@@ -1,0 +1,865 @@
+# bookmarks (rung 2) — the live-model cap, reached.
+#
+# `bookmarks::app::App` installs a `LimitPolicy` with `maxLiveModels = 256`.
+# Its own comment says why: `BookmarksAuthorizer::authorizeRegister` is
+# permissive by choice, so an unauthenticated client can make the server
+# create model instances even though it can never execute anything useful on
+# them once `SigningAuthorizer::authorize` rejects the call.
+# `maxLiveModels` is the framework's answer to that shape of churn.
+#
+# This file is the proof the cap is real: registrations succeed up to 256 live
+# models, and the next one is refused with `err "too many models"`. No session
+# is installed anywhere in it, because none is needed -- which is the fact the
+# cap exists to bound.
+#
+# ── The arithmetic, which is off by one from the obvious ───────────────
+# The `client` directive does three things: it connects, sends `hello`, and
+# sends `register`. So the connection already holds **one** instance before
+# the first `send register` below, and 255 more reach the cap rather than 256.
+# Getting that wrong is how this file was first written, and the server said
+# so at the 256th send.
+#
+# ── Why it is hundreds of lines of the same thing ──────────────────────
+# The cap is 256 and the scenario DSL has no loop, so reaching it takes 255
+# sends. That length is the honest cost of asserting a real limit instead of
+# exempting it in `coverage_allowlist.json` with a note saying it was too
+# tedious to drive. The body below was generated; it is committed rather than
+# its generator, because a checked-in file is what the runner and the coverage
+# report read.
+#
+# ── Why this rung ──────────────────────────────────────────────────────
+# `pastebin` installs no `LimitPolicy` at all, so its server has no cap to
+# reach. bookmarks, polls, kanban and ledger all install the same 256; this
+# file sits in the first of them.
+#
+# Not a workflow, and not counted as one: it dispatches no domain action.
+#
+# ── Re-runnability, which is the interesting part ──────────────────────
+# Model instances are held by the *connection*, so closing it releases all of
+# them. The driver gives each rung one server for its whole directory and
+# `--twice` runs that directory again, so this file has to leave the server
+# with the capacity it found. Its closing steps drop the connection, and every
+# instance created here goes with it.
+
+model BookmarkModel
+
+# This already registers the first instance.
+client filler
+
+# ── 255 more, bringing the total to exactly the cap ────────────────────
+
+send register typeId=BookmarkModel
+expect ok field @modelId != 0
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+expect ok
+
+send register typeId=BookmarkModel
+# The last one still succeeds: the cap is a maximum, not a ceiling one
+# below it.
+expect ok field @modelId != 0
+
+# ── The next one is refused ────────────────────────────────────────────
+send register typeId=BookmarkModel
+expect err message == "too many models"
+
+# ...and it stays refused: a rejected register consumes no slot, so retrying
+# does not eventually succeed.
+send register typeId=BookmarkModel
+expect err message == "too many models"
+
+# ── The cap is on the server, not on the model type ────────────────────
+# A different type is refused too: `maxLiveModels` counts every live model
+# this RemoteServer holds, across all callers and all types.
+send register typeId=AuthModel
+expect err message == "too many models"
+
+send register typeId=TagModel
+expect err message == "too many models"
+
+# ── ...and the refusal is a reply, not a disconnection ─────────────────
+# The connection is still usable, which matters: a client that hits the cap
+# must be able to release instances and carry on rather than reconnect. It is
+# still an *unauthenticated* connection though, so what it gets back is this
+# rung's ordinary "unauthorized" -- a different refusal from the cap's, which
+# is the point: the server is answering it on the merits again.
+send instances typeId=BookmarkModel
+expect err message == "unauthorized"
+expect err message !~ "too many models"
+
+# A second *connection* is refused too -- the cap counts models, not callers --
+# but that cannot be asserted here: the `client` directive registers as part of
+# opening, so its refusal surfaces as a failed `client` step rather than as a
+# reply a scenario can `expect` on. The two type refusals above make the same
+# point within one connection, which is as close as the DSL gets.
+
+# ── Release everything by closing the connection ───────────────────────
+# This is the step that makes the file re-runnable, and it is also the
+# behaviour worth pinning: instances are scoped to the connection that made
+# them, so dropping it returns every slot.
+close filler
+
+# A fresh connection can register again, which it could not if the slots had
+# leaked.
+client after
+
+send register typeId=BookmarkModel
+expect ok field @modelId != 0
+
+close after

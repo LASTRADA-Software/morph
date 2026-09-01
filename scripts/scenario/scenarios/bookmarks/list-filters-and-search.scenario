@@ -1,0 +1,110 @@
+# bookmarks (rung 2) — the four ways a listing narrows, and how they combine.
+#
+# examples/bookmarks/README.md's "What to implement" step 2: search and list
+# with filters (tag, unread, archived, text) and pagination. Each filter is
+# an independent axis of ListBookmarks, so this file exercises them one at a
+# time and then together -- a filter that was ignored would still pass every
+# assertion of a listing that happened to contain the right rows.
+#
+# Every assertion is stated in *both* directions: the bookmark that must be
+# there and the one that must not. A filter that returned everything and a
+# filter that returned nothing are both wrong, and only the pair catches both.
+#
+# Re-runnable: the principal `sifter` is used by no other file in this
+# directory, the tag names are unique to it, and every assertion is anchored
+# to a captured id rather than a count or a position.
+
+client auth model=AuthModel
+
+do Login username=sifter
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client store model=BookmarkModel
+session principal=$who token=$token
+
+do CreateBookmark url="https://example.com/filters/needle" title="A needle in the haystack" description="findable by text" tags=["filter-a"]
+expect ok capture needle=$.id
+
+do CreateBookmark url="https://example.com/filters/hay" title="Ordinary hay" tags=["filter-b"]
+expect ok capture hay=$.id
+
+do CreateBookmark url="https://example.com/filters/filed" title="Filed away" tags=["filter-a"]
+expect ok capture filed=$.id
+
+do ArchiveBookmark id=$filed
+expect ok
+
+# ── No filter: the default is ActiveOnly, so the archived one is absent ────
+do ListBookmarks
+expect ok field bookmarks ~ "\"id\":$needle,"
+expect ok field bookmarks ~ "\"id\":$hay,"
+expect ok field bookmarks !~ "\"id\":$filed,"
+
+# ── By tag ─────────────────────────────────────────────────────────────────
+do ListBookmarks tag=filter-a
+expect ok field bookmarks ~ "\"id\":$needle,"
+expect ok field bookmarks !~ "\"id\":$hay,"
+
+do ListBookmarks tag=filter-b
+expect ok field bookmarks ~ "\"id\":$hay,"
+expect ok field bookmarks !~ "\"id\":$needle,"
+
+# A tag nobody has narrows to nothing rather than to everything.
+do ListBookmarks tag=filter-nonexistent
+expect ok field bookmarks == []
+
+# ── By text ────────────────────────────────────────────────────────────────
+do ListBookmarks searchText=needle
+expect ok field bookmarks ~ "\"id\":$needle,"
+expect ok field bookmarks !~ "\"id\":$hay,"
+
+do ListBookmarks searchText=Ordinary
+expect ok field bookmarks ~ "\"id\":$hay,"
+expect ok field bookmarks !~ "\"id\":$needle,"
+
+# ── By archive state ───────────────────────────────────────────────────────
+do ListBookmarks archiveFilter=ArchivedOnly tag=filter-a
+expect ok field bookmarks ~ "\"id\":$filed,"
+expect ok field bookmarks !~ "\"id\":$needle,"
+
+do ListBookmarks archiveFilter=Any tag=filter-a
+expect ok field bookmarks ~ "\"id\":$filed,"
+expect ok field bookmarks ~ "\"id\":$needle,"
+
+# ── By read state ──────────────────────────────────────────────────────────
+# Nothing in this rung's wire surface marks a bookmark read, so every one of
+# them is Unread -- which makes UnreadOnly and Any agree, and ReadOnly empty.
+# Asserted as the fact it is rather than skipped.
+do ListBookmarks readFilter=UnreadOnly tag=filter-a
+expect ok field bookmarks ~ "\"id\":$needle,"
+
+do ListBookmarks readFilter=ReadOnly tag=filter-a
+expect ok field bookmarks == []
+
+# ── Combined: the filters intersect, they do not union ────────────────────
+do ListBookmarks tag=filter-a archiveFilter=Any searchText=needle
+expect ok field bookmarks ~ "\"id\":$needle,"
+expect ok field bookmarks !~ "\"id\":$filed,"
+expect ok field bookmarks !~ "\"id\":$hay,"
+
+do ListBookmarks tag=filter-b searchText=needle
+expect ok field bookmarks == []
+
+# ── Leave the database as it was found ────────────────────────────────────
+do DeleteBookmark id=$needle
+expect ok
+
+do DeleteBookmark id=$hay
+expect ok
+
+do DeleteBookmark id=$filed
+expect ok
+
+# Anchored to this run's three ids rather than to the listing being empty --
+# see changes-since-cursor.scenario for why an empty-listing assertion is not
+# load-bearing at the end of a file.
+do ListBookmarks archiveFilter=Any
+expect ok field bookmarks !~ "\"id\":$needle,"
+expect ok field bookmarks !~ "\"id\":$hay,"
+expect ok field bookmarks !~ "\"id\":$filed,"

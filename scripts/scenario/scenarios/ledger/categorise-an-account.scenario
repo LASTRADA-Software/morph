@@ -1,0 +1,104 @@
+# ledger (rung 5) — categories, the link to an account, and the two ways a
+# category gets attached.
+#
+# examples/ledger/README.md's "What to implement" step 3 and step 4 meet here.
+# There are two paths onto an account's category and they belong to different
+# models:
+#
+#   * BudgetModel::LinkAccountToCategory -- what a person does in the UI;
+#   * LedgerModel::SetCategory -- the same effect, carrying the *rule* and
+#     *rule version* that caused it, which is what step 4's replay pinning
+#     needs recorded.
+#
+# Both are driven here, in that order, so the file also shows that the second
+# accepts a bare call with no rule at all (an id that is empty is omitted from
+# the JSON rather than sent as null -- so "no rule" is spelled by leaving both
+# fields out).
+#
+# Re-runnable: the accounts and categories are created here, and the
+# assertions name captured ids.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Categorised cash" kind=0 currency=1
+expect ok capture cash=$.id
+
+do OpenAccount ledgerId=1 name="Categorised coffee" kind=1 currency=1
+expect ok capture coffee=$.id
+
+client budgets model=BudgetModel
+session principal=$who token=$token
+
+# CreateCategory answers with a bare id rather than an object, so the capture
+# reads `$` -- the whole body -- not `$.field`.
+do CreateCategory ledgerId=1 name="Categorised drinks"
+expect ok capture drinks=$
+
+do CreateCategory ledgerId=1 name="Categorised travel"
+expect ok capture travel=$
+
+# ── The person's path ─────────────────────────────────────────────────────
+do LinkAccountToCategory accountId=$coffee categoryId=$drinks
+expect ok
+
+# ── The rule's path, with the causing rule recorded alongside ────────────
+client rules model=RuleModel
+session principal=$who token=$token
+
+do CreateRule ledgerId=1 trigger=0 matchText="flat white" action=0 actionValue="Categorised drinks"
+expect ok capture rule=$
+
+use books
+
+do SetCategory accountId=$cash categoryId=$travel ruleId=$rule ruleVersion=1
+expect ok
+
+# ── ...and the same action with no rule at all ───────────────────────────
+do SetCategory accountId=$cash categoryId=$drinks
+expect ok
+
+# ── The categorisation is observable through the budget report ───────────
+# Which is the only read this rung has for it: GetLedger answers with
+# accounts and their balances, not with their categories.
+use budgets
+
+do CreateBudget ledgerId=1 name="Categorised budget" categoryId=$drinks
+expect ok capture budget=$
+
+do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":50000,"den":1,"dp":2} currency=1
+expect ok
+
+use books
+
+do StoreTransaction ledgerId=1 description="flat white" date="2026-08-05T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-350,"den":1,"dp":2}},{"accountId":$coffee,"amount":{"num":350,"den":1,"dp":2}}]
+expect ok
+
+use budgets
+
+# Both accounts are on the drinks category now -- coffee by the link, cash by
+# the second SetCategory -- so the entry above is counted once for each side.
+do GetBudgetReport budgetId=$budget month="2026-08"
+expect ok field limit.num == 50000
+expect ok field currency == 1
+
+# ── The refusals ──────────────────────────────────────────────────────────
+do LinkAccountToCategory accountId=999999 categoryId=$drinks
+expect err message == "LinkAccountToCategory: no such account or category"
+
+do LinkAccountToCategory accountId=$coffee categoryId=999999
+expect err message == "LinkAccountToCategory: no such account or category"
+
+use books
+
+do SetCategory accountId=999999 categoryId=$drinks
+expect err message == "SetCategory: no such account or category"
+
+# Nothing the refusals touched changed: the ledger still reads.
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$coffee,\"name\":\"Categorised coffee\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":350"

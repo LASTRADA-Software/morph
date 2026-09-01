@@ -1,0 +1,78 @@
+# ledger (rung 5) — the four account kinds, and a transaction touching all of
+# them.
+#
+# examples/ledger/README.md's "What to implement" names the Firefly subset:
+# account (asset/expense/revenue/liability). AccountKind is not decoration --
+# it is what a statement groups by -- but the zero-sum invariant does not care
+# about it at all, which is the fact this file pins: a four-leg entry across
+# four different kinds in one currency is legal exactly when the amounts sum
+# to zero, kinds notwithstanding.
+#
+# Balances start at zero and go the way the amounts say, including negative
+# for a liability, so nothing here assumes a sign convention the model does
+# not have.
+#
+# Wire shapes: AccountKind::Asset is 0, ::Expense 1, ::Revenue 2,
+# ::Liability 3; Currency::USD is 0 and ::EUR is 1. Both travel as integers.
+#
+# Re-runnable: every account is opened here, so the balances are this run's.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Kinds asset" kind=0 currency=1
+expect ok capture asset=$.id
+expect ok field kind == 0
+expect ok field balance.num == 0
+
+do OpenAccount ledgerId=1 name="Kinds expense" kind=1 currency=1
+expect ok capture expense=$.id
+expect ok field kind == 1
+
+do OpenAccount ledgerId=1 name="Kinds revenue" kind=2 currency=1
+expect ok capture revenue=$.id
+expect ok field kind == 2
+
+do OpenAccount ledgerId=1 name="Kinds liability" kind=3 currency=1
+expect ok capture liability=$.id
+expect ok field kind == 3
+
+# ── One entry across all four kinds ───────────────────────────────────────
+# Salary arrives (revenue -> asset), rent is paid on credit (expense ->
+# liability). Four legs, one currency, summing to zero.
+do StoreTransaction ledgerId=1 description="salary in, rent on credit" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$asset,"amount":{"num":200000,"den":1,"dp":2}},{"accountId":$revenue,"amount":{"num":-200000,"den":1,"dp":2}},{"accountId":$expense,"amount":{"num":90000,"den":1,"dp":2}},{"accountId":$liability,"amount":{"num":-90000,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$asset,\"name\":\"Kinds asset\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":200000"
+expect ok field accounts ~ "\"id\":$expense,\"name\":\"Kinds expense\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":90000"
+expect ok field accounts ~ "\"id\":$revenue,\"name\":\"Kinds revenue\",\"kind\":2,\"currency\":1,\"balance\":.\"num\":-200000"
+expect ok field accounts ~ "\"id\":$liability,\"name\":\"Kinds liability\",\"kind\":3,\"currency\":1,\"balance\":.\"num\":-90000"
+
+# The read agrees with the write's own reply.
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$asset,\"name\":\"Kinds asset\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":200000"
+expect ok field accounts ~ "\"id\":$liability,\"name\":\"Kinds liability\",\"kind\":3,\"currency\":1,\"balance\":.\"num\":-90000"
+
+# ── Kind does not exempt anything from the invariant ──────────────────────
+# Two legs across two kinds that do not cancel. Two, not one: a single-leg
+# entry never reaches the zero-sum check at all -- validate() rejects it
+# first, with the generic validation message -- so a one-leg "test" of the
+# invariant would be testing something else entirely.
+do StoreTransaction ledgerId=1 description="revenue with a short counterpart" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$revenue,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$asset,"amount":{"num":90,"den":1,"dp":2}}]
+expect err message ~ "zero-sum violation in EUR"
+
+# ...and the one-leg entry, which is refused earlier and differently.
+do StoreTransaction ledgerId=1 description="revenue with no counterpart" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$revenue,"amount":{"num":-100,"den":1,"dp":2}}]
+expect err message == "action failed validation: LedgerModel/StoreTransaction"
+expect err message !~ "zero-sum"
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$revenue,\"name\":\"Kinds revenue\",\"kind\":2,\"currency\":1,\"balance\":.\"num\":-200000"
+
+# ── Paying the liability down moves two kinds and still balances ──────────
+do StoreTransaction ledgerId=1 description="pay the landlord" date="2026-08-03T00:00:00.000Z" legs=[{"accountId":$liability,"amount":{"num":90000,"den":1,"dp":2}},{"accountId":$asset,"amount":{"num":-90000,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$liability,\"name\":\"Kinds liability\",\"kind\":3,\"currency\":1,\"balance\":.\"num\":0"
+expect ok field accounts ~ "\"id\":$asset,\"name\":\"Kinds asset\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":110000"

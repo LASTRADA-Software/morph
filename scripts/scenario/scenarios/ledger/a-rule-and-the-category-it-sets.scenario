@@ -1,0 +1,174 @@
+# ledger (rung 5) — a rule fires during a store, and moves an account's whole
+# history with it.
+#
+# examples/ledger/README.md's "What to implement" step 4: rules are
+# "description contains X ⇒ set category Y", **applied during store**. This
+# file drives that cascade from a socket: a transaction whose description
+# matches a rule is posted, and the categorisation the rule performs is
+# observed through the only read that can see it -- the budget report.
+#
+# ── The consequence that is not guessable, and is the point of this file ──
+# The rule's action sets the *account's* category, not the entry's. This rung
+# categorises accounts; it has no per-entry category column. So when a rule
+# fires on one transaction, every entry that account already carries moves to
+# the new category too -- the budget report for the old category drops to
+# zero and the new one gains the entire history, not just the entry that
+# triggered the rule.
+#
+# That is a design consequence rather than a defect (the categorisation is
+# account-level by construction), but it is invisible in any test that posts
+# a single transaction, and it is exactly what a user would notice: one
+# purchase at a newly-ruled merchant reassigns their whole month.
+#
+# ── SetCategory's rule stamp ─────────────────────────────────────────────
+# `SetCategory` also takes `ruleId` and `ruleVersion`, so a categorisation
+# records not merely "this account is Household" but "rule 7 at version 2 made
+# it so". That is what step 4's replay pinning needs: edit a rule between
+# recording and replaying and a trail without the version lies about why.
+# The server records what it is told here -- it is an audit stamp, not an
+# optimistic-concurrency check (that is `UpdateRule`'s `expectedVersion`).
+#
+# Wire shapes: RuleTrigger::DescriptionContains is 0 and RuleAction::
+# SetCategory is 0. CreateRule, CreateCategory, CreateBudget and SetBudgetLimit
+# each answer with a bare id, so their captures read `$`.
+#
+# ── How this file stays re-runnable ─────────────────────────────────────
+# A rule names its target category by **name**, not by id (`actionValue` is a
+# string). Category names are not unique, so a second run of this file with
+# fixed names creates a second "Ruled household" and the rule resolves to the
+# first one -- run two's budget then reports zero while run one's category
+# quietly collects the spending.
+#
+# So the accounts are opened first and one of their ids is spent as the run's
+# nonce: every category name, and the rule's own matchText and actionValue,
+# carry it. No randomness and no clock, and each run's rule points at each
+# run's own category.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+# The nonce: the first account's own id, which no earlier run had.
+do OpenAccount ledgerId=1 name="Ruled cash" kind=0 currency=1
+expect ok capture cash=$.id
+
+do OpenAccount ledgerId=1 name="Ruled spend" kind=1 currency=1
+expect ok capture spend=$.id
+
+client budgets model=BudgetModel
+session principal=$who token=$token
+
+do CreateCategory ledgerId=1 name="Ruled groceries $cash"
+expect ok capture groceries=$
+
+do CreateCategory ledgerId=1 name="Ruled household $cash"
+expect ok capture household=$
+
+client rules model=RuleModel
+session principal=$who token=$token
+
+do CreateRule ledgerId=1 trigger=0 matchText="SUPERMARKET-$cash" action=0 actionValue="Ruled household $cash"
+expect ok capture rule=$
+
+# ── Two budgets, so both sides of the move are observable ────────────────
+use budgets
+
+do CreateBudget ledgerId=1 name="Ruled groceries budget $cash" categoryId=$groceries
+expect ok capture groceryBudget=$
+
+do CreateBudget ledgerId=1 name="Ruled household budget $cash" categoryId=$household
+expect ok capture householdBudget=$
+
+do SetBudgetLimit budgetId=$groceryBudget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency=1
+expect ok
+
+do SetBudgetLimit budgetId=$householdBudget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency=1
+expect ok
+
+# ── The account starts on groceries, stamped with the rule that put it there
+use books
+
+do SetCategory accountId=$spend categoryId=$groceries ruleId=$rule ruleVersion=1
+expect ok
+
+# ── A transaction the rule does *not* match ─────────────────────────────
+do StoreTransaction ledgerId=1 description="corner bakery" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1000,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":1000,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Ruled spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1000"
+
+use budgets
+
+do GetBudgetReport budgetId=$groceryBudget month="2026-08"
+expect ok field spent.num == 1000
+
+do GetBudgetReport budgetId=$householdBudget month="2026-08"
+expect ok field spent.num == 0
+
+# ── A transaction the rule *does* match ─────────────────────────────────
+use books
+
+do StoreTransaction ledgerId=1 description="SUPERMARKET-$cash run" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-2000,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":2000,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Ruled spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":3000"
+
+use budgets
+
+# The whole history moved, not only the entry that matched: household gains
+# 30.00, which is the bakery's 10.00 plus the supermarket's 20.00.
+do GetBudgetReport budgetId=$householdBudget month="2026-08"
+expect ok field spent.num == 3000
+
+do GetBudgetReport budgetId=$groceryBudget month="2026-08"
+expect ok field spent.num == 0
+
+# ── ...and it stays moved for entries posted afterwards ─────────────────
+use books
+
+do StoreTransaction ledgerId=1 description="corner bakery again" date="2026-08-03T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-500,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":500,"den":1,"dp":2}}]
+expect ok
+
+use budgets
+
+do GetBudgetReport budgetId=$householdBudget month="2026-08"
+expect ok field spent.num == 3500
+
+do GetBudgetReport budgetId=$groceryBudget month="2026-08"
+expect ok field spent.num == 0
+
+# ── The rule changes, and the version a stamp records changes with it ───
+use rules
+
+do UpdateRule ruleId=$rule matchText="SUPERMARKET-$cash LTD" actionValue="Ruled groceries $cash" expectedVersion=1
+expect ok field version == 2
+expect ok field actionValue == "Ruled groceries $cash"
+
+# ── A hand categorisation, stamped with the version that now exists ─────
+use books
+
+do SetCategory accountId=$spend categoryId=$groceries ruleId=$rule ruleVersion=2
+expect ok
+
+use budgets
+
+do GetBudgetReport budgetId=$groceryBudget month="2026-08"
+expect ok field spent.num == 3500
+
+do GetBudgetReport budgetId=$householdBudget month="2026-08"
+expect ok field spent.num == 0
+
+# ── A version the server never issued is recorded anyway ────────────────
+# The stamp is what the caller claims, not something SetCategory verifies.
+use books
+
+do SetCategory accountId=$spend categoryId=$groceries ruleId=$rule ruleVersion=99
+expect ok
+
+do SetCategory accountId=$spend categoryId=999999 ruleId=$rule ruleVersion=2
+expect err message == "SetCategory: no such account or category"
+
+use budgets
+
+do GetBudgetReport budgetId=$groceryBudget month="2026-08"
+expect ok field spent.num == 3500

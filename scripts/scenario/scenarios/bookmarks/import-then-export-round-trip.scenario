@@ -1,0 +1,125 @@
+# bookmarks (rung 2) — a Netscape bookmark file in, the same links out.
+#
+# examples/bookmarks/README.md's "What to implement" step 5: Netscape HTML
+# import and export, chunked, with the import carrying an idempotency key.
+# The round trip is the assertion that matters -- a parser that read the URLs
+# and dropped the titles, or an exporter that wrote a file no importer could
+# read, would each pass an "imported: 2" check on its own.
+#
+# ── The idempotency key is the point of ImportOpId ────────────────────────
+# A large import is chunked, so a client that loses a reply and retries must
+# not import the chunk twice. Replaying a chunk under the *same* opId is a
+# no-op reporting zero imported; the same chunk under a *new* opId is a
+# genuinely new request and is honoured. Both are asserted, because an
+# implementation that deduplicated on chunk *content* rather than on the
+# operation id would pass the first and fail the second.
+#
+# ── How this file stays re-runnable, which is the whole difficulty ────────
+# An opId is consumed **permanently**. Deleting every bookmark an import
+# created does not release it: the operation ledger is what makes a retry
+# safe, so it has to outlive the rows. A file that hard-coded `opId=chunk-one`
+# would therefore import two bookmarks on its first run and zero on every run
+# after -- which is exactly what this file did until a second pass caught it.
+#
+# The fix is to derive every opId and every url from a value that is new in
+# each run and available inside the file. An autoincrement BookmarkId is
+# precisely that, so this file creates one throwaway bookmark first and spends
+# its id as the run's nonce: `opId="alpha-$run"`, `.../alpha-$run`. No
+# randomness, no clock, and nothing that depends on the database being empty.
+#
+# Every listing assertion narrows by that same nonce, so pagination cannot
+# reach them either.
+
+client auth model=AuthModel
+
+do Login username=importer
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client store model=BookmarkModel
+session principal=$who token=$token
+
+# The nonce: a bookmark whose only purpose is to have an id no earlier run had.
+do CreateBookmark url="https://imported.example/run-marker" title="Run marker" tags=["import-run"]
+expect ok capture run=$.id
+
+# ── Import ─────────────────────────────────────────────────────────────────
+do ImportBookmarks opId="alpha-$run" chunk="<DL><p>\n<DT><A HREF=\"https://imported.example/alpha-$run\">Alpha $run</A>\n<DT><A HREF=\"https://imported.example/beta-$run\">Beta $run</A>\n</DL><p>"
+expect ok field imported.num == 2
+expect ok field skipped.num == 0
+
+# The read is the proof: two bookmarks, with the titles the file carried.
+do ListBookmarks searchText="Alpha $run"
+expect ok field bookmarks ~ "https://imported.example/alpha-$run"
+expect ok field bookmarks ~ "\"title\":\"Alpha $run\""
+expect ok capture alpha=$.bookmarks[0].id
+
+do ListBookmarks searchText="Beta $run"
+expect ok field bookmarks ~ "https://imported.example/beta-$run"
+expect ok capture beta=$.bookmarks[0].id
+
+do GetBookmark id=$alpha
+expect ok field url == "https://imported.example/alpha-$run"
+expect ok field title == "Alpha $run"
+expect ok field archiveState == Active
+
+# ── Replaying the same chunk under the same opId imports nothing ─────────
+do ImportBookmarks opId="alpha-$run" chunk="<DL><p>\n<DT><A HREF=\"https://imported.example/alpha-$run\">Alpha $run</A>\n<DT><A HREF=\"https://imported.example/beta-$run\">Beta $run</A>\n</DL><p>"
+expect ok field imported.num == 0
+expect ok field skipped.num == 0
+
+# ...and nothing was duplicated by the replay.
+do ListBookmarks searchText="Alpha $run"
+expect ok field bookmarks ~ "\"id\":$alpha,"
+expect ok capture stillOne=$.bookmarks[0].id
+# The url occurs once in the whole listing, not twice: a replay that had
+# imported the chunk again would put a second row here with the same url, and
+# every other assertion in this file would still hold.
+expect ok field bookmarks !~ "alpha-$run.*alpha-$run"
+
+# ── A second, different chunk under its own opId ─────────────────────────
+do ImportBookmarks opId="gamma-$run" chunk="<DL><p>\n<DT><A HREF=\"https://imported.example/gamma-$run\">Gamma $run</A>\n</DL><p>"
+expect ok field imported.num == 1
+
+do ListBookmarks searchText="Gamma $run"
+expect ok field bookmarks ~ "https://imported.example/gamma-$run"
+expect ok capture gamma=$.bookmarks[0].id
+
+# ── Export, and find every imported link in it ───────────────────────────
+do ExportBookmarks
+expect ok field html ~ "NETSCAPE-Bookmark-file-1"
+expect ok field html ~ "https://imported.example/alpha-$run"
+expect ok field html ~ "https://imported.example/beta-$run"
+expect ok field html ~ "https://imported.example/gamma-$run"
+expect ok field html ~ ">Alpha $run</A>"
+
+# ── A chunk with no links in it is not an error ──────────────────────────
+# The importer is deliberately lenient about what it is handed: a browser's
+# export carries headings, folders and comments this rung ignores.
+do ImportBookmarks opId="empty-$run" chunk="this carries no anchors at all"
+expect ok field imported.num == 0
+
+# ── An imported bookmark is an ordinary one ──────────────────────────────
+do ArchiveBookmark id=$gamma
+expect ok
+
+do GetBookmark id=$gamma
+expect ok field archiveState == Archived
+expect ok field title == "Gamma $run"
+
+# ── Leave the collection as it was found ─────────────────────────────────
+# The opIds stay spent, which is the point of them; the rows do not.
+do DeleteBookmark id=$alpha
+expect ok
+
+do DeleteBookmark id=$beta
+expect ok
+
+do DeleteBookmark id=$gamma
+expect ok
+
+do DeleteBookmark id=$run
+expect ok
+
+do ListBookmarks archiveFilter=Any searchText="$run"
+expect ok field bookmarks == []

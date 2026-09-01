@@ -1,0 +1,90 @@
+# kanban (rung 4) — sign in, make a project, open its board.
+#
+# The shortest complete journey this rung has, and the one every other file in
+# this directory assumes. examples/kanban/README.md's build order step 1:
+# project/column/task CRUD plus the board read.
+#
+# ── Wire shapes that are not guessable from the DTOs ────────────────────────
+#   * every strong id is its bare underlying number on the wire, so a
+#     ProjectId is `1` and an empty one is omitted from the JSON entirely;
+#   * `Role` travels as its name -- "Viewer", "Member", "Manager" -- and so
+#     does `RuleMutationType` ("AddTag", "RemoveTag");
+#   * every *mutating* BoardModel action answers with the whole rebuilt
+#     `GetBoardResult`, not a receipt: CreateColumn returns the board, and the
+#     new column is in it. The later Rule/Tag/Attachment family breaks that
+#     convention deliberately and answers with `{}` or its own narrow result;
+#   * `BoardModel` is keyed by project id and shared, so a freshly registered
+#     handler is attached to no board. It has to be pointed at one with
+#     `OpenBoard` before any other action will answer -- and a handler that
+#     was never opened fails with the raw text `stoull` rather than a typed
+#     message, which is asserted in
+#     a-board-must-be-opened-before-it-answers.scenario;
+#   * `AuthModel`/`Login` is the one model/action pair a tokenless caller may
+#     reach (`KanbanAuthorizer::kAnonymousModelType`). Everything else needs
+#     the token it mints, installed with a `session` step -- `client`'s own
+#     principal=/token= options take literal text and are not
+#     capture-expanded (morph#360).
+#
+# Re-runnable: the project is created by this file, so its board is empty in
+# every run and every id below is captured from the reply that minted it.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+expect ok field principal == alice
+
+# ── The reserved namespace is refused, so no client can log in as a service
+do Login username="system:anything"
+expect err message == "Login: the 'system:' principal namespace is reserved"
+
+# ── A project, and the role its creator gets ───────────────────────────────
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Release board"
+expect ok capture project=$.id
+
+# Creating a project makes you its Manager -- which is the read that proves
+# the create did more than insert a row.
+do GetProjectRoles projectId=$project
+expect ok field roles ~ "\"principal\":\"alice\",\"role\":\"Manager\""
+
+do GetMyProjects
+expect ok field projects ~ "\"id\":$project,\"name\":\"Release board\",\"myRole\":\"Manager\""
+
+# ── The board ──────────────────────────────────────────────────────────────
+client board model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$project
+expect ok field projectId == $project
+expect ok field name == "Release board"
+expect ok field columns == []
+expect ok field swimlanes == []
+expect ok field tasks == []
+
+# ...and the state read agrees with what OpenBoard returned.
+do GetBoardState
+expect ok field projectId == $project
+expect ok field name == "Release board"
+
+# ── The refusals ───────────────────────────────────────────────────────────
+use admin
+
+do CreateProject name=""
+expect err message == "action failed validation: ProjectAdminModel/CreateProject"
+
+use board
+
+# A project that does not exist is told apart from one the caller may not
+# reach: "project not found" here, and "caller's role does not permit this
+# action" in a-viewer-can-read-but-not-write.scenario.
+do OpenBoard projectId=999999
+expect err message == "project not found"
+expect err message !~ "role"
+
+# The refused open left the handler pointed where it was.
+do GetBoardState
+expect ok field projectId == $project

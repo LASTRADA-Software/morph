@@ -1,0 +1,146 @@
+# ledger (rung 5) — two books in one database, and every read that must not
+# cross between them.
+#
+# `LedgerModel` is keyed by ledger (book) id, and every action carries one.
+# Firefly's own model is one user with several books, so "which book" is an
+# argument rather than a connection property -- which means the isolation is
+# enforced per call, in the query, and a missing `WHERE ledger_id = ?` would
+# be invisible to any test that only ever used one book.
+#
+# The scenario driver seeds two books precisely so this file can exist: no
+# registered action creates a `ledgers` row, so a second book is not something
+# a scenario can make for itself.
+#
+# Re-runnable: the accounts are opened here, in both books, and every
+# assertion names a captured id.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+# ── One account in each book, with deliberately identical names ────────
+# Identical names, so nothing below can pass by matching on a name alone.
+do OpenAccount ledgerId=1 name="Isolated wallet" kind=0 currency=1
+expect ok capture first=$.id
+
+do OpenAccount ledgerId=2 name="Isolated wallet" kind=0 currency=1
+expect ok capture second=$.id
+
+do OpenAccount ledgerId=1 name="Isolated spend" kind=1 currency=1
+expect ok capture firstSpend=$.id
+
+do OpenAccount ledgerId=2 name="Isolated spend" kind=1 currency=1
+expect ok capture secondSpend=$.id
+
+# ── Each book's listing holds its own accounts and not the other's ─────
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$first,"
+expect ok field accounts ~ "\"id\":$firstSpend,"
+expect ok field accounts !~ "\"id\":$second,"
+expect ok field accounts !~ "\"id\":$secondSpend,"
+
+do GetLedger ledgerId=2
+expect ok field accounts ~ "\"id\":$second,"
+expect ok field accounts ~ "\"id\":$secondSpend,"
+expect ok field accounts !~ "\"id\":$first,"
+expect ok field accounts !~ "\"id\":$firstSpend,"
+
+# ── A transaction in book one moves book one's balances only ───────────
+do StoreTransaction ledgerId=1 description="book one only" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$first,"amount":{"num":-4000,"den":1,"dp":2}},{"accountId":$firstSpend,"amount":{"num":4000,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4000"
+expect ok field accounts !~ "\"id\":$second,"
+
+do GetLedger ledgerId=2
+expect ok field accounts ~ "\"id\":$second,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":0"
+
+# ── ...and one in book two leaves book one alone ───────────────────────
+do StoreTransaction ledgerId=2 description="book two only" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$second,"amount":{"num":-1500,"den":1,"dp":2}},{"accountId":$secondSpend,"amount":{"num":1500,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$second,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1500"
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4000"
+
+# ── Budgets are scoped to their own book too ───────────────────────────
+client budgets model=BudgetModel
+session principal=$who token=$token
+
+do CreateCategory ledgerId=1 name="Isolated category"
+expect ok capture category=$
+
+do LinkAccountToCategory accountId=$firstSpend categoryId=$category
+expect ok
+
+# The *second* book's account, linked to the *first* book's category. The
+# link itself is accepted -- categories and accounts are joined by id, not by
+# book -- but the report below must still not count it, because the report
+# filters journals by the budget's own ledger.
+do LinkAccountToCategory accountId=$secondSpend categoryId=$category
+expect ok
+
+do CreateBudget ledgerId=1 name="Isolated budget" categoryId=$category
+expect ok capture budget=$
+
+do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency=1
+expect ok
+
+# 40.00 from book one, and nothing from book two's 15.00, even though both
+# accounts are on the category.
+do GetBudgetReport budgetId=$budget month="2026-08"
+expect ok field spent.num == 4000
+expect ok field limit.num == 100000
+
+# ── A report submitted for one book names that book ────────────────────
+use books
+
+do SubmitReport ledgerId=1 kind=0 params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
+expect ok capture jobOne=$
+
+do SubmitReport ledgerId=2 kind=0 params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
+expect ok capture jobTwo=$
+
+do GetReportStatus jobId=$jobOne
+expect ok field status == 0
+
+do GetReportStatus jobId=$jobTwo
+expect ok field status == 0
+
+# ── Where the isolation stops: a leg may name another book's account ───
+#
+# `StoreTransaction ledgerId=1` carrying a leg on a *book two* account is
+# **accepted**. The journal is filed under book one, and book two's account
+# balance moves. Every read stays scoped -- book one's reply does not mention
+# the foreign account, and book two's listing shows the balance change with no
+# journal of its own to explain it -- so the two books disagree about what
+# happened, and neither report says so.
+#
+# This is asserted as it behaves, not as it ought to: the account lookup does
+# run (a leg naming an id that exists in no book at all is refused, below), it
+# simply does not check which book the account belongs to. That makes this a
+# missing `WHERE ledger_id = ?` on the leg's account lookup rather than an
+# absent check, and the file pins it so a fix has to come here and change it
+# deliberately. Filed as morph#367, which also notes that
+# `UndoTransaction` *does* make the equivalent check
+# ("journal does not belong to this ledger"), and that
+# `ImportLedgerChunk` has the same hole at its own account lookup.
+do StoreTransaction ledgerId=1 description="a leg from the other book" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$first,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$secondSpend,"amount":{"num":100,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4100"
+# The reply is scoped to book one, so it does not mention the account it just
+# moved.
+expect ok field accounts !~ "\"id\":$secondSpend,"
+
+# Book two's balance moved all the same.
+do GetLedger ledgerId=2
+expect ok field accounts ~ "\"id\":$secondSpend,\"name\":\"Isolated spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1600"
+
+# ── An account that exists in no book at all *is* refused ──────────────
+# Which is what shows the lookup happens: it finds the row and does not ask
+# whose book it is in.
+do StoreTransaction ledgerId=1 description="a leg from nowhere" date="2026-08-03T00:00:00.000Z" legs=[{"accountId":$first,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":999999,"amount":{"num":100,"den":1,"dp":2}}]
+expect err message == "StoreTransaction: no such account"
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4100"

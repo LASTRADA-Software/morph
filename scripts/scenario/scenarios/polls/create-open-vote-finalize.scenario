@@ -1,0 +1,81 @@
+# polls (rung 3) — the organizer's journey, end to end.
+#
+#   create a poll -> open it -> vote -> read the tally -> finalize
+#
+# examples/polls/README.md's "What to implement", steps 1-4, in order. This is
+# the file the other nine specialise; each of them assumes this one works.
+#
+# ── Wire shapes that are not guessable from the DTOs ────────────────────────
+#   * PollModel is *keyed* -- BRIDGE_MODEL_KEY(PollModel, OpenPoll,
+#     &OpenPoll::pollId) -- so a freshly registered handler is attached to no
+#     poll at all. CreatePoll works on it (it makes a poll rather than reading
+#     one), but every other action needs an OpenPoll first, and says so:
+#     "GetPollState: handler was never attached via OpenPoll";
+#   * option ids are a table-wide autoincrement, not per-poll ordinals, so
+#     they are captured from GetPollState rather than written as 1, 2, 3 --
+#     the second poll in a database gets 4, 5, 6;
+#   * `choice` travels as its enumerator name ("Yes", "IfNeedBe", "No"), and
+#     `finalized` as "Yes"/"No", because both enums carry a glz::meta;
+#   * the three counts are `Count`, a Quantity, so they arrive as
+#     {"num","den","dp"} objects and are asserted as `.num`;
+#   * `finalizedOptionId` is a strong id on the wire as its bare underlying
+#     number, and an *empty* one is 0 -- so "not finalized" reads as 0 rather
+#     than as an absent field;
+#   * CreatePoll answers with the pollId and two capability tokens. The admin
+#     one authorises FinalizePoll, and it is checked against
+#     `session::current()->token` -- so it is installed with a `session` step,
+#     not passed as an action input.
+#
+# Re-runnable: the poll is created by this file, so its ids and its event
+# sequence are its own in every run.
+
+model PollModel
+
+client organizer
+
+do CreatePoll title="Team lunch" options=[{"label":"Monday"},{"label":"Tuesday"},{"label":"Wednesday"}]
+expect ok capture poll=$.pollId
+expect ok capture admin=$.adminToken
+expect ok capture participant=$.participantToken
+
+# ── Nothing works until the handler is attached to a poll ──────────────────
+client latecomer
+do GetPollState
+expect err message == "GetPollState: handler was never attached via OpenPoll"
+
+do OpenPoll pollId=$poll
+expect ok field title == "Team lunch"
+expect ok field finalized == No
+expect ok field finalizedOptionId == 0
+expect ok capture monday=$.options[0].id
+expect ok capture tuesday=$.options[1].id
+
+# ── Vote ───────────────────────────────────────────────────────────────────
+do SubmitVotes participantName=alice votes=[{"optionId":$monday,"choice":"Yes"},{"optionId":$tuesday,"choice":"No"}]
+expect ok
+
+# The read is the proof, not the submit's own ok.
+do GetPollState
+expect ok field options[0].yesCount.num == 1
+expect ok field options[1].noCount.num == 1
+expect ok field votes ~ "\"participantName\":\"alice\""
+
+# ── Finalize ───────────────────────────────────────────────────────────────
+# The admin token is a capability, not an identity: without it in the session
+# the organizer's own connection is refused just like anyone else's.
+do FinalizePoll optionId=$monday
+expect err message == "admin token required"
+
+session principal=organizer token=$admin
+
+do FinalizePoll optionId=$monday
+expect ok field finalized == Yes
+expect ok field finalizedOptionId == $monday
+
+# ── The poll is read-only now ──────────────────────────────────────────────
+do SubmitVotes participantName=bob votes=[{"optionId":$monday,"choice":"Yes"}]
+expect err message == "poll is finalized"
+
+do GetPollState
+expect ok field finalized == Yes
+expect ok field options[0].yesCount.num == 1

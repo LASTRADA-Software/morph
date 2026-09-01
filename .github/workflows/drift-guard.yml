@@ -3,7 +3,8 @@ name: Drift guard
 # Gates for the "a list that stopped matching what it describes" class of bug.
 # Every job here is fast and dependency-free; none of them compiles anything.
 #
-# Sections below: the spec <-> code gates, then the ladder rung-list gate.
+# Sections below: the spec <-> code gates, the ladder rung-list gate, then the
+# scenario-coverage gate.
 #
 # Two independent gates for the "spec <-> code drift" class of bug (a
 # docs/spec/*.md file stating a mechanical fact -- an enum cardinality, a
@@ -82,3 +83,53 @@ jobs:
 
       - name: Check every known rung appears in the filters that cannot generate it
         run: bash scripts/check_rung_filters.sh
+
+  # ── The wire/action surface <-> the scenario corpus that covers it ──────
+  # scripts/scenario/scenario_coverage.py enumerates two surfaces straight out
+  # of the source -- every envelope kind and refusal RemoteServer can put on
+  # the wire (include/morph/core/remote.hpp, wire.hpp), and every action each
+  # server rung registers (BRIDGE_REGISTER_ACTION under examples/<rung>/) --
+  # and diffs both against what scripts/scenario/scenarios/ actually sends and
+  # asserts. It compiles nothing and starts nothing, which is what lets it run
+  # here rather than in the build matrix.
+  #
+  # The drift it catches is the ordinary kind: a new action registered with no
+  # scenario reaching it, a new refusal added to remote.hpp that nothing
+  # asserts, an allowlist entry left behind after the thing it exempted became
+  # coverable (audited in both directions, so a stale entry fails too), or a
+  # scenario edited until it no longer qualifies as a workflow. Every one of
+  # those leaves the corpus quietly measuring less than it did, which is
+  # exactly the failure mode the report was built for and the reason it is
+  # worth a gate rather than a habit.
+  #
+  # What this job does NOT do is *run* the corpus: that needs the five
+  # ladder_<rung>_server binaries built, which is a build this workflow does
+  # not have and would stop being fast and dependency-free to acquire. Running
+  # scripts/scenario/run_scenarios.py in CI is its own change -- see the PR
+  # that added the corpus.
+  #
+  # No path filter, on the same reasoning as rung-filter-lint above: the
+  # surface this tracks is spread across include/, examples/ and
+  # scripts/scenario/, and a filter that missed one of them would reproduce the
+  # drift it exists to catch.
+  scenario-coverage:
+    name: Wire & action surface vs. the scenario corpus
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # The gate itself is tested first, on the same terms as prose-lint and
+      # rung-filter-lint above: a lint gate nobody tests reports green whether
+      # or not it still detects anything. This self-test drives
+      # scenario_coverage.py against fixtures whose right answers are known --
+      # including one where the correct exit code is non-zero -- and pins the
+      # real corpus's own exit code, so a change that silently stops the
+      # shipped scenarios covering their own surface fails here.
+      #
+      # Standard library only, and no server: scripts/scenario/README.md's
+      # "Self-test" section states the same.
+      - name: Self-test the scenario runner and the coverage report
+        run: python3 scripts/scenario/test_morph_scenario.py
+
+      - name: Check every envelope kind, refusal and registered action is covered or exempt
+        run: python3 scripts/scenario/scenario_coverage.py

@@ -1,0 +1,102 @@
+# pastebin (rung 1) — the envelope kinds a typed client never sends, and the
+# refusal each of them has for a missing typeId.
+#
+# `morph::wire`'s envelope carries eight kinds. A morph client sends four of
+# them in the ordinary course of work -- `hello`, `register`, `execute`,
+# `deregister` -- and the other four are the instance-management surface that
+# `RemoteServer::dispatchMessage` handles and no typed C++ client exposes:
+#
+#   `attach`     point a connection at a keyed/shared instance
+#   `assign`     hand an instance to a connection
+#   `instances`  list the live shared instances of a type
+#   `schemas`    serve a type's action schemas as JSON Schema
+#
+# All four take a `typeId`, and all four refuse without one, each with its own
+# message. This file is not a workflow and is not counted as one: it threads
+# nothing between domain actions, which is exactly what it is for.
+#
+# ── Why this lives in pastebin/ ────────────────────────────────────────
+# A scenario is attributed to the rung directory it sits in, and pastebin is
+# the rung with no authentication at all -- so these envelopes are answered on
+# their own merits rather than being refused for want of a token first. The
+# README already lists "hostile envelopes" as this directory's business.
+#
+# Re-runnable: nothing here writes anything.
+
+model PasteModel
+
+client prober
+
+# ── instances, before anything is attached ─────────────────────────────
+# The body is a JSON array of the live *shared* instances of the type. A
+# plainly registered instance is not shared, so this is empty even though this
+# connection already holds one.
+send instances typeId=PasteModel
+expect ok field @body == "[]"
+
+# ── attach ─────────────────────────────────────────────────────────────
+send attach typeId=PasteModel
+expect ok field @modelId != 0
+
+send attach
+expect err message == "attach requires a typeId"
+
+# ── assign ─────────────────────────────────────────────────────────────
+send assign typeId=PasteModel
+expect ok
+
+send assign
+expect err message == "assign requires a typeId"
+
+# ── instances, now that one is attached ────────────────────────────────
+# The attach above is what puts an instance in the shared directory, so the
+# listing is no longer empty -- which is the pair that shows `instances`
+# reports something rather than always answering the same way.
+send instances typeId=PasteModel
+expect ok field @body != "[]"
+
+send instances
+expect err message == "instances requires a typeId"
+
+# ── schemas ────────────────────────────────────────────────────────────
+# The served JSON Schema document, one entry per registered action, with the
+# `required` array and the field bounds each action declares.
+send schemas typeId=PasteModel
+expect ok field @body ~ "CreatePaste"
+expect ok field @body ~ "GetPaste"
+expect ok field @body ~ "ExpirePaste"
+expect ok field @body ~ "\"type\":\"object\""
+# CreatePaste's declared burn-budget bounds reach the client as standard
+# JSON-Schema keys -- morph#310's whole point.
+expect ok field @body ~ "burnAfterReads"
+expect ok field @body ~ "minimum"
+expect ok field @body ~ "multipleOf"
+
+send schemas
+expect err message == "schemas requires a typeId"
+
+# ── register, for the fifth of these refusals ──────────────────────────
+send register
+expect err message == "register requires a typeId"
+
+# ── A typeId no model was registered under ─────────────────────────────
+# `schemas` answers `{}` rather than refusing: an unknown type has no actions,
+# and an empty schema document is a truthful answer to "what does this type
+# serve". Asserted as it behaves -- a client cannot use this to tell an
+# unregistered type from a registered one with no actions, which is a
+# disclosure property rather than an accident.
+send schemas typeId=NoSuchModel
+expect ok field @body == "{}"
+
+# `attach`, which has to produce an instance, cannot be so relaxed.
+send attach typeId=NoSuchModel
+expect err message ~ "NoSuchModel"
+
+# ── The connection still works afterwards ──────────────────────────────
+# Every refusal above is a reply, not a disconnection: a hostile envelope must
+# not cost a well-behaved client its session.
+do CreatePaste content="still connected" syntax=plaintext
+expect ok capture paste=$.id
+
+do GetPaste id=$paste
+expect ok field content == "still connected"

@@ -1,0 +1,110 @@
+# ledger (rung 5) — the sign-in, and every door it opens or leaves shut.
+#
+# `ledger::auth::LedgerAuthorizer` is `SigningAuthorizer`-derived, so every
+# `execute` is authorized against a genuinely signed bearer token and the
+# principal the server extracts from it -- never the one the client asserts.
+# `AuthModel` is the one model an unauthenticated caller may reach, and the
+# `system:` namespace is reserved: it is where the report runner's own service
+# principal lives, and AuthModel refuses to mint a token for it, which is what
+# makes RunReportJob's refusal unreachable from a socket.
+#
+# This file drives all four of the rung's models with no session, with a
+# forged one, and with a real one, so the boundary is stated per model rather
+# than assumed from one of them.
+#
+# Re-runnable: the accounts and categories are created here.
+
+client auth model=AuthModel
+
+# ── The reserved namespace ─────────────────────────────────────────────
+# Its own message, distinct from ordinary validation: the namespace is
+# refused by name, not merely rejected as malformed.
+do Login username="system:report-runner"
+expect err message == "Login: the 'system:' principal namespace is reserved"
+
+do Login username="system:anything-at-all"
+expect err message == "Login: the 'system:' principal namespace is reserved"
+
+do Login username=""
+expect err message == "action failed validation: AuthModel/Login"
+
+# ── A real sign-in ─────────────────────────────────────────────────────
+do Login username=accountant
+expect ok capture token=$.token
+expect ok capture who=$.principal
+expect ok field principal == accountant
+
+# ── No session at all: every model refuses ─────────────────────────────
+client books model=LedgerModel
+
+do OpenAccount ledgerId=1 name="Authorised cash" kind=0 currency=1
+expect err message == "unauthorized"
+
+client budgets model=BudgetModel
+
+do CreateCategory ledgerId=1 name="Authorised category"
+expect err message == "unauthorized"
+
+client rules model=RuleModel
+
+do CreateRule ledgerId=1 trigger=0 matchText="anything" action=0 actionValue="Authorised category"
+expect err message == "unauthorized"
+
+# ── A token shaped like one, signed by nobody ──────────────────────────
+use books
+session principal=accountant token="eyJwcmluY2lwYWwiOiJhY2NvdW50YW50In0.not-a-real-signature"
+
+do OpenAccount ledgerId=1 name="Authorised cash" kind=0 currency=1
+expect err message == "unauthorized"
+
+# ── The real one ───────────────────────────────────────────────────────
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Authorised cash" kind=0 currency=1
+expect ok capture cash=$.id
+
+do OpenAccount ledgerId=1 name="Authorised spend" kind=1 currency=1
+expect ok capture spend=$.id
+
+do StoreTransaction ledgerId=1 description="authorised work" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-800,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":800,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Authorised cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-800"
+
+# ── The same token authorises the other models ────────────────────────
+use budgets
+session principal=$who token=$token
+
+do CreateCategory ledgerId=1 name="Authorised category"
+expect ok capture category=$
+
+do LinkAccountToCategory accountId=$spend categoryId=$category
+expect ok
+
+use rules
+session principal=$who token=$token
+
+do CreateRule ledgerId=1 trigger=0 matchText="authorised" action=0 actionValue="Authorised category"
+expect ok capture rule=$
+
+do UpdateRule ruleId=$rule matchText="authorised work" actionValue="Authorised category" expectedVersion=1
+expect ok field version == 2
+
+# ── ...and the work it authorised is really there ─────────────────────
+use books
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Authorised spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":800"
+
+# ── Dropping the session closes the doors again ───────────────────────
+session principal="" token=""
+
+do StoreTransaction ledgerId=1 description="after signing out" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":100,"den":1,"dp":2}}]
+expect err message == "unauthorized"
+
+do GetLedger ledgerId=1
+expect err message == "unauthorized"
+
+# ...and the balance is what it was before the refused write.
+session principal=$who token=$token
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Authorised cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-800"

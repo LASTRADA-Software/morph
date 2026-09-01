@@ -1,0 +1,85 @@
+# ledger (rung 5) — the invariant, stated per currency, and the refusal that
+# proves it is enforced.
+#
+# examples/ledger/README.md's "What to implement" step 1, with the review
+# correction it carries: *"legs in different currencies cannot sum, so the
+# rule is legs sum to zero within each currency"*. A transaction spanning two
+# currencies is therefore legal exactly when each currency's own partition
+# balances -- and a transaction whose two legs are in different currencies and
+# happen to sum to zero *numerically* is not legal at all.
+#
+# That last case is the one worth a file: it is the shape a naive
+# implementation accepts, and the error message names the currency, which is
+# how you can tell the partitioning ran at all.
+#
+# ── Wire shapes, from the ledger rung's own conventions ───────────────────
+#   * every strong id is its bare underlying number, and an empty one is
+#     omitted from the JSON rather than sent as null;
+#   * enums are their integer values: AccountKind::Asset is 0 and ::Expense
+#     is 1, Currency::USD is 0 and ::EUR is 1;
+#   * a Rational is {"num","den","dp"} and comes back *canonicalised* --
+#     -500/1 at dp=2 is stored and returned as -500/1 dp=2, but 250/100 would
+#     come back as 5/2;
+#   * a leg's currency is not carried by the leg. It comes from the account
+#     the leg names, which is why the partitioning needs the accounts to
+#     exist before it can decide anything.
+#
+# Re-runnable: every account is opened by this file, so the balances asserted
+# below are this run's own; the seeded ledger 1 may hold any number of other
+# rows without affecting them.
+
+server ws://127.0.0.1:8765
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Zero-sum EUR cash" kind=0 currency=1
+expect ok capture eurCash=$.id
+
+do OpenAccount ledgerId=1 name="Zero-sum EUR food" kind=1 currency=1
+expect ok capture eurFood=$.id
+
+do OpenAccount ledgerId=1 name="Zero-sum USD cash" kind=0 currency=0
+expect ok capture usdCash=$.id
+
+do OpenAccount ledgerId=1 name="Zero-sum USD fees" kind=1 currency=0
+expect ok capture usdFees=$.id
+
+# ── Four legs, two currencies, each partition balanced ────────────────────
+do StoreTransaction ledgerId=1 description="one entry, two currencies" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$eurCash,"amount":{"num":-500,"den":1,"dp":2}},{"accountId":$eurFood,"amount":{"num":500,"den":1,"dp":2}},{"accountId":$usdCash,"amount":{"num":-700,"den":1,"dp":2}},{"accountId":$usdFees,"amount":{"num":700,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-500"
+expect ok field accounts ~ "\"id\":$usdCash,\"name\":\"Zero-sum USD cash\",\"kind\":0,\"currency\":0,\"balance\":.\"num\":-700"
+
+# ── One currency out of balance rejects the whole entry ───────────────────
+# The EUR legs balance; the USD legs do not. The message names USD, which is
+# what shows the partitioning happened rather than one global sum.
+do StoreTransaction ledgerId=1 description="USD does not balance" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$eurCash,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$eurFood,"amount":{"num":100,"den":1,"dp":2}},{"accountId":$usdCash,"amount":{"num":-700,"den":1,"dp":2}},{"accountId":$usdFees,"amount":{"num":600,"den":1,"dp":2}}]
+expect err message ~ "zero-sum violation in USD"
+expect err message !~ "EUR"
+
+# The EUR legs of that rejected entry were not posted either: all-or-nothing.
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-500"
+
+# ── Two legs that cancel numerically but not within a currency ────────────
+# -1000 and +1000, which any single global sum would accept. Each currency's
+# own partition is a single unbalanced leg, so it is refused.
+do StoreTransaction ledgerId=1 description="cross-currency, numerically zero" date="2026-08-03T00:00:00.000Z" legs=[{"accountId":$eurCash,"amount":{"num":-1000,"den":1,"dp":2}},{"accountId":$usdCash,"amount":{"num":1000,"den":1,"dp":2}}]
+expect err message ~ "zero-sum violation"
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-500"
+expect ok field accounts ~ "\"id\":$usdCash,\"name\":\"Zero-sum USD cash\",\"kind\":0,\"currency\":0,\"balance\":.\"num\":-700"
+
+# ── A foreign-amount pair is display metadata, never part of the sum ──────
+# The EUR legs balance on their own; the foreign amount and currency ride
+# along for audit and are not summed against anything.
+do StoreTransaction ledgerId=1 description="paid in EUR, priced in USD" date="2026-08-04T00:00:00.000Z" legs=[{"accountId":$eurCash,"amount":{"num":-100,"den":1,"dp":2},"foreignAmount":{"num":110,"den":1,"dp":2},"foreignCurrency":0},{"accountId":$eurFood,"amount":{"num":100,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-600"
+# The USD side is untouched: a foreign amount posts nothing.
+expect ok field accounts ~ "\"id\":$usdCash,\"name\":\"Zero-sum USD cash\",\"kind\":0,\"currency\":0,\"balance\":.\"num\":-700"

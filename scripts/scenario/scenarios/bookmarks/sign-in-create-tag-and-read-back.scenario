@@ -1,0 +1,116 @@
+# bookmarks (rung 2) — sign in, save a link, tag it, read it back.
+#
+# examples/bookmarks/README.md's "What to implement" step 1: bookmark CRUD
+# plus tag assignment. This is the shortest complete journey the rung has, and
+# the one every other file in this directory assumes.
+#
+# ── Wire shapes that are not guessable from the DTOs ────────────────────────
+#   * every strong id is its bare underlying number on the wire, so a
+#     BookmarkId is `1`, not an object and not a string;
+#   * the four enums travel as their enumerator *names* -- "Private"/"Shared",
+#     "Unread"/"Read", "Active"/"Archived" -- because each carries a glz::meta;
+#   * `bookmarkCount` on a tag is a `Count`, a Quantity, so it arrives as
+#     {"num","den","dp"} and is asserted as `.num`;
+#   * tags are created implicitly by naming them on a bookmark. There is no
+#     CreateTag action: TagModel only renames, merges and lists what
+#     CreateBookmark and EditBookmark brought into being;
+#   * a bookmark's `tags` come back ordered by *tag id*, not in the order the
+#     create sent them -- so a tag some earlier bookmark already introduced
+#     sorts ahead of a brand-new one. Every tag assertion here is therefore a
+#     containment test over the array rather than an index, which is also what
+#     keeps it true on a database this file has already run against;
+#   * AuthModel is the one model an unauthenticated caller may reach. The
+#     token it mints is real and server-signed, and it has to be installed
+#     with a `session` step -- `client`'s own principal=/token= options take
+#     literal text and are not capture-expanded (morph#360).
+#
+# Re-runnable: every bookmark here is created by this file and read back by
+# the id its own create returned, so nothing depends on the database being
+# empty or on any listing position.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+expect ok field principal == alice
+
+client store model=BookmarkModel
+session principal=$who token=$token
+
+do CreateBookmark url="https://en.cppreference.com/w/cpp/23" title="C++23" description="the standard, as pages" notes="read the ranges section" tags=["cpp","reading"]
+expect ok capture cpp=$.id
+
+# The read is the proof, and it is what shows the defaults the create never
+# sent: a new bookmark is Unread, Active and Private.
+do GetBookmark id=$cpp
+expect ok field url == "https://en.cppreference.com/w/cpp/23"
+expect ok field title == "C++23"
+expect ok field description == "the standard, as pages"
+expect ok field notes == "read the ranges section"
+expect ok field tags ~ "\"cpp\""
+expect ok field tags ~ "\"reading\""
+expect ok field readState == Unread
+expect ok field archiveState == Active
+expect ok field visibility == Private
+
+# ── The tag exists now, because the bookmark named it ──────────────────────
+client tags model=TagModel
+session principal=$who token=$token
+
+do ListTags
+expect ok field tags ~ "\"name\":\"cpp\""
+expect ok field tags ~ "\"name\":\"reading\""
+
+# ── A second bookmark sharing one of the tags ──────────────────────────────
+use store
+
+do CreateBookmark url="https://isocpp.org/faq" title="C++ FAQ" tags=["cpp"]
+expect ok capture faq=$.id
+
+do GetBookmark id=$faq
+expect ok field title == "C++ FAQ"
+expect ok field tags ~ "\"cpp\""
+expect ok field tags !~ "\"reading\""
+
+# ── Filtering by that tag finds both, and only both ────────────────────────
+do ListBookmarks tag=cpp
+expect ok field bookmarks ~ "\"id\":$cpp,"
+expect ok field bookmarks ~ "\"id\":$faq,"
+
+do ListBookmarks tag=reading
+expect ok field bookmarks ~ "\"id\":$cpp,"
+expect ok field bookmarks !~ "\"id\":$faq,"
+
+# ── An empty url is refused, so no half-made bookmark exists ───────────────
+do CreateBookmark url="" title="nowhere"
+expect err message == "action failed validation: BookmarkModel/CreateBookmark"
+
+# ── ...and the collection closes the way it opened ────────────────────────
+# Deleting the second bookmark leaves the first, its tags, and the tag rows
+# themselves -- a tag outlives the bookmarks that named it, with a count of
+# zero, which is why this file can run against a database it has already run
+# against.
+do DeleteBookmark id=$faq
+expect ok
+
+do GetBookmark id=$faq
+expect err message == "no such bookmark"
+
+do GetBookmark id=$cpp
+expect ok field title == "C++23"
+expect ok field tags ~ "\"cpp\""
+
+do DeleteBookmark id=$cpp
+expect ok
+
+do ListBookmarks tag=cpp
+expect ok field bookmarks !~ "\"id\":$cpp,"
+expect ok field bookmarks !~ "\"id\":$faq,"
+
+use tags
+
+# The tags survive their bookmarks, counting nothing.
+do ListTags
+expect ok field tags ~ "\"name\":\"cpp\""
+expect ok field tags ~ "\"name\":\"reading\""

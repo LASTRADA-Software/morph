@@ -1,0 +1,107 @@
+# kanban (rung 4) — tags on a card, applied by hand.
+#
+# `ApplyTagMutation` is the manual half of this rung's rules engine: it is the
+# same mutation a rule performs, exposed as an action a person can dispatch.
+# examples/kanban/dto/rule_dto.hpp says so in as many words -- it "exists as a
+# real, BRIDGE_REGISTER_ACTION-registered action" rather than only as
+# something a rule can do.
+#
+# ── A result-shape break worth knowing about ────────────────────────────
+# Every *earlier* mutating BoardModel action answers with the whole rebuilt
+# `GetBoardResult`. The Rule/Tag/Attachment family, added later, answers with
+# `{}` instead -- `ApplyTagMutationResult` is an empty struct. So the tag's
+# effect is only visible on the next read, which is what this file does and
+# what a client has to do.
+#
+# `RuleMutationType` travels as its name, "AddTag" or "RemoveTag".
+#
+# Re-runnable: the project is created here.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Tagging"
+expect ok capture project=$.id
+
+client board model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$project
+expect ok
+
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Taggable"
+expect ok capture task=$.tasks[0].id
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$todo,\"swimlaneId\":$lane,\"title\":\"Taggable\",\"position\":0,\"tags\":\\[\\]"
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Untagged"
+expect ok capture other=$.tasks[1].id
+
+# ── Add ─────────────────────────────────────────────────────────────────
+# The reply is an empty ack, so the read is the only proof there is.
+do ApplyTagMutation taskId=$task mutationType=AddTag tag=urgent
+expect ok field @body == "{}"
+
+do GetBoardState
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$todo,\"swimlaneId\":$lane,\"title\":\"Taggable\",\"position\":0,\"tags\":\\[\"urgent\"\\]"
+# ...and only that task.
+expect ok field tasks ~ "\"id\":$other,\"columnId\":$todo,\"swimlaneId\":$lane,\"title\":\"Untagged\",\"position\":1,\"tags\":\\[\\]"
+
+# ── A second tag joins the first ────────────────────────────────────────
+do ApplyTagMutation taskId=$task mutationType=AddTag tag=backend
+expect ok
+
+do GetBoardState
+expect ok field tasks ~ "\"urgent\""
+expect ok field tasks ~ "\"backend\""
+
+# ── Adding the same tag twice does not double it ────────────────────────
+do ApplyTagMutation taskId=$task mutationType=AddTag tag=urgent
+expect ok
+
+do GetBoardState
+expect ok field tasks !~ "\"urgent\",\"urgent\""
+expect ok field tasks !~ "\"urgent\".*\"urgent\""
+
+# ── Remove ──────────────────────────────────────────────────────────────
+do ApplyTagMutation taskId=$task mutationType=RemoveTag tag=urgent
+expect ok
+
+do GetBoardState
+expect ok field tasks !~ "\"urgent\""
+expect ok field tasks ~ "\"backend\""
+
+# ── Removing a tag that is not there is a no-op, not an error ──────────
+do ApplyTagMutation taskId=$task mutationType=RemoveTag tag=urgent
+expect ok
+
+do GetBoardState
+expect ok field tasks ~ "\"backend\""
+
+# ── The refusals ────────────────────────────────────────────────────────
+do ApplyTagMutation taskId=$task mutationType=AddTag tag=""
+expect err message == "action failed validation: BoardModel/ApplyTagMutation"
+
+do ApplyTagMutation taskId=999999 mutationType=AddTag tag=ghost
+expect err message == "task does not belong to this project"
+
+do GetBoardState
+expect ok field tasks !~ "ghost"
+expect ok field tasks ~ "\"backend\""
+
+# ── Tags survive a move ─────────────────────────────────────────────────
+do CreateColumn name="Done" wipLimit=0
+expect ok capture done=$.columns[1].id
+
+do MoveTaskPosition taskId=$task columnId=$done swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$done,\"swimlaneId\":$lane,\"title\":\"Taggable\",\"position\":0,\"tags\":\\[\"backend\"\\]"

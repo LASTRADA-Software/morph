@@ -1,0 +1,52 @@
+# pastebin (rung 1) — reading is a mutation, and editing is not a read.
+#
+# examples/pastebin/README.md's journal design decision: GetPaste is the one
+# client-visible journaled mutation, deliberately not split into an unlogged
+# read plus a RecordRead. The observable consequence is here -- the read
+# counter advances on every GetPaste, and does *not* advance on EditPaste,
+# which returns the paste's current count without touching it.
+#
+# That asymmetry is worth pinning because it is exactly the kind of thing a
+# refactor "tidies up": making EditPaste return a freshly-read view, or
+# resetting the counter on edit, would break no in-process test that only ever
+# checks content.
+#
+# Re-runnable: the paste is created here, so its counter starts at zero in
+# every run.
+
+model PasteModel
+
+client alice
+
+do CreatePaste content="v1" syntax=plaintext editability=Editable
+expect ok capture paste=$.id
+
+do GetPaste id=$paste
+expect ok field readCount.num == 1
+
+do GetPaste id=$paste
+expect ok field readCount.num == 2
+
+# The edit reports the count it found -- two -- rather than zero or three.
+do EditPaste id=$paste content="v2" syntax=restructuredtext
+expect ok field content == "v2"
+expect ok field syntax == restructuredtext
+expect ok field readCount.num == 2
+
+# ...and the next read resumes from there, so the edit neither counted nor
+# reset.
+do GetPaste id=$paste
+expect ok field readCount.num == 3
+expect ok field content == "v2"
+
+# A paste with no budget has no burnAfterReads on the wire at all: an
+# unengaged Quantity is omitted rather than sent as null or zero. An absent
+# path fails every operator, `!=` included, so this is asserted with a regex
+# over the whole body instead.
+do GetPaste id=$paste
+expect ok field readCount.num == 4
+expect ok field @body !~ "burnAfterReads"
+
+do ListPastes cursor="$paste~"
+expect ok field pastes ~ "\"id\":\"$paste\""
+expect ok field pastes ~ "\"syntax\":\"restructuredtext\""

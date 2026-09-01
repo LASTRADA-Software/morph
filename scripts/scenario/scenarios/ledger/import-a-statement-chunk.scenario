@@ -1,0 +1,108 @@
+# ledger (rung 5) — a CSV statement uploaded in chunks, and the two things
+# that stop a re-upload from double-counting it.
+#
+# examples/ledger/README.md's "What to implement" step 6: chunked bulk
+# actions, content-hash idempotency keys at scale, duplicate detection across
+# re-imports -- "the natural production home of the exactly-once discipline".
+#
+# ── The chunk format, which is not in any DTO ────────────────────────────
+# `date,description,account_id,amount`, one header line skipped, and the date
+# must be a full ISO-8601 instant: `2026-08-01` alone is refused with
+# "malformed date". Every parsed row posts a *two-leg* entry -- the row's own
+# account against this chunk's shared `counterAccountId` -- because a CSV row
+# names no offsetting account and a real statement import is always "for" one
+# account with everything else landing in a counter or suspense account.
+#
+# ── Two different dedup mechanisms, and only one of them fires ───────────
+# There are two keys in play and they are easy to conflate:
+#
+#   * the **content hash**, per row: a row already imported is skipped and
+#     counted in `duplicates`;
+#   * the **opId**, per chunk: `ledger_imported_ops` records it, but
+#     `execute(ImportLedgerChunk)` deliberately does *not* read it back for an
+#     early return -- its own comment says the lookup "exists purely to keep
+#     the replay safe, not to short-circuit any of the work above", because
+#     `ImportedOpRecord` stores no result to return.
+#
+# So replaying a chunk under the same opId reports `imported: 0,
+# duplicates: N` -- the content hash doing the work -- and not the original
+# call's counts. That is asserted below as what happens, since the counts are
+# what a client shows the user.
+#
+# ── How this file stays re-runnable ─────────────────────────────────────
+# The content hash is over `description | ISO date | amount` -- the account id
+# is *not* part of it. So a second run uploading the same descriptions on the
+# same dates for the same amounts has every row skipped as a duplicate, even
+# though the accounts are new. The first account's id is therefore spent as
+# the run's nonce and stamped into every description as well as into every
+# opId, which an opId needs anyway: an opId is consumed permanently.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+do OpenAccount ledgerId=1 name="Imported current" kind=0 currency=1
+expect ok capture current=$.id
+
+do OpenAccount ledgerId=1 name="Imported suspense" kind=1 currency=1
+expect ok capture suspense=$.id
+
+# ── The first chunk ──────────────────────────────────────────────────────
+do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-a-$current" csvChunk="date,description,account_id,amount\n2026-08-01T00:00:00.000Z,latte $current,$current,-3.50\n2026-08-02T00:00:00.000Z,bagel $current,$current,-2.00\n"
+expect ok field imported == 2
+expect ok field duplicates == 0
+
+# The read is the proof: two rows, -5.50 off the current account and the
+# matching +5.50 in suspense.
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-550"
+expect ok field accounts ~ "\"id\":$suspense,\"name\":\"Imported suspense\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":550"
+
+# ── The same chunk again, same opId: nothing is posted ───────────────────
+do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-a-$current" csvChunk="date,description,account_id,amount\n2026-08-01T00:00:00.000Z,latte $current,$current,-3.50\n2026-08-02T00:00:00.000Z,bagel $current,$current,-2.00\n"
+expect ok field imported == 0
+expect ok field duplicates == 2
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-550"
+
+# ── The same rows under a *new* opId: still nothing, by content ──────────
+# This is the assertion that separates the two mechanisms. If dedup were only
+# by opId, a fresh key would re-post both rows and the balance would double.
+do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-b-$current" csvChunk="date,description,account_id,amount\n2026-08-01T00:00:00.000Z,latte $current,$current,-3.50\n2026-08-02T00:00:00.000Z,bagel $current,$current,-2.00\n"
+expect ok field imported == 0
+expect ok field duplicates == 2
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-550"
+
+# ── A chunk that overlaps: one old row, one new ─────────────────────────
+do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-c-$current" csvChunk="date,description,account_id,amount\n2026-08-02T00:00:00.000Z,bagel $current,$current,-2.00\n2026-08-03T00:00:00.000Z,newspaper $current,$current,-1.25\n"
+expect ok field imported == 1
+expect ok field duplicates == 1
+
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-675"
+
+# ── A chunk with no rows at all is not an error ─────────────────────────
+do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-d-$current" csvChunk="date,description,account_id,amount\n"
+expect ok field imported == 0
+expect ok field duplicates == 0
+
+# ── The refusals ────────────────────────────────────────────────────────
+do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-e-$current" csvChunk="date,description,account_id,amount\n2026-08-04,short date $current,$current,-1.00\n"
+expect err message == "ImportLedgerChunk: malformed date"
+
+do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-f-$current" csvChunk="date,description,account_id,amount\nonly,three,fields\n"
+expect err message == "ImportLedgerChunk: malformed CSV row"
+
+do ImportLedgerChunk ledgerId=1 counterAccountId=999999 opId="stmt-g-$current" csvChunk="date,description,account_id,amount\n2026-08-05T00:00:00.000Z,anything $current,$current,-1.00\n"
+expect err message == "ImportLedgerChunk: no such account"
+
+# None of the three refusals posted anything.
+do GetLedger ledgerId=1
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-675"

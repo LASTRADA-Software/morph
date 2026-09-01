@@ -1,0 +1,193 @@
+# kanban (rung 4) — the whole rung, in the order a team would actually meet it.
+#
+# One project, three people, and every registered action used for what it is
+# for rather than to prove a point about it. The other nineteen files in this
+# directory each isolate one behaviour; this one is the integration: a
+# manager sets a board up and staffs it, two members work it, rules fire as
+# cards land, files and comments accumulate, somebody is promoted, somebody
+# leaves, and both feeds are read at the end to see whether they agree about
+# what happened.
+#
+# It exists because every behaviour those files pin is pinned *in isolation*,
+# on a board with two columns and one card. The interactions are what a real
+# board has and what nothing else here covers: a rule firing on a task that
+# already carries a tag; a WIP limit meeting a card being dragged by somebody
+# who was promoted mid-week; an event cursor read across all of it.
+#
+# Re-runnable: the project is created here, and every id is captured.
+
+client auth model=AuthModel
+
+do Login username=manager
+expect ok capture managerToken=$.token
+expect ok capture manager=$.principal
+
+do Login username=dev
+expect ok capture devToken=$.token
+expect ok capture dev=$.principal
+
+do Login username=reviewer
+expect ok capture reviewerToken=$.token
+expect ok capture reviewer=$.principal
+
+# ── Monday: the board is set up and staffed ────────────────────────────
+client admin model=ProjectAdminModel
+session principal=$manager token=$managerToken
+
+do CreateProject name="Release week"
+expect ok capture project=$.id
+
+do SetMemberRole projectId=$project principal=dev role=Member
+expect ok
+
+do SetMemberRole projectId=$project principal=reviewer role=Viewer
+expect ok
+
+do GetProjectRoles projectId=$project
+expect ok field roles ~ "\"principal\":\"manager\",\"role\":\"Manager\""
+expect ok field roles ~ "\"principal\":\"dev\",\"role\":\"Member\""
+expect ok field roles ~ "\"principal\":\"reviewer\",\"role\":\"Viewer\""
+
+client board model=BoardModel
+session principal=$manager token=$managerToken
+
+do OpenBoard projectId=$project
+expect ok capture start=$.projectId
+
+do CreateColumn name="Backlog" wipLimit=0
+expect ok capture backlog=$.columns[0].id
+
+do CreateColumn name="In review" wipLimit=1
+expect ok capture review=$.columns[1].id
+
+do CreateColumn name="Shipped" wipLimit=0
+expect ok capture shipped=$.columns[2].id
+
+do CreateSwimlane name="This week"
+expect ok capture week=$.swimlanes[0].id
+
+do CreateRule projectId=$project triggerColumnId=$shipped mutationType=AddTag mutationValue=released
+expect ok capture releaseRule=$.ruleId
+
+do GetRules projectId=$project
+expect ok field rules ~ "\"id\":$releaseRule,\"triggerColumnId\":$shipped,\"mutationType\":\"AddTag\",\"mutationValue\":\"released\""
+
+do GetEventsSince lastEventId=0
+expect ok capture mondayCursor=$.events[3].id
+
+# ── Tuesday: the dev picks up work ─────────────────────────────────────
+client devBoard model=BoardModel
+session principal=$dev token=$devToken
+
+do OpenBoard projectId=$project
+expect ok field columns ~ "\"id\":$review,\"name\":\"In review\",\"wipLimit\":1,\"taskCount\":0"
+
+do CreateTask columnId=$backlog swimlaneId=$week title="Bump the version"
+expect ok capture bump=$.tasks[0].id
+
+do CreateTask columnId=$backlog swimlaneId=$week title="Write the notes"
+expect ok capture notes=$.tasks[1].id
+
+do ApplyTagMutation taskId=$bump mutationType=AddTag tag=chore
+expect ok
+
+do AddAttachment taskId=$notes filename="draft.md" contentType="text/markdown" sizeBytes=812 storageKey="week/draft.md"
+expect ok
+
+do MoveTaskPosition taskId=$bump columnId=$review swimlaneId=$week position=0 opId="bump-$bump"
+expect ok field columns ~ "\"id\":$review,\"name\":\"In review\",\"wipLimit\":1,\"taskCount\":1"
+
+# The reply was lost, so the client sends it again. It must not double.
+do MoveTaskPosition taskId=$bump columnId=$review swimlaneId=$week position=0 opId="bump-$bump"
+expect ok field columns ~ "\"id\":$review,\"name\":\"In review\",\"wipLimit\":1,\"taskCount\":1"
+
+# ── Wednesday: the reviewer reads, and may not touch ───────────────────
+client reviewerBoard model=BoardModel
+session principal=$reviewer token=$reviewerToken
+
+do OpenBoard projectId=$project
+expect ok field tasks ~ "\"id\":$bump,\"columnId\":$review,\"swimlaneId\":$week"
+
+do GetAttachments taskId=$notes
+expect ok field attachments ~ "\"filename\":\"draft.md\",\"contentType\":\"text/markdown\",\"sizeBytes\":812,\"storageKey\":\"week/draft.md\",\"uploadedBy\":\"dev\""
+
+do AddComment taskId=$bump body="Looks fine to me"
+expect err message == "caller's role does not permit this action"
+
+# ── ...so the manager promotes them ────────────────────────────────────
+use admin
+
+do SetMemberRole projectId=$project principal=reviewer role=Member
+expect ok
+
+use reviewerBoard
+
+do AddComment taskId=$bump body="Looks fine to me"
+expect ok field comments ~ "\"taskId\":$bump,\"principal\":\"reviewer\",\"body\":\"Looks fine to me\""
+
+# The review column holds one card, so the second cannot join it.
+do MoveTaskPosition taskId=$notes columnId=$review swimlaneId=$week position=0
+expect err message == "MoveTaskPosition: target column is at its WIP limit"
+
+# ── Thursday: it ships, and the rule fires on a card that has a tag ────
+use devBoard
+
+do MoveTaskPosition taskId=$bump columnId=$shipped swimlaneId=$week position=0
+expect ok field tasks ~ "\"id\":$bump,\"columnId\":$shipped,\"swimlaneId\":$week,\"title\":\"Bump the version\",\"position\":0,\"tags\":\\[\"chore\",\"released\"\\]"
+
+# ...and the freed column takes the next card.
+do MoveTaskPosition taskId=$notes columnId=$review swimlaneId=$week position=0
+expect ok field columns ~ "\"id\":$review,\"name\":\"In review\",\"wipLimit\":1,\"taskCount\":1"
+expect ok field columns ~ "\"id\":$shipped,\"name\":\"Shipped\",\"wipLimit\":0,\"taskCount\":1"
+
+# ── Friday: the dev leaves the project ─────────────────────────────────
+use admin
+
+do RemoveMember projectId=$project principal=dev
+expect ok
+
+use devBoard
+
+do MoveTaskPosition taskId=$notes columnId=$shipped swimlaneId=$week position=1
+expect err message == "caller's role does not permit this action"
+
+# The work stays behind.
+use board
+
+do GetBoardState
+expect ok field tasks ~ "\"id\":$notes,\"columnId\":$review,\"swimlaneId\":$week"
+expect ok field tasks ~ "\"id\":$bump,\"columnId\":$shipped,\"swimlaneId\":$week"
+expect ok field comments ~ "\"principal\":\"reviewer\""
+
+do GetAttachments taskId=$notes
+expect ok field attachments ~ "\"uploadedBy\":\"dev\""
+
+# ── The retrospective: do the two feeds agree? ─────────────────────────
+# The sync stream carries the shapes of change since Monday.
+do GetEventsSince lastEventId=$mondayCursor
+expect ok field events ~ "\"kind\":\"task\""
+expect ok field events ~ "\"kind\":\"move\""
+
+# The audit stream carries who did what -- including the reviewer's refused
+# comment and the dev's refused move, which the sync stream does not.
+do GetActivity
+expect ok field events ~ "\"actionType\":\"CreateTask\",\"principal\":\"dev\""
+expect ok field events ~ "\"actionType\":\"AddComment\",\"principal\":\"reviewer\""
+expect ok field events ~ "\"actionType\":\"MoveTaskPosition\",\"principal\":\"dev\""
+expect ok field events ~ "\"actionType\":\"CreateRule\",\"principal\":\"manager\""
+
+# ── And the board is left in the state the week produced ───────────────
+do GetBoardState
+expect ok field columns ~ "\"id\":$backlog,\"name\":\"Backlog\",\"wipLimit\":0,\"taskCount\":0"
+expect ok field columns ~ "\"id\":$review,\"name\":\"In review\",\"wipLimit\":1,\"taskCount\":1"
+expect ok field columns ~ "\"id\":$shipped,\"name\":\"Shipped\",\"wipLimit\":0,\"taskCount\":1"
+
+use admin
+
+do GetProjectRoles projectId=$project
+expect ok field roles ~ "\"principal\":\"reviewer\",\"role\":\"Member\""
+expect ok field roles ~ "\"principal\":\"manager\",\"role\":\"Manager\""
+expect ok field roles !~ "dev"
+
+do GetMyProjects
+expect ok field projects ~ "\"id\":$project,\"name\":\"Release week\",\"myRole\":\"Manager\""

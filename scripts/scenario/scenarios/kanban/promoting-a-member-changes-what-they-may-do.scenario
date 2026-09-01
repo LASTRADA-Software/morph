@@ -1,0 +1,138 @@
+# kanban (rung 4) — a role change takes effect on the caller's next action,
+# on a connection they never reopened.
+#
+# The question this file answers is not "does SetMemberRole write a row" --
+# GetProjectRoles settles that. It is whether the *board handler somebody is
+# already holding* respects the new role. `requireRole` queries
+# `project_has_roles` per action rather than caching a role at attach time, so
+# a promotion is live; a cached role would make this file's middle section
+# fail while every role listing still read correctly.
+#
+# That distinction is only visible out of process. In-process, there is no
+# "connection they are already holding".
+#
+# Re-runnable: the project is created here.
+
+client auth model=AuthModel
+
+do Login username=alice
+expect ok capture aliceToken=$.token
+expect ok capture alice=$.principal
+
+do Login username=bob
+expect ok capture bobToken=$.token
+expect ok capture bob=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$alice token=$aliceToken
+
+do CreateProject name="Promotion"
+expect ok capture project=$.id
+
+do SetMemberRole projectId=$project principal=bob role=Viewer
+expect ok
+
+client hers model=BoardModel
+session principal=$alice token=$aliceToken
+
+do OpenBoard projectId=$project
+expect ok
+
+do CreateColumn name="Todo" wipLimit=0
+expect ok capture todo=$.columns[0].id
+
+do CreateColumn name="Done" wipLimit=0
+expect ok capture done=$.columns[1].id
+
+do CreateSwimlane name="Lane"
+expect ok capture lane=$.swimlanes[0].id
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Subject"
+expect ok capture task=$.tasks[0].id
+
+# ── He attaches as a Viewer, and is refused ────────────────────────────
+client his model=BoardModel
+session principal=$bob token=$bobToken
+
+do OpenBoard projectId=$project
+expect ok field projectId == $project
+
+do MoveTaskPosition taskId=$task columnId=$done swimlaneId=$lane position=0
+expect err message == "caller's role does not permit this action"
+
+do CreateRule projectId=$project triggerColumnId=$done mutationType=AddTag mutationValue=shipped
+expect err message == "caller's role does not permit this action"
+
+# ── Promoted to Member, on the same handler he is already holding ──────
+use admin
+
+do SetMemberRole projectId=$project principal=bob role=Member
+expect ok
+
+do GetProjectRoles projectId=$project
+expect ok field roles ~ "\"principal\":\"bob\",\"role\":\"Member\""
+
+use his
+
+# No reopen, no reconnect: the next action simply succeeds.
+do MoveTaskPosition taskId=$task columnId=$done swimlaneId=$lane position=0
+expect ok field tasks ~ "\"id\":$task,\"columnId\":$done,\"swimlaneId\":$lane"
+
+# ...and the rule is still above him.
+do CreateRule projectId=$project triggerColumnId=$done mutationType=AddTag mutationValue=shipped
+expect err message == "caller's role does not permit this action"
+
+# ── Promoted again, to Manager ─────────────────────────────────────────
+use admin
+
+do SetMemberRole projectId=$project principal=bob role=Manager
+expect ok
+
+use his
+
+do CreateRule projectId=$project triggerColumnId=$done mutationType=AddTag mutationValue=shipped
+expect ok capture rule=$.ruleId
+
+do GetRules projectId=$project
+expect ok field rules ~ "\"id\":$rule,\"triggerColumnId\":$done,\"mutationType\":\"AddTag\",\"mutationValue\":\"shipped\""
+
+# ── ...and a Manager may administer, including demoting the other one ──
+client hisAdmin model=ProjectAdminModel
+session principal=$bob token=$bobToken
+
+do SetMemberRole projectId=$project principal=alice role=Viewer
+expect ok
+
+do GetProjectRoles projectId=$project
+expect ok field roles ~ "\"principal\":\"alice\",\"role\":\"Viewer\""
+expect ok field roles ~ "\"principal\":\"bob\",\"role\":\"Manager\""
+
+# ── ...and the demotion is live on *her* handler too ───────────────────
+use hers
+
+do GetBoardState
+expect ok field tasks ~ "\"id\":$task,"
+
+do CreateTask columnId=$todo swimlaneId=$lane title="No longer allowed"
+expect err message == "caller's role does not permit this action"
+
+# An action a model does not register is refused by name, before any role
+# check: GetMyProjects belongs to ProjectAdminModel, not to BoardModel.
+do GetMyProjects
+expect err message == "unknown action: BoardModel/GetMyProjects"
+
+use admin
+
+do GetMyProjects
+expect ok field projects ~ "\"id\":$project,\"name\":\"Promotion\",\"myRole\":\"Viewer\""
+
+# ── Demoting back restores her ─────────────────────────────────────────
+use hisAdmin
+
+do SetMemberRole projectId=$project principal=alice role=Manager
+expect ok
+
+use hers
+
+do CreateTask columnId=$todo swimlaneId=$lane title="Allowed again"
+expect ok field tasks ~ "Allowed again"

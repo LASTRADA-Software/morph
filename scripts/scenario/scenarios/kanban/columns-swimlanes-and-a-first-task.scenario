@@ -1,0 +1,82 @@
+# kanban (rung 4) — the board's furniture, and the first card on it.
+#
+# examples/kanban/README.md's build order step 1. A task needs a column *and*
+# a swimlane, both of which must already exist and both of which must belong
+# to this project -- so this is the shortest journey in which one action's
+# result is genuinely required by the next.
+#
+# The counts are the assertion worth having: `ColumnView::taskCount` is
+# derived, not stored, so a task created into the wrong column would still
+# appear on the board and would show up here as a count on the wrong one.
+#
+# Re-runnable: the project is created here, so its board starts empty.
+
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client admin model=ProjectAdminModel
+session principal=$who token=$token
+
+do CreateProject name="Furniture"
+expect ok capture project=$.id
+
+client board model=BoardModel
+session principal=$who token=$token
+
+do OpenBoard projectId=$project
+expect ok field columns == []
+
+# ── Two columns and a swimlane ────────────────────────────────────────────
+# Each mutating action answers with the whole rebuilt board, so the new
+# column is in the reply that created it.
+do CreateColumn name="Todo" wipLimit=0
+expect ok field columns ~ "\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":0"
+expect ok capture todo=$.columns[0].id
+
+do CreateColumn name="Doing" wipLimit=3
+expect ok field columns ~ "\"name\":\"Doing\",\"wipLimit\":3,\"taskCount\":0"
+expect ok capture doing=$.columns[1].id
+
+do CreateSwimlane name="Default"
+expect ok field swimlanes ~ "\"name\":\"Default\""
+expect ok capture lane=$.swimlanes[0].id
+
+# ── The first task ────────────────────────────────────────────────────────
+do CreateTask columnId=$todo swimlaneId=$lane title="Write the release notes"
+expect ok field tasks ~ "\"columnId\":$todo,\"swimlaneId\":$lane,\"title\":\"Write the release notes\""
+expect ok capture task=$.tasks[0].id
+# The count is derived from the tasks, so it moved with the task.
+expect ok field columns ~ "\"id\":$todo,\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":1"
+expect ok field columns ~ "\"id\":$doing,\"name\":\"Doing\",\"wipLimit\":3,\"taskCount\":0"
+
+# ── A second task in the same column ──────────────────────────────────────
+do CreateTask columnId=$todo swimlaneId=$lane title="Cut the tag"
+expect ok field columns ~ "\"id\":$todo,\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":2"
+
+# The independent read agrees.
+do GetBoardState
+expect ok field columns ~ "\"id\":$todo,\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":2"
+expect ok field tasks ~ "\"id\":$task,"
+expect ok field tasks ~ "Write the release notes"
+expect ok field tasks ~ "Cut the tag"
+
+# ── The refusals ──────────────────────────────────────────────────────────
+do CreateColumn name=""
+expect err message == "action failed validation: BoardModel/CreateColumn"
+
+do CreateSwimlane name=""
+expect err message == "action failed validation: BoardModel/CreateSwimlane"
+
+do CreateTask columnId=$todo swimlaneId=$lane title=""
+expect err message == "action failed validation: BoardModel/CreateTask"
+
+# A column id that belongs to no project of this board.
+do CreateTask columnId=999999 swimlaneId=$lane title="Nowhere"
+expect err message == "column does not belong to this project"
+
+# None of the refusals changed the counts.
+do GetBoardState
+expect ok field columns ~ "\"id\":$todo,\"name\":\"Todo\",\"wipLimit\":0,\"taskCount\":2"
+expect ok field tasks !~ "Nowhere"

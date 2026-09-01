@@ -1,0 +1,50 @@
+# polls (rung 3) — changing a vote replaces it rather than adding to it.
+#
+# examples/polls/README.md's "What to implement" step 3 pairs SubmitVotes with
+# UpdateVotes. The distinction worth pinning is that an update is not an
+# append: a participant who votes Yes and then IfNeedBe must leave the tally
+# with one IfNeedBe and *zero* Yes, not one of each. A tally that only ever
+# increments would satisfy every assertion about the new value and none about
+# the old one, so both are asserted here.
+#
+# Re-runnable: the poll is created here.
+
+model PollModel
+
+client alice
+
+do CreatePoll title="Change of heart" options=[{"label":"Now"},{"label":"Later"}]
+expect ok capture poll=$.pollId
+
+do OpenPoll pollId=$poll
+expect ok capture now=$.options[0].id
+expect ok capture later=$.options[1].id
+
+do SubmitVotes participantName=alice votes=[{"optionId":$now,"choice":"Yes"},{"optionId":$later,"choice":"No"}]
+expect ok field options[0].yesCount.num == 1
+expect ok field options[1].noCount.num == 1
+
+do UpdateVotes participantName=alice votes=[{"optionId":$now,"choice":"IfNeedBe"},{"optionId":$later,"choice":"Yes"}]
+expect ok
+
+# The read is the proof: the old choices are gone, not merely outnumbered.
+do GetPollState
+expect ok field options[0].ifNeedBeCount.num == 1
+expect ok field options[0].yesCount.num == 0
+expect ok field options[1].yesCount.num == 1
+expect ok field options[1].noCount.num == 0
+
+# One participant, one row per option -- the update replaced, it did not add.
+do GetEventsSince lastEventId=0
+expect ok field events ~ "alice submitted votes"
+expect ok field events ~ "alice updated votes"
+
+# ── The option has to belong to this poll ──────────────────────────────────
+# Option ids are a table-wide autoincrement, so an id from another poll is a
+# perfectly well-formed number that names a real row -- and is still refused.
+do UpdateVotes participantName=alice votes=[{"optionId":999999,"choice":"Yes"}]
+expect err message == "option does not belong to this poll"
+
+# The refusal changed nothing.
+do GetPollState
+expect ok field options[0].ifNeedBeCount.num == 1

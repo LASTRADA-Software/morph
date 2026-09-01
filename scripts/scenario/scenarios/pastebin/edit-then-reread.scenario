@@ -1,0 +1,61 @@
+# pastebin (rung 1) — an edit is proven by the re-read, and by the listing.
+#
+# examples/pastebin/README.md's "What to implement" step 3: EditPaste and
+# DeletePaste are the plain mutations, for *editable* pastes. Editability is a
+# per-paste property fixed at create time, so this walks both sides of it:
+# the paste that accepts an edit, and the one that refuses every edit forever.
+#
+# The listing check at the end is what makes this more than a round trip:
+# `syntax` is carried in PasteSummary as well as in PasteView, so an edit that
+# updated the view's copy and not the row would pass a re-read and fail here.
+#
+# Re-runnable: both pastes are created by this file.
+
+model PasteModel
+
+client alice
+
+do CreatePaste content="first draft" syntax=plaintext editability=Editable
+expect ok capture draft=$.id
+
+do GetPaste id=$draft
+expect ok field content == "first draft"
+expect ok field editability == Editable
+
+do EditPaste id=$draft content="second draft" syntax=markdown
+expect ok
+
+# The read is the proof.
+do GetPaste id=$draft
+expect ok field content == "second draft"
+expect ok field syntax == markdown
+expect ok field content !~ "first"
+
+# ...and so is the listing, which carries its own copy of `syntax`.
+do ListPastes cursor="$draft~"
+expect ok field pastes ~ "\"id\":\"$draft\""
+expect ok field pastes ~ "\"syntax\":\"markdown\""
+
+# ── The default is immutable, and it is enforced ───────────────────────────
+# `editability` is one of CreatePaste::optionalFields, so omitting it is legal
+# and yields Immutable.
+do CreatePaste content="carved in stone" syntax=plaintext
+expect ok capture stone=$.id
+
+do GetPaste id=$stone
+expect ok field editability == Immutable
+
+do EditPaste id=$stone content="chiselled" syntax=plaintext
+expect err message == "EditPaste: paste is not editable"
+
+# The refusal changed nothing.
+do GetPaste id=$stone
+expect ok field content == "carved in stone"
+expect ok field content !~ "chiselled"
+
+# An edit that clears the content is refused by validate(), not stored.
+do EditPaste id=$draft content="" syntax=markdown
+expect err message == "action failed validation: PasteModel/EditPaste"
+
+do GetPaste id=$draft
+expect ok field content == "second draft"

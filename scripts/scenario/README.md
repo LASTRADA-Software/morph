@@ -28,12 +28,58 @@ python3 scripts/scenario/morph_scenario.py \
     scripts/scenario/scenarios/pastebin/paste-lifecycle.scenario
 ```
 
+## Running a whole rung
+
+`run_scenarios.py` starts the server, runs every file in that rung's
+directory against it, and tears it down — the lifecycle `morph_scenario.py`
+deliberately does not own. It needs the rung servers built:
+
+```bash
+cmake --preset clang-release -B build/ladder-srv -DMORPH_BUILD_LADDER=ON \
+    -DMORPH_LADDER_RUNGS=all -DMORPH_BUILD_NET=ON -DMORPH_BUILD_QT=ON \
+    -DMORPH_BUILD_TESTS=ON
+cmake --build build/ladder-srv --target ladder_pastebin_server ladder_bookmarks_server \
+    ladder_polls_server ladder_kanban_server ladder_ledger_server
+
+python3 scripts/scenario/run_scenarios.py                     # every rung
+python3 scripts/scenario/run_scenarios.py --rung pastebin
+python3 scripts/scenario/run_scenarios.py --rung ledger --twice --mutate
+```
+
+| Flag | Meaning |
+|---|---|
+| `--rung NAME` | Restrict to one rung; repeatable. Default: every rung with a directory. |
+| `--build-dir DIR` | Where the `ladder_<rung>_server` binaries live. Searched under `build/*/` if omitted, and ambiguity is an error rather than an arbitrary pick. |
+| `--mutate` | After a file passes, run `mutate_scenario.py` on it; fail on any survivor. |
+| `--twice` | Run the directory a second time against the same database. |
+| `-v` | Pass `--verbose` through to the runner. |
+
+Each rung gets **one** server for its whole directory, on a fresh SQLite
+database in a temp directory, with its port bound to `0` so runs cannot
+collide. That is why every scenario must be **re-runnable against a database
+it has already run on**: no assertion may depend on the database being empty,
+and listing assertions pin to captured ids rather than to counts. `--twice`
+is what proves it — it reruns the directory against the database the first
+pass left behind and demands the same result.
+
+`broken-on-purpose.scenario` has its verdict inverted: it is meant to fail, so
+a run in which it passes is a failure.
+
+Ledger is seeded with two `ledgers` rows before its scenarios run. That rung
+is the one whose root entity no registered action creates, so `OpenAccount
+ledgerId=1` against a genuinely empty database is refused with `no such
+ledger`. Every other rung creates its own root entity over the wire and is
+seeded with nothing.
+
 `scenarios/` holds one directory per rung, and one file per workflow:
 
 | Directory | Server | What it covers |
 |---|---|---|
-| `pastebin/` | `ladder_pastebin_server` | paste lifecycle, privacy, hostile envelopes |
-| `bookmarks/` | `ladder_bookmarks_server` | sign-in, session handling, forged and borrowed tokens |
+| `pastebin/` | `ladder_pastebin_server` | paste lifecycle, burn-after-reads, expiry, listing privacy and pagination; the envelope kinds a typed client never sends, and malformed frames |
+| `bookmarks/` | `ladder_bookmarks_server` | sign-in and forged tokens, CRUD, archive, atomic bulk edit, tag rename/merge, filters, the changes-since poll, import/export, two users and a shared feed; the live-model cap |
+| `polls/` | `ladder_polls_server` | the shared-instance showcase: create/open/vote/finalize, two participants converging, principal-scoped undo, the event cursor and instance rebirth |
+| `kanban/` | `ladder_kanban_server` | projects and boards, moves and WIP limits, per-project RBAC across three roles, rules and their cascades, comments, attachments, both event streams |
+| `ledger/` | `ladder_ledger_server` | per-currency zero-sum bookkeeping, categories and budgets, rules and version conflicts, CSV import, submit-then-poll reporting, two books |
 
 The rung a scenario belongs to is its parent directory name — that is how
 per-rung action coverage is attributed, so a file loose in `scenarios/` is
@@ -258,6 +304,25 @@ go. An entry whose action *is* dispatched grants no exemption — `exempt` is
 scoped to the actions no scenario dispatches at all — so the report lists it
 apart from the entries the per-rung `(n exempt)` count actually reflects.
 
+### In CI
+
+`.github/workflows/drift-guard.yml`'s `scenario-coverage` job runs
+`test_morph_scenario.py` and then `scenario_coverage.py` on every push and
+pull request. Both read source and scenario files only — they compile nothing
+and start nothing — which is what lets them sit in a workflow whose every job
+is fast and dependency-free.
+
+That gate catches the surface drifting away from the corpus: an action
+registered with no scenario reaching it, a refusal added to `remote.hpp` that
+nothing asserts, an allowlist entry left behind after the thing it exempted
+became coverable, or a scenario edited until it no longer qualifies as a
+workflow.
+
+What CI does **not** do is *run* the corpus. `run_scenarios.py` needs the five
+`ladder_<rung>_server` binaries built, which no workflow has today; running it
+is its own change. So a scenario can currently drift from a server's real
+behaviour without CI noticing — only from its *surface*.
+
 `scenario_coverage.py --floors` is a **testing-only** override for this tool's
 own fixtures (it lets them satisfy a floor without authoring dozens of
 throwaway workflow files); CI and any real run pass it nothing and get the
@@ -282,12 +347,17 @@ python3 scripts/scenario/test_morph_scenario.py
   waiting for the port and tearing down belong to whatever runs it.
 - **No schema validation of inputs.** [morph#171](https://github.com/LASTRADA-Software/morph/issues/171)
   proposed checking a scenario's inputs against the server's served JSON Schema
-  before sending. morph does not serve schemas over the wire: `schemaJson<A>()`
-  and `Bridge::schemasJson()` are compile-time, in-process APIs, and no envelope
-  `kind` exposes them to a remote client. See
-  [morph#234](https://github.com/LASTRADA-Software/morph/issues/234). Until one
-  does, this runner sends what the file says, which is also what makes
-  deliberately malformed payloads expressible.
+  before sending. The runner does not do that, and this entry used to say it
+  *could* not, because "morph does not serve schemas over the wire … no
+  envelope `kind` exposes them to a remote client". That is not true: the
+  `schemas` kind serves exactly that document, and
+  `scenarios/pastebin/wire-kinds-and-typeid-refusals.scenario` reads
+  `PasteModel`'s out of a live server, `required` array, declared bounds and
+  all. What remains true is the narrower statement: this runner sends what the
+  file says without consulting it, which is also what makes deliberately
+  malformed payloads expressible. Validating against the served schema is
+  therefore now *possible* and merely not done — see
+  [morph#234](https://github.com/LASTRADA-Software/morph/issues/234).
 - **It does not replace the C++ tests.** Model behaviour is tested in-process
   and stays there. This covers the seam those tests assume away.
 
