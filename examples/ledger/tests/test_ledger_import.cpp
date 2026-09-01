@@ -348,3 +348,74 @@ TEST_CASE("ImportLedgerChunk rejects a chunk that does not sum to zero within a 
                         .opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"chunk-jpy-usd"})}),
                     ledger::ZeroSumViolation);
 }
+
+TEST_CASE("ImportLedgerChunk refuses an account from another book", "[ledger][import][security]") {
+    // Both of this action's account lookups -- the chunk-wide
+    // `counterAccountId` and the per-row `account_id` column -- resolved by
+    // id alone, so a chunk imported into book one could post onto book two's
+    // accounts (morph#367). Every other test in this file uses a single book,
+    // which is why a second one is seeded here.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord firstBookRow;
+    firstBookRow.name = "Book one";
+    mapper.Create(firstBookRow);
+    ledger::db::LedgerRecord secondBookRow;
+    secondBookRow.name = "Book two";
+    mapper.Create(secondBookRow);
+    const auto firstBook = ledger::LedgerId{static_cast<std::int64_t>(firstBookRow.id.Value())};
+    const auto secondBook = ledger::LedgerId{static_cast<std::int64_t>(secondBookRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = firstBook,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = firstBook,
+                                      .name = "Suspense",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = secondBook,
+                                      .name = "Their suspense",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    auto firstState = model.execute(ledger::GetLedger{.ledgerId = firstBook});
+    const auto checkingId = firstState.accounts.at(0).id;
+    const auto suspenseId = firstState.accounts.at(1).id;
+    const auto theirSuspenseId = model.execute(ledger::GetLedger{.ledgerId = secondBook}).accounts.at(0).id;
+
+    const std::string ownRowCsv =
+        "date,description,account_id,amount\n2026-01-01T00:00:00Z,Coffee," + std::to_string(*checkingId) + ",-4.50\n";
+
+    // The chunk-wide counter account, named from the other book.
+    try {
+        model.execute(ledger::ImportLedgerChunk{
+            .ledgerId = firstBook,
+            .counterAccountId = theirSuspenseId,
+            .csvChunk = ownRowCsv,
+            .opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"chunk-foreign-counter"})});
+        FAIL("ImportLedgerChunk accepted a counter account from another book");
+    } catch (const ledger::NotFound& error) {
+        CHECK(std::string{error.what()} == "ImportLedgerChunk: account does not belong to this ledger");
+    }
+
+    // ...and a CSV row's own `account_id` column, likewise.
+    const std::string foreignRowCsv = "date,description,account_id,amount\n2026-01-01T00:00:00Z,Coffee," +
+                                      std::to_string(*theirSuspenseId) + ",-4.50\n";
+    try {
+        model.execute(ledger::ImportLedgerChunk{
+            .ledgerId = firstBook,
+            .counterAccountId = suspenseId,
+            .csvChunk = foreignRowCsv,
+            .opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"chunk-foreign-row"})});
+        FAIL("ImportLedgerChunk accepted a CSV row naming another book's account");
+    } catch (const ledger::NotFound& error) {
+        CHECK(std::string{error.what()} == "ImportLedgerChunk: account does not belong to this ledger");
+    }
+
+    // Nothing landed in either book.
+    auto finalFirst = model.execute(ledger::GetLedger{.ledgerId = firstBook});
+    CHECK(std::ranges::all_of(finalFirst.accounts, [](const auto& a) { return a.balance.numerator == 0; }));
+    CHECK(model.execute(ledger::GetLedger{.ledgerId = secondBook}).accounts.at(0).balance.numerator == 0);
+}

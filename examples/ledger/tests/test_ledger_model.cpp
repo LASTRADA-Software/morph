@@ -842,3 +842,63 @@ TEST_CASE("A JPY leg stores and renders as a true integer", "[ledger][model]") {
     CHECK(result.accounts[1].balance.decimalPlaces == DecimalPlaces{0});
     CHECK(ledger::formatMoney(ledger::Currency::JPY, result.accounts[1].balance) == "1500");
 }
+
+TEST_CASE("StoreTransaction refuses a leg on another book's account", "[ledger][model][security]") {
+    // Two books in one database -- every other test in this file uses one,
+    // which is exactly why this hole survived out-of-process for so long.
+    // Account ids are a table-wide autoincrement, so book two's account id is
+    // a well-formed number naming a real row and a lookup by id alone finds
+    // it. Without the ledger filter the entry is accepted, the journal is
+    // filed under book one, and book two's balance moves with no journal of
+    // its own to explain it (morph#367).
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord firstBookRow;
+    firstBookRow.name = "Book one";
+    mapper.Create(firstBookRow);
+    ledger::db::LedgerRecord secondBookRow;
+    secondBookRow.name = "Book two";
+    mapper.Create(secondBookRow);
+    const auto firstBook = ledger::LedgerId{static_cast<std::int64_t>(firstBookRow.id.Value())};
+    const auto secondBook = ledger::LedgerId{static_cast<std::int64_t>(secondBookRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = firstBook,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = secondBook,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
+    const auto ours = model.execute(ledger::GetLedger{.ledgerId = firstBook}).accounts.at(0).id;
+    const auto theirs = model.execute(ledger::GetLedger{.ledgerId = secondBook}).accounts.at(0).id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // The message must be the *scope* one, not the not-found one: a leg
+    // naming an id no book holds is a different refusal, and a client that
+    // cannot tell the two apart cannot tell "you typed a dead id" from "that
+    // account is in your other book".
+    try {
+        model.execute(ledger::StoreTransaction{
+            .ledgerId = firstBook,
+            .description = "A leg from the other book",
+            .date = morph::time::Timestamp::now(),
+            .legs = {ledger::TransactionLeg{
+                         .accountId = ours,
+                         .amount = morph::math::Rational{Numerator{-100}, Denominator{1}, DecimalPlaces{2}}},
+                     ledger::TransactionLeg{
+                         .accountId = theirs,
+                         .amount = morph::math::Rational{Numerator{100}, Denominator{1}, DecimalPlaces{2}}}}});
+        FAIL("StoreTransaction accepted a leg on another book's account");
+    } catch (const ledger::NotFound& error) {
+        CHECK(std::string{error.what()} == "StoreTransaction: account does not belong to this ledger");
+    }
+
+    // Refused means nothing moved -- in either book.
+    CHECK(model.execute(ledger::GetLedger{.ledgerId = firstBook}).accounts.at(0).balance.numerator == 0);
+    CHECK(model.execute(ledger::GetLedger{.ledgerId = secondBook}).accounts.at(0).balance.numerator == 0);
+}
