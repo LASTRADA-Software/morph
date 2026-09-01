@@ -140,6 +140,24 @@ void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::Pr
     }
 }
 
+/// @brief Confirms an action's own `projectId` argument names the board this
+///        handler is attached to (@p attachedProjectDbId) -- sibling of the
+///        three `require*BelongsToProject` checks above, for the one argument
+///        that names a project rather than a row inside one. `CreateRule` and
+///        `GetRules` are the two actions carrying such an argument, and a
+///        handler is only ever attached to one board (`OpenBoard` is this
+///        model's keyed attach action), so an argument naming a *different*
+///        project cannot be served here: it is refused rather than quietly
+///        answered from -- or written onto -- the attached board (morph#369).
+/// @param projectId The action's own `projectId` field.
+/// @param attachedProjectDbId The attached board's project id, parsed from
+///        `_projectIdStr`.
+void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attachedProjectDbId) {
+    if (!projectId.hasValue() || *projectId < 0 || static_cast<std::uint64_t>(*projectId) != attachedProjectDbId) {
+        throw NotFound{"projectId does not match the attached board"};
+    }
+}
+
 [[nodiscard]] GetBoardResult buildState(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project) {
     GetBoardResult result;
     result.projectId = ProjectId{static_cast<std::int64_t>(project.id.Value())};
@@ -664,6 +682,10 @@ CreateRuleResult BoardModel::execute(const CreateRule& action) {
         requireRole(Role::Manager);
         auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
         const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+        // The rule is created on the board this handler is attached to, so an
+        // action naming a different project is refused rather than written
+        // onto the attached board under another project's name (morph#369).
+        requireProjectMatchesAttachedBoard(action.projectId, projectDbId);
         auto project = loadProjectById(mapper.Get(), projectDbId);
 
         // The rule's trigger column must belong to this project -- same "trust
@@ -707,6 +729,10 @@ GetRulesResult BoardModel::execute(const GetRules& action) {
     requireRole(Role::Viewer);
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    // The rules listed are the attached board's, so an action naming a
+    // different project is refused rather than answered with this board's
+    // rules under the other project's name (morph#369).
+    requireProjectMatchesAttachedBoard(action.projectId, projectDbId);
     // loadProjectById's only purpose here is the same NotFound-if-attached-
     // project-was-deleted check every other read in this file makes; its
     // return value itself is unused otherwise.

@@ -827,6 +827,63 @@ TEST_CASE("Replaying a move-to-Done journal entry does not re-fire its rule", "[
     CHECK(closedTagCount == 1);
 }
 
+// morph#369: `CreateRule`/`GetRules` each carry a `projectId` their own
+// `validate()` insists be present. Neither used to consult it -- the board
+// was named by the handler's attach state alone -- so a handler attached to
+// project A, asked for project B's rules, answered with A's and an `ok`. The
+// argument was load-bearing in the type and inert in the code, and a client
+// that passed the id it meant had no way to tell it had been ignored. Both
+// now refuse a mismatch the way every other cross-project check in
+// board_model.cpp does. alice is a Manager on *both* projects here, so what
+// these pin is the projectId check itself, not the role gate standing in
+// for it.
+
+TEST_CASE("GetRules refuses another project's id rather than answering with the attached board's rules",
+          "[kanban][rules][cross-tenant]") {
+    DbFixture fixture;
+    const auto projectA = createProjectAs("alice", "Project A");
+    const auto projectB = createProjectAs("alice", "Project B");
+
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectA});
+    const auto columnOnA = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.front().id;
+    model.execute(kanban::CreateRule{.projectId = projectA,
+                                     .triggerColumnId = columnOnA,
+                                     .mutationType = kanban::RuleMutationType::AddTag,
+                                     .mutationValue = "shipped"});
+
+    // The attached board still answers its own id.
+    CHECK(model.execute(kanban::GetRules{.projectId = projectA}).rules.size() == 1);
+
+    // Project B's id does not, even though B exists and alice may read it.
+    CHECK_THROWS_AS(model.execute(kanban::GetRules{.projectId = projectB}), kanban::NotFound);
+}
+
+TEST_CASE("CreateRule refuses another project's id rather than creating the rule on the attached board",
+          "[kanban][rules][cross-tenant]") {
+    DbFixture fixture;
+    const auto projectA = createProjectAs("alice", "Project A");
+    const auto projectB = createProjectAs("alice", "Project B");
+
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectA});
+    const auto columnOnA = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.front().id;
+
+    // A rule naming project B, on project A's own trigger column -- the case
+    // that used to succeed, writing the rule onto A and reporting an id for
+    // it as though B had been served.
+    CHECK_THROWS_AS(model.execute(kanban::CreateRule{.projectId = projectB,
+                                                     .triggerColumnId = columnOnA,
+                                                     .mutationType = kanban::RuleMutationType::AddTag,
+                                                     .mutationValue = "shipped"}),
+                    kanban::NotFound);
+
+    // ...and it wrote nothing: the refusal is a refusal, not a relabelling.
+    CHECK(model.execute(kanban::GetRules{.projectId = projectA}).rules.empty());
+}
+
 // Task 16: attachment metadata (README build-order step 8's "bytes over a
 // side channel, metadata through actions" -- this task never touches actual
 // bytes, only the storageKey a later HTTP side channel would have handed

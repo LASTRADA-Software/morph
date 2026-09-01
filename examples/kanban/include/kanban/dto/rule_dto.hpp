@@ -103,6 +103,11 @@ enum class RuleMutationType : std::uint8_t { AddTag, RemoveTag };
 ///        the column id, rendered as text), keeping the wire DTO concrete
 ///        and ergonomic while the entity stays general enough for a future
 ///        trigger/condition kind.
+///
+///        `projectId` must name the board the handler is attached to via
+///        `OpenBoard` -- a `BoardModel` handler serves exactly one board, and
+///        an argument naming another project is refused rather than silently
+///        served from the attached one.
 struct CreateRule {
     ProjectId projectId;
     ColumnId triggerColumnId;
@@ -120,7 +125,9 @@ struct CreateRuleResult {
     RuleId ruleId;
 };
 
-/// @brief Lists every automation rule on `projectId`'s board.
+/// @brief Lists every automation rule on `projectId`'s board. As with
+///        `CreateRule`, `projectId` must be the board the handler is attached
+///        to.
 struct GetRules {
     ProjectId projectId;
 
