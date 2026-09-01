@@ -506,6 +506,45 @@ void finishReportJob(Lightweight::DataMapper& mapper, std::int64_t jobId, Report
     mapper.Update(row);
 }
 
+/// @brief Resolves one account by id and refuses it unless it belongs to
+///        @p ledgerId -- the ledger the calling action names.
+///
+///        Account ids are a table-wide autoincrement, so another book's
+///        account id is a perfectly well-formed number naming a real row: a
+///        lookup by id alone finds it and accepts it. The leg then posts onto
+///        that book's balance while the journal is filed under the ledger the
+///        action named, and since every read *is* scoped, the named book's
+///        reply does not mention the account it moved and the other book shows
+///        a balance change with no journal of its own to explain it. The two
+///        books disagree and neither report says so (morph#367).
+///
+///        The ledger is compared after the lookup rather than folded into it
+///        as a second `Where`, so "no such account" and "that account is in
+///        another book" stay two different answers -- a client that cannot
+///        tell them apart cannot tell a dead id from a mis-scoped one. This is
+///        `execute(UndoTransaction)`'s own idiom for the identical question
+///        about a journal row ("journal does not belong to this ledger"),
+///        applied to the account lookups that lacked it.
+/// @param mapper The data mapper to query through.
+/// @param accountId The account row's primary key.
+/// @param ledgerId The ledger the calling action names.
+/// @param action The calling action's name, prefixed onto both refusals.
+/// @return The account row, which belongs to @p ledgerId.
+/// @throws NotFound If no account has that id, or it belongs to another ledger.
+[[nodiscard]] db::AccountRecord accountInLedger(Lightweight::DataMapper& mapper, const AccountId& accountId,
+                                                const LedgerId& ledgerId, std::string_view action) {
+    auto rows = mapper.Query<db::AccountRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *accountId)
+                    .All();
+    if (rows.empty()) {
+        throw NotFound{std::string{action} + ": no such account"};
+    }
+    if (rows.front().ledger.Value() != static_cast<std::uint64_t>(*ledgerId)) {
+        throw NotFound{std::string{action} + ": account does not belong to this ledger"};
+    }
+    return rows.front();
+}
+
 }  // namespace
 
 void LedgerModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
@@ -692,13 +731,9 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         std::vector<db::AccountRecord> legAccounts;
         legAccounts.reserve(action.legs.size());
         for (const auto& leg : action.legs) {
-            auto rows = mapper.Query<db::AccountRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *leg.accountId)
-                            .All();
-            if (rows.empty()) {
-                throw NotFound{"StoreTransaction: no such account"};
-            }
-            legAccounts.push_back(rows.front());
+            // Scoped to this action's own ledger -- see accountInLedger for why
+            // an unscoped lookup here let a leg post onto another book.
+            legAccounts.push_back(accountInLedger(mapper, leg.accountId, action.ledgerId, "StoreTransaction"));
         }
 
         // Every leg onto its own account currency's scale before anything sums
@@ -1034,14 +1069,11 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
             throw NotFound{"ImportLedgerChunk: no such ledger"};
         }
 
-        auto counterAccountRows =
-            mapper.Query<db::AccountRecord>()
-                .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.counterAccountId)
-                .All();
-        if (counterAccountRows.empty()) {
-            throw NotFound{"ImportLedgerChunk: no such account"};
-        }
-        const auto& counterAccountRow = counterAccountRows.front();
+        // Scoped to the chunk's own ledger, like every row's account below: a
+        // counter account from another book would otherwise take one leg of
+        // every imported row (see accountInLedger).
+        const auto counterAccountRow =
+            accountInLedger(mapper, action.counterAccountId, action.ledgerId, "ImportLedgerChunk");
 
         std::int64_t imported = 0;
         std::int64_t duplicates = 0;
@@ -1071,13 +1103,9 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
             const auto rowAccountId = AccountId{std::stoll(accountIdField)};
             const auto amount = parseAmount(amountField);
 
-            auto rowAccountRows = mapper.Query<db::AccountRecord>()
-                                      .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *rowAccountId)
-                                      .All();
-            if (rowAccountRows.empty()) {
-                throw NotFound{"ImportLedgerChunk: no such account"};
-            }
-            const auto& rowAccountRow = rowAccountRows.front();
+            // The CSV's own `account_id` column is client-supplied text, so it
+            // is scoped exactly like the counter account above.
+            const auto rowAccountRow = accountInLedger(mapper, rowAccountId, action.ledgerId, "ImportLedgerChunk");
 
             // Content hash (design spec §8's "description + date + legs,
             // canonicalized" -- the amount IS the leg here, since each row is a
