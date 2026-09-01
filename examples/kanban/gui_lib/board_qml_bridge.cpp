@@ -19,6 +19,7 @@
 
 #include "gui/error_text.hpp"
 #include "gui/id_qml.hpp"
+#include "kanban_schemas.hpp"
 
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
 #include <QEventLoop>
@@ -247,8 +248,15 @@ BoardBridge::BoardBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
         emit attachmentsListed(_attachments);
     });
     connect(&_presenter, &BoardPresenter::failed, this, &BoardBridge::failed);
+    connect(&_presenter, &BoardPresenter::formReplyReceived, this, &BoardBridge::replyReceived);
 
     _networkManager = new QNetworkAccessManager{this};
+}
+
+QString BoardBridge::schemasJson() const { return QString::fromStdString(kanbanSchemasJson()); }
+
+void BoardBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
+    _presenter.submitForm(actionType, bodyJson);
 }
 
 void BoardBridge::applyBoard(const GetBoardResult& result) {

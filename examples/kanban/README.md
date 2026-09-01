@@ -124,45 +124,91 @@ Strand ordering under real contention (2), typed server-side validation (3),
 authorization at Kanboard's granularity (4), journal-derived activity + undo
 (5, 6), the full offline stack (7), shared board instances throughout.
 
-**`morph::forms`: the login form only.** `gui/qml/LoginView.qml` renders
-`Login` through `morph::forms::schemaJson<Login>()` and the shipped
-`MorphForms` `DynamicForm`, submitting via the renderer's own explicit Submit
-button — the same shape `bookmarks`, `polls`, `lims` and `pastebin` ship. It
-has no hand-written field and no hand-written submit button; if `Login` grows
-a second member, that file does not change.
+**`morph::forms`: every form on every screen.** Six of this rung's inputs are
+rendered from `morph::forms::schemaJson<A>()` through the shipped `MorphForms`
+`DynamicForm`, each submitting through the renderer's own explicit Submit
+button — the same shape `bookmarks`, `polls`, `lims` and `pastebin` ship:
 
-Every *other* input in this rung is still hand-built Qt Quick, which
-[`IMPLEMENTATION.md`](../IMPLEMENTATION.md)'s rule 2 forbids by default and
-which this README owes a per-element justification for. It does not have one,
-and the honest position is that most of these have no justification available:
-
-| Hand-built input | Action behind it | Rule 2 status |
+| Form | Action | Screen |
 |---|---|---|
-| `gui/qml/RulesView.qml:89`, `:97`, `:103` | rule definition | **Unjustified.** Not yet attempted through the renderer. |
-| `gui/qml/MembersView.qml:56`, `:81`, `:87` | `SetMemberRole` / `RemoveMember` | **Unjustified.** A principal string plus a role `enum class` is squarely in the forms palette. |
-| `gui/qml/ProjectListView.qml:125` | `CreateProject` | **Unjustified.** One `std::string name`. |
-| `gui/qml/BoardView.qml` column/task/comment entry | `CreateColumn`, `CreateSwimlane`, `CreateTask`, `AddComment` | **Unjustified.** `schemaJson<A>()` renders all four today — verified, see below. |
-| `gui/qml/BoardView.qml` drag-and-drop board | `MoveTaskPosition` | **Rule 2(a), plausibly.** A drag gesture is not a form somebody fills in; a schema-rendered version of it would be beside the point. Still owes a written finding if kept. |
+| Sign in | `Login` | `gui/qml/LoginView.qml` |
+| Create project | `CreateProject` | `gui/qml/ProjectListView.qml` |
+| Add column | `CreateColumn` | `gui/qml/BoardView.qml` |
+| Add swimlane | `CreateSwimlane` | `gui/qml/BoardView.qml` |
+| New task | `CreateTask` | `gui/qml/BoardView.qml`, one instance per column |
+| Add comment | `AddComment` | `gui/qml/TaskDetailPopup.qml` |
 
-The claim in that last column is measured, not assumed:
-`morph::forms::schemaJson<A>()` was compiled against this rung's real,
-unmodified DTOs and produces a usable schema for `Login`, `CreateColumn`,
-`CreateSwimlane`, `CreateTask`, `AddComment` and `MoveTaskPosition` alike.
-The rule-3 strong ids are not a blocker — `TaskId` emits as
-`{"type":["integer","null"],…}` under `$defs`, and `DynamicForm` resolves
-`$ref` into `$defs` — and `MoveTaskPosition::optionalFields` is honoured.
-So rule 2's justification (a), "the generated UI *cannot* express the
-interaction", is **not available** for any of the form-shaped rows above.
+Not one of them has a hand-written field or a hand-written submit button; if any
+of those six actions grows a member, no `.qml` file changes. Both QML bridges
+expose the one schema document (`gui_lib/kanban_schemas.hpp`) and the
+`submitIfValid` controller contract the renderer calls, and each routes only the
+actions its own models serve — an action a controller does not serve is reported
+back on `replyReceived`, never dropped.
 
-That leaves converting them, which is tracked as
-[morph#344](https://github.com/LASTRADA-Software/morph/issues/344). Login went
-first because it is the smallest complete instance of the whole path — schema
-document, controller contract, renderer, typed reply — and it establishes the
-pattern the rest follow. The rung's GUI design spec
-(`docs/superpowers/specs/2026-08-17-kanban-gui-design.md` §4) settles the
-two-bridge/property-bag architecture and never mentions forms, schemas or
-`DynamicForm`, so it was never the justification the QML comments treated it
-as.
+Two of those actions carry ids that are *context rather than input* — which
+column a task is created in, which task a comment lands on. They are declared
+`hidden` in the DTO's own `fieldMetadata` (rule 3's "the DTO *is* the form
+definition"), so the renderer draws no control for them and the view that owns
+the form supplies them with `setFieldValue`. That keeps "type a title in the
+column you want it in" working without a raw row id ever appearing on screen.
+
+**This is rendered, not merely generated.** `tests/test_gui_forms_render.cpp`
+loads the shipped `.qml` into a real QML engine with real bridges over a real
+backend, and for each of the five non-login forms asserts the controls the
+renderer drew, the body it assembled, and the row the model ended up with. It
+was mutation-checked twice: dropping the hidden-field seeding leaves `CreateTask`
+permanently `!ready`, and dropping `hidden` from `CreateTask::columnId` makes the
+raw id column visible.
+
+### What is still hand-built, and why
+
+[`IMPLEMENTATION.md`](../IMPLEMENTATION.md)'s rule 2 forbids hand-built input
+widgets by default and allows exactly two justifications, each of which has to
+be written here. Three elements remain, and all three are rule 2(a) — "the
+generated UI *cannot* express the interaction" — which rule 2 also makes a
+forms-subsystem finding, so each is filed:
+
+| Hand-built input | Action | Rule 2 justification |
+|---|---|---|
+| `gui/qml/BoardView.qml`'s drag-and-drop board | `MoveTaskPosition` | **(a).** A drag is a gesture, not a form. See below. |
+| `gui/qml/MembersView.qml`'s role pickers (`:70`, `:101`) | `SetMemberRole` | **(a).** The renderer cannot draw an `enum class`. [#386](https://github.com/LASTRADA-Software/morph/issues/386) |
+| `gui/qml/RulesView.qml`'s add-rule row (`:105`, `:113`) | `CreateRule` | **(a).** Same enum gap. [#386](https://github.com/LASTRADA-Software/morph/issues/386) |
+
+**The two enum pickers are a genuine subsystem gap, and it is measured.**
+`morph::forms::schemaJson` describes a C++ `enum class` completely — `Role`
+emits as `{"type":"string","oneOf":[{"title":"Viewer","const":"Viewer"},…]}` —
+and `DynamicForm` renders that as a plain `TextField`: with those exact schemas
+it draws `TextField(objectName "field_role")` / `TextField(objectName
+"field_mutationType")`, reports `ready == true` for `role = "Emperor"` and
+`mutationType = "Explode"`, and assembles `{"role":"Emperor"}` for submission.
+Converting either screen would replace a working three- or two-item `ComboBox`
+with a text box that accepts any string at all, so they stay until
+[#386](https://github.com/LASTRADA-Software/morph/issues/386) lands. Everything
+else on both screens is already schema-shaped; `RulesView`'s trigger-column
+picker additionally wants `CreateRule::triggerColumnId` to become a
+`morph::forms::Choice<…, "GetBoardState">`, which is what rule 3 already
+prescribes for a user-chosen foreign key.
+
+**The drag-and-drop board is not a subsystem gap, and this README should not
+pretend otherwise.** `schemaJson<MoveTaskPosition>()` produces a perfectly good
+schema — `taskId`/`columnId`/`swimlaneId`/`position` required, `opId` honoured
+as optional — and `DynamicForm` would render it without complaint. What is
+missing is not an expressive capacity; it is that nobody moves a card by typing
+four row ids into number fields and pressing Submit. The destination column,
+swimlane and position are *produced by the gesture itself* (`DropArea.onDropped`
+computes them from the drop's own geometry), so the form has no input left to
+collect. A form renderer is the wrong shape for a direct-manipulation gesture,
+and asking `morph::forms` to grow one would be asking it to become a different
+kind of library. Rule 2(a) applies on those grounds — the interaction, not the
+schema — which is why nothing is filed against `morph::forms` for it.
+
+Two smaller findings fell out of rendering these forms for real, both filed
+rather than folded in: every `DynamicForm` warns about `onOptionsReceived`
+against any controller with no `Choice` field
+([#387](https://github.com/LASTRADA-Software/morph/issues/387)), and the
+renderer mistypes array-valued schema keys when `schema` is assigned as a
+`QVariant` instead of bound
+([#388](https://github.com/LASTRADA-Software/morph/issues/388)).
 
 ## Expected strain points
 
@@ -266,8 +312,19 @@ findings were originally `r4-001`/`r4-002` under the retired
   — the replay-attempt budget cannot tell an undelivered replay from a
   rejected one, so reconnect flaps dead-letter work the server never saw.
 - [#344](https://github.com/LASTRADA-Software/morph/issues/344) —
-  the flagship GUI is hand-built with no `morph::forms` usage and no rule-2
+  the flagship GUI was hand-built with no `morph::forms` usage and no rule-2
+  justification. Six forms now render through the shipped renderer and the
+  three remaining hand-built elements each carry their written rule-2(a)
   justification (see "morph subsystems exercised").
+- [#386](https://github.com/LASTRADA-Software/morph/issues/386) —
+  `DynamicForm` renders a C++ `enum class` as a free-text field, which is what
+  keeps `MembersView`/`RulesView` hand-built.
+- [#387](https://github.com/LASTRADA-Software/morph/issues/387) —
+  every `DynamicForm` warns about `onOptionsReceived` on a controller with no
+  `Choice` field.
+- [#388](https://github.com/LASTRADA-Software/morph/issues/388) —
+  `DynamicForm` mistypes array-valued schema keys when `schema` is assigned as
+  a `QVariant` rather than bound.
 
 Not filed here, deliberately: the applied-ops ledger that "Exactly-once has
 no owner in the stack" (below) forces every rung to rebuild is already

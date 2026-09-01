@@ -88,13 +88,14 @@ TEST_CASE("ProjectAdminBridge exposes exactly the surface a login/project-list/m
     REQUIRE(meta->indexOfProperty("schemasJson") >= 0);
     CHECK(meta->propertyCount() - meta->propertyOffset() == 4);
 
-    // `login` is intentionally absent: it is no longer Q_INVOKABLE, because
-    // LoginView.qml submits through the schema renderer and nothing in
-    // gui/qml/ calls it any more.
+    // `login` and `createProject` are intentionally absent: neither is
+    // Q_INVOKABLE any more, because LoginView.qml and ProjectListView.qml both
+    // submit through the schema renderer and nothing in gui/qml/ calls either.
+    // Both survive as plain C++ methods, which the cases below still drive.
     CHECK(meta->indexOfMethod("login(QString)") < 0);
+    CHECK(meta->indexOfMethod("createProject(QString)") < 0);
     REQUIRE(meta->indexOfMethod("submitIfValid(QString,QString)") >= 0);
     REQUIRE(meta->indexOfMethod("refreshProjects()") >= 0);
-    REQUIRE(meta->indexOfMethod("createProject(QString)") >= 0);
     REQUIRE(meta->indexOfMethod("listRoles(qlonglong)") >= 0);
     REQUIRE(meta->indexOfMethod("setMemberRole(qlonglong,QString,QString)") >= 0);
     REQUIRE(meta->indexOfMethod("removeMember(qlonglong,QString)") >= 0);
@@ -111,7 +112,7 @@ TEST_CASE("ProjectAdminBridge exposes exactly the surface a login/project-list/m
 
     // Nothing else: an adapter method with no binding site is a stub, and one
     // removed from under a binding is a silent runtime gap.
-    CHECK(ownMethodCount(meta) == 15);
+    CHECK(ownMethodCount(meta) == 14);
 }
 
 TEST_CASE("ProjectAdminBridge::login installs the returned token and updates the principal property",
@@ -346,6 +347,85 @@ TEST_CASE("ProjectAdminBridge::submitIfValid logs in through the schema path and
     const auto session = rig.bridge(0).defaultSession();
     REQUIRE_FALSE(session.token.empty());
     CHECK_FALSE(replyPayload.contains(QString::fromStdString(session.token)));
+}
+
+TEST_CASE("ProjectAdminBridge::submitIfValid creates a project and still emits projectCreated",
+          "[kanban][gui][qml-bridge][issue344]") {
+    // ProjectListView.qml no longer hand-builds a TextField either:
+    // `DynamicForm` assembles CreateProject's body and calls submitIfValid.
+    // The interesting part is what the *other* signal does, because the view's
+    // own re-listing hangs off it: `submitForm` decodes CreateProjectResult and
+    // re-emits projectCreated(id, name) exactly as the typed path does, with
+    // the name recovered from the submitted body. A schema path that only
+    // emitted replyReceived would have left the project pane refreshing itself
+    // never again.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    kanban::gui::ProjectAdminBridge bridge{rig->bridge(0), rig->executor()};
+
+    qlonglong createdId = -1;
+    QString createdName;
+    bool created = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectCreated,
+                     [&](qlonglong id, const QString& name) {
+                         createdId = id;
+                         createdName = name;
+                         created = true;
+                     });
+    bool ok = false;
+    bool replied = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::replyReceived,
+                     [&](const QString& actionType, bool succeeded, const QString&) {
+                         if (actionType != QStringLiteral("CreateProject")) {
+                             return;
+                         }
+                         ok = succeeded;
+                         replied = true;
+                     });
+
+    // Exactly the body DynamicForm builds for CreateProject's one member.
+    bridge.submitIfValid(QStringLiteral("CreateProject"), QStringLiteral(R"({"name":"Sprint Board"})"));
+    REQUIRE(pumpUntil([&] { return replied && created; }));
+    CHECK(ok);
+    CHECK(createdId > 0);
+    CHECK(createdName == QStringLiteral("Sprint Board"));
+
+    // And it is a real row, not just a signal: the listing the view refreshes
+    // on that signal finds it.
+    QVariantList rows;
+    bool listed = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectsListed, [&](const QVariantList& projects) {
+        rows = projects;
+        listed = true;
+    });
+    bridge.refreshProjects();
+    REQUIRE(pumpUntil([&] { return listed; }));
+    REQUIRE(rows.size() == 1);
+    CHECK(rows.front().toMap().value(QStringLiteral("name")).toString() == QStringLiteral("Sprint Board"));
+}
+
+TEST_CASE("ProjectAdminBridge::submitIfValid refuses an action its own models do not serve",
+          "[kanban][gui][qml-bridge][issue344]") {
+    // Both bridges publish the same schema document, so a form bound to the
+    // wrong controller is a real mistake to make. It reports rather than
+    // silently doing nothing.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    kanban::gui::ProjectAdminBridge bridge{rig->bridge(0), rig->executor()};
+
+    QString payload;
+    bool ok = true;
+    bool replied = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::replyReceived,
+                     [&](const QString&, bool succeeded, const QString& text) {
+                         ok = succeeded;
+                         payload = text;
+                         replied = true;
+                     });
+    bridge.submitIfValid(QStringLiteral("CreateColumn"), QStringLiteral(R"({"name":"To Do"})"));
+    REQUIRE(pumpUntil([&] { return replied; }));
+    CHECK_FALSE(ok);
+    CHECK(payload.contains(QStringLiteral("CreateColumn")));
 }
 
 TEST_CASE("ProjectAdminBridge relays failed() and never emits a raw token on any signal",

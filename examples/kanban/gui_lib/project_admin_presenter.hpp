@@ -56,10 +56,14 @@ public:
     ///
     /// The schema renderer names action types as strings and hands back an
     /// assembled JSON body, so this is the entry point it needs — the typed
-    /// `login()` above stays for callers that already have a `QString`
-    /// username. A successful `Login` still installs its token here rather
-    /// than in the QML bridge, so the one place this rung learns an identity
-    /// is unchanged by which of the two paths dispatched it.
+    /// `login()`/`createProject()` calls stay for callers that already hold
+    /// typed arguments. A successful `Login` still installs its token here
+    /// rather than in the QML bridge, so the one place this rung learns an
+    /// identity is unchanged by which of the two paths dispatched it.
+    ///
+    /// Serves `Login` (`AuthModel`) and `CreateProject` (`ProjectAdminModel`);
+    /// any other action type is reported back through `formReplyReceived` as
+    /// unroutable rather than dropped.
     ///
     /// @param actionType Registered action type id, as the schema names it.
     /// @param bodyJson   Fully-assembled JSON body, as `DynamicForm` builds it.

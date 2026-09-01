@@ -126,6 +126,13 @@ class BoardBridge : public QObject {
     ///        bridge needing to re-resolve an id to a key. Also refreshed
     ///        after a successful `uploadAttachment()`.
     Q_PROPERTY(QVariantList attachments READ attachments NOTIFY attachmentsListed)
+    /// @brief `{actionType: schema}` JSON — everything the QML renderer needs
+    ///        to draw this screen's schema-driven forms. The same document
+    ///        `ProjectAdminBridge` serves (`kanban_schemas.hpp`), so a view
+    ///        holding either bridge can render any of this rung's forms.
+    ///        `CONSTANT`: the document is a pure function of the compiled
+    ///        action types.
+    Q_PROPERTY(QString schemasJson READ schemasJson CONSTANT)
 
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     /// @brief Current pending-item count in the offline queue — the same
@@ -165,6 +172,23 @@ public:
     /// @return The most recent `getAttachments` result's rows.
     [[nodiscard]] QVariantList attachments() const { return _attachments; }
 
+    /// @brief The schema document the board screen's forms render from
+    ///        (`kanban_schemas.hpp`).
+    /// @return `{actionType: schema}` JSON.
+    [[nodiscard]] QString schemasJson() const;
+
+    /// @brief Dispatches @p bodyJson as @p actionType's body — the entry point
+    ///        `MorphForms`' `DynamicForm` calls on submit.
+    ///
+    /// Named to match the controller contract the shipped renderer expects
+    /// (`morph::qt::forms::FormsControllerCore::submitIfValid`), so a
+    /// `DynamicForm`'s `controller:` binding can point straight at this
+    /// bridge — identical in shape and rationale to
+    /// `ProjectAdminBridge::submitIfValid`. Emits `replyReceived`.
+    /// @param actionType Registered action type id, as the schema names it.
+    /// @param bodyJson   Fully-assembled JSON body, as `DynamicForm` builds it.
+    Q_INVOKABLE void submitIfValid(const QString& actionType, const QString& bodyJson);
+
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     /// @brief The offline queue's current depth (see `queueDepth` property).
     /// @return The most recent `syncStatusChanged` queue-depth value.
@@ -185,19 +209,29 @@ public:
     Q_INVOKABLE void refresh();
 
     /// @brief Creates a new column. Emits `boardChanged`, or `failed`.
+    ///
+    /// Deliberately **not** `Q_INVOKABLE`, like the three below it and like
+    /// `ProjectAdminBridge::login`: `BoardView.qml` submits `CreateColumn`
+    /// through the schema renderer now, so nothing in `gui/qml/` calls this,
+    /// and QML surface nothing binds is exactly what
+    /// `tests/test_kanban_qml_surface.cpp` exists to catch. It stays a plain
+    /// public method for C++ callers that already hold typed arguments — the
+    /// offline-queue suite drives the board through these.
     /// @param name     The column's name.
     /// @param wipLimit The column's WIP limit (`0` = unlimited).
-    Q_INVOKABLE void createColumn(const QString& name, int wipLimit);
+    void createColumn(const QString& name, int wipLimit);
 
     /// @brief Creates a new swimlane. Emits `boardChanged`, or `failed`.
+    ///        Not `Q_INVOKABLE` — see `createColumn`.
     /// @param name The swimlane's name.
-    Q_INVOKABLE void createSwimlane(const QString& name);
+    void createSwimlane(const QString& name);
 
     /// @brief Creates a new task. Emits `boardChanged`, or `failed`.
+    ///        Not `Q_INVOKABLE` — see `createColumn`.
     /// @param columnId   The task's target column, as its plain number.
     /// @param swimlaneId The task's target swimlane, as its plain number.
     /// @param title      The task's title.
-    Q_INVOKABLE void createTask(const QString& columnId, const QString& swimlaneId, const QString& title);
+    void createTask(const QString& columnId, const QString& swimlaneId, const QString& title);
 
     /// @brief Moves a task to a new column/swimlane/position. Mints a fresh
     ///        `opId` (`QUuid::createUuid().toString()`) internally for
@@ -219,9 +253,10 @@ public:
     Q_INVOKABLE void moveTask(const QString& taskId, const QString& columnId, const QString& swimlaneId, int position);
 
     /// @brief Appends a comment to a task. Emits `commentAdded`, or `failed`.
+    ///        Not `Q_INVOKABLE` — see `createColumn`.
     /// @param taskId The task to comment on, as its plain number.
     /// @param body   The comment's body.
-    Q_INVOKABLE void addComment(const QString& taskId, const QString& body);
+    void addComment(const QString& taskId, const QString& body);
 
     /// @brief Sets `myRole` (see that property's own doc comment). Pure
     ///        state — dispatches nothing.
@@ -407,6 +442,17 @@ signals:
     /// @brief An `addComment` succeeded.
     /// @param taskId The commented-on task's id, as its plain number.
     void commentAdded(const QString& taskId);
+    /// @brief Emitted once per `submitIfValid`, carrying that form's outcome.
+    ///
+    /// The name `DynamicForm`'s callers already listen for
+    /// (`bookmarks::gui::FormsBridge::replyReceived`,
+    /// `ProjectAdminBridge::replyReceived`), so a view moved between rungs —
+    /// or between this rung's two bridges — binds the same handler. Carries no
+    /// credential: no board action returns one.
+    /// @param actionType The action the reply belongs to.
+    /// @param ok         Whether the dispatch succeeded.
+    /// @param payload    Result JSON on success, the error message otherwise.
+    void replyReceived(const QString& actionType, bool ok, const QString& payload);
     /// @brief A `getRules` succeeded — see `rules` property.
     /// @param rules The listing's rows.
     void rulesListed(const QVariantList& rules);

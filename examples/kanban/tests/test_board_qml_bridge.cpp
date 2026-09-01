@@ -290,6 +290,125 @@ TEST_CASE("BoardBridge::addComment reports the commented task", "[kanban][gui][q
     CHECK(commentedTaskId == taskId);
 }
 
+TEST_CASE("BoardBridge::submitIfValid runs the board forms and keeps the board property live",
+          "[kanban][gui][qml-bridge][issue344]") {
+    // BoardView.qml and TaskDetailPopup.qml no longer hand-build any input:
+    // `DynamicForm` assembles each body from schemaJson<A>() and calls
+    // submitIfValid, so this is the path the flagship's board screen takes now.
+    // Two things must hold on it, and the second is what the schema path could
+    // most easily have lost.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    const auto projectId = seedProject(*rig);
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+
+    bool changed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&] { changed = true; });
+    bridge.openBoard(QString::number(projectId));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    QString repliedFor;
+    bool ok = false;
+    bool replied = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::replyReceived,
+                     [&](const QString& actionType, bool succeeded, const QString&) {
+                         repliedFor = actionType;
+                         ok = succeeded;
+                         replied = true;
+                     });
+
+    // 1. It really dispatched. Exactly the body DynamicForm builds for a
+    //    CreateColumn with its optional wipLimit left blank -- the key absent
+    //    entirely, not sent as 0.
+    changed = false;
+    bridge.submitIfValid(QStringLiteral("CreateColumn"), QStringLiteral(R"({"name":"To Do"})"));
+    REQUIRE(pumpUntil([&] { return replied; }));
+    CHECK(ok);
+    CHECK(repliedFor == QStringLiteral("CreateColumn"));
+
+    // 2. ...and the `board` property caught up in the same turn, without
+    //    waiting for a poll tick. Every binding on the board screen reads that
+    //    property, so a submit that dispatched but left it stale would look
+    //    exactly like a submit that did nothing.
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QVariantList columns = bridge.board().value(QStringLiteral("columns")).toList();
+    REQUIRE(columns.size() == 1);
+    CHECK(columns.front().toMap().value(QStringLiteral("name")).toString() == QStringLiteral("To Do"));
+    CHECK(columns.front().toMap().value(QStringLiteral("wipLimit")).toLongLong() == 0);
+    const QString columnId = columns.front().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    replied = false;
+    bridge.submitIfValid(QStringLiteral("CreateSwimlane"), QStringLiteral(R"({"name":"Default"})"));
+    REQUIRE(pumpUntil([&] { return replied && changed; }));
+    CHECK(ok);
+    const QString swimlaneId = bridge.board()
+                                   .value(QStringLiteral("swimlanes"))
+                                   .toList()
+                                   .front()
+                                   .toMap()
+                                   .value(QStringLiteral("id"))
+                                   .toString();
+
+    changed = false;
+    replied = false;
+    bridge.submitIfValid(
+        QStringLiteral("CreateTask"),
+        QStringLiteral(R"({"columnId":%1,"swimlaneId":%2,"title":"Fix bug"})").arg(columnId, swimlaneId));
+    REQUIRE(pumpUntil([&] { return replied && changed; }));
+    CHECK(ok);
+    const QString taskId =
+        bridge.board().value(QStringLiteral("tasks")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    // 3. AddComment additionally re-emits commentAdded, the signal
+    //    BoardView.qml's own handler binds -- the schema path must not be the
+    //    one path on which that goes silent.
+    QString commentedTaskId;
+    bool commented = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::commentAdded, [&](const QString& id) {
+        commentedTaskId = id;
+        commented = true;
+    });
+    changed = false;
+    replied = false;
+    bridge.submitIfValid(QStringLiteral("AddComment"),
+                         QStringLiteral(R"({"taskId":%1,"body":"looks good"})").arg(taskId));
+    REQUIRE(pumpUntil([&] { return replied && commented; }));
+    CHECK(ok);
+    CHECK(commentedTaskId == taskId);
+    const QVariantList comments = bridge.board().value(QStringLiteral("comments")).toList();
+    REQUIRE(comments.size() == 1);
+    CHECK(comments.front().toMap().value(QStringLiteral("body")).toString() == QStringLiteral("looks good"));
+}
+
+TEST_CASE("BoardBridge::submitIfValid refuses an action outside the four forms it renders",
+          "[kanban][gui][qml-bridge][issue344]") {
+    // The renderer names actions as strings. `BoardModel` registers plenty of
+    // actions no form renders, and reaching one through this seam just because
+    // the model serves it is precisely what the literal action list in
+    // BoardPresenter::submitForm closes -- checked here on a *registered*
+    // action, not on a nonsense string, because a nonsense string would be
+    // refused by executeJson anyway and would prove nothing about the gate.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+
+    QString payload;
+    bool ok = true;
+    bool replied = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::replyReceived,
+                     [&](const QString&, bool succeeded, const QString& text) {
+                         ok = succeeded;
+                         payload = text;
+                         replied = true;
+                     });
+    bridge.submitIfValid(QStringLiteral("MoveTaskPosition"),
+                         QStringLiteral(R"({"taskId":1,"columnId":1,"swimlaneId":1,"position":0})"));
+    REQUIRE(pumpUntil([&] { return replied; }));
+    CHECK_FALSE(ok);
+    CHECK(payload.contains(QStringLiteral("MoveTaskPosition")));
+}
+
 TEST_CASE("BoardBridge::setMyRole updates the myRole property", "[kanban][gui][qml-bridge]") {
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");

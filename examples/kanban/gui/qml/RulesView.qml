@@ -11,6 +11,22 @@
 // directly -- no "watch for other trigger kinds" affordance, since
 // RuleTriggerEvent has exactly one member (rule_dto.hpp).
 //
+// This is the second of the two screens whose inputs stay hand-built under
+// examples/IMPLEMENTATION.md rule 2's justification (a), for the same filed
+// gap as MembersView.qml (morph#386): `CreateRule::mutationType` is a
+// `RuleMutationType` enum class, and the shipped DynamicForm renders the
+// closed `oneOf`-of-`const`s schemaJson emits for it as a plain free-text
+// field -- measured: TextField(objectName "field_mutationType"),
+// ready == true for mutationType = "Explode", and
+// {"mutationType":"Explode"} submitted. The trigger-column picker below is
+// *not* part of that gap: `triggerColumnId` is a foreign key chosen by a user,
+// which rule 3 already says should be a
+// `morph::forms::Choice<..., "GetBoardState">` rather than a raw id, and
+// GetBoardState is a registered action returning `columns` as its first array
+// member. Converting this view is therefore one enum fix plus one DTO field
+// type -- neither of which belongs in the change that converted the other five
+// forms.
+//
 // `boardBridge` defaults to null so this same file also loads standalone
 // with nothing wired up, matching MembersView.qml's identical convention.
 // Reached from BoardView.qml's "Rules" header button, which opens this view

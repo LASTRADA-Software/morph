@@ -9,6 +9,20 @@
 // "add member by search," per the minimal-bootstrap scope decision (design
 // spec §1).
 //
+// This is one of two screens in this rung whose inputs stay hand-built, under
+// examples/IMPLEMENTATION.md rule 2's justification (a) -- "the generated UI
+// cannot express the interaction" -- and, per that rule, the gap is filed:
+// morph#386. Concretely: `SetMemberRole::role` is a `kanban::Role` enum class,
+// which `morph::forms::schemaJson` emits as a fully-described closed set
+// ({"type":"string","oneOf":[{"title":"Viewer","const":"Viewer"},...]}), and
+// the shipped DynamicForm renders that as a plain free-text field --
+// measured, not assumed: with that exact schema it draws
+// TextField(objectName "field_role"), reports ready == true for
+// role = "Emperor", and submits {"role":"Emperor"}. Replacing the three-item
+// ComboBox below with a text box that accepts any string at all would be a
+// worse screen, so it stays until morph#386 lands. Everything else about this
+// view is already schema-shaped and converts in one step once it does.
+//
 // `projectAdminBridge` defaults to null and `projectId` defaults to -1 so
 // this same file also loads standalone with nothing wired up, which is
 // exactly what the offscreen engine-load smoke test

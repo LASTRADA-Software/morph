@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "board_presenter.hpp"
 
+#include <glaze/glaze.hpp>
+#include <string>
 #include <utility>
 
 #include "gui/error_text.hpp"
@@ -40,6 +42,54 @@ void BoardPresenter::getBoardState() {
     track<GetBoardResult>(
         _handler.execute(GetBoardState{}), [this](GetBoardResult result) { emit boardOpened(std::move(result)); },
         [this](const std::exception_ptr& err) { reportError(err); });
+}
+
+void BoardPresenter::submitForm(const QString& actionType, const QString& bodyJson) {
+    // The four board forms `kanban_schemas.hpp` publishes, and nothing else.
+    // Checked against a literal list rather than handed straight to
+    // `executeJson`: `BoardModel` also registers actions no form renders
+    // (`MoveTaskPosition`, `DeleteRule`, `ApplyTagMutation`, ...), and a
+    // renderer -- or a typo in a QML `actionType:` string -- must not be able
+    // to reach one of those through this seam just because the model happens
+    // to serve it. QML names types as strings; an unroutable one has to arrive
+    // somewhere a human reads it.
+    const std::string type = actionType.toStdString();
+    if (type != "CreateColumn" && type != "CreateSwimlane" && type != "CreateTask" && type != "AddComment") {
+        emit formReplyReceived(actionType, false,
+                               QStringLiteral("no board form in this client serves action '") + actionType + u'\'');
+        return;
+    }
+    // `AddComment`'s taskId, echoed back on `commentAdded` below. Decoded from
+    // the submitted body, not from the reply (which is the whole board), and
+    // captured in this call's own continuation rather than stashed on a shared
+    // member -- the same discipline `addComment()` below already documents.
+    AddComment comment;
+    const bool decodedComment = type == "AddComment" && !glz::read_json(comment, bodyJson.toStdString());
+    track<std::string>(
+        _handler.executeJson(type, bodyJson.toStdString()),
+        [this, actionType, decodedComment, commentTaskId = comment.taskId](std::string resultJson) {
+            // Every action above returns the full rebuilt board state (design
+            // spec §7), so the reply is decoded and re-emitted as
+            // `boardOpened` -- the same signal the typed calls below emit.
+            // Without it `BoardBridge::board` would only catch up on the next
+            // poll tick, and every binding over it (the columns, the task
+            // cards, the comment list) would sit stale after a submit the user
+            // just made.
+            GetBoardResult state;
+            if (glz::read_json(state, resultJson)) {
+                emit formReplyReceived(actionType, false,
+                                       QStringLiteral("the action succeeded but its reply could not be decoded"));
+                return;
+            }
+            emit boardOpened(std::move(state));
+            if (decodedComment) {
+                emit commentAdded(idText(commentTaskId));
+            }
+            emit formReplyReceived(actionType, true, QString::fromStdString(resultJson));
+        },
+        [this, actionType](const std::exception_ptr& err) {
+            emit formReplyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
+        });
 }
 
 void BoardPresenter::createColumn(const QString& name, std::int64_t wipLimit) {
