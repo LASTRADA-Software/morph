@@ -33,6 +33,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <condition_variable>
@@ -60,6 +61,7 @@
 #include "pastebin/core/errors.hpp"
 #include "pastebin/db/database.hpp"
 #include "pastebin/db/paste_entity.hpp"
+#include "pastebin/models/paste_id_source.hpp"
 #include "pastebin/models/paste_model.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_busy_fixture.hpp"
@@ -166,6 +168,80 @@ void occupyKeyspace(std::size_t comboCount) {
         "read_count, is_private, is_editable) SELECT c.prefix || '-' || suffix.x, 'occupied', 'text', "
         "0, NULL, NULL, 0, 0, 0 FROM suffix, (" +
         combos + ") c");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// The injectable paste-id source (`pastebin/models/paste_id_source.hpp`)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// @brief `paste_model.cpp`'s `kMaxIdAttempts`, mirrored here for the same
+///        reason the keyspace above is: it is that translation unit's own
+///        constant. This copy is not free to rot either — the exhaustion case
+///        scripts exactly this many colliding ids followed by a free one, and
+///        fails if the model draws a ninth.
+constexpr std::size_t kMaxIdAttempts = 8;
+
+/// @brief A paste-id source that hands back the same id on every call, so
+///        every allocation attempt collides on the same row.
+[[nodiscard]] pastebin::PasteIdSource constantIdSource(std::string id) {
+    return [id = std::move(id)] { return id; };
+}
+
+/// @brief A paste-id source that hands back a written-down sequence of ids in
+///        order, and counts how many `CreatePaste` actually drew.
+///
+/// The count is the assertion the old sampling version could not make: it
+/// says how many allocation attempts happened, not merely that the call
+/// eventually succeeded or failed.
+class ScriptedIds {
+public:
+    /// @param ids The ids to hand back, in order.
+    explicit ScriptedIds(std::vector<std::string> ids) : _ids{std::move(ids)} {}
+
+    /// @brief A source drawing from this script; must not outlive it.
+    /// @return The source, to install with `pastebin::ScopedPasteIdSource`.
+    [[nodiscard]] pastebin::PasteIdSource source() {
+        return [this] {
+            const std::size_t index = _drawn.fetch_add(1);
+            // Off the end means `CreatePaste` asked for more ids than the
+            // script covers — i.e. it retried past the budget the case
+            // encodes. Fail loudly here rather than wrap around and let the
+            // case pass on a different sequence than the one it describes.
+            REQUIRE(index < _ids.size());
+            return _ids[index];
+        };
+    }
+
+    /// @brief How many ids have been drawn from this script so far.
+    [[nodiscard]] std::size_t drawn() const noexcept { return _drawn.load(); }
+
+private:
+    std::vector<std::string> _ids;
+    std::atomic<std::size_t> _drawn{0};
+};
+
+/// @brief Whether @p id is spelled from the real animal-name keyspace —
+///        `<adjective>-<animal>-<0..999>`, both words from the mirrored
+///        arrays above.
+///
+/// Used to check that a create outside every `ScopedPasteIdSource` is back on
+/// the built-in random generator, rather than on some id a test scripted.
+[[nodiscard]] bool isAnimalNameId(std::string_view id) {
+    const auto firstDash = id.find('-');
+    if (firstDash == std::string_view::npos) {
+        return false;
+    }
+    const auto secondDash = id.find('-', firstDash + 1);
+    if (secondDash == std::string_view::npos) {
+        return false;
+    }
+    const auto adjective = id.substr(0, firstDash);
+    const auto animal = id.substr(firstDash + 1, secondDash - firstDash - 1);
+    const auto suffix = id.substr(secondDash + 1);
+    const bool digits =
+        !suffix.empty() && std::ranges::all_of(suffix, [](char chr) { return chr >= '0' && chr <= '9'; });
+    return std::ranges::find(kAdjectives, adjective) != kAdjectives.end() &&
+           std::ranges::find(kAnimals, animal) != kAnimals.end() && digits;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1443,32 +1519,97 @@ TEST_CASE("Two CreatePaste calls with identical content mint two distinct pastes
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("CreatePaste retries past colliding animal-name ids instead of failing the call", "[pastebin][model]") {
+    // ── Why this case cannot be flaky ───────────────────────────────────────
+    // Every id `CreatePaste` tries here is written down below, in order, and
+    // handed to it through `pastebin::ScopedPasteIdSource`. No random number
+    // is drawn while that guard is alive, so there is no distribution to
+    // sample, no seed to reproduce, and no outcome that can differ between
+    // runs: the retry path is taken on every run, and the case can only fail
+    // if the retry logic itself is wrong.
+    //
+    // The previous version occupied a quarter of the keyspace and let the real
+    // generator roll (morph#365). That made an eight-attempt exhaustion a
+    // 1-in-1,640 event across its 40 creates — a red build on an unrelated PR
+    // that often, unreproducible when it fired, because `randomPasteId()`
+    // seeds from `std::random_device` and Catch2's `--rng-seed` cannot reach
+    // it. Its odds were the thing under test; here the retry *logic* is. The
+    // collisions are a real primary-key violation from the real store either
+    // way — the seam supplies the candidate id, not the verdict on it.
     DbFixture fixture;
-
-    // A quarter of the keyspace is occupied up front, so roughly one
-    // allocation attempt in four collides on a real primary-key violation and
-    // has to be retried. Across the creates below a collision is effectively
-    // certain (P(none) = 0.75^40 ~= 1e-5), while exhausting the eight-attempt
-    // budget for any single create is not (P = 0.25^8 ~= 1.5e-5 per create) —
-    // the retry path is genuinely exercised without the case becoming flaky.
-    occupyKeyspace(kCombos / 4);
-
     pastebin::PasteModel model;
-    std::vector<pastebin::PasteId> minted;
-    for (int i = 0; i < 40; ++i) {
-        pastebin::CreatePasteResult result;
-        REQUIRE_NOTHROW(result = model.execute(makeCreate("attempt " + std::to_string(i))));
-        REQUIRE(result.id.hasValue());
-        minted.push_back(result.id);
+
+    // One stored paste whose id every scripted collision below lands on.
+    const std::string taken = "gold-fox-7";
+    {
+        pastebin::ScopedPasteIdSource occupy{constantIdSource(taken)};
+        REQUIRE(*model.execute(makeCreate("already here")).id == taken);
     }
 
-    // Every id is distinct, and none of them landed on an occupied row (which
-    // would mean an allocation overwrote a stored paste rather than retrying).
-    std::ranges::sort(minted);
-    CHECK(std::ranges::adjacent_find(minted) == minted.end());
-    for (const auto& id : minted) {
-        CHECK(model.execute(pastebin::GetPaste{.id = id}).content.starts_with("attempt "));
+    // Three collisions, then a free id. Exactly four ids are drawn: fewer
+    // would mean an attempt was skipped, more that the loop kept going past
+    // the insert that succeeded.
+    ScriptedIds script{{taken, taken, taken, "keen-owl-3"}};
+    {
+        pastebin::ScopedPasteIdSource scripted{script.source()};
+        pastebin::CreatePasteResult result;
+        REQUIRE_NOTHROW(result = model.execute(makeCreate("minted after three collisions")));
+        CHECK(*result.id == "keen-owl-3");
     }
+    CHECK(script.drawn() == 4);
+
+    // The retries went *past* the occupied row rather than through it: the
+    // paste stored under the colliding id is still the original one.
+    CHECK(model.execute(pastebin::GetPaste{.id = pastebin::PasteId{taken}}).content == "already here");
+    CHECK(model.execute(pastebin::GetPaste{.id = pastebin::PasteId{"keen-owl-3"}}).content ==
+          "minted after three collisions");
+
+    // The seam is scoped, and production is its no-override path: with every
+    // guard destroyed, the next create mints from the built-in random
+    // generator again — an id nothing scripted, spelled from the real
+    // keyspace.
+    const auto unscripted = model.execute(makeCreate("back on the real generator")).id;
+    CHECK(*unscripted != taken);
+    CHECK(*unscripted != "keen-owl-3");
+    CHECK(isAnimalNameId(*unscripted));
+}
+
+TEST_CASE("CreatePaste stops after exactly eight colliding ids and fails with the error it can name",
+          "[pastebin][model]") {
+    // The exhaustion half of the same retry loop, deterministic for the same
+    // reason: the ids are scripted, not sampled. The script is one id longer
+    // than the budget and that last id is *free*, so a budget that grew — or
+    // a loop that stopped bounding itself — would allocate it and fail this
+    // case twice over: the create would not throw, and `drawn()` would read
+    // nine.
+    //
+    // Complements rather than duplicates the whole-keyspace case below. That
+    // one drives the real generator, and so also guards the keyspace copy at
+    // the top of this file, but it can say nothing about how many attempts
+    // were made or what the failure said.
+    DbFixture fixture;
+    pastebin::PasteModel model;
+
+    const std::string taken = "wild-yak-1";
+    {
+        pastebin::ScopedPasteIdSource occupy{constantIdSource(taken)};
+        REQUIRE(*model.execute(makeCreate("already here")).id == taken);
+    }
+
+    std::vector<std::string> ids(kMaxIdAttempts, taken);
+    ids.emplace_back("soft-bee-2");  // free, and one draw beyond the budget
+    ScriptedIds script{ids};
+    {
+        pastebin::ScopedPasteIdSource scripted{script.source()};
+        REQUIRE_THROWS_MATCHES(model.execute(makeCreate("no id left to try")), pastebin::ValidationError,
+                               Catch::Matchers::MessageMatches(
+                                   Catch::Matchers::Equals("CreatePaste: could not allocate a unique paste id")));
+    }
+    CHECK(script.drawn() == kMaxIdAttempts);
+
+    // Nothing was stored under the free id the model never asked for, and the
+    // occupied row is still the only paste in the table.
+    CHECK_THROWS_AS(model.execute(pastebin::GetPaste{.id = pastebin::PasteId{"soft-bee-2"}}), pastebin::NotFound);
+    CHECK(model.execute(pastebin::ListPastes{}).pastes.size() == 1);
 }
 
 TEST_CASE("CreatePaste gives up with a ValidationError once the whole keyspace is occupied", "[pastebin][model]") {
