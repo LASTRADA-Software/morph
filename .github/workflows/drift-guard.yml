@@ -84,6 +84,29 @@ jobs:
       - name: Check every known rung appears in the filters that cannot generate it
         run: bash scripts/check_rung_filters.sh
 
+  # ── The AUTOMOC-include gate's own self-test ───────────────────────────
+  # The gate itself (scripts/check_automoc_includes.sh) cannot run here: it
+  # reads generated moc output, so it needs an AUTOMOC target to have been
+  # built, and it runs after the build in ci.yml's linux-qt, ladder-tests and
+  # linux-all-features jobs. Its self-test needs no Qt, no toolchain and no
+  # build at all, so it runs here, once, in seconds -- and, unlike a step
+  # behind a 20-minute build, it still reports when that build fails.
+  #
+  # Same reasoning as every other gate in this file: a lint gate nobody tests
+  # reports green whether or not it still detects anything. This one is
+  # especially exposed to that, because the ascending include it looks for
+  # (issue #372) is present in every build and only becomes a compile error
+  # where the directory arithmetic lands on a second same-named header -- so
+  # the gate going blind would look exactly like the gate passing.
+  automoc-include-lint:
+    name: AUTOMOC-include checker self-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the AUTOMOC-include checker
+        run: bash scripts/test_check_automoc_includes.sh
+
   # ── The wire/action surface <-> the scenario corpus that covers it ──────
   # scripts/scenario/scenario_coverage.py enumerates two surfaces straight out
   # of the source -- every envelope kind and refusal RemoteServer can put on

@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Usage: bash scripts/check_automoc_includes.sh [DIR...]
+#
+# Fails if any moc-generated source includes its class's header by a path that
+# climbs out of its own directory -- see issue #372.
+#
+# moc writes the include for the header it was run on. Left to itself it writes
+# a path relative to the generated file, and since the generated file lives
+# deep inside the build tree that path is a long run of "..":
+#
+#     #include "../../../../../../examples/ledger/gui_lib/budget_presenter.hpp"
+#
+# A quoted include is resolved against the including file's own directory *and*
+# against every -I entry, so the compiler attempts that same climb from each of
+# the target's include directories too. Whether the escaped path resolves to a
+# second, different file of the same name is arithmetic on how deep the
+# checkout happens to sit inside its parent directories -- nothing about the
+# code. When it does resolve, Clang reports
+#
+#     error: multiple candidates for header '...' found; ... ignoring others
+#     including '.../examples/<rung>/include' [-Werror,-Wshadow-header]
+#
+# and the project's -Werror turns every AUTOMOC target into a build failure.
+# That is not hypothetical: a git worktree under .claude/worktrees/<name>/
+# (where the agent harness puts them) sits exactly six levels inside the
+# checkout it was made from, which is exactly the climb, so every
+# ladder_<rung>_gui_lib -- and every ladder_<rung>_tests that links one --
+# stopped building at all.
+#
+# cmake/compiler_options.cmake sets CMAKE_AUTOMOC_PATH_PREFIX so moc emits the
+# header path relative to the include directory it was found under
+# ("budget_presenter.hpp", "ledger/app/app.hpp") instead, which resolves
+# through the target's own -I set and cannot ascend. This gate asserts that it
+# stayed that way: the failure it guards against is silent everywhere the
+# arithmetic happens not to land, so a plain CI checkout would build green for
+# years while the defect sat in the generated output.
+#
+# Scans each given DIR recursively for moc output (moc_*.cpp and *.moc; the
+# mocs_compilation.cpp aggregators are skipped -- they only include files
+# alongside them and carry none of moc's own header includes). Default DIR is
+# "build", which covers every preset's binary directory.
+#
+# Exits 0 if every moc include is free of a ".." segment. Exits 1 if any
+# ascends, printing one "file:line: include" diagnostic per offender, and also
+# if no moc output was found at all -- a gate that scanned nothing must not
+# report success (run it after a build configured with -DMORPH_BUILD_QT=ON).
+set -euo pipefail
+
+if [ "$#" -eq 0 ]; then
+    dirs=("build")
+else
+    dirs=("$@")
+fi
+
+# find writes into a file rather than a process substitution so that its exit
+# status is actually observed: inside `< <(...)` it is discarded, and a missing
+# or unreadable build tree would then reach the "no moc output" branch below
+# and be reported as an unbuilt one -- a wrong diagnosis of a real failure.
+# find names the offending path itself, so nothing here needs to pre-check it.
+moc_list="$(mktemp)"
+trap 'rm -f "$moc_list"' EXIT
+# _deps is pruned: FetchContent/CPM check their dependencies' *sources* out
+# under the build tree, and a third-party file named like moc output is not
+# this project's to fix -- failing on one would point the reader at a CMake
+# setting that cannot affect it. Nothing morph builds lives under _deps.
+if ! find "${dirs[@]}" -type d -name '_deps' -prune -o \
+        \( -name 'moc_*.cpp' -o -name '*.moc' \) -type f -print0 \
+        > "$moc_list"; then
+    echo "error: find failed while scanning for moc output under: ${dirs[*]}" >&2
+    exit 1
+fi
+mapfile -d '' -t moc_files < "$moc_list"
+
+if [ "${#moc_files[@]}" -eq 0 ]; then
+    cat >&2 <<EMPTY
+error: no moc-generated sources (moc_*.cpp, *.moc) found under: ${dirs[*]}
+       This gate has nothing to check and must not report success. Build a
+       tree configured with -DMORPH_BUILD_QT=ON first.
+EMPTY
+    exit 1
+fi
+
+# A defect is a quoted include whose path carries a ".." segment, whether the
+# ascent starts the path ("../../foo.hpp") or sits inside it ("a/../foo.hpp").
+# Dots within a name ("a..b.hpp") are not an ascent, and angle-bracket includes
+# (Qt's own headers) are never written this way and are not scanned.
+#
+# grep's status is checked rather than swallowed with `|| true`: 1 is "no
+# offenders", but anything above that is an error (an unreadable file, say),
+# which `|| true` would turn into a clean bill of health for a file that was
+# never actually scanned.
+grep_status=0
+offenders="$(grep -HnE '^#include[[:space:]]*"([^"]*/)?\.\./' "${moc_files[@]}")" \
+    || grep_status=$?
+if [ "$grep_status" -gt 1 ]; then
+    echo "error: grep failed (status ${grep_status}) while scanning moc output" >&2
+    exit 1
+fi
+
+if [ -n "$offenders" ]; then
+    cat >&2 <<OFFENDERS
+
+${offenders}
+
+AUTOMOC include lint failed: the moc output above includes its header by a path
+that climbs out of its own directory. That path is also resolved against every
+-I entry, so it can pick up a same-named header from a different checkout -- and
+Clang's -Wshadow-header makes it a hard error under this project's -Werror
+(issue #372).
+
+Two things produce this, and the second is the likelier one:
+
+  1. CMAKE_AUTOMOC_PATH_PREFIX is no longer set, or no longer reaches the target
+     that produced the output above (cmake/compiler_options.cmake sets it in the
+     top-level scope, which initialises AUTOMOC_PATH_PREFIX on every target
+     created from there down).
+
+  2. The moc'd header is not under any of that target's INCLUDE_DIRECTORIES.
+     AUTOMOC_PATH_PREFIX computes the prefix by locating the header beneath one
+     of them; when none matches it passes moc no -p at all and moc silently
+     falls back to the ascending path. Give the header's directory to the
+     target -- target_include_directories(<target> ... "<dir>") -- so the
+     include it emits can resolve through -I.
+OFFENDERS
+    exit 1
+fi
+
+echo "AUTOMOC include lint OK: ${#moc_files[@]} generated moc source(s), none ascending."

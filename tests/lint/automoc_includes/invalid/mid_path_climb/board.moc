@@ -1,0 +1,4 @@
+// Fixture for scripts/check_automoc_includes.sh: the ascent need not be at the
+// start of the path, and *.moc output is scanned alongside moc_*.cpp.
+#include <QtCore/qmetatype.h>
+#include "gui_lib/../../presenter.hpp"

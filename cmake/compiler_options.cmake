@@ -366,6 +366,62 @@ if(MORPH_DROPPED_WARNING_FLAGS)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  AUTOMOC-generated translation units
+# ═══════════════════════════════════════════════════════════════════════════
+# Every flag above is worthless on a target that cannot be compiled at all,
+# and without this setting the AUTOMOC targets are exactly that in one very
+# ordinary layout.
+#
+# By default moc writes the include for the class's own header as a path
+# relative to the generated file, climbing back out of the build tree with a
+# run of "..":
+#
+#     #include "../../../../../../examples/ledger/gui_lib/budget_presenter.hpp"
+#
+# A quoted include is resolved against the including file's directory *and*
+# against every -I entry, so that climb is attempted from each of the target's
+# include directories too. Whether the escaped path resolves to a second,
+# different file is pure arithmetic on how deep the source tree happens to sit
+# inside its parent directories -- and when a git worktree is placed inside the
+# repository it checks out (.claude/worktrees/<name>/, which is where the agent
+# harness puts them), it does: six levels up from
+# <worktree>/examples/<rung>/include lands back in the outer checkout, where
+# examples/<rung>/gui_lib/<same name>.hpp really exists. Clang then reports
+#
+#     error: multiple candidates for header '...' found; ... ignoring others
+#     including '<worktree>/examples/<rung>/include' [-Werror,-Wshadow-header]
+#
+# once per moc'd class, and -Werror (above) turns every AUTOMOC target in the
+# project into a build failure -- ladder_<rung>_gui_lib, and with it every
+# ladder_<rung>_tests binary that links one (issue #372).
+#
+# AUTOMOC_PATH_PREFIX makes moc emit the header path relative to the include
+# directory it was found under instead ("budget_presenter.hpp",
+# "ledger/app/app.hpp"), so the generated include resolves through the target's
+# own -I set and never ascends out of the build tree. That removes the
+# ambiguity rather than the diagnostic: -Wno-shadow-header would silence this
+# case, but it is also the only thing that reports a genuine cross-checkout
+# header pickup, which in this layout is a reachable state (issue #372's triage
+# demonstrates a moc TU compiling against the *outer* checkout's header once
+# the diagnostic is suppressed). scripts/check_automoc_includes.sh is the
+# regression gate: it fails on any generated moc include that ascends.
+#
+# It only reaches headers that actually sit under one of their target's
+# INCLUDE_DIRECTORIES, which every Q_OBJECT header in the tree does today. For
+# one that does not, CMake finds no directory to make the path relative to,
+# passes moc no -p, and moc falls back to the ascending path with no warning --
+# so a new QObject header in a directory the target does not -I (a rung's
+# tests/, say, which morph_add_rung.cmake puts on no include path) reappears as
+# a gate failure rather than a silent regression. The fix there is to put the
+# header's directory on the target's include path, not to unset this.
+#
+# Set as a normal variable in the top-level scope, so it initialises
+# AUTOMOC_PATH_PREFIX on every target created by this directory and every
+# add_subdirectory() below it. It is deliberately not an option(): a build that
+# cannot compile its own moc output is not a configuration anyone wants.
+set(CMAKE_AUTOMOC_PATH_PREFIX ON)
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  Public functions
 # ═══════════════════════════════════════════════════════════════════════════
 
