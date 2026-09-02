@@ -329,9 +329,9 @@ public:
 private:
     /// @brief Shared body of both `handle()` overloads.
     ///
-    /// Peeks at @p msg's `kind`/`modelId` — a cheap, best-effort decode,
-    /// thrown away immediately either way — and, for an `execute`
-    /// naming a `modelId`, takes an execute-ordering ticket (see
+    /// Peeks at @p msg's `kind`/`modelId` — a cheap, best-effort decode, thrown
+    /// away immediately either way — and, for an `execute` naming a `modelId`,
+    /// takes an execute-ordering ticket (see
     /// `takeExecuteTicket`'s own doc comment on the class-private members
     /// above) *before* posting to `_pool`, so two same-model `execute`s
     /// posted back-to-back always take their tickets in call order — the
@@ -997,12 +997,12 @@ private:
     // scatter the authorization sequence each branch depends on across helpers,
     // with no reader benefit.
     //
-    // `executeTicket`, when engaged, is this call's execute-ordering ticket
-    // from `handleImpl`, adopted below by an `ExecuteTicketGuard`
-    // that owns it for the rest of this frame — including `dispatchExecute`,
-    // the only branch that does anything with it beyond releasing it. Every
-    // other `kind` ignores it; `handleImpl` never takes one for a non-`execute`
-    // envelope in the first place, so it is always `std::nullopt` for those.
+    // `executeTicket`, when engaged, is this call's execute-ordering ticket from
+    // `handleImpl`, adopted below by an `ExecuteTicketGuard` that owns it for
+    // the rest of this frame — including `dispatchExecute`, the only branch that
+    // does anything with it beyond releasing it. Every other `kind` ignores it;
+    // `handleImpl` never takes one for a non-`execute` envelope in the first
+    // place, so it is always `std::nullopt` for those.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0,
                          std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> executeTicket = {}) {
@@ -1351,8 +1351,8 @@ private:
     // per-instance authorize — whose *order* is the security contract itself
     // (see docs/spec/security.md), so it is deliberately not broken up.
     //
-    // `ticketGuard` owns this call's execute-ordering ticket (if
-    // one was taken) on behalf of `dispatchMessage`, which constructed it and
+    // `ticketGuard` owns this call's execute-ordering ticket (if one was
+    // taken) on behalf of `dispatchMessage`, which constructed it and
     // outlives this call. Every path out of this function releases the ticket:
     // the rejection branches below do it explicitly, through
     // `rejectAndRelease`, so it is freed before their reply goes out; the one
@@ -1540,18 +1540,17 @@ private:
             }
         }
 
-        // Where per-model ordering is enforced: block (on this pool thread — never the
-        // strand itself, and never any other model's strand) until every
-        // execute for `mid` that the transport sent before this one has
+        // Where per-model ordering is enforced: block (on this pool thread —
+        // never the strand itself, and never any other model's strand) until
+        // every execute for `mid` that the transport sent before this one has
         // already made its own `_strand.post(mid, ...)` call below. Every
-        // early-return above this point released its ticket immediately
-        // without ever waiting here, so a model-not-found/unauthorized/
-        // busy rejection for a *different* ticket can never be the thing
-        // this wait is stuck behind — only a ticket that is also headed for
-        // `_strand.post` can hold this one up, and it can only hold it up
-        // for as long as *its own* pre-strand work (identical in kind to
-        // this one's) takes, not for the duration of whatever the model's
-        // strand does with it afterward.
+        // early-return above this point released its ticket immediately without
+        // ever waiting here, so a model-not-found/unauthorized/busy rejection
+        // for a *different* ticket can never be the thing this wait is stuck
+        // behind — only a ticket that is also headed for `_strand.post` can
+        // hold this one up, and it can only hold it up for as long as *its own*
+        // pre-strand work (identical in kind to this one's) takes, not for the
+        // duration of whatever the model's strand does with it afterward.
         ticketGuard.awaitTurn();
         _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), complete, timeoutHandle]() mutable {
             ::morph::exec::detail::ModelId const targetMid{env.modelId};
