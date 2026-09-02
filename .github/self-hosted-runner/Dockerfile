@@ -41,6 +41,26 @@ RUN apt-get update -q && apt-get install -y --no-install-recommends \
         build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Anonymous HTTPS clones from this image are unreliable over HTTP/2, and
+# CMakeLists.txt's FetchContent fallback for glaze does exactly one of
+# those per configure: GitHub answers the info/refs GET with 200 and then
+# the git-upload-pack POST on the same reused HTTP/2 connection with a
+# spurious 401 (`www-authenticate: Basic realm="GitHub"`), which git turns
+# into `could not read Username for 'https://github.com'` and CMake into
+# "Failed to clone repository". Measured here at ~7 failures in 10
+# ls-remotes; with -c http.version=HTTP/1.1 (or protocol.version=0) it is
+# 10 in 10. It is the client stack, not the network or the IP -- the same
+# clone from the Docker host, same public address, is 10 in 10 -- and not
+# git's version either: git 2.55 from ppa:git-core/ppa in this image fails
+# at the same rate as the distro's 2.43, because both link Ubuntu 24.04's
+# libcurl 8.5.0/nghttp2 1.59. There is no newer libcurl to install on
+# 24.04, so the fix is to keep git off HTTP/2 entirely. Only
+# authenticated requests escape the 401 (git retries with credentials),
+# which is why actions/checkout has always worked here and only the
+# dependency clone fails. System-wide rather than per-repo: the bug is in
+# the HTTP stack, so it applies to every clone any job makes.
+RUN git config --system http.version HTTP/1.1
+
 # Ubuntu 24.04's apt package is CMake 3.28.3. GitHub-hosted ubuntu-24.04
 # ships a newer CMake from Kitware's own release archive rather than the
 # distro package, and that gap is not cosmetic: linux-all-features'

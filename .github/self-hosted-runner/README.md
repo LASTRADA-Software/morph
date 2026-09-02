@@ -5,30 +5,14 @@ Docker containers. Used by `ci.yml`'s `linux-compilers`, `linux-sanitizers`,
 and `linux-all-features` jobs whenever a runner is online and idle (see
 **ci.yml integration** below).
 
-Currently running across three hosts:
-
-- the maintainer's Windows machine (Docker Desktop, Linux containers): 4
-  containers, each capped at 6 CPUs (`docker run --cpus=6`) on a
-  32-logical-processor box — 24 cores committed, 8 left as headroom for the
-  host OS and Docker Desktop itself.
-- a Hetzner Cloud VM (8 CPU / 15 GiB): 3 workers at 2 CPU/4 GiB each plus
-  its own `fastcached` daemon (1 CPU/2 GiB/10 GiB-disk), all sized by
-  `bootstrap-cloud-node.sh` from the box's actual resources — see
-  **Bootstrapping a cloud node with its own fastcached** below.
-- the maintainer's Linux workstation (12 logical processors / 61 GiB, plain
-  Docker Engine): 5 containers pinned to 2 processors each (`--cpuset-cpus`,
-  not `--cpus` — see below) with a 6 GiB cap, plus a released `fastcached`
-  running as a host service on the Docker bridge address — 10 of 12
-  processors committed to runners, the rest to the host and the cache.
-  Started by hand rather than by `bootstrap-cloud-node.sh`, which is written
-  for a dedicated VM it may install Docker on and give the whole box to; see
-  **Running more than one runner** below for the exact commands, and **A
-  workstation that already runs its own fastcached** for why the runners get
-  their own daemon rather than the one already serving the developer's local
-  builds.
-
-All three hosts' runners register to the same repo and are indistinguishable
-to `ci.yml` — a job lands on whichever is online and idle.
+Any number of hosts can register runners to this repo; they are
+indistinguishable to `ci.yml` — a job lands on whichever is online and
+idle. Which machines are currently registered is not recorded here (it
+changes): read it off **Settings → Actions → Runners**, or
+`gh api repos/LASTRADA-Software/morph/actions/runners`. Registrations for
+hosts that no longer exist stay listed there as `offline` and are harmless
+— the probe counts only online, non-busy ones — but are worth deleting so
+the list reflects what actually runs.
 
 Multiple runners exist so a multi-leg matrix (`linux-compilers` has 4,
 `linux-sanitizers` has 3) actually runs its legs in parallel instead of
@@ -263,8 +247,9 @@ directly.
 Each container is one runner process. To add capacity (another container
 here, or a registration on a second machine), repeat the Quick start with
 a distinct `RUNNER_NAME` per container/host — no coordination between them
-is needed, they all just poll the same repo's job queue. This is exactly
-how the current 4 containers are set up:
+is needed, they all just poll the same repo's job queue. On a host where
+`host.docker.internal` resolves by itself (Docker Desktop), that is just
+the Quick start in a loop:
 
 ```bash
 for i in 1 2 3 4; do
@@ -285,8 +270,8 @@ the image needs to know about — size it to (host logical processors) ÷
 itself, and adjust down if the containers are still oversubscribing the
 box under load.
 
-On a **plain Linux Docker Engine** host two more flags are needed, and the
-Linux workstation's 5 containers are started exactly like this:
+On a **plain Linux Docker Engine** host two more flags are needed. A
+12-processor / 61 GiB box running five containers, for example:
 
 ```bash
 for i in 1 2 3 4 5; do
@@ -332,10 +317,11 @@ done
 The registration token is single-use, which is why it is minted inside the
 loop rather than once before it.
 
-The Windows host's four containers use `--cpus=6` and carry the same latent
-hazard — 32 logical processors reported to every build inside a 6-CPU
-container. It has not bitten there because those containers are not memory
-capped, so the oversubscription costs wall-clock rather than killed compiles.
+Any host that starts its containers with `--cpus=N` instead carries the
+same latent hazard — the box's full logical-processor count is reported to
+every build inside an N-CPU container. It only bites where a memory cap is
+also set: without one the oversubscription costs wall-clock rather than
+killed compiles.
 
 ## ci.yml integration
 
@@ -369,6 +355,45 @@ needed for that case.
 the remaining Linux jobs (valgrind, Qt, ladder tests, clang-tidy) are
 intentionally left on `ubuntu-24.04` for now.
 
+## Dependency clones and HTTP/2
+
+`CMakeLists.txt` falls back to `FetchContent` for glaze when no installed
+copy is found, so every Linux configure step does one anonymous
+`git clone https://github.com/stephenberry/glaze.git` — the only
+unauthenticated clone in the build. Inside this image that clone fails
+most of the time: GitHub answers the `info/refs` GET with 200 and then
+the `git-upload-pack` POST on the same reused HTTP/2 connection with a
+spurious `401` and `www-authenticate: Basic realm="GitHub"`, which
+surfaces as
+
+```
+fatal: could not read Username for 'https://github.com': No such device or address
+fatal: expected flush after ref listing
+Had to git clone more than once: 3 times.
+CMake Error ... Failed to clone repository: 'https://github.com/stephenberry/glaze.git'
+```
+
+and fails Configure. It looks like a credentials or rate-limit problem and
+is neither: it is Ubuntu 24.04's libcurl 8.5.0 / nghttp2 1.59 speaking
+HTTP/2. Measured from a running runner container, ~7 of 10 `ls-remote`s
+fail; with `-c http.version=HTTP/1.1` or `-c protocol.version=0`, 10 of
+10 succeed. The same clone from the Docker host (same public address,
+libcurl 8.21) is 10 of 10, and upgrading git inside the container to 2.55
+from `ppa:git-core/ppa` changes nothing — the libcurl underneath is the
+same, and 24.04 has no newer one to install. Only *authenticated*
+requests escape the 401, because git retries them with credentials, which
+is why `actions/checkout` has always worked here and only the dependency
+clone breaks.
+
+The Dockerfile therefore pins `git config --system http.version HTTP/1.1`.
+Containers built from an older image keep failing until they are
+recreated; to fix a running one in place, without disturbing the job it
+may be executing:
+
+```bash
+docker exec -u root morph-runner-1 git config --system http.version HTTP/1.1
+```
+
 ## Compiler cache: fastcache-cc
 
 `linux-compilers`, `linux-sanitizers`, and `linux-all-features` each set
@@ -386,14 +411,13 @@ daemon reachable at that address from inside its containers**. There is
 no single shared cache across hosts; each host caches its own compiles.
 How `host.docker.internal` resolves differs by platform:
 
-- **Docker Desktop (the Windows machine)**: resolves automatically to
+- **Docker Desktop (Windows/macOS hosts)**: resolves automatically to
   whatever the host's `127.0.0.1` means — i.e. that machine's own
-  `fastcached` service (see `D:\caching` on that machine; **not** part of
-  this repository). That service must be **running** and its
+  `fastcached` service (kept outside this repository). That service must be **running** and its
   `fastcached.yaml` must **bind `0.0.0.0`**, not the default `127.0.0.1`,
   or a container cannot reach it at all (`127.0.0.1` inside a container
   means the container itself).
-- **Plain Linux Docker Engine (the Hetzner box, or any cloud VM)**: does
+- **Plain Linux Docker Engine (a workstation or a cloud VM)**: does
   **not** provide `host.docker.internal` automatically the way Docker
   Desktop does. `bootstrap-cloud-node.sh` adds it explicitly via
   `--add-host=host.docker.internal:host-gateway` on each worker
@@ -410,7 +434,7 @@ How `host.docker.internal` resolves differs by platform:
 
 A developer machine's `fastcached` listens on loopback, which inside a
 container means the container itself. Two ways to give the runners a cache
-on such a host, and this repository's Linux workstation uses the second:
+on such a host; the second is what these runners are set up for:
 
 1. **Add a listener on the Docker bridge gateway** to the existing daemon —
    `listeners:` in `fastcached.yaml` supersedes `bind`/`port`, so both
@@ -430,8 +454,8 @@ on such a host, and this repository's Linux workstation uses the second:
 
 2. **Run a second daemon, as a host process**, bound to the bridge address
    only and left on a released version, with the personal one untouched on
-   loopback. This is what the Linux workstation does, as a `systemd --user`
-   unit (`fastcached-ci.service`) running the 0.1.1 release binary:
+   loopback — e.g. as a `systemd --user` unit (`fastcached-ci.service`)
+   running the 0.1.1 release binary:
 
    ```yaml
    # ~/.local/opt/fastcached-0.1.1/fastcached-ci.yaml
@@ -468,8 +492,8 @@ on such a host, and this repository's Linux workstation uses the second:
 `FASTCACHE_AUTO_INSTALL=ON` fetches the newest **released** `fastcache-cc`
 from the `fastcached` project's GitHub Releases. A daemon built from that
 project's `master` can be far ahead of its last release and **refuses that
-client**, which is why the workstation runs a release build rather than the
-one already on the box.
+client**, which is why the daemon serving the runners has to be a release
+build, not whatever from-source one is already on the box.
 
 Measured here: `fastcached 0.1.1-599-gea414a2` (a from-source master build)
 against the auto-installed `fastcache-cc` 0.1.1, configuring from inside a
