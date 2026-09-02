@@ -39,12 +39,14 @@ TestCase {
     property var corpusCache: null
 
     // The schema the next createTemporaryObject() picks up. A `property var`
-    // assigned a JS value, then *bound* into the component below -- not handed
-    // to createTemporaryObject as an initial-properties entry, which converts
-    // the object through QVariantMap and turns every JSON array into something
-    // `Array.isArray` rejects. DynamicForm reads `p.type` with exactly that
-    // test, so a converted schema silently renders every boolean field as a
-    // plain TextField and the equals-bool rows would measure nothing.
+    // assigned a JS value, then *bound* into the component below rather than
+    // handed to createTemporaryObject as an initial-properties entry. That
+    // distinction used to matter -- the initial-properties path converts the
+    // object through QVariantMap, and `DynamicForm` typed each field by asking
+    // `Array.isArray` about the result -- but morph#388 made the renderer
+    // re-read the schema as JSON at the property, so both paths now render the
+    // same form. Binding stays because it is what every shipped app does, and
+    // because re-assigning `pendingSchema` per corpus row re-renders on its own.
     property var pendingSchema: ({})
 
     QtObject {

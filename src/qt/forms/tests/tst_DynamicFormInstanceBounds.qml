@@ -39,8 +39,12 @@ TestCase {
     property var corpusCache: null
 
     // Bound into the component rather than passed through
-    // createTemporaryObject's initial properties, which converts the object via
-    // QVariantMap and leaves `Array.isArray(p.type)` false.
+    // createTemporaryObject's initial properties. Both paths render the same
+    // form since morph#388 (`DynamicForm` re-reads the schema as JSON at the
+    // property, so the QVariantMap conversion no longer changes what it sees);
+    // binding stays because it is what every shipped app does, and because
+    // `pendingSchema` is re-assigned per corpus row and the binding re-renders
+    // on its own.
     property var pendingSchema: ({})
 
     QtObject {
