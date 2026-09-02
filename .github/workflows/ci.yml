@@ -112,10 +112,78 @@ jobs:
         if: matrix.preset == 'cl-debug' || matrix.preset == 'clangcl-debug'
         run: ctest --preset ${{ matrix.preset }}
 
+  # Picks the self-hosted morph-docker runner for linux-compilers when one is
+  # registered, online, and idle; falls back to the GitHub-hosted label
+  # otherwise. GITHUB_TOKEN can't call the runners API (it's a repo-admin
+  # operation regardless of the permissions: block below), so this needs
+  # RUNNER_STATUS_TOKEN -- a PAT with Administration: Read-only on this repo,
+  # stored as a repo secret. Forked-repo PRs don't get repo secrets at all
+  # (the token comes through empty), which this treats the same as "no
+  # runner online": fall back to GitHub-hosted. See
+  # .github/self-hosted-runner/README.md for the runner itself.
+  probe-self-hosted:
+    name: Probe self-hosted runner
+    runs-on: ubuntu-24.04
+    outputs:
+      runs_on: ${{ steps.probe.outputs.runs_on }}
+    steps:
+      - name: Check for an idle morph-docker runner
+        id: probe
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+        run: |
+          set -euo pipefail
+          fallback='["ubuntu-24.04"]'
+
+          if [ -z "${RUNNER_STATUS_TOKEN}" ]; then
+            echo "No RUNNER_STATUS_TOKEN (e.g. a forked-repo PR) -- using GitHub-hosted."
+            echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          runners=$(curl -fsSL \
+            -H "Authorization: Bearer ${RUNNER_STATUS_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runners") || {
+              echo "Runners API call failed -- using GitHub-hosted."
+              echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
+              exit 0
+            }
+
+          online=$(echo "${runners}" | jq '[.runners[] |
+            select(.status == "online" and .busy == false and
+                   (.labels | map(.name) | contains(["morph-docker"])))] | length')
+
+          if [ "${online}" -gt 0 ]; then
+            echo "Found an idle morph-docker runner -- using self-hosted."
+            echo 'runs_on=["self-hosted", "Linux", "X64", "morph-docker"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "No idle morph-docker runner -- using GitHub-hosted."
+            echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
+          fi
+
   # ── Linux: GCC and Clang plain builds ────────────────────────────────
   linux-compilers:
     name: Linux / ${{ matrix.preset }}
-    runs-on: ubuntu-24.04
+    needs: probe-self-hosted
+    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # Only set on the self-hosted path: host.docker.internal does not
+      # resolve on a GitHub-hosted VM (it is not a Docker container), and an
+      # address that is merely unreachable rather than refusing the
+      # connection stalls fastcache-cc's TCP connect for up to ~2m30s per
+      # matrix leg (CompileCache.cmake's own measured worst case) instead of
+      # failing fast -- so this must stay empty on that path, not just
+      # "wrong but harmless".
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      # FASTCACHE_AUTO_INSTALL is a plain CMake option(), not something
+      # CompileCache.cmake reads from the environment the way it does
+      # FASTCACHE_ADDR -- an env var of this name is silently ignored, only
+      # -DFASTCACHE_AUTO_INSTALL=ON on the cmake command line reaches it
+      # (confirmed live: FASTCACHE_ADDR landed in CMakeCache.txt from the
+      # environment, FASTCACHE_AUTO_INSTALL stayed OFF). This is that flag,
+      # precomputed once so every Configure step below can just splice it in.
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -155,7 +223,18 @@ jobs:
       # actual compiler invocation, not by this key, so sharing one cache
       # entry per preset across jobs only raises the hit rate -- it cannot
       # serve a wrong object for a different flag set.
+
+      # Skipped on the self-hosted path: CompileCache.cmake's
+      # FASTCACHE_AUTO_INSTALL only fetches fastcache-cc when NONE of
+      # fastcache-cc/sccache/ccache are already on PATH ("only when there is
+      # nothing else to use" -- see that file's own comment on the guard).
+      # Installing sccache unconditionally, as this job used to, permanently
+      # defeated auto-install regardless of FASTCACHE_AUTO_INSTALL=ON:
+      # sccache was always present, so the auto-install guard's `AND NOT
+      # SCCACHE` was always false. GitHub-hosted's fallback still gets
+      # sccache exactly as before.
       - name: Restore sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
@@ -163,16 +242,23 @@ jobs:
           restore-keys: sccache-${{ matrix.preset }}-
 
       - name: Install sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
+      # No -DCMAKE_..._COMPILER_LAUNCHER=sccache here on purpose: leaving the
+      # launcher unset lets cmake/CompileCache.cmake's own auto-detection run,
+      # which prefers fastcache-cc (this job's FASTCACHE_ADDR, set above, only
+      # when running self-hosted) and falls back to the sccache install steps
+      # above when no daemon answers -- e.g. this exact job on the
+      # GitHub-hosted fallback runner, which never gets a FASTCACHE_ADDR to
+      # begin with. Setting the launcher explicitly, as every other Linux job
+      # still does, would make CompileCache.cmake bail out before it ever
+      # probes for fastcache-cc (see that file's own comment).
       - name: Configure (gcc)
         if: startsWith(matrix.preset, 'gcc-')
-        run: |
-          cmake --preset ${{ matrix.preset }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        run: cmake --preset ${{ matrix.preset }} $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       - name: Configure (clang)
         if: startsWith(matrix.preset, 'clang-')
@@ -180,8 +266,7 @@ jobs:
           cmake --preset ${{ matrix.preset }} \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -196,8 +281,13 @@ jobs:
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
+      #
+      # Guarded the same way as the Install/Restore sccache steps above:
+      # sccache is never installed on the self-hosted path (fastcache-cc is
+      # used there instead), so `sccache --show-stats` would just fail
+      # "command not found" there.
       - name: sccache stats
-        if: always()
+        if: "always() && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -209,7 +299,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
@@ -217,11 +307,20 @@ jobs:
 
   linux-sanitizers:
     name: Linux / ${{ matrix.preset }}
-    runs-on: ubuntu-24.04
+    needs: probe-self-hosted
+    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
+      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # name -- CompileCache.cmake declares it as a plain option(), which
+      # CMake never reads from the environment.
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        preset: [clang-asan, clang-tsan, clang-ubsan, clang-coverage]
+        preset: [clang-asan, clang-tsan, clang-ubsan]
     steps:
       - uses: actions/checkout@v4
 
@@ -238,19 +337,102 @@ jobs:
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
 
-      # Only the coverage leg builds the ladder: examples/common's
-      # hand-written GUI/testkit code is real coverage of morph's client
-      # stack (Bridge, backends, QtExecutor, completions — see
-      # examples/TESTING.md's "round-7 T4 reframe"), so it belongs in the
-      # coverage number the same way the models it will host later do
-      # (examples/IMPLEMENTATION.md rule 5). asan/tsan/ubsan skip this, same
-      # as before — "a GUI stack under TSan is mostly noise" — coverage
-      # instrumentation carries none of that risk.
-      - name: Install ODBC + SQLite driver (coverage leg only)
-        if: matrix.preset == 'clang-coverage'
+      # Keyed by preset alone, matching linux-compilers' cache above: this
+      # matrix's clang-asan/clang-tsan legs share the same preset name (and
+      # much of the same object set) as ladder-sanitizers and kanban-tsan
+      # respectively, which build the identical compiler+preset with extra
+      # -DMORPH_BUILD_* flags on top. See linux-compilers' identical comment
+      # for why sharing the key across jobs is safe.
+
+      # Skipped on the self-hosted path: see linux-compilers' identical
+      # Restore/Install sccache steps for why (installing sccache
+      # unconditionally would permanently defeat fastcache-cc auto-install).
+      - name: Restore sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: sccache-${{ matrix.preset }}-
+
+      - name: Install sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          # unixodbc-dev + libsqliteodbc: the application ladder (built by this
-          # leg only) fetches the Lightweight ORM, whose CMake runs
+          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      # morph::net and the SQLite offline queue are opt-in, but they are also
+      # where the memory/threading/UB risk actually lives (raw sockets, an I/O
+      # thread, a hand-rolled frame reader, a C API). Left off, the sanitizers
+      # silently skipped them. QML, the fuzzers, and the ladder stay out of
+      # this matrix entirely — they are covered by linux-coverage and
+      # linux-all-features, and "a GUI stack under TSan is mostly noise".
+      #
+      # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers' Configure
+      # steps for why leaving it unset is what lets fastcache-cc be selected.
+      - name: Configure
+        run: |
+          cmake --preset ${{ matrix.preset }} \
+            -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
+            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: |
+          # morph::testkit::OomInjector (tests/oom_injector.cpp) overrides
+          # the process-wide operator new/delete to force std::bad_alloc on
+          # demand -- ASan and TSan's own runtimes already interpose
+          # operator new/delete themselves, and linking a second, competing
+          # definition fails with "multiple definition of `operator
+          # new(unsigned long)'" (confirmed in CI). Excluded by test name on
+          # exactly these two legs; every other CI leg (plain clang/gcc,
+          # Windows, ubsan, coverage) runs these tests normally.
+          EXCLUDE_ARGS=()
+          if [ "${{ matrix.preset }}" = "clang-asan" ] || [ "${{ matrix.preset }}" = "clang-tsan" ]; then
+            EXCLUDE_ARGS+=(-E "OomInjector|morph#108")
+          fi
+          ctest --preset ${{ matrix.preset }} "${EXCLUDE_ARGS[@]}"
+
+  # ── Linux: coverage (clang, ladder + Qt) ─────────────────────────────
+  #
+  # Split out of linux-sanitizers (which used to carry this as a 4th
+  # clang-coverage matrix leg) so plain asan/tsan/ubsan can move onto the
+  # self-hosted probe while this leg -- the one that builds the full
+  # ladder stack (ODBC/SQLite/yaml-cpp/zip) and Qt, and uploads to
+  # Codecov -- stays pinned to ubuntu-24.04.
+  linux-coverage:
+    name: Linux / clang-coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-coverage-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-coverage-
+
+      - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build catch2 libsqlite3-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+
+      # examples/common's hand-written GUI/testkit code is real coverage of
+      # morph's client stack (Bridge, backends, QtExecutor, completions --
+      # see examples/TESTING.md's "round-7 T4 reframe"), so it belongs in
+      # the coverage number the same way the models it will host later do
+      # (examples/IMPLEMENTATION.md rule 5).
+      - name: Install ODBC + SQLite driver
+        run: |
+          # unixodbc-dev + libsqliteodbc: the application ladder (built by
+          # this job) fetches the Lightweight ORM, whose CMake runs
           # `pkg_check_modules(ODBC REQUIRED odbc)`, and whose ladder fixtures
           # open a real `DRIVER=SQLite3` connection at test time.
           # Named explicitly rather than relied on from the runner image.
@@ -258,7 +440,7 @@ jobs:
           # does `find_package(yaml-cpp)`/`find_package(libzip)` as system
           # CONFIG packages, not through CPM (examples/bank/CMakeLists.txt's
           # comment on the identical fetch) — without these, configure fails
-          # the moment this leg's MORPH_BUILD_LADDER=ON pulls Lightweight in.
+          # the moment MORPH_BUILD_LADDER=ON pulls Lightweight in.
           # Dropped from this step by mistake when it was renamed from
           # "Install Qt6 WebSockets" to "Install ODBC + SQLite driver" —
           # every other job that builds the ladder on Linux (Application
@@ -273,99 +455,62 @@ jobs:
       # used to be installed above; replaced wholesale rather than kept
       # alongside aqtinstall's Qt, which would leave two Qt6 installs on the
       # same runner for find_package() to pick between.
-      - name: Install Qt ${{ env.QT_VERSION }} (coverage leg only)
-        if: matrix.preset == 'clang-coverage'
+      - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
           cache: true
 
-      # Keyed by preset alone, matching linux-compilers' cache above: this
-      # matrix's clang-asan/clang-tsan legs share the same preset name (and
-      # much of the same object set) as ladder-sanitizers and kanban-tsan
-      # respectively, which build the identical compiler+preset with extra
-      # -DMORPH_BUILD_* flags on top. See linux-compilers' identical comment
-      # for why sharing the key across jobs is safe.
       - name: Restore sccache
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: sccache-${{ matrix.preset }}-
+          key: sccache-clang-coverage-${{ github.sha }}
+          restore-keys: sccache-clang-coverage-
 
       - name: Install sccache
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
-      # morph::net and the SQLite offline queue are opt-in, but they are also
-      # where the memory/threading/UB risk actually lives (raw sockets, an I/O
-      # thread, a hand-rolled frame reader, a C API). Left off, the sanitizers
-      # and the coverage number both silently skipped them. QML and the
-      # fuzzers stay out of this matrix entirely — they are covered by the
-      # linux-all-features job, and a GUI stack under TSan is mostly noise;
-      # the ladder (Qt6::WebSockets, no QML) is the one exception, built only
-      # on the coverage leg, for the reason in the Qt install step above.
       - name: Configure
         run: |
-          EXTRA_ARGS=()
-          if [ "${{ matrix.preset }}" = "clang-coverage" ]; then
-            EXTRA_ARGS+=(-DMORPH_BUILD_QT=ON -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=all)
-          fi
-          cmake --preset ${{ matrix.preset }} \
+          cmake --preset clang-coverage \
             -DMORPH_BUILD_NET=ON \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_LADDER=ON \
+            -DMORPH_LADDER_RUNGS=all \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
-            "${EXTRA_ARGS[@]}"
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once at BUILD
       # time to enumerate its cases, which can abort on this headless runner
       # without it — see "Linux / all optional features"'s own Build step
-      # for the identical failure this leg's coverage build hit once the
-      # ladder actually started compiling (this leg has no QML, a narrower
-      # Qt surface, but ladder_common_tests still links Qt6::WebSockets).
-      # Harmless for the non-Qt legs (nothing reads it).
+      # for the identical failure this job's build hit once the ladder
+      # actually started compiling (no QML here, a narrower Qt surface, but
+      # ladder_common_tests still links Qt6::WebSockets).
       - name: Build
         env:
           QT_QPA_PLATFORM: offscreen
-        run: cmake --build --preset ${{ matrix.preset }}
+        run: cmake --build --preset clang-coverage
 
       - name: Test
         env:
-          # Harmless for the non-Qt legs (nothing reads it); required for the
-          # coverage leg's ladder tests, which open real Qt widgets/sockets
+          # Required for the ladder tests, which open real Qt widgets/sockets
           # on a runner with no display.
           QT_QPA_PLATFORM: offscreen
         run: |
-          # morph::testkit::OomInjector (tests/oom_injector.cpp) overrides
-          # the process-wide operator new/delete to force std::bad_alloc on
-          # demand -- ASan and TSan's own runtimes already interpose
-          # operator new/delete themselves, and linking a second, competing
-          # definition fails with "multiple definition of `operator
-          # new(unsigned long)'" (confirmed in CI). Excluded by test name on
-          # exactly these two legs; every other CI leg (plain clang/gcc,
-          # Windows, ubsan, coverage) runs these tests normally.
-          EXCLUDE_ARGS=()
-          if [ "${{ matrix.preset }}" = "clang-asan" ] || [ "${{ matrix.preset }}" = "clang-tsan" ]; then
-            EXCLUDE_ARGS+=(-E "OomInjector|morph#108")
-          fi
-          if [ "${{ matrix.preset }}" = "clang-coverage" ]; then
-            LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage "${EXCLUDE_ARGS[@]}"
-          else
-            ctest --preset ${{ matrix.preset }} "${EXCLUDE_ARGS[@]}"
-          fi
+          LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage
 
       - name: Generate coverage report
-        if: matrix.preset == 'clang-coverage'
         run: bash scripts/coverage.sh
 
       - name: Upload coverage to Codecov
-        if: matrix.preset == 'clang-coverage'
         uses: codecov/codecov-action@v5
         with:
           files: build/clang-coverage/coverage.lcov
@@ -431,7 +576,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-${{ matrix.preset }}-${{ github.sha }}
+          key: sccache-clang-coverage-${{ github.sha }}
 
   kanban-tsan:
     name: Kanban / ThreadSanitizer
@@ -646,7 +791,16 @@ jobs:
 
   ladder-tests:
     name: Application ladder
-    runs-on: ubuntu-24.04
+    needs: probe-self-hosted
+    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
+      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # name -- CompileCache.cmake declares it as a plain option(), which
+      # CMake never reads from the environment.
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -696,6 +850,11 @@ jobs:
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
+          # libsqlite3-dev: Lightweight's own CMakeLists.txt does
+          # find_package(SQLite3) as a system CONFIG package. GitHub-hosted
+          # ubuntu-24.04 ships it preinstalled; a bare self-hosted image does
+          # not, so configure fails with "Could NOT find SQLite3" the moment
+          # MORPH_BUILD_LADDER=ON pulls Lightweight in without it.
           # unixodbc-dev + libsqliteodbc: the application ladder fetches the
           # Lightweight ORM, whose CMake runs
           # `pkg_check_modules(ODBC REQUIRED odbc)`, and whose ladder fixtures
@@ -709,7 +868,7 @@ jobs:
           # Qt itself is installed by the aqtinstall step below, not apt: see
           # that step's comment for why the distro package is unusable here.
           sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
-            libyaml-cpp-dev libzip-dev libgl1-mesa-dev \
+            libsqlite3-dev libyaml-cpp-dev libzip-dev libgl1-mesa-dev \
             unixodbc-dev libsqliteodbc
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
@@ -733,8 +892,12 @@ jobs:
       # this job's gcc-debug+Qt+ladder build shares the same core-library
       # objects as linux-compilers' plain gcc-debug leg and linux-qt's
       # gcc-debug+Qt build.
+
+      # Skipped on the self-hosted path: see linux-compilers' identical
+      # Restore/Install sccache steps for why (installing sccache
+      # unconditionally would permanently defeat fastcache-cc auto-install).
       - name: Restore sccache
-        if: steps.filter.outputs.run == 'true'
+        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
@@ -742,11 +905,14 @@ jobs:
           restore-keys: sccache-gcc-debug-
 
       - name: Install sccache
-        if: steps.filter.outputs.run == 'true'
+        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
+      # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
+      # Configure steps for why leaving it unset is what lets fastcache-cc
+      # be selected.
       - name: Configure (gcc-debug, ladder + Qt on)
         if: steps.filter.outputs.run == 'true'
         run: |
@@ -754,8 +920,7 @@ jobs:
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_LADDER_RUNGS=all \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once at BUILD
@@ -806,8 +971,11 @@ jobs:
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
+      #
+      # Guarded the same way as the Install/Restore sccache steps above:
+      # sccache is never installed on the self-hosted path.
       - name: sccache stats
-        if: always() && steps.filter.outputs.run == 'true'
+        if: "always() && steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -819,7 +987,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
@@ -827,7 +995,16 @@ jobs:
 
   ladder-sanitizers:
     name: Application ladder / ASan+UBSan
-    runs-on: ubuntu-24.04
+    needs: probe-self-hosted
+    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
+      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # name -- CompileCache.cmake declares it as a plain option(), which
+      # CMake never reads from the environment.
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -896,8 +1073,12 @@ jobs:
       # Keyed by preset alone (clang-asan), matching linux-sanitizers' cache:
       # this job's clang-asan+Qt+ladder build shares the same compiler and
       # much of the same core-library object set as that job's clang-asan leg.
+
+      # Skipped on the self-hosted path: see linux-compilers' identical
+      # Restore/Install sccache steps for why (installing sccache
+      # unconditionally would permanently defeat fastcache-cc auto-install).
       - name: Restore sccache
-        if: steps.filter.outputs.run == 'true'
+        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
@@ -905,11 +1086,14 @@ jobs:
           restore-keys: sccache-clang-asan-
 
       - name: Install sccache
-        if: steps.filter.outputs.run == 'true'
+        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
+      # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
+      # Configure steps for why leaving it unset is what lets fastcache-cc
+      # be selected.
       - name: Configure (clang-asan, ladder + Qt on)
         if: steps.filter.outputs.run == 'true'
         run: |
@@ -919,8 +1103,7 @@ jobs:
             -DMORPH_LADDER_RUNGS=all \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       # QT_QPA_PLATFORM=offscreen at build time as well as test time: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once during the
@@ -986,8 +1169,11 @@ jobs:
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
+      #
+      # Guarded the same way as the Install/Restore sccache steps above:
+      # sccache is never installed on the self-hosted path.
       - name: sccache stats
-        if: always() && steps.filter.outputs.run == 'true'
+        if: "always() && steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -999,7 +1185,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
@@ -1007,7 +1193,16 @@ jobs:
 
   linux-all-features:
     name: Linux / all optional features (${{ matrix.compiler }})
-    runs-on: ubuntu-24.04
+    needs: probe-self-hosted
+    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
+      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # name -- CompileCache.cmake declares it as a plain option(), which
+      # CMake never reads from the environment.
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1075,7 +1270,12 @@ jobs:
       # top) share their core-library objects with linux-compilers' plain
       # gcc-debug/clang-debug legs and every other job building the same
       # preset (linux-qt, ladder-tests, valgrind for gcc-debug).
+
+      # Skipped on the self-hosted path: see linux-compilers' identical
+      # Restore/Install sccache steps for why (installing sccache
+      # unconditionally would permanently defeat fastcache-cc auto-install).
       - name: Restore sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
@@ -1083,6 +1283,7 @@ jobs:
           restore-keys: sccache-${{ matrix.preset }}-
 
       - name: Install sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
@@ -1107,6 +1308,9 @@ jobs:
           # engine-load smoke test were built by nothing at all. This job has
           # Qt ${{ env.QT_VERSION }} from aqtinstall, so here they are built,
           # and the smoke test runs, on every push.
+          # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
+          # Configure steps for why leaving it unset is what lets
+          # fastcache-cc be selected.
           cmake --preset ${{ matrix.preset }} \
             -DMORPH_BUILD_NET=ON \
             -DMORPH_BUILD_QT=ON \
@@ -1119,8 +1323,7 @@ jobs:
             -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
             -DMORPH_REQUIRE_VETTED_HMAC=ON \
             $EXTRA \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once at BUILD
@@ -1167,8 +1370,11 @@ jobs:
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
+      #
+      # Guarded the same way as the Install/Restore sccache steps above:
+      # sccache is never installed on the self-hosted path.
       - name: sccache stats
-        if: always()
+        if: "always() && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -1180,7 +1386,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
@@ -1398,9 +1604,10 @@ jobs:
       # needs the project actually compiled nor linked. pinned_facts.cmake's
       # generated header is likewise a configure_file() (configure-time), not
       # a build-time add_custom_command, so it's already on disk too. Compiler
-      # caching (sccache) accordingly has nothing to do in this job, unlike
-      # every other Linux job here -- so those steps, and the Build step that
-      # was their only reason to run, are gone rather than merely skipped.
+      # caching (sccache/fastcache-cc) accordingly has nothing to do in this
+      # job, unlike every other Linux job here -- so those steps, and the
+      # Build step that was their only reason to run, are gone rather than
+      # merely skipped.
       - name: Configure (generates compile_commands.json over every optional feature)
         run: |
           cmake --preset clang-debug \
