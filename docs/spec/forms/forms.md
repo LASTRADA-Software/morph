@@ -1011,12 +1011,20 @@ not one, because only one of the two signals is universal:
   deliberately declares neither it nor `fetchOptions()`
   (`bookmarks::gui::BookmarkFormsController` and
   `pastebin::gui::PasteFormsController` each carry the reasoning: an unused
-  `fetchOptions()` would be a stub with nothing to call it). Its block carries
-  `ignoreUnknownSignals: true` so the absence is not a warning — scoped to that
-  one optional signal, and to nothing else. Without the split, every form
-  instance warned once about `onOptionsReceived` as soon as a conforming
-  choiceless controller was attached (morph#387), which forced any GUI test
-  asserting "no QML warnings" to tolerate that exact text.
+  `fetchOptions()` would be a stub with nothing to call it). Its block gates its
+  **target** on the signal being declared — `form.controller.optionsReceived
+  !== undefined`, else `null` — so a controller that omits it is never connected
+  to and the absence is not a warning. Without the split, every form instance
+  warned once about `onOptionsReceived` as soon as a conforming choiceless
+  controller was attached (morph#387), which forced any GUI test asserting "no
+  QML warnings" to tolerate that exact text.
+
+  The gate is what makes the block optional, **not** `ignoreUnknownSignals`. A
+  controller that does declare `optionsReceived` is connected to strictly, so a
+  misspelling of the handler is still reported. `ignoreUnknownSignals: true`
+  would silence that too, and the silence is expensive: the options never
+  arrive, every `Choice` combo box stays empty, the form never reaches `ready`,
+  and nothing is logged.
 
 `src/qt/forms/tests/tst_DynamicFormChoicelessController.qml` pins both halves:
 a choiceless controller loads with no warning, a `Choice`-serving one still

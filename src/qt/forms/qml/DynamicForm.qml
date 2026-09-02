@@ -1273,13 +1273,20 @@ Frame {
     // `optionsReceived` is not. It exists only on a controller that serves a
     // morph::forms::Choice field, and a controller that serves none declares
     // no stub for it -- the sanctioned shape (bookmarks' and pastebin's forms
-    // controllers both document why). Kept in its own block so
-    // `ignoreUnknownSignals` covers this one optional signal and nothing else:
-    // on its own, the form once warned once per instance for every conforming
-    // choiceless controller (morph#387).
+    // controllers both document why). Unaccommodated, that shape made the form
+    // warn once per instance about the handler below (morph#387).
+    //
+    // The accommodation is the gated target, not `ignoreUnknownSignals`. A
+    // controller without the signal is never connected to, so there is nothing
+    // to warn about; a controller that has it is connected strictly, so a
+    // misspelling of the handler below is still reported. `ignoreUnknownSignals`
+    // would silence both, and the second is not noise: a misspelled handler on a
+    // Choice-serving controller drops every option, leaves the combo box empty
+    // and the form short of `ready`, and would then do so with no diagnostic at
+    // all.
     Connections {
-        target: form.controller
-        ignoreUnknownSignals: true
+        target: form.controller && form.controller.optionsReceived !== undefined
+                    ? form.controller : null
         function onOptionsReceived(optionsAction, ok, payload) {
             if (!ok)
                 return
