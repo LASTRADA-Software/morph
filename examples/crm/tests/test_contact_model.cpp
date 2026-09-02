@@ -167,3 +167,50 @@ TEST_CASE("ListContactOptions serves {id, name} rows for the primary-contact Cho
     CHECK(options.contacts.front().id == std::to_string(*created.contactId));
     CHECK(options.contacts.front().name == "Ada Lovelace");
 }
+
+// The sibling of `AccountModel`/`LeadModel`/`OpportunityModel`/`QuoteModel`'s
+// own "journals its edits against the attached identity" case (morph#412).
+// `ContactModel::attachActionLog` was called by no test at all, so the claim
+// that this model journals what it writes was supported by no executed line --
+// the state lims was in before its own audit trail turned out to be recording
+// verifications under an empty key.
+//
+// Reading the entries back through `log->entries("contacts")` rather than
+// through the model is what makes the key load-bearing: entries stamped with a
+// different key, or with none, do not come back from that call, so the case
+// fails if `attachActionLog` is not called or its key is not the one used.
+TEST_CASE("ContactModel journals its edits against the attached identity", "[crm][contact][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    crm::AccountModel accounts;
+    crm::ContactModel contacts;
+    contacts.attachActionLog(log, std::string{"contacts"});
+
+    const auto accountId = createAcme(accounts);
+    const auto created = contacts.execute(ada(crm::AccountChoice{std::to_string(*accountId)}));
+    contacts.execute(crm::UpdateContact{
+        .contactId = created.contactId,
+        .account = crm::AccountChoice{std::to_string(*accountId)},
+        .firstName = "Ada",
+        .lastName = "King",
+        .email = "ada.king@example.test",
+        .phone = "555-0100",
+        .expectedVersion = 1,
+    });
+
+    const auto entries = log->entries("contacts");
+    REQUIRE(entries.size() == 2);
+    CHECK(entries[0].actionType == "CreateContact");
+    CHECK(entries[1].actionType == "UpdateContact");
+    for (const auto& entry : entries) {
+        CHECK(entry.modelType == "ContactModel");
+        CHECK(entry.entityKey == "contacts");
+        CHECK(entry.principal == "alice");
+        CHECK(entry.outcome == morph::journal::Outcome::Succeeded);
+        CHECK_FALSE(entry.schema.empty());
+    }
+    // `AccountModel` shares neither the log nor the key here, so a stray
+    // account entry cannot be what satisfied the count above.
+    CHECK(log->entries("accounts").empty());
+}
