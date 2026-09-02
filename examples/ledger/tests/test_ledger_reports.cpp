@@ -485,3 +485,78 @@ TEST_CASE("RunReportJob rejects unengaged ids and an unknown job", "[ledger][rep
         model.execute(ledger::RunReportJob{.jobId = ledger::ReportJobId{9999}, .ledgerId = ledger::LedgerId{9999}}),
         ledger::NotFound);
 }
+
+TEST_CASE("RunReportJob refuses a job that belongs to another ledger", "[ledger][reports]") {
+    // morph#371. The action carries both a `jobId` and a `ledgerId`, and used
+    // to resolve the job by id alone -- the ledger guard below it checked only
+    // that `action.ledgerId` named an *existing* book, never that it was
+    // *this job's* book. The aggregation then ran against the action's ledger
+    // (`computeReportJson(mapper, action.ledgerId, ...)`) and settled the
+    // action's job (`finishReportJob(mapper, *action.jobId, Done, ...)`), so
+    // book two's job settled `Done` carrying book one's totals, and a
+    // subsequent `GetReportStatus` handed those back as book two's report.
+    // `Done` is terminal, so the correct body could never afterwards be
+    // computed for that job.
+    //
+    // The two books are given different currencies so a cross-filed body is
+    // visible in the body itself rather than only in the status: every
+    // account of a book contributes a line under its own currency code, so
+    // book one's report says "USD" and book two's says "EUR". Asserting on
+    // the code is what makes this case fail on the *cross-filing* rather than
+    // merely on some job having been settled.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+
+    const auto makeBook = [&](std::string name, ledger::Currency currency) {
+        ledger::db::LedgerRecord row;
+        row.name = std::move(name);
+        mapper.Create(row);
+        const auto id = ledger::LedgerId{static_cast<std::int64_t>(row.id.Value())};
+        model.execute(ledger::OpenAccount{
+            .ledgerId = id, .name = "Checking", .kind = ledger::AccountKind::Asset, .currency = currency});
+        return id;
+    };
+
+    const auto bookOne = makeBook("Personal", ledger::Currency::USD);
+    const auto bookTwo = makeBook("Business", ledger::Currency::EUR);
+
+    const auto jobTwo = model.execute(
+        ledger::SubmitReport{.ledgerId = bookTwo, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
+    REQUIRE(jobTwo.hasValue());
+
+    // Book two's job, named with book one's ledger. Refused, and -- because
+    // the refusal is raised inside the aggregation's own try, exactly as the
+    // "no such ledger" guard beside it is -- reported as `Failed` rather than
+    // thrown, so the row is left terminal instead of `Pending` for
+    // `runPendingReportsOnce` to re-sweep forever.
+    CHECK(runReportJob(model, jobTwo, bookOne).status == ledger::ReportStatus::Failed);
+
+    // The load-bearing assertion: whatever the status says, book one's totals
+    // must not have been filed as book two's report. Before the fix this read
+    // back `Done` with a body whose single line's currency was "USD".
+    const auto crossFiled = model.execute(ledger::GetReportStatus{.jobId = jobTwo});
+    CHECK(crossFiled.status != ledger::ReportStatus::Done);
+    if (crossFiled.result.has_value()) {
+        std::vector<ledger::ReportLine> crossFiledLines;
+        REQUIRE(!glz::read_json(crossFiledLines, *crossFiled.result));
+        for (const auto& line : crossFiledLines) {
+            CHECK(line.currency != "USD");
+        }
+    }
+
+    // The guard refuses only the mismatch: the same book's own job still
+    // runs, so this is not a check that simply broke `RunReportJob`. A fresh
+    // job, because the one above is now terminally `Failed`.
+    const auto jobTwoAgain = model.execute(
+        ledger::SubmitReport{.ledgerId = bookTwo, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
+    CHECK(runReportJob(model, jobTwoAgain, bookTwo).status == ledger::ReportStatus::Done);
+    const auto correct = model.execute(ledger::GetReportStatus{.jobId = jobTwoAgain});
+    REQUIRE(correct.status == ledger::ReportStatus::Done);
+    REQUIRE(correct.result.has_value());
+    std::vector<ledger::ReportLine> lines;
+    REQUIRE(!glz::read_json(lines, *correct.result));
+    REQUIRE(lines.size() == 1);
+    CHECK(lines[0].currency == "EUR");
+}
