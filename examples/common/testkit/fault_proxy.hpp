@@ -23,7 +23,8 @@
 /// WebSocket relay between `QtWebSocketBackend` and `QtWebSocketServer` with
 /// scriptable per-call rules — drop exactly the reply frame of call k, delay
 /// it, duplicate it, or kill the connection mid-reply. Closes the fault-proxy
-/// half of finding 004.
+/// half of the two-harness gap that section names; the deterministic-schedule
+/// strand interleaver is the other.
 
 namespace morph::ladder::testkit {
 
