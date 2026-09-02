@@ -181,8 +181,9 @@ Frame {
         // below false, so the value fell through to the plain-text encoding and
         // went out as a quoted JSON *string* that the server then rejected with
         // parse_number_failure (morph#189). Resolve through the non-null branch
-        // so the field is typed by T. `oneOf` is handled the same way; glaze
-        // does not emit it today, but a hand-written or evolved schema may.
+        // so the field is typed by T. `oneOf` is handled the same way — glaze
+        // emits it for every `glz::enumerate`d `enum class`, and a
+        // hand-written or evolved schema may use it for nullability too.
         const branches = Array.isArray(p.anyOf) ? p.anyOf : (Array.isArray(p.oneOf) ? p.oneOf : null)
         if (branches !== null) {
             for (let i = 0; i < branches.length; ++i) {
@@ -195,12 +196,76 @@ Frame {
                 const merged = Object.assign({}, branch, p)
                 delete merged.anyOf
                 delete merged.oneOf
+                // A closed set of alternatives is not the nullability shape
+                // this collapse exists for: its branches differ in *value*,
+                // so the first one's `const` is not the field's own and must
+                // not be left masquerading as it (morph#386). The set itself
+                // survives via enumChoices() below, which reads the branches
+                // rather than this collapsed node.
+                delete merged["const"]
                 if (p.type === undefined)
                     merged.type = branch.type
                 return merged
             }
         }
         return p
+    }
+
+    // Value/label pairs for a property that states a **closed set of values**
+    // outright, or [] for one that does not. Two spellings, both handled:
+    //
+    //   1. A `oneOf`/`anyOf` in which every branch bar `{"type":"null"}`
+    //      pins one value with `const` and names it with `title` -- what
+    //      glaze emits for a C++ `enum class` that declares a `glz::meta`
+    //      with `glz::enumerate` (the same declaration that makes it travel
+    //      as its enumerator name rather than its underlying integer):
+    //
+    //        "role": {"type": "string",
+    //                 "oneOf": [{"title": "Viewer",  "const": "Viewer"},
+    //                           {"title": "Member",  "const": "Member"},
+    //                           {"title": "Manager", "const": "Manager"}]}
+    //
+    //   2. The bare JSON Schema `enum` keyword, which glaze does not emit but
+    //      a hand-written or evolved schema may: `{"enum": ["a", "b"]}`.
+    //
+    // This is distinguishable from the nullable-`$ref` shape resolveProp
+    // collapses (morph#189), whose branches carry no `const` at all: **one**
+    // branch without a `const` and the property is not a closed set, so the
+    // whole thing falls back rather than offering a partial list.
+    //
+    // `valueJson` is the JSON literal of the value (a string alternative
+    // therefore arrives quoted), matching the convention a server-fetched
+    // Choice's rows already use, so both feed the same combo box and the same
+    // fieldJsonLiteral path.
+    function enumChoices(prop) {
+        const p = resolveRef(prop)
+        const literals = p["enum"]
+        if (Array.isArray(literals)) {
+            const rows = []
+            for (let i = 0; i < literals.length; ++i) {
+                // A `null` member spells nullability, not a choosable value —
+                // the same thing the "null" branch means in shape 1. Leaving
+                // the field blank is how the user declines it.
+                if (literals[i] === null)
+                    continue
+                rows.push({ label: String(literals[i]), valueJson: JSON.stringify(literals[i]) })
+            }
+            return rows
+        }
+        const branches = Array.isArray(p.anyOf) ? p.anyOf : (Array.isArray(p.oneOf) ? p.oneOf : null)
+        if (branches === null)
+            return []
+        const rows = []
+        for (let i = 0; i < branches.length; ++i) {
+            const branch = resolveRef(branches[i])
+            if (branch.type === "null")
+                continue
+            if (branch["const"] === undefined)
+                return []
+            rows.push({ label: String(opt(branch.title, branch["const"])),
+                        valueJson: JSON.stringify(branch["const"]) })
+        }
+        return rows
     }
 
     // --- i18n: field-slot key derivation and resolution ------------------
@@ -256,6 +321,14 @@ Frame {
                 const types = Array.isArray(p.type) ? p.type : (p.type === undefined ? [] : [p.type])
                 const dp = opt(raw["x-decimalPlaces"], p["x-decimalPlaces"])
                 const optionsAction = opt(raw["x-optionsAction"], p["x-optionsAction"])
+                // A closed set stated by the schema itself (morph#386). Read
+                // from `raw`, not the collapsed `p`: resolveProp keeps only
+                // one branch, and the set is the point. A field that also
+                // declares x-optionsAction is a server-fetched Choice and
+                // stays one -- the two are kept mutually exclusive so every
+                // `isChoice` test below (the options fetch, the dependent
+                // refresh) keeps meaning exactly what it meant.
+                const enumOptionRows = optionsAction !== undefined ? [] : enumChoices(raw)
                 const extUnits = opt(p.ExtUnits, {})
                 const unitText = opt(extUnits.unitUnicode, opt(extUnits.unitAscii, ""))
                 // Canonical unit first, then declared convertible alternatives.
@@ -297,6 +370,14 @@ Frame {
                     unitOptions: unitOptions,
                     canonDp: opt(dp, 0),
                     isChoice: optionsAction !== undefined,
+                    // A closed set the schema enumerates: drawn with the same
+                    // combo box `isChoice` draws, but the options are already
+                    // here, so there is no options action and no fetch. The
+                    // rows are `{label, valueJson}`, identical in shape to a
+                    // fetched Choice's, so both share fieldJsonLiteral and
+                    // the delegate below.
+                    isEnum: enumOptionRows.length > 0,
+                    enumOptions: enumOptionRows,
                     optionsAction: opt(optionsAction, ""),
                     valueField: opt(opt(raw["x-optionValue"], p["x-optionValue"]), "id"),
                     labelField: opt(opt(raw["x-optionLabel"], p["x-optionLabel"]), "name"),
@@ -840,6 +921,23 @@ Frame {
         if (f.isArray) {
             return arrayJsonLiteral(text)
         }
+        if (f.isEnum) {
+            // Also already a JSON literal — but here the whole set is in the
+            // schema, so membership is decidable *on the client*, and a value
+            // outside it is invalid rather than merely "the server will say
+            // no". Without this the form reported ready for role="Emperor"
+            // and assembled a body for it (morph#386), which is the opposite
+            // of what a submit gate is for. Same reason isBoolean refuses
+            // anything but true/false. A server-fetched Choice below is
+            // deliberately not checked this way: its option list is a
+            // snapshot that may already be stale (choice.md, "Validation &
+            // staleness"), so the server owns that verdict.
+            for (let i = 0; i < f.enumOptions.length; ++i) {
+                if (f.enumOptions[i].valueJson === text)
+                    return text
+            }
+            return null
+        }
         if (f.isChoice) {
             return text  // already a JSON literal (see the ComboBox's onActivated)
         }
@@ -1008,8 +1106,15 @@ Frame {
             for (let i = 0; i < form.fields.length; ++i) {
                 const name = form.fields[i].name
                 const entry = form.findControl(form, "field_" + name)
-                if (entry)
-                    entry.text = ""
+                if (entry) {
+                    // An enum's combo box claims this objectName (morph#386)
+                    // and carries no writable `text` -- "no selection" is
+                    // currentIndex -1, the state it is created in.
+                    if (form.fields[i].isEnum)
+                        entry.currentIndex = -1
+                    else
+                        entry.text = ""
+                }
                 const area = form.findControl(form, "multiline_" + name)
                 if (area)
                     area.text = ""
@@ -1195,23 +1300,65 @@ Frame {
                     }
                 }
 
+                // One combo box for both closed sets: the server-fetched
+                // Choice (x-optionsAction) and the schema-stated enum
+                // (a `oneOf` of `const`s, or a bare `enum`; morph#386). They
+                // differ only in where the rows come from -- an enum's are
+                // already in the schema, so it never fetches -- and the rows
+                // have the same {label, valueJson} shape either way.
                 ComboBox {
+                    id: choiceEntry
+                    // An enum claims the field_ objectName from the plain
+                    // TextField, which is hidden for it, exactly as the
+                    // CheckBox does for a boolean. A fetched Choice keeps the
+                    // pre-existing arrangement (the hidden TextField holds
+                    // the name) so no existing caller's lookup changes.
+                    objectName: fieldColumn.modelData.isEnum
+                                ? "field_" + fieldColumn.modelData.name : ""
                     visible: overrideLoader.sourceComponent === null
-                             && fieldColumn.modelData.isChoice && !fieldColumn.modelData.isRadioChoice
+                             && (fieldColumn.modelData.isChoice || fieldColumn.modelData.isEnum)
+                             && !fieldColumn.modelData.isRadioChoice
                     // A dependent Choice (x-optionsDependsOn) stays disabled
                     // until its parent(s) are engaged and a fetch has
                     // populated fieldOptions; an independent Choice is
                     // unaffected (dependsOn.length === 0 always short-circuits
                     // true here, exactly like before this feature existed).
+                    // An enum has no parents and needs no fetch, so it is only
+                    // ever disabled by x-readonly.
                     enabled: !fieldColumn.modelData.readOnly
-                             && (fieldColumn.modelData.dependsOn.length === 0
+                             && (fieldColumn.modelData.isEnum
+                                 || fieldColumn.modelData.dependsOn.length === 0
                                  || (form.fieldOptions[fieldColumn.modelData.name] || []).length > 0)
                     Layout.fillWidth: true
                     textRole: "label"
                     currentIndex: -1
                     displayText: currentIndex < 0 ? "— select —" : currentText
-                    model: { form.optionsRevision; return form.fieldOptions[fieldColumn.modelData.name] || [] }
+                    model: {
+                        form.optionsRevision
+                        return fieldColumn.modelData.isEnum
+                               ? fieldColumn.modelData.enumOptions
+                               : (form.fieldOptions[fieldColumn.modelData.name] || [])
+                    }
                     onActivated: form.setFieldValue(fieldColumn.modelData.name, model[currentIndex].valueJson)
+                    // Re-seed from the retained value whenever this delegate is
+                    // (re)created -- see the plain TextField's comment below
+                    // for why (a tab switch destroys and rebuilds every
+                    // control, and `currentIndex` is otherwise write-only).
+                    // Enum only: its rows are in the schema and so are present
+                    // at creation, whereas a fetched Choice's arrive later and
+                    // are re-selected by onOptionsReceived instead.
+                    Component.onCompleted: {
+                        if (!fieldColumn.modelData.isEnum)
+                            return
+                        const retained = form.opt(form.fieldValues[fieldColumn.modelData.name], "")
+                        const rows = fieldColumn.modelData.enumOptions
+                        for (let i = 0; i < rows.length; ++i) {
+                            if (rows[i].valueJson === retained) {
+                                choiceEntry.currentIndex = i
+                                return
+                            }
+                        }
+                    }
                     Accessible.role: Accessible.ComboBox
                     Accessible.name: fieldColumn.modelData.name
                     Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
@@ -1266,12 +1413,14 @@ Frame {
 
                 TextField {
                     id: entry
-                    objectName: (fieldColumn.modelData.isArray || fieldColumn.modelData.isBoolean)
+                    objectName: (fieldColumn.modelData.isArray || fieldColumn.modelData.isBoolean
+                                 || fieldColumn.modelData.isEnum)
                                 ? "" : "field_" + fieldColumn.modelData.name
                     visible: overrideLoader.sourceComponent === null
                              && !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
                              && !fieldColumn.modelData.isMultiline && !fieldColumn.modelData.isSlider
                              && !fieldColumn.modelData.isArray && !fieldColumn.modelData.isBoolean
+                             && !fieldColumn.modelData.isEnum
                     Layout.fillWidth: true
                     readOnly: fieldColumn.modelData.readOnly
                     placeholderText: fieldColumn.modelData.placeholder !== ""
