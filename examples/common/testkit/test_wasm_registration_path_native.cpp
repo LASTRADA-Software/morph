@@ -50,7 +50,7 @@ BRIDGE_REGISTER_ACTION(WasmSpikeProbeModel, WasmSpikeProbeAction, "WasmSpikeProb
 // `morph::bridge::detail::HandlerBinding`.
 TEST_CASE(
     "registerHandler() called immediately after Bridge construction, before any event-loop turn, resolves "
-    "once the socket connects -- see finding 017",
+    "once the socket connects",
     "[ladder][testkit][wasm-spike]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -65,7 +65,7 @@ TEST_CASE(
     morph::bridge::Bridge bridge{std::move(backendPtr)};
 
     // Constructing the handler registers immediately -- before the socket is
-    // connected -- see finding 017.
+    // connected -- via the queue-and-retry path described above.
     morph::bridge::BridgeHandler<WasmSpikeProbeModel> handler{bridge, &qtExec};
 
     REQUIRE(morph::ladder::testkit::pumpUntil([&] { return handler.isBound(); }));
