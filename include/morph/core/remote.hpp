@@ -329,8 +329,8 @@ public:
 private:
     /// @brief Shared body of both `handle()` overloads.
     ///
-    /// Finding 035: peeks at @p msg's `kind`/`modelId` — a cheap, best-effort
-    /// decode, thrown away immediately either way — and, for an `execute`
+    /// Peeks at @p msg's `kind`/`modelId` — a cheap, best-effort decode,
+    /// thrown away immediately either way — and, for an `execute`
     /// naming a `modelId`, takes an execute-ordering ticket (see
     /// `takeExecuteTicket`'s own doc comment on the class-private members
     /// above) *before* posting to `_pool`, so two same-model `execute`s
@@ -998,7 +998,7 @@ private:
     // with no reader benefit.
     //
     // `executeTicket`, when engaged, is this call's execute-ordering ticket
-    // from `handleImpl` (finding 035), adopted below by an `ExecuteTicketGuard`
+    // from `handleImpl`, adopted below by an `ExecuteTicketGuard`
     // that owns it for the rest of this frame — including `dispatchExecute`,
     // the only branch that does anything with it beyond releasing it. Every
     // other `kind` ignores it; `handleImpl` never takes one for a non-`execute`
@@ -1351,7 +1351,7 @@ private:
     // per-instance authorize — whose *order* is the security contract itself
     // (see docs/spec/security.md), so it is deliberately not broken up.
     //
-    // `ticketGuard` owns this call's finding-035 execute-ordering ticket (if
+    // `ticketGuard` owns this call's execute-ordering ticket (if
     // one was taken) on behalf of `dispatchMessage`, which constructed it and
     // outlives this call. Every path out of this function releases the ticket:
     // the rejection branches below do it explicitly, through
@@ -1363,7 +1363,8 @@ private:
     // `authorize`/`authenticate`/`authorizeInstance`/`missingRequiredFields`,
     // or out of the post itself — is covered by the guard's destructor back in
     // `dispatchMessage`. See `ExecuteTicketGuard` and the class-private
-    // members' own doc comment for the full design (finding 035, issue #351).
+    // members' own doc comment for the full design (issue #351), and
+    // `docs/spec/core/backend.md`, "Per-model execute ordering".
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply,
                          ExecuteTicketGuard& ticketGuard) {
@@ -1540,7 +1541,7 @@ private:
             }
         }
 
-        // Finding 035's actual fix: block (on this pool thread — never the
+        // Where the order is enforced: block (on this pool thread — never the
         // strand itself, and never any other model's strand) until every
         // execute for `mid` that the transport sent before this one has
         // already made its own `_strand.post(mid, ...)` call below. Every
@@ -1656,6 +1657,10 @@ private:
     std::shared_ptr<::morph::session::IAuthorizer> _authorizer;
 
     // ── Per-model execute-ordering gate ──────────────────────────────────────
+    // Specified in `docs/spec/core/backend.md`,
+    // "Per-model execute ordering"; this block is the implementation's own
+    // record of why it is shaped that way.
+    //
     // `handle()`'s two overloads dispatch to `_pool`, a multi-worker
     // ThreadPoolExecutor: two `execute` envelopes for the *same* model,
     // posted back-to-back, can have their pre-strand work (decode, authorize,
