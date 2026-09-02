@@ -64,32 +64,35 @@ mapfile -d '' -t moc_files < <(
 )
 
 if [ "${#moc_files[@]}" -eq 0 ]; then
-    echo "error: no moc-generated sources (moc_*.cpp, *.moc) found under: ${dirs[*]}" >&2
-    echo "       This gate has nothing to check and must not report success. Build a" >&2
-    echo "       tree configured with -DMORPH_BUILD_QT=ON first." >&2
+    cat >&2 <<EMPTY
+error: no moc-generated sources (moc_*.cpp, *.moc) found under: ${dirs[*]}
+       This gate has nothing to check and must not report success. Build a
+       tree configured with -DMORPH_BUILD_QT=ON first.
+EMPTY
     exit 1
 fi
 
-# A defect is a quoted include whose path carries a ".." segment. Angle-bracket
-# includes (Qt's own headers) are never written this way and are not scanned.
-offenders="$(
-    grep -Hn '^#include[[:space:]]*"[^"]*"' "${moc_files[@]}" \
-        | grep -E '"([^"]*/)?\.\./' \
-        || true
-)"
+# A defect is a quoted include whose path carries a ".." segment, whether the
+# ascent starts the path ("../../foo.hpp") or sits inside it ("a/../foo.hpp").
+# Dots within a name ("a..b.hpp") are not an ascent, and angle-bracket includes
+# (Qt's own headers) are never written this way and are not scanned.
+offenders="$(grep -HnE '^#include[[:space:]]*"([^"]*/)?\.\./' "${moc_files[@]}" || true)"
 
 if [ -n "$offenders" ]; then
-    printf '%s\n' "$offenders" >&2
-    echo "" >&2
-    echo "AUTOMOC include lint failed: the moc output above includes its header by a" >&2
-    echo "path that climbs out of its own directory. That path is also resolved" >&2
-    echo "against every -I entry, so it can pick up a same-named header from a" >&2
-    echo "different checkout -- and Clang's -Wshadow-header makes it a hard error" >&2
-    echo "under this project's -Werror (issue #372)." >&2
-    echo "" >&2
-    echo "cmake/compiler_options.cmake sets CMAKE_AUTOMOC_PATH_PREFIX to prevent" >&2
-    echo "this; check that it is still set and still reaching the target that" >&2
-    echo "produced the output above." >&2
+    cat >&2 <<OFFENDERS
+
+${offenders}
+
+AUTOMOC include lint failed: the moc output above includes its header by a path
+that climbs out of its own directory. That path is also resolved against every
+-I entry, so it can pick up a same-named header from a different checkout -- and
+Clang's -Wshadow-header makes it a hard error under this project's -Werror
+(issue #372).
+
+cmake/compiler_options.cmake sets CMAKE_AUTOMOC_PATH_PREFIX to prevent this;
+check that it is still set and still reaching the target that produced the
+output above.
+OFFENDERS
     exit 1
 fi
 
