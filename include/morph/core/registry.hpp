@@ -125,8 +125,8 @@ struct ActionValidator {
 /// reaches without first passing through the reactive `set<>` gate
 /// (`morph::flows::FlowSession::set<>`, forms/flows.hpp) or the type-erased
 /// `executeJson` gate (`ActionExecuteRegistry::registerAction`), both of which
-/// already enforce `ready()` themselves. Deriving from `std::runtime_error` means existing
-/// `catch (const std::exception&)` handling — e.g. `RemoteServer::dispatchExecute`'s
+/// already enforce `ready()` themselves. Deriving from `std::runtime_error`
+/// means existing `catch (const std::exception&)` handling — e.g. `RemoteServer::dispatchExecute`'s
 /// strand catch, which turns any thrown exception into an `err` reply — keeps
 /// working unchanged; callers that care can `catch`/`dynamic_cast` the specific
 /// type instead.

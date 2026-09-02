@@ -2316,7 +2316,7 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
                 // Enforce the action's validator on the request/reply dispatch path,
                 // just as the reactive `set<>` path does in
                 // `morph::flows::FlowSession::set<>` (forms/flows.hpp), which fires a
-                // step only once `ActionValidator<A>::ready` passes. Without this, a
+                // step only once its `ActionValidator` is ready. Without this, a
                 // submitted action that fails its readiness/validity check
                 // (empty required Quantity, out-of-range field, …) would reach the
                 // handler and either produce a silently wrong result or force every
