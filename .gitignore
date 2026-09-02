@@ -3,6 +3,12 @@
 /build-wasm/
 /out/
 *.db
+# Every ladder rung's server writes its FileActionLog into the *current
+# directory* -- `std::filesystem::current_path() / "<rung>_actions.jsonl"`, see
+# each `src/server/main.cpp`. Running one from the repo root (or pointing the
+# scenario runner at it) therefore drops a journal here, and one was committed
+# by accident before this line existed.
+*_actions.jsonl
 *.profraw
 /.cache/
 /compile_commands.json

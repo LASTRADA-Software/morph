@@ -79,6 +79,33 @@ expect err message ~ "OpenBoard"
 do GetBoardState
 expect err message !~ "stoull"
 
+# ── ...and neither does a contextKey that names no project ─────────────
+# The other way to reach an unattached handler: register *with* a contextKey.
+# `Remote::attachLogIfConfigured` forwards it to the model verbatim off the
+# wire, so it is arbitrary text. `foo` used to be adopted as the board id and
+# answer `stoull` from `std::stoull("foo")` -- the same defect one step over
+# from the empty key, and the reason morph#368's guard checks that the key
+# parses whole rather than merely that it is non-empty.
+client garbage model=BoardModel contextKey=foo
+session principal=$who token=$token
+
+do GetBoardState
+expect err message == "GetBoardState: handler was never attached via OpenBoard"
+
+do GetActivity
+expect err message == "GetActivity: handler was never attached via OpenBoard"
+
+# A key whose *prefix* is a real project id is the dangerous one: `stoull`
+# stops at the first non-digit and reports success, so this used to attach the
+# handler to project $project -- a board this client never named.
+client prefixed model=BoardModel contextKey=${project}x
+session principal=$who token=$token
+
+do GetBoardState
+expect err message == "GetBoardState: handler was never attached via OpenBoard"
+
+use fresh
+
 # ── Validation still runs first ────────────────────────────────────────
 # A malformed action is refused for being malformed, not for the handler being
 # unattached -- so the attach check is not the outermost gate.
