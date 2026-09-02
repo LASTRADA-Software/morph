@@ -1363,8 +1363,7 @@ private:
     // `authorize`/`authenticate`/`authorizeInstance`/`missingRequiredFields`,
     // or out of the post itself — is covered by the guard's destructor back in
     // `dispatchMessage`. See `ExecuteTicketGuard` and the class-private
-    // members' own doc comment for the full design (issue #351), and
-    // `docs/spec/core/backend.md`, "Per-model execute ordering".
+    // members' own doc comment for the full design (issue #351).
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply,
                          ExecuteTicketGuard& ticketGuard) {
@@ -1541,7 +1540,7 @@ private:
             }
         }
 
-        // Where the order is enforced: block (on this pool thread — never the
+        // Where per-model ordering is enforced: block (on this pool thread — never the
         // strand itself, and never any other model's strand) until every
         // execute for `mid` that the transport sent before this one has
         // already made its own `_strand.post(mid, ...)` call below. Every
@@ -1657,9 +1656,7 @@ private:
     std::shared_ptr<::morph::session::IAuthorizer> _authorizer;
 
     // ── Per-model execute-ordering gate ──────────────────────────────────────
-    // Specified in `docs/spec/core/backend.md`,
-    // "Per-model execute ordering"; this block is the implementation's own
-    // record of why it is shaped that way.
+    // Specified in `docs/spec/core/backend.md`, "Per-model execute ordering".
     //
     // `handle()`'s two overloads dispatch to `_pool`, a multi-worker
     // ThreadPoolExecutor: two `execute` envelopes for the *same* model,

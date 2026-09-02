@@ -19,12 +19,11 @@
 
 /// @file
 /// The single highest-yield harness the ladder needs and the repo lacked
-/// (examples/TESTING.md, "The fault-injection wire proxy"): an in-process
+/// (`examples/TESTING.md`, "The fault-injection wire proxy"): an in-process
 /// WebSocket relay between `QtWebSocketBackend` and `QtWebSocketServer` with
 /// scriptable per-call rules — drop exactly the reply frame of call k, delay
 /// it, duplicate it, or kill the connection mid-reply. Closes the fault-proxy
-/// half of the two-harness gap that section names; the deterministic-schedule
-/// strand interleaver is the other.
+/// half of the gap that section names.
 
 namespace morph::ladder::testkit {
 
