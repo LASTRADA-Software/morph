@@ -59,9 +59,18 @@ for dir in "${dirs[@]}"; do
     fi
 done
 
-mapfile -d '' -t moc_files < <(
-    find "${dirs[@]}" \( -name 'moc_*.cpp' -o -name '*.moc' \) -type f -print0
-)
+# find runs into a file rather than a process substitution so its exit status
+# is actually observed: inside `< <(...)` it is discarded, and an unreadable
+# build tree would then reach the "no moc output" branch below and be reported
+# as an unbuilt tree -- a wrong diagnosis of a real failure.
+moc_list="$(mktemp)"
+trap 'rm -f "$moc_list"' EXIT
+if ! find "${dirs[@]}" \( -name 'moc_*.cpp' -o -name '*.moc' \) -type f -print0 \
+        > "$moc_list"; then
+    echo "error: find failed while scanning for moc output under: ${dirs[*]}" >&2
+    exit 1
+fi
+mapfile -d '' -t moc_files < "$moc_list"
 
 if [ "${#moc_files[@]}" -eq 0 ]; then
     cat >&2 <<EMPTY
@@ -76,7 +85,19 @@ fi
 # ascent starts the path ("../../foo.hpp") or sits inside it ("a/../foo.hpp").
 # Dots within a name ("a..b.hpp") are not an ascent, and angle-bracket includes
 # (Qt's own headers) are never written this way and are not scanned.
-offenders="$(grep -HnE '^#include[[:space:]]*"([^"]*/)?\.\./' "${moc_files[@]}" || true)"
+#
+# grep's status is checked rather than swallowed with `|| true`: 1 is "no
+# offenders", but anything above that is an error (an unreadable file, say),
+# which `|| true` would turn into a clean bill of health for a file that was
+# never actually scanned.
+set +e
+offenders="$(grep -HnE '^#include[[:space:]]*"([^"]*/)?\.\./' "${moc_files[@]}")"
+grep_status=$?
+set -e
+if [ "$grep_status" -gt 1 ]; then
+    echo "error: grep failed (status ${grep_status}) while scanning moc output" >&2
+    exit 1
+fi
 
 if [ -n "$offenders" ]; then
     cat >&2 <<OFFENDERS

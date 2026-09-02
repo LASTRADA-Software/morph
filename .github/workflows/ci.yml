@@ -1369,6 +1369,18 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: cmake --build --preset ${{ matrix.preset }}
 
+      # ── moc output that climbs out of the build tree (issue #372) ────
+      # Same pair as linux-qt, and for the same reason -- see its comment.
+      # This is the widest build the gate reaches: the clang leg is the only
+      # one that compiles moc output under -Weverything, where -Wshadow-header
+      # is what actually fires, and this job is the only one that builds
+      # morph_forms_module's AUTOMOC output at all.
+      - name: Self-test the AUTOMOC-include checker
+        run: bash scripts/test_check_automoc_includes.sh
+
+      - name: Check no generated moc include ascends
+        run: bash scripts/check_automoc_includes.sh build/${{ matrix.preset }}
+
       # Includes the fuzz *replay* tests on the clang leg: each committed seed
       # and crash reproducer is replayed once and must not crash. This is a
       # deterministic regression check, not a fuzzing campaign.

@@ -48,10 +48,27 @@ if [ "${#invalid_dirs[@]}" -eq 0 ]; then
     fail "no fixtures found in ${fixtures}/invalid -- the self-test would pass vacuously"
 fi
 
+# A nonzero exit is not enough on its own. The checker has a second failure
+# path -- "no moc-generated sources found" -- and a fixture directory whose
+# files stopped matching the checker's find patterns would take it, so the
+# fixture would still be "rejected" while the checker no longer looks at that
+# kind of file at all. Dropping '*.moc' from the checker's find is exactly
+# that: mid_path_climb holds only board.moc, so it would keep reporting
+# rejected while every real .moc in a build tree went unscanned. So assert the
+# rejection is the ascending-include diagnostic, and that it names a file in
+# this fixture directory.
 for dir in "${invalid_dirs[@]}"; do
     name="$(basename "$dir")"
-    if bash "$checker" "$dir" >/dev/null 2>&1; then
+    if output="$(bash "$checker" "$dir" 2>&1)"; then
         fail "invalid fixture ${name} was accepted; the checker no longer detects it"
+    elif ! printf '%s\n' "$output" | grep -q 'AUTOMOC include lint failed'; then
+        fail "invalid fixture ${name} was rejected, but not as an ascending include \
+-- the checker failed for some other reason (a vacuous scan, most likely):"
+        printf '%s\n' "$output" >&2
+    elif ! printf '%s\n' "$output" | grep -qF "$dir"; then
+        fail "invalid fixture ${name} was rejected without naming any file under \
+${dir}; the diagnostic does not point at the offender:"
+        printf '%s\n' "$output" >&2
     else
         note "ok: invalid fixture ${name} rejected"
     fi
