@@ -157,6 +157,25 @@ API surface).
   (`==`↔`!=`, `~`↔`!~`). With the pair added, every one of the eleven now
   produces an `op !=->==` mutant and every one is caught.
 
+- **`DynamicForm` rendered a C++ `enum class` as a free-text field, and its
+  submit gate accepted values outside the set.** `schemaJson<A>()` describes a
+  `glz::enumerate`d enum member completely — glaze emits a closed `oneOf` of
+  `const` alternatives, each with its own `title` — but the renderer read none
+  of it: `resolveProp` collapsed the `oneOf` to its first non-null branch (the
+  nullable-`$ref` path added for morph#189, where branches differ only in
+  nullability) and no field flag ever looked at `const`. A three-value set drew
+  a `TextField`, and `ready` was `true` for `role = "Emperor"`. The renderer
+  now recognises "every branch bar `null` carries a `const`" as a closed set,
+  distinct from the nullability shape, draws it with the combo box a `Choice`
+  already uses (no options action, no fetch — the values and their labels are
+  already in the schema), and refuses a value outside the set so the gate means
+  what it says. The bare JSON-Schema `enum` keyword is read the same way. Two
+  shipped rungs were rendering free-text boxes for fully enumerated members
+  today: `pastebin::CreatePaste`'s `visibility`/`editability` and
+  `bookmarks::CreateBookmark`'s `visibility`. `docs/spec/forms/forms.md` gains
+  a "Closed sets" section, and loses the false claim — the stated reason
+  `oneOf` was treated as nullability-only — that glaze does not emit `oneOf`.
+
 - **`docs/spec/error_handling.md`'s remote-error table was a subset presenting
   itself as an enumeration.** It listed 8 refusals where `RemoteServer` emits
   17, and told a client implementer that `unknown envelope kind` fires for

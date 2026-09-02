@@ -816,14 +816,74 @@ inline — `std::optional<std::int64_t>`, or a `std::optional<T>` over a strong 
 A renderer that resolves only a *top-level* `$ref` sees no type at all here, so
 every field-kind flag is false and the value takes the plain-text path — a
 quoted string the server rejects with `parse_number_failure`. `DynamicForm.qml`
-therefore resolves through `anyOf` (and `oneOf`, which glaze does not currently
-emit but a hand-written or evolved schema may): it takes the first branch whose
-type is not `"null"`, follows a `$ref` inside it, and merges the result under
-the property's own keys, so the field is typed by `T` and picks up `T`'s
-constraints such as `minimum`/`maximum`. Integers on this path are emitted as
-bare, exact numbers — the payload is assembled as JSON *text*, never round-tripped
-through `JSON.parse`, so values beyond 2^53 (including `INT64_MAX`) survive
-intact.
+therefore resolves through `anyOf` (and through `oneOf`, which takes the same
+shape when a hand-written or evolved schema spells nullability that way): it
+takes the first branch whose type is not `"null"`, follows a `$ref` inside it,
+and merges the result under the property's own keys, so the field is typed by
+`T` and picks up `T`'s constraints such as `minimum`/`maximum`. Integers on this
+path are emitted as bare, exact numbers — the payload is assembled as JSON
+*text*, never round-tripped through `JSON.parse`, so values beyond 2^53
+(including `INT64_MAX`) survive intact.
+
+This collapse applies **only** to branches that differ in nullability. A
+`oneOf`/`anyOf` whose branches differ in *value* is a closed set, not a nullable
+type, and is described next — collapsing one to its first branch would both
+discard the alternatives and leave that branch's `const` masquerading as the
+field's own pinned value.
+
+### Closed sets — a reflected `enum class`
+
+A C++ `enum class` member that declares a `glz::meta` with `glz::enumerate` is
+fully described by the schema. That declaration is the same one that makes the
+enum travel as its enumerator **name** rather than as its underlying integer, so
+in practice every enum a form can meaningfully render carries it. glaze emits
+such a member as a `oneOf` of `const` alternatives, each carrying its own
+`title` (the enumerator name, which is also the name its reader accepts):
+
+```json
+"role": {"type": "string",
+         "oneOf": [{"title": "Viewer",  "const": "Viewer"},
+                   {"title": "Member",  "const": "Member"},
+                   {"title": "Manager", "const": "Manager"}],
+         "x-order": 2, "title": "Role"}
+```
+
+This is standard JSON-Schema vocabulary, not an `x-*` extension: no morph key
+declares it and none is needed. A renderer recognises the shape by the property
+holding a `oneOf`/`anyOf` in which **every** branch bar `{"type": "null"}`
+carries a `const`. One branch without a `const` and it is not a closed set —
+that is the nullability shape above, and a partial list would be worse than no
+list at all. The bare JSON-Schema `enum` keyword (`{"enum": ["a", "b"]}`), which
+glaze does not emit but a hand-written schema may, states the same thing and is
+read the same way.
+
+Two obligations follow, and `DynamicForm.qml` meets both:
+
+- **Draw a selection control**, not a text field. The alternatives' `title`s are
+  already the human labels, and the set is closed, so this is the same combo box
+  a [`Choice`](#choice--server-sourced-picklist) draws — the only difference is
+  that the options are in the schema rather than behind `x-optionsAction`, so
+  there is no options fetch and no round trip. A `null` branch is not offered as
+  a choosable value: leaving the field blank is how an optional member is
+  declined.
+- **Refuse a value outside the set.** Membership is decidable on the client
+  here — the schema states the whole set — so a value outside it must leave the
+  form not ready, exactly as a `boolean` field refuses anything but `true`/
+  `false`. This is what distinguishes a closed set from a `Choice`, whose option
+  list is a server snapshot that may already be stale and whose membership
+  verdict therefore belongs to the server (see
+  [choice.md](choice.md), "Validation & staleness").
+
+The value on the wire is the enumerator name as a JSON string — `"role":"Manager"`
+— which is what glaze's enum reader accepts; it refuses any other name with a
+parse error, so a renderer that submitted free text was relying on the server to
+say what the client already knew.
+
+An enum **without** a `glz::meta` is a different, and worse, case: glaze emits a
+`$ref` to a `$defs` entry that is the six-way wildcard
+`{"type": ["number", "string", "boolean", "object", "array", "null"]}`, naming
+neither the enumerators nor even a single type. There is nothing for a renderer
+to recognise — see morph#392.
 ### Exact numeric bounds — `x-exactMinimum` / `x-exactMaximum`
 
 `minimum` and `maximum` are standard JSON-Schema vocabulary, stamped by glaze.
@@ -884,7 +944,9 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
 - **`src/qt/forms`** builds the QML module `MorphForms` (CMake target
   `morph_forms_module`, `qt_add_qml_module(... URI MorphForms VERSION 1.0)`):
   `DynamicForm.qml` (the `Repeater`-over-`fields` form renderer: `$ref`
-  and `anyOf` resolution/dual-read, the exact rational digit arithmetic, the unit
+  and `anyOf` resolution/dual-read, the closed-set selection control (see
+  [Closed sets](#closed-sets--a-reflected-enum-class)),
+  the exact rational digit arithmetic, the unit
   selector, the required-field submit gate, the options-fetch, layout/
   grouping into sections/tabs, the widget-hint controls — textarea, slider,
   radio group — the comma-separated-with-validation `"array"`-typed field
@@ -2167,6 +2229,12 @@ not just its public API:
   `glz::reflect<A>::keys`, and it is trusted to equal source **declaration
   order**. If glaze's reflection reordered keys, `x-order` would misdescribe the
   layout while still looking well-formed.
+- **A `glz::enumerate`d `enum class` as a `oneOf` of `const`s.** A renderer
+  recognises a closed set by that shape alone (see
+  [Closed sets](#closed-sets--a-reflected-enum-class)); morph stamps no key of
+  its own to mark it. If glaze emitted such an enum some other way — a bare
+  `enum` array is read too, but a third spelling would not be — the member
+  would silently fall back to a free-text field.
 
 A change to any of these in glaze could make the generator silently produce a
 wrong or un-merged schema rather than fail loudly.
