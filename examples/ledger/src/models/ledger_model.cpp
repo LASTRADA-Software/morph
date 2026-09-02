@@ -1315,6 +1315,32 @@ RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
         if (ledgerRows.empty()) {
             throw NotFound{"RunReportJob: no such ledger"};
         }
+        // The scope guard, on top of the existence guard: `action.ledgerId` is
+        // what the aggregation below runs against and what
+        // `ActionKeyTraits<RunReportJob>` strands on, but the *job* names its
+        // own ledger on its row. Without this comparison
+        // `RunReportJob{jobId: <book two's job>, ledgerId: <book one>}` settles
+        // book two's job `Done` carrying book one's totals, terminally, and
+        // `GetReportStatus` then hands those back as book two's report
+        // (morph#371). Same shape as `accountInLedger`'s ledger comparison and
+        // `execute(UndoTransaction)`'s journal check -- an id resolved without
+        // the scope the action names.
+        //
+        // Compared after the job lookup rather than folded into it as a second
+        // `Where`, for `accountInLedger`'s reason: "no such job" and "that job
+        // is in another book" stay two distinguishable answers.
+        //
+        // Inside the try for the same reason the guard above is, and with the
+        // same consequence: a mismatched pair settles the job `Failed`, which
+        // is terminal. That is the deliberate trade -- `ledger::app::App`
+        // re-sweeps every `Pending` row on every pass, so a refusal thrown out
+        // of the method would have the row re-dispatched forever. The only
+        // dispatcher reads `jobId` and `ledgerId` off one row
+        // (`runPendingReportsOnce`), so a pair that reaches here mismatched is
+        // a caller defect, not a recoverable state.
+        if (jobRows.front().ledger.Value() != static_cast<std::uint64_t>(*action.ledgerId)) {
+            throw NotFound{"RunReportJob: job does not belong to this ledger"};
+        }
 
         std::string resultJson;
         {
