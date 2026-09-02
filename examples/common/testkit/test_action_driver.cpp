@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: Apache-2.0
-#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 #include <optional>
@@ -173,26 +172,60 @@ TEST_CASE("SeededScript falls back to the caller's default when MORPH_STRESS_SEE
 TEST_CASE("SeededScript can pick the last generator, which absorbs the leftover weight", "[testkit][action_driver]") {
     // next() walks only the first N-1 weight ranges and lets the final
     // generator absorb the remainder, so "the loop ran to completion" is the
-    // ordinary last-generator-won path. Weighting the last entry heavily
-    // makes both outcomes -- an early break and a run to completion -- occur
-    // within a single script, so neither arm of that loop goes unexercised.
+    // ordinary last-generator-won path. Both arms of that walk are covered
+    // here -- an early break and a run to completion -- so neither goes
+    // unexercised.
+    //
+    // Each arm is made *certain* rather than sampled (morph#375). This case
+    // used to run one 1:9 script for 60 draws and assert that both values
+    // appeared, which is a property of the sample and not of the walk: the
+    // light generator is missed with probability 0.9^60 = 1.8e-3. The seed is
+    // not fixed either -- SeededScript::resolveSeed lets MORPH_STRESS_SEED
+    // replace every script's seed process-wide, and TESTING.md documents that
+    // variable as the knob for re-running the ladder *stress* suites, so
+    // exporting it re-rolled that lottery for this unit case. A sweep of
+    // seeds 1..3000 found 314, 779 and 2522 failing.
+    //
+    // Weighting the other generator 0 collapses the draw range to a single
+    // value: _totalWeight is 1, so `uniform_int_distribution<int>{0, 0}`
+    // yields 0 for every engine state. That makes each arm follow from the
+    // walk itself rather than from what the engine happened to produce --
+    // which also removes the toolchain dependence the sampled form carried,
+    // since std::uniform_int_distribution's mapping is unspecified and a
+    // libstdc++/libc++/MSVC difference re-rolled the same lottery.
     using morph::ladder::testkit::SeededScript;
 
-    std::vector<int> generated;
-    SeededScript<int> script{/*seed=*/2'024,
-                             /*generators=*/{{1, [] { return 100; }}, {9, [] { return 200; }}},
-                             /*burstSize=*/100,
-                             /*onBurst=*/[](const std::vector<int>&) {}};
+    const auto draw = [](std::vector<SeededScript<int>::WeightedGenerator> generators) {
+        SeededScript<int> script{/*seed=*/2'024, std::move(generators), /*burstSize=*/100,
+                                 /*onBurst=*/[](const std::vector<int>&) {}};
+        std::vector<int> generated;
+        // Twelve rather than the sixty this case used to draw: the outcome no
+        // longer depends on how many samples are taken, so the count buys
+        // nothing but a longer expansion on failure.
+        for (int i = 0; i < 12; ++i) {
+            generated.push_back(script.next());
+        }
+        return generated;
+    };
 
-    for (int i = 0; i < 60; ++i) {
-        generated.push_back(script.next());
-    }
+    // Run under the seeds that used to break this case, and under an unset
+    // MORPH_STRESS_SEED, asserting the identical answer each time: the
+    // immunity is measured here, not merely claimed by the weights.
+    const std::vector<std::optional<std::string>> seeds{std::nullopt, std::string{"314"}, std::string{"779"},
+                                                        std::string{"2522"}, std::string{"424242"}};
+    for (const auto& seed : seeds) {
+        INFO("MORPH_STRESS_SEED=" << seed.value_or("<unset>"));
+        std::optional<ScopedEnvVar> seedOverride;
+        if (seed.has_value()) {
+            seedOverride.emplace("MORPH_STRESS_SEED", *seed);
+        }
 
-    // Both generators must actually have been selected, or this test would
-    // silently stop covering one of the two paths it exists to cover.
-    CHECK(std::count(generated.begin(), generated.end(), 100) > 0);
-    CHECK(std::count(generated.begin(), generated.end(), 200) > 0);
-    for (int v : generated) {
-        CHECK((v == 100 || v == 200));
+        // The early break: `pick` is 0 and the first generator's range is
+        // [0, 1), so i == 0 matches and the loop breaks on its first pass.
+        CHECK(draw({{1, [] { return 100; }}, {0, [] { return 200; }}}) == std::vector<int>(12, 100));
+        // The run to completion: the first generator's range is empty, so
+        // `pick < weight` is false, `pick -= weight` leaves 0, the loop
+        // condition goes false and the last generator absorbs the remainder.
+        CHECK(draw({{0, [] { return 100; }}, {1, [] { return 200; }}}) == std::vector<int>(12, 200));
     }
 }
