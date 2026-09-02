@@ -124,6 +124,17 @@ turns it into a set of per-key serial queues:
 - `_inFlight` counts strand lambdas currently dispatched to the base executor.
   The destructor waits on `_cv` until `_inFlight == 0` before destroying the
   map, so no pool thread can touch `_strands` after the executor is gone.
+- **`~StrandExecutor` is a complete-drain barrier, not only a use-after-free
+  guard.** The re-arm in `scheduleNext` increments `_inFlight` for the next
+  dispatch *before* the current dispatch decrements its own, so the count never
+  dips to zero across a handoff; and a lambda that finds `pending` empty is the
+  only one that lets it reach zero. So once every caller has stopped posting —
+  which the "no `post()` may race or follow `~StrandExecutor`" corollary below
+  requires anyway — `_inFlight == 0` means **every queued task has run**, not
+  merely that none is running right now. Code that needs a strand quiesced
+  should therefore destroy it and rely on that wait, rather than poll a counter
+  against a wall-clock budget: the barrier is exact and does not depend on how
+  fast or how loaded the host is.
 
 `LocalBackend` owns one `StrandExecutor` over the worker pool; `RemoteServer`
 owns another over its worker pool. Both post model work keyed by `ModelId`.

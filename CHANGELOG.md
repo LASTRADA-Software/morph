@@ -130,6 +130,20 @@ API surface).
 
 ### Fixed
 
+- **A loaded machine could turn the `StrandExecutor` serialisation test into no
+  serialisation check at all.** `tests/test_strand_race.cpp` drained 3200
+  strand-serialised tasks against a fixed budget of 2000 x 1 ms sleeps, twenty
+  times over, and asserted the drain with a `REQUIRE` placed *before* the
+  `maxInFlight == 1` invariant the file exists for. When the budget expired,
+  Catch2 aborted the case on the drain and the invariant was never evaluated —
+  a scheduling outcome reported as a strand-serialisation failure. The drain is
+  now `~StrandExecutor`'s own blocking wait rather than a deadline, which
+  `docs/spec/concurrency_and_lifetimes.md` now documents as an exact
+  complete-drain barrier: `_inFlight` never dips to zero across a re-arm, so
+  once posting has stopped, `_inFlight == 0` means every queued task has run.
+  The deficit is a `CHECK` carrying its numbers and the invariant stays a
+  `REQUIRE`, so the two diagnoses are independent.
+
 - **`docs/spec/error_handling.md`'s remote-error table was a subset presenting
   itself as an enumeration.** It listed 8 refusals where `RemoteServer` emits
   17, and told a client implementer that `unknown envelope kind` fires for
