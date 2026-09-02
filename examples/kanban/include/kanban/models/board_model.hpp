@@ -280,7 +280,17 @@ public:
     /// holder-wrapped instance, achieved without one.
     /// @param log Sink entries are forwarded to.
     /// @param entityKey Stable identity stamped onto every `LogEntry` this
-    ///        instance produces (this rung's project id, as a string).
+    ///        instance produces (this rung's project id, as a string), and --
+    ///        because it names a project -- also adopted as the board this
+    ///        handler is attached to. **An empty key is ignored for that
+    ///        second purpose**: it identifies no project, so it neither
+    ///        attaches an unattached handler nor un-attaches an open one.
+    ///        `ModelFactory::create` passes exactly that when it hands the
+    ///        process-wide default log to a newly constructed holder, and
+    ///        storing it used to leave `_projectIdStr` engaged-but-empty --
+    ///        which made every attach guard in this class pass and every
+    ///        action answer `stoull` (#368). The log itself is attached
+    ///        either way.
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
 private:
@@ -398,13 +408,20 @@ private:
     ///         project.
     void applyTagMutationImpl(const ApplyTagMutation& action);
 
-    /// @brief The project this handler is attached to, cached on the first
-    ///        successful `execute(OpenBoard)`. Also set (independently) by
-    ///        `attachActionLog`, whose `entityKey` parameter is the string
-    ///        form of the same project id in every path this rung exercises
-    ///        -- `OpenBoard` overwrites it with the identical value, so the
-    ///        two writers never disagree in practice. Unset until the first
-    ///        of either call.
+    /// @brief The project this handler is attached to, set on the first
+    ///        successful `execute(OpenBoard)` and, independently, by
+    ///        `attachActionLog` from a **non-empty** `entityKey` (the keyed
+    ///        registration path, where `Remote::attachLogIfConfigured`
+    ///        supplies the client's `contextKey` -- the same project id
+    ///        `OpenBoard` would set). Disengaged until one of those happens.
+    ///
+    ///        The invariant every attach guard in this class relies on:
+    ///        **engaged implies non-empty implies attached.** It is what
+    ///        makes `has_value()` a sufficient test before the
+    ///        `std::stoull(*_projectIdStr)` that follows it in every
+    ///        `execute()` overload, and it holds only because
+    ///        `attachActionLog` declines an empty key -- see #368 for what
+    ///        the fifteen guards did while it did not.
     std::optional<std::string> _projectIdStr;
 
     /// @brief Durable action log this instance appends to, if any -- set by

@@ -240,7 +240,28 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
 
 void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
     _log = std::move(log);
-    _projectIdStr = std::move(entityKey);
+    // An empty key is not a board, so it does not become one. `_projectIdStr`
+    // answers "which project is this handler attached to", and every
+    // `execute()` overload's guard asks that question as `has_value()` --
+    // assigning unconditionally left the optional *engaged with an empty
+    // string* on the ordinary construction path, so all fifteen guards fell
+    // through to `std::stoull("")` and the rung answered `stoull` to every
+    // action instead of naming the one a client forgot (#368).
+    //
+    // That path is not exotic: `ModelFactory::create` attaches the
+    // process-wide default log to every new holder with an empty `entityKey`
+    // (`morph/core/model.hpp`), and kanban's own `App` installs such a log
+    // (`morph::journal::setActionLog`, `app/app.cpp`). The keyed path is
+    // unaffected -- `Remote::attachLogIfConfigured` already declines to
+    // attach at all on an empty `contextKey` (`morph/core/remote.hpp`), so
+    // the key it does pass is a real project id and still attaches here.
+    //
+    // Skipping rather than storing the empty string also stops a later
+    // log attach from *un-attaching* a handler that `OpenBoard` had already
+    // pointed at a board.
+    if (!entityKey.empty()) {
+        _projectIdStr = std::move(entityKey);
+    }
 }
 
 template <typename Action, typename Result>
