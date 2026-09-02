@@ -279,18 +279,25 @@ public:
     /// functionally the same effect `recordIfAttached` gives a
     /// holder-wrapped instance, achieved without one.
     /// @param log Sink entries are forwarded to.
-    /// @param entityKey Stable identity stamped onto every `LogEntry` this
-    ///        instance produces (this rung's project id, as a string), and --
-    ///        because it names a project -- also adopted as the board this
-    ///        handler is attached to. **An empty key is ignored for that
-    ///        second purpose**: it identifies no project, so it neither
-    ///        attaches an unattached handler nor un-attaches an open one.
-    ///        `ModelFactory::create` passes exactly that when it hands the
+    /// @param entityKey This rung's project id, as a string. Accepted only
+    ///        if it is the complete decimal spelling of one; anything else is
+    ///        discarded, and the entries this instance stamps then carry the
+    ///        empty key (`logAction` reads `_projectIdStr`, the one member
+    ///        both purposes share). Two keys that are not project ids reach
+    ///        here, and both used to pose as a board (#368):
+    ///        `ModelFactory::create` passes an *empty* key when it hands the
     ///        process-wide default log to a newly constructed holder, and
-    ///        storing it used to leave `_projectIdStr` engaged-but-empty --
-    ///        which made every attach guard in this class pass and every
-    ///        action answer `stoull` (#368). The log itself is attached
-    ///        either way.
+    ///        `Remote::attachLogIfConfigured` forwards the client's
+    ///        `contextKey` *verbatim off the wire*, so it can be any text at
+    ///        all. The `log` itself is attached either way.
+    ///
+    ///        Consequence worth knowing before relying on the stamp: for a
+    ///        discarded key, the holder still records `_contextKey` verbatim
+    ///        (`morph/core/model.hpp`) while this instance records `""`, so
+    ///        the two writers disagree in one log. Only garbage keys are
+    ///        affected. Giving journal stamping its own member -- the shape
+    ///        `ledger::LedgerModel` and lims/crm already use -- would settle
+    ///        it, and is the larger change #368's triage deferred.
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
 private:
@@ -410,18 +417,23 @@ private:
 
     /// @brief The project this handler is attached to, set on the first
     ///        successful `execute(OpenBoard)` and, independently, by
-    ///        `attachActionLog` from a **non-empty** `entityKey` (the keyed
-    ///        registration path, where `Remote::attachLogIfConfigured`
-    ///        supplies the client's `contextKey` -- the same project id
-    ///        `OpenBoard` would set). Disengaged until one of those happens.
+    ///        `attachActionLog` from an `entityKey` that **parses whole as a
+    ///        project id** (the keyed registration path, where
+    ///        `Remote::attachLogIfConfigured` supplies the client's
+    ///        `contextKey` -- the same project id `OpenBoard` would set).
+    ///        Disengaged until one of those happens.
     ///
     ///        The invariant every attach guard in this class relies on:
-    ///        **engaged implies non-empty implies attached.** It is what
+    ///        **engaged implies it parses as a project id.** That is what
     ///        makes `has_value()` a sufficient test before the
-    ///        `std::stoull(*_projectIdStr)` that follows it in every
-    ///        `execute()` overload, and it holds only because
-    ///        `attachActionLog` declines an empty key -- see #368 for what
-    ///        the fifteen guards did while it did not.
+    ///        `std::stoull(*_projectIdStr)` following it in every `execute()`
+    ///        overload -- sufficient for the parse, that is; whether the
+    ///        project still exists is `loadProjectById`'s question, and
+    ///        whether the caller may touch it is `requireRole`'s. It holds
+    ///        only because both writers establish it: `OpenBoard` stores
+    ///        `std::to_string` of a real row id, and `attachActionLog`
+    ///        declines any key that is not one. See #368 for what the
+    ///        fifteen guards did while it did not hold.
     std::optional<std::string> _projectIdStr;
 
     /// @brief Durable action log this instance appends to, if any -- set by
