@@ -169,8 +169,7 @@ it later needs no change to `appSchemaJson` itself.
 
 ## `FlowSession<Model, Steps...>`
 
-The typed C++ sequencer, built entirely on `BridgeHandler`'s existing
-reactive draft ([bridge.md](../core/bridge.md)):
+The typed C++ sequencer ([bridge.md](../core/bridge.md)):
 
 ```cpp
 template <typename Model, typename... Steps>
@@ -191,16 +190,18 @@ public:
 };
 ```
 
-- **A step is an ordinary action fire.** `set<FieldPtr>` forwards directly to
-  `BridgeHandler::set<FieldPtr>`, so the step's `ActionValidator::ready` gate
-  and auto-fire-on-ready behaviour are exactly the standalone-form path —
-  `FlowSession` adds no new execution mode.
+- **A step is an ordinary action fire.** `set<FieldPtr>` writes the field into
+  `FlowSession`'s own draft for the current step, evaluates that step's
+  `ActionValidator<A>::ready` itself, and on success dispatches the draft
+  through the handler's ordinary `execute<A>` — `FlowSession` adds no new
+  execution mode. There is no in-flight coalescing: every ready `set<>`
+  dispatches.
 - **`advance()`/`back()` are pure sequencing.** `advance()` moves to the next
   step only if the current step has already produced a captured, successful
   result (`ready() == true`); a not-ready step does not advance. `back()`
-  returns to the previous step; neither the handler's own per-action draft
-  nor `FlowSession`'s own per-step `std::tuple<Steps...>` snapshot is ever
-  reset, so entered values survive navigation.
+  returns to the previous step; `FlowSession`'s own per-step
+  `std::tuple<Steps...>` drafts are never reset, so entered values survive
+  navigation.
 - **`resolved(path)` is the prefill source.** On every successful step
   result, `FlowSession` flattens both the step's submitted draft (via
   `morph::forms::detail::forEachNamedMember`) and its result into a
@@ -312,7 +313,7 @@ the typed template API (see [Design decisions](#design-decisions)).
 | No runtime wizard/app registry | `BRIDGE_REGISTER_WIZARD`/`BRIDGE_REGISTER_APP` only specialise traits | Neither a wizard nor an app is ever executed or looked up by string id at runtime; the consuming code always names the concrete type. Avoids a second registry to keep in lockstep with the schema-emission call sites, mirroring how the example's own `schemasJson()` already hand-assembles its schema set rather than walking a generic registry. |
 | Prefill resolution lives with the caller/renderer | `FlowSession::resolved(path)` is read-only; nothing calls `set<>` automatically | Matches the wizard document's own wording that the renderer resolves and issues the `set<>` calls; keeps `FlowSession` a pure sequencer with no opinion on *when* a step should be pre-populated. |
 | Result fields win over draft fields on name collision | `FlowSession::captureResult` records the draft first, then the result, so identical field names are overwritten by the result; `FormsController`'s QML-facing resolved-value map applies the same order | A deterministic, testable rule for the one genuinely ambiguous point in the source design (prefill can come from "an earlier step's result *or* submitted draft"), applied identically on both the typed C++ path and the QML reference renderer's JSON path. |
-| Steps must be pairwise distinct types | `static_assert(detail::AllDistinct<Steps...>::value, ...)` | `BridgeHandler` keeps exactly one draft per `(handler, action type)`; reusing a type twice in one flow would silently collide. Also required for `std::get<A>(_drafts)` (`std::tuple::get<T>` needs a unique `T`). |
+| Steps must be pairwise distinct types | `static_assert(detail::AllDistinct<Steps...>::value, ...)` | `std::get<A>(_drafts)` needs a unique `T`, and reusing a step type would silently collide the two steps' drafts. |
 | QML reference renderer does not use `FlowSession` | `WizardView.qml`/`AppShell.qml`/`FormsController` sequence wizards via plain `executeJson` + a JSON resolved-value map, not the typed template API | QML/MOC cannot name a C++ action type generically at compile time, and `FormsController.hpp` must stay free of template-heavy morph headers (its existing `Q_MOC_RUN` guard). `FlowSession` remains available for non-QML/typed embeddings and is exercised directly by `tests/test_flows_apps.cpp`. |
 
 ## Limitations

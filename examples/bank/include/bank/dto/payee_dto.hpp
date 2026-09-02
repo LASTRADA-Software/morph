@@ -40,7 +40,7 @@ struct PayeeInfo {
 
 /// @brief Add a beneficiary for the current owner.
 ///
-/// Designed for field-by-field entry via `BridgeHandler::set<>`: the action only
+/// Designed for field-by-field entry via `morph::flows::FlowSession::set<>`: the action only
 /// becomes ready once both a name and a plausible IBAN are present.
 struct AddPayee {
     std::string name;

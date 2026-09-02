@@ -68,8 +68,12 @@ concept HasValidate = requires(const A& act) {
 
 }  // namespace detail
 
-/// @brief Per-action validator used by `BridgeHandler::set<...>` to decide
-///        whether the in-progress draft is ready to execute.
+/// @brief Per-action readiness predicate deciding whether an action may execute.
+///
+/// Enforced on every dispatch path that reaches `Model::execute` (see
+/// `ValidationError` below for the sites), and consulted by
+/// `morph::flows::FlowSession::set<>` (forms/flows.hpp) to decide whether an
+/// in-progress draft is complete enough to fire.
 ///
 /// Resolution order (highest-priority first):
 ///   1. **Explicit specialisation** of `ActionValidator<Action>` — typically via
@@ -121,15 +125,18 @@ struct ActionValidator {
 /// Raised by `morph::model::detail::ActionDispatcher::registerAction`'s runner
 /// (the server dispatch path used by `RemoteServer`, every remote and Qt
 /// WebSocket topology) and by `Bridge::executeVia`'s `localOp` (the in-process
-/// path used by `LocalBackend`) — the two execution sites an in-progress action
-/// reaches without first passing through the reactive `set<>` gate
-/// (`morph::flows::FlowSession::set<>`, forms/flows.hpp) or the type-erased
-/// `executeJson` gate (`ActionExecuteRegistry::registerAction`), both of which
-/// already enforce `ready()` themselves. Deriving from `std::runtime_error`
-/// means existing `catch (const std::exception&)` handling — e.g. `RemoteServer::dispatchExecute`'s
-/// strand catch, which turns any thrown exception into an `err` reply — keeps
-/// working unchanged; callers that care can `catch`/`dynamic_cast` the specific
-/// type instead.
+/// path used by `LocalBackend`) — the two sites an action can reach ungated: one
+/// built by hand and handed to `BridgeHandler::execute<Action>()`, or one decoded
+/// from an untrusted wire envelope. An action that *did* pass
+/// `morph::flows::FlowSession::set<>`'s gate (forms/flows.hpp) or the type-erased
+/// `executeJson` gate (`ActionExecuteRegistry::registerAction`) reaches `localOp`
+/// too — `FlowSession::fireStep` dispatches through the handler — and is simply
+/// re-checked there.
+///
+/// Deriving from `std::runtime_error` means existing `catch (const std::exception&)`
+/// handling — e.g. `RemoteServer::dispatchExecute`'s strand catch, which turns any
+/// thrown exception into an `err` reply — keeps working unchanged; callers that care
+/// can `catch`/`dynamic_cast` the specific type instead.
 struct ValidationError : std::runtime_error {
     /// @brief Constructs the error with a message of the form
     ///        `"action failed validation: <modelType>/<actionType>"`.
@@ -151,8 +158,8 @@ enum class Loggable : std::uint8_t { No, Yes };
 /// Deliberately minimal for now — only `coalesce` exists, and it has no
 /// registration macro yet. Specialise directly for the rare action where only
 /// the latest occurrence should survive a checkpoint (e.g. a form-field edit
-/// fired repeatedly via `BridgeHandler::set<...>`); every other action defaults
-/// to `false`, meaning every execution is treated as a distinct, permanent fact
+/// fired repeatedly via `morph::flows::FlowSession::set<>`); every other action
+/// defaults to `false`, meaning every execution is treated as a distinct, permanent fact
 /// (the right default for anything resembling a business event).
 /// @tparam Action Concrete action type.
 template <typename Action>
@@ -1116,8 +1123,9 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 
 /// @brief Registers a readiness predicate for action @p A.
 ///
-/// Specialises `morph::model::ActionValidator<A>` so that `BridgeHandler::set<...>`
-/// only fires `model.execute(draft)` when the predicate returns `true`.
+/// Specialises `morph::model::ActionValidator<A>` so that @p FN gates @p A on every
+/// dispatch path before `Model::execute` runs, and gates
+/// `morph::flows::FlowSession::set<>`'s auto-fire (forms/flows.hpp).
 ///
 /// @param A  Concrete action type.
 /// @param FN Callable `bool(const A&)`.

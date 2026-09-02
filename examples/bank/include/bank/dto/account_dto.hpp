@@ -25,7 +25,7 @@ struct OpenAccount {
     int currency = 0;                 ///< bank::Currency
     std::int64_t overdraftMinor = 0;  ///< permitted overdraft, minor units
 
-    /// Form-readiness predicate (used by `BridgeHandler::set<>` streaming).
+    /// Form-readiness predicate (used by `morph::flows::FlowSession::set<>` streaming).
     [[nodiscard]] bool validate() const {
         return kind >= 0 && kind <= 2 && currency >= 0 && currency <= 4 && overdraftMinor >= 0;
     }

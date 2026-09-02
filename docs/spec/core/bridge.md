@@ -3,7 +3,7 @@
 `morph::bridge` owns the client-side dispatch path: a `Bridge` holds an active
 `IBackend` and a set of registered model bindings; a `BridgeHandler<Model>` is
 an RAII handle that registers one model instance and exposes typed
-`execute()`, field-by-field `set()`, and subscription APIs. A
+`execute()`, type-erased `executeJson()`, and subscription APIs. A
 `ActionExecuteRegistry` provides dynamic (string-keyed) dispatch for call sites
 that only know action names at runtime.
 
@@ -390,7 +390,8 @@ registered.
 
 Between decode and dispatch the registry executor applies four
 normalisations, in order, so the request/reply path matches the schema and
-the reactive `set<>` path rather than trusting the raw wire body:
+`morph::flows::FlowSession::set<>`'s gate rather than trusting the raw wire
+body:
 
 - **Declared-precision reconciliation.** `morph::forms::reconcileDeclaredPrecision`
   **rounds** every `Quantity` field of the decoded action to its *declared*
@@ -439,11 +440,12 @@ handler destruction removes it. See [callback_scope.md](callback_scope.md).
 
 **`subscribe<R>(cb)`** registers `cb` against this handler's binding. The
 subscription is matched at publish time by comparing the binding's current
-instance, so it follows the handler when it re-points. Delivers the result
-to the registered `sink` callback. If a flight is already in progress, marks
-`pending = true` and refires when the current flight completes
-(debounce-like coalescence). On failure, the registered `errSink` is invoked;
-if none is registered, the error is logged via `morph::log::logError`
+instance, so it follows the handler when it re-points. There is one callback
+per `(handler, R)` — subscribing again replaces the previous one — and it is
+delivered on the handler's executor. Delivery is best-effort and unbuffered,
+with no replay, and a failed action notifies nobody: an error reaches the
+caller through the `Completion` its `execute()` returned, not through the
+subscription
 
 **`guiExecutor()`** returns the executor passed at construction.
 
@@ -780,7 +782,7 @@ exactly as long as its handler. The bridge can enumerate live bindings (for
 
 **The lifetime rule.** The liveness token makes only *destruction* safe in
 either order. It does **not** make a `Bridge` optional for live handlers: any
-`execute()`, `executeJson()`, or `set<>`-triggered fire dereferences the
+`execute()`, `executeJson()`, or `FlowSession::set<>`-triggered fire dereferences the
 `Bridge&` and must run while the bridge is alive. In other words, the bridge
 must still outlive all normal use of its handlers; only mis-ordered
 *destruction* is now defined behaviour. (This corrects an earlier claim that
@@ -874,12 +876,13 @@ make teardown order-independent.)
 
 - **Backend switch interrupts in-flight fielded edits.** When `switchBackend`
   commits, it cancels the old backend's pending completions with
-  `BackendChangedError`. A fielded subscriber whose `set<>`-triggered flight is
-  still in the air will therefore receive `BackendChangedError` on its
-  `errSink` mid-edit (or see it logged if no `errSink` is registered). The
-  client-side draft survives the switch, so the next `set<>` re-fires cleanly
-  against the new backend, but the interrupted flight itself surfaces as an
-  error rather than being transparently retried.
+  `BackendChangedError`. A flow step whose `FlowSession::set<>`-triggered
+  flight is still in the air will therefore receive `BackendChangedError` on
+  its `errSink` mid-edit (or see it logged if no `errSink` is registered). The
+  draft lives in `FlowSession`'s own `std::tuple<Steps...>` and so survives the
+  switch, letting the next `set<>` re-fire cleanly against the new backend, but
+  the interrupted flight itself surfaces as an error rather than being
+  transparently retried.
 - **`ActionExecuteRegistry::execute` trusts its `void* handler`.** The
   type-erased entry point takes a `void*` that each registered executor
   `static_cast`s back to `BridgeHandler<Model, Sharing>*` for the model type
@@ -936,11 +939,10 @@ carve-out remains part of the contract; the attribute simply cannot say it. See
   `ActionValidator`, `Loggable`, `BRIDGE_REGISTER_ACTION`, and the server-side
   `ActionDispatcher` counterpart.
 - [`../forms/workflows_navigation.md`](../forms/workflows_navigation.md) —
-  `FlowSession`, the typed sequencer that extends the per-action reactive
-  draft (`subscribe`/`set<>`/`reset`, draft persistence across fires and
-  backend switches) to span a wizard's ordered steps, with no new dispatch
+  `FlowSession`, the typed sequencer that spans a wizard's ordered steps over
+  this type's ordinary `execute<Action>` path — sequencing, not a new dispatch
   path.
 - [`concurrency_and_lifetimes.md`](../concurrency_and_lifetimes.md) — the broader
   mutex-ordering and object-lifetime rules this type participates in.
 - [`forms.md`](../forms/forms.md) — `morph::forms::computed`/`computeList`/`recomputeAll`,
-  the computed-field declaration this spec's reactive and dispatch paths recompute.
+  the computed-field declaration this spec's dispatch paths recompute.
