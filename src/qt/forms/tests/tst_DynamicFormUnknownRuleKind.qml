@@ -43,10 +43,11 @@ TestCase {
         function fetchOptions(optionsAction) { optionsReceived(optionsAction, true, "[]") }
     }
 
-    // Bound into the component rather than passed as an initial property:
-    // createTemporaryObject's initial-properties path converts the object
-    // through QVariantMap, which leaves `Array.isArray(p.type)` false and makes
-    // DynamicForm misread every field's declared type.
+    // Bound into the component rather than passed as an initial property.
+    // Both paths render the same form since morph#388 (`DynamicForm` re-reads
+    // the schema as JSON at the property, so the initial-properties path's
+    // QVariantMap conversion no longer changes what it sees); binding stays
+    // because it is what every shipped app does.
     property var pendingSchema: ({})
 
     Component {

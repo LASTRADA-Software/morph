@@ -49,19 +49,26 @@ TestCase {
         function fetchOptions(optionsAction, body) { optionsReceived(optionsAction, true, "[]") }
     }
 
-    // schemaJson<kanban::SetMemberRole>(), verbatim (the same fixture
+    // schemaJson<kanban::SetMemberRole>() (the same fixture
     // tst_DynamicFormEnumChoice.qml pins): `projectId` is the array-valued
     // `type` of the report, `role` the morph#386 closed set.
+    //
+    // The properties are declared `role, principal, projectId` -- deliberately
+    // *not* their sorted order. schemaJson emits them sorted, so a verbatim
+    // copy would leave declaration order and sorted order identical, and
+    // test_x_order_is_what_makes_the_two_layouts_agree below would assert
+    // nothing: its check that the QVariant boundary reorders the keys would
+    // pass whether or not any reordering happened.
     property var roleSchema: ({
         "type": "object",
         "properties": {
-            "principal": { "type": "string", "x-order": 1, "title": "Principal" },
-            "projectId": { "$ref": "#/$defs/ProjectId", "x-order": 0, "title": "Project Id" },
             "role": { "type": "string",
                       "oneOf": [{ "title": "Viewer", "const": "Viewer" },
                                 { "title": "Member", "const": "Member" },
                                 { "title": "Manager", "const": "Manager" }],
-                      "x-order": 2, "title": "Role" }
+                      "x-order": 2, "title": "Role" },
+            "principal": { "type": "string", "x-order": 1, "title": "Principal" },
+            "projectId": { "$ref": "#/$defs/ProjectId", "x-order": 0, "title": "Project Id" }
         },
         "additionalProperties": false,
         "$defs": {
@@ -252,10 +259,12 @@ TestCase {
         // an observation about the boundary, not a gap in the fix.
         //
         // Asserted rather than assumed: if the keys did *not* get reordered,
-        // the layout agreement below would be proving nothing.
+        // the layout agreement below would be proving nothing. The fixture
+        // declares them in a different order from the sorted one precisely so
+        // these two lines can disagree.
         var form = viaVariant(variantRoleForm, testCase.roleSchema)
         compare(Object.keys(form.schema.properties), ["principal", "projectId", "role"])
-        compare(Object.keys(testCase.roleSchema.properties), ["principal", "projectId", "role"])
+        compare(Object.keys(testCase.roleSchema.properties), ["role", "principal", "projectId"])
 
         // ...and `x-order` overrides that order in both, identically.
         var names = function (f) { return f.fields.map(function (x) { return x.name }) }
