@@ -249,10 +249,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/da2/registr
 <div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span><span class="comment">/// WebSocket topology) and by `Bridge::executeVia`&#39;s `localOp` (the in-process</span></div>
 <div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span><span class="comment">/// path used by `LocalBackend`) — the two execution sites an in-progress action</span></div>
 <div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">/// reaches without first passing through the reactive `set&lt;&gt;` gate</span></div>
-<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">/// (`BridgeHandler::tryFireImpl`) or the type-erased `executeJson` gate</span></div>
-<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">/// (`ActionExecuteRegistry::registerAction`), both of which already enforce</span></div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">/// `ready()` themselves. Deriving from `std::runtime_error` means existing</span></div>
-<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span><span class="comment">/// `catch (const std::exception&amp;)` handling — e.g. `RemoteServer::dispatchExecute`&#39;s</span></div>
+<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">/// (`morph::flows::FlowSession::set&lt;&gt;`, forms/flows.hpp) or the type-erased</span></div>
+<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">/// `executeJson` gate (`ActionExecuteRegistry::registerAction`), both of which</span></div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">/// already enforce `ready()` themselves. Deriving from `std::runtime_error`</span></div>
+<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span><span class="comment">/// means existing `catch (const std::exception&amp;)` handling — e.g. `RemoteServer::dispatchExecute`&#39;s</span></div>
 <div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">/// strand catch, which turns any thrown exception into an `err` reply — keeps</span></div>
 <div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">/// working unchanged; callers that care can `catch`/`dynamic_cast` the specific</span></div>
 <div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span><span class="comment">/// type instead.</span></div>
@@ -542,7 +542,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/da2/registr
 <div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span>            <span class="comment">// Enforce the action&#39;s validator on the server dispatch path — the</span></div>
 <div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span>            <span class="comment">// one path an untrusted remote client can drive directly with a</span></div>
 <div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span>            <span class="comment">// hand-built envelope, bypassing the client-side gates</span></div>
-<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span>            <span class="comment">// (BridgeHandler::set&lt;&gt;&#39;s tryFireImpl and</span></div>
+<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span>            <span class="comment">// (morph::flows::FlowSession::set&lt;&gt; and</span></div>
 <div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span>            <span class="comment">// ActionExecuteRegistry::registerAction). ActionValidator&lt;Action&gt;::ready</span></div>
 <div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span>            <span class="comment">// auto-detects a `bool validate() const` member and defaults to</span></div>
 <div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span>            <span class="comment">// `true` for actions with no validator, so this is a no-op for</span></div>

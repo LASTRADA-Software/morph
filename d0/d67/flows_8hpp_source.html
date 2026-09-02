@@ -320,11 +320,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d67/flows_8
 <div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span><span class="comment">/// (`BridgeHandler::set&lt;&gt;` / `subscribe&lt;&gt;`, bridge.hpp) — a `FlowSession`</span></div>
 <div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span><span class="comment">/// contributes only sequencing (`advance`/`back`) and a resolved-values map</span></div>
 <div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span><span class="comment">/// callers use to prefill a later step from an earlier one&#39;s submitted</span></div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment">/// fields or result. `Steps...` must be pairwise distinct action types: each</span></div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span><span class="comment">/// occupies one slot of the handler&#39;s per-action-type draft (bridge.md&#39;s</span></div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment">/// &quot;Subscription semantics&quot; — exactly one `SubscriberEntry` per action type),</span></div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span><span class="comment">/// so reusing the same action type twice in one flow would collide on that</span></div>
-<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment">/// single slot.</span></div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment">/// fields or result. `Steps...` must be pairwise distinct action types: this</span></div>
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span><span class="comment">/// session&#39;s drafts live in a `std::tuple&lt;Steps...&gt;` addressed by type</span></div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment">/// (`std::get&lt;A&gt;(_drafts)`), and `std::get&lt;T&gt;` is ill-formed when `T` occurs</span></div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span><span class="comment">/// more than once — which is what the `AllDistinct&lt;Steps...&gt;` assert below</span></div>
+<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment">/// enforces.</span></div>
 <div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">///</span></div>
 <div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="comment">/// @tparam Model Concrete model type owning the `BridgeHandler` this flow dispatches through.</span></div>
 <div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="comment">/// @tparam Steps Ordered, pairwise-distinct action types (the flow&#39;s steps).</span></div>
