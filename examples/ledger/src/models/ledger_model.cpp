@@ -742,6 +742,13 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
                 "StoreTransaction: description and at least two legs with engaged accountIds are required"};
         }
         Lightweight::DataMapper mapper;
+        // Before the opId replay below, and before any account lookup: both
+        // answer questions about the book. A replay hit returns the stored
+        // `GetLedgerResult` -- every account and balance in the book -- and the
+        // account lookups are a "does account N belong to book B" oracle, so a
+        // gate placed after either would hand a non-owner exactly what the
+        // `GetLedger` gate exists to withhold (morph#382).
+        const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "StoreTransaction");
 
         // Task 11b, design spec §1 (kanban's execute(MoveTaskPosition) pattern,
         // ladder-kanban-impl:examples/kanban/src/models/board_model.cpp):
@@ -807,7 +814,6 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         // ImportedOpRecord::appliedAtMs/ReportJobRecord::createdAtMs in later
         // tasks, not a client-supplied journal date).
         journalRow.date = action.date.value.has_value() ? (*action.date.value).value.time_since_epoch().count() : 0;
-        const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "StoreTransaction");
         journalRow.ledger = ledgerRow;
         mapper.Create(journalRow);
 
@@ -1474,7 +1480,16 @@ void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCate
     // where it is the only book gate the action gets, and the rule cascade
     // inside `execute(StoreTransaction)`, where the caller has already passed
     // the same gate on the same book and this one passes too (morph#382).
-    db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), db::currentPrincipal(), "SetCategory");
+    //
+    // Both *rows*, too, the way `BudgetModel::execute(LinkAccountToCategory)`
+    // checks both of its: this action joins two rows nothing else constrains
+    // to one book. Gating only the account would let a caller file its own
+    // account under another principal's category, and `GetBudgetReport`
+    // selects legs by exactly that link -- so every entry posted against the
+    // account would land in the other principal's budget report.
+    const auto principal = db::currentPrincipal();
+    db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), principal, "SetCategory");
+    db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), principal, "SetCategory");
     accountRows.front().category = categoryRows.front();
     mapper.Update(accountRows.front());
 }

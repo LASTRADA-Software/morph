@@ -181,6 +181,99 @@ TEST_CASE("The owner is still free to work in its own book", "[ledger][ownership
         .opId = {}}));
 }
 
+TEST_CASE("Replaying another principal's opId does not hand back its book", "[ledger][ownership]") {
+    // `StoreTransaction`'s exactly-once path answers a repeated `opId` with
+    // the stored `GetLedgerResult` -- every account and balance in the book.
+    // That return sits early in the action, so a book gate placed after it
+    // would leak exactly what the `GetLedger` gate withholds: guess the opId
+    // and read the whole book. The account lookups just below it are the same
+    // hazard in weaker form, a "does account N belong to book B" oracle.
+    morph::ladder::testkit::DbFixture fixture;
+
+    ledger::LedgerModel model;
+    ledger::LedgerId book;
+    ledger::AccountId cash;
+    ledger::AccountId spend;
+    const ledger::ImportOpId opId{"tx-1"};
+    {
+        const ScopedPrincipal alice{"alice"};
+        book = model.execute(ledger::CreateLedger{.name = "Alice's private book"}).id;
+        cash = model
+                   .execute(ledger::OpenAccount{.ledgerId = book,
+                                                .name = "Alice Cash",
+                                                .kind = ledger::AccountKind::Asset,
+                                                .currency = ledger::Currency::USD})
+                   .id;
+        spend = model
+                    .execute(ledger::OpenAccount{.ledgerId = book,
+                                                 .name = "Alice Spend",
+                                                 .kind = ledger::AccountKind::Expense,
+                                                 .currency = ledger::Currency::USD})
+                    .id;
+        model.execute(ledger::StoreTransaction{
+            .ledgerId = book,
+            .description = "groceries",
+            .date = {},
+            .legs = {{.accountId = cash,
+                      .amount = morph::math::Rational{morph::math::Numerator{-100}, morph::math::Denominator{1},
+                                                      morph::math::DecimalPlaces{2}}},
+                     {.accountId = spend,
+                      .amount = morph::math::Rational{morph::math::Numerator{100}, morph::math::Denominator{1},
+                                                      morph::math::DecimalPlaces{2}}}},
+            .opId = opId});
+    }
+
+    const ScopedPrincipal bob{"bob"};
+    CHECK_THROWS_AS(
+        model.execute(ledger::StoreTransaction{
+            .ledgerId = book,
+            .description = "groceries",
+            .date = {},
+            .legs = {{.accountId = cash,
+                      .amount = morph::math::Rational{morph::math::Numerator{-100}, morph::math::Denominator{1},
+                                                      morph::math::DecimalPlaces{2}}},
+                     {.accountId = spend,
+                      .amount = morph::math::Rational{morph::math::Numerator{100}, morph::math::Denominator{1},
+                                                      morph::math::DecimalPlaces{2}}}},
+            .opId = opId}),
+        ledger::Forbidden);
+}
+
+TEST_CASE("SetCategory refuses a category in another principal's book", "[ledger][ownership]") {
+    // The action joins two rows, and gating only the account would let Bob
+    // file his own account under Alice's category. `GetBudgetReport` selects
+    // legs by exactly that link, so every entry Bob posts would then be summed
+    // into Alice's budget report.
+    morph::ladder::testkit::DbFixture fixture;
+
+    ledger::LedgerModel ledgerModel;
+    ledger::BudgetModel budgetModel;
+
+    ledger::CategoryId aliceCategory;
+    {
+        const ScopedPrincipal alice{"alice"};
+        const auto aliceBook = ledgerModel.execute(ledger::CreateLedger{.name = "Alice's private book"}).id;
+        aliceCategory = budgetModel.execute(ledger::CreateCategory{.ledgerId = aliceBook, .name = "Alice food"});
+    }
+
+    const ScopedPrincipal bob{"bob"};
+    const auto bobBook = ledgerModel.execute(ledger::CreateLedger{.name = "Bob's own book"}).id;
+    const auto bobAccount = ledgerModel
+                                .execute(ledger::OpenAccount{.ledgerId = bobBook,
+                                                             .name = "Bob Spend",
+                                                             .kind = ledger::AccountKind::Expense,
+                                                             .currency = ledger::Currency::USD})
+                                .id;
+
+    CHECK_THROWS_AS(
+        ledgerModel.execute(ledger::SetCategory{
+            .accountId = bobAccount, .categoryId = aliceCategory, .ruleId = ledger::RuleId{}, .ruleVersion = 0}),
+        ledger::Forbidden);
+    CHECK_THROWS_AS(
+        budgetModel.execute(ledger::LinkAccountToCategory{.accountId = bobAccount, .categoryId = aliceCategory}),
+        ledger::Forbidden);
+}
+
 TEST_CASE("BudgetModel and RuleModel refuse a book they do not own", "[ledger][ownership]") {
     morph::ladder::testkit::DbFixture fixture;
 

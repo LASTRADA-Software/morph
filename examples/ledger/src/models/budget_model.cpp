@@ -168,9 +168,11 @@ AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
             throw NotFound{"LinkAccountToCategory: no such account or category"};
         }
         // Both sides, because this action names two rows and nothing else
-        // constrains them to the same book: linking someone else's account to
-        // your category, or your account to someone else's, is refused
-        // (morph#382).
+        // constrains them to the same book. What this refuses is a link across
+        // an *ownership* boundary -- someone else's account under your
+        // category, or yours under someone else's (morph#382). Two books the
+        // same principal owns, or two unowned ones, can still be cross-linked;
+        // that is a separate integrity gap this gate does not claim to close.
         db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), ctx->principal,
                                    "LinkAccountToCategory");
         db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), ctx->principal,
