@@ -109,8 +109,14 @@ Build order:
    nothing in this rung uses it. `execute(MoveTaskPosition)` re-checks the
    whole destination inside its own transaction and throws the rung's typed
    errors — `NotFound` for a column or swimlane that no longer belongs to
-   the project (`src/models/board_model.cpp:849`, `:858`), `Conflict` for a
-   target column already at its WIP limit (`:835`). A replay that keeps
+   the project (`src/models/board_model.cpp:966`, the
+   `requireColumnBelongsToProject` call, and `:998`, the swimlane half's
+   inline re-check), `Conflict` for a target column already at its WIP limit
+   (`:984`, the `throw Conflict`). Each citation names what is on the line as
+   well as the number: nothing here verifies a line number —
+   `scripts/check_spec_citations.sh` checks cited paths and section headings
+   only — so the name is what a reader follows once the line has moved.
+   A replay that keeps
    throwing is retried by `SyncWorker` up to its 5-attempt cumulative cap
    and then dead-lettered, and `BoardBridge`'s `DeadLetterSink` turns that
    into a `syncStatusChanged(queueDepth, deadLettered)` emission the GUI

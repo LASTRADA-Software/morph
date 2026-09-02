@@ -103,7 +103,7 @@ must both work unchanged.
     `Loggable::Yes`), not split.** The recommended split (a pure, unlogged
     `GetPaste` plus an internally-journaled `RecordRead` mutation) turned
     out to be structurally unavailable: `IModelHolder::recordIfAttached`
-    (`include/morph/core/model.hpp:145`) is called only by the two
+    (`include/morph/core/model.hpp:221`, its definition) is called only by the two
     built-in dispatch runners, for the one action actually dispatched —
     there is no seam for a model to author a second, independent
     `LogEntry` from inside its own `execute()`. `Bridge::modelFactory`
