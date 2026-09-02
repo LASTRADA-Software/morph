@@ -1000,6 +1000,28 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
 This is packaging and factoring only: no `x-*` key changed, and a plain
 single-action form renders identically to before the renderer was extracted.
 
+`DynamicForm` connects to the controller through **two** `Connections` blocks,
+not one, because only one of the two signals is universal:
+
+- **`replyReceived(actionType, ok, payload)` is required** of every controller.
+  Its block is strict, so a handler there that matches no signal on the target
+  is a misspelling and the engine reports it.
+- **`optionsReceived(optionsAction, ok, payload)` is optional.** It exists only
+  on a controller that serves a `Choice` field; a controller that serves none
+  deliberately declares neither it nor `fetchOptions()`
+  (`bookmarks::gui::BookmarkFormsController` and
+  `pastebin::gui::PasteFormsController` each carry the reasoning: an unused
+  `fetchOptions()` would be a stub with nothing to call it). Its block carries
+  `ignoreUnknownSignals: true` so the absence is not a warning — scoped to that
+  one optional signal, and to nothing else. Without the split, every form
+  instance warned once about `onOptionsReceived` as soon as a conforming
+  choiceless controller was attached (morph#387), which forced any GUI test
+  asserting "no QML warnings" to tolerate that exact text.
+
+`src/qt/forms/tests/tst_DynamicFormChoicelessController.qml` pins both halves:
+a choiceless controller loads with no warning, a `Choice`-serving one still
+receives its options, and a target missing `replyReceived` is still reported.
+
 `DynamicForm.schema` takes the parsed schema **however it is supplied** — a
 declarative QML binding (`schema: controller.schemas[actionType]`), an initial
 property, a `setProperty` from C++, or `createTemporaryObject(component,

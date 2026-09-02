@@ -1245,6 +1245,8 @@ Frame {
         return payload
     }
 
+    // `replyReceived` is on every controller, so this block stays strict: a
+    // handler here that matches no signal is a misspelling and must be loud.
     Connections {
         target: form.controller
         function onReplyReceived(actionType, ok, payload) {
@@ -1253,6 +1255,18 @@ Frame {
             form.resultOk = ok
             form.resultText = ok ? form.humanize(payload) : payload
         }
+    }
+
+    // `optionsReceived` is not. It exists only on a controller that serves a
+    // morph::forms::Choice field, and a controller that serves none declares
+    // no stub for it -- the sanctioned shape (bookmarks' and pastebin's forms
+    // controllers both document why). Kept in its own block so
+    // `ignoreUnknownSignals` covers this one optional signal and nothing else:
+    // on its own, the form once warned once per instance for every conforming
+    // choiceless controller (morph#387).
+    Connections {
+        target: form.controller
+        ignoreUnknownSignals: true
         function onOptionsReceived(optionsAction, ok, payload) {
             if (!ok)
                 return
