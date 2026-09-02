@@ -24,6 +24,25 @@ struct LedgerRecord {
     static constexpr std::string_view TableName = "ledgers";
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;                              // 1
+    // The principal that created this book (morph#382). Every action reaching
+    // this book compares it against `session::current()->principal`; see
+    // `ledger/db/book_access.hpp`, which is the single home for that rule.
+    //
+    // Nullable, and the nullability is load-bearing rather than incidental:
+    // `AddNotRequiredColumn` is the only way SQLite will add a column to a
+    // table that may already hold rows, and there is no principal to
+    // attribute those rows to. `std::nullopt` therefore means "created before
+    // ownership existed", the same reading `ReportJobRecord::paramsJson`
+    // already has, and such a book stays open to every authenticated
+    // principal exactly as it was. `CreateLedger` populates it on every book
+    // written from now on, so nothing produces a new NULL.
+    //
+    // Width matches `ledger::auth::kMaxPrincipalBytes`, the longest principal
+    // `Login` will mint a token for; `ledger_model.cpp` carries the
+    // `static_assert` tying the two together, because `SqlFixedString`'s
+    // constructor truncates rather than throwing and a silently shortened
+    // owner would be an owner nobody can match.
+    Light::Field<std::optional<Light::SqlAnsiString<64>>, Light::SqlRealName{"owner"}> owner;  // 2
 };
 
 // Declared here, ahead of AccountRecord, rather than in its previous

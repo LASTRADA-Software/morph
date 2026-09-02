@@ -8,6 +8,7 @@
 
 #include "clock.hpp"
 #include "ledger/core/errors.hpp"
+#include "ledger/db/book_access.hpp"
 #include "ledger/db/ledger_entity.hpp"
 
 namespace ledger {
@@ -79,14 +80,9 @@ RuleId RuleModel::execute(const CreateRule& action) {
             throw ValidationError{"CreateRule: ledgerId and matchText are required"};
         }
         Lightweight::DataMapper mapper;
-        auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                              .All();
-        if (ledgerRows.empty()) {
-            throw NotFound{"CreateRule: no such ledger"};
-        }
+        const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "CreateRule");
         db::RuleRecord ruleRow;
-        ruleRow.ledger = ledgerRows.front();
+        ruleRow.ledger = ledgerRow;
         ruleRow.trigger = static_cast<int>(action.trigger);
         ruleRow.matchText = action.matchText;
         ruleRow.action = static_cast<int>(action.action);
@@ -119,6 +115,7 @@ RuleInfo RuleModel::execute(const UpdateRule& action) {
             throw NotFound{"UpdateRule: no such rule"};
         }
         auto& ruleRow = ruleRows.front();
+        db::requireOwnedParentBook(mapper, ruleRow.ledger.Value(), ctx->principal, "UpdateRule");
         // Optimistic concurrency (design spec §10, Scenario B). An engaged
         // expectedVersion that no longer matches means the row moved on after the
         // client read it: refuse outright rather than overwrite the change that

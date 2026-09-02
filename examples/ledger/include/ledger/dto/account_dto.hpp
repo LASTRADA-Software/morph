@@ -35,14 +35,15 @@ inline constexpr std::size_t kMaxLedgerNameBytes = 128;
 /// (`EmptyPrincipalError`, design spec §11) exactly as every other mutating
 /// action on this model does, and `LedgerAuthorizer` already requires a
 /// validly signed token for everything but `AuthModel`/`Login`, so a
-/// tokenless caller never reaches the model at all. Beyond that there is no
-/// gate, and deliberately so: unlike `kanban::CreateProject` -- whose caller
-/// becomes the new project's first `Manager` in the same transaction -- this
-/// rung ships no per-book roles at all, no table to write one into, and no
-/// action that reads one. Recording an owner here would be the first half of
-/// an authorization scheme whose second half does not exist, which reads as a
-/// guarantee the rung cannot keep. What this rung *does* enforce is
-/// documented in `ledger/auth/ledger_authorizer.hpp`'s file comment. Filed as
+/// tokenless caller never reaches the model at all.
+///
+/// **What it records.** The caller becomes the book's owner
+/// (`LedgerRecord::owner`), and every action that reaches this book afterwards
+/// refuses any other principal -- `ledger/db/book_access.hpp` is the single
+/// home for that comparison and the full rationale. That is a narrower
+/// promise than `kanban::CreateProject`'s, which makes its caller the first
+/// `Manager` of a real role table: this rung has no roles and no way to share
+/// a book, so the owner is simply the one principal that may use it.
 /// morph#382.
 struct CreateLedger {
     std::string name;
