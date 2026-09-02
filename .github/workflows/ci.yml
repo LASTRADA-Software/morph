@@ -759,6 +759,21 @@ jobs:
       - name: Build
         run: cmake --build --preset gcc-debug
 
+      # ── moc output that climbs out of the build tree (issue #372) ────
+      # Runs here rather than in a dependency-free lint job because the thing
+      # it inspects is generated: it needs an AUTOMOC target to have actually
+      # been built. The self-test goes first, on the same terms as
+      # test-type-name-lint and drift-guard.yml's gates -- a lint gate nobody
+      # tests reports green whether or not it still detects anything, and this
+      # one is especially exposed to that, because the ascending include it
+      # looks for is present in every build and only becomes a compile error
+      # where the directory arithmetic lands on a second same-named header.
+      - name: Self-test the AUTOMOC-include checker
+        run: bash scripts/test_check_automoc_includes.sh
+
+      - name: Check no generated moc include ascends
+        run: bash scripts/check_automoc_includes.sh build/gcc-debug
+
       - name: Test (offscreen Qt platform)
         env:
           QT_QPA_PLATFORM: offscreen
@@ -936,6 +951,26 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: cmake --build --preset gcc-debug
+
+      # ── moc output that climbs out of the build tree (issue #372) ────
+      # Runs here rather than in a dependency-free lint job because the thing
+      # it inspects is generated: it needs an AUTOMOC target to have actually
+      # been built. The self-test goes first, on the same terms as
+      # test-type-name-lint and drift-guard.yml's gates -- a lint gate nobody
+      # tests reports green whether or not it still detects anything, and this
+      # one is especially exposed to that, because the ascending include it
+      # looks for is present in every build and only becomes a compile error
+      # where the directory arithmetic lands on a second same-named header.
+      - name: Self-test the AUTOMOC-include checker
+        if: steps.filter.outputs.run == 'true'
+        run: bash scripts/test_check_automoc_includes.sh
+
+      # ladder_<rung>_gui_lib is where issue #372 actually bit: it is the
+      # AUTOMOC target every ladder_<rung>_tests binary links, so this job is
+      # the one whose build tree carries the output that stopped compiling.
+      - name: Check no generated moc include ascends
+        if: steps.filter.outputs.run == 'true'
+        run: bash scripts/check_automoc_includes.sh build/gcc-debug
 
       - name: Test (offscreen Qt platform, ladder tests only, stress excluded)
         if: steps.filter.outputs.run == 'true'
