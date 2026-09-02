@@ -191,11 +191,22 @@ public:
 ```
 
 - **A step is an ordinary action fire.** `set<FieldPtr>` writes the field into
-  `FlowSession`'s own draft for the current step, evaluates that step's
-  `ActionValidator<A>::ready` itself, and on success dispatches the draft
-  through the handler's ordinary `execute<A>` — `FlowSession` adds no new
-  execution mode. There is no in-flight coalescing: every ready `set<>`
-  dispatches.
+  `FlowSession`'s own per-step draft, checks `ActionValidator<A>::ready` on it,
+  and dispatches a ready draft with `BridgeHandler::execute<A>()`. The gate and
+  the auto-fire-on-ready behaviour are the standalone form's, but the *draft*
+  is the flow's: nothing is forwarded to handler-side draft machinery, and
+  `FlowSession` still adds no new execution mode.
+- **A flow step does not coalesce in flight.** Because the dispatch decision is
+  made in `FlowSession::set<>`, **every** `set<>` that leaves the draft ready
+  fires, including one made while an earlier fire is still outstanding.
+  Keystroke-rate `set<>` calls on an already-complete draft therefore produce
+  one request each, and their replies land in whatever order the backend
+  answers — the last reply to arrive wins, which need not be the last call
+  made. This is the one place a flow step differs from the standalone-form
+  path, whose handler-side draft collapsed patches arriving during a flight. A
+  caller that wants one request per pause throttles or debounces on its own
+  side; `FlowSession` deliberately does not, since it cannot know the host's
+  input cadence.
 - **`advance()`/`back()` are pure sequencing.** `advance()` moves to the next
   step only if the current step has already produced a captured, successful
   result (`ready() == true`); a not-ready step does not advance. `back()`

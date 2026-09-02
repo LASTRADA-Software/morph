@@ -14,7 +14,7 @@
 /// document a renderer consumes to build a stepper;
 /// `morph::flows::FlowSession<Model, Steps...>` (see the `set<>`/`advance`/
 /// `back` API added alongside it) is the typed C++ sequencer that fires each
-/// step through the ordinary `BridgeHandler<Model>::set<>` / `subscribe<>`
+/// step through the ordinary `BridgeHandler<Model>::execute<A>()` dispatch
 /// path (bridge.hpp) and tracks the resolved values a caller (or a renderer)
 /// reads to prefill a later step.
 ///
@@ -180,11 +180,15 @@ template <typename W>
 /// @brief Sequences an ordered list of registered actions (`Steps...`) as one
 ///        multi-step flow sharing captured values across steps.
 ///
-/// Each step is fired through the handler's ordinary reactive path
-/// (`BridgeHandler::set<>` / `subscribe<>`, bridge.hpp) — a `FlowSession`
-/// contributes only sequencing (`advance`/`back`) and a resolved-values map
-/// callers use to prefill a later step from an earlier one's submitted
-/// fields or result. `Steps...` must be pairwise distinct action types: this
+/// Each step is fired through the handler's ordinary one-shot dispatch
+/// (`BridgeHandler::execute<A>()` → `Completion<R>`, bridge.hpp) — a
+/// `FlowSession` contributes only sequencing (`advance`/`back`), the per-step
+/// drafts and their readiness gate, and a resolved-values map callers use to
+/// prefill a later step from an earlier one's submitted fields or result. The
+/// handler holds no draft on a flow's behalf: nothing here goes through
+/// handler-side draft machinery.
+///
+/// `Steps...` must be pairwise distinct action types: this
 /// session's drafts live in a `std::tuple<Steps...>` addressed by type
 /// (`std::get<A>(_drafts)`), and `std::get<T>` is ill-formed when `T` occurs
 /// more than once — which is what the `AllDistinct<Steps...>` assert below
@@ -237,9 +241,24 @@ public:
     FlowSession(FlowSession&&) = delete;
     FlowSession& operator=(FlowSession&&) = delete;
 
-    /// @brief Sets one field of the current step's draft and forwards it to
-    ///        the handler's ordinary `set<>` (auto-fires when the step's
-    ///        `ActionValidator` is ready, exactly as a standalone form).
+    /// @brief Sets one field of the current step's draft and dispatches the
+    ///        step as soon as its `ActionValidator` reports the draft ready.
+    ///
+    /// The draft is this session's own (`std::get<A>(_drafts)`), the readiness
+    /// check is made here, and a ready draft is fired by this session's
+    /// `fireStep<A>` through `BridgeHandler::execute<A>()`. Nothing is
+    /// forwarded to any draft the handler keeps.
+    ///
+    /// @par No in-flight coalescing
+    /// **Every `set<>` that leaves the draft ready dispatches, including one
+    /// made while an earlier dispatch is still in flight.** Keystroke-rate
+    /// calls on an already-complete draft therefore produce one request each,
+    /// and their results arrive in whatever order the backend answers them —
+    /// the last reply to land wins, which need not be the last call made. This
+    /// is the one way a flow step differs from the standalone-form path, whose
+    /// handler-side draft collapsed patches arriving during a flight. A caller
+    /// that wants one request per pause throttles or debounces on its own side.
+    ///
     /// @tparam FieldPtr Pointer-to-data-member of the current step's action struct.
     /// @param value New value for the field.
     /// @throws std::logic_error if @p FieldPtr's action is not the current step.
@@ -261,9 +280,9 @@ public:
         }
         // The readiness gate that used to live in the handler's draft machinery
         // lives here now: the flow already owns the draft, so it can decide when
-        // the step is complete and dispatch it itself. Note there is no
-        // in-flight coalescing — each ready `set<>` dispatches, where the old
-        // handler-side draft collapsed patches landing during a flight.
+        // the step is complete and dispatch it itself. The absence of in-flight
+        // coalescing that follows from dispatching here is published in this
+        // function's @brief, not left to this comment to discover.
         if (::morph::model::ActionValidator<A>::ready(draft)) {
             fireStep<A>(std::move(draft), stepIndex);
         }
