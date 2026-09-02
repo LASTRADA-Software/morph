@@ -30,10 +30,15 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
 
     morph::exec::detail::ModelId const key{42};
 
-    for (int iter = 0; iter < kIterations; ++iter) {
-        morph::exec::ThreadPoolExecutor pool{4};
-        morph::exec::detail::StrandExecutor strand{pool};
+    constexpr int kExpected = kThreads * kPostsPerThread;
 
+    for (int iter = 0; iter < kIterations; ++iter) {
+        // Declared outside the strand's scope so it is destroyed *after* the
+        // strand -- docs/spec/concurrency_and_lifetimes.md, "base IExecutor
+        // must outlive its StrandExecutor". The reverse order deadlocks.
+        morph::exec::ThreadPoolExecutor pool{4};
+
+        // Outlive the strand too: the drain below runs their final updates.
         std::atomic<int> inFlight{0};
         std::atomic<int> maxInFlight{0};
         std::atomic<int> completed{0};
@@ -49,27 +54,63 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
             completed.fetch_add(1);
         };
 
-        std::vector<std::thread> producers;
-        producers.reserve(kThreads);
-        for (int t = 0; t < kThreads; ++t) {
-            producers.emplace_back([&] {
-                for (int i = 0; i < kPostsPerThread; ++i) {
-                    strand.post(key, task);
-                }
-            });
-        }
-        for (auto& producer : producers) {
-            producer.join();
+        {
+            morph::exec::detail::StrandExecutor strand{pool};
+
+            std::vector<std::thread> producers;
+            producers.reserve(kThreads);
+            for (int t = 0; t < kThreads; ++t) {
+                producers.emplace_back([&] {
+                    for (int i = 0; i < kPostsPerThread; ++i) {
+                        strand.post(key, task);
+                    }
+                });
+            }
+            for (auto& producer : producers) {
+                producer.join();
+            }
+            // Every producer has joined, so nothing else will post -- which is
+            // also what the spec's "no post() may race or follow
+            // ~StrandExecutor" corollary requires. Closing this scope runs
+            // `~StrandExecutor`, which blocks until `_inFlight == 0`; because
+            // the re-arm in `scheduleNext` increments `_inFlight` for the next
+            // dispatch *before* the current one decrements, the count never
+            // dips to zero across a handoff, so `_inFlight == 0` with no
+            // producer left means every queued task has run.
+            //
+            // This replaces a fixed budget of 2000 x 1 ms sleeps (morph#374).
+            // That budget was ~2 s of wall clock for 3200 strand-serialised
+            // tasks, 20 times over, and could expire with work still queued on
+            // a loaded machine. Worse, the deficit was a `REQUIRE` and came
+            // first, so Catch2 aborted the case before `maxInFlight` -- the
+            // only reason this test exists -- was ever evaluated: a busy host
+            // turned "the strand serialisation test" into "no strand
+            // serialisation check ran", reported as a strand failure. The
+            // drain is now a synchronisation point rather than a deadline, so
+            // it does not depend on how fast the host is.
+            //
+            // The budget was never the runtime bound it looked like, either:
+            // `~StrandExecutor` ran at the end of every iteration regardless
+            // and blocked for the same drain, so on a green run the polling
+            // loop waited for something the destructor was about to wait for
+            // anyway. All the loop ever added was a way to fail first. What
+            // remains is CTest's own per-test `TIMEOUT 120`
+            // (`tests/CMakeLists.txt`), which is the right place for "this
+            // host was too slow" to be reported: as a timeout, not as an
+            // invariant that did not hold.
         }
 
-        // Drain: wait for every posted task to complete.
-        constexpr int kExpected = kThreads * kPostsPerThread;
-        for (int i = 0; i < 2000 && completed.load() < kExpected; ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-
-        REQUIRE(completed.load() == kExpected);
+        INFO("iteration " << iter << ": completed " << completed.load() << " of " << kExpected);
+        // A `CHECK`, and deliberately not a `REQUIRE`: the two questions are
+        // independent and both must be answered. `~StrandExecutor` has already
+        // returned, so a deficit here is a task the strand lost, never a slow
+        // host -- and reporting it must not stop `maxInFlight` below from
+        // being evaluated over the tasks that did run.
+        CHECK(completed.load() == kExpected);
         // The core invariant: at most one task for this key ever runs at once.
+        // This one is a `REQUIRE` -- a value above 1 means two strands ran the
+        // same key's tasks concurrently, which is the race this file regresses
+        // and not something to keep iterating past.
         REQUIRE(maxInFlight.load() == 1);
     }
 }
