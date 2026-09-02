@@ -527,8 +527,15 @@ jobs:
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
+      # No `if:` guard. This step used to carry `if: matrix.preset ==
+      # 'clang-coverage'`, left behind when this job was split out of
+      # linux-sanitizers' matrix (see this job's own header comment). The job has
+      # no matrix, so `matrix.preset` evaluates to the empty string, the
+      # condition is false on every run, and the HTML report has never been
+      # uploaded -- a step that is skipped and a step that succeeded are rendered
+      # the same way, which is why nothing reported it. Found while fixing
+      # morph#403.
       - name: Upload coverage HTML
-        if: matrix.preset == 'clang-coverage'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report

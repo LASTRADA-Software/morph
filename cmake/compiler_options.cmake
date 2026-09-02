@@ -492,11 +492,117 @@ function(apply_sanitizers target mode)
     endif()
 endfunction()
 
+# @brief Instrument a target for llvm-cov coverage; `TEST` also registers it
+#        as a binary scripts/coverage.sh must map profile data through.
+#
+# Instrumentation alone is not enough to be counted. llvm-cov resolves the
+# counters in a .profraw through a *binary*'s coverage mapping, so a test
+# executable that is instrumented, runs, and writes profile data still
+# contributes nothing unless that same executable is handed to llvm-cov --
+# positionally or via -object. scripts/coverage.sh used to name those binaries
+# by hand, and four of them were never added: morph_net_tests wrote profile
+# data that was merged and then dropped on the floor, and morph_qt_tests,
+# morph_offline_sqlite_tests and morph_net_qt_interop_tests were not even
+# instrumented, so include/morph/net contributed zero files to the uploaded
+# report while eight test files drove it (morph#403).
+#
+# That is the third time a hand-maintained list in scripts/coverage.sh has
+# rotted -- morph#141 (rungs 2-4 never added) and morph#179 (the rung list had
+# drifted past ledger and lims) were the first two, and both were fixed by
+# deleting the copy and deriving the list instead. This is the same fix for the
+# test-executable list: the build system already knows which binaries it
+# instrumented, so it writes them out (see
+# morph_write_coverage_object_manifest below) and coverage.sh reads them. A
+# binary registered here cannot be forgotten by a script in another directory.
+#
+# Not every apply_coverage() target belongs on that list. The function is also
+# called on libraries (ladder_<rung>_lib), on GUI shells (ladder_<rung>_gui,
+# morph_ladder_app) and on demos (morph_example, morph_forms_demo). Handing
+# llvm-cov a demo binary would add the template instantiations only that demo
+# has and score them as uncovered, moving the number for a reason unrelated to
+# what any test checks -- so registration is not simply "everything
+# instrumented".
+#
+# The classifier is the repository's own naming convention, which every test
+# executable already follows: an EXECUTABLE whose name ends in `_tests`
+# (morph_tests, morph_net_tests, morph_qt_tests, morph_offline_sqlite_tests,
+# morph_net_qt_interop_tests, ladder_common_tests, ladder_<rung>_tests) is a
+# test binary. Deriving it from the name rather than from a per-call flag is
+# the same move that fixed morph#179: a new test executable is registered by
+# being named like one, with nothing to remember and nothing to forget. `TEST`
+# forces registration for a test binary that is deliberately not named that way
+# (the two morph_journal_skew_* probes, which are one test spread over two
+# separately compiled programs).
+#
+# The convention is not left to trust: scripts/coverage.sh cross-checks the
+# manifest against the binaries ctest actually ran and fails when one of them
+# is unprofiled and unexplained.
 function(apply_coverage target)
+    cmake_parse_arguments(PARSE_ARGV 1 _morph_cov "TEST" "" "")
+    if(_morph_cov_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR
+            "apply_coverage(${target}): unexpected argument(s) "
+            "'${_morph_cov_UNPARSED_ARGUMENTS}'. The only option is TEST.")
+    endif()
+
     target_compile_options(${target} PRIVATE
         -fprofile-instr-generate -fcoverage-mapping -g -O0)
     target_link_options(${target} PRIVATE
         -fprofile-instr-generate)
+
+    get_target_property(_morph_cov_type ${target} TYPE)
+    if(_morph_cov_TEST AND NOT _morph_cov_type STREQUAL "EXECUTABLE")
+        message(FATAL_ERROR
+            "apply_coverage(${target} TEST): TEST names a binary llvm-cov is "
+            "handed as -object, so it is only meaningful for an executable; "
+            "'${target}' is a ${_morph_cov_type}.")
+    endif()
+
+    if(_morph_cov_TEST OR (_morph_cov_type STREQUAL "EXECUTABLE"
+                           AND "${target}" MATCHES "_tests$"))
+        # $<TARGET_FILE:> rather than a composed path: the manifest is written
+        # at generate time, when the real output name (and any multi-config
+        # subdirectory) is known, so nothing here has to reproduce CMake's
+        # naming rules the way the hand-written list in coverage.sh did.
+        set_property(GLOBAL APPEND PROPERTY MORPH_COVERAGE_TEST_OBJECTS
+                     "$<TARGET_FILE:${target}>")
+    endif()
+endfunction()
+
+# @brief Write the list of coverage-instrumented test binaries for coverage.sh.
+#
+# Deferred to the end of the top-level directory (see the cmake_language(DEFER)
+# at the bottom of this file) so it runs after every add_subdirectory() has had
+# its chance to call apply_coverage(... TEST) -- the same "must see every
+# target" requirement morph_verify_warning_flags() has, solved without needing
+# a call site in CMakeLists.txt.
+#
+# The file is written only for a coverage configure; a normal build has no
+# instrumented targets and needs no manifest. An AF_COVERAGE build that *does*
+# build the test suite and still registered nothing is a configuration error
+# rather than an empty report, because an empty object list is exactly the
+# silently-shrinking figure morph#403 was about.
+function(morph_write_coverage_object_manifest)
+    get_property(_morph_cov_objects GLOBAL PROPERTY MORPH_COVERAGE_TEST_OBJECTS)
+    if(NOT _morph_cov_objects)
+        if(AF_COVERAGE AND TARGET morph_tests)
+            message(FATAL_ERROR
+                "morph: coverage: AF_COVERAGE is ON and the test suite is being "
+                "built, but no target called apply_coverage(<target> TEST). "
+                "scripts/coverage.sh would then have no binary to map profile "
+                "data through and would report coverage over nothing (morph#403).")
+        endif()
+        return()
+    endif()
+    list(REMOVE_DUPLICATES _morph_cov_objects)
+    list(JOIN _morph_cov_objects "\n" _morph_cov_content)
+    file(GENERATE
+         OUTPUT "${CMAKE_BINARY_DIR}/coverage_objects.txt"
+         CONTENT "${_morph_cov_content}\n")
+    list(LENGTH _morph_cov_objects _morph_cov_count)
+    message(STATUS
+        "morph: coverage: ${_morph_cov_count} test binary/binaries will be "
+        "profiled (build/coverage_objects.txt)")
 endfunction()
 
 function(apply_bigobj target)
@@ -523,3 +629,12 @@ function(apply_fuzzer target)
     target_compile_options(${target} PRIVATE -fsanitize=fuzzer,address -fno-omit-frame-pointer -g -O1)
     target_link_options(${target} PRIVATE -fsanitize=fuzzer,address)
 endfunction()
+
+# Registered here rather than called from CMakeLists.txt so the manifest and the
+# function that fills it stay in one file: a writer that has to be invoked by
+# hand from another directory is the same shape of coupling morph#403 was about.
+# DEFER on this directory runs the call after every add_subdirectory() of the
+# scope that included this file completes, which is when the last
+# apply_coverage() has run.
+cmake_language(DEFER DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+               CALL morph_write_coverage_object_manifest)

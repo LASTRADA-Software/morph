@@ -12,6 +12,12 @@ target_link_libraries(morph_net_qt_interop_tests
 set_target_properties(morph_net_qt_interop_tests PROPERTIES AUTOMOC ON)
 apply_warnings(morph_net_qt_interop_tests)
 
+# Was missing entirely: this suite drives morph::net against Qt's transport and
+# was never instrumented (morph#403).
+if(AF_COVERAGE)
+    apply_coverage(morph_net_qt_interop_tests)
+endif()
+
 include(Catch)
 
 get_target_property(_qt_core_dll Qt6::Core IMPORTED_LOCATION)

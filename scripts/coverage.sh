@@ -11,27 +11,71 @@ LLVM_PROFDATA="llvm-profdata${SUFFIX}"
 LLVM_COV="llvm-cov${SUFFIX}"
 
 OUT="build/clang-coverage"
-TEST_EXE="$OUT/tests/morph_tests"
 MERGED="$OUT/merged.profdata"
 REPORT_DIR="$OUT/html"
+MANIFEST="$OUT/coverage_objects.txt"
 
-# Second binary, only present when this configure also built the ladder
-# (MORPH_BUILD_LADDER=ON — see the "coverage leg only" Qt install step in
-# ci.yml). llvm-cov takes one binary positionally and every additional one
-# via -object; OBJECT_ARGS stays empty (and every ${OBJECT_ARGS[@]}
-# expansion below a no-op) when the ladder wasn't built, so this script
-# still works unchanged for a plain `cmake --preset clang-coverage` with no
+# -- The binaries llvm-cov maps the profile data through ---------------------
+#
+# llvm-cov resolves a .profraw's counters through a *binary*'s coverage
+# mapping: one binary positionally, every additional one via -object. A test
+# executable that is instrumented, runs, and writes profile data therefore
+# still contributes nothing unless it appears here.
+#
+# This list used to be written out by hand, and it was wrong in the way a
+# hand-written list is always eventually wrong. It named three binary families
+# while the tree built nine; morph_net_tests wrote profile data that
+# llvm-profdata merged and llvm-cov then dropped, so include/morph/net -- 955
+# lines, 42 of the library's 148 throw sites, eight test files driving it --
+# contributed zero files to the uploaded report, and both
+# sqlite_offline_queue.hpp's 57.04% and include/morph/qt's 13 lines were
+# measured with their own suites absent (morph#403). It was the third time:
+# morph#141 (rungs 2-4 never added) and morph#179 (the rung list had drifted
+# past ledger and lims) were the same defect in the same file, and both were
+# fixed by deleting the copy and reading an authoritative list instead.
+#
+# So the list is no longer here. cmake/compiler_options.cmake's
+# apply_coverage() registers every instrumented test binary as it instruments
+# it, and writes the resolved paths to coverage_objects.txt at generate time.
+# A binary cannot be missing from that file without also being missing from the
+# build.
+#
+# The manifest is validated, and cross-checked against the binaries ctest
+# actually runs, by a gate of its own -- so that "a suite was added and never
+# instrumented" fails the coverage leg instead of quietly shrinking the
+# denominator. It is a separate script because a gate nobody tests reports
+# green whether or not it still detects anything, and
+# scripts/test_check_coverage_objects.sh can exercise it without a build.
+bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_objects.sh" "$OUT"
+
+COVERAGE_OBJECTS=()
+while IFS= read -r _object; do
+    [ -n "$_object" ] || continue
+    COVERAGE_OBJECTS+=("$_object")
+done < "$MANIFEST"
+
+# One binary goes positionally and the rest via -object. Which one is first is
+# arbitrary -- llvm-cov treats them alike -- so it is simply the first line.
+PRIMARY_OBJECT="${COVERAGE_OBJECTS[0]}"
+OBJECT_ARGS=()
+for _object in "${COVERAGE_OBJECTS[@]:1}"; do
+    OBJECT_ARGS+=(-object "$_object")
+done
+
+# Only meaningful when this configure also built the ladder
+# (MORPH_BUILD_LADDER=ON -- see the "coverage leg only" Qt install step in
+# ci.yml). It decides which *source* paths are worth naming below; the binary
+# itself reaches llvm-cov through the manifest above, so this script still
+# works unchanged for a plain `cmake --preset clang-coverage` with no
 # -DMORPH_BUILD_LADDER=ON.
 LADDER_TEST_EXE="$OUT/examples/common/ladder_common_tests"
-OBJECT_ARGS=()
-if [ -x "$LADDER_TEST_EXE" ]; then
-    OBJECT_ARGS+=(-object "$LADDER_TEST_EXE")
-fi
 
-# Per-rung test binaries, added on exactly the same "only if it was built"
+# Per-rung *source paths*, named on exactly the same "only if it was built"
 # terms. Each rung's models are what examples/IMPLEMENTATION.md rule 5's
-# 100% bar actually names, so a rung that ships models must contribute its
-# profile data or the gate below measures nothing.
+# 100% bar actually names, so a rung that ships models must have its sources
+# named here or the gate below measures nothing. (The rung's test *binary*
+# reaches llvm-cov through coverage_objects.txt above; this loop decides only
+# which source trees the report is computed over.)
 #
 # Driven by a loop rather than one hand-written block per rung, because the
 # hand-written form silently rotted: rungs 2, 3 and 4 shipped without ever
@@ -67,7 +111,6 @@ while IFS= read -r _rung; do
     [ -n "$_rung" ] || continue
     _exe="$OUT/examples/${_rung}/ladder_${_rung}_tests"
     if [ -x "$_exe" ]; then
-        OBJECT_ARGS+=(-object "$_exe")
         RUNG_TEST_EXES+=("$_rung")
     fi
 done <<< "$_MORPH_LADDER_RUNGS"
@@ -131,7 +174,7 @@ fi
 ${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
 
 mkdir -p "$REPORT_DIR"
-${LLVM_COV} show "$TEST_EXE" \
+${LLVM_COV} show "$PRIMARY_OBJECT" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -ignore-filename-regex="$IGNORE_REGEX" \
@@ -141,13 +184,13 @@ ${LLVM_COV} show "$TEST_EXE" \
 
 echo "Coverage report: $REPORT_DIR/index.html"
 
-${LLVM_COV} report "$TEST_EXE" \
+${LLVM_COV} report "$PRIMARY_OBJECT" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -ignore-filename-regex="$IGNORE_REGEX" \
     "${SOURCES[@]}"
 
-${LLVM_COV} export "$TEST_EXE" \
+${LLVM_COV} export "$PRIMARY_OBJECT" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -ignore-filename-regex="$IGNORE_REGEX" \
@@ -161,7 +204,7 @@ ${LLVM_COV} export "$TEST_EXE" \
 # header-only templated code. Collapse them to one record per source branch,
 # matching the aggregate that `llvm-cov report` already prints above. Branch
 # coverage is preserved (not skipped); only the per-instantiation noise is removed.
-${LLVM_COV} export "$TEST_EXE" \
+${LLVM_COV} export "$PRIMARY_OBJECT" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -ignore-filename-regex="$IGNORE_REGEX" \

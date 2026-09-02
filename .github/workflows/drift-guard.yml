@@ -107,6 +107,31 @@ jobs:
       - name: Self-test the AUTOMOC-include checker
         run: bash scripts/test_check_automoc_includes.sh
 
+  # ── The coverage-object gate's own self-test ───────────────────────────
+  # The gate itself (scripts/check_coverage_objects.sh) runs inside
+  # scripts/coverage.sh, in ci.yml's linux-coverage job, because it compares the
+  # generated manifest against `ctest --show-only=json-v1` and so needs a
+  # configured, built, test-registered tree. Its self-test needs none of that --
+  # both of its inputs are files, and the fixtures are throwaway executables in
+  # a temp directory -- so it runs here, in seconds, and still reports when that
+  # 20-minute build fails.
+  #
+  # Same reasoning as every other gate in this file, and unusually direct here:
+  # the defect this gate catches (morph#403 -- a test binary that runs, writes
+  # profile data, and is never handed to llvm-cov) is *already* a silence. The
+  # coverage run succeeds, the report uploads, and the figure is simply computed
+  # over a smaller denominator. A gate that had gone blind to that would be
+  # indistinguishable from a gate finding nothing wrong, which is precisely how
+  # the same defect reached its third occurrence (morph#141, morph#179, #403).
+  coverage-object-lint:
+    name: Coverage-object checker self-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the coverage-object checker
+        run: bash scripts/test_check_coverage_objects.sh
+
   # ── The wire/action surface <-> the scenario corpus that covers it ──────
   # scripts/scenario/scenario_coverage.py enumerates two surfaces straight out
   # of the source -- every envelope kind and refusal RemoteServer can put on
