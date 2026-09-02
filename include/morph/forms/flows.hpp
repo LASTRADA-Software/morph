@@ -252,8 +252,8 @@ public:
     ///
     /// The draft is this session's own (`std::get<A>(_drafts)`), the readiness
     /// check is made here, and a ready draft is fired by this session's
-    /// `fireStep<A>` through `BridgeHandler::execute<A>()`. Nothing is
-    /// forwarded to any draft the handler keeps.
+    /// `fireStep<A>` through `BridgeHandler::execute<A>()`. The handler keeps
+    /// no draft of its own, so there is nothing to forward to.
     ///
     /// @par No in-flight coalescing
     /// **Every `set<>` that leaves the draft ready dispatches, including one
