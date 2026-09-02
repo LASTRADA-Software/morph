@@ -212,8 +212,8 @@ public:
   step only if the current step has already produced a captured, successful
   result (`ready() == true`); a not-ready step does not advance. `back()`
   returns to the previous step; `FlowSession`'s own per-step
-  `std::tuple<Steps...>` drafts are never reset, so entered values survive
-  navigation.
+  `std::tuple<Steps...>` draft — the only draft in play, since the handler
+  keeps none — is never reset, so entered values survive navigation.
 - **`resolved(path)` is the prefill source.** On every successful step
   result, `FlowSession` flattens both the step's submitted draft (via
   `morph::forms::detail::forEachNamedMember`) and its result into a
@@ -240,9 +240,8 @@ public:
   statement rather than relying on member destruction alone: members are
   destroyed only *after* the destructor body, and that body can pump an event
   loop (a blocking, `sendSync`-style call) and deliver into a half-dead
-  session. This is
-  the "teardown that pumps" escape hatch callback_scope.md documents, and
-  `FlowSession` is its worked example.
+  session. This is the "teardown that pumps" escape hatch callback_scope.md
+  documents, and `FlowSession` is its worked example.
 
 ## The Qt/QML reference renderer
 
