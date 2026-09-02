@@ -18,11 +18,21 @@
 // and a `Connections` with a null target matches nothing and warns about
 // nothing -- which is why the one QML test each rung ships never saw it.
 //
-// The fix is a second `Connections` block carrying `ignoreUnknownSignals` for
-// the optional signal alone, so `replyReceived` -- which every controller has
-// -- keeps warning when it does not match. Both halves are asserted here: a
-// blanket `ignoreUnknownSignals` on the one original block would pass the
-// first test and fail the third.
+// The fix is a second `Connections` block for the optional signal alone, whose
+// target is gated on the controller actually declaring it, so `replyReceived`
+// -- which every controller has -- keeps warning when it does not match. Both
+// halves are asserted here: a blanket `ignoreUnknownSignals` on the one
+// original block would pass the first test and fail the third.
+//
+// The gate is deliberately narrower than `ignoreUnknownSignals: true` on this
+// block, which would also pass all three. That flag silences a *misspelled*
+// `onOptionsReceived` on a controller that does serve a Choice, turning an
+// empty combo box and a form that never reaches `ready` into a failure with no
+// diagnostic. Only a source mutation separates the two, so it is checked that
+// way rather than asserted here: misspell the handler in DynamicForm.qml and
+// the second test below fails with the engine's "no signal of the target
+// matches the name" warning under the gate, and silently -- on the missing
+// options alone -- under the flag.
 
 import QtQuick
 import QtTest
