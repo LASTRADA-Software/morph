@@ -172,7 +172,7 @@ json="$(ctest_json "$dir" "$tests_exe")"
 if output="$(bash "$checker" "$dir" "$json" 2>&1)"; then
     fail "a manifest naming a binary the build never produced was accepted:"
     printf '%s\n' "$output" >&2
-elif ! printf '%s' "$output" | grep -q 'ladder_crm_tests'; then
+elif ! mentions 'ladder_crm_tests' "$output"; then
     fail "the stale manifest entry was rejected, but the message does not name it:"
     printf '%s\n' "$output" >&2
 else
@@ -203,10 +203,10 @@ JSON
 if output="$(bash "$checker" "$dir" "${dir}/ctest.json" 2>&1)"; then
     fail "a wrapper-driven test's unprofiled subject was accepted:"
     printf '%s\n' "$output" >&2
-elif ! printf '%s' "$output" | grep -q 'morph_forms_demo_lookalike'; then
+elif ! mentions 'morph_forms_demo_lookalike' "$output"; then
     fail "the wrapper-driven subject was not the binary reported:"
     printf '%s\n' "$output" >&2
-elif printf '%s' "$output" | grep -q 'wrapper.sh'; then
+elif mentions 'wrapper[.]sh' "$output"; then
     fail "the wrapper itself was reported; only build-tree binaries can carry coverage:"
     printf '%s\n' "$output" >&2
 else

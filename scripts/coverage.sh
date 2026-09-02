@@ -236,3 +236,16 @@ ${LLVM_COV} export "$PRIMARY_OBJECT" \
 
 python3 scripts/aggregate_lcov_branches.py \
     "$OUT/coverage.lcov.raw" "$OUT/coverage.json" "$OUT/coverage.lcov"
+
+# The branch half of the number, which until morph#404 was produced, preserved,
+# uploaded and scored by nothing: every status and every component in
+# codecov.yml measures lines, and Codecov has no branch target to set. A line
+# is covered the moment control reaches it, whatever the condition on it
+# evaluated to, so a branch taken one way only passes every gate this
+# repository had.
+#
+# Deliberately last, and on "$OUT/coverage.lcov" rather than the .raw: it must
+# read aggregate_lcov_branches.py's output, since llvm-cov emits one BRDA
+# record per template instantiation and a header-only template library scores
+# one source branch dozens of times in the raw file.
+python3 scripts/check_branch_coverage.py "$OUT/coverage.lcov"

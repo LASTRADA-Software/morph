@@ -132,6 +132,18 @@ jobs:
       - name: Self-test the coverage-object checker
         run: bash scripts/test_check_coverage_objects.sh
 
+      # scripts/check_branch_coverage.py, on the same terms: the gate itself
+      # runs inside scripts/coverage.sh (it reads the aggregated LCOV that leg
+      # produces), and its self-test needs only hand-written fixtures.
+      #
+      # This one guards a defect with no other trace at all. A branch taken one
+      # way only executes its line, so the line percentage is unmoved, Codecov
+      # is content, and nothing anywhere reports it -- there are 179 such lines
+      # in include/morph today (morph#404). A gate that had gone blind to that
+      # would produce exactly the output a healthy one produces.
+      - name: Self-test the branch-coverage checker
+        run: python3 scripts/check_branch_coverage.py --self-test
+
   # ── The wire/action surface <-> the scenario corpus that covers it ──────
   # scripts/scenario/scenario_coverage.py enumerates two surfaces straight out
   # of the source -- every envelope kind and refusal RemoteServer can put on

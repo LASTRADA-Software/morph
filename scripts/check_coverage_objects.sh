@@ -78,9 +78,9 @@ coverage_exclusion_reason() {
             echo "libFuzzer harnesses (MORPH_BUILD_FUZZERS=ON only, which the coverage leg does not set); apply_fuzzer() builds them at -O1 under -fsanitize=fuzzer,address, a different instrumentation from apply_coverage()'s"
             ;;
         # ── Known gaps, not justified exclusions ────────────────────────────
-        # The three below are the same defect morph#403 is about, in files this
-        # gate did not exist to guard: all three run in the coverage leg
-        # (MORPH_BUILD_EXAMPLES defaults ON) and none reaches llvm-cov. They
+        # The first three below run in the coverage leg itself
+        # (MORPH_BUILD_EXAMPLES defaults ON) and none reaches llvm-cov; the
+        # rest are the same defect in suites only a local configure builds. They
         # are listed rather than silently tolerated so the leg prints the gap
         # on every run, which is the whole difference between this and the
         # three occurrences that went unnoticed. Each is a small edit in a file
@@ -94,11 +94,30 @@ coverage_exclusion_reason() {
         morph_qt_tls_example)
             echo "GAP: run by the qt_tls_example_runs ctest test and never instrumented, so the pinned-certificate and insecure-verify paths it exercises through include/morph/qt score nothing. Fix: an if(AF_COVERAGE) apply_coverage(morph_qt_tls_example TEST) block in examples/qt_tls_client/CMakeLists.txt"
             ;;
+        # Suites the CI coverage leg does not build, but a local coverage
+        # configure can. Without these entries, adding any of their options to
+        # `cmake --preset clang-coverage` turns coverage.sh from "produces a
+        # report" into "exits 1 and produces nothing" -- a gate against silent
+        # omission should not itself make a legitimate configure unusable. They
+        # are the same defect as the three above and get the same one-line fix;
+        # they are only separated because nothing in CI has ever measured them.
+        bank_tests|bank_gui_tests|bank_gui_qml_tests)
+            echo "GAP: built by -DMORPH_BUILD_BANK_EXAMPLE=ON, which the coverage leg does not set, and never instrumented (examples/bank/CMakeLists.txt). Fix: an if(AF_COVERAGE) apply_coverage(<target>) block there; the names already end in _tests"
+            ;;
+        morph_vetted_hmac_libsodium_tests|morph_vetted_hmac_openssl_tests)
+            echo "GAP: built by -DMORPH_BUILD_HMAC_EXAMPLES=ON, which the coverage leg does not set, and never instrumented (examples/vetted_hmac/CMakeLists.txt). Fix: an if(AF_COVERAGE) apply_coverage(<target>) block there"
+            ;;
+        morph_forms_qml_tests|morph_forms_controller_core_tests)
+            echo "GAP: built by -DMORPH_BUILD_FORMS_QML=ON, which the coverage leg does not set, and never instrumented (src/qt/forms/CMakeLists.txt). These drive include/morph/forms through the QML renderer, so they are the suites most likely to move the forms number when they are instrumented"
+            ;;
         *)
             return 1
             ;;
     esac
 }
+
+ctest_profile_scratch="$(mktemp -d)"
+trap 'rm -rf "$ctest_profile_scratch"' EXIT
 
 # ── The manifest ─────────────────────────────────────────────────────────────
 if [ ! -s "$manifest" ]; then
@@ -166,13 +185,36 @@ ctest_binaries="$(
         if [ -n "$ctest_json_file" ]; then
             cat "$ctest_json_file"
         else
-            ctest --test-dir "$build_dir" --show-only=json-v1
+            # LLVM_PROFILE_FILE into a scratch directory: --show-only still
+            # *runs* every PRE_TEST discovery script, which executes the
+            # instrumented test binaries with --list-tests. Left alone they
+            # would each drop a default.profraw into the build tree, and
+            # scripts/coverage.sh's `find ... -name '*.profraw'` would sweep
+            # those listing runs into the next merge.
+            LLVM_PROFILE_FILE="${ctest_profile_scratch}/discovery-%p.profraw" \
+                ctest --test-dir "$build_dir" --show-only=json-v1
         fi
     } | BUILD_DIR="$build_dir" python3 -c '
 import json, os, sys
 
+try:
+    document = json.load(sys.stdin)
+    tests = document["tests"]
+except Exception as error:
+    # Without this the caller sees a bare traceback and, because the enclosing
+    # command substitution runs under `set -e`, coverage.sh dies with no
+    # indication of which script failed or why. `ctest --show-only=json-v1`
+    # prints anything a TEST_INCLUDE_FILES discovery script writes to stdout
+    # *before* the document, and emits nothing parseable at all when it fails.
+    sys.stderr.write(
+        "error: could not read the test list for {}: {}\n"
+        "`ctest --test-dir {} --show-only=json-v1` did not produce a JSON document "
+        "with a \"tests\" array. Run it by hand: a configure error, or a test-discovery "
+        "script writing to stdout, both land here.\n".format(
+            os.environ["BUILD_DIR"], error, os.environ["BUILD_DIR"]))
+    raise SystemExit(1)
+
 build_root = os.path.realpath(os.environ["BUILD_DIR"]) + os.sep
-document = json.load(sys.stdin)
 
 # Catch2 registers one ctest case per assertion-level TEST_CASE, so the same
 # command[0] string recurs thousands of times for a handful of binaries.
@@ -181,7 +223,7 @@ document = json.load(sys.stdin)
 # instead.
 resolved = {}
 seen = {}
-for test in document.get("tests", []):
+for test in tests:
     for argument in test.get("command") or []:
         candidate = resolved.get(argument)
         if candidate is None:

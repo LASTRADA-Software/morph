@@ -552,6 +552,40 @@ function(apply_coverage target)
             "'${_morph_cov_UNPARSED_ARGUMENTS}'. The only option is TEST.")
     endif()
 
+    # -fcoverage-mcdc is deliberately absent, and this is the record of that
+    # decision (morph#404 asks for one either way).
+    #
+    # It works. Measured on clang 22.1.8 against tests/test_bridge_local.cpp,
+    # compiled with this exact flag set plus -fcoverage-mcdc: the compile takes
+    # 17.3s against 16.4s (+5.5%), the object grows from 15,064,616 to
+    # 15,324,288 bytes (+1.7%), and clang emits **no diagnostics at all** --
+    # in particular none of the "maximum number of conditions" warnings that
+    # LLVM's implementation issues for a decision with too many conditions, so
+    # morph's decisions all fit the cap on this compiler. `llvm-cov report
+    # --show-mcdc-summary` then prints an MC/DC Conditions column.
+    #
+    # It is not adopted yet, for two reasons that are about sequence rather
+    # than cost.
+    #
+    # First, MC/DC has nowhere to go. llvm-cov's LCOV export carries no MC/DC
+    # records -- only its report and JSON output do -- and Codecov has no MC/DC
+    # concept, so the number cannot ride the upload path this repository
+    # already has. It would need a second gate of its own, reading the JSON.
+    #
+    # Second, and the real reason: MC/DC is strictly stronger than branch
+    # coverage, and branch coverage is not yet at its ceiling. There are 179
+    # lines in include/morph where a decision has been evaluated and only ever
+    # come out one way (scripts/check_branch_coverage.py prints them per file).
+    # Every one of those is an MC/DC failure too, so turning MC/DC on today
+    # would produce a large number that says exactly what the branch number
+    # already says, in a form nobody can act on independently. The order that
+    # buys something is: dispose of the partial branches first, then measure
+    # MC/DC against what is left.
+    #
+    # Unverified: the CI coverage leg pins clang 20 and only clang 22.1.8 is
+    # installed on the machine this was measured on, so the flag's behaviour on
+    # clang 20 -- which supports it, the feature having landed in LLVM 18 -- has
+    # not been observed here. Whoever adopts it should re-measure on the pin.
     target_compile_options(${target} PRIVATE
         -fprofile-instr-generate -fcoverage-mapping -g -O0)
     target_link_options(${target} PRIVATE
@@ -609,13 +643,37 @@ function(morph_write_coverage_object_manifest)
     endif()
     list(REMOVE_DUPLICATES _morph_cov_objects)
     list(JOIN _morph_cov_objects "\n" _morph_cov_content)
-    file(GENERATE
-         OUTPUT "${CMAKE_BINARY_DIR}/coverage_objects.txt"
-         CONTENT "${_morph_cov_content}\n")
+
+    # $<CONFIG> in the output name under a multi-config generator, and not
+    # otherwise. The content is a join of $<TARGET_FILE:> expressions, which
+    # resolve per configuration; CMake refuses to write one file from
+    # content that differs between configurations and fails the *generate*
+    # step outright --
+    #
+    #     Evaluation file to be written multiple times with different content
+    #     CMake Generate step failed.  Build files cannot be regenerated correctly.
+    #
+    # -- so `cmake -G "Ninja Multi-Config" -DAF_COVERAGE=ON` would not
+    # configure at all, which is a much worse failure than the coverage
+    # report this file exists for. scripts/coverage.sh reads the plain name
+    # because the clang-coverage preset is single-config Ninja; a
+    # multi-config coverage build gets one manifest per configuration and
+    # would need the script taught which one, but it configures rather than
+    # dying, which is the point.
+    get_property(_morph_cov_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+    if(_morph_cov_multi_config)
+        set(_morph_cov_manifest "${CMAKE_BINARY_DIR}/coverage_objects-$<CONFIG>.txt")
+    else()
+        set(_morph_cov_manifest "${CMAKE_BINARY_DIR}/coverage_objects.txt")
+    endif()
+    file(GENERATE OUTPUT "${_morph_cov_manifest}" CONTENT "${_morph_cov_content}\n")
     list(LENGTH _morph_cov_objects _morph_cov_count)
+    cmake_path(RELATIVE_PATH _morph_cov_manifest
+               BASE_DIRECTORY "${CMAKE_BINARY_DIR}"
+               OUTPUT_VARIABLE _morph_cov_manifest_name)
     message(STATUS
         "morph: coverage: ${_morph_cov_count} test binary/binaries will be "
-        "profiled (build/coverage_objects.txt)")
+        "profiled (${_morph_cov_manifest_name})")
 endfunction()
 
 function(apply_bigobj target)
