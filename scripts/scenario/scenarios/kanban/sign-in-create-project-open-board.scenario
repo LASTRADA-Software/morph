@@ -16,9 +16,10 @@
 #   * `BoardModel` is keyed by project id and shared, so a freshly registered
 #     handler is attached to no board. It has to be pointed at one with
 #     `OpenBoard` before any other action will answer -- and a handler that
-#     was never opened fails with the raw text `stoull` rather than a typed
-#     message, which is asserted in
-#     a-board-must-be-opened-before-it-answers.scenario;
+#     was never opened is refused by name, "<Action>: handler was never
+#     attached via OpenBoard", which is asserted per action in
+#     a-board-must-be-opened-before-it-answers.scenario (it answered the raw
+#     text `stoull` until morph#368);
 #   * `AuthModel`/`Login` is the one model/action pair a tokenless caller may
 #     reach (`KanbanAuthorizer::kAnonymousModelType`). Everything else needs
 #     the token it mints, installed with a `session` step -- `client`'s own
