@@ -591,8 +591,21 @@ endforeach()
         target_compile_features(ladder_${_rung}_headless PRIVATE cxx_std_23)
         set_target_properties(ladder_${_rung}_headless PROPERTIES AUTOMOC ON)
         apply_bigobj(ladder_${_rung}_headless)
+        # TEST although this is not a ctest case: it is the spawned far end of
+        # the rung's process-separation tests (examples/kanban/tests/
+        # test_kanban_process_separation.cpp spawns four of them through
+        # testkit/process_pool.hpp), so the src/headless/ code they run exists
+        # only in *this* binary's coverage mapping. The children inherit
+        # LLVM_PROFILE_FILE through QProcess and exit normally, so they do
+        # write profile data -- which llvm-cov could not map to anything until
+        # this registration existed, while scripts/coverage.sh named
+        # examples/<rung>/src among its SOURCES regardless. Exactly the
+        # morph#403 shape, and invisible to
+        # scripts/check_coverage_objects.sh, because a binary reached through a
+        # compile definition appears in no ctest command. Same reasoning, and
+        # the same TEST keyword, as tests/qt's qt_test_server/qt_test_client.
         if(AF_COVERAGE)
-            apply_coverage(ladder_${_rung}_headless)
+            apply_coverage(ladder_${_rung}_headless TEST)
         endif()
         # Same AF_SANITIZER block every other ladder target carries, and not
         # optional here: this executable links ladder_<rung>_gui_lib, which

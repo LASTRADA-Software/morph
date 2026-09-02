@@ -46,8 +46,23 @@ MANIFEST="$OUT/coverage_objects.txt"
 # denominator. It is a separate script because a gate nobody tests reports
 # green whether or not it still detects anything, and
 # scripts/test_check_coverage_objects.sh can exercise it without a build.
+#
+# Checked before the gate runs, cheap first: without profile data there is
+# nothing to report either way, and the gate's own ctest query is the slowest
+# thing in this script. Running it only to die twenty lines later on an empty
+# profraw set is the wrong order for anyone driving this by hand.
+PROFILES=$(find "$OUT" -name "*.profraw" 2>/dev/null | tr '\n' ' ')
+if [ -z "$PROFILES" ]; then
+    echo "ERROR: No .profraw files found in $OUT." >&2
+    echo "Did you set LLVM_PROFILE_FILE and run ctest --preset clang-coverage?" >&2
+    exit 1
+fi
+
 bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_objects.sh" "$OUT"
 
+# Re-read rather than re-derived: the gate above has already rejected a missing
+# manifest, an empty one, and any entry with no executable behind it, so this
+# loop is a read of something already known good.
 COVERAGE_OBJECTS=()
 while IFS= read -r _object; do
     [ -n "$_object" ] || continue
@@ -62,13 +77,25 @@ for _object in "${COVERAGE_OBJECTS[@]:1}"; do
     OBJECT_ARGS+=(-object "$_object")
 done
 
-# Only meaningful when this configure also built the ladder
-# (MORPH_BUILD_LADDER=ON -- see the "coverage leg only" Qt install step in
-# ci.yml). It decides which *source* paths are worth naming below; the binary
-# itself reaches llvm-cov through the manifest above, so this script still
-# works unchanged for a plain `cmake --preset clang-coverage` with no
-# -DMORPH_BUILD_LADDER=ON.
-LADDER_TEST_EXE="$OUT/examples/common/ladder_common_tests"
+# "Was this test binary built?", answered by looking it up in the manifest
+# rather than by rebuilding the path CMake would have used. Both of the
+# questions below -- was the ladder built, was this rung built -- used to be
+# `[ -x "$OUT/examples/<...>/<name>" ]`, which is the same guessing at CMake's
+# output layout that the -object list has just stopped doing. Leaving it here
+# would have kept half the mechanism derived and half hand-composed: an output
+# name or directory change would go on supplying objects while silently
+# dropping that rung's *sources*, which is the shrinking figure again, only
+# harder to see because the other half now looks safe. The manifest already
+# holds the exact resolved paths, so a basename lookup in it is the whole test.
+coverage_object_built() {
+    local _name="$1" _candidate
+    for _candidate in "${COVERAGE_OBJECTS[@]}"; do
+        if [ "${_candidate##*/}" = "$_name" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 # Per-rung *source paths*, named on exactly the same "only if it was built"
 # terms. Each rung's models are what examples/IMPLEMENTATION.md rule 5's
@@ -99,7 +126,7 @@ LADDER_TEST_EXE="$OUT/examples/common/ladder_common_tests"
 # path filter a rung behind (morph#179). Reading the list removes the copy.
 #
 # A rung that was not configured in this build contributes nothing, exactly as
-# before, via the `-x` guard.
+# before, via the coverage_object_built() guard.
 #
 # Substituted before the loop, not piped into it: under `set -e` a failing
 # reader inside a process substitution would not abort this script, and a
@@ -109,8 +136,7 @@ _MORPH_LADDER_RUNGS="$(bash "$(dirname "${BASH_SOURCE[0]}")/ladder_rungs.sh" lis
 RUNG_TEST_EXES=()
 while IFS= read -r _rung; do
     [ -n "$_rung" ] || continue
-    _exe="$OUT/examples/${_rung}/ladder_${_rung}_tests"
-    if [ -x "$_exe" ]; then
+    if coverage_object_built "ladder_${_rung}_tests"; then
         RUNG_TEST_EXES+=("$_rung")
     fi
 done <<< "$_MORPH_LADDER_RUNGS"
@@ -128,7 +154,11 @@ done <<< "$_MORPH_LADDER_RUNGS"
 # no separate exclusion mechanism needed. Demo src/, system headers and
 # fetched dependencies are excluded the same way.
 SOURCES=(include/morph)
-if [ -x "$LADDER_TEST_EXE" ]; then
+# examples/common only when this configure also built the ladder
+# (MORPH_BUILD_LADDER=ON -- see the "coverage leg only" Qt install step in
+# ci.yml), so this script still works unchanged for a plain
+# `cmake --preset clang-coverage` with no -DMORPH_BUILD_LADDER=ON.
+if coverage_object_built ladder_common_tests; then
     SOURCES+=(examples/common)
 fi
 # include/ + src/ are each rung's DTOs and models (rule 5's own 100% bar);
@@ -163,13 +193,6 @@ done
 # genuinely are not part of what examples/IMPLEMENTATION.md rule 5's 100%
 # bar means to hold to that standard — only the real testkit/GUI code is.
 IGNORE_REGEX='.*/testkit/test_[^/]+\.cpp$'
-
-PROFILES=$(find "$OUT" -name "*.profraw" 2>/dev/null | tr '\n' ' ')
-if [ -z "$PROFILES" ]; then
-    echo "ERROR: No .profraw files found in $OUT." >&2
-    echo "Did you set LLVM_PROFILE_FILE and run ctest --preset clang-coverage?" >&2
-    exit 1
-fi
 
 ${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
 

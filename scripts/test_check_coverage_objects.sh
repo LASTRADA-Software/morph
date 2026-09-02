@@ -16,7 +16,7 @@
 # document naming them, which is also what lets this run in drift-guard.yml
 # next to the other checkers' self-tests rather than behind a 20-minute build.
 #
-# Asserts six directions:
+# Asserts eight directions:
 #
 #   1. every ctest binary profiled                     -> pass
 #   2. an unprofiled binary with no stated reason      -> fail, naming it
@@ -24,12 +24,16 @@
 #   4. a missing/empty manifest                        -> fail
 #   5. a manifest naming a binary that was not built   -> fail
 #   6. a wrapper-driven test (subject is an argument)  -> fail on the subject
+#   7. ctest listing no tests at all                   -> fail, not a vacuous pass
+#   8. an unfixed GAP entry                            -> pass, but as a warning
 #
-# 3 and 5 matter as much as 2. Without 3 the gate could be "fixed" by making
+# 3, 5 and 7 matter as much as 2. Without 3 the gate could be "fixed" by making
 # every exclusion fatal, which would simply move the pressure onto deleting the
 # check; without 5 a manifest could name a target the build silently dropped
 # and the report would be computed over the survivors -- the same shrinking
-# denominator by another route.
+# denominator by another route; and without 7 the gate could satisfy every
+# other case by examining nothing, which is the failure it exists to detect
+# committed by the detector.
 set -euo pipefail
 
 readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -60,6 +64,12 @@ binary() {
     printf '%s' "${dir}/${name}"
 }
 
+manifest() {
+    local dir="$1"
+    shift
+    printf '%s\n' "$@" > "${dir}/coverage_objects.txt"
+}
+
 ctest_json() {
     local dir="$1"
     shift
@@ -76,11 +86,20 @@ ctest_json() {
     printf '%s' "${dir}/ctest.json"
 }
 
+# `grep <<<` rather than `printf '%s' "$output" | grep`: under `set -o pipefail`
+# a `grep -q` that matches early can close the pipe under printf, and the
+# pipeline then reports printf's SIGPIPE status rather than grep's match. Every
+# assertion below inverts a grep, so that would turn a correct gate into a
+# reported self-test failure, intermittently and only on longer messages.
+mentions() {
+    grep -q -- "$1" <<< "$2"
+}
+
 # ── 1. every ctest binary profiled -> pass ───────────────────────────────────
 dir="$(case_dir all_profiled)"
 tests_exe="$(binary "$dir" morph_tests)"
 net_exe="$(binary "$dir" morph_net_tests)"
-printf '%s\n%s\n' "$tests_exe" "$net_exe" > "${dir}/coverage_objects.txt"
+manifest "$dir" "$tests_exe" "$net_exe"
 json="$(ctest_json "$dir" "$tests_exe" "$net_exe")"
 
 if output="$(bash "$checker" "$dir" "$json" 2>&1)"; then
@@ -98,13 +117,13 @@ fi
 dir="$(case_dir unprofiled)"
 tests_exe="$(binary "$dir" morph_tests)"
 net_exe="$(binary "$dir" morph_net_tests)"
-printf '%s\n' "$tests_exe" > "${dir}/coverage_objects.txt"
+manifest "$dir" "$tests_exe"
 json="$(ctest_json "$dir" "$tests_exe" "$net_exe")"
 
 if output="$(bash "$checker" "$dir" "$json" 2>&1)"; then
     fail "an unprofiled test binary was accepted -- this is the defect the gate exists for:"
     printf '%s\n' "$output" >&2
-elif ! printf '%s' "$output" | grep -q 'morph_net_tests'; then
+elif ! mentions 'morph_net_tests' "$output"; then
     fail "the unprofiled binary was rejected, but the message does not name morph_net_tests:"
     printf '%s\n' "$output" >&2
 else
@@ -115,11 +134,11 @@ fi
 dir="$(case_dir excluded)"
 tests_exe="$(binary "$dir" morph_tests)"
 bench_exe="$(binary "$dir" morph_bench)"
-printf '%s\n' "$tests_exe" > "${dir}/coverage_objects.txt"
+manifest "$dir" "$tests_exe"
 json="$(ctest_json "$dir" "$tests_exe" "$bench_exe")"
 
 if output="$(bash "$checker" "$dir" "$json" 2>&1)"; then
-    if printf '%s' "$output" | grep -q 'morph_bench'; then
+    if mentions 'morph_bench' "$output"; then
         note "ok: a named exclusion is accepted, and its reason reported"
     else
         fail "morph_bench was accepted silently; an exclusion must state itself:"
@@ -192,6 +211,58 @@ elif printf '%s' "$output" | grep -q 'wrapper.sh'; then
     printf '%s\n' "$output" >&2
 else
     note "ok: a wrapper-driven test is checked on its subject, not on its wrapper"
+fi
+
+# ── 7. ctest lists no tests at all -> fail, not a vacuous pass ──────────────
+# Every check this gate makes is a statement about the binaries ctest runs, so
+# an empty test list satisfies all of them by having nothing to satisfy. That
+# is what an unconfigured build directory, or a test registration that silently
+# produced nothing, looks like from here -- and reporting it as clean would be
+# this gate committing the failure it exists to detect. scripts/
+# check_rung_filters.sh guards its own end the same way.
+dir="$(case_dir empty_ctest)"
+tests_exe="$(binary "$dir" morph_tests)"
+manifest "$dir" "$tests_exe"
+printf '{"kind":"ctestInfo","version":{"major":1,"minor":0},"tests":[]}' > "${dir}/ctest.json"
+
+if output="$(bash "$checker" "$dir" "${dir}/ctest.json" 2>&1)"; then
+    fail "an empty ctest test list was reported as clean -- the gate verified nothing:"
+    printf '%s\n' "$output" >&2
+elif ! mentions 'no test binaries' "$output"; then
+    fail "the empty test list was rejected, but not for being empty:"
+    printf '%s\n' "$output" >&2
+else
+    note "ok: an empty ctest test list is rejected rather than passing vacuously"
+fi
+
+# ── 8. a GAP must not read as a decision ────────────────────────────────────
+# The exclusion table holds two unlike things: decisions (a benchmark is not a
+# test) and defects nobody has fixed yet. If both print "deliberately not
+# profiled", the second stops being legible as a defect and the table becomes
+# the suppression list this gate was written against. morph_concepts_tests is a
+# real, currently-unfixed gap; assert it announces itself as one.
+dir="$(case_dir gap_wording)"
+tests_exe="$(binary "$dir" morph_tests)"
+gap_exe="$(binary "$dir" morph_concepts_tests)"
+manifest "$dir" "$tests_exe"
+json="$(ctest_json "$dir" "$tests_exe" "$gap_exe")"
+
+if output="$(bash "$checker" "$dir" "$json" 2>&1)"; then
+    if ! mentions '^warning: morph_concepts_tests' "$output"; then
+        fail "a GAP entry did not announce itself as one:"
+        printf '%s\n' "$output" >&2
+    elif mentions 'deliberately not profiled -- GAP' "$output"; then
+        fail "a GAP entry printed as a deliberate exclusion:"
+        printf '%s\n' "$output" >&2
+    elif ! mentions 'unfixed gap' "$output"; then
+        fail "the summary line does not count the unfixed gaps:"
+        printf '%s\n' "$output" >&2
+    else
+        note "ok: an unfixed gap reads as a warning, not as a decision"
+    fi
+else
+    fail "a listed gap was rejected outright; the leg must stay green while it is carried:"
+    printf '%s\n' "$output" >&2
 fi
 
 if [ "$failures" -ne 0 ]; then

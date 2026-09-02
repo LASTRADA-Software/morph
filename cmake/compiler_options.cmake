@@ -529,14 +529,21 @@ endfunction()
 # morph_net_qt_interop_tests, ladder_common_tests, ladder_<rung>_tests) is a
 # test binary. Deriving it from the name rather than from a per-call flag is
 # the same move that fixed morph#179: a new test executable is registered by
-# being named like one, with nothing to remember and nothing to forget. `TEST`
-# forces registration for a test binary that is deliberately not named that way
-# (the two morph_journal_skew_* probes, which are one test spread over two
-# separately compiled programs).
+# being named like one, with nothing to remember and nothing to forget.
 #
-# The convention is not left to trust: scripts/coverage.sh cross-checks the
-# manifest against the binaries ctest actually ran and fails when one of them
-# is unprofiled and unexplained.
+# `TEST` forces registration for a binary the convention cannot reach, and the
+# case it exists for is the one the convention is structurally blind to: a
+# process a test *spawns*. tests/qt's qt_test_server and qt_test_client are the
+# far end of the process-separation tests, so the include/morph/qt code
+# exercised across that OS boundary lives only in their coverage mapping -- and
+# they are named for their role rather than as suites, because that is what
+# they are.
+#
+# The convention is not left to trust: scripts/check_coverage_objects.sh
+# cross-checks the manifest against the binaries ctest actually runs and fails
+# when one of them is unprofiled and unexplained. What it cannot check is the
+# spawned kind, which appears in no ctest command -- so `TEST` is exactly the
+# obligation that gate cannot enforce, and is documented at both ends.
 function(apply_coverage target)
     cmake_parse_arguments(PARSE_ARGV 1 _morph_cov "TEST" "" "")
     if(_morph_cov_UNPARSED_ARGUMENTS)
@@ -577,22 +584,28 @@ endfunction()
 # target" requirement morph_verify_warning_flags() has, solved without needing
 # a call site in CMakeLists.txt.
 #
-# The file is written only for a coverage configure; a normal build has no
-# instrumented targets and needs no manifest. An AF_COVERAGE build that *does*
-# build the test suite and still registered nothing is a configuration error
-# rather than an empty report, because an empty object list is exactly the
+# A non-coverage configure writes nothing: it instruments nothing, so there is
+# no manifest to write. A coverage configure always writes the file, even when
+# the list is empty -- `file(GENERATE)` is what makes the previous configure's
+# manifest go away, and a build tree reconfigured from "tests on" to "tests
+# off" must not be left holding a stale list of binaries that happen to still
+# exist on disk. An AF_COVERAGE build that *does* build the test suite and
+# still registered nothing is a configuration error rather than an empty
+# report, because an object list with nothing in it is exactly the
 # silently-shrinking figure morph#403 was about.
 function(morph_write_coverage_object_manifest)
-    get_property(_morph_cov_objects GLOBAL PROPERTY MORPH_COVERAGE_TEST_OBJECTS)
-    if(NOT _morph_cov_objects)
-        if(AF_COVERAGE AND TARGET morph_tests)
-            message(FATAL_ERROR
-                "morph: coverage: AF_COVERAGE is ON and the test suite is being "
-                "built, but no target called apply_coverage(<target> TEST). "
-                "scripts/coverage.sh would then have no binary to map profile "
-                "data through and would report coverage over nothing (morph#403).")
-        endif()
+    if(NOT AF_COVERAGE)
         return()
+    endif()
+    get_property(_morph_cov_objects GLOBAL PROPERTY MORPH_COVERAGE_TEST_OBJECTS)
+    if(NOT _morph_cov_objects AND TARGET morph_tests)
+        message(FATAL_ERROR
+            "morph: coverage: AF_COVERAGE is ON and the test suite is being "
+            "built, but no target was registered as a coverage object. "
+            "scripts/coverage.sh would then have no binary to map profile "
+            "data through and would report coverage over nothing (morph#403). "
+            "A test executable registers itself by being named <name>_tests, "
+            "or explicitly with apply_coverage(<target> TEST).")
     endif()
     list(REMOVE_DUPLICATES _morph_cov_objects)
     list(JOIN _morph_cov_objects "\n" _morph_cov_content)

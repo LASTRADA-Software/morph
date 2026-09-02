@@ -125,13 +125,17 @@ while IFS= read -r object; do
     manifest_count=$((manifest_count + 1))
 done < "$manifest"
 
-# ── What ctest actually runs ─────────────────────────────────────────────────
-if [ -n "$ctest_json_file" ]; then
-    ctest_json="$(cat "$ctest_json_file")"
-else
-    ctest_json="$(ctest --test-dir "$build_dir" --show-only=json-v1)"
+# A manifest holding only blank lines passes the `-s` test above but names
+# nothing, which would make every check below trivially true.
+if [ "$manifest_count" -eq 0 ]; then
+    echo "error: ${manifest} names no binaries." >&2
+    echo "A coverage configure that registered nothing cannot produce a report over" >&2
+    echo "anything; see cmake/compiler_options.cmake's apply_coverage()." >&2
+    exit 1
 fi
 
+# ── What ctest actually runs ─────────────────────────────────────────────────
+#
 # Every element of a test's command that resolves to an executable file inside
 # the build tree -- not just command[0]. Two of this repository's tests are
 # driven by a wrapper that takes the binary under test as an argument
@@ -143,28 +147,57 @@ fi
 # data-file arguments all fall outside it, and the binaries this gate is about
 # are all inside it by construction.
 #
+# What this cannot see, stated rather than left to be discovered: a binary a
+# test *spawns* appears in no ctest command at all. tests/qt's qt_test_server
+# and qt_test_client are exactly that -- the far end of the process-separation
+# tests -- and they are covered here only because tests/qt/CMakeLists.txt opts
+# them in explicitly with apply_coverage(... TEST). Any future test that forks
+# a helper has to do the same; this gate will not ask for it.
+#
+# The JSON is streamed straight into python rather than captured into a shell
+# variable first: `ctest --show-only=json-v1` over this repository's ~2,400
+# tests is about 2 MB, and there is no reason for it to live in the shell's
+# memory twice on the way past.
+#
 # Compared as realpath()s: the manifest holds generator-resolved absolute
 # paths, while a test may be registered with either form.
-ctest_binaries="$(printf '%s' "$ctest_json" | BUILD_DIR="$build_dir" python3 -c '
+ctest_binaries="$(
+    {
+        if [ -n "$ctest_json_file" ]; then
+            cat "$ctest_json_file"
+        else
+            ctest --test-dir "$build_dir" --show-only=json-v1
+        fi
+    } | BUILD_DIR="$build_dir" python3 -c '
 import json, os, sys
 
 build_root = os.path.realpath(os.environ["BUILD_DIR"]) + os.sep
 document = json.load(sys.stdin)
-seen = []
+
+# Catch2 registers one ctest case per assertion-level TEST_CASE, so the same
+# command[0] string recurs thousands of times for a handful of binaries.
+# realpath() walks and readlink()s every component, so resolving per occurrence
+# is ~40k syscalls to learn fifteen answers; resolve per distinct string
+# instead.
+resolved = {}
+seen = {}
 for test in document.get("tests", []):
     for argument in test.get("command") or []:
-        candidate = os.path.realpath(argument)
+        candidate = resolved.get(argument)
+        if candidate is None:
+            candidate = resolved[argument] = os.path.realpath(argument)
         if not candidate.startswith(build_root):
             continue
         if not os.path.isfile(candidate) or not os.access(candidate, os.X_OK):
             continue
-        if candidate not in seen:
-            seen.append(candidate)
+        seen[candidate] = None
 print("\n".join(seen))
-')"
+'
+)"
 
 unexplained=()
 checked=0
+gaps=0
 while IFS= read -r binary; do
     [ -n "$binary" ] || continue
     checked=$((checked + 1))
@@ -173,7 +206,20 @@ while IFS= read -r binary; do
     esac
     name="$(basename "$binary")"
     if reason="$(coverage_exclusion_reason "$name")"; then
-        printf 'note: %s is run by ctest and deliberately not profiled -- %s\n' "$name" "$reason"
+        # A decision and an unfixed defect must not print the same way. Saying
+        # "deliberately not profiled" about a GAP is precisely the sentence
+        # that lets one stop being read as a defect.
+        case "$reason" in
+            GAP:*)
+                gaps=$((gaps + 1))
+                printf 'warning: %s is run by ctest and is NOT profiled -- %s\n' \
+                    "$name" "${reason#GAP: }"
+                ;;
+            *)
+                printf 'note: %s is run by ctest and deliberately not profiled -- %s\n' \
+                    "$name" "$reason"
+                ;;
+        esac
     else
         unexplained+=("$name")
     fi
@@ -192,5 +238,26 @@ if [ "${#unexplained[@]}" -gt 0 ]; then
     exit 1
 fi
 
-printf 'ok: %d test binary/binaries profiled; %d ctest binary/binaries checked\n' \
-    "$manifest_count" "$checked"
+# A gate that examined nothing must not report success. `ctest --show-only`
+# against a build directory that was never configured for tests, or whose test
+# registration silently produced an empty list, returns a valid JSON document
+# with zero tests -- and every check below it then passes by having nothing to
+# check. That is the same vacuous green scripts/check_rung_filters.sh guards
+# against at its own end, and it is worth guarding here twice over, because a
+# coverage report over a suite ctest does not know about is precisely the
+# shape of failure this gate was written for.
+if [ "$checked" -eq 0 ]; then
+    echo "error: ctest reported no test binaries at all under ${build_dir}." >&2
+    echo "This gate then verified nothing, which is not the same as finding nothing" >&2
+    echo "wrong. Check that the build directory is configured with MORPH_BUILD_TESTS=ON" >&2
+    echo "and that 'ctest --test-dir ${build_dir} --show-only' lists cases." >&2
+    exit 1
+fi
+
+if [ "$gaps" -gt 0 ]; then
+    printf 'ok: %d test binary/binaries profiled; %d ctest binary/binaries checked; %d unfixed gap(s)\n' \
+        "$manifest_count" "$checked" "$gaps"
+else
+    printf 'ok: %d test binary/binaries profiled; %d ctest binary/binaries checked\n' \
+        "$manifest_count" "$checked"
+fi

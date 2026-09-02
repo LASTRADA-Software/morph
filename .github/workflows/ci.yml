@@ -540,6 +540,11 @@ jobs:
         with:
           name: coverage-report
           path: build/clang-coverage/html/
+          # llvm-cov show emits one page per source file across include/morph,
+          # examples/common and every rung -- a few thousand small files, which
+          # upload-artifact pays per-file overhead on. Bounded rather than kept
+          # forever, since the step now actually runs on every coverage build.
+          retention-days: 14
 
   # ── Linux: kanban's concurrent-move stress test under ThreadSanitizer ──
   # test_kanban_stress.cpp's [tsan]-tagged TEST_CASE drives BoardModel through
