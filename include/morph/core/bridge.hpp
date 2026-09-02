@@ -2314,8 +2314,10 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
                 // No-op for actions with no computedFields. See docs/spec/forms/forms.md.
                 ::morph::forms::recomputeAll(action);
                 // Enforce the action's validator on the request/reply dispatch path,
-                // just as the reactive `set<>` path does via `tryFireImpl`. Without
-                // this, a submitted action that fails its readiness/validity check
+                // just as the reactive `set<>` path does in
+                // `morph::flows::FlowSession::set<>` (forms/flows.hpp), which fires a
+                // step only once `ActionValidator<A>::ready` passes. Without this, a
+                // submitted action that fails its readiness/validity check
                 // (empty required Quantity, out-of-range field, …) would reach the
                 // handler and either produce a silently wrong result or force every
                 // handler to re-check by hand. `ActionValidator<Action>::ready`

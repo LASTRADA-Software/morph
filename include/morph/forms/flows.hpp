@@ -185,8 +185,7 @@ template <typename W>
 /// contributes only sequencing (`advance`/`back`) and a resolved-values map
 /// callers use to prefill a later step from an earlier one's submitted
 /// fields or result. `Steps...` must be pairwise distinct action types: each
-/// occupies one slot of the handler's per-action-type draft (bridge.md's
-/// "Subscription semantics" — exactly one `SubscriberEntry` per action type),
+/// occupies one slot of this session's own `std::tuple<Steps...>` draft store,
 /// so reusing the same action type twice in one flow would collide on that
 /// single slot.
 ///
