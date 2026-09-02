@@ -116,30 +116,6 @@ include(cmake/compiler_options.cmake)
 # USE_COMPILER_CACHE/FASTCACHE_ADDR options.
 include(cmake/CompileCache.cmake)
 
-# Which launcher was chosen, for the two places that must opt *one* of them out.
-#
-# `fastcache-cc` has been observed serving a stale object for a genuinely
-# changed source (fastcached#51), so a few targets disable the launcher rather
-# than risk silently linking a stale object. That opt-out is spelled by clearing
-# the target's `<LANG>_COMPILER_LAUNCHER` property -- which clears **whatever**
-# launcher is configured, not the one it means to avoid. On a CI runner that
-# launcher is sccache, so those targets were silently bypassing the compiler
-# cache entirely: measured across one full CI run, sccache saw 1302 of 2674
-# compilations and the other 1372 went uncached, while `--show-stats` reported
-# a healthy 97.5% over the half it could see.
-#
-# Detected from the launcher's own value rather than from a variable inside
-# CompileCache.cmake: that file is vendored verbatim from fastcached so it can
-# be re-synced without merge work, and its selection state is private. The
-# launcher is a list (`cmake -E env FASTCACHE_... <path>/fastcache-cc`) when
-# fastcache-cc is chosen and a bare program path otherwise, so a substring match
-# identifies it either way -- including when it was set externally, which
-# CompileCache.cmake leaves untouched.
-set(MORPH_COMPILER_CACHE_IS_FASTCACHE OFF)
-if(CMAKE_CXX_COMPILER_LAUNCHER MATCHES "fastcache-cc" OR CMAKE_C_COMPILER_LAUNCHER MATCHES "fastcache-cc")
-    set(MORPH_COMPILER_CACHE_IS_FASTCACHE ON)
-endif()
-
 # ── clang-tidy integration ─────────────────────────────────────────────────
 if(MORPH_BUILD_CLANG_TIDY)
     find_program(CLANG_TIDY_BIN clang-tidy REQUIRED)
