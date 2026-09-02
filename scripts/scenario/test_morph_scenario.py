@@ -31,6 +31,8 @@ from morph_scenario import (
 import run_scenarios
 import scenario_coverage
 
+from mutate_scenario import mutants
+
 from scenario_coverage import (
     DECODE_FUNCTION_MARKER,
     MIN_ACTIONS,
@@ -1371,6 +1373,91 @@ class RungSpecTests(unittest.TestCase):
         self.assertEqual(env["LEDGER_PORT"], "0")
         self.assertIn("Database=/tmp/x.db", env["LEDGER_DB"])
         self.assertEqual(env["QT_QPA_PLATFORM"], "offscreen")
+
+
+class MutantOperatorCoverageTest(unittest.TestCase):
+    """The mutator must be able to source every comparison the runner accepts.
+
+    An operator that only ever appears as a *destination* of a flip is one
+    the mutator can never mutate away from, so every assertion written with
+    it goes operator-unmutated: its lone mutant is the `expect ok`->`expect
+    err` kind flip, which the reply's own kind catches without the
+    comparison measuring anything (morph#383).
+    """
+
+    # The closed set `parse_expect` accepts; asserted below rather than
+    # trusted, so a runner that grows a fifth operator fails here.
+    OPERATORS = ("==", "!=", "~", "!~")
+
+    def _line(self, op: str) -> str:
+        return f"expect ok field status {op} 2"
+
+    def _operator_flips(self, op: str) -> list[tuple[str, str]]:
+        """Returns ``(description, mutated line)`` for the operator flips of one op."""
+        return [
+            (what, mutated)
+            for _, mutated, what in mutants([self._line(op)])
+            if what.startswith("op ")
+        ]
+
+    def test_the_runner_accepts_exactly_these_four_comparisons(self) -> None:
+        for op in self.OPERATORS:
+            with self.subTest(op=op):
+                parsed = parse_expect(["ok", "field", "status", op, "2"], 1, self._line(op))
+                self.assertEqual(parsed[-1].op, op)
+        with self.assertRaises(ScenarioError):
+            parse_expect(["ok", "field", "status", ">=", "2"], 1, "expect ok field status >= 2")
+
+    def test_every_operator_yields_exactly_one_operator_mutant(self) -> None:
+        for op in self.OPERATORS:
+            with self.subTest(op=op):
+                flips = self._operator_flips(op)
+                self.assertEqual(
+                    len(flips), 1,
+                    f"{op!r} produced {len(flips)} operator mutants: {flips}",
+                )
+
+    def test_an_operator_mutant_lands_on_a_different_operator_the_runner_accepts(self) -> None:
+        for op in self.OPERATORS:
+            with self.subTest(op=op):
+                (what, mutated), = self._operator_flips(op)
+                landed = parse_expect(mutated.split()[1:], 1, mutated)[-1].op
+                self.assertIn(landed, self.OPERATORS, what)
+                self.assertNotEqual(landed, op, what)
+
+    def test_not_equal_flips_back_to_equal(self) -> None:
+        # The specific gap morph#383 reports: `!=` was a destination of the
+        # `==` flip and the source of nothing.
+        self.assertEqual(
+            self._operator_flips("!="),
+            [("op !=->==", "expect ok field status == 2")],
+        )
+
+    def test_a_line_is_never_flipped_at_two_operators_at_once(self) -> None:
+        # ` !~ ` contains no ` ~ ` substring and ` != ` no ` == `, so no pair
+        # can re-fire on a line another already matched. A mutant that moved
+        # two operators would not isolate either one.
+        for op in self.OPERATORS:
+            with self.subTest(op=op):
+                (_, mutated), = self._operator_flips(op)
+                self.assertEqual(len(mutated.split()), len(self._line(op).split()))
+                self.assertEqual(mutated.split()[:4], self._line(op).split()[:4])
+
+    def test_every_comparison_in_the_shipped_corpus_gets_an_operator_mutant(self) -> None:
+        # The corpus-level statement: no shipped assertion carries a
+        # comparison that nothing mutates.
+        root = _repo_root() / "scripts" / "scenario" / "scenarios"
+        unmutated: list[str] = []
+        for path in sorted(root.rglob("*.scenario")):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                if not line.strip().startswith("expect "):
+                    continue
+                if not any(f" {op} " in line for op in self.OPERATORS):
+                    continue
+                flipped = [what for _, _, what in mutants([line]) if what.startswith("op ")]
+                if not flipped:
+                    unmutated.append(f"{path.relative_to(root)}:{number}: {line.strip()}")
+        self.assertEqual(unmutated, [], "assertions no operator mutant reaches")
 
 
 if __name__ == "__main__":

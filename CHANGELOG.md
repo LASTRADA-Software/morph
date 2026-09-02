@@ -144,6 +144,19 @@ API surface).
   The deficit is a `CHECK` carrying its numbers and the invariant stays a
   `REQUIRE`, so the two diagnoses are independent.
 
+- **`scripts/scenario/mutate_scenario.py` never flipped `!=` back to `==`.**
+  The pair list read `(" == ", " != "), (" !~ ", " ~ "), (" ~ ", " !~ ")`, so
+  ` != ` was a *destination* of a flip and the source of none. Every `!=`
+  assertion in the corpus was therefore mutated only at its `expect ok`/`expect
+  err` kind — which the reply's own kind catches — while the comparison that
+  carries the claim went unmeasured. Eleven assertions across four files were
+  affected, five of them the `status != 2` lines whose file header explains
+  they were written that way *because* `status == 0` raced the report runner's
+  timer: the operator was the whole claim, and it was the one thing nothing
+  checked. The mutator's own docstring already promised both directions
+  (`==`↔`!=`, `~`↔`!~`). With the pair added, every one of the eleven now
+  produces an `op !=->==` mutant and every one is caught.
+
 - **`docs/spec/error_handling.md`'s remote-error table was a subset presenting
   itself as an enumeration.** It listed 8 refusals where `RemoteServer` emits
   17, and told a client implementer that `unknown envelope kind` fires for
