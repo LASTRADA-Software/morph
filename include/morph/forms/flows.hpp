@@ -209,7 +209,12 @@ public:
     /// @param onError Optional callback invoked when the current step's fire
     ///                fails (e.g. `BackendChangedError` mid-flight). When
     ///                absent, the error is logged via `morph::log::logError`,
-    ///                matching `BridgeHandler`'s own no-`errSink` default.
+    ///                which is how `BridgeHandler` itself reports a failure no
+    ///                caller is holding a `Completion` for (bridge.hpp). A
+    ///                handler offers no error callback to inherit a default
+    ///                from: `subscribe<R>` is notified of results only, and an
+    ///                `execute()` failure reaches the caller through the
+    ///                `Completion` it returned.
     ///                Stored and invoked for this session's whole lifetime, so
     ///                anything the callable refers to must outlive the session.
     explicit FlowSession(::morph::bridge::BridgeHandler<Model>& handler MORPH_LIFETIMEBOUND,
@@ -220,13 +225,14 @@ public:
 
     /// @brief Refuses every callback this session installed.
     ///
-    /// Dropping the handler's subscription would not be enough on its own:
-    /// `unsubscribe()` only removes the sink from the handler's map, and says
-    /// nothing about a callback already copied out of that map and in flight on
-    /// another thread. `_callbacks` gates every installed callback on a token
-    /// the callback checks *before* touching `this`, so a callback still in
-    /// flight when this destructor runs is refused instead of touching a
-    /// partially- or fully-destroyed object.
+    /// There is nothing to detach. A step's callbacks are `.then`/`.onError`
+    /// continuations on the `Completion` that `BridgeHandler::execute<A>()`
+    /// returned — already owned by the in-flight dispatch, not held in a map
+    /// this session could remove itself from, and possibly running on another
+    /// thread the moment this destructor starts. `_callbacks` gates every
+    /// installed callback on a token the callback checks *before* touching
+    /// `this`, so a callback still in flight when this destructor runs is
+    /// refused instead of touching a partially- or fully-destroyed object.
     ///
     /// `requestStop()` is called explicitly rather than left to the member's own
     /// destruction, even though `_callbacks` is declared last: members are
@@ -254,10 +260,13 @@ public:
     /// made while an earlier dispatch is still in flight.** Keystroke-rate
     /// calls on an already-complete draft therefore produce one request each,
     /// and their results arrive in whatever order the backend answers them —
-    /// the last reply to land wins, which need not be the last call made. This
-    /// is the one way a flow step differs from the standalone-form path, whose
-    /// handler-side draft collapsed patches arriving during a flight. A caller
-    /// that wants one request per pause throttles or debounces on its own side.
+    /// the last reply to land wins, which need not be the last call made. An
+    /// earlier handler-side draft did collapse patches arriving during a
+    /// flight; nothing does now, here or on the standalone-form path (the
+    /// shipped renderer's `DynamicForm` calls `submitIfValid` on every change
+    /// that leaves the form ready, with no in-flight suppression either). A
+    /// caller that wants one request per pause throttles or debounces on its
+    /// own side.
     ///
     /// @tparam FieldPtr Pointer-to-data-member of the current step's action struct.
     /// @param value New value for the field.
@@ -305,10 +314,10 @@ public:
         {
             std::scoped_lock const lock{_mtx};
             _currentReady = false;
-            // Retire the old step's callbacks here, not only in
-            // subscribeCurrent(): on the last step this advance finishes the
-            // flow and no new subscription follows, so nothing else would move
-            // the marker and a late reply could still mark a finished flow ready.
+            // Retire the old step's callbacks here, not only in beginStep():
+            // on the last step this advance finishes the flow and no further
+            // beginStep() follows, so nothing else would move the marker and a
+            // late reply could still mark a finished flow ready.
             _activeStep = _index;
         }
         if (!finished()) {
@@ -317,9 +326,9 @@ public:
         return true;
     }
 
-    /// @brief Returns to the previous step. Its draft (and the handler's own
-    ///        per-action draft) were never reset, so its entered values are
-    ///        intact.
+    /// @brief Returns to the previous step. Its draft — this session's own
+    ///        `std::get<A>(_drafts)` slot, the only draft in play — was never
+    ///        reset, so its entered values are intact.
     /// @return `true` if the flow moved back, `false` if already at step 0.
     bool back() {
         if (_index == 0) {
@@ -382,10 +391,10 @@ private:
     void captureResult(const ::morph::model::ActionTraits<A>::Result& result, std::size_t stepIndex) {
         std::scoped_lock const lock{_mtx};
         if (stepIndex != _activeStep) {
-            // A reply for a step the flow has already left. `unsubscribe()`
-            // removes the sink but cannot recall a callback already copied out
-            // of the handler's map (see ~FlowSession), so a step re-fired just
-            // before advance() can still land here afterwards. Applying it
+            // A reply for a step the flow has already left. A dispatch in
+            // flight cannot be recalled -- its `.then` continuation is already
+            // owned by the completion (see ~FlowSession) -- so a step re-fired
+            // just before advance() can still land here afterwards. Applying it
             // would do real damage twice over: `_resolvedValues` would be
             // overwritten with a superseded reply that advance() never saw, and
             // `_currentReady = true` below is not step-keyed, so it would mark
@@ -475,16 +484,16 @@ private:
     std::function<void(std::exception_ptr)> _onError;
     // _index/_handler/_onError are touched only from the thread that owns
     // this FlowSession (constructor, destructor, set/advance/back); guarded
-    // separately below is the state a subscription's result/error callback
-    // also touches, which runs on whatever thread/executor resolves the
-    // underlying BridgeHandler completion -- not necessarily this same
-    // thread. See docs/spec/core/bridge.md's executor/callback model.
+    // separately below is the state a step's result/error continuation also
+    // touches, which runs on whatever thread/executor resolves the underlying
+    // BridgeHandler completion -- not necessarily this same thread. See
+    // docs/spec/core/bridge.md's executor/callback model.
     std::size_t _index{0};
     mutable std::mutex _mtx;
     std::tuple<Steps...> _drafts{};
-    // The step whose subscriptions are currently installed, mirrored under
-    // _mtx so a callback running on the resolving executor's thread can tell
-    // whether it still speaks for the current step. `_index` itself is only
+    // The step whose continuations are the ones the flow still recognises,
+    // mirrored under _mtx so a callback running on the resolving executor's
+    // thread can tell whether it still speaks for the current step. `_index` itself is only
     // safe to read from the owning thread.
     std::size_t _activeStep{0};
     bool _currentReady{false};
