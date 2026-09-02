@@ -116,6 +116,11 @@ TestCase {
         DynamicForm { actionType: "Mixed"; controller: mockController }
     }
 
+    Component {
+        id: unboundedForm
+        DynamicForm { actionType: "Unbounded"; controller: mockController }
+    }
+
     function bound(component) {
         var form = createTemporaryObject(component, testCase)
         verify(form !== null)
@@ -268,5 +273,29 @@ TestCase {
         compare(form.sections[0].title, "Ids")
         compare(form.sections[0].fields.map(function (f) { return f.name }), ["optId"])
         compare(form.sections[1].fields.length, 3)
+    }
+
+    // ── a bound the round trip cannot carry ──────────────────────────────────
+
+    function test_a_non_finite_bound_is_no_bound_either_way() {
+        // JSON has no `Infinity`, so re-reading the schema as JSON turns one
+        // into `null` -- and `null` is not `undefined`, so a naive gate reads
+        // it as the bound 0 and rejects every positive value. Only a
+        // hand-authored QML object literal can declare such a bound
+        // (`schemaJson<A>()` never emits one), which is exactly the case
+        // `normalizeSchema`'s own cycle branch contemplates.
+        var openEnded = ({
+            "type": "object",
+            "properties": { "size": { "type": "integer", "x-order": 0, "title": "Size",
+                                      "minimum": -Infinity, "maximum": Infinity } },
+            "required": ["size"]
+        })
+        var form = createTemporaryObject(unboundedForm, testCase, { schema: openEnded })
+        verify(form !== null)
+        compare(form.fieldByName["size"].maximum, undefined)
+        compare(form.fieldByName["size"].minimum, undefined)
+        put(form, "size", "1000000")
+        compare(form.ready, true)
+        verify(form.previewLine.indexOf('"size":1000000') !== -1)
     }
 }

@@ -170,6 +170,19 @@ Frame {
         return num / den
     }
 
+    // A declared scalar bound as a finite number, or `undefined` for "no bound".
+    //
+    // JSON has no `Infinity`, so `schemaData`'s round trip turns a non-finite
+    // bound -- reachable only from a hand-authored QML object literal, never
+    // from `schemaJson<A>()` -- into `null`. A null bound is not `undefined`,
+    // so every gate below would read it as the bound **0**: `maximum: Infinity`
+    // would go from "no effective ceiling" to rejecting every positive value.
+    // JSON Schema gives a null numeric keyword no meaning either, so both
+    // spellings land on the same answer: not a declared bound.
+    function numericBound(value) {
+        return typeof value === "number" && isFinite(value) ? value : undefined
+    }
+
     // Whether `value` breaks a declared `multipleOf` (morph#310). An absent or
     // non-positive step is no constraint at all, matching JSON Schema, which
     // requires `multipleOf` to be strictly positive.
@@ -461,8 +474,8 @@ Frame {
                     // one glaze stamped on the shared type definition -- which
                     // is what makes a bound on one `Quantity` member leave a
                     // sibling of the same type alone.
-                    minimum: p.minimum,
-                    maximum: p.maximum,
+                    minimum: numericBound(p.minimum),
+                    maximum: numericBound(p.maximum),
                     // `multipleOf = 1` is how "whole number" is spelled: the
                     // constraint a `Quantity` cannot carry in its type, since
                     // `Quantity<U, Dec>` requires `Dec >= 1` and therefore

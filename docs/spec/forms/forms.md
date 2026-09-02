@@ -1044,6 +1044,14 @@ emits `x-order` on every property, so a generated schema is unaffected. A
 tie falls back to key order: such a schema lays out in declaration order when
 bound and in sorted order when assigned. Give every property an `x-order`.
 
+One other value JSON cannot carry: a **non-finite** `minimum`/`maximum`. Only a
+hand-authored QML object literal can declare one — `schemaJson<A>()` never
+emits it, and no JSON text can spell it — and the re-read turns it into `null`.
+The renderer reads a bound that is not a finite number as **no bound declared**,
+which is what `maximum: Infinity` already meant, and matches JSON Schema giving
+a null numeric keyword no meaning. Without that, a null bound would read as the
+bound `0` and reject every positive value.
+
 ## Renderer conformance kit
 
 A renderer proves it honors the contract above by consuming a **schema
