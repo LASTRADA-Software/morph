@@ -125,13 +125,14 @@ struct ActionValidator {
 /// Raised by `morph::model::detail::ActionDispatcher::registerAction`'s runner
 /// (the server dispatch path used by `RemoteServer`, every remote and Qt
 /// WebSocket topology) and by `Bridge::executeVia`'s `localOp` (the in-process
-/// path used by `LocalBackend`) — the two sites an action can reach ungated: one
-/// built by hand and handed to `BridgeHandler::execute<Action>()`, or one decoded
-/// from an untrusted wire envelope. An action that *did* pass
-/// `morph::flows::FlowSession::set<>`'s gate (forms/flows.hpp) or the type-erased
-/// `executeJson` gate (`ActionExecuteRegistry::registerAction`) reaches `localOp`
-/// too — `FlowSession::fireStep` dispatches through the handler — and is simply
-/// re-checked there.
+/// path used by `LocalBackend`) — the two sites an action can reach ungated: the
+/// runner by a hand-built envelope from an untrusted remote client, `localOp` by
+/// an action built by hand and handed to `BridgeHandler::execute<Action>()`. An
+/// action that *did* pass `morph::flows::FlowSession::set<>`'s gate
+/// (forms/flows.hpp) or the type-erased `executeJson` gate
+/// (`ActionExecuteRegistry::registerAction`) still reaches whichever of the two
+/// its topology dispatches through — `FlowSession::fireStep` goes through the
+/// handler like any other caller — and is simply re-checked there.
 ///
 /// Deriving from `std::runtime_error` means existing `catch (const std::exception&)`
 /// handling — e.g. `RemoteServer::dispatchExecute`'s strand catch, which turns any

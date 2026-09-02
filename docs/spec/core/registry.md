@@ -307,14 +307,16 @@ requires any change to `ActionValidator`/`HasValidate` — both are ordinary
 
 ### `ValidationError`
 
-Thrown by the two execution sites an action can reach ungated — one built by
-hand and handed to `BridgeHandler::execute<Action>()`, or one decoded from an
-untrusted wire envelope: `ActionDispatcher::registerAction`'s runner (the
-server dispatch path `RemoteServer` uses on every remote and Qt WebSocket
-topology) and `Bridge::executeVia`'s `localOp` (the in-process path
-`LocalBackend` uses). An action that already passed
+Thrown by the two execution sites an action can reach ungated:
+`ActionDispatcher::registerAction`'s runner (the server dispatch path
+`RemoteServer` uses on every remote and Qt WebSocket topology), which a
+hand-built envelope from an untrusted remote client reaches directly, and
+`Bridge::executeVia`'s `localOp` (the in-process path `LocalBackend` uses),
+which an action built by hand and handed to `BridgeHandler::execute<Action>()`
+reaches directly. An action that already passed
 `morph::flows::FlowSession::set<>`'s gate or the type-erased `executeJson`
-gate reaches `localOp` too, and is simply re-checked there. Both call `ActionValidator<Action>::ready(action)`
+gate still reaches whichever of the two its topology dispatches through, and
+is simply re-checked there. Both call `ActionValidator<Action>::ready(action)`
 immediately before `Model::execute` and throw `ValidationError` on `false`,
 instead of executing the action:
 

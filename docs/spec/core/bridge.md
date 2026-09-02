@@ -445,7 +445,7 @@ per `(handler, R)` — subscribing again replaces the previous one — and it is
 delivered on the handler's executor. Delivery is best-effort and unbuffered,
 with no replay, and a failed action notifies nobody: an error reaches the
 caller through the `Completion` its `execute()` returned, not through the
-subscription
+subscription.
 
 **`guiExecutor()`** returns the executor passed at construction.
 
@@ -877,12 +877,12 @@ make teardown order-independent.)
 - **Backend switch interrupts in-flight fielded edits.** When `switchBackend`
   commits, it cancels the old backend's pending completions with
   `BackendChangedError`. A flow step whose `FlowSession::set<>`-triggered
-  flight is still in the air will therefore receive `BackendChangedError` on
-  its `errSink` mid-edit (or see it logged if no `errSink` is registered). The
-  draft lives in `FlowSession`'s own `std::tuple<Steps...>` and so survives the
-  switch, letting the next `set<>` re-fire cleanly against the new backend, but
-  the interrupted flight itself surfaces as an error rather than being
-  transparently retried.
+  flight is still in the air will therefore reach that session's `onError`
+  callback mid-edit (or be logged, if the session was constructed without
+  one). The draft lives in `FlowSession`'s own `std::tuple<Steps...>` and so
+  survives the switch, letting the next `set<>` re-fire cleanly against the
+  new backend, but the interrupted flight itself surfaces as an error rather
+  than being transparently retried.
 - **`ActionExecuteRegistry::execute` trusts its `void* handler`.** The
   type-erased entry point takes a `void*` that each registered executor
   `static_cast`s back to `BridgeHandler<Model, Sharing>*` for the model type
