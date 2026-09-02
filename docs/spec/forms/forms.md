@@ -1000,6 +1000,28 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
 This is packaging and factoring only: no `x-*` key changed, and a plain
 single-action form renders identically to before the renderer was extracted.
 
+`DynamicForm.schema` takes the parsed schema **however it is supplied** — a
+declarative QML binding (`schema: controller.schemas[actionType]`), an initial
+property, a `setProperty` from C++, or `createTemporaryObject(component,
+parent, {schema: ...})`. An assigned value round-trips through `QVariant`,
+which turns each of the schema's arrays into a `QVariantList` rather than a JS
+array; the renderer re-reads the schema as plain JSON once, at the property, so
+an array-valued `type` (`["integer","null"]`), the `anyOf`-over-`$ref` collapse
+and closed-set recognition all read the same either way. The same schema
+supplied both ways yields the same field descriptors and the same submitted
+body — asserted in `src/qt/forms/tests/tst_DynamicFormSchemaAsVariant.qml`,
+which builds one form each way and compares them against each other.
+
+The one thing that does **not** survive the `QVariant` boundary is JSON key
+order: the map it converts through is sorted, and the declaration order is
+gone before the renderer is reached, so no renderer can recover it. This is
+the general rule `x-order` already exists for — "renderers lay fields out in
+ascending `x-order`, not in JSON key order", above — and `schemaJson<A>()`
+emits `x-order` on every property, so a generated schema is unaffected. A
+**hand-written** schema that omits `x-order` leaves its fields tied, and a
+tie falls back to key order: such a schema lays out in declaration order when
+bound and in sorted order when assigned. Give every property an `x-order`.
+
 ## Renderer conformance kit
 
 A renderer proves it honors the contract above by consuming a **schema
