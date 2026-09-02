@@ -5,10 +5,14 @@
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
+#include <charconv>
+#include <cstdint>
 #include <glaze/glaze.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
+#include <string_view>
+#include <system_error>
 
 #include "clock.hpp"
 #include "kanban/db/kanban_entity.hpp"
@@ -236,11 +240,48 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
     return result;
 }
 
+/// @brief Whether @p key is the decimal spelling of a project row id, whole
+///        and with nothing else in it.
+///
+/// The precondition the fifteen attach guards in this file are written
+/// against. Each tests `_projectIdStr.has_value()` and then reaches
+/// `std::stoull(*_projectIdStr)`, so `has_value()` is only a sufficient guard
+/// while everything stored there parses -- and one of the two writers takes
+/// its key straight off the wire (`Remote::attachLogIfConfigured` forwards the
+/// client's `contextKey` verbatim, `morph/core/remote.hpp`), so "everything
+/// stored there" is a claim about untrusted text.
+///
+/// `std::from_chars` rather than a `stoull` in a `try` block, because the
+/// question is whether the *whole* string is an id: `stoull` stops at the
+/// first non-digit and reports success, so it reads "5x" as project 5 and
+/// would silently attach the handler to a board the client did not name. It
+/// also accepts leading whitespace and wraps a negative around to a huge
+/// id; `from_chars` on an unsigned type does neither.
+[[nodiscard]] bool namesAProject(std::string_view key) noexcept {
+    std::uint64_t value = 0;
+    const char* const end = key.data() + key.size();
+    // The empty key needs no case of its own: `from_chars` reports
+    // `invalid_argument` for an empty range, so it fails the first test.
+    const auto [stopped, ec] = std::from_chars(key.data(), end, value);
+    return ec == std::errc{} && stopped == end;
+}
+
 }  // namespace
 
 void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
     _log = std::move(log);
-    _projectIdStr = std::move(entityKey);
+    // A key that does not name a project does not become one -- this
+    // condition is load-bearing, not defensive. `_projectIdStr` is also the
+    // answer to "which project is this handler attached to", which every
+    // `execute()` overload asks as `has_value()` before dereferencing it into
+    // `std::stoull`; adopting the key unconditionally made that question
+    // answer "yes" for strings no `stoull` can parse, so the guards fell
+    // through and the rung replied with the bare text `stoull` -- an
+    // `std::invalid_argument` escaping as though it were a domain error
+    // (#368). See `attachActionLog`'s declaration for the contract this keeps.
+    if (namesAProject(entityKey)) {
+        _projectIdStr = std::move(entityKey);
+    }
 }
 
 template <typename Action, typename Result>
