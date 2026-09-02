@@ -406,6 +406,15 @@ endif()
 # the diagnostic is suppressed). scripts/check_automoc_includes.sh is the
 # regression gate: it fails on any generated moc include that ascends.
 #
+# It only reaches headers that actually sit under one of their target's
+# INCLUDE_DIRECTORIES, which every Q_OBJECT header in the tree does today. For
+# one that does not, CMake finds no directory to make the path relative to,
+# passes moc no -p, and moc falls back to the ascending path with no warning --
+# so a new QObject header in a directory the target does not -I (a rung's
+# tests/, say, which morph_add_rung.cmake puts on no include path) reappears as
+# a gate failure rather than a silent regression. The fix there is to put the
+# header's directory on the target's include path, not to unset this.
+#
 # Set as a normal variable in the top-level scope, so it initialises
 # AUTOMOC_PATH_PREFIX on every target created by this directory and every
 # add_subdirectory() below it. It is deliberately not an option(): a build that

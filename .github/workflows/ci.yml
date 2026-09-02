@@ -760,17 +760,11 @@ jobs:
         run: cmake --build --preset gcc-debug
 
       # ── moc output that climbs out of the build tree (issue #372) ────
-      # Runs here rather than in a dependency-free lint job because the thing
-      # it inspects is generated: it needs an AUTOMOC target to have actually
-      # been built. The self-test goes first, on the same terms as
-      # test-type-name-lint and drift-guard.yml's gates -- a lint gate nobody
-      # tests reports green whether or not it still detects anything, and this
-      # one is especially exposed to that, because the ascending include it
-      # looks for is present in every build and only becomes a compile error
-      # where the directory arithmetic lands on a second same-named header.
-      - name: Self-test the AUTOMOC-include checker
-        run: bash scripts/test_check_automoc_includes.sh
-
+      # Runs here rather than alongside the repo's other lint gates because
+      # what it inspects is generated: it needs an AUTOMOC target to have
+      # actually been built. The checker's own self-test needs none of that and
+      # runs in drift-guard.yml's automoc-include-lint job instead, so it still
+      # reports when a build fails.
       - name: Check no generated moc include ascends
         run: bash scripts/check_automoc_includes.sh build/gcc-debug
 
@@ -953,15 +947,11 @@ jobs:
         run: cmake --build --preset gcc-debug
 
       # ── moc output that climbs out of the build tree (issue #372) ────
-      # Same pair as linux-qt above, and for the same reason -- see its
+      # Same gate as linux-qt above, and for the same reason -- see its
       # comment. This job is the one that matters most: ladder_<rung>_gui_lib
       # is where #372 actually bit, and it is the AUTOMOC target every
       # ladder_<rung>_tests binary links, so this build tree is the one
       # carrying the output that stopped compiling.
-      - name: Self-test the AUTOMOC-include checker
-        if: steps.filter.outputs.run == 'true'
-        run: bash scripts/test_check_automoc_includes.sh
-
       - name: Check no generated moc include ascends
         if: steps.filter.outputs.run == 'true'
         run: bash scripts/check_automoc_includes.sh build/gcc-debug
@@ -1370,14 +1360,11 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
 
       # ── moc output that climbs out of the build tree (issue #372) ────
-      # Same pair as linux-qt, and for the same reason -- see its comment.
-      # This is the widest build the gate reaches: the clang leg is the only
-      # one that compiles moc output under -Weverything, where -Wshadow-header
-      # is what actually fires, and this job is the only one that builds
+      # Same gate as linux-qt, and for the same reason -- see its comment.
+      # This is the widest build it reaches: the clang leg is the only one that
+      # compiles moc output under -Weverything, where -Wshadow-header is what
+      # actually fires, and this job is the only one that builds
       # morph_forms_module's AUTOMOC output at all.
-      - name: Self-test the AUTOMOC-include checker
-        run: bash scripts/test_check_automoc_includes.sh
-
       - name: Check no generated moc include ascends
         run: bash scripts/check_automoc_includes.sh build/${{ matrix.preset }}
 

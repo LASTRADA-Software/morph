@@ -57,15 +57,20 @@ fi
 # rejected while every real .moc in a build tree went unscanned. So assert the
 # rejection is the ascending-include diagnostic, and that it names a file in
 # this fixture directory.
+#
+# Here-strings rather than `printf ... | grep -q`: `grep -q` exits the moment it
+# matches, and under `set -o pipefail` the SIGPIPE that kills the writer becomes
+# the pipeline's status -- so a diagnostic long enough to fill the pipe buffer
+# would be reported as *not* matching the very pattern it contains.
 for dir in "${invalid_dirs[@]}"; do
     name="$(basename "$dir")"
     if output="$(bash "$checker" "$dir" 2>&1)"; then
         fail "invalid fixture ${name} was accepted; the checker no longer detects it"
-    elif ! printf '%s\n' "$output" | grep -q 'AUTOMOC include lint failed'; then
+    elif ! grep -q 'AUTOMOC include lint failed' <<<"$output"; then
         fail "invalid fixture ${name} was rejected, but not as an ascending include \
 -- the checker failed for some other reason (a vacuous scan, most likely):"
         printf '%s\n' "$output" >&2
-    elif ! printf '%s\n' "$output" | grep -qF "$dir"; then
+    elif ! grep -qF "$dir" <<<"$output"; then
         fail "invalid fixture ${name} was rejected without naming any file under \
 ${dir}; the diagnostic does not point at the offender:"
         printf '%s\n' "$output" >&2

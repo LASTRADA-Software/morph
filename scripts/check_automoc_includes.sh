@@ -52,20 +52,19 @@ else
     dirs=("$@")
 fi
 
-for dir in "${dirs[@]}"; do
-    if [ ! -d "$dir" ]; then
-        echo "error: $dir is not a directory" >&2
-        exit 1
-    fi
-done
-
-# find runs into a file rather than a process substitution so its exit status
-# is actually observed: inside `< <(...)` it is discarded, and an unreadable
-# build tree would then reach the "no moc output" branch below and be reported
-# as an unbuilt tree -- a wrong diagnosis of a real failure.
+# find writes into a file rather than a process substitution so that its exit
+# status is actually observed: inside `< <(...)` it is discarded, and a missing
+# or unreadable build tree would then reach the "no moc output" branch below
+# and be reported as an unbuilt one -- a wrong diagnosis of a real failure.
+# find names the offending path itself, so nothing here needs to pre-check it.
 moc_list="$(mktemp)"
 trap 'rm -f "$moc_list"' EXIT
-if ! find "${dirs[@]}" \( -name 'moc_*.cpp' -o -name '*.moc' \) -type f -print0 \
+# _deps is pruned: FetchContent/CPM check their dependencies' *sources* out
+# under the build tree, and a third-party file named like moc output is not
+# this project's to fix -- failing on one would point the reader at a CMake
+# setting that cannot affect it. Nothing morph builds lives under _deps.
+if ! find "${dirs[@]}" -type d -name '_deps' -prune -o \
+        \( -name 'moc_*.cpp' -o -name '*.moc' \) -type f -print0 \
         > "$moc_list"; then
     echo "error: find failed while scanning for moc output under: ${dirs[*]}" >&2
     exit 1
@@ -90,10 +89,9 @@ fi
 # offenders", but anything above that is an error (an unreadable file, say),
 # which `|| true` would turn into a clean bill of health for a file that was
 # never actually scanned.
-set +e
-offenders="$(grep -HnE '^#include[[:space:]]*"([^"]*/)?\.\./' "${moc_files[@]}")"
-grep_status=$?
-set -e
+grep_status=0
+offenders="$(grep -HnE '^#include[[:space:]]*"([^"]*/)?\.\./' "${moc_files[@]}")" \
+    || grep_status=$?
 if [ "$grep_status" -gt 1 ]; then
     echo "error: grep failed (status ${grep_status}) while scanning moc output" >&2
     exit 1
@@ -110,9 +108,19 @@ that climbs out of its own directory. That path is also resolved against every
 Clang's -Wshadow-header makes it a hard error under this project's -Werror
 (issue #372).
 
-cmake/compiler_options.cmake sets CMAKE_AUTOMOC_PATH_PREFIX to prevent this;
-check that it is still set and still reaching the target that produced the
-output above.
+Two things produce this, and the second is the likelier one:
+
+  1. CMAKE_AUTOMOC_PATH_PREFIX is no longer set, or no longer reaches the target
+     that produced the output above (cmake/compiler_options.cmake sets it in the
+     top-level scope, which initialises AUTOMOC_PATH_PREFIX on every target
+     created from there down).
+
+  2. The moc'd header is not under any of that target's INCLUDE_DIRECTORIES.
+     AUTOMOC_PATH_PREFIX computes the prefix by locating the header beneath one
+     of them; when none matches it passes moc no -p at all and moc silently
+     falls back to the ascending path. Give the header's directory to the
+     target -- target_include_directories(<target> ... "<dir>") -- so the
+     include it emits can resolve through -I.
 OFFENDERS
     exit 1
 fi
