@@ -33,7 +33,19 @@ def mutants(lines: list[str]) -> list[tuple[int, str, str]]:
             out.append((index, line.replace("expect ok", "expect err", 1), "kind ok->err"))
         elif stripped.startswith("expect err"):
             out.append((index, line.replace("expect err", "expect ok", 1), "kind err->ok"))
-        for original, flipped in ((" == ", " != "), (" !~ ", " ~ "), (" ~ ", " !~ ")):
+        # Both directions of every comparison `parse_expect` accepts. An
+        # operator that is only ever a *destination* here is one no assertion
+        # written with it is ever mutated at (morph#383): its lone mutant is
+        # the kind flip above, which the reply's own kind catches while the
+        # comparison itself measures nothing. Each pair's source substring is
+        # absent from every other pair's, so at most one fires per line and a
+        # mutant always isolates a single operator.
+        for original, flipped in (
+            (" == ", " != "),
+            (" != ", " == "),
+            (" !~ ", " ~ "),
+            (" ~ ", " !~ "),
+        ):
             if original in line:
                 out.append(
                     (index, line.replace(original, flipped, 1), f"op {original.strip()}->{flipped.strip()}")
