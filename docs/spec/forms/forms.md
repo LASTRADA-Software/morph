@@ -1040,9 +1040,12 @@ gone before the renderer is reached, so no renderer can recover it. This is
 the general rule `x-order` already exists for — "renderers lay fields out in
 ascending `x-order`, not in JSON key order", above — and `schemaJson<A>()`
 emits `x-order` on every property, so a generated schema is unaffected. A
-**hand-written** schema that omits `x-order` leaves its fields tied, and a
-tie falls back to key order: such a schema lays out in declaration order when
-bound and in sorted order when assigned. Give every property an `x-order`.
+**hand-written** schema that omits `x-order` leaves its fields tied, and the
+sort that orders them is `Array.prototype.sort`, which QML's engine does not
+guarantee to be stable: measured on Qt 6.11.2, four all-equal elements come
+back reordered. So a tied schema lays out in an order that is neither
+declaration order nor key order, bound or assigned. Give every property an
+`x-order`.
 
 One other value JSON cannot carry: a **non-finite** `minimum`/`maximum`. Only a
 hand-authored QML object literal can declare one — `schemaJson<A>()` never
@@ -1386,8 +1389,9 @@ top-level `x-rules` array (alongside `required`); `allRulesSatisfied<A>(action)`
 evaluates it as the shared C++ predicate; and because `validate()` calls
 `allRulesSatisfied`, `ActionValidator<A>::ready` ([registry.md](../core/registry.md))
 picks it up automatically on every dispatch path that already enforces
-`ready()` — the reactive `set<>` gate, the client request/reply gate, and the
-server dispatch runner ([registry.md](../core/registry.md)) — with no extra
+`ready()` — `morph::flows::FlowSession::set<>`'s gate, the client
+request/reply gate, and the server dispatch runner
+([registry.md](../core/registry.md)) — with no extra
 code anywhere. The vocabulary is deliberately closed: adding a new rule kind is
 a framework change, never an application-supplied lambda, which is what lets
 the client and the server evaluate identically from the same serialized form.
@@ -2003,7 +2007,7 @@ for the exhaustive tables and design rationale.
 | Layout declaration | **`static constexpr formLayout` / `fieldSpans`, mirroring `optionalFields`** | Visual structure is a compile-time property of the action, exactly like the existing opt-out list; a renderer that ignores it degrades to the flat `x-order` form with no missing fields. |
 | Widget selection | **Type-derived by default (`Multiline`/`Ranged`), `fieldMetadata`-shaped override wins** | Mirrors the `Choice`/`Quantity` pattern: the control is a compile-time property of the type; the escape hatch is a typed declaration, not a schema-only knob. |
 | Widget override lookup | **Duck-typed on `.field`/`.widget`, not a named type** | Keeps `forms.hpp`'s widget lookup free of a hard dependency on any one field-metadata descriptor type declaration; any shape exposing those two members is honoured, `FieldMeta` ([above](#field-metadata--fieldmeta)) included. |
-| Computed fields | **One declaration (`computed`/`computeList`) drives schema + client + server via a single shared `recomputeAll`** | The same evaluator runs on the reactive client path and on every server dispatch path, so the displayed value and the stored value are derived identically — a computed field can never drift, and the server never trusts a client-submitted derivation. |
+| Computed fields | **One declaration (`computed`/`computeList`) drives schema + client + server via a single shared `recomputeAll`** | The same evaluator runs on the client dispatch paths (`executeJson`, `Bridge::executeVia`) and on every server dispatch path, so the displayed value and the stored value are derived identically — a computed field can never drift, and the server never trusts a client-submitted derivation. |
 
 ## Failure modes
 

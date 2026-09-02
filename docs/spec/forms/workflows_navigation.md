@@ -202,11 +202,12 @@ public:
   Keystroke-rate `set<>` calls on an already-complete draft therefore produce
   one request each, and their replies land in whatever order the backend
   answers — the last reply to arrive wins, which need not be the last call
-  made. This is the one place a flow step differs from the standalone-form
-  path, whose handler-side draft collapsed patches arriving during a flight. A
-  caller that wants one request per pause throttles or debounces on its own
-  side; `FlowSession` deliberately does not, since it cannot know the host's
-  input cadence.
+  made. An earlier handler-side draft did collapse patches arriving during a
+  flight; nothing does now — not here, and not on the standalone-form path,
+  where `DynamicForm` calls `submitIfValid` on every change that leaves the
+  form ready with no in-flight suppression either. A caller that wants one
+  request per pause throttles or debounces on its own side; `FlowSession`
+  deliberately does not, since it cannot know the host's input cadence.
 - **`advance()`/`back()` are pure sequencing.** `advance()` moves to the next
   step only if the current step has already produced a captured, successful
   result (`ready() == true`); a not-ready step does not advance. `back()`
@@ -237,8 +238,9 @@ public:
   completion resolving after the session is gone is refused rather than
   dereferencing freed memory. `~FlowSession` calls `requestStop()` as its first
   statement rather than relying on member destruction alone: members are
-  destroyed only *after* the destructor body, and that body unsubscribes — a
-  path that can pump an event loop and deliver into a half-dead session. This is
+  destroyed only *after* the destructor body, and that body can pump an event
+  loop (a blocking, `sendSync`-style call) and deliver into a half-dead
+  session. This is
   the "teardown that pumps" escape hatch callback_scope.md documents, and
   `FlowSession` is its worked example.
 
