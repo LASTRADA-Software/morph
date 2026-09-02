@@ -840,10 +840,9 @@ TEST_CASE(
     // Closes a gap Task 14's review flagged as parked, not blocking: a
     // Socket-mode negative-auth case (wrong-secret token rejected over the
     // real wire transport) was manually fault-injection-verified during
-    // Task 14's development (task-14-report.md's "Finding-027 framing
-    // check") but never committed as a permanent test. Composes naturally
-    // alongside this task's own cross-user case above -- same
-    // BackendRig::Socket setup, one more BridgeHandler.
+    // Task 14's development but never committed as a permanent test.
+    // Composes naturally alongside this task's own cross-user case above --
+    // same BackendRig::Socket setup, one more BridgeHandler.
     //
     // Registration itself is unaffected by the wrong secret, for a different
     // reason than "no session to check": a wrong-secret token fails
