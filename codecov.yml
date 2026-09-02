@@ -68,6 +68,70 @@ coverage:
 # directory does.
 component_management:
   individual_components:
+    # ── The framework itself ────────────────────────────────────────────────
+    #
+    # Every other component below is under examples/. Until this one existed,
+    # include/morph -- the product, and the largest single thing in the report
+    # -- was scored only by the `default` status above, which carries no target
+    # at all. The library was the one part of this repository with no stated
+    # number to hold to, while eight example applications each had one
+    # (morph#402).
+    #
+    # Where 93% comes from, and what has to happen to it. Measured over the
+    # LCOV this repository actually uploads (build/clang-coverage/coverage.lcov,
+    # after scripts/aggregate_lcov_branches.py), by Codecov's own arithmetic: a
+    # DA line with zero hits is a miss, a hit line carrying an untaken BRDA
+    # branch is a partial, and coverage is hits / (hits + misses + partials).
+    # That gave 7,977 hits of 8,488 lines = 93.98%, with 332 misses and 179
+    # partials, so 93% leaves the same small margin below a measured ceiling
+    # that every target in this file leaves.
+    #
+    # Where the number lives, so a regression is legible rather than averaged
+    # away:
+    #     net       77.61%   1,157 lines   193 misses,  66 partials
+    #     forms     94.68%   1,560 lines    58 misses,  25 partials
+    #     offline   91.94%     633 lines    36 misses,  15 partials
+    #     core      97.35%   3,249 lines    35 misses,  51 partials
+    #     util      97.83%   1,012 lines     4 misses,  18 partials
+    #     session   97.19%     249 lines     4 misses,   3 partials
+    #     qt        97.44%      39 lines     1 miss,     0 partials
+    #     journal   99.44%     357 lines     1 miss,     1 partial
+    #     detail   100.00%     155 lines
+    #     render   100.00%      77 lines
+    # One subsystem carries the whole gap: net is 26% of the library's misses
+    # in 14% of its lines. That is not a surprise -- morph#403 is the reason
+    # anyone can see it, since include/morph/net contributed *zero files* to
+    # every report before it.
+    #
+    # **This target is provisional and must be re-derived from the first
+    # Codecov report produced after morph#403 lands.** Two reasons, and the
+    # second is the one that matters. First, it was measured on clang 22.1.8
+    # while the coverage leg pins clang 20, and the method reproduces Codecov
+    # to about a third of a point (examples/common: 90.72% computed here
+    # against 90.39% from the Codecov API on master) rather than exactly.
+    # Second, and unavoidably: morph#403 moved the *denominator*. Handing
+    # llvm-cov the binaries whose profile data it used to drop brought whole
+    # files into the report that had never been in it, so include/morph's line
+    # count is not the 5,716 the API reported for master and the two numbers
+    # cannot be reconciled by adjusting anything. The measurement has to be
+    # retaken, not corrected -- which is what morph#403 said would happen.
+    #
+    # informational: true, like every other component here, and for the same
+    # reason: the decision to make any of these blocking is recorded below as
+    # the repo owner's, taken once the ladder is finished. This component
+    # changes what the file *says* about the framework, not what it enforces.
+    - component_id: framework
+      name: "morph framework (include/morph)"
+      paths:
+        - include/morph/**
+      statuses:
+        - type: project
+          target: 93%
+          informational: true
+        - type: patch
+          target: 93%
+          informational: true
+
     - component_id: ladder
       name: "application ladder (examples/common)"
       paths:
@@ -441,3 +505,15 @@ ignore:
   - "examples/lims/tests/**"
   - "examples/lims/gui/**"
   - "examples/lims/gui_wasm/**"
+  # Rung 7, crm, on the same terms. Missing until now: every rung from
+  # bookmarks onwards got its three entries as it landed, and crm's were not
+  # added. Nothing failed, because scripts/coverage.sh's SOURCES array names
+  # only examples/crm/{include,src,gui_lib} and so never put crm's tests or
+  # main() shells into a report for these lines to exclude -- which is exactly
+  # the point of writing them down: the entries state the intent rather than
+  # leaving the exclusion to be an accident of what the other script happens to
+  # name. scripts/check_rung_filters.sh checks that each rung has a
+  # `component_id`, not that it has these, so the omission was unguarded.
+  - "examples/crm/tests/**"
+  - "examples/crm/gui/**"
+  - "examples/crm/gui_wasm/**"
