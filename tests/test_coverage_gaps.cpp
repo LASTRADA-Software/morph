@@ -572,8 +572,6 @@ TEST_CASE("morph::bridge::Bridge: switchBackend purges weak_ptr bindings whose o
     REQUIRE_NOTHROW(bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool)));
 }
 
-// ── bridge.hpp: tryFireImpl returns when draft is absent (lines 498-499)
-
 // ── model.hpp: morph::model::detail::IModelHolder::into<Wrong>() throws std::bad_cast (lines 70-71)
 
 TEST_CASE("morph::model::detail::IModelHolder::into<Wrong>() throws std::bad_cast", "[coverage][model]") {

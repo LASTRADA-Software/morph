@@ -123,10 +123,10 @@ struct ActionValidator {
 /// WebSocket topology) and by `Bridge::executeVia`'s `localOp` (the in-process
 /// path used by `LocalBackend`) — the two execution sites an in-progress action
 /// reaches without first passing through the reactive `set<>` gate
-/// (`BridgeHandler::tryFireImpl`) or the type-erased `executeJson` gate
-/// (`ActionExecuteRegistry::registerAction`), both of which already enforce
-/// `ready()` themselves. Deriving from `std::runtime_error` means existing
-/// `catch (const std::exception&)` handling — e.g. `RemoteServer::dispatchExecute`'s
+/// (`morph::flows::FlowSession::set<>`, forms/flows.hpp) or the type-erased
+/// `executeJson` gate (`ActionExecuteRegistry::registerAction`), both of which
+/// already enforce `ready()` themselves. Deriving from `std::runtime_error`
+/// means existing `catch (const std::exception&)` handling — e.g. `RemoteServer::dispatchExecute`'s
 /// strand catch, which turns any thrown exception into an `err` reply — keeps
 /// working unchanged; callers that care can `catch`/`dynamic_cast` the specific
 /// type instead.
@@ -410,7 +410,7 @@ public:
             // Enforce the action's validator on the server dispatch path — the
             // one path an untrusted remote client can drive directly with a
             // hand-built envelope, bypassing the client-side gates
-            // (BridgeHandler::set<>'s tryFireImpl and
+            // (morph::flows::FlowSession::set<> and
             // ActionExecuteRegistry::registerAction). ActionValidator<Action>::ready
             // auto-detects a `bool validate() const` member and defaults to
             // `true` for actions with no validator, so this is a no-op for
