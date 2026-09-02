@@ -280,6 +280,25 @@ TEST_CASE("A partly-numeric contextKey does not attach to the board its prefix n
           "GetBoardState: handler was never attached via OpenBoard");
 }
 
+// A zero-padded key parses, and that is exactly the problem: `_projectIdStr`
+// is read twice -- by `std::stoull` for the board, and verbatim as every
+// entry's `entityKey`, which `execute(GetActivity)` looks entries up by. A
+// handler attached as "007" would work against project 7 while journaling
+// under a key no other client and no `GetActivity` ever asks for, splitting
+// one board's activity stream in two. So the spelling has to be canonical,
+// not merely parseable.
+TEST_CASE("A zero-padded contextKey does not attach the handler", "[kanban][model][unattached]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Padded");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+
+    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(), "00" + std::to_string(*projectId));
+
+    CHECK(errorTextOf([&] { return model.execute(kanban::GetBoardState{}); }) ==
+          "GetBoardState: handler was never attached via OpenBoard");
+}
+
 // Attaching a log with an empty key after OpenBoard must not un-attach the
 // handler either: the old assignment clobbered a live board id with "", so a
 // handler that had been working answered "stoull" from then on.

@@ -11,6 +11,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
+#include <string>
 #include <string_view>
 #include <system_error>
 
@@ -257,13 +258,23 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
 /// would silently attach the handler to a board the client did not name. It
 /// also accepts leading whitespace and wraps a negative around to a huge
 /// id; `from_chars` on an unsigned type does neither.
+///
+/// The spelling has to be *canonical*, not merely parseable, because
+/// `_projectIdStr` has a second reader: `logAction`/`logFailure` stamp it as
+/// each entry's `entityKey`, and `execute(GetActivity)` reads entries back by
+/// that exact string. `from_chars` accepts "007" for project 7, so a client
+/// registering with `contextKey=007` would pass every attach guard and every
+/// `requireRole` while journaling under a key no other client -- and no
+/// `GetActivity` -- ever asks for, silently splitting one board's activity
+/// stream in two. Comparing against `std::to_string(value)` is what rules that
+/// out.
 [[nodiscard]] bool namesAProject(std::string_view key) noexcept {
     std::uint64_t value = 0;
     const char* const end = key.data() + key.size();
     // The empty key needs no case of its own: `from_chars` reports
     // `invalid_argument` for an empty range, so it fails the first test.
     const auto [stopped, ec] = std::from_chars(key.data(), end, value);
-    return ec == std::errc{} && stopped == end;
+    return ec == std::errc{} && stopped == end && key == std::to_string(value);
 }
 
 }  // namespace

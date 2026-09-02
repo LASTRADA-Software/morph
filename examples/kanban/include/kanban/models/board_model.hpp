@@ -280,7 +280,11 @@ public:
     /// holder-wrapped instance, achieved without one.
     /// @param log Sink entries are forwarded to.
     /// @param entityKey This rung's project id, as a string. Accepted only
-    ///        if it is the complete decimal spelling of one; anything else is
+    ///        if it is the complete *canonical* decimal spelling of one --
+    ///        `"7"`, never `"007"`, because this member is also each entry's
+    ///        `entityKey` and `execute(GetActivity)` reads entries back by that
+    ///        exact string, so a second spelling would silently split one
+    ///        board's activity stream. Anything else is
     ///        discarded, and the entries this instance stamps then carry the
     ///        empty key (`logAction` reads `_projectIdStr`, the one member
     ///        both purposes share). Two keys that are not project ids reach
