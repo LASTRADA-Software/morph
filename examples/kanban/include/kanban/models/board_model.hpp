@@ -280,16 +280,25 @@ public:
     /// holder-wrapped instance, achieved without one.
     /// @param log Sink entries are forwarded to.
     /// @param entityKey Stamped verbatim as every subsequent entry's
-    ///        `entityKey` (`_entityKeyStr`, set unconditionally) -- the same
-    ///        contract `IModelHolder::_contextKey` keeps for a holder-wrapped
-    ///        instance (`morph/core/model.hpp`), so the two writers a caller
-    ///        might compare never disagree. Two keys that are not project ids
-    ///        reach here in practice: `ModelFactory::create` passes an *empty*
-    ///        key when it hands the process-wide default log to a newly
-    ///        constructed holder, and `Remote::attachLogIfConfigured` forwards
-    ///        the client's `contextKey` *verbatim off the wire*, so it can be
-    ///        any text at all. The `log` itself is attached regardless of what
-    ///        @p entityKey contains.
+    ///        `entityKey` (`_entityKeyStr`) -- the same contract
+    ///        `IModelHolder::_contextKey` keeps for a holder-wrapped instance
+    ///        (`morph/core/model.hpp`), so the two writers a caller might
+    ///        compare never disagree, for the ordinary case this method is
+    ///        ever called under: once, before any `execute()` reaches this
+    ///        instance (`ModelFactory::create`/`Remote::attachLogIfConfigured`
+    ///        both call it exactly there). The one case it is *not*
+    ///        unconditional: a board already attached (`_projectIdStr`
+    ///        engaged) and @p entityKey naming a *different* one -- there
+    ///        `_entityKeyStr` keeps its current value rather than following
+    ///        @p entityKey, so a second attach call can never pull the
+    ///        journal key away from the board `_projectIdStr` still names
+    ///        `execute(GetActivity)` reads by. Two keys that are not project
+    ///        ids reach here in practice: `ModelFactory::create` passes an
+    ///        *empty* key when it hands the process-wide default log to a
+    ///        newly constructed holder, and `Remote::attachLogIfConfigured`
+    ///        forwards the client's `contextKey` *verbatim off the wire*, so
+    ///        it can be any text at all. The `log` itself is attached
+    ///        regardless of what @p entityKey contains.
     ///
     ///        Separately, and only if @p entityKey is the complete *canonical*
     ///        decimal spelling of a project id -- `"7"`, never `"007"` --
@@ -445,19 +454,24 @@ private:
     ///        (`ledger_model.cpp`) and lims/crm already use (#422; #368's
     ///        triage deferred exactly this split).
     ///
-    ///        Set two ways, both unconditional -- unlike `_projectIdStr`,
-    ///        nothing here is validated as a project id, matching
-    ///        `IModelHolder::_contextKey`'s own unconditional assignment
-    ///        (`morph/core/model.hpp`) so the two never disagree: `OpenBoard`
-    ///        sets it to the same canonical row-id string it sets
-    ///        `_projectIdStr` to, which is what keeps `execute(GetActivity)`'s
+    ///        Set two ways. Unlike `_projectIdStr`, nothing here is validated
+    ///        as a project id, matching `IModelHolder::_contextKey`'s own
+    ///        unconditional assignment (`morph/core/model.hpp`) for the
+    ///        ordinary case of one attach per instance: `OpenBoard` sets it to
+    ///        the same canonical row-id string it sets `_projectIdStr` to,
+    ///        which is what keeps `execute(GetActivity)`'s
     ///        `_log->entries(*_projectIdStr)` finding entries this handler's
     ///        own `OpenBoard`-attached session wrote; `attachActionLog` sets
-    ///        it to @p entityKey verbatim, whatever that string is. Empty
-    ///        (the default) until either happens, so an unattached handler's
-    ///        entries -- reachable only via `logFailure`, since every
-    ///        mutating `execute()` throws before `logAction` when unattached
-    ///        -- carry the empty key, same as before this member existed.
+    ///        it to its `entityKey` argument verbatim, whatever that string
+    ///        is -- *unless* `_projectIdStr` already names a different board,
+    ///        in which case it keeps its current value rather than following
+    ///        a second attach call away from the board `_projectIdStr` still
+    ///        names (see `attachActionLog`'s own doc comment). Empty (the
+    ///        default) until one of those happens, so an unattached
+    ///        handler's entries -- reachable only via `logFailure`, since
+    ///        every mutating `execute()` throws before `logAction` when
+    ///        unattached -- carry the empty key, same as before this member
+    ///        existed.
     std::optional<std::string> _entityKeyStr;
 
     /// @brief Durable action log this instance appends to, if any -- set by

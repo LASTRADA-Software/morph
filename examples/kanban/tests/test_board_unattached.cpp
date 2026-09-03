@@ -310,10 +310,23 @@ TEST_CASE("Attaching a log with an empty entityKey does not un-attach an open bo
     const ScopedPrincipal alice{"alice"};
     model.execute(kanban::OpenBoard{.projectId = projectId});
 
-    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(), {});
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    model.attachActionLog(log, {});
 
     const auto state = model.execute(kanban::GetBoardState{});
     CHECK(state.projectId == projectId);
+
+    // #422's own version of this hazard: an empty entityKey must not pull
+    // _entityKeyStr away from the board _projectIdStr still names either --
+    // otherwise every entry logged after this second attach call would carry
+    // entityKey="" while execute(GetActivity) keeps reading entries by
+    // *_projectIdStr, making them invisible to it despite the handler still
+    // answering as attached. Proven by round-tripping through GetActivity
+    // itself, not by reading the member directly.
+    model.execute(kanban::CreateColumn{.name = "Doing", .wipLimit = 0});
+    const auto activity = model.execute(kanban::GetActivity{});
+    REQUIRE(activity.events.size() == 1);
+    CHECK(activity.events.front().actionType == "CreateColumn");
 }
 
 // #422's own residue: a `contextKey` the attach guard rejects used to produce
@@ -333,13 +346,17 @@ TEST_CASE("A rejected contextKey still produces the raw key as the journal entit
 
     model.attachActionLog(log, "foo");
 
-    // The attach guard still refuses "foo" as a board -- this is the
-    // existing #368 behavior, unaffected by #422's split.
-    CHECK_THROWS_AS(model.execute(kanban::GetBoardState{}), kanban::NotFound);
+    // CreateColumn, not GetBoardState: GetBoardState is Loggable::No and its
+    // execute() has no try/catch at all, so it never reaches logFailure.
+    // CreateColumn's own attach guard throw is caught by its execute()'s
+    // KanbanError handler, which does. The attach guard still refuses "foo"
+    // as a board either way -- this is the existing #368 behavior, unaffected
+    // by #422's split.
+    CHECK_THROWS_AS(model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}), kanban::NotFound);
 
-    // The refusal above is a KanbanError, so every execute() overload's own
-    // catch block already ran logFailure for it before rethrowing -- exactly
-    // the path that used to stamp "" instead of "foo".
+    // The refusal above is a KanbanError, so CreateColumn's own catch block
+    // already ran logFailure for it before rethrowing -- exactly the path
+    // that used to stamp "" instead of "foo".
     const auto entries = log->entries();
     REQUIRE(entries.size() == 1);
     CHECK(entries.front().entityKey == "foo");

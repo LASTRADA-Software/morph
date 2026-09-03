@@ -282,10 +282,21 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
 
 void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
     _log = std::move(log);
-    // Unconditional, matching IModelHolder::_contextKey -- see
-    // attachActionLog's declaration for why this member takes whatever
-    // string arrives, validated or not.
-    _entityKeyStr = entityKey;
+    // Unconditional *unless* a board is already attached and this key names a
+    // different one -- matching IModelHolder::_contextKey's own unconditional
+    // assignment (see attachActionLog's declaration) for the ordinary case,
+    // where this call is the only attach an instance ever receives (it always
+    // runs before any execute(), per ModelFactory::create/
+    // Remote::attachLogIfConfigured), but not letting a *second* call
+    // silently pull the journal key away from an `OpenBoard`-established
+    // board while leaving `_projectIdStr` -- and therefore
+    // execute(GetActivity)'s own `_log->entries(*_projectIdStr)` -- pointed at
+    // the original one. That would be this member split's own version of the
+    // divergence #422 exists to remove, just relocated to a second attach
+    // rather than closed by having one.
+    if (!_projectIdStr.has_value() || entityKey == *_projectIdStr) {
+        _entityKeyStr = entityKey;
+    }
     // A key that does not name a project does not become the attach state --
     // this condition is load-bearing, not defensive. `_projectIdStr` is the
     // answer to "which project is this handler attached to", which every
