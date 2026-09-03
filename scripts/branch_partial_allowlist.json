@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Partial branch lines in include/morph that no test can cover, with the reason each.",
+    "",
+    "A 'partial line' is a line that ran and left one of its arms untaken -- a place where",
+    "inverting the condition cannot fail a test, because nothing has ever observed the other",
+    "way. scripts/check_branch_coverage.py counts them. Most are simply untested and belong on",
+    "the backlog that gate prints. The ones here are different: they are unreachable by",
+    "construction, and the reason has to say why rather than asserting it (morph#404: 'a bare",
+    "suppression is not a disposition').",
+    "",
+    "Each entry is audited in both directions on every coverage run, which is what stops this",
+    "file becoming the suppression list it superficially resembles. An entry whose line is no",
+    "longer partial fails the gate and must be deleted; an entry whose source text no longer",
+    "exists fails too. `line` is a hint, not the key: the key is `source`, matched against the",
+    "file's current contents, because a comment citing a bare line number is the defect this",
+    "repository has now found three times (morph#349, morph#355, morph#419). If the code moves",
+    "and the text is still unique, the gate resolves it and tells you the new number."
+  ],
+  "entries": [
+    {
+      "file": "include/morph/util/rational.hpp",
+      "line": 272,
+      "source": "assert(rawDecimalPlaces <= kMaxDecimalPlaces);",
+      "reason": "assert()'s false arm calls abort(). Reaching it means violating the precondition and terminating the process, so no test in a Catch2 binary can observe it and still report; a death test would prove only that assert() works. The decision the assert guards is checked by the caller-side tests that stay inside kMaxDecimalPlaces."
+    },
+    {
+      "file": "include/morph/util/rational.hpp",
+      "line": 698,
+      "source": "if (!std::is_constant_evaluated()) {",
+      "reason": "The false arm is the constant-evaluated one, and constant evaluation does not execute instrumented code -- no counter can increment during it. So in every run this branch is true, structurally, and its other arm is not a gap in the tests but a gap in what runtime instrumentation can see. reportOverflow's constexpr behaviour is exercised by the constexpr Rational arithmetic in tests/test_rational.cpp; what cannot be exercised is llvm-cov's counter."
+    },
+    {
+      "file": "include/morph/util/rational.hpp",
+      "line": 731,
+      "source": "if (!std::is_constant_evaluated()) {",
+      "reason": "reportClamp's copy of the same shape as line 698 above, and uncoverable for the same reason: the untaken arm is constant evaluation, which increments no counters."
+    }
+  ]
+}

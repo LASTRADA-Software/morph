@@ -84,6 +84,81 @@ jobs:
       - name: Check every known rung appears in the filters that cannot generate it
         run: bash scripts/check_rung_filters.sh
 
+  # ── The AUTOMOC-include gate's own self-test ───────────────────────────
+  # The gate itself (scripts/check_automoc_includes.sh) cannot run here: it
+  # reads generated moc output, so it needs an AUTOMOC target to have been
+  # built, and it runs after the build in ci.yml's linux-qt, ladder-tests and
+  # linux-all-features jobs. Its self-test needs no Qt, no toolchain and no
+  # build at all, so it runs here, once, in seconds -- and, unlike a step
+  # behind a 20-minute build, it still reports when that build fails.
+  #
+  # Same reasoning as every other gate in this file: a lint gate nobody tests
+  # reports green whether or not it still detects anything. This one is
+  # especially exposed to that, because the ascending include it looks for
+  # (issue #372) is present in every build and only becomes a compile error
+  # where the directory arithmetic lands on a second same-named header -- so
+  # the gate going blind would look exactly like the gate passing.
+  automoc-include-lint:
+    name: AUTOMOC-include checker self-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the AUTOMOC-include checker
+        run: bash scripts/test_check_automoc_includes.sh
+
+  # ── The coverage-object gate's own self-test ───────────────────────────
+  # The gate itself (scripts/check_coverage_objects.sh) runs inside
+  # scripts/coverage.sh, in ci.yml's linux-coverage job, because it compares the
+  # generated manifest against `ctest --show-only=json-v1` and so needs a
+  # configured, built, test-registered tree. Its self-test needs none of that --
+  # both of its inputs are files, and the fixtures are throwaway executables in
+  # a temp directory -- so it runs here, in seconds, and still reports when that
+  # 20-minute build fails.
+  #
+  # Same reasoning as every other gate in this file, and unusually direct here:
+  # the defect this gate catches (morph#403 -- a test binary that runs, writes
+  # profile data, and is never handed to llvm-cov) is *already* a silence. The
+  # coverage run succeeds, the report uploads, and the figure is simply computed
+  # over a smaller denominator. A gate that had gone blind to that would be
+  # indistinguishable from a gate finding nothing wrong, which is precisely how
+  # the same defect reached its third occurrence (morph#141, morph#179, #403).
+  coverage-object-lint:
+    name: Coverage-object checker self-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the coverage-object checker
+        run: bash scripts/test_check_coverage_objects.sh
+
+      # scripts/check_coverage_roots.sh, on the same terms: the gate itself runs
+      # inside scripts/coverage.sh (it needs the built objects and the merged
+      # profile), and its self-test reads hand-written `llvm-cov export
+      # -summary-only` documents, so it needs neither.
+      #
+      # Its defect is a silence too, and a wider one. A shared compiler cache
+      # served objects built in another worktree; clang had embedded that
+      # worktree's absolute paths in their coverage mappings; coverage.sh
+      # filters by relative path, so those records matched nothing and were
+      # dropped -- 246 of 688 in the run that found it, and with them the whole
+      # of examples/crm/src/models, whose tests ran and passed throughout
+      # (morph#426). Nothing in the pipeline returned nonzero.
+      - name: Self-test the coverage-roots checker
+        run: bash scripts/test_check_coverage_roots.sh
+
+      # scripts/check_branch_coverage.py, on the same terms: the gate itself
+      # runs inside scripts/coverage.sh (it reads the aggregated LCOV that leg
+      # produces), and its self-test needs only hand-written fixtures.
+      #
+      # This one guards a defect with no other trace at all. A branch taken one
+      # way only executes its line, so the line percentage is unmoved, Codecov
+      # is content, and nothing anywhere reports it -- there are 179 such lines
+      # in include/morph today (morph#404). A gate that had gone blind to that
+      # would produce exactly the output a healthy one produces.
+      - name: Self-test the branch-coverage checker
+        run: python3 scripts/check_branch_coverage.py --self-test
+
   # ── The wire/action surface <-> the scenario corpus that covers it ──────
   # scripts/scenario/scenario_coverage.py enumerates two surfaces straight out
   # of the source -- every envelope kind and refusal RemoteServer can put on

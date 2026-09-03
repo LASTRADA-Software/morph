@@ -59,6 +59,7 @@
 //   directions.
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstring>
 #include <memory>
 #include <morph/core/bridge.hpp>
@@ -82,6 +83,44 @@ TEST_CASE("decode accepts an envelope at the size limit boundary", "[wire][harde
     const std::string json = encode(env);
     REQUIRE(json.size() < kMaxEnvelopeBytes);
     REQUIRE_NOTHROW(decode(json));
+}
+
+// The boundary the case above is named for, and does not actually reach.
+//
+// `decode` refuses `json.size() > kMaxEnvelopeBytes`, so exactly
+// kMaxEnvelopeBytes is the largest envelope the wire layer accepts and
+// kMaxEnvelopeBytes + 1 the smallest it refuses. Every case around this one
+// stays either comfortably under the cap (1 KiB) or comfortably over it
+// (+1024 bytes), which leaves the guard's own boundary untouched: mutating
+// `>` to `>=` -- moving the cap down by one byte and rejecting a legal
+// envelope -- passed the entire suite (morph#405, the first mutation run over
+// include/morph/core). A cap is one comparison, and a comparison is only
+// tested at the value where changing it changes the answer.
+//
+// Both halves are asserted here rather than only the accepting one: `>=` is
+// killed by the first REQUIRE, and a hypothetical `>` becoming `<` or the
+// guard being dropped altogether is killed by the second.
+TEST_CASE("decode's size cap is exact at kMaxEnvelopeBytes", "[wire][hardening]") {
+    static const std::string kPrefix = R"({"kind":"execute","body":")";
+    static const std::string kSuffix = R"("})";
+    REQUIRE(kMaxEnvelopeBytes > kPrefix.size() + kSuffix.size());
+
+    auto envelopeOfExactly = [](std::size_t total) {
+        std::string json;
+        json.reserve(total);
+        json += kPrefix;
+        json.append(total - kPrefix.size() - kSuffix.size(), 'x');
+        json += kSuffix;
+        return json;
+    };
+
+    const std::string atCap = envelopeOfExactly(kMaxEnvelopeBytes);
+    REQUIRE(atCap.size() == kMaxEnvelopeBytes);
+    REQUIRE_NOTHROW(decode(atCap));
+
+    const std::string oneOver = envelopeOfExactly(kMaxEnvelopeBytes + 1);
+    REQUIRE(oneOver.size() == kMaxEnvelopeBytes + 1);
+    REQUIRE_THROWS_AS(decode(oneOver), std::runtime_error);
 }
 
 TEST_CASE("decode rejects an oversized envelope before parsing", "[wire][hardening]") {

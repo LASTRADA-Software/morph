@@ -10,6 +10,19 @@ add_executable(qt_test_client qt_test_client_main.cpp qt_test_models.hpp)
 target_link_libraries(qt_test_client PRIVATE morph_qt_impl)
 apply_warnings(qt_test_client)
 
+# TEST although neither is a ctest case: they are the other end of the
+# process-separation tests above, so the include/morph/qt code exercised across
+# that OS boundary only exists in *these* two binaries' coverage mapping. An
+# instrumented child writes its own .profraw (LLVM_PROFILE_FILE's %p is per
+# process and the environment is inherited across the spawn), and llvm-cov can
+# only map it back through the binary that produced it -- see apply_coverage()
+# in cmake/compiler_options.cmake, and morph#403 for what "instrumented but not
+# handed to llvm-cov" costs.
+if(AF_COVERAGE)
+    apply_coverage(qt_test_server TEST)
+    apply_coverage(qt_test_client TEST)
+endif()
+
 # ── Catch2 tests ─────────────────────────────────────────────────────────────
 
 add_executable(morph_qt_tests
@@ -26,6 +39,14 @@ target_link_libraries(morph_qt_tests
 
 set_target_properties(morph_qt_tests PROPERTIES AUTOMOC ON)
 apply_warnings(morph_qt_tests)
+
+# Was missing entirely, so this suite was never instrumented and contributed
+# nothing to the coverage number while the CI coverage leg configured
+# -DMORPH_BUILD_QT=ON and ran it -- include/morph/qt showed 13 lines in the
+# uploaded report (morph#403).
+if(AF_COVERAGE)
+    apply_coverage(morph_qt_tests)
+endif()
 
 # Make sure the helpers exist before the test binary tries to spawn them.
 add_dependencies(morph_qt_tests qt_test_server qt_test_client)

@@ -15,5 +15,12 @@ target_link_libraries(morph_offline_sqlite_tests
 
 apply_warnings(morph_offline_sqlite_tests)
 
+# Was missing entirely, so sqlite_offline_queue.hpp's dedicated suite was never
+# instrumented and the file's 57.04% -- the worst in the library -- was measured
+# with its own tests absent from the report (morph#403).
+if(AF_COVERAGE)
+    apply_coverage(morph_offline_sqlite_tests)
+endif()
+
 include(Catch)
 catch_discover_tests(morph_offline_sqlite_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)

@@ -527,12 +527,24 @@ jobs:
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
+      # No `if:` guard. This step used to carry `if: matrix.preset ==
+      # 'clang-coverage'`, left behind when this job was split out of
+      # linux-sanitizers' matrix (see this job's own header comment). The job has
+      # no matrix, so `matrix.preset` evaluates to the empty string, the
+      # condition is false on every run, and the HTML report has never been
+      # uploaded -- a step that is skipped and a step that succeeded are rendered
+      # the same way, which is why nothing reported it. Found while fixing
+      # morph#403.
       - name: Upload coverage HTML
-        if: matrix.preset == 'clang-coverage'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: build/clang-coverage/html/
+          # llvm-cov show emits one page per source file across include/morph,
+          # examples/common and every rung -- a few thousand small files, which
+          # upload-artifact pays per-file overhead on. Bounded rather than kept
+          # forever, since the step now actually runs on every coverage build.
+          retention-days: 14
 
   # ── Linux: kanban's concurrent-move stress test under ThreadSanitizer ──
   # test_kanban_stress.cpp's [tsan]-tagged TEST_CASE drives BoardModel through
@@ -759,6 +771,15 @@ jobs:
       - name: Build
         run: cmake --build --preset gcc-debug
 
+      # ── moc output that climbs out of the build tree (issue #372) ────
+      # Runs here rather than alongside the repo's other lint gates because
+      # what it inspects is generated: it needs an AUTOMOC target to have
+      # actually been built. The checker's own self-test needs none of that and
+      # runs in drift-guard.yml's automoc-include-lint job instead, so it still
+      # reports when a build fails.
+      - name: Check no generated moc include ascends
+        run: bash scripts/check_automoc_includes.sh build/gcc-debug
+
       - name: Test (offscreen Qt platform)
         env:
           QT_QPA_PLATFORM: offscreen
@@ -936,6 +957,16 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: cmake --build --preset gcc-debug
+
+      # ── moc output that climbs out of the build tree (issue #372) ────
+      # Same gate as linux-qt above, and for the same reason -- see its
+      # comment. This job is the one that matters most: ladder_<rung>_gui_lib
+      # is where #372 actually bit, and it is the AUTOMOC target every
+      # ladder_<rung>_tests binary links, so this build tree is the one
+      # carrying the output that stopped compiling.
+      - name: Check no generated moc include ascends
+        if: steps.filter.outputs.run == 'true'
+        run: bash scripts/check_automoc_includes.sh build/gcc-debug
 
       - name: Test (offscreen Qt platform, ladder tests only, stress excluded)
         if: steps.filter.outputs.run == 'true'
@@ -1339,6 +1370,15 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: cmake --build --preset ${{ matrix.preset }}
+
+      # ── moc output that climbs out of the build tree (issue #372) ────
+      # Same gate as linux-qt, and for the same reason -- see its comment.
+      # This is the widest build it reaches: the clang leg is the only one that
+      # compiles moc output under -Weverything, where -Wshadow-header is what
+      # actually fires, and this job is the only one that builds
+      # morph_forms_module's AUTOMOC output at all.
+      - name: Check no generated moc include ascends
+        run: bash scripts/check_automoc_includes.sh build/${{ matrix.preset }}
 
       # Includes the fuzz *replay* tests on the clang leg: each committed seed
       # and crash reproducer is replayed once and must not crash. This is a

@@ -366,6 +366,62 @@ if(MORPH_DROPPED_WARNING_FLAGS)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  AUTOMOC-generated translation units
+# ═══════════════════════════════════════════════════════════════════════════
+# Every flag above is worthless on a target that cannot be compiled at all,
+# and without this setting the AUTOMOC targets are exactly that in one very
+# ordinary layout.
+#
+# By default moc writes the include for the class's own header as a path
+# relative to the generated file, climbing back out of the build tree with a
+# run of "..":
+#
+#     #include "../../../../../../examples/ledger/gui_lib/budget_presenter.hpp"
+#
+# A quoted include is resolved against the including file's directory *and*
+# against every -I entry, so that climb is attempted from each of the target's
+# include directories too. Whether the escaped path resolves to a second,
+# different file is pure arithmetic on how deep the source tree happens to sit
+# inside its parent directories -- and when a git worktree is placed inside the
+# repository it checks out (.claude/worktrees/<name>/, which is where the agent
+# harness puts them), it does: six levels up from
+# <worktree>/examples/<rung>/include lands back in the outer checkout, where
+# examples/<rung>/gui_lib/<same name>.hpp really exists. Clang then reports
+#
+#     error: multiple candidates for header '...' found; ... ignoring others
+#     including '<worktree>/examples/<rung>/include' [-Werror,-Wshadow-header]
+#
+# once per moc'd class, and -Werror (above) turns every AUTOMOC target in the
+# project into a build failure -- ladder_<rung>_gui_lib, and with it every
+# ladder_<rung>_tests binary that links one (issue #372).
+#
+# AUTOMOC_PATH_PREFIX makes moc emit the header path relative to the include
+# directory it was found under instead ("budget_presenter.hpp",
+# "ledger/app/app.hpp"), so the generated include resolves through the target's
+# own -I set and never ascends out of the build tree. That removes the
+# ambiguity rather than the diagnostic: -Wno-shadow-header would silence this
+# case, but it is also the only thing that reports a genuine cross-checkout
+# header pickup, which in this layout is a reachable state (issue #372's triage
+# demonstrates a moc TU compiling against the *outer* checkout's header once
+# the diagnostic is suppressed). scripts/check_automoc_includes.sh is the
+# regression gate: it fails on any generated moc include that ascends.
+#
+# It only reaches headers that actually sit under one of their target's
+# INCLUDE_DIRECTORIES, which every Q_OBJECT header in the tree does today. For
+# one that does not, CMake finds no directory to make the path relative to,
+# passes moc no -p, and moc falls back to the ascending path with no warning --
+# so a new QObject header in a directory the target does not -I (a rung's
+# tests/, say, which morph_add_rung.cmake puts on no include path) reappears as
+# a gate failure rather than a silent regression. The fix there is to put the
+# header's directory on the target's include path, not to unset this.
+#
+# Set as a normal variable in the top-level scope, so it initialises
+# AUTOMOC_PATH_PREFIX on every target created by this directory and every
+# add_subdirectory() below it. It is deliberately not an option(): a build that
+# cannot compile its own moc output is not a configuration anyone wants.
+set(CMAKE_AUTOMOC_PATH_PREFIX ON)
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  Public functions
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -436,11 +492,280 @@ function(apply_sanitizers target mode)
     endif()
 endfunction()
 
+# ── A coverage build does not share a compiler cache (morph#426) ─────────────
+#
+# Set before cmake/CompileCache.cmake is included, so its option() -- which
+# honours a normal variable of the same name under CMP0077 -- picks this up as
+# the default. `NOT DEFINED` rather than an unconditional set: an explicit
+# -DUSE_COMPILER_CACHE=ON is still honoured, because on a single-checkout CI
+# runner the cache is safe and worth having, and the decision belongs to
+# whoever knows whether their cache is shared.
+#
+# What goes wrong without this. A cache entry is keyed on content; the object
+# it returns embeds absolute source paths, because nothing here passes
+# -ffile-prefix-map / -fcoverage-prefix-map. So a hit served across two
+# worktrees of this repository yields an object whose *coverage mapping* names
+# the other worktree. Demonstrated directly by compiling one translation unit
+# in worktree A through the launcher and then the byte-identical unit in
+# worktree B: B's binary exports `SF:/.../wtA/lib.hpp`, and the same unit
+# compiled with no launcher exports B's own path, which is what identifies the
+# launcher rather than the compiler as the cause.
+#
+# The damage is not mis-attribution. scripts/coverage.sh filters by *relative*
+# path, so a record rooted in another worktree matches no filter and is
+# dropped: in the run that found this, 246 of 688 records were foreign and all
+# eight of examples/crm/src/models/*.cpp appeared only under the foreign root,
+# so codecov.yml's entire crm src component was missing from the report while
+# its tests ran and passed. llvm-cov additionally discards function records it
+# cannot reconcile, because the same header arriving under two roots hashes two
+# ways -- worth 33 points on examples/common/gui/event_poller.hpp.
+#
+# The alternative fix, rejected with reasons. Adding -fcoverage-prefix-map so
+# the recorded paths are worktree-independent does produce correct paths
+# (measured: `SF:lib.hpp`), but it does not keep the cache hits it was supposed
+# to buy -- the flag carries the absolute source root, so the launcher keys the
+# two worktrees differently and misses anyway (measured: the mapped object
+# built in a third worktree carries that worktree's own paths, i.e. it
+# compiled locally). It also breaks the report it was meant to fix: with
+# relative recorded paths, llvm-cov's positional source filters match nothing,
+# and llvm-cov's behaviour when a filter matches nothing is to emit *every*
+# file -- so coverage.sh would silently widen to include demos, `gui/` shells,
+# fetched _deps and the test files it deliberately excludes. Correct paths at
+# the cost of rewriting the filter mechanism whose silent shrinkage this issue
+# is about was the worse trade.
+#
+# scripts/check_coverage_roots.sh is the second half of this, and is not
+# redundant with it: the default above is overridable, and the failure is a
+# silence that no exit code reports.
+if(AF_COVERAGE)
+    if(DEFINED CMAKE_CXX_COMPILER_LAUNCHER OR DEFINED CMAKE_C_COMPILER_LAUNCHER)
+        # cmake/CompileCache.cmake returns early when a launcher is already set,
+        # so USE_COMPILER_CACHE decides nothing on this path and setting it here
+        # would print "cache disabled" over a build that is still caching. CI's
+        # linux-coverage job takes exactly this route: it passes
+        # -DCMAKE_C[XX]_COMPILER_LAUNCHER=sccache on its configure line. That is
+        # safe there -- one checkout, so there is no second worktree for a path
+        # to come from -- and it is the caller's decision either way, so this
+        # says what is true rather than overriding it.
+        message(STATUS
+            "morph: coverage: a compiler launcher is set externally "
+            "(CXX='${CMAKE_CXX_COMPILER_LAUNCHER}'), so this build caches "
+            "regardless of USE_COMPILER_CACHE. Safe on a single checkout; on a "
+            "machine with several worktrees of this repository a cache hit can "
+            "carry another worktree's source paths into the coverage mapping "
+            "(morph#426), which scripts/check_coverage_roots.sh will catch.")
+    elseif(NOT DEFINED USE_COMPILER_CACHE)
+        set(USE_COMPILER_CACHE OFF)
+        message(STATUS
+            "morph: coverage: compiler cache disabled by default -- a shared cache "
+            "can serve objects built in another worktree, whose absolute source "
+            "paths then match none of scripts/coverage.sh's filters (morph#426). "
+            "Pass -DUSE_COMPILER_CACHE=ON to override where the cache is known "
+            "not to be shared across checkouts.")
+    elseif(USE_COMPILER_CACHE)
+        # DEFINED is true for a value the *previous* configure left in the cache,
+        # not only for one someone passed. A tree first configured without
+        # AF_COVERAGE carries USE_COMPILER_CACHE:BOOL=ON from CompileCache.cmake's
+        # own option(), so reconfiguring it with -DAF_COVERAGE=ON would take the
+        # default above and skip it -- silently, which is the failure mode this
+        # block exists to prevent. It cannot be distinguished from a deliberate
+        # -DUSE_COMPILER_CACHE=ON, so it is not overridden; it is said out loud,
+        # and scripts/check_coverage_roots.sh is what turns it into an error if
+        # the cache did in fact lend this build another worktree's paths.
+        message(WARNING
+            "morph: coverage: USE_COMPILER_CACHE is ON for a coverage build. If it "
+            "is shared across checkouts it can serve objects compiled in another "
+            "worktree, whose absolute source paths match none of "
+            "scripts/coverage.sh's filters and are dropped from the report "
+            "(morph#426). This is expected on a single-checkout CI runner; on a "
+            "developer machine with several worktrees, reconfigure with "
+            "-DUSE_COMPILER_CACHE=OFF, or delete this build tree so the coverage "
+            "default applies.")
+    endif()
+endif()
+
+# @brief Instrument a target for llvm-cov coverage; `TEST` also registers it
+#        as a binary scripts/coverage.sh must map profile data through.
+#
+# Instrumentation alone is not enough to be counted. llvm-cov resolves the
+# counters in a .profraw through a *binary*'s coverage mapping, so a test
+# executable that is instrumented, runs, and writes profile data still
+# contributes nothing unless that same executable is handed to llvm-cov --
+# positionally or via -object. scripts/coverage.sh used to name those binaries
+# by hand, and four of them were never added: morph_net_tests wrote profile
+# data that was merged and then dropped on the floor, and morph_qt_tests,
+# morph_offline_sqlite_tests and morph_net_qt_interop_tests were not even
+# instrumented, so include/morph/net contributed zero files to the uploaded
+# report while eight test files drove it (morph#403).
+#
+# That is the third time a hand-maintained list in scripts/coverage.sh has
+# rotted -- morph#141 (rungs 2-4 never added) and morph#179 (the rung list had
+# drifted past ledger and lims) were the first two, and both were fixed by
+# deleting the copy and deriving the list instead. This is the same fix for the
+# test-executable list: the build system already knows which binaries it
+# instrumented, so it writes them out (see
+# morph_write_coverage_object_manifest below) and coverage.sh reads them. A
+# binary registered here cannot be forgotten by a script in another directory.
+#
+# Not every apply_coverage() target belongs on that list. The function is also
+# called on libraries (ladder_<rung>_lib), on GUI shells (ladder_<rung>_gui,
+# morph_ladder_app) and on demos (morph_example, morph_forms_demo). Handing
+# llvm-cov a demo binary would add the template instantiations only that demo
+# has and score them as uncovered, moving the number for a reason unrelated to
+# what any test checks -- so registration is not simply "everything
+# instrumented".
+#
+# The classifier is the repository's own naming convention, which every test
+# executable already follows: an EXECUTABLE whose name ends in `_tests`
+# (morph_tests, morph_net_tests, morph_qt_tests, morph_offline_sqlite_tests,
+# morph_net_qt_interop_tests, ladder_common_tests, ladder_<rung>_tests) is a
+# test binary. Deriving it from the name rather than from a per-call flag is
+# the same move that fixed morph#179: a new test executable is registered by
+# being named like one, with nothing to remember and nothing to forget.
+#
+# `TEST` forces registration for a binary the convention cannot reach, and the
+# case it exists for is the one the convention is structurally blind to: a
+# process a test *spawns*. tests/qt's qt_test_server and qt_test_client are the
+# far end of the process-separation tests, so the include/morph/qt code
+# exercised across that OS boundary lives only in their coverage mapping -- and
+# they are named for their role rather than as suites, because that is what
+# they are.
+#
+# The convention is not left to trust: scripts/check_coverage_objects.sh
+# cross-checks the manifest against the binaries ctest actually runs and fails
+# when one of them is unprofiled and unexplained. What it cannot check is the
+# spawned kind, which appears in no ctest command -- so `TEST` is exactly the
+# obligation that gate cannot enforce, and is documented at both ends.
 function(apply_coverage target)
+    cmake_parse_arguments(PARSE_ARGV 1 _morph_cov "TEST" "" "")
+    if(_morph_cov_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR
+            "apply_coverage(${target}): unexpected argument(s) "
+            "'${_morph_cov_UNPARSED_ARGUMENTS}'. The only option is TEST.")
+    endif()
+
+    # -fcoverage-mcdc is deliberately absent, and this is the record of that
+    # decision (morph#404 asks for one either way).
+    #
+    # It works. Measured on clang 22.1.8 against tests/test_bridge_local.cpp,
+    # compiled with this exact flag set plus -fcoverage-mcdc: the compile takes
+    # 17.3s against 16.4s (+5.5%), the object grows from 15,064,616 to
+    # 15,324,288 bytes (+1.7%), and clang emits **no diagnostics at all** --
+    # in particular none of the "maximum number of conditions" warnings that
+    # LLVM's implementation issues for a decision with too many conditions, so
+    # morph's decisions all fit the cap on this compiler. `llvm-cov report
+    # --show-mcdc-summary` then prints an MC/DC Conditions column.
+    #
+    # It is not adopted yet, for two reasons that are about sequence rather
+    # than cost.
+    #
+    # First, MC/DC has nowhere to go. llvm-cov's LCOV export carries no MC/DC
+    # records -- only its report and JSON output do -- and Codecov has no MC/DC
+    # concept, so the number cannot ride the upload path this repository
+    # already has. It would need a second gate of its own, reading the JSON.
+    #
+    # Second, and the real reason: MC/DC is strictly stronger than branch
+    # coverage, and branch coverage is not yet at its ceiling. There are 179
+    # lines in include/morph where a decision has been evaluated and only ever
+    # come out one way (scripts/check_branch_coverage.py prints them per file).
+    # Every one of those is an MC/DC failure too, so turning MC/DC on today
+    # would produce a large number that says exactly what the branch number
+    # already says, in a form nobody can act on independently. The order that
+    # buys something is: dispose of the partial branches first, then measure
+    # MC/DC against what is left.
+    #
+    # Unverified: the CI coverage leg pins clang 20 and only clang 22.1.8 is
+    # installed on the machine this was measured on, so the flag's behaviour on
+    # clang 20 -- which supports it, the feature having landed in LLVM 18 -- has
+    # not been observed here. Whoever adopts it should re-measure on the pin.
     target_compile_options(${target} PRIVATE
         -fprofile-instr-generate -fcoverage-mapping -g -O0)
     target_link_options(${target} PRIVATE
         -fprofile-instr-generate)
+
+    get_target_property(_morph_cov_type ${target} TYPE)
+    if(_morph_cov_TEST AND NOT _morph_cov_type STREQUAL "EXECUTABLE")
+        message(FATAL_ERROR
+            "apply_coverage(${target} TEST): TEST names a binary llvm-cov is "
+            "handed as -object, so it is only meaningful for an executable; "
+            "'${target}' is a ${_morph_cov_type}.")
+    endif()
+
+    if(_morph_cov_TEST OR (_morph_cov_type STREQUAL "EXECUTABLE"
+                           AND "${target}" MATCHES "_tests$"))
+        # $<TARGET_FILE:> rather than a composed path: the manifest is written
+        # at generate time, when the real output name (and any multi-config
+        # subdirectory) is known, so nothing here has to reproduce CMake's
+        # naming rules the way the hand-written list in coverage.sh did.
+        set_property(GLOBAL APPEND PROPERTY MORPH_COVERAGE_TEST_OBJECTS
+                     "$<TARGET_FILE:${target}>")
+    endif()
+endfunction()
+
+# @brief Write the list of coverage-instrumented test binaries for coverage.sh.
+#
+# Deferred to the end of the top-level directory (see the cmake_language(DEFER)
+# at the bottom of this file) so it runs after every add_subdirectory() has had
+# its chance to call apply_coverage(... TEST) -- the same "must see every
+# target" requirement morph_verify_warning_flags() has, solved without needing
+# a call site in CMakeLists.txt.
+#
+# A non-coverage configure writes nothing: it instruments nothing, so there is
+# no manifest to write. A coverage configure always writes the file, even when
+# the list is empty -- `file(GENERATE)` is what makes the previous configure's
+# manifest go away, and a build tree reconfigured from "tests on" to "tests
+# off" must not be left holding a stale list of binaries that happen to still
+# exist on disk. An AF_COVERAGE build that *does* build the test suite and
+# still registered nothing is a configuration error rather than an empty
+# report, because an object list with nothing in it is exactly the
+# silently-shrinking figure morph#403 was about.
+function(morph_write_coverage_object_manifest)
+    if(NOT AF_COVERAGE)
+        return()
+    endif()
+    get_property(_morph_cov_objects GLOBAL PROPERTY MORPH_COVERAGE_TEST_OBJECTS)
+    if(NOT _morph_cov_objects AND TARGET morph_tests)
+        message(FATAL_ERROR
+            "morph: coverage: AF_COVERAGE is ON and the test suite is being "
+            "built, but no target was registered as a coverage object. "
+            "scripts/coverage.sh would then have no binary to map profile "
+            "data through and would report coverage over nothing (morph#403). "
+            "A test executable registers itself by being named <name>_tests, "
+            "or explicitly with apply_coverage(<target> TEST).")
+    endif()
+    list(REMOVE_DUPLICATES _morph_cov_objects)
+    list(JOIN _morph_cov_objects "\n" _morph_cov_content)
+
+    # $<CONFIG> in the output name under a multi-config generator, and not
+    # otherwise. The content is a join of $<TARGET_FILE:> expressions, which
+    # resolve per configuration; CMake refuses to write one file from
+    # content that differs between configurations and fails the *generate*
+    # step outright --
+    #
+    #     Evaluation file to be written multiple times with different content
+    #     CMake Generate step failed.  Build files cannot be regenerated correctly.
+    #
+    # -- so `cmake -G "Ninja Multi-Config" -DAF_COVERAGE=ON` would not
+    # configure at all, which is a much worse failure than the coverage
+    # report this file exists for. scripts/coverage.sh reads the plain name
+    # because the clang-coverage preset is single-config Ninja; a
+    # multi-config coverage build gets one manifest per configuration and
+    # would need the script taught which one, but it configures rather than
+    # dying, which is the point.
+    get_property(_morph_cov_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+    if(_morph_cov_multi_config)
+        set(_morph_cov_manifest "${CMAKE_BINARY_DIR}/coverage_objects-$<CONFIG>.txt")
+    else()
+        set(_morph_cov_manifest "${CMAKE_BINARY_DIR}/coverage_objects.txt")
+    endif()
+    file(GENERATE OUTPUT "${_morph_cov_manifest}" CONTENT "${_morph_cov_content}\n")
+    list(LENGTH _morph_cov_objects _morph_cov_count)
+    cmake_path(RELATIVE_PATH _morph_cov_manifest
+               BASE_DIRECTORY "${CMAKE_BINARY_DIR}"
+               OUTPUT_VARIABLE _morph_cov_manifest_name)
+    message(STATUS
+        "morph: coverage: ${_morph_cov_count} test binary/binaries will be "
+        "profiled (${_morph_cov_manifest_name})")
 endfunction()
 
 function(apply_bigobj target)
@@ -467,3 +792,12 @@ function(apply_fuzzer target)
     target_compile_options(${target} PRIVATE -fsanitize=fuzzer,address -fno-omit-frame-pointer -g -O1)
     target_link_options(${target} PRIVATE -fsanitize=fuzzer,address)
 endfunction()
+
+# Registered here rather than called from CMakeLists.txt so the manifest and the
+# function that fills it stay in one file: a writer that has to be invoked by
+# hand from another directory is the same shape of coupling morph#403 was about.
+# DEFER on this directory runs the call after every add_subdirectory() of the
+# scope that included this file completes, which is when the last
+# apply_coverage() has run.
+cmake_language(DEFER DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+               CALL morph_write_coverage_object_manifest)

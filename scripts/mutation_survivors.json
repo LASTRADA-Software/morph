@@ -1,0 +1,162 @@
+{
+  "_comment": [
+    "Triage of the first mutation run over include/morph, produced by scripts/mutation.sh.",
+    "",
+    "A survivor is a mutant the suite passed on: the program was changed and no test said so.",
+    "The number below is not a percentage anyone should read as a grade -- it is the first",
+    "measurement of a question this repository had never asked, and morph#405 asks for it to be",
+    "written down whatever it turned out to be. morph#408 owns what to do about it.",
+    "",
+    "Every survivor falls in one of four classes, and the distinction that matters is between the",
+    "first two -- which are noise a mutation score always carries -- and the last, which is the",
+    "finding. `equivalent` entries are listed individually with a reason each, because an",
+    "unexplained exclusion is a suppression; the other classes are counted with their",
+    "representative sites, because 348 hand-written reasons would be 348 unread ones.",
+    "",
+    "Re-measure with: MULL_PREFIX=... bash scripts/mutation.sh core-forms"
+  ],
+  "run": {
+    "date": "2026-09-03",
+    "scope": "include/morph/core, include/morph/forms",
+    "driven_by": "morph_tests (1279 Catch2 cases, all passing)",
+    "tool": "Mull 0.34.0, mull-runner-22 / mull-ir-frontend-22, LLVM 22.1.2",
+    "compiler": "clang 22.1.8 (CI pins clang 20; Mull ships a -20 package, and the score has not been re-measured on it)",
+    "mutators": "cxx_all",
+    "mutants": 999,
+    "killed": 640,
+    "survived": 359,
+    "mutation_score_percent": 64.06,
+    "wall_time": "46m24s on 12 workers, --timeout 60000",
+    "caveat": [
+      "The number can only be too high, not too low. tests/test_outbox.cpp names its scratch",
+      "file after the address of a stack object, which is stable across processes, so twelve",
+      "concurrent copies of morph_tests can collide on it; a collision fails a case, and a",
+      "failed case reads to Mull as a killed mutant. It cannot manufacture a survivor, so the",
+      "359 below are real and the 640 kills are an upper bound."
+    ]
+  },
+  "classes": {
+    "equivalent": {
+      "count": 11,
+      "meaning": "No test could distinguish the mutant from the original, so the survivor is not a gap. Listed individually below.",
+      "entries": [
+        {
+          "file": "include/morph/core/registry.hpp",
+          "line": 54,
+          "mutants": 3,
+          "mutator": "cxx_add_to_sub",
+          "source": "seed ^= std::hash<std::string>{}(key.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);",
+          "reason": "The golden-ratio hash_combine mix. Every one of its three additions feeds a value used only as an unordered_map bucket index -- PairKeyHash is never serialised, never compared to a constant, and never pinned in docs/spec/pinned_facts.toml. Turning an addition into a subtraction yields a different hash, and an unordered container is required by the standard to behave correctly under any hash function, so no observable behaviour changes. What a test could assert -- that equal keys hash equally -- the mutant preserves, because it mutates the mixing arithmetic and not the inputs."
+        },
+        {
+          "file": "include/morph/core/bridge.hpp",
+          "line": 119,
+          "mutants": 3,
+          "mutator": "cxx_add_to_sub",
+          "source": "return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));",
+          "reason": "Bridge::KeyHash is the same mix over the same kind of value, for _executors' bucket index, and equivalent for the same reason: the hash is internal to one unordered_map in one process and reaches no wire, no file and no assertion."
+        },
+        {
+          "file": "include/morph/core/backend.hpp",
+          "line": 749,
+          "mutants": 1,
+          "mutator": "cxx_replace_scalar_call",
+          "source": "aware.reserve(_changeAware.size());",
+          "reason": "reserve() is a capacity hint. Its argument affects how many reallocations follow and nothing else -- the vector's contents, size and iteration order are identical whether it is told 42 or the real count. A test that could tell the difference would be asserting on an allocator, which is not part of this API."
+        },
+        {
+          "file": "include/morph/core/logger.hpp",
+          "line": 78,
+          "mutants": 1,
+          "mutator": "cxx_replace_scalar_call",
+          "source": "out.reserve(msg.size() + 8);",
+          "reason": "A capacity hint on a std::string, equivalent for the same reason as backend.hpp:749."
+        },
+        {
+          "file": "include/morph/core/wire.hpp",
+          "line": 302,
+          "mutants": 1,
+          "mutator": "cxx_replace_scalar_call",
+          "source": "out.reserve(text.size());",
+          "reason": "A capacity hint on a std::string, equivalent for the same reason as backend.hpp:749."
+        },
+        {
+          "file": "include/morph/forms/views.hpp",
+          "line": 264,
+          "mutants": 1,
+          "mutator": "cxx_replace_scalar_call",
+          "source": "ordered.reserve(propsObj.size());",
+          "reason": "A capacity hint on a std::vector, equivalent for the same reason as backend.hpp:749."
+        },
+        {
+          "file": "include/morph/forms/views.hpp",
+          "line": 430,
+          "mutants": 1,
+          "mutator": "cxx_replace_scalar_call",
+          "source": "ids.reserve(_providers.size());",
+          "reason": "A capacity hint on a std::vector, equivalent for the same reason as backend.hpp:749."
+        }
+      ]
+    },
+    "side_channel_logging": {
+      "count": 19,
+      "meaning": "Removing a log call survives because nothing in morph_tests captures log output.",
+      "reason": "This is not equivalence -- a log line that stops being emitted is an observable change, and morph::log has a sink this suite could install. It is a deliberate absence of assertions on a diagnostic channel, and it is recorded separately from the gaps below so that a future decision to assert on logs (or not to) is made about logs rather than buried in a total.",
+      "representative_sites": [
+        "include/morph/core/remote.hpp:1031 -- logError on an undecodable envelope",
+        "include/morph/core/remote.hpp:1038 -- the one-line-per-request log every kind goes through"
+      ]
+    },
+    "side_channel_metrics": {
+      "count": 8,
+      "meaning": "Removing an emitMetric/beginSpan call survives.",
+      "reason": "include/morph/core/observability.hpp has a test file of its own (tests/test_observability.cpp), so unlike logging this is a surface the suite already asserts on -- just not on these eight call sites. Closer to a gap than logging is, and separated from it for that reason.",
+      "representative_sites": [
+        "include/morph/core/backend.hpp:613 -- emitMetric(Metric::registerCount, 1.0)",
+        "include/morph/core/backend.hpp:807 -- emitMetric(Metric::executeInFlight, ...)"
+      ]
+    },
+    "unasserted": {
+      "count": 321,
+      "meaning": "The finding. Code that morph_tests executes, changes to which no test notices.",
+      "by_file": {
+        "include/morph/core/remote.hpp": 121,
+        "include/morph/core/bridge.hpp": 79,
+        "include/morph/forms/forms.hpp": 25,
+        "include/morph/core/registry.hpp": 13,
+        "include/morph/forms/flows.hpp": 11,
+        "include/morph/core/completion.hpp": 10,
+        "include/morph/core/payload_schema.hpp": 10,
+        "include/morph/core/backend.hpp": 9,
+        "include/morph/core/wire.hpp": 8,
+        "include/morph/forms/instance_constraints.hpp": 6,
+        "include/morph/core/executor.hpp": 5,
+        "include/morph/core/model.hpp": 4,
+        "include/morph/core/observability.hpp": 4,
+        "include/morph/core/strand.hpp": 4,
+        "include/morph/forms/views.hpp": 4,
+        "include/morph/core/callback_scope.hpp": 2,
+        "include/morph/core/logger.hpp": 2,
+        "include/morph/core/model_key.hpp": 2,
+        "include/morph/core/timeout_scheduler.hpp": 2
+      },
+      "shapes_worth_naming": [
+        {
+          "shape": "the server's reply is deleted and the suite passes",
+          "count_approx": 25,
+          "detail": "cxx_remove_void_call on reply(wire::encode(makeOk(env.callId, ...))) survives at eight sites in remote.hpp, and on makeErr replies for 'unauthorized', 'connection closed' and 'too many ...' at twelve more. The dispatch paths run; what they put on the wire is not asserted at those sites. The scenario corpus under scripts/scenario asserts wire replies for the ladder rungs, which is why this is invisible to the C++ suite rather than untested everywhere -- but morph_tests is what morph#405 measures."
+        },
+        {
+          "shape": "a boundary comparison is only ever exercised away from its boundary",
+          "count_approx": 30,
+          "detail": "cxx_gt_to_ge and its family survive on include/morph/core/wire.hpp:514 (the kMaxEnvelopeBytes cap), payload_schema.hpp:169 (kPayloadShapeMaxDepth), forms/instance_constraints.hpp:156 (kMaxDecimalPlaces), forms/forms.hpp:2356 and a dozen more. Each is a comparison tested only at values where moving it by one changes nothing. wire.hpp:514 is the one this run turned into a test -- see tests/test_wire_hardening.cpp, 'decode's size cap is exact at kMaxEnvelopeBytes', whose neighbour was already named 'at the size limit boundary' while asserting a 1 KiB envelope."
+        },
+        {
+          "shape": "a completion is never delivered and nothing waits on it",
+          "count_approx": 13,
+          "detail": "cxx_remove_void_call on onDone(failure), onDone(nullptr), onDone(std::current_exception()) and resultState->setException(...) survives in backend.hpp and completion.hpp. A test that drives the path without awaiting its completion cannot distinguish a completion that never arrives from one that arrives late."
+        }
+      ]
+    }
+  }
+}

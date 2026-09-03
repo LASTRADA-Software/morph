@@ -11,27 +11,98 @@ LLVM_PROFDATA="llvm-profdata${SUFFIX}"
 LLVM_COV="llvm-cov${SUFFIX}"
 
 OUT="build/clang-coverage"
-TEST_EXE="$OUT/tests/morph_tests"
 MERGED="$OUT/merged.profdata"
 REPORT_DIR="$OUT/html"
+MANIFEST="$OUT/coverage_objects.txt"
 
-# Second binary, only present when this configure also built the ladder
-# (MORPH_BUILD_LADDER=ON — see the "coverage leg only" Qt install step in
-# ci.yml). llvm-cov takes one binary positionally and every additional one
-# via -object; OBJECT_ARGS stays empty (and every ${OBJECT_ARGS[@]}
-# expansion below a no-op) when the ladder wasn't built, so this script
-# still works unchanged for a plain `cmake --preset clang-coverage` with no
-# -DMORPH_BUILD_LADDER=ON.
-LADDER_TEST_EXE="$OUT/examples/common/ladder_common_tests"
-OBJECT_ARGS=()
-if [ -x "$LADDER_TEST_EXE" ]; then
-    OBJECT_ARGS+=(-object "$LADDER_TEST_EXE")
+# -- The binaries llvm-cov maps the profile data through ---------------------
+#
+# llvm-cov resolves a .profraw's counters through a *binary*'s coverage
+# mapping: one binary positionally, every additional one via -object. A test
+# executable that is instrumented, runs, and writes profile data therefore
+# still contributes nothing unless it appears here.
+#
+# This list used to be written out by hand, and it was wrong in the way a
+# hand-written list is always eventually wrong. It named three binary families
+# while the tree built nine; morph_net_tests wrote profile data that
+# llvm-profdata merged and llvm-cov then dropped, so include/morph/net -- 955
+# lines, 42 of the library's 148 throw sites, eight test files driving it --
+# contributed zero files to the uploaded report, and both
+# sqlite_offline_queue.hpp's 57.04% and include/morph/qt's 13 lines were
+# measured with their own suites absent (morph#403). It was the third time:
+# morph#141 (rungs 2-4 never added) and morph#179 (the rung list had drifted
+# past ledger and lims) were the same defect in the same file, and both were
+# fixed by deleting the copy and reading an authoritative list instead.
+#
+# So the list is no longer here. cmake/compiler_options.cmake's
+# apply_coverage() registers every instrumented test binary as it instruments
+# it, and writes the resolved paths to coverage_objects.txt at generate time.
+# A binary cannot be missing from that file without also being missing from the
+# build.
+#
+# The manifest is validated, and cross-checked against the binaries ctest
+# actually runs, by a gate of its own -- so that "a suite was added and never
+# instrumented" fails the coverage leg instead of quietly shrinking the
+# denominator. It is a separate script because a gate nobody tests reports
+# green whether or not it still detects anything, and
+# scripts/test_check_coverage_objects.sh can exercise it without a build.
+#
+# Checked before the gate runs, cheap first: without profile data there is
+# nothing to report either way, and the gate's own ctest query is the slowest
+# thing in this script. Running it only to die twenty lines later on an empty
+# profraw set is the wrong order for anyone driving this by hand.
+PROFILES=$(find "$OUT" -name "*.profraw" 2>/dev/null | tr '\n' ' ')
+if [ -z "$PROFILES" ]; then
+    echo "ERROR: No .profraw files found in $OUT." >&2
+    echo "Did you set LLVM_PROFILE_FILE and run ctest --preset clang-coverage?" >&2
+    exit 1
 fi
 
-# Per-rung test binaries, added on exactly the same "only if it was built"
+bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_objects.sh" "$OUT"
+
+# Re-read rather than re-derived: the gate above has already rejected a missing
+# manifest, an empty one, and any entry with no executable behind it, so this
+# loop is a read of something already known good.
+COVERAGE_OBJECTS=()
+while IFS= read -r _object; do
+    [ -n "$_object" ] || continue
+    COVERAGE_OBJECTS+=("$_object")
+done < "$MANIFEST"
+
+# One binary goes positionally and the rest via -object. Which one is first is
+# arbitrary -- llvm-cov treats them alike -- so it is simply the first line.
+PRIMARY_OBJECT="${COVERAGE_OBJECTS[0]}"
+OBJECT_ARGS=()
+for _object in "${COVERAGE_OBJECTS[@]:1}"; do
+    OBJECT_ARGS+=(-object "$_object")
+done
+
+# "Was this test binary built?", answered by looking it up in the manifest
+# rather than by rebuilding the path CMake would have used. Both of the
+# questions below -- was the ladder built, was this rung built -- used to be
+# `[ -x "$OUT/examples/<...>/<name>" ]`, which is the same guessing at CMake's
+# output layout that the -object list has just stopped doing. Leaving it here
+# would have kept half the mechanism derived and half hand-composed: an output
+# name or directory change would go on supplying objects while silently
+# dropping that rung's *sources*, which is the shrinking figure again, only
+# harder to see because the other half now looks safe. The manifest already
+# holds the exact resolved paths, so a basename lookup in it is the whole test.
+coverage_object_built() {
+    local _name="$1" _candidate
+    for _candidate in "${COVERAGE_OBJECTS[@]}"; do
+        if [ "${_candidate##*/}" = "$_name" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Per-rung *source paths*, named on exactly the same "only if it was built"
 # terms. Each rung's models are what examples/IMPLEMENTATION.md rule 5's
-# 100% bar actually names, so a rung that ships models must contribute its
-# profile data or the gate below measures nothing.
+# 100% bar actually names, so a rung that ships models must have its sources
+# named here or the gate below measures nothing. (The rung's test *binary*
+# reaches llvm-cov through coverage_objects.txt above; this loop decides only
+# which source trees the report is computed over.)
 #
 # Driven by a loop rather than one hand-written block per rung, because the
 # hand-written form silently rotted: rungs 2, 3 and 4 shipped without ever
@@ -55,7 +126,7 @@ fi
 # path filter a rung behind (morph#179). Reading the list removes the copy.
 #
 # A rung that was not configured in this build contributes nothing, exactly as
-# before, via the `-x` guard.
+# before, via the coverage_object_built() guard.
 #
 # Substituted before the loop, not piped into it: under `set -e` a failing
 # reader inside a process substitution would not abort this script, and a
@@ -65,9 +136,7 @@ _MORPH_LADDER_RUNGS="$(bash "$(dirname "${BASH_SOURCE[0]}")/ladder_rungs.sh" lis
 RUNG_TEST_EXES=()
 while IFS= read -r _rung; do
     [ -n "$_rung" ] || continue
-    _exe="$OUT/examples/${_rung}/ladder_${_rung}_tests"
-    if [ -x "$_exe" ]; then
-        OBJECT_ARGS+=(-object "$_exe")
+    if coverage_object_built "ladder_${_rung}_tests"; then
         RUNG_TEST_EXES+=("$_rung")
     fi
 done <<< "$_MORPH_LADDER_RUNGS"
@@ -85,7 +154,11 @@ done <<< "$_MORPH_LADDER_RUNGS"
 # no separate exclusion mechanism needed. Demo src/, system headers and
 # fetched dependencies are excluded the same way.
 SOURCES=(include/morph)
-if [ -x "$LADDER_TEST_EXE" ]; then
+# examples/common only when this configure also built the ladder
+# (MORPH_BUILD_LADDER=ON -- see the "coverage leg only" Qt install step in
+# ci.yml), so this script still works unchanged for a plain
+# `cmake --preset clang-coverage` with no -DMORPH_BUILD_LADDER=ON.
+if coverage_object_built ladder_common_tests; then
     SOURCES+=(examples/common)
 fi
 # include/ + src/ are each rung's DTOs and models (rule 5's own 100% bar);
@@ -121,17 +194,22 @@ done
 # bar means to hold to that standard — only the real testkit/GUI code is.
 IGNORE_REGEX='.*/testkit/test_[^/]+\.cpp$'
 
-PROFILES=$(find "$OUT" -name "*.profraw" 2>/dev/null | tr '\n' ' ')
-if [ -z "$PROFILES" ]; then
-    echo "ERROR: No .profraw files found in $OUT." >&2
-    echo "Did you set LLVM_PROFILE_FILE and run ctest --preset clang-coverage?" >&2
-    exit 1
-fi
-
 ${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
 
+# Before any filter is applied, and deliberately so: the exports below keep
+# only records that matched a relative SOURCES entry, so a record rooted in
+# another checkout is gone by the time they run and every path left is under
+# this tree by construction. A shared compiler cache can serve objects built in
+# another worktree, and their coverage mappings name that worktree -- 246 of
+# 688 records in the run that found it, taking the whole of crm's src models
+# out of the report while its tests ran and passed (morph#426). The cause is
+# removed at configure time (cmake/compiler_options.cmake defaults
+# USE_COMPILER_CACHE to OFF under AF_COVERAGE); this is the check that the
+# removal held, because the failure it guards against reports nothing.
+bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_roots.sh" "$OUT"
+
 mkdir -p "$REPORT_DIR"
-${LLVM_COV} show "$TEST_EXE" \
+${LLVM_COV} show "$PRIMARY_OBJECT" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -ignore-filename-regex="$IGNORE_REGEX" \
@@ -141,13 +219,13 @@ ${LLVM_COV} show "$TEST_EXE" \
 
 echo "Coverage report: $REPORT_DIR/index.html"
 
-${LLVM_COV} report "$TEST_EXE" \
+${LLVM_COV} report "$PRIMARY_OBJECT" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -ignore-filename-regex="$IGNORE_REGEX" \
     "${SOURCES[@]}"
 
-${LLVM_COV} export "$TEST_EXE" \
+${LLVM_COV} export "$PRIMARY_OBJECT" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -ignore-filename-regex="$IGNORE_REGEX" \
@@ -161,7 +239,7 @@ ${LLVM_COV} export "$TEST_EXE" \
 # header-only templated code. Collapse them to one record per source branch,
 # matching the aggregate that `llvm-cov report` already prints above. Branch
 # coverage is preserved (not skipped); only the per-instantiation noise is removed.
-${LLVM_COV} export "$TEST_EXE" \
+${LLVM_COV} export "$PRIMARY_OBJECT" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -ignore-filename-regex="$IGNORE_REGEX" \
@@ -170,3 +248,16 @@ ${LLVM_COV} export "$TEST_EXE" \
 
 python3 scripts/aggregate_lcov_branches.py \
     "$OUT/coverage.lcov.raw" "$OUT/coverage.json" "$OUT/coverage.lcov"
+
+# The branch half of the number, which until morph#404 was produced, preserved,
+# uploaded and scored by nothing: every status and every component in
+# codecov.yml measures lines, and Codecov has no branch target to set. A line
+# is covered the moment control reaches it, whatever the condition on it
+# evaluated to, so a branch taken one way only passes every gate this
+# repository had.
+#
+# Deliberately last, and on "$OUT/coverage.lcov" rather than the .raw: it must
+# read aggregate_lcov_branches.py's output, since llvm-cov emits one BRDA
+# record per template instantiation and a header-only template library scores
+# one source branch dozens of times in the raw file.
+python3 scripts/check_branch_coverage.py "$OUT/coverage.lcov" --objects "$MANIFEST"

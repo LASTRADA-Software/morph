@@ -1,0 +1,7 @@
+// Fixture for scripts/check_automoc_includes.sh: dots that are part of a file
+// or directory name are not an ascent, and Qt's own angle-bracket includes are
+// never scanned. None of these may be reported.
+#include "a..b.hpp"
+#include "v1..2/widget.hpp"
+#include <QtCore/qmetatype.h>
+#include <QtCore/qtmochelpers.h>
