@@ -203,7 +203,16 @@ TEST_CASE("FlowSession: every set<> that leaves the draft ready dispatches again
     // came back -- every other flow test in this file drains until `ready()`,
     // which is true after one dispatch or after five.
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    // Hand-stepped rather than the inline executor the cases above use. A
+    // step's continuation runs on whatever executor resolves the completion,
+    // and this case deliberately has five dispatches outstanding at once; with
+    // an inline executor those five `captureResult` calls run on pool threads
+    // and race the end of this scope, because `~FlowSession` only *requests* a
+    // stop and `CallbackScope` documents that request as advisory across
+    // threads -- a callback that has already passed its token check goes on to
+    // touch the session. Stepping the continuations keeps every one of them on
+    // this thread, so the flow is destroyed with nothing left to deliver.
+    morph::testing::StepExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
@@ -212,7 +221,10 @@ TEST_CASE("FlowSession: every set<> that leaves the draft ready dispatches again
     // Step two is the one counted: its execute() does no sleeping, so five
     // dispatches of it cost nothing.
     flow.set<&FlowStepOne::label>(std::string{"counting"});
-    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    while (!flow.ready()) {
+        REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+        cbExec.runAll();
+    }
     REQUIRE(flow.advance());
 
     auto const before = FlowTestModel::stepTwoExecutions.load();
@@ -223,12 +235,22 @@ TEST_CASE("FlowSession: every set<> that leaves the draft ready dispatches again
     CHECK(FlowTestModel::stepTwoExecutions.load() == before);
 
     // Five edits that each leave the draft ready: five dispatches, one per
-    // edit, not one dispatch carrying the final draft.
+    // edit, not one dispatch carrying the final draft. The counter is bumped on
+    // entry to `execute`, so this says five requests were *made* -- which is
+    // the claim -- and says nothing yet about their replies.
     for (const auto* note : {"a", "b", "c", "d", "e"}) {
         flow.set<&FlowStepTwo::note>(std::string{note});
     }
     REQUIRE(morph::testing::waitUntil([&] { return FlowTestModel::stepTwoExecutions.load() >= before + 5; }));
     CHECK(FlowTestModel::stepTwoExecutions.load() == before + 5);
+
+    // Now deliver all five replies, and only then leave the scope. The loop
+    // ends once a full budget passes with the queue empty, which is what makes
+    // "nothing is still in flight" an observation rather than an assumption.
+    while (morph::testing::waitUntil([&] { return cbExec.pending() > 0; }, std::chrono::milliseconds{250})) {
+        cbExec.runAll();
+    }
+    CHECK(flow.ready());  // every one of the five replies landed
 }
 
 TEST_CASE("FlowSession: back() returns to step one with its draft intact", "[flows]") {
