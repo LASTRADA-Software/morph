@@ -35,6 +35,12 @@
       "line": 731,
       "source": "if (!std::is_constant_evaluated()) {",
       "reason": "reportClamp's copy of the same shape as line 698 above, and uncoverable for the same reason: the untaken arm is constant evaluation, which increments no counters."
+    },
+    {
+      "file": "include/morph/util/datetime.hpp",
+      "line": 158,
+      "source": "if (!allowSign && count > 0 && offset < text.size() && (text[offset] == '-' || text[offset] == '+')) {",
+      "reason": "Both the `count > 0` false arm and the `offset < text.size()` false arm are unreachable. This lambda has exactly 6 call sites, all in fromIso8601 (lines 177-182), each passing a literal `count` of 4 (year, allowSign=true) or 2 (month/day/hour/minute/second, allowSign=false); `count > 0` is a compile-time-true invariant of every call site, never 0. `offset < text.size()` is likewise always true whenever this branch even executes (it is gated by `!allowSign`): every allowSign=false call site has `offset + count <= 19` (offsets 5/8/11/14/17, each with count=2, so max offset+count is 19), and the function already returns std::nullopt earlier if `text.size() < 19`. So by the time any allowSign=false call runs, text.size() >= 19 >= offset + count, making `offset < text.size()` always true. Both are defensive bounds-checks inside a private lambda whose only callers are fixed, audited literals -- there is no way to reach either false arm without changing the call sites themselves."
     }
   ]
 }
