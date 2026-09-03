@@ -41,6 +41,34 @@ Frame {
     property var schema
     property var controller
 
+    // The schema as ordinary JSON data, however it was supplied (morph#388).
+    // **Every read of the schema below goes through this, never through
+    // `schema` itself.**
+    //
+    // A *bound* `schema` -- what every shipped app writes, and what the
+    // renderer contract describes -- arrives as a genuine JS object. A schema
+    // *assigned* instead (an initial property, a `setProperty` from C++,
+    // `createTemporaryObject(c, p, {schema: ...})`) round-trips through
+    // QVariant, and each of its arrays comes back as a QVariantList. A
+    // QVariantList carries `.length`, `.indexOf` and `.map`, so most of this
+    // file never noticed -- but `Array.isArray` on one is **false**, and the
+    // three places that ask that question therefore took the wrong branch,
+    // silently, on a form that still reported `ready`:
+    //
+    //   - `type: ["integer","null"]` (what schemaJson emits for a rule-3
+    //     strong id under `$defs`) was wrapped rather than unpacked, leaving
+    //     `isInteger` false, so the id was submitted as a quoted JSON
+    //     *string* and the server answered parse_number_failure;
+    //   - the `anyOf`-over-`$ref` collapse (morph#189) never ran, so a
+    //     nullable `$ref` member regressed to that same encoding -- #189's
+    //     own fix, going inert on this path;
+    //   - the closed-set recognition (morph#386) never ran, so an `enum`
+    //     drew a free-text box over what the schema states is a closed set.
+    //
+    // Normalising once, here, is what stops that being a standing trap for
+    // the next `Array.isArray` anyone writes against schema data.
+    readonly property var schemaData: normalizeSchema(schema)
+
     // Client-side theming/override registry (docs/spec/forms/forms.md,
     // "Theming / component-override registry"): null (the default) means no
     // registry installed -- every field renders its built-in control exactly
@@ -69,7 +97,7 @@ Frame {
     // the action declares no formRules, in which case every helper below is
     // a no-op and behavior is byte-identical to a renderer with no rule
     // support (the fallback the spec requires).
-    property var rules: schema["x-rules"] || []
+    property var rules: schemaData["x-rules"] || []
     property int rulesRevision: 0
 
     // "x-submitMode": "explicit" (docs/spec/forms/forms.md, "Explicit submit
@@ -79,7 +107,7 @@ Frame {
     // an explicit submit Button (added to the layout below), enabled only
     // while `ready`, is the sole way to fire. Absent (the default) or any
     // other value keeps today's auto-submit-on-validity behavior unchanged.
-    property bool explicitSubmitMode: schema["x-submitMode"] === "explicit"
+    property bool explicitSubmitMode: schemaData["x-submitMode"] === "explicit"
 
     // i18n: a host-supplied translation catalog (see I18nCatalog.hpp) and the
     // BCP-47 locale to resolve against. `catalog: null` (the default) means
@@ -100,6 +128,28 @@ Frame {
         return value === undefined ? fallback : value
     }
 
+    // Re-reads a schema as plain JSON data, for `schemaData` above. JSON is
+    // the only shape a schema has, so a round trip through it is a no-op in
+    // meaning for a value that was already plain.
+    //
+    // Anything that is not an object -- including the `undefined` of a form
+    // whose schema has not been set yet -- passes through untouched, so an
+    // unconfigured form behaves exactly as it did before.
+    function normalizeSchema(value) {
+        if (value === null || typeof value !== "object")
+            return value
+        try {
+            return JSON.parse(JSON.stringify(value))
+        } catch (ignored) {
+            // JSON.stringify throws on a reference cycle, which a parsed
+            // schema cannot contain but a hand-written QML object literal
+            // could. Such a schema renders today (nothing here follows a
+            // `$ref` by identity), so hand it back untouched rather than
+            // taking the whole form out with a broken binding.
+            return value
+        }
+    }
+
     // A `{num,den,dp}` Rational node (the wire shape `x-minimum`/`x-maximum`
     // take on a schema decorated by morph::forms::InstanceConstraints) read as
     // a JS number, or `undefined` when the key is absent or malformed.
@@ -118,6 +168,19 @@ Frame {
         if (typeof num !== "number" || typeof den !== "number" || den === 0)
             return undefined
         return num / den
+    }
+
+    // A declared scalar bound as a finite number, or `undefined` for "no bound".
+    //
+    // JSON has no `Infinity`, so `schemaData`'s round trip turns a non-finite
+    // bound -- reachable only from a hand-authored QML object literal, never
+    // from `schemaJson<A>()` -- into `null`. A null bound is not `undefined`,
+    // so every gate below would read it as the bound **0**: `maximum: Infinity`
+    // would go from "no effective ceiling" to rejecting every positive value.
+    // JSON Schema gives a null numeric keyword no meaning either, so both
+    // spellings land on the same answer: not a declared bound.
+    function numericBound(value) {
+        return typeof value === "number" && isFinite(value) ? value : undefined
     }
 
     // Whether `value` breaks a declared `multipleOf` (morph#310). An absent or
@@ -166,7 +229,7 @@ Frame {
     function resolveRef(prop) {
         if (prop && prop["$ref"] !== undefined) {
             const defName = prop["$ref"].split("/").pop()
-            const def = opt((schema["$defs"] || {})[defName], {})
+            const def = opt((schemaData["$defs"] || {})[defName], {})
             return Object.assign({}, def, prop)
         }
         return opt(prop, {})
@@ -311,8 +374,8 @@ Frame {
 
     // Flat field descriptors, in declaration (x-order) order.
     property var fields: {
-        const props = schema.properties || {}
-        const required = schema.required || []
+        const props = schemaData.properties || {}
+        const required = schemaData.required || []
         return Object.keys(props)
             .sort(function (a, b) { return opt(props[a]["x-order"], 0) - opt(props[b]["x-order"], 0) })
             .map(function (name) {
@@ -411,8 +474,8 @@ Frame {
                     // one glaze stamped on the shared type definition -- which
                     // is what makes a bound on one `Quantity` member leave a
                     // sibling of the same type alone.
-                    minimum: p.minimum,
-                    maximum: p.maximum,
+                    minimum: numericBound(p.minimum),
+                    maximum: numericBound(p.maximum),
                     // `multipleOf = 1` is how "whole number" is spelled: the
                     // constraint a `Quantity` cannot carry in its type, since
                     // `Quantity<U, Dec>` requires `Dec >= 1` and therefore
@@ -489,7 +552,7 @@ Frame {
     // declares no x-layout at all, this is one implicit group holding every
     // field: the pre-grouping flat form, unchanged.
     property var sections: {
-        const groupDefs = (schema["x-layout"] || {}).groups || []
+        const groupDefs = (schemaData["x-layout"] || {}).groups || []
         if (groupDefs.length === 0)
             return [{ title: "", kind: "flat", fields: fields }]
 
@@ -1195,6 +1258,8 @@ Frame {
         return payload
     }
 
+    // `replyReceived` is on every controller, so this block stays strict: a
+    // handler here that matches no signal is a misspelling and must be loud.
     Connections {
         target: form.controller
         function onReplyReceived(actionType, ok, payload) {
@@ -1203,6 +1268,25 @@ Frame {
             form.resultOk = ok
             form.resultText = ok ? form.humanize(payload) : payload
         }
+    }
+
+    // `optionsReceived` is not. It exists only on a controller that serves a
+    // morph::forms::Choice field, and a controller that serves none declares
+    // no stub for it -- the sanctioned shape (bookmarks' and pastebin's forms
+    // controllers both document why). Unaccommodated, that shape made the form
+    // warn once per instance about the handler below (morph#387).
+    //
+    // The accommodation is the gated target, not `ignoreUnknownSignals`. A
+    // controller without the signal is never connected to, so there is nothing
+    // to warn about; a controller that has it is connected strictly, so a
+    // misspelling of the handler below is still reported. `ignoreUnknownSignals`
+    // would silence both, and the second is not noise: a misspelled handler on a
+    // Choice-serving controller drops every option, leaves the combo box empty
+    // and the form short of `ready`, and would then do so with no diagnostic at
+    // all.
+    Connections {
+        target: form.controller && form.controller.optionsReceived !== undefined
+                    ? form.controller : null
         function onOptionsReceived(optionsAction, ok, payload) {
             if (!ok)
                 return

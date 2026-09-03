@@ -388,9 +388,14 @@ TEST_CASE("Forms::Rules::Unsatisfiable::MessageNamesTheActionTheKindAndBothField
     }
     CHECK(message.find("CFRUnsatisfiableExactlyOne") != std::string::npos);
     CHECK(message.find("exactlyOneOf") != std::string::npos);
-    CHECK(message.find("value") != std::string::npos);
-    CHECK(message.find("qualifier") != std::string::npos);
     CHECK(message.find("optionalFields") != std::string::npos);
+    // The two offenders are not merely *mentioned*: they are rendered as one
+    // comma-separated list, in the order the rule ranges over them, with no
+    // stray separator at either end. Checking only that each name appears
+    // somewhere in a sentence that also contains the words "required array"
+    // passes against a list rendered ", value, qualifier" or "valuequalifier",
+    // and the list is the part of this message a reader acts on.
+    CHECK(message.contains("required array: value, qualifier. No submission"));
 }
 
 TEST_CASE("Forms::Rules::Unsatisfiable::ThrowIsNotCachedAwayBySchemaJson", "[forms][rules][unsatisfiable]") {

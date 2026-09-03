@@ -160,8 +160,10 @@ template <typename T>
 /// shape that never reaches the journal.
 ///
 /// @tparam T     Type to render.
-/// @param  depth Current recursion depth; at `kPayloadShapeMaxDepth` the
-///               opaque tag is emitted instead of recursing further.
+/// @param  depth Current recursion depth; once it is *past*
+///               `kPayloadShapeMaxDepth` the opaque tag is emitted instead of
+///               recursing further, so `kPayloadShapeMaxDepth` is the deepest
+///               level that still renders its own structure.
 /// @return The rendering described above.
 template <typename T>
 [[nodiscard]] std::string payloadShape(int depth) {

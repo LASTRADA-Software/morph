@@ -66,6 +66,7 @@ add_executable(morph_tests
     test_strong_id_keys.cpp
     test_wire_encode_fault.cpp
     test_wire_hardening.cpp
+    test_remote_reply_envelopes.cpp
     test_wire_schemas.cpp
     test_protocol_version.cpp
     test_limit_policy.cpp

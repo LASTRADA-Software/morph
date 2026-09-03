@@ -249,6 +249,39 @@ TEST_CASE("payloadFingerprint: reordering members does NOT change the fingerprin
     REQUIRE(payloadFingerprint<PEShapeReordered>() == payloadFingerprint<PEShapeBase>());
 }
 
+// ── The recursion limit, read at its own edge ────────────────────────────────
+//
+// `payloadShape` stops decomposing and emits the opaque tag once `depth` is
+// *past* `kPayloadShapeMaxDepth`, so the deepest level that still renders its
+// own structure is `kPayloadShapeMaxDepth` itself. That cut-off is what keeps a
+// self-referential payload (`struct Node { std::vector<Node> kids; }` is a legal
+// Glaze payload) fingerprinting finitely, and it decides what such a type
+// fingerprints *as* -- but every other shape case in this file nests two or
+// three levels, far enough from the edge that moving the comparison by one
+// changes no rendering at all.
+//
+// Each `std::vector<>` wrapper costs exactly one level: `payloadShape<vector<T>>
+// (d)` renders `[` + `payloadShape<T>(d + 1)` + `]`, and `payloadShapeString`
+// enters at depth 0, so the leaf of an N-deep chain is rendered at depth N.
+using PEDepthAtLimit = std::vector<
+    std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::int32_t>>>>>>>>;
+using PEDepthPastLimit = std::vector<PEDepthAtLimit>;
+
+TEST_CASE("payloadShapeString: the deepest level that still renders is kPayloadShapeMaxDepth itself",
+          "[journal][payload_evolution][issue174]") {
+    // The literals below are written for a limit of 8; if the constant moves,
+    // they are what has to move with it.
+    STATIC_REQUIRE(morph::model::detail::kPayloadShapeMaxDepth == 8);
+
+    // Leaf at depth 8 -- at the limit, so still decomposed into its own tag.
+    REQUIRE(payloadShapeString<PEDepthAtLimit>() == "[[[[[[[[i4]]]]]]]]");
+    // Leaf at depth 9 -- one past it, so the opaque tag stands in and the
+    // recursion terminates rather than following the type any further.
+    REQUIRE(payloadShapeString<PEDepthPastLimit>() == "[[[[[[[[[x]]]]]]]]]");
+    // Which means the two are distinguishable: truncation is not a collision.
+    REQUIRE(payloadFingerprint<PEDepthAtLimit>() != payloadFingerprint<PEDepthPastLimit>());
+}
+
 TEST_CASE("payloadFingerprint: renders nested shape and carries the scheme prefix",
           "[journal][payload_evolution][issue174]") {
     REQUIRE(payloadShapeString<PEShapeNested>() == "(inner:(count:i4,state:s),lookup:{s>i4},note:?s,xs:[i4])");

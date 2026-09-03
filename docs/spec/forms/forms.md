@@ -1000,6 +1000,69 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
 This is packaging and factoring only: no `x-*` key changed, and a plain
 single-action form renders identically to before the renderer was extracted.
 
+`DynamicForm` connects to the controller through **two** `Connections` blocks,
+not one, because only one of the two signals is universal:
+
+- **`replyReceived(actionType, ok, payload)` is required** of every controller.
+  Its block is strict, so a handler there that matches no signal on the target
+  is a misspelling and the engine reports it.
+- **`optionsReceived(optionsAction, ok, payload)` is optional.** It exists only
+  on a controller that serves a `Choice` field; a controller that serves none
+  deliberately declares neither it nor `fetchOptions()`
+  (`bookmarks::gui::BookmarkFormsController` and
+  `pastebin::gui::PasteFormsController` each carry the reasoning: an unused
+  `fetchOptions()` would be a stub with nothing to call it). Its block gates its
+  **target** on the signal being declared — `form.controller.optionsReceived
+  !== undefined`, else `null` — so a controller that omits it is never connected
+  to and the absence is not a warning. Without the split, every form instance
+  warned once about `onOptionsReceived` as soon as a conforming choiceless
+  controller was attached (morph#387), which forced any GUI test asserting "no
+  QML warnings" to tolerate that exact text.
+
+  The gate is what makes the block optional, **not** `ignoreUnknownSignals`. A
+  controller that does declare `optionsReceived` is connected to strictly, so a
+  misspelling of the handler is still reported. `ignoreUnknownSignals: true`
+  would silence that too, and the silence is expensive: the options never
+  arrive, every `Choice` combo box stays empty, the form never reaches `ready`,
+  and nothing is logged.
+
+`src/qt/forms/tests/tst_DynamicFormChoicelessController.qml` pins both halves:
+a choiceless controller loads with no warning, a `Choice`-serving one still
+receives its options, and a target missing `replyReceived` is still reported.
+
+`DynamicForm.schema` takes the parsed schema **however it is supplied** — a
+declarative QML binding (`schema: controller.schemas[actionType]`), an initial
+property, a `setProperty` from C++, or `createTemporaryObject(component,
+parent, {schema: ...})`. An assigned value round-trips through `QVariant`,
+which turns each of the schema's arrays into a `QVariantList` rather than a JS
+array; the renderer re-reads the schema as plain JSON once, at the property, so
+an array-valued `type` (`["integer","null"]`), the `anyOf`-over-`$ref` collapse
+and closed-set recognition all read the same either way. The same schema
+supplied both ways yields the same field descriptors and the same submitted
+body — asserted in `src/qt/forms/tests/tst_DynamicFormSchemaAsVariant.qml`,
+which builds one form each way and compares them against each other.
+
+The one thing that does **not** survive the `QVariant` boundary is JSON key
+order: the map it converts through is sorted, and the declaration order is
+gone before the renderer is reached, so no renderer can recover it. This is
+the general rule `x-order` already exists for — "renderers lay fields out in
+ascending `x-order`, not in JSON key order", above — and `schemaJson<A>()`
+emits `x-order` on every property, so a generated schema is unaffected. A
+**hand-written** schema that omits `x-order` leaves its fields tied, and the
+sort that orders them is `Array.prototype.sort`, which QML's engine does not
+guarantee to be stable: measured on Qt 6.11.2, four all-equal elements come
+back reordered. So a tied schema lays out in an order that is neither
+declaration order nor key order, bound or assigned. Give every property an
+`x-order`.
+
+One other value JSON cannot carry: a **non-finite** `minimum`/`maximum`. Only a
+hand-authored QML object literal can declare one — `schemaJson<A>()` never
+emits it, and no JSON text can spell it — and the re-read turns it into `null`.
+The renderer reads a bound that is not a finite number as **no bound declared**,
+which is what `maximum: Infinity` already meant, and matches JSON Schema giving
+a null numeric keyword no meaning. Without that, a null bound would read as the
+bound `0` and reject every positive value.
+
 ## Renderer conformance kit
 
 A renderer proves it honors the contract above by consuming a **schema
@@ -1334,8 +1397,9 @@ top-level `x-rules` array (alongside `required`); `allRulesSatisfied<A>(action)`
 evaluates it as the shared C++ predicate; and because `validate()` calls
 `allRulesSatisfied`, `ActionValidator<A>::ready` ([registry.md](../core/registry.md))
 picks it up automatically on every dispatch path that already enforces
-`ready()` — the reactive `set<>` gate, the client request/reply gate, and the
-server dispatch runner ([registry.md](../core/registry.md)) — with no extra
+`ready()` — `morph::flows::FlowSession::set<>`'s gate, the client
+request/reply gate, and the server dispatch runner
+([registry.md](../core/registry.md)) — with no extra
 code anywhere. The vocabulary is deliberately closed: adding a new rule kind is
 a framework change, never an application-supplied lambda, which is what lets
 the client and the server evaluate identically from the same serialized form.
@@ -1951,7 +2015,7 @@ for the exhaustive tables and design rationale.
 | Layout declaration | **`static constexpr formLayout` / `fieldSpans`, mirroring `optionalFields`** | Visual structure is a compile-time property of the action, exactly like the existing opt-out list; a renderer that ignores it degrades to the flat `x-order` form with no missing fields. |
 | Widget selection | **Type-derived by default (`Multiline`/`Ranged`), `fieldMetadata`-shaped override wins** | Mirrors the `Choice`/`Quantity` pattern: the control is a compile-time property of the type; the escape hatch is a typed declaration, not a schema-only knob. |
 | Widget override lookup | **Duck-typed on `.field`/`.widget`, not a named type** | Keeps `forms.hpp`'s widget lookup free of a hard dependency on any one field-metadata descriptor type declaration; any shape exposing those two members is honoured, `FieldMeta` ([above](#field-metadata--fieldmeta)) included. |
-| Computed fields | **One declaration (`computed`/`computeList`) drives schema + client + server via a single shared `recomputeAll`** | The same evaluator runs on the reactive client path and on every server dispatch path, so the displayed value and the stored value are derived identically — a computed field can never drift, and the server never trusts a client-submitted derivation. |
+| Computed fields | **One declaration (`computed`/`computeList`) drives schema + client + server via a single shared `recomputeAll`** | The same evaluator runs on the client dispatch paths (`executeJson`, `Bridge::executeVia`) and on every server dispatch path, so the displayed value and the stored value are derived identically — a computed field can never drift, and the server never trusts a client-submitted derivation. |
 
 ## Failure modes
 

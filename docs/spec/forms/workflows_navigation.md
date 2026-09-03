@@ -169,8 +169,7 @@ it later needs no change to `appSchemaJson` itself.
 
 ## `FlowSession<Model, Steps...>`
 
-The typed C++ sequencer, built entirely on `BridgeHandler`'s existing
-reactive draft ([bridge.md](../core/bridge.md)):
+The typed C++ sequencer ([bridge.md](../core/bridge.md)):
 
 ```cpp
 template <typename Model, typename... Steps>
@@ -191,16 +190,30 @@ public:
 };
 ```
 
-- **A step is an ordinary action fire.** `set<FieldPtr>` forwards directly to
-  `BridgeHandler::set<FieldPtr>`, so the step's `ActionValidator::ready` gate
-  and auto-fire-on-ready behaviour are exactly the standalone-form path —
-  `FlowSession` adds no new execution mode.
+- **A step is an ordinary action fire.** `set<FieldPtr>` writes the field into
+  `FlowSession`'s own per-step draft, checks `ActionValidator<A>::ready` on it,
+  and dispatches a ready draft with `BridgeHandler::execute<A>()`. The gate and
+  the auto-fire-on-ready behaviour are the standalone form's, but the *draft*
+  is the flow's: nothing is forwarded to handler-side draft machinery, and
+  `FlowSession` still adds no new execution mode.
+- **A flow step does not coalesce in flight.** Because the dispatch decision is
+  made in `FlowSession::set<>`, **every** `set<>` that leaves the draft ready
+  fires, including one made while an earlier fire is still outstanding.
+  Keystroke-rate `set<>` calls on an already-complete draft therefore produce
+  one request each, and their replies land in whatever order the backend
+  answers — the last reply to arrive wins, which need not be the last call
+  made. An earlier handler-side draft did collapse patches arriving during a
+  flight; nothing does now — not here, and not on the standalone-form path,
+  where `DynamicForm` calls `submitIfValid` on every change that leaves the
+  form ready with no in-flight suppression either. A caller that wants one
+  request per pause throttles or debounces on its own side; `FlowSession`
+  deliberately does not, since it cannot know the host's input cadence.
 - **`advance()`/`back()` are pure sequencing.** `advance()` moves to the next
   step only if the current step has already produced a captured, successful
   result (`ready() == true`); a not-ready step does not advance. `back()`
-  returns to the previous step; neither the handler's own per-action draft
-  nor `FlowSession`'s own per-step `std::tuple<Steps...>` snapshot is ever
-  reset, so entered values survive navigation.
+  returns to the previous step; `FlowSession`'s own per-step
+  `std::tuple<Steps...>` draft — the only draft in play, since the handler
+  keeps none — is never reset, so entered values survive navigation.
 - **`resolved(path)` is the prefill source.** On every successful step
   result, `FlowSession` flattens both the step's submitted draft (via
   `morph::forms::detail::forEachNamedMember`) and its result into a
@@ -225,10 +238,10 @@ public:
   completion resolving after the session is gone is refused rather than
   dereferencing freed memory. `~FlowSession` calls `requestStop()` as its first
   statement rather than relying on member destruction alone: members are
-  destroyed only *after* the destructor body, and that body unsubscribes — a
-  path that can pump an event loop and deliver into a half-dead session. This is
-  the "teardown that pumps" escape hatch callback_scope.md documents, and
-  `FlowSession` is its worked example.
+  destroyed only *after* the destructor body, and that body can pump an event
+  loop (a blocking, `sendSync`-style call) and deliver into a half-dead
+  session. This is the "teardown that pumps" escape hatch callback_scope.md
+  documents, and `FlowSession` is its worked example.
 
 ## The Qt/QML reference renderer
 
@@ -312,7 +325,7 @@ the typed template API (see [Design decisions](#design-decisions)).
 | No runtime wizard/app registry | `BRIDGE_REGISTER_WIZARD`/`BRIDGE_REGISTER_APP` only specialise traits | Neither a wizard nor an app is ever executed or looked up by string id at runtime; the consuming code always names the concrete type. Avoids a second registry to keep in lockstep with the schema-emission call sites, mirroring how the example's own `schemasJson()` already hand-assembles its schema set rather than walking a generic registry. |
 | Prefill resolution lives with the caller/renderer | `FlowSession::resolved(path)` is read-only; nothing calls `set<>` automatically | Matches the wizard document's own wording that the renderer resolves and issues the `set<>` calls; keeps `FlowSession` a pure sequencer with no opinion on *when* a step should be pre-populated. |
 | Result fields win over draft fields on name collision | `FlowSession::captureResult` records the draft first, then the result, so identical field names are overwritten by the result; `FormsController`'s QML-facing resolved-value map applies the same order | A deterministic, testable rule for the one genuinely ambiguous point in the source design (prefill can come from "an earlier step's result *or* submitted draft"), applied identically on both the typed C++ path and the QML reference renderer's JSON path. |
-| Steps must be pairwise distinct types | `static_assert(detail::AllDistinct<Steps...>::value, ...)` | `BridgeHandler` keeps exactly one draft per `(handler, action type)`; reusing a type twice in one flow would silently collide. Also required for `std::get<A>(_drafts)` (`std::tuple::get<T>` needs a unique `T`). |
+| Steps must be pairwise distinct types | `static_assert(detail::AllDistinct<Steps...>::value, ...)` | `std::get<A>(_drafts)` needs a unique `T`, and reusing a step type would silently collide the two steps' drafts. |
 | QML reference renderer does not use `FlowSession` | `WizardView.qml`/`AppShell.qml`/`FormsController` sequence wizards via plain `executeJson` + a JSON resolved-value map, not the typed template API | QML/MOC cannot name a C++ action type generically at compile time, and `FormsController.hpp` must stay free of template-heavy morph headers (its existing `Q_MOC_RUN` guard). `FlowSession` remains available for non-QML/typed embeddings and is exercised directly by `tests/test_flows_apps.cpp`. |
 
 ## Limitations

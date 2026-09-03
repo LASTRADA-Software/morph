@@ -50,7 +50,7 @@ provides:
   ids and JSON codecs. Users specialise them directly or use macros.
 - **Validators** — `ActionValidator<A>` that decides whether a partially-built
   action draft is ready to execute, enforced on every dispatch path: the
-  reactive `set<>` path, the type-erased `executeJson` path, the server dispatch
+  `morph::flows::FlowSession::set<>` gate, the type-erased `executeJson` path, the server dispatch
   runner (`ActionDispatcher::registerAction`), and the local `Bridge::executeVia`
   path — the last two throw `ValidationError` on a `false` result instead of
   running `Model::execute`.
@@ -307,11 +307,16 @@ requires any change to `ActionValidator`/`HasValidate` — both are ordinary
 
 ### `ValidationError`
 
-Thrown by the two execution sites that receive an action without first passing
-through a client-side readiness gate: `ActionDispatcher::registerAction`'s
-runner (the server dispatch path `RemoteServer` uses on every remote and Qt
-WebSocket topology) and `Bridge::executeVia`'s `localOp` (the in-process path
-`LocalBackend` uses). Both call `ActionValidator<Action>::ready(action)`
+Thrown by the two execution sites an action can reach ungated:
+`ActionDispatcher::registerAction`'s runner (the server dispatch path
+`RemoteServer` uses on every remote and Qt WebSocket topology), which a
+hand-built envelope from an untrusted remote client reaches directly, and
+`Bridge::executeVia`'s `localOp` (the in-process path `LocalBackend` uses),
+which an action built by hand and handed to `BridgeHandler::execute<Action>()`
+reaches directly. An action that already passed
+`morph::flows::FlowSession::set<>`'s gate or the type-erased `executeJson`
+gate still reaches whichever of the two its topology dispatches through, and
+is simply re-checked there. Both call `ActionValidator<Action>::ready(action)`
 immediately before `Model::execute` and throw `ValidationError` on `false`,
 instead of executing the action:
 
@@ -1145,7 +1150,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `Loggable` is a strong enum | **`Loggable::No` / `Loggable::Yes`**, not bare `bool` | Registration call sites read as intent rather than an unexplained `false`. |
 | `ModelFactory::create` attaches the default log | **Single construction path for all topologies** | "Set the log once in `main()`" works uniformly across local and remote topologies. Callers that need a specific identity call `attachActionLog` again afterward. |
 | `setOutboxManaged` opt-out | **Suppress `recordIfAttached`, not `hasActionLog()`** | A store-backed model that logs inside its own transaction (see `journal.md`'s transactional outbox) must stop the framework's auto-append without losing "a log is attached" as a fact holders can still query. |
-| `coalesce` defaults to `false` | **Every execution is a distinct, permanent fact** | The right default for anything resembling a business event. Only actions where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via `BridgeHandler::set`) opt in. |
+| `coalesce` defaults to `false` | **Every execution is a distinct, permanent fact** | The right default for anything resembling a business event. Only actions where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via `morph::flows::FlowSession::set`) opt in. |
 
 ## Thread safety
 

@@ -211,7 +211,7 @@ TEST_CASE("schemaJson emits neither key for an action with no computedFields", "
 }
 
 // ---------------------------------------------------------------------------
-// Client reactive path: BridgeHandler::set<> recomputes live before firing.
+// Client reactive path: BridgeHandler::execute recomputes live before dispatching.
 // ---------------------------------------------------------------------------
 
 struct CFModel {
@@ -223,7 +223,7 @@ BRIDGE_REGISTER_ACTION(CFModel, CFLineItem, "Test_CF_LineItem")
 
 using SyncExecutor = morph::testing::InlineExecutor;
 
-TEST_CASE("BridgeHandler::set<> recomputes total live before firing", "[bridge][computed]") {
+TEST_CASE("BridgeHandler::execute recomputes total before dispatching", "[bridge][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
