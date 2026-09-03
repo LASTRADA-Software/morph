@@ -612,7 +612,7 @@ template&lt;typename Model&gt; </div>
 <p>The instance keeps everything the creating action just did — nothing is re-created and nothing is stranded. A no-op if <code class="param">binding</code> already holds a different real primary (the locally cached primary must not race ahead of the backend's own refusal to re-key an already-keyed instance — see <span class="tt">IBackend::assignPrimary</span>).</p>
 <p>Known gap: if <code class="param">binding</code> was still anonymous but the <em>target</em> key is already held by a different instance, the backend's <span class="tt">assignPrimary</span> silently declines to promote (the existing holder always wins), but this method has no way to learn that and still caches <code class="param">primary</code> as though the promotion succeeded — <span class="tt">binding-&gt;primary()</span> can then report a key the backend never actually filed this instance under, and a same-key <span class="tt">attach()</span> after that becomes a silent no-op (the "already
 primary == primary" guard in <span class="tt"><a class="el" href="#aa1760de87cd33a1a1559c7a72b213efd" title="Attaches (or re-points) binding to the shared instance for primary.">attachHandler</a></span>), so the binding can never reach the instance actually holding that key. Closing this requires <span class="tt">assignPrimary</span>'s outcome to become observable (e.g. a <span class="tt">bool</span> return threaded across every <span class="tt">IBackend</span> implementation and, for wire backends, a reply field) — tracked as a follow-up, not fixed here. Prefers the backend's <span class="tt">IBackend::assignPrimaryAsync</span> when it offers one — the same "avoid a nested-event-loop block that aborts a WASM
-main thread" rationale <span class="tt"><a class="el" href="#a4075023106e7be2251049ca4be569410" title="Creates and registers a new HandlerBinding for Model.">Bridge::registerHandler()</a></span> follows for the initial bind step (<span class="tt">backend.md</span>, "Asynchronous registration") applies identically here: this method is invoked from inside the result <span class="tt">Completion</span>'s callback chain (<span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">BridgeHandler::execute</a></span>'s <span class="tt">onResult</span>), not from the original call stack, so there is no caller left blocked waiting on it either way — the async path simply avoids parking the Qt event loop for the round trip. <span class="tt">binding-&gt;contextKey</span>/<span class="tt">primary</span> are only published once the (possibly async) reply confirms the call, so a caller reading <span class="tt">binding-&gt;primary()</span> never sees a promotion that the backend has not actually completed. Falls back to the synchronous <span class="tt">assignPrimary</span> when the backend offers no async path, publishing immediately exactly as before this method existed.</p>
+main thread" rationale <span class="tt"><a class="el" href="#a4075023106e7be2251049ca4be569410" title="Creates and registers a new HandlerBinding for Model.">Bridge::registerHandler()</a></span> follows for the initial bind step (<span class="tt">backend.md</span>, "Asynchronous registration") applies identically here: this method is invoked from inside the result <span class="tt">Completion</span>'s callback chain (<span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">BridgeHandler::execute</a></span>'s <span class="tt">onResult</span>), not from the original call stack, so there is no caller left blocked waiting on it either way — the async path simply avoids parking the Qt event loop for the round trip. <span class="tt">binding-&gt;contextKey</span>/<span class="tt">primary</span> are only published once the (possibly async) reply confirms the call, so a caller reading <span class="tt">binding-&gt;primary()</span> never sees a promotion that the backend has not actually completed. Falls back to the synchronous <span class="tt">assignPrimary</span> when the backend offers no async path, publishing immediately in that case.</p>
 <p><span class="tt">_attachMtx</span> is released <em>before</em> calling <span class="tt">assignPrimaryAsync</span> — not held across it — mirroring <span class="tt">registerHandlerImpl</span>'s discipline for <span class="tt">registerModelAsync</span>: the success/error callback below re-acquires <span class="tt">_attachMtx</span>, so a backend that ever invoked it synchronously (none documented here do, but nothing prevents one from doing so) would otherwise self-deadlock re-acquiring a mutex this same call stack still held. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Model</td><td>Concrete model type. </td></tr>
@@ -1024,7 +1024,7 @@ template&lt;typename Model&gt; </div>
 <p>Sets (or disables) the client-side execute deadline. </p>
 <p>Every <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> call after this point races the real reply against <code class="param">deadline</code>; whichever settles first wins (<span class="tt">CompletionState::setValue</span>/ <span class="tt">setException</span> are idempotent — see <span class="tt"><a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a></span>). If <code class="param">deadline</code> elapses first, the pending <span class="tt">Completion</span> fails with <span class="tt"><a class="el" href="../../d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError.html" title="Thrown to a pending Completion when Bridge::setExecuteDeadline&#39;s duration elapses before any reply ar...">morph::backend::ClientTimeoutError</a></span>; the real reply, if it arrives later, is silently discarded exactly like any other late write to an already-resolved <span class="tt">CompletionState</span>.</p>
 <p>The clock starts inside <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span>, immediately before the backend's own <span class="tt">execute()</span> is dispatched, so <code class="param">deadline</code> covers the whole round trip — serialisation, transport, server-side work, and the reply's journey back — not just the time spent waiting after dispatch.</p>
-<p>Disabled (<span class="tt">std::chrono::milliseconds{0}</span>, the default) reproduces today's exact behavior: a dropped frame or a hung server leaves the <span class="tt">Completion</span> pending forever, same as before this method existed.</p>
+<p>Disabled (<span class="tt">std::chrono::milliseconds{0}</span>, the default): a dropped frame or a hung server leaves the <span class="tt">Completion</span> pending forever.</p>
 <p>The backing <span class="tt">TimeoutScheduler</span> (and its one background thread) is created lazily on the first call that enables a deadline, so a <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> that never opts in spawns no extra thread. Once created it lives until <span class="tt"><a class="el" href="#a7045f7c97ea552add8cfbfc1868daba3" title="Cancels every still-pending completion on the active backend.">~Bridge()</a></span>; setting the deadline back to <span class="tt">0</span> stops new calls from arming it but does not tear the thread down. Thread-safe.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
@@ -1033,7 +1033,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01096">1096</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01095">1095</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1063,7 +1063,7 @@ template&lt;typename Model&gt; </div>
 <p>Returns the currently installed client-side execute deadline. </p>
 <dl class="section return"><dt>Returns</dt><dd>The deadline; <span class="tt">std::chrono::milliseconds{0}</span> when disabled. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01106">1106</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01105">1105</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1093,7 +1093,7 @@ template&lt;typename Model&gt; </div>
 <p>Returns a copy of the currently installed default session. Thread-safe. </p>
 <dl class="section return"><dt>Returns</dt><dd>Snapshot of the default <span class="tt">Context</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01113">1113</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01112">1112</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1128,7 +1128,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01131">1131</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01130">1130</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1158,7 +1158,7 @@ template&lt;typename Model&gt; </div>
 <p>Returns a copy of the currently installed <span class="tt">Principal</span>. Thread-safe. </p>
 <p>Default-constructed (empty <span class="tt">id</span>, no <span class="tt">roles</span>) if <span class="tt"><a class="el" href="#aaa5a8eb690678014ee8403bfcdca07df" title="Installs the verified Principal for this Bridge. Thread-safe.">setPrincipal</a></span> was never called or the application signed out by clearing it. </p><dl class="section return"><dt>Returns</dt><dd>Snapshot of the installed <span class="tt">Principal</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01141">1141</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01140">1140</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1190,7 +1190,7 @@ template&lt;typename Model&gt; </div>
 loading" indicator or gate a feature on quiescence, without hand-rolling its own counter around every <span class="tt">execute()</span> call site. A single relaxed atomic load/increment/decrement: cheap enough to read on every frame of a UI loading spinner.</p>
 <dl class="section return"><dt>Returns</dt><dd>Count of actions dispatched but not yet resolved. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01163">1163</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01162">1162</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1238,7 +1238,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01194">1194</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01193">1193</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1274,7 +1274,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01206">1206</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01205">1205</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1309,7 +1309,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01297">1297</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01296">1296</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1373,7 +1373,7 @@ template&lt;typename Model, typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the typed result or an exception (including <span class="tt">ValidationError</span> on <span class="tt">LocalBackend</span> when the action fails its validator). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01347">1347</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01346">1346</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

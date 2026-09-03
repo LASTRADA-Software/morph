@@ -135,7 +135,7 @@ Static Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Stable shape tag for <span class="tt">Rational</span>, so a payload fingerprint can tell a <span class="tt">Rational</span> field from a <span class="tt">Timestamp</span> or a <span class="tt">Quantity</span> one. </p>
 <p>Its <span class="tt">glz::meta</span> above routes serialisation through <span class="tt">setWire</span>/<span class="tt">getWire</span>, so there are no reflected members for <span class="tt">payloadShape</span> to decompose and the field would otherwise render as the bare opaque tag — making a retype between two such types invisible to <span class="tt">journal::replay()</span>'s mismatch gate. The name is spelled here rather than derived from <span class="tt">glz::name_v</span>, which is compiler-dependent. See <span class="tt"><a class="el" href="../../dd/d09/payload__shape__tag_8hpp.html" title="Opt-in, compiler-independent shape tag for a type with a custom Glaze codec.">morph/core/payload_shape_tag.hpp</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01450">1450</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01475">1475</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a28d27b4099aa46928825c8e6e03b492f" name="a28d27b4099aa46928825c8e6e03b492f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a28d27b4099aa46928825c8e6e03b492f">&#9670;&#160;</a></span>name()</h2>
@@ -163,7 +163,7 @@ Static Public Member Functions</h2></td></tr>
 <p>This type's stable shape name. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">"rational"</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01453">1453</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01478">1478</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>

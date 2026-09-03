@@ -596,7 +596,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Installs <code class="param">policy</code>, consulted by every subsequent <span class="tt">register</span> and <span class="tt">execute</span>. Thread-safe. </p>
-<p>All-zero fields (the default-constructed value) mean "unbounded" — the server behaves exactly as it did before this method was ever called. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>All-zero fields (the default-constructed value) mean "unbounded" — an unconfigured server never applies any of the limits below. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">policy</td><td>Resource limits to apply from this call onward. </td></tr>
   </table>
