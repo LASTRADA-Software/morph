@@ -212,6 +212,25 @@ TEST_CASE("morph::qt::QtWebSocketBackend: action result delivered via then", "[q
     REQUIRE(result.load() == 99);
 }
 
+// Coverage: qt_websocket_backend.hpp:380. IBackend::notifyBackendChanged() is
+// called by Bridge::switchBackend() on the backend being switched to;
+// test_switch_backend.cpp already has the identical-shape parity test for
+// SimulatedRemoteBackend ("...is a documented no-op"). This backend holds no
+// local model objects, so the override is a no-op too.
+TEST_CASE("morph::qt::QtWebSocketBackend::notifyBackendChanged is a documented no-op", "[qt][ws][notify]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    REQUIRE_NOTHROW(backend.notifyBackendChanged());
+}
+
 TEST_CASE(
     "morph::qt::QtWebSocketBackend: registerModelAsync (opt-in via Config::asyncRegistrationEnabled) registers "
     "without blocking",
