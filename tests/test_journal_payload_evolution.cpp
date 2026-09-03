@@ -466,6 +466,21 @@ TEST_CASE("journal::replay: a migration registered for a different fingerprint d
                       SchemaMismatchError);
 }
 
+// Coverage: journal.hpp:137, PayloadMigrationRegistry::clear().
+TEST_CASE("PayloadMigrationRegistry::clear removes every registered migration",
+          "[journal][payload_evolution][coverage]") {
+    PayloadMigrationRegistry migrations;
+    migrations.add("PE_SetState", payloadFingerprint<PESetStateV1>(),
+                   [](std::string_view payload) { return std::string{payload}; });
+    REQUIRE(migrations.size() == 1);
+    REQUIRE(migrations.find("PE_SetState", payloadFingerprint<PESetStateV1>()) != nullptr);
+
+    migrations.clear();
+
+    REQUIRE(migrations.size() == 0);
+    REQUIRE(migrations.find("PE_SetState", payloadFingerprint<PESetStateV1>()) == nullptr);
+}
+
 TEST_CASE("journal::replay: a migration never rewrites the stored entry", "[journal][payload_evolution][issue174]") {
     PEFixture fixture;
     std::vector<LogEntry> entries{entryFromOldBuild("quarantined")};

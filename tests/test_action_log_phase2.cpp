@@ -7,6 +7,8 @@
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -762,6 +764,40 @@ TEST_CASE(
     // Destruction with _file == nullptr must be safe (the null check in the
     // destructor is load-bearing, not defensive noise) -- rotator's own
     // scope exit below exercises exactly that.
+}
+
+// Coverage: file_action_log.hpp:304, the untaken "a failed" half of the
+// ternary in rotate()'s reopen-failure message (BRDA:304,0,44,0). The
+// existing reopen-failure test above only reaches "a successful" rename;
+// this one forces std::filesystem::rename itself to fail (sealedPath points
+// into a directory that doesn't exist) *and* the subsequent reopen to also
+// fail, so both halves of "failed to reopen ... after a failed rename" run.
+TEST_CASE("FileActionLog::rotate: a failing reopen after a failed rename reports \"a failed\" rename in the message",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const active{"file_fault_rotate_reopen_after_failed_rename"};
+    // A sealedPath whose parent directory does not exist: std::filesystem::rename
+    // cannot create it, so renameError is set (renameError == true).
+    const std::filesystem::path sealed =
+        std::filesystem::temp_directory_path() / "morph_test_nonexistent_dir_for_rotate" / "sealed.ndjson";
+
+    auto callCount = std::make_shared<int>(0);
+    morph::core::FileIoOps ioOps;
+    morph::core::FileIoOps const realOps;
+    ioOps.fopen = [callCount, realOps](const std::string& path, const char* mode) -> std::FILE* {
+        // Call 0 is the constructor's real open; every fopen() after that
+        // (the reopen inside rotate()) fails.
+        return (*callCount)++ == 0 ? realOps.fopen(path, mode) : nullptr;
+    };
+    FileActionLog rotator{active.path, ioOps};
+    rotator.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    rotator.flush();
+
+    REQUIRE_THROWS_MATCHES(
+        rotator.rotate(sealed), std::runtime_error,
+        Catch::Matchers::MessageMatches(Catch::Matchers::ContainsSubstring("after a failed rename to")));
+
+    // The rename never happened: no sealed file was created.
+    REQUIRE_FALSE(std::filesystem::exists(sealed));
 }
 
 TEST_CASE("FileActionLog: a torn trailing record whose path becomes unreadable is left untouched",
