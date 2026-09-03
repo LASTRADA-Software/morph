@@ -1,40 +1,21 @@
 {
   "_comment": [
-    "Triage of the first mutation run over include/morph, produced by scripts/mutation.sh.",
+    "Triage of the mutation runs over include/morph, produced by scripts/mutation.sh.",
     "",
     "A survivor is a mutant the suite passed on: the program was changed and no test said so.",
-    "The number below is not a percentage anyone should read as a grade -- it is the first",
-    "measurement of a question this repository had never asked, and morph#405 asks for it to be",
-    "written down whatever it turned out to be. morph#408 owns what to do about it.",
+    "That is what the tool reports. `runs[1]` records the measurement, made while working",
+    "morph#431 and morph#432, that it is not what the tool means here -- four survivors sampled",
+    "from three different headers were hand-applied to the source and every one of them turned",
+    "the suite red. See `false_positive_finding` below; read it before treating any single",
+    "survivor as a gap.",
     "",
-    "Every survivor falls in one of four classes, and the distinction that matters is between the",
-    "first two -- which are noise a mutation score always carries -- and the last, which is the",
-    "finding. `equivalent` entries are listed individually with a reason each, because an",
-    "unexplained exclusion is a suppression; the other classes are counted with their",
-    "representative sites, because 348 hand-written reasons would be 348 unread ones.",
+    "The classes below still divide the list usefully -- `equivalent` entries are listed",
+    "individually with a reason each, because an unexplained exclusion is a suppression, and the",
+    "side channels are recorded separately so a future decision about logs is made about logs.",
+    "But the residual class is now an upper bound on missing assertions, not a set of them.",
     "",
     "Re-measure with: MULL_PREFIX=... bash scripts/mutation.sh core-forms"
   ],
-  "run": {
-    "date": "2026-09-03",
-    "scope": "include/morph/core, include/morph/forms",
-    "driven_by": "morph_tests (1279 Catch2 cases, all passing)",
-    "tool": "Mull 0.34.0, mull-runner-22 / mull-ir-frontend-22, LLVM 22.1.2",
-    "compiler": "clang 22.1.8 (CI pins clang 20; Mull ships a -20 package, and the score has not been re-measured on it)",
-    "mutators": "cxx_all",
-    "mutants": 999,
-    "killed": 640,
-    "survived": 359,
-    "mutation_score_percent": 64.06,
-    "wall_time": "46m24s on 12 workers, --timeout 60000",
-    "caveat": [
-      "The number can only be too high, not too low. tests/test_outbox.cpp names its scratch",
-      "file after the address of a stack object, which is stable across processes, so twelve",
-      "concurrent copies of morph_tests can collide on it; a collision fails a case, and a",
-      "failed case reads to Mull as a killed mutant. It cannot manufacture a survivor, so the",
-      "359 below are real and the 640 kills are an upper bound."
-    ]
-  },
   "classes": {
     "equivalent": {
       "count": 11,
@@ -117,8 +98,8 @@
       ]
     },
     "unasserted": {
-      "count": 321,
-      "meaning": "The finding. Code that morph_tests executes, changes to which no test notices.",
+      "count": "see runs[1] and false_positive_finding -- the residual class is an upper bound, not a count",
+      "meaning": "Code morph_tests executes that the report says no test would notice being wrong. Four of these were sampled and hand-applied on 2026-09-03; all four turned the suite red. Treat an entry here as a site to check, not a gap that has been found.",
       "by_file": {
         "include/morph/core/remote.hpp": 121,
         "include/morph/core/bridge.hpp": 79,
@@ -144,12 +125,14 @@
         {
           "shape": "the server's reply is deleted and the suite passes",
           "count_approx": 25,
-          "detail": "cxx_remove_void_call on reply(wire::encode(makeOk(env.callId, ...))) survives at eight sites in remote.hpp, and on makeErr replies for 'unauthorized', 'connection closed' and 'too many ...' at twelve more. The dispatch paths run; what they put on the wire is not asserted at those sites. The scenario corpus under scripts/scenario asserts wire replies for the ladder rungs, which is why this is invisible to the C++ suite rather than untested everywhere -- but morph_tests is what morph#405 measures."
+          "detail": "cxx_remove_void_call on reply(wire::encode(makeOk(env.callId, ...))) survives at eight sites in remote.hpp, and on makeErr replies for 'unauthorized', 'connection closed' and 'too many ...' at twelve more. The dispatch paths run; what they put on the wire is not asserted at those sites. The scenario corpus under scripts/scenario asserts wire replies for the ladder rungs, which is why this is invisible to the C++ suite rather than untested everywhere -- but morph_tests is what morph#405 measures.",
+          "status": "Disproved on 2026-09-03: the two sampled sites of this shape fail 34 test cases when hand-applied. See false_positive_finding."
         },
         {
           "shape": "a boundary comparison is only ever exercised away from its boundary",
           "count_approx": 30,
-          "detail": "cxx_gt_to_ge and its family survive on include/morph/core/wire.hpp:514 (the kMaxEnvelopeBytes cap), payload_schema.hpp:169 (kPayloadShapeMaxDepth), forms/instance_constraints.hpp:156 (kMaxDecimalPlaces), forms/forms.hpp:2356 and a dozen more. Each is a comparison tested only at values where moving it by one changes nothing. wire.hpp:514 is the one this run turned into a test -- see tests/test_wire_hardening.cpp, 'decode's size cap is exact at kMaxEnvelopeBytes', whose neighbour was already named 'at the size limit boundary' while asserting a 1 KiB envelope."
+          "detail": "cxx_gt_to_ge and its family survive on include/morph/core/wire.hpp:514 (the kMaxEnvelopeBytes cap), payload_schema.hpp:169 (kPayloadShapeMaxDepth), forms/instance_constraints.hpp:156 (kMaxDecimalPlaces), forms/forms.hpp:2356 and a dozen more. Each is a comparison tested only at values where moving it by one changes nothing. wire.hpp:514 is the one this run turned into a test -- see tests/test_wire_hardening.cpp, 'decode's size cap is exact at kMaxEnvelopeBytes', whose neighbour was already named 'at the size limit boundary' while asserting a 1 KiB envelope.",
+          "status": "Real, and three of them are now closed: payload_schema.hpp's kPayloadShapeMaxDepth comparison, instance_constraints.hpp:156's kMaxDecimalPlaces guard and forms.hpp:2356's offender-list separator are all off the survivor list as of runs[1]."
         },
         {
           "shape": "a completion is never delivered and nothing waits on it",
@@ -158,5 +141,153 @@
         }
       ]
     }
+  },
+  "runs": [
+    {
+      "date": "2026-09-03",
+      "scope": "include/morph/core, include/morph/forms",
+      "driven_by": "morph_tests (1279 Catch2 cases, all passing)",
+      "tool": "Mull 0.34.0, mull-runner-22 / mull-ir-frontend-22, LLVM 22.1.2",
+      "compiler": "clang 22.1.8 (CI pins clang 20; Mull ships a -20 package, and the score has not been re-measured on it)",
+      "mutators": "cxx_all",
+      "mutants": 999,
+      "killed": 640,
+      "survived": 359,
+      "mutation_score_percent": 64.06,
+      "wall_time": "46m24s on 12 workers, --timeout 60000",
+      "caveat": [
+        "The number can only be too high, not too low. tests/test_outbox.cpp names its scratch",
+        "file after the address of a stack object, which is stable across processes, so twelve",
+        "concurrent copies of morph_tests can collide on it; a collision fails a case, and a",
+        "failed case reads to Mull as a killed mutant. It cannot manufacture a survivor, so the",
+        "359 below are real and the 640 kills are an upper bound."
+      ],
+      "label": "baseline, origin/master (morph#405)"
+    },
+    {
+      "label": "lane/d-framework, after morph#431 and morph#432's tests",
+      "date": "2026-09-03",
+      "scope": "include/morph/core, include/morph/forms",
+      "driven_by": "morph_tests (1303 Catch2 cases, all passing)",
+      "tool": "Mull 0.34.0, mull-runner-22 / mull-ir-frontend-22, LLVM 22.1.2",
+      "compiler": "clang 22.1.8 (CI pins clang 20; the score has still not been measured on it)",
+      "mutators": "cxx_all",
+      "mutants": 999,
+      "killed": 647,
+      "survived": 352,
+      "mutation_score_percent": 64.76,
+      "wall_time": "45m on 12 workers, --timeout 60000",
+      "movement_against_baseline": [
+        "+7 killed, -7 survived, +0.70 points. The named boundary sites morph#431 and",
+        "morph#432 led with are gone from the survivor list: payload_schema.hpp's",
+        "`depth > kPayloadShapeMaxDepth` and the `depth + 1` in its range branch,",
+        "instance_constraints.hpp:156's `places > kMaxDecimalPlaces`, and forms.hpp:2356's",
+        "offender-list separator.",
+        "",
+        "The twenty `reply(...)`/`complete(...)` sites in remote.hpp that morph#431 led with",
+        "are still reported as survivors, and twenty new assertions on exactly those replies",
+        "(tests/test_remote_reply_envelopes.cpp) did not move them. That is what prompted the",
+        "measurement below."
+      ],
+      "survivors_by_file": {
+        "include/morph/core/remote.hpp": 126,
+        "include/morph/core/bridge.hpp": 85,
+        "include/morph/forms/forms.hpp": 23,
+        "include/morph/core/registry.hpp": 16,
+        "include/morph/core/completion.hpp": 14,
+        "include/morph/core/backend.hpp": 14,
+        "include/morph/forms/flows.hpp": 13,
+        "include/morph/core/wire.hpp": 8,
+        "include/morph/core/payload_schema.hpp": 8,
+        "include/morph/core/executor.hpp": 8,
+        "include/morph/core/strand.hpp": 7,
+        "include/morph/forms/views.hpp": 6,
+        "include/morph/forms/instance_constraints.hpp": 5,
+        "include/morph/core/timeout_scheduler.hpp": 4,
+        "include/morph/core/observability.hpp": 4,
+        "include/morph/core/model.hpp": 4,
+        "include/morph/core/logger.hpp": 3,
+        "include/morph/core/model_key.hpp": 2,
+        "include/morph/core/callback_scope.hpp": 2
+      },
+      "survivors_by_mutator": {
+        "cxx_remove_void_call": 148,
+        "cxx_replace_scalar_call": 97,
+        "cxx_init_const": 26,
+        "cxx_assign_const": 23,
+        "cxx_add_to_sub": 13,
+        "cxx_gt_to_ge": 8,
+        "other": 37
+      }
+    }
+  ],
+  "false_positive_finding": {
+    "verdict": "A survivor in this report is not evidence that the site is unasserted.",
+    "verification_status": "measured, 2026-09-03, on lane/d-framework in the same build tree and configuration the run above used",
+    "method": [
+      "Four survivors were picked from the run above, from three different headers, and the",
+      "mutation Mull reported was applied to the source by hand -- the call deleted, exactly",
+      "as `cxx_remove_void_call` describes. The tree was rebuilt and morph_tests run.",
+      "A survivor means the suite passes on the mutant, so each of these should have stayed",
+      "green."
+    ],
+    "results": [
+      {
+        "site": "include/morph/core/remote.hpp:718 and :818",
+        "mutant": "cxx_remove_void_call on reply(wire::encode(makeOk(env.callId, {}, mid.v))) and on the fresh-instance sibling",
+        "mull_verdict": "Survived",
+        "hand_applied_result": "34 of 1303 test cases fail (35 assertions)",
+        "sample_failures": [
+          "tests/test_remote_connection_scope.cpp:389 -- REQUIRE(regA.await()) is false",
+          "tests/test_coverage_push95.cpp:572 -- envelope decode failed: index 0: no_read_input"
+        ]
+      },
+      {
+        "site": "include/morph/forms/forms.hpp:1981",
+        "mutant": "cxx_remove_void_call on emitDeclaredBound(property, \"minimum\", *meta.minimum)",
+        "mull_verdict": "Survived",
+        "hand_applied_result": "2 cases fail in tests/test_forms_field_bounds.cpp (:104, :148)"
+      },
+      {
+        "site": "include/morph/core/registry.hpp:709",
+        "mutant": "cxx_remove_void_call on holder->attachIdentity(std::string{primary})",
+        "mull_verdict": "Survived",
+        "hand_applied_result": "2 cases fail (tests/test_registry_extra.cpp:237, tests/test_remote_extra.cpp:674)"
+      }
+    ],
+    "consequences": [
+      "morph#431's headline -- 'twenty places where the framework's response path can be",
+      "deleted and morph_tests stays green' -- is false as stated. The response path is",
+      "asserted; deleting it turns 34 cases red.",
+      "",
+      "The 64.06% and 64.76% scores are lower bounds on the suite's real mutation score, and",
+      "the survivor list is an upper bound on the set of missing assertions. The caveat",
+      "recorded for the baseline run said the score 'can only be too high, never too low';",
+      "that was about test_outbox.cpp's scratch-file collisions and remains true of that",
+      "mechanism, but this one pushes the other way and is much larger.",
+      "",
+      "cxx_remove_void_call is 148 of the 352 survivors, and remote.hpp and bridge.hpp -- both",
+      "header-only and included by many of morph_tests' 105 translation units -- are 211 of",
+      "them. Neither number should be read as a gap count until this is understood."
+    ],
+    "mechanism": [
+      "Inferred from the shape of the result, not verified. Every affected site is in a header",
+      "compiled into many translation units, where each object carries its own copy of the",
+      "function and the linker keeps one. Mull embeds its mutants per object (the",
+      "`.mull_mutants` section) and the runner enables one by id; if the copy carrying the",
+      "enabled mutant is one the linker discarded, the running program is unmutated and the",
+      "mutant is scored as a survivor. That would make the effect specific to header-defined",
+      "code in a multi-TU binary, which matches where the survivors are concentrated -- but",
+      "it has not been confirmed against Mull's implementation."
+    ],
+    "what_would_change_the_verdict": [
+      "A run in which a hand-applied survivor leaves the suite green would show that survivor",
+      "to be a real gap. Sampling four and finding four false positives does not prove all 352",
+      "are; it proves the report cannot be read site-by-site without this check.",
+      "Confirming the mechanism (or finding a Mull option that avoids it -- a single-TU",
+      "harness, or -fvisibility-inlines-hidden style deduplication control) would say how many",
+      "of the 352 are affected."
+    ],
+    "filed_as": "morph#434"
   }
 }
