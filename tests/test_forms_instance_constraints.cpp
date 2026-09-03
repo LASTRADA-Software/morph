@@ -230,6 +230,39 @@ TEST_CASE("Precision finer than the instance declares is a violation", "[forms][
     CHECK(morph::forms::violationKindName(violations.front().kind) == "precisionExceeded");
 }
 
+TEST_CASE("The widest precision an instance may declare is kMaxDecimalPlaces itself",
+          "[forms][instance-constraints]") {
+    // `exactAtDecimals` refuses outright *above* `kMaxDecimalPlaces`, because
+    // the test it would otherwise run divides by `10^places` and 10^19 does not
+    // fit an `std::int64_t`. That cut-off is inclusive on the legal side --
+    // `FieldConstraint::decimalPlaces` is documented as living in
+    // `[0, kMaxDecimalPlaces]`, so 18 is a precision an instance may declare and
+    // must therefore still judge values on their merits, while 19 is out of
+    // range and can satisfy nothing. Every other precision case in this file
+    // sits at 1 or 3, where moving that comparison by one changes no verdict.
+    InstanceConstraints widest;
+    widest.declare(FieldConstraint{.field = "value", .decimalPlaces = morph::math::kMaxDecimalPlaces});
+
+    // 0.5 is 1/2, exactly representable at any precision from one place up, so
+    // a declaration of 18 places accepts it.
+    CHECK(widest.checkValue("value", exact(1, 2, 1)).empty());
+
+    // 1/3 is exactly representable at no decimal precision at all, so the same
+    // declaration still rejects it -- which is what shows 18 places is being
+    // evaluated rather than waved through or refused wholesale.
+    const auto recurring = widest.checkValue("value", exact(1, 3, 0));
+    REQUIRE(recurring.size() == 1);
+    CHECK(recurring.front().kind == ConstraintViolationKind::PrecisionExceeded);
+
+    // One place past the range: `10^19` is unrepresentable, so the guard fires
+    // and nothing satisfies the declaration -- not even the value 18 accepted.
+    InstanceConstraints beyondRange;
+    beyondRange.declare(FieldConstraint{.field = "value", .decimalPlaces = morph::math::kMaxDecimalPlaces + 1});
+    const auto refused = beyondRange.checkValue("value", exact(1, 2, 1));
+    REQUIRE(refused.size() == 1);
+    CHECK(refused.front().kind == ConstraintViolationKind::PrecisionExceeded);
+}
+
 TEST_CASE("One value can break more than one declared key at once", "[forms][instance-constraints]") {
     // 12.34 = 617/50: over the 0..10 range *and* finer than one decimal.
     const ICCapture both{.analysisVersionId = 1, .value = ICConcentration{exact(617, 50, 2)}};

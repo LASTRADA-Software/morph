@@ -78,6 +78,12 @@ struct FlowStepExplodesNonStdResult {
 struct FlowTestModel {
     std::int64_t nextId = 1;
 
+    // How many times FlowStepTwo has actually been dispatched, across every
+    // instance in this translation unit. FlowSession publishes only the *last*
+    // result of a step, so the number of dispatches behind it is not otherwise
+    // observable -- and it is exactly what the no-coalescing contract is about.
+    static inline std::atomic<int> stepTwoExecutions{0};
+
     FlowStepOneResult execute(const FlowStepOne& action) {
         std::this_thread::sleep_for(std::chrono::milliseconds{50});
         // A sentinel label to let a test deterministically fail one specific
@@ -89,6 +95,7 @@ struct FlowTestModel {
         return FlowStepOneResult{.id = nextId++, .label = action.label};
     }
     FlowStepTwoResult execute(const FlowStepTwo& action) {
+        stepTwoExecutions.fetch_add(1, std::memory_order_relaxed);
         return FlowStepTwoResult{.summary = std::to_string(action.refId) + ":" + action.note};
     }
     static FlowStepExplodesResult execute(const FlowStepExplodes& /*action*/) { throw std::runtime_error{"boom"}; }
@@ -187,6 +194,43 @@ TEST_CASE("FlowSession: fires step one, advances, and captures step two's prefil
     CHECK(*summary == R"("1:looks fine")");
 }
 
+TEST_CASE("FlowSession: every set<> that leaves the draft ready dispatches again", "[flows]") {
+    // `set<>`'s own @brief states this as a property callers have to plan
+    // around: there is no in-flight coalescing, so keystroke-rate edits on an
+    // already-complete draft produce one request each and the last reply to
+    // land wins rather than the last call made. An earlier handler-side draft
+    // did collapse those, and nothing here would have failed if that collapsing
+    // came back -- every other flow test in this file drains until `ready()`,
+    // which is true after one dispatch or after five.
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
+
+    // Step two is the one counted: its execute() does no sleeping, so five
+    // dispatches of it cost nothing.
+    flow.set<&FlowStepOne::label>(std::string{"counting"});
+    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    REQUIRE(flow.advance());
+
+    auto const before = FlowTestModel::stepTwoExecutions.load();
+
+    // `refId` alone leaves the draft incomplete, so this dispatches nothing --
+    // the readiness gate, not the edit, is what fires a step.
+    flow.set<&FlowStepTwo::refId>(std::int64_t{7});
+    CHECK(FlowTestModel::stepTwoExecutions.load() == before);
+
+    // Five edits that each leave the draft ready: five dispatches, one per
+    // edit, not one dispatch carrying the final draft.
+    for (const auto* note : {"a", "b", "c", "d", "e"}) {
+        flow.set<&FlowStepTwo::note>(std::string{note});
+    }
+    REQUIRE(morph::testing::waitUntil([&] { return FlowTestModel::stepTwoExecutions.load() >= before + 5; }));
+    CHECK(FlowTestModel::stepTwoExecutions.load() == before + 5);
+}
+
 TEST_CASE("FlowSession: back() returns to step one with its draft intact", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
@@ -223,8 +267,7 @@ TEST_CASE("FlowSession: set<> on an action that is not the current step throws",
     CHECK_THROWS_AS(flow.set<&FlowStepTwo::note>(std::string{"too early"}), std::logic_error);
 }
 
-TEST_CASE("FlowSession: backend switch mid-flight surfaces BackendChangedError on the flow's onError",
-          "[flows]") {
+TEST_CASE("FlowSession: backend switch mid-flight surfaces BackendChangedError on the flow's onError", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
