@@ -24,6 +24,19 @@ set -euo pipefail
 build_dir="${1:?usage: check_coverage_profiles.sh BUILD_DIR}"
 readonly build_dir
 
+# Checked explicitly, ahead of the find below: under `set -e`/`pipefail`,
+# `find` on a directory that does not exist exits nonzero even with its own
+# stderr redirected away, which would abort this script's `profiles=$(...)`
+# assignment silently -- no output, no message, just exit 1 -- before the
+# "No .profraw files found" diagnostic four lines down ever gets a chance to
+# run. A missing BUILD_DIR and an empty one are different mistakes and
+# deserve different messages.
+if [ ! -d "$build_dir" ]; then
+    echo "ERROR: $build_dir does not exist." >&2
+    echo "Did you configure with cmake --preset clang-coverage first?" >&2
+    exit 1
+fi
+
 profiles="$(find "$build_dir" -name '*.profraw' 2>/dev/null | tr '\n' ' ')"
 if [ -z "${profiles// /}" ]; then
     echo "ERROR: No .profraw files found in $build_dir." >&2

@@ -223,6 +223,19 @@ IGNORE_REGEX='.*/testkit/test_[^/]+\.cpp$'
 
 ${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
 
+# Deleted the moment they are safely folded into "$MERGED", not at the end of
+# this script: every .profraw's data is now durably captured there, so
+# holding them past this point buys nothing, while a later failure --
+# llvm-cov, the branch gate, anything below -- would otherwise leave them
+# in place for a retried `coverage.sh` to merge a second time alongside
+# whatever a rerun of `ctest` also wrote. That second merge would not be
+# additive counting error (llvm-profdata's counts are absolute per process
+# execution, not deltas), but it is the same "profile set for a run is
+# discovered, not defined" shape morph#430 exists to remove, just triggered
+# by a retry instead of an old worktree. See PROFILES' own assignment above
+# for the full account.
+rm -f $PROFILES
+
 # Before any filter is applied, and deliberately so: the exports below keep
 # only records that matched a relative SOURCES entry, so a record rooted in
 # another checkout is gone by the time they run and every path left is under
@@ -288,12 +301,3 @@ python3 scripts/aggregate_lcov_branches.py \
 # record per template instantiation and a header-only template library scores
 # one source branch dozens of times in the raw file.
 python3 scripts/check_branch_coverage.py "$OUT/coverage.lcov" --objects "$MANIFEST"
-
-# Every .profraw merged above is now folded into "$MERGED" and reflected in
-# every report this run produced -- deleting them here loses nothing this run
-# needed and is what keeps the next run's PROFILES bounded to its own output
-# (see the comment at this script's PROFILES assignment, morph#430). Reached
-# only after every gate and export above has exited 0: a failed run leaves its
-# .profraw in place, so a rerun after a fix still has profile data to merge
-# instead of needing `ctest` run again from scratch.
-rm -f $PROFILES

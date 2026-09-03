@@ -104,6 +104,28 @@ else
     printf '%s\n' "$output" >&2
 fi
 
+# ── 4. BUILD_DIR does not exist -> fail, naming it, not a bare `find` crash ──
+# Under `set -e`/`pipefail`, `find` on a directory that does not exist exits
+# nonzero even with stderr redirected away -- without an explicit existence
+# check ahead of it, `profiles=$(find ... | tr ...)` would abort the whole
+# script right there, silently: no stdout, no "No .profraw files found"
+# message, just a bare exit 1 indistinguishable from a crash.
+dir="${work}/does_not_exist"
+rm -rf "$dir"
+
+if output="$(bash "$checker" "$dir" 2>&1)"; then
+    fail "a nonexistent build dir was accepted:"
+    printf '%s\n' "$output" >&2
+elif [ -z "$output" ]; then
+    fail "a nonexistent build dir failed with no message at all -- this is the" \
+         "silent-abort defect this case exists to catch"
+elif ! mentions "$dir" "$output"; then
+    fail "a nonexistent build dir was rejected, but the message does not name it:"
+    printf '%s\n' "$output" >&2
+else
+    note "ok: a nonexistent build dir fails with a message naming it, not a bare crash"
+fi
+
 if [ "$failures" -ne 0 ]; then
     printf '\n%d self-test check(s) failed\n' "$failures" >&2
     exit 1
