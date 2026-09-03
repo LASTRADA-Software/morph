@@ -223,7 +223,8 @@ TEST_CASE("FlowSession: set<> on an action that is not the current step throws",
     CHECK_THROWS_AS(flow.set<&FlowStepTwo::note>(std::string{"too early"}), std::logic_error);
 }
 
-TEST_CASE("FlowSession: backend switch mid-flight surfaces BackendChangedError on the step's errSink", "[flows]") {
+TEST_CASE("FlowSession: backend switch mid-flight surfaces BackendChangedError on the flow's onError",
+          "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
