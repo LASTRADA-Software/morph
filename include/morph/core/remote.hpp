@@ -457,8 +457,8 @@ public:
     /// @brief Installs @p policy, consulted by every subsequent `register` and
     ///        `execute`. Thread-safe.
     ///
-    /// All-zero fields (the default-constructed value) mean "unbounded" — the
-    /// server behaves exactly as it did before this method was ever called.
+    /// All-zero fields (the default-constructed value) mean "unbounded" — an
+    /// unconfigured server never applies any of the limits below.
     /// @param policy Resource limits to apply from this call onward.
     void setLimitPolicy(LimitPolicy policy) {
         std::scoped_lock const lock{_limitsMtx};
@@ -1137,10 +1137,9 @@ private:
                 // client's unverified claim.
                 stampVerifiedPrincipal(env);
                 // Bound *who may create* an instance. The default hook allows
-                // all, so an unconfigured server registers any known type
-                // exactly as before; a deployer opts into gating registration
-                // by overriding authorizeRegister. No instance is constructed
-                // on denial.
+                // all, so an unconfigured server registers any known type; a
+                // deployer opts into gating registration by overriding
+                // authorizeRegister. No instance is constructed on denial.
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
@@ -1881,12 +1880,11 @@ public:
     ///
     /// Every `register`/`deregister`/`attach`/`assign`/`instances` call this
     /// backend makes uses `ConnectionId{0}` — the server's "unscoped" sentinel
-    /// (`backend.md`, "Connection scopes") — exactly as before connection
-    /// scopes existed. Use the `ConnectionId` constructor below to give this
-    /// backend its own scope instead, so tests can exercise connection-scoped
-    /// state (rate limiting, connection-drop recovery, shared-instance
-    /// attach/detach across connections) deterministically without a real
-    /// socket.
+    /// (`backend.md`, "Connection scopes"). Use the `ConnectionId` constructor
+    /// below to give this backend its own scope instead, so tests can
+    /// exercise connection-scoped state (rate limiting, connection-drop
+    /// recovery, shared-instance attach/detach across connections)
+    /// deterministically without a real socket.
     /// @param server The `RemoteServer` instance to forward calls to. Borrowed,
     ///               not owned: it must outlive this backend — a backend holding
     ///               a `RemoteServer&` that has been destroyed is a

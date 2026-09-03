@@ -127,8 +127,8 @@ struct IBackend {
     ///
     /// The default implementation offers no async path and returns `false`
     /// without calling either callback — the caller (`Bridge::registerHandler`)
-    /// falls back to `registerModelWithContext` in that case, matching every
-    /// caller's behavior before this method existed.
+    /// falls back to `registerModelWithContext` in that case, so a backend
+    /// with no override behaves synchronously.
     ///
     /// @note Scope: only `Bridge::registerHandler()`'s plain (non-shared)
     ///       registration path — a `BridgeHandler`'s initial construction —
@@ -173,8 +173,8 @@ struct IBackend {
     ///
     /// The default implementation offers no async path and returns `false`
     /// without calling either callback — the caller (`Bridge::ensureBoundAsync`)
-    /// falls back to the synchronous `registerModelShared` in that case,
-    /// matching every caller's behavior before this method existed.
+    /// falls back to the synchronous `registerModelShared` in that case, so a
+    /// backend with no override behaves synchronously.
     ///
     /// @param typeId     String type-id of the model.
     /// @param factory    Callable that constructs the `IModelHolder` (local path only).
@@ -349,8 +349,8 @@ struct IBackend {
     ///
     /// The default implementation offers no async path and returns `false`
     /// without calling either callback — the caller (`Bridge::assignHandlerPrimary`)
-    /// falls back to `assignPrimary` in that case, matching every caller's
-    /// behavior before this method existed.
+    /// falls back to `assignPrimary` in that case, so a backend with no
+    /// override behaves synchronously.
     ///
     /// @param mid          Live instance to promote.
     /// @param typeId       Model type id — the directory's first key component.

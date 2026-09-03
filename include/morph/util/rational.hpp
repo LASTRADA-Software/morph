@@ -915,17 +915,17 @@ private:
         constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
         constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
 
-        // Neither component may be INT64_MIN past this point. Canonicalising
+        // Neither component may be INT64_MIN past this point: canonicalising
         // needs `|value|` and a sign flip, and `-INT64_MIN` is not
-        // representable -- negating it is undefined behaviour, which this
-        // function used to commit. It was reachable two ways: constructing a
-        // Rational with such a numerator directly, and *ordinary arithmetic*
-        // landing on it exactly (`-INT64_MAX - 1` is a perfectly legal
-        // subtraction whose result is INT64_MIN).
+        // representable -- negating it is undefined behaviour. INT64_MIN is
+        // reachable two ways: constructing a Rational with such a numerator
+        // directly, and *ordinary arithmetic* landing on it exactly
+        // (`-INT64_MAX - 1` is a perfectly legal subtraction whose result is
+        // INT64_MIN).
         //
         // Clamped to the adjacent representable magnitude, matching what
-        // `setWire` already does for the same values arriving off the wire.
-        // The value is off by one ulp; it is not undefined.
+        // `setWire` does for the same values arriving off the wire. The value
+        // is off by one ulp; it is not undefined.
         if (numerator == minValue || denominator == minValue) {
             reportClamp();
             numerator = numerator == minValue ? -maxValue : numerator;
