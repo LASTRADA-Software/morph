@@ -152,7 +152,7 @@ def resolve_allowlist(repo_root, sites, hits, allowlist_path, failures):
                             f"suppression is not a disposition.")
             continue
 
-        resolved, _source_lines = check_branch_coverage.resolve_allowlist_source_line(
+        resolved = check_branch_coverage.resolve_allowlist_source_line(
             repo_root, path, hint, wanted, allowlist_path, failures)
         if resolved is None:
             continue

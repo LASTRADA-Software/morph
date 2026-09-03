@@ -282,18 +282,23 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
 
 void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
     _log = std::move(log);
-    // Unconditional *unless* a board is already attached and this key names a
-    // different one -- matching IModelHolder::_contextKey's own unconditional
-    // assignment (see attachActionLog's declaration) for the ordinary case,
-    // where this call is the only attach an instance ever receives (it always
-    // runs before any execute(), per ModelFactory::create/
-    // Remote::attachLogIfConfigured), but not letting a *second* call
-    // silently pull the journal key away from an `OpenBoard`-established
-    // board while leaving `_projectIdStr` -- and therefore
-    // execute(GetActivity)'s own `_log->entries(*_projectIdStr)` -- pointed at
-    // the original one. That would be this member split's own version of the
-    // divergence #422 exists to remove, just relocated to a second attach
-    // rather than closed by having one.
+    // _entityKeyStr does not follow a second attachActionLog call away from
+    // a board already attached via OpenBoard -- kept only for the case
+    // exercised by this file's own "empty entityKey does not un-attach"
+    // test, a caller invoking attachActionLog directly on an already
+    // OpenBoard-attached instance. This never happens through the registry:
+    // attachActionLog runs exactly once per instance, immediately after
+    // ModelFactory::create()'s std::make_unique -- always on a brand-new
+    // instance with _projectIdStr still disengaged -- and BoardModel's
+    // shared-instance directory key *is* the project id
+    // (BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)), so a
+    // second attach naming a *different* project can never even reach an
+    // already-live instance: attachExistingLocked's re-attach-by-key path
+    // only bumps a refcount and never calls attachActionLog again, and a
+    // genuinely different key routes to a different, freshly-constructed
+    // instance via the registry instead. _projectIdStr therefore has no
+    // matching guard: nothing can drive it to a state this one would need
+    // to protect against.
     if (!_projectIdStr.has_value() || entityKey == *_projectIdStr) {
         _entityKeyStr = entityKey;
     }

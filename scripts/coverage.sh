@@ -83,7 +83,34 @@ MANIFEST="$OUT/coverage_objects.txt"
 # is the slowest thing in this script. Running it only to die twenty lines
 # later on an empty profraw set is the wrong order for anyone driving this by
 # hand.
-PROFILES=$(bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_profiles.sh" "$OUT")
+# An array, not a space-joined string: PROFILES is used unquoted below (both
+# to merge and to delete), and a space-joined string word-splits a path
+# containing a space into fragments -- `rm -f` then silently no-ops on the
+# fragments (its whole point is to not fail on a missing file) and leaves the
+# real .profraw undeleted, which is morph#430's own staleness shape
+# reappearing through the one script meant to close it. Nothing in this
+# repository's own paths triggers this today, but the fix costs nothing and
+# matches COVERAGE_OBJECTS' own array-of-paths shape below.
+PROFILES=()
+while IFS= read -r _profile; do
+    [ -n "$_profile" ] || continue
+    PROFILES+=("$_profile")
+done < <(bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_profiles.sh" "$OUT")
+
+# A gate between here and the merge below (the object-manifest check next,
+# the roots check after it) can still fail under `set -e` before PROFILES is
+# ever merged or deleted. That is deliberate, not an oversight: those gates
+# are configure/build-time mistakes (a suite never wired into
+# apply_coverage(), a compiler cache serving foreign paths) a caller fixes
+# and reruns coverage.sh for, without re-running `ctest` -- and re-running
+# `ctest` is the only thing that would put a *second* set of profraw
+# alongside this one, since this script's own discovery is deterministic
+# over an unchanged tree. If a caller reruns `ctest` in between fixing such a
+# gate and rerunning this script, the two sets are merged together and this
+# script cannot tell that happened; that residual case is accepted rather
+# than solved here, since closing it needs either idempotent (content-
+# addressed) merging or a persisted record of which files this run already
+# consumed, both larger than this fix's scope.
 
 bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_objects.sh" "$OUT"
 
@@ -221,7 +248,7 @@ done
 # bar means to hold to that standard — only the real testkit/GUI code is.
 IGNORE_REGEX='.*/testkit/test_[^/]+\.cpp$'
 
-${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
+${LLVM_PROFDATA} merge -sparse "${PROFILES[@]}" -o "$MERGED"
 
 # Deleted the moment they are safely folded into "$MERGED", not at the end of
 # this script: every .profraw's data is now durably captured there, so
@@ -234,7 +261,7 @@ ${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
 # discovered, not defined" shape morph#430 exists to remove, just triggered
 # by a retry instead of an old worktree. See PROFILES' own assignment above
 # for the full account.
-rm -f $PROFILES
+rm -f "${PROFILES[@]}"
 
 # Before any filter is applied, and deliberately so: the exports below keep
 # only records that matched a relative SOURCES entry, so a record rooted in

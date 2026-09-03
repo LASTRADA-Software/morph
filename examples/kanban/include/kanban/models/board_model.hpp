@@ -290,20 +290,28 @@ public:
     ///        unconditional: a board already attached (`_projectIdStr`
     ///        engaged) and @p entityKey naming a *different* one -- there
     ///        `_entityKeyStr` keeps its current value rather than following
-    ///        @p entityKey, so a second attach call can never pull the
-    ///        journal key away from the board `_projectIdStr` still names
-    ///        `execute(GetActivity)` reads by. Two keys that are not project
-    ///        ids reach here in practice: `ModelFactory::create` passes an
-    ///        *empty* key when it hands the process-wide default log to a
-    ///        newly constructed holder, and `Remote::attachLogIfConfigured`
-    ///        forwards the client's `contextKey` *verbatim off the wire*, so
-    ///        it can be any text at all. The `log` itself is attached
-    ///        regardless of what @p entityKey contains.
+    ///        @p entityKey, so a direct second call (not one the registry
+    ///        ever makes -- see below) cannot pull the journal key away from
+    ///        the board `_projectIdStr` still names and
+    ///        `execute(GetActivity)`'s `_log->entries(*_projectIdStr)` reads
+    ///        by. `_projectIdStr` needs no matching guard: `BoardModel`'s
+    ///        shared-instance directory key *is* the project id
+    ///        (`BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)`),
+    ///        so a call naming a *different* project can never reach an
+    ///        already-attached instance in the first place -- it routes to a
+    ///        different, freshly-constructed one via the registry, with
+    ///        `_projectIdStr` still disengaged when `attachActionLog` reaches
+    ///        it. Two keys that are not project ids reach here in practice:
+    ///        `ModelFactory::create` passes an *empty* key when it hands the
+    ///        process-wide default log to a newly constructed holder, and
+    ///        `Remote::attachLogIfConfigured` forwards the client's
+    ///        `contextKey` *verbatim off the wire*, so it can be any text at
+    ///        all. The `log` itself is attached regardless of what
+    ///        @p entityKey contains.
     ///
     ///        Separately, and only if @p entityKey is the complete *canonical*
     ///        decimal spelling of a project id -- `"7"`, never `"007"` --
-    ///        `_projectIdStr` (the *attach* state: which board this handler is
-    ///        bound to) is also set to it. A key that is not one leaves
+    ///        `_projectIdStr` is also set to it. A key that is not one leaves
     ///        `_projectIdStr` disengaged, so every `has_value()` attach guard
     ///        in this class still refuses to serve a handler no `OpenBoard`
     ///        or canonical keyed attach ever named a board for (#368) --
@@ -448,11 +456,18 @@ private:
     std::optional<std::string> _projectIdStr;
 
     /// @brief The key every subsequent `logAction`/`logFailure` call stamps
-    ///        as its `LogEntry::entityKey` -- kept separate from
-    ///        `_projectIdStr` (the attach state) rather than sharing it, the
-    ///        same shape `ledger::LedgerModel::_entityKeyStr`
-    ///        (`ledger_model.cpp`) and lims/crm already use (#422; #368's
-    ///        triage deferred exactly this split).
+    ///        as its `LogEntry::entityKey` -- kept as its own member, separate
+    ///        from `_projectIdStr` (the attach state), rather than one member
+    ///        serving both -- the same *shape* `ledger::LedgerModel::
+    ///        _entityKeyStr` (`ledger_model.cpp`) and lims/crm already use
+    ///        (#422; #368's triage deferred exactly this split). Not the same
+    ///        *assignment*: `LedgerModel` has no attach-state member to guard
+    ///        against at all (every one of its actions carries its own
+    ///        `ledgerId`, so nothing there plays `_projectIdStr`'s role), so
+    ///        its `attachActionLog` sets `_entityKeyStr` with one unconditional
+    ///        line and stops. `BoardModel`'s guard below is this class's own
+    ///        addition, for a hazard only a class with a separate attach-state
+    ///        member has to guard against in the first place.
     ///
     ///        Set two ways. Unlike `_projectIdStr`, nothing here is validated
     ///        as a project id, matching `IModelHolder::_contextKey`'s own
@@ -465,9 +480,10 @@ private:
     ///        it to its `entityKey` argument verbatim, whatever that string
     ///        is -- *unless* `_projectIdStr` already names a different board,
     ///        in which case it keeps its current value rather than following
-    ///        a second attach call away from the board `_projectIdStr` still
-    ///        names (see `attachActionLog`'s own doc comment). Empty (the
-    ///        default) until one of those happens, so an unattached
+    ///        a direct second attach call away from the board `_projectIdStr`
+    ///        still names (see `attachActionLog`'s own doc comment for why
+    ///        `_projectIdStr` itself needs no matching guard). Empty (the
+    ///        default) until one of the writers runs, so an unattached
     ///        handler's entries -- reachable only via `logFailure`, since
     ///        every mutating `execute()` throws before `logAction` when
     ///        unattached -- carry the empty key, same as before this member

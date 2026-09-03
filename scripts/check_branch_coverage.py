@@ -188,20 +188,19 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
     morph#355, morph#419), and a second, independently-maintained copy of the
     fix is how that class of defect gets a fourth chance.
 
-    Returns (resolved_line, source_lines) on success -- source_lines is the
-    file's current content, so a caller that needs to search it again (this
-    module's own caller does not; check_error_path_coverage.py's does, for a
-    different site) is not made to re-read the file. Returns (None, None) and
-    appends to `failures` on any failure: a missing source file, `wanted` text
-    that no longer exists, or an ambiguous match. A "moved" resolution is
-    still success (the returned line is correct) but is also reported to
-    `failures`, since the allowlist's own `line` hint has drifted and update
-    is still needed -- see the "has moved to line" message below.
+    Returns the resolved line number on success. Returns `None` and appends
+    to `failures` on any failure: a missing source file, `wanted` text that
+    no longer exists, or an ambiguous match. A "moved" resolution is still
+    success in the sense that the text was found (the caller could use the
+    line), but this function returns `None` for it too and relies on the
+    caller to stop, because the allowlist's own `line` hint has drifted and
+    an update is still needed before the entry should be trusted -- see the
+    "has moved to line" message below.
     """
     source_file = os.path.join(repo_root, path)
     if not os.path.exists(source_file):
         failures.append(f"{allowlist_path} names {path}, which does not exist.")
-        return None, None
+        return None
     with open(source_file) as handle:
         source_lines = handle.read().splitlines()
 
@@ -212,23 +211,23 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
             f"nowhere in the file any more. The code changed and the disposition "
             f"did not; re-read it rather than moving the number."
         )
-        return None, source_lines
+        return None
     if hint in matches:
-        return hint, source_lines
+        return hint
     if len(matches) == 1:
         resolved = matches[0]
         failures.append(
             f"{path}:{hint} has moved to line {resolved}. The text still matches, so "
             f"nothing is wrong with the disposition -- update the `line` hint."
         )
-        return None, source_lines
+        return None
 
     failures.append(
         f"{path}:{hint} is allowlisted by a source line that appears {len(matches)} "
         f"times (lines {matches}), and none of them is {hint}, so which one is "
         f"meant is not decidable. Make the entry unambiguous."
     )
-    return None, source_lines
+    return None
 
 
 def resolve_allowlist(repo_root, partial_lines, allowlist_path, failures):
@@ -267,8 +266,7 @@ def resolve_allowlist(repo_root, partial_lines, allowlist_path, failures):
                             f"suppression is not a disposition.")
             continue
 
-        resolved, _source_lines = resolve_allowlist_source_line(
-            repo_root, path, hint, wanted, allowlist_path, failures)
+        resolved = resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path, failures)
         if resolved is None:
             continue
 

@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # Usage: bash scripts/check_coverage_profiles.sh BUILD_DIR
 #
-# Prints the space-separated list of .profraw files under BUILD_DIR on
-# stdout, and fails if there are none. This is the profile-discovery half of
-# morph#430: naming it here, in one place, is what lets scripts/coverage.sh
-# delete exactly this list once it has merged them, so a later run's find can
-# never inherit a stale file this run already accounted for.
+# Prints the .profraw files under BUILD_DIR on stdout, one per line, and
+# fails if there are none. One per line, not space-joined: scripts/
+# coverage.sh reads this into a bash array (the same pattern its own
+# COVERAGE_OBJECTS manifest read already uses) rather than word-splitting a
+# single string, so a path containing a space is merged and deleted as one
+# unit instead of being silently split into fragments that `rm -f` no-ops on
+# -- code review on the #430 fix found the space-joined form left exactly
+# that gap, even though nothing in this repository's own paths triggers it
+# today. This is the profile-discovery half of morph#430: naming it here, in
+# one place, is what lets scripts/coverage.sh delete exactly this list once
+# it has merged them, so a later run's find can never inherit a stale file
+# this run already accounted for.
 #
 # On its own this script still does a recursive find with no time bound --
 # that half of the fix is not "search narrower", it is "nothing is left for
@@ -37,11 +44,11 @@ if [ ! -d "$build_dir" ]; then
     exit 1
 fi
 
-profiles="$(find "$build_dir" -name '*.profraw' 2>/dev/null | tr '\n' ' ')"
-if [ -z "${profiles// /}" ]; then
+profiles="$(find "$build_dir" -name '*.profraw' 2>/dev/null)"
+if [ -z "$profiles" ]; then
     echo "ERROR: No .profraw files found in $build_dir." >&2
     echo "Did you set LLVM_PROFILE_FILE and run ctest --preset clang-coverage?" >&2
     exit 1
 fi
 
-printf '%s' "$profiles"
+printf '%s\n' "$profiles"

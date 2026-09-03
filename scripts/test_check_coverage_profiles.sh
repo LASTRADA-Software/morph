@@ -52,6 +52,17 @@ mentions() {
     grep -q -- "$1" <<< "$2"
 }
 
+# Like mentions(), but for a literal string rather than a BRE pattern --
+# used for a filesystem path from `mktemp -d`, which is not this test's own
+# text and so is never guaranteed free of BRE metacharacters ((), [], *, .)
+# that would make mentions() match something other than the literal path it
+# was given. Safe under this repository's own CI (a plain Linux mktemp
+# template has none of those), but self-tests are not proof against every
+# environment they might run in.
+mentions_literal() {
+    grep -qF -- "$1" <<< "$2"
+}
+
 # ── 1. .profraw files present -> pass, printing every path ──────────────────
 dir="$(case_dir present)"
 : > "${dir}/a-123.profraw"
@@ -75,7 +86,7 @@ dir="$(case_dir empty)"
 if output="$(bash "$checker" "$dir" 2>&1)"; then
     fail "an empty build dir was accepted -- this is the defect the gate exists for:"
     printf '%s\n' "$output" >&2
-elif ! mentions "$dir" "$output"; then
+elif ! mentions_literal "$dir" "$output"; then
     fail "the empty build dir was rejected, but the message does not name it:"
     printf '%s\n' "$output" >&2
 else
@@ -119,7 +130,7 @@ if output="$(bash "$checker" "$dir" 2>&1)"; then
 elif [ -z "$output" ]; then
     fail "a nonexistent build dir failed with no message at all -- this is the" \
          "silent-abort defect this case exists to catch"
-elif ! mentions "$dir" "$output"; then
+elif ! mentions_literal "$dir" "$output"; then
     fail "a nonexistent build dir was rejected, but the message does not name it:"
     printf '%s\n' "$output" >&2
 else
