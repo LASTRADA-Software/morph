@@ -13,6 +13,7 @@
 #include "clock.hpp"
 #include "ledger/core/errors.hpp"
 #include "ledger/core/money.hpp"
+#include "ledger/db/book_access.hpp"
 #include "ledger/db/ledger_entity.hpp"
 
 namespace ledger {
@@ -133,14 +134,9 @@ CategoryId BudgetModel::execute(const CreateCategory& action) {
             throw ValidationError{"CreateCategory: ledgerId and name are required"};
         }
         Lightweight::DataMapper mapper;
-        auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                              .All();
-        if (ledgerRows.empty()) {
-            throw NotFound{"CreateCategory: no such ledger"};
-        }
+        const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "CreateCategory");
         db::CategoryRecord categoryRow;
-        categoryRow.ledger = ledgerRows.front();
+        categoryRow.ledger = ledgerRow;
         categoryRow.name = action.name;
         mapper.Create(categoryRow);
         auto result = CategoryId{static_cast<std::int64_t>(categoryRow.id.Value())};
@@ -171,6 +167,16 @@ AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
         if (accountRows.empty() || categoryRows.empty()) {
             throw NotFound{"LinkAccountToCategory: no such account or category"};
         }
+        // Both sides, because this action names two rows and nothing else
+        // constrains them to the same book. What this refuses is a link across
+        // an *ownership* boundary -- someone else's account under your
+        // category, or yours under someone else's (morph#382). Two books the
+        // same principal owns, or two unowned ones, can still be cross-linked;
+        // that is a separate integrity gap this gate does not claim to close.
+        db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), ctx->principal,
+                                   "LinkAccountToCategory");
+        db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), ctx->principal,
+                                   "LinkAccountToCategory");
         accountRows.front().category = categoryRows.front();
         mapper.Update(accountRows.front());
         auto result = AccountId{static_cast<std::int64_t>(accountRows.front().id.Value())};
@@ -201,6 +207,14 @@ BudgetId BudgetModel::execute(const CreateBudget& action) {
         if (ledgerRows.empty() || categoryRows.empty()) {
             throw NotFound{"CreateBudget: no such ledger or category"};
         }
+        // The named book, and the category's own book -- a budget joins the
+        // two, so owning one of them is not enough (morph#382). The existence
+        // check above keeps its combined message; ownership is a separate
+        // refusal.
+        if (!db::bookIsReachableBy(ledgerRows.front(), ctx->principal)) {
+            throw Forbidden{"CreateBudget: this book belongs to another principal"};
+        }
+        db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), ctx->principal, "CreateBudget");
         db::BudgetRecord budgetRow;
         budgetRow.ledger = ledgerRows.front();
         budgetRow.name = action.name;
@@ -231,6 +245,7 @@ BudgetId BudgetModel::execute(const SetBudgetLimit& action) {
         if (budgetRows.empty()) {
             throw NotFound{"SetBudgetLimit: no such budget"};
         }
+        db::requireOwnedParentBook(mapper, budgetRows.front().ledger.Value(), ctx->principal, "SetBudgetLimit");
         // Onto the limit currency's own scale before it is stored, the same way
         // LedgerModel restates a transaction leg onto its account currency's --
         // a limit is compared against a sum of legs, and two values only compare
@@ -268,6 +283,10 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     if (budgetRows.empty()) {
         throw NotFound{"GetBudgetReport: no such budget"};
     }
+    // A pure read, gated the same way `LedgerModel::execute(GetLedger)` is:
+    // spent-so-far against a budget is the book's activity, and it was
+    // readable by every authenticated principal (morph#382).
+    db::requireOwnedParentBook(mapper, budgetRows.front().ledger.Value(), db::currentPrincipal(), "GetBudgetReport");
     auto limitRows = mapper.Query<db::BudgetLimitRecord>()
                          .Where(::Lightweight::FieldNameOf<&db::BudgetLimitRecord::budget>, "=", *action.budgetId)
                          .Where(::Lightweight::FieldNameOf<&db::BudgetLimitRecord::month>, "=", action.month)

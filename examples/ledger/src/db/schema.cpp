@@ -204,3 +204,25 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000014, "Store SubmitReport params with the jo
     // decodeMonthlyParams already treats as the all-time fallback.
     plan.AlterTable("ledger_report_jobs").AddNotRequiredColumn("params_json", NVarchar(0));
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000015, "Record which principal owns each book") {
+    // Per-book ownership (morph#382). Until this column existed the rung had
+    // no notion of whose book a `ledgers` row was: the signed-token check and
+    // the per-action empty-principal gate both held, and neither says *whose*
+    // book this is, so any authenticated principal could read, write and post
+    // into any book -- including one another principal had just created with
+    // `CreateLedger`.
+    //
+    // Nullable (AddNotRequiredColumn, not AddColumn) for the same reason
+    // 20260819000014's `params_json` is: SQLite cannot add a NOT NULL column
+    // without a default to a table that may already hold rows, and there is
+    // no principal to attribute a pre-existing book to. `NULL` therefore
+    // means "created before ownership existed" and such a book stays open to
+    // everyone, which is exactly the behaviour it had. `CreateLedger` stamps
+    // every book written from here on, so no new NULL is ever produced.
+    //
+    // Varchar(64) matches `ledger::auth::kMaxPrincipalBytes` and
+    // `LedgerRecord::owner`'s own capacity; `ledger_model.cpp` carries the
+    // static_assert tying them together.
+    plan.AlterTable("ledgers").AddNotRequiredColumn("owner", Varchar(64));
+}

@@ -22,10 +22,12 @@
 #include <vector>
 
 #include "clock.hpp"
+#include "ledger/auth/ledger_authorizer.hpp"
 #include "ledger/core/errors.hpp"
 #include "ledger/core/money.hpp"
 #include "ledger/core/time_util.hpp"
 #include "ledger/core/units.hpp"
+#include "ledger/db/book_access.hpp"
 #include "ledger/db/ledger_entity.hpp"
 
 namespace ledger {
@@ -36,6 +38,12 @@ static_assert(decltype(db::LedgerRecord::name)::ValueType{}.capacity() == kMaxLe
               "on the way into the row (Light::SqlFixedString's constructor is noexcept and truncates rather than "
               "throwing), so the caller is told 'ok' about a book stored under a name they never sent. Same guard, "
               "same reason, as kanban's own kMaxProjectNameBytes assertion in src/models/board_model.cpp.");
+
+static_assert(decltype(db::LedgerRecord::owner)::ValueType::value_type{}.capacity() == auth::kMaxPrincipalBytes,
+              "ledger::db::LedgerRecord::owner must be exactly as wide as the longest principal Login will mint a "
+              "token for (ledger::auth::kMaxPrincipalBytes) -- Light::SqlFixedString truncates rather than throwing, "
+              "so a narrower column would store a shortened owner that the very principal who created the book can "
+              "never match, locking them out of it (morph#382).");
 
 namespace {
 
@@ -637,6 +645,10 @@ CreateLedgerResult LedgerModel::execute(const CreateLedger& action) {
         Lightweight::DataMapper mapper;
         db::LedgerRecord ledgerRow;
         ledgerRow.name = Light::SqlAnsiString<128>{action.name};
+        // The caller owns what it creates (morph#382). This is the only place
+        // an owner is ever written: every other action reads it, and a book
+        // whose owner is NULL is one written before this column existed.
+        ledgerRow.owner = Light::SqlAnsiString<64>{ctx->principal};
         mapper.Create(ledgerRow);
         auto result = CreateLedgerResult{.id = LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())}};
         logAction(action, result);
@@ -663,14 +675,9 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
         // BelongsTo assignment needs the real persisted parent (per
         // polls::db::OptionRecord's own `opt.poll = poll;` usage, where `poll`
         // is a row that has actually round-tripped through Create/Query).
-        auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                              .All();
-        if (ledgerRows.empty()) {
-            throw NotFound{"OpenAccount: no such ledger"};
-        }
+        const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "OpenAccount");
         db::AccountRecord accountRow;
-        accountRow.ledger = ledgerRows.front();
+        accountRow.ledger = ledgerRow;
         accountRow.name = action.name;
         accountRow.kind = static_cast<int>(action.kind);
         accountRow.currencyCode = currencyToCode(action.currency);
@@ -708,6 +715,14 @@ GetLedgerResult LedgerModel::execute(const GetLedger& action) {
         throw ValidationError{"GetLedger: ledgerId is required"};
     }
     Lightweight::DataMapper mapper;
+    // A read is where the gap was widest: this action had no principal check
+    // of any kind, so a second authenticated client could ask for -- and get
+    // -- every account and balance in a book it had nothing to do with
+    // (morph#382). It carries no EmptyPrincipalError gate even now, because
+    // it does not need one: an empty principal never matches a recorded
+    // owner, so it is refused here and admitted only for an unowned book,
+    // which is exactly what it could always reach.
+    static_cast<void>(db::requireOwnedBook(mapper, action.ledgerId, db::currentPrincipal(), "GetLedger"));
     // Real balance per account: the sum of every leg posted against it,
     // computed in-model via Rational::operator+ (never a raw SQL SUM() --
     // see sumAccountLegs's own doc comment), via the shared buildLedgerState
@@ -727,6 +742,13 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
                 "StoreTransaction: description and at least two legs with engaged accountIds are required"};
         }
         Lightweight::DataMapper mapper;
+        // Before the opId replay below, and before any account lookup: both
+        // answer questions about the book. A replay hit returns the stored
+        // `GetLedgerResult` -- every account and balance in the book -- and the
+        // account lookups are a "does account N belong to book B" oracle, so a
+        // gate placed after either would hand a non-owner exactly what the
+        // `GetLedger` gate exists to withhold (morph#382).
+        const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "StoreTransaction");
 
         // Task 11b, design spec §1 (kanban's execute(MoveTaskPosition) pattern,
         // ladder-kanban-impl:examples/kanban/src/models/board_model.cpp):
@@ -792,13 +814,7 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         // ImportedOpRecord::appliedAtMs/ReportJobRecord::createdAtMs in later
         // tasks, not a client-supplied journal date).
         journalRow.date = action.date.value.has_value() ? (*action.date.value).value.time_since_epoch().count() : 0;
-        auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                              .All();
-        if (ledgerRows.empty()) {
-            throw NotFound{"StoreTransaction: no such ledger"};
-        }
-        journalRow.ledger = ledgerRows.front();
+        journalRow.ledger = ledgerRow;
         mapper.Create(journalRow);
 
         for (std::size_t i = 0; i < action.legs.size(); ++i) {
@@ -845,7 +861,7 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
                 throw LedgerError{"StoreTransaction: failed to serialize result for the applied-ops ledger"};
             }
             db::AppliedOpRecord op;
-            op.ledger = ledgerRows.front();
+            op.ledger = ledgerRow;
             op.opId = *action.opId;
             op.resultJson = resultJson;
             op.createdAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
@@ -972,6 +988,12 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
         if (originalJournalRow.ledger.Value() != static_cast<std::uint64_t>(*action.ledgerId)) {
             throw NotFound{"UndoTransaction: journal does not belong to this ledger"};
         }
+        // The book gate runs after the journal is resolved, not before it, so
+        // the two "no such journal" refusals this action already had keep
+        // their exact wording and order (morph#382). The journal names its own
+        // ledger and that has just been verified against the action's, so
+        // gating on it is gating on the book the action really reaches.
+        db::requireOwnedParentBook(mapper, originalJournalRow.ledger.Value(), ctx->principal, "UndoTransaction");
 
         // A compensating entry names the entry it reverses, so "has this already
         // been reversed?" is a query rather than mutable state on the original --
@@ -1091,12 +1113,7 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
         // complete, zero-sum journal entry by `storeJournalImpl` -- see that
         // method's own doc comment), it just does not roll the whole chunk back
         // to empty.
-        auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                              .All();
-        if (ledgerRows.empty()) {
-            throw NotFound{"ImportLedgerChunk: no such ledger"};
-        }
+        const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "ImportLedgerChunk");
 
         // Scoped to the chunk's own ledger, like every row's account below: a
         // counter account from another book would otherwise take one leg of
@@ -1164,7 +1181,7 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
                                                                morph::time::Timestamp{*parsedDate}, legs, legAccounts);
 
             db::ImportedTxnHashRecord hashRow;
-            hashRow.ledger = ledgerRows.front();
+            hashRow.ledger = ledgerRow;
             hashRow.hash = hash;
             mapper.Create(hashRow);
 
@@ -1213,15 +1230,10 @@ ReportJobId LedgerModel::execute(const SubmitReport& action) {
         throw ValidationError{"SubmitReport: ledgerId is required"};
     }
     Lightweight::DataMapper mapper;
-    auto ledgerRows = mapper.Query<db::LedgerRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
-                          .All();
-    if (ledgerRows.empty()) {
-        throw NotFound{"SubmitReport: no such ledger"};
-    }
+    const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "SubmitReport");
 
     db::ReportJobRecord jobRow;
-    jobRow.ledger = ledgerRows.front();
+    jobRow.ledger = ledgerRow;
     jobRow.kind = static_cast<int>(action.kind);
     jobRow.status = static_cast<int>(ReportStatus::Pending);
     jobRow.createdAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
@@ -1422,6 +1434,12 @@ GetReportStatusResult LedgerModel::execute(const GetReportStatus& action) {
         throw NotFound{"GetReportStatus: no such job"};
     }
     const auto& row = jobRows.front();
+    // A job id carries no ledgerId of its own (morph#371), so the book this
+    // read reaches is the one the job row names. Gated after the job lookup so
+    // "no such job" keeps its wording, and like `execute(GetLedger)` this pure
+    // read needs no separate empty-principal gate: an empty principal matches
+    // no recorded owner.
+    db::requireOwnedParentBook(mapper, row.ledger.Value(), db::currentPrincipal(), "GetReportStatus");
     return GetReportStatusResult{
         .status = static_cast<ReportStatus>(row.status.Value()),
         .result = row.resultJson.Value().has_value()
@@ -1458,6 +1476,20 @@ void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCate
     if (accountRows.empty() || categoryRows.empty()) {
         throw NotFound{"SetCategory: no such account or category"};
     }
+    // Both call sites reach this: the public `execute(SetCategory)` overload,
+    // where it is the only book gate the action gets, and the rule cascade
+    // inside `execute(StoreTransaction)`, where the caller has already passed
+    // the same gate on the same book and this one passes too (morph#382).
+    //
+    // Both *rows*, too, the way `BudgetModel::execute(LinkAccountToCategory)`
+    // checks both of its: this action joins two rows nothing else constrains
+    // to one book. Gating only the account would let a caller file its own
+    // account under another principal's category, and `GetBudgetReport`
+    // selects legs by exactly that link -- so every entry posted against the
+    // account would land in the other principal's budget report.
+    const auto principal = db::currentPrincipal();
+    db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), principal, "SetCategory");
+    db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), principal, "SetCategory");
     accountRows.front().category = categoryRows.front();
     mapper.Update(accountRows.front());
 }

@@ -416,17 +416,27 @@ component_management:
     # ledger's and lims's above, and `informational: true` like every other
     # ladder component (morph#133).
     #
-    # Unlike those two, this entry does NOT yet carry a per-miss audit
-    # establishing which of the 148 uncovered lines are unreachable-by-design
-    # rather than merely untested. One thing the measurement already shows is
-    # not a coverage artifact, and is recorded here rather than rounded past:
-    # `ContactModel::attachActionLog` and `SavedViewModel::attachActionLog`
-    # are called by no test at all (both headers score 0/4), so those two
-    # models' journaling paths are entirely unverified -- while
-    # AccountModel, LeadModel, OpportunityModel and QuoteModel each have an
-    # explicit "journals its edits against the attached identity" test. That
-    # is the same shape of gap ledger's own first measurement turned up
-    # (a documented obligation nothing executed), and it is open, not closed.
+    # Re-measured after morph#403 and morph#426, on a profile with zero foreign
+    # roots: 1488/1616 = 92.08% lines, of which quote_model.cpp is now
+    # 222/238 93.28% (GetQuote, previously driven by nothing). By Codecov's own
+    # arithmetic -- which is what this target is checked against, and which
+    # counts a line with a one-sided branch as a partial rather than a hit --
+    # the component reads 87.15%: 1390 hits, 128 misses, 77 partials.
+    #
+    # The per-miss audit this entry used to lack is now written, in
+    # examples/crm/README.md's "What the uncovered lines in crm's models are".
+    # Its result is that crm is unlike ledger and lims: 92 of the 141 lines it
+    # classified are the rung's own ValidationError/NotFound rejection paths on
+    # 25 actions, reachable from the wire and simply untested, and only 4 are
+    # unreachable-by-design. That is not a ceiling and must not be recorded as
+    # one (morph#412).
+    #
+    # `ContactModel::attachActionLog` and `SavedViewModel::attachActionLog` are
+    # no longer called by no test: both models gained the "journals its edits
+    # against the attached identity" case their four siblings had, and no
+    # defect was found on either -- both journal both mutations, under the
+    # attached key, with the caller's principal. Recorded as a negative result
+    # against the lims precedent, rather than left implying an open finding.
     - component_id: crm
       name: "application ladder rung 7 (examples/crm models)"
       paths:

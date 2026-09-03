@@ -32,9 +32,16 @@
 /// is: `SigningAuthorizer::authorize()` verifying a real signed token on
 /// every `execute` other than `Login`, `RemoteServer` overwriting
 /// `Context::principal` with the verified identity before the model runs,
-/// and each mutating model action refusing an empty principal
+/// each mutating model action refusing an empty principal
 /// (`EmptyPrincipalError`, design spec §11) or, for `RunReportJob`, refusing
-/// any principal but `kReportRunnerPrincipal`.
+/// any principal but `kReportRunnerPrincipal` -- and, since morph#382,
+/// **per-book ownership**: `CreateLedger` records its caller on the `ledgers`
+/// row and every action reaching a book compares that owner against
+/// `Context::principal`, reads included. That last one is deliberately *not*
+/// here: it is the same reason `authorizeInstance` is permissive above, seen
+/// from the other side. The hook cannot express it for shared keyed
+/// instances, so the rule lives through the relation instead
+/// (`ledger/db/book_access.hpp`, `examples/IMPLEMENTATION.md` rule 4).
 
 namespace ledger::auth {
 

@@ -5,25 +5,25 @@
 # attached to no board at all. Every other action needs one, and this file
 # drives each of them in that state.
 #
-# ── What it answers, which is not what it should ───────────────────────
-# **Every** action answers with the bare text `stoull`.
+# ── What it answers ────────────────────────────────────────────────────
+# Every action names itself and names `OpenBoard` -- "<Action>: handler was
+# never attached via OpenBoard", the shape `polls::PollModel` answers with and
+# a message a client can act on: it says which call was missed.
 #
-# Two of them look like they should not. `GetActivity` and `GetRules` each
-# open with a `_projectIdStr.has_value()` check whose message is exactly the
-# right one -- "handler was never attached via OpenBoard", the shape
-# `polls::PollModel` uses and the message a client could act on. That check
-# never fires: on an unattached handler the optional is *engaged, with an
-# empty string*, so `has_value()` is true and control falls through to
-# `requireRole`, which reaches `std::stoull("")` and throws
-# `std::invalid_argument`. Its `what()` is the string `stoull`, and that is
-# what goes on the wire, as though it were a domain error.
+# It did not always. Every action used to answer the bare text `stoull` -- the
+# `what()` of the `std::invalid_argument` `std::stoull("")` throws -- even
+# though all fifteen `execute()` overloads already opened with a
+# `_projectIdStr.has_value()` guard carrying the correct message. The optional
+# was *engaged with an empty string* on an unattached handler, so `has_value()`
+# was true, every guard fell through to `requireRole`, and `std::stoull("")`
+# threw. `_projectIdStr` was written by `attachActionLog` as well as by
+# `OpenBoard`, and `ModelFactory::create` calls it with an empty `entityKey` on
+# every newly constructed holder. Fixed in morph#368 by declining the empty
+# key: an empty string identifies no project, so it no longer poses as one.
 #
-# So the guard is written, is correct, and is dead -- which is worse than not
-# having one, because reading the source suggests the good message exists.
-#
-# Asserted here as it behaves, per action, because that is what a client
-# receives today and because fixing it then has to come through this file.
-# Filed as morph#368.
+# Asserted here per action because this is the wire surface a client sees, and
+# because the in-process tests all attach before acting -- the two writers of
+# `_projectIdStr` only ever disagreed when they did not.
 #
 # Re-runnable: this file creates one project and never touches anyone else's.
 
@@ -43,35 +43,68 @@ client fresh model=BoardModel
 session principal=$who token=$token
 
 do GetBoardState
-expect err message == "stoull"
+expect err message == "GetBoardState: handler was never attached via OpenBoard"
 
 do CreateColumn name="Todo" wipLimit=0
-expect err message == "stoull"
+expect err message == "CreateColumn: handler was never attached via OpenBoard"
 
 do CreateSwimlane name="Lane"
-expect err message == "stoull"
+expect err message == "CreateSwimlane: handler was never attached via OpenBoard"
 
 do CreateTask columnId=1 swimlaneId=1 title="Nowhere"
-expect err message == "stoull"
+expect err message == "CreateTask: handler was never attached via OpenBoard"
 
 do MoveTaskPosition taskId=1 columnId=1 swimlaneId=1 position=0
-expect err message == "stoull"
+expect err message == "MoveTaskPosition: handler was never attached via OpenBoard"
 
 do AddComment taskId=1 body="Into the void"
-expect err message == "stoull"
+expect err message == "AddComment: handler was never attached via OpenBoard"
 
 do GetEventsSince lastEventId=0
-expect err message == "stoull"
+expect err message == "GetEventsSince: handler was never attached via OpenBoard"
 
-# ...including the two whose own has_value() guard has the right message and
-# never reaches it.
+# ...including the two morph#368 singled out, whose guard was written, was
+# correct, and was the last thing on this rung anyone expected to be dead.
 do GetActivity
-expect err message == "stoull"
-expect err message !~ "OpenBoard"
+expect err message == "GetActivity: handler was never attached via OpenBoard"
+expect err message ~ "OpenBoard"
 
 do GetRules projectId=$project
-expect err message == "stoull"
-expect err message !~ "OpenBoard"
+expect err message == "GetRules: handler was never attached via OpenBoard"
+expect err message ~ "OpenBoard"
+
+# Nothing on this surface answers `stoull` any more -- an id-parsing detail
+# that named neither the action nor the mistake, and that a client could not
+# tell apart from an internal fault.
+do GetBoardState
+expect err message !~ "stoull"
+
+# ── ...and neither does a contextKey that names no project ─────────────
+# The other way to reach an unattached handler: register *with* a contextKey.
+# `Remote::attachLogIfConfigured` forwards it to the model verbatim off the
+# wire, so it is arbitrary text. `foo` used to be adopted as the board id and
+# answer `stoull` from `std::stoull("foo")` -- the same defect one step over
+# from the empty key, and the reason morph#368's guard checks that the key
+# parses whole rather than merely that it is non-empty.
+client garbage model=BoardModel contextKey=foo
+session principal=$who token=$token
+
+do GetBoardState
+expect err message == "GetBoardState: handler was never attached via OpenBoard"
+
+do GetActivity
+expect err message == "GetActivity: handler was never attached via OpenBoard"
+
+# A key whose *prefix* is a real project id is the dangerous one: `stoull`
+# stops at the first non-digit and reports success, so this used to attach the
+# handler to project $project -- a board this client never named.
+client prefixed model=BoardModel contextKey=${project}x
+session principal=$who token=$token
+
+do GetBoardState
+expect err message == "GetBoardState: handler was never attached via OpenBoard"
+
+use fresh
 
 # ── Validation still runs first ────────────────────────────────────────
 # A malformed action is refused for being malformed, not for the handler being

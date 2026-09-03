@@ -641,6 +641,112 @@ The two review-added features in the **"7-later" bucket** (duplicate
 detection on create, record merge) are deferred by the delivery review
 itself, not by this build, and neither gates 7a or 7b.
 
+## What the uncovered lines in `crm`'s models are (audit, 2026-09)
+
+`codecov.yml` scores `examples/crm/{src,include/crm}/models/**` and says, of
+this rung's entry specifically, that it "does NOT yet carry a per-miss audit
+establishing which of the 148 uncovered lines are unreachable-by-design rather
+than merely untested" (morph#412). Ledger's and lims's entries carry one; each
+ends by naming two or three defensive guards no caller can reach.
+
+**crm's answer is different, and that is the finding.** Measured over the whole
+crm suite on a clean coverage run, the component had 141 uncovered lines, and
+four of them are unreachable. Every one is classified below.
+
+| class | lines |
+|---|---:|
+| `validate()` rejections — a required field the action was not given | 52 |
+| `NotFound` rejections — an id that names no row | 40 |
+| other untested branches (enumerated below) | 39 |
+| `journalEntries()` — an accessor with no caller | 6 |
+| unreachable by design | 4 |
+
+### The 92 lines that are the rung's rejection contract
+
+Two thirds of the gap is one shape: every `throw ValidationError{"<Action>: X
+is required"}` and every `throw NotFound{"<Action>: no such Y"}` in the eight
+model translation units. They are reachable from the wire by any client that
+sends a malformed action or a stale id — they are, in fact, *the* thing a
+buggy or hostile client reaches first — and they are executed by no test.
+`UpdateContact`, `GetContact`, `UpdateLead`, `MarkLeadLost`, `GetLead`,
+`ConvertLead`, `UpdateAccount`, `SetAccountRole`, `GetAccountRoles`,
+`GetAccountHistory`, `UndoLastAccountChange`, `GetAccount`, `UpdateQuote`,
+`SendQuote`, `DecideQuote`, `GetQuote`, `UpdateOpportunity`, `GetOpportunity`,
+`MoveOpportunityStage`, `QueuedOpportunityUpdate`, `ListConflicts`,
+`ResolveConflict`, `DeleteCustomField`, `RunSavedView` and `DeleteSavedView`
+each carry at least one, and none is driven.
+
+This is untested, not unreachable, and it must not be written down as if it
+were a ceiling. Nor is it closable by generating one rejection case per guard:
+a case that asserts only "it threw" pins the exception type and nothing else,
+while the assertion worth having — that the two refusals stay
+*distinguishable*, because a caller retries differently for "you sent nothing"
+than for "it is gone" — is one case per model, not one per line. The `GetQuote`
+pair in `tests/test_quote_model.cpp` is that shape.
+
+### The 39 other lines, named
+
+* **`QuoteModel::execute(const GetQuote&)` — the whole action, 13 lines, 9 of
+  them here and its two guards counted above.** Registered on the wire by
+  `include/crm/models/quote_model.hpp`'s `BRIDGE_REGISTER_ACTION` and driven by
+  no test, no presenter and no scenario. Now covered — and removing its
+  `validate()` guard does not merely change a message, it aborts the process on
+  an unset `QuoteId`.
+* **`ListContactOptions`' unfiltered branch, 6 lines.** Every test passes an
+  `accountId`, so "options for every contact" — the form's own default — runs
+  nowhere.
+* **`UpdateOpportunity`'s primary-contact lookup, 5 lines,** and its
+  `expectedCloseValue` set arm, 2 lines; `ResolveConflict`'s clear-the-value
+  arm, 3 lines. Each is the unexercised side of an optional field.
+* **`entryNamesAccount`'s two `return false` arms, 4 lines,** and
+  `UndoLastAccountChange`'s `continue` for an entry naming a different account,
+  2 lines. The undo history filter only ever runs over entries that all match.
+* **`decodeChoiceOptions`' two "nothing stored"/"does not decode" arms, 4
+  lines,** and `decodeMinRoleToEdit`'s fall-through to `Role::Member` for a
+  pre-7b field, 2 lines.
+* **`parseAccountChoice`'s empty-choice arm, 2 lines** — a contact submitted
+  with no account at all.
+
+### The 6 lines that are not a coverage problem
+
+`journalEntries()` is declared on all seven models and called from exactly one
+place in the rung — `tests/test_saved_view.cpp`. The other six have no caller
+in tests, presenters, app code or GUI: a rung reads its audit trail through
+`GetAccountHistory`, not through this accessor. They are uncovered because
+nothing wants them.
+
+### The 4 that are unreachable by design
+
+* **`alreadyDecided`'s empty-key guard (`src/models/opportunity_model.cpp`), 2
+  lines.** `QueuedOpportunityUpdate::validate()` requires a non-empty
+  `operationKey`, and `execute` runs it before any path reaches the lookup, so
+  the guard fires only for a caller that bypassed validation entirely. This is
+  the same guard, for the same reason, that lims's own audit records for
+  `lims::SampleModel::alreadyDecided` — which the function's doc comment
+  already cites as its model.
+* **`MoveOpportunityStage`'s `CrmError{"MoveOpportunityStage: corrupt ledger
+  entry"}`, 2 lines.** It fires only for a stage-ledger row this model wrote
+  and cannot parse back. It turns an impossible state into a typed error
+  instead of a bad read; reaching it in a test means writing the corruption
+  directly.
+
+### Two claims in `codecov.yml` this audit retires
+
+* `ContactModel::attachActionLog` and `SavedViewModel::attachActionLog` are no
+  longer "called by no test at all", and those models' journaling paths are no
+  longer "entirely unverified" — both gained the case their four siblings had,
+  and **no defect was found on either**: both journal both of their mutations,
+  under the attached key, with the caller's principal. That is contrary to what
+  the same paragraph's lims precedent would predict, and it is worth recording
+  as a negative result rather than leaving a comment that implies an open one.
+* The 148-line figure is 141 as this audit found it, every one accounted for
+  above. Covering `GetQuote` leaves 128, and moves the component from 86.33% to
+  87.15% by Codecov's own arithmetic (`hits / (hits + misses + partials)` over
+  the uploaded LCOV) and from 91.27% to 92.08% by `llvm-cov`'s line count. Those
+  are two different measurements of the same profile, not a discrepancy — see
+  `../TESTING.md`, "What `examples/common`'s coverage number measures", for
+  which one a `codecov.yml` target is checked against.
+
 ## Definition of done
 
 Current state per bullet. The rung is server-complete; the two bullets that

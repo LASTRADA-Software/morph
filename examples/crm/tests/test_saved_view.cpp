@@ -6,6 +6,9 @@
 // result. Scoped per-principal, owner-only to delete.
 
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <morph/journal/action_log.hpp>
+#include <string>
 
 #include "crm/core/errors.hpp"
 #include "crm/models/account_model.hpp"
@@ -229,6 +232,63 @@ TEST_CASE("DeleteSavedView naming a nonexistent view is NotFound", "[crm][saved_
     const ScopedPrincipal alice{"alice"};
     crm::SavedViewModel model;
     CHECK_THROWS_AS(model.execute(crm::DeleteSavedView{.savedViewId = crm::SavedViewId{999}}), crm::NotFound);
+}
+
+// The sibling of `AccountModel`/`LeadModel`/`OpportunityModel`/`QuoteModel`'s
+// own "journals its edits against the attached identity" case (morph#412).
+// `SavedViewModel::attachActionLog` was called by no test at all, so nothing
+// executed proved this model records what it writes.
+//
+// Both mutations are covered, and the delete deliberately so: a saved view is
+// the one crm entity whose row is *removed* rather than versioned, which makes
+// its journal entry the only surviving record that it ever existed. Reading
+// back through `log->entries("saved-views")` is what makes the attached key
+// load-bearing -- an entry stamped with a different key, or none, does not come
+// back from that call.
+TEST_CASE("SavedViewModel journals its edits against the attached identity", "[crm][saved_view][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    crm::SavedViewModel model;
+    model.attachActionLog(log, std::string{"saved-views"});
+
+    const auto saved =
+        model.execute(crm::CreateSavedView{.name = "My negotiations", .stage = crm::OpportunityStage::Negotiation});
+    model.execute(crm::DeleteSavedView{.savedViewId = saved.savedViewId});
+
+    const auto entries = log->entries("saved-views");
+    REQUIRE(entries.size() == 2);
+    CHECK(entries[0].actionType == "CreateSavedView");
+    CHECK(entries[1].actionType == "DeleteSavedView");
+    for (const auto& entry : entries) {
+        CHECK(entry.modelType == "SavedViewModel");
+        CHECK(entry.entityKey == "saved-views");
+        CHECK(entry.principal == "alice");
+        CHECK(entry.outcome == morph::journal::Outcome::Succeeded);
+        CHECK_FALSE(entry.schema.empty());
+    }
+    // The view itself is gone; the journal is what is left of it.
+    CHECK(model.execute(crm::ListSavedViews{}).views.empty());
+    CHECK(model.journalEntries().size() == 2);
+}
+
+// `ListSavedViews` and `RunSavedView` are registered `Loggable::No` and record
+// nothing, which this pins so a later reader does not read the case above as
+// "every action journals".
+TEST_CASE("SavedViewModel's reads journal nothing", "[crm][saved_view][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    crm::SavedViewModel model;
+    model.attachActionLog(log, std::string{"saved-views"});
+
+    const auto saved = model.execute(crm::CreateSavedView{.name = "Negotiating"});
+    const auto afterCreate = log->entries("saved-views").size();
+
+    model.execute(crm::ListSavedViews{});
+    model.execute(crm::RunSavedView{.savedViewId = saved.savedViewId});
+
+    CHECK(log->entries("saved-views").size() == afterCreate);
 }
 
 TEST_CASE("Every mutating SavedView action refuses an empty principal", "[crm][saved_view][audit]") {

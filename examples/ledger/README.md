@@ -55,8 +55,72 @@ authenticated principal may call it; a caller with no token is refused
 principal by the model itself. Added by morph#361: until then a `ledgers` row
 was created by no registered action at all, and a freshly started
 `ladder_ledger_server` against a new database served a book nobody could open
-(`OpenAccount` refused with `OpenAccount: no such ledger`). There is no
-per-book ownership — see morph#382.
+(`OpenAccount` refused with `OpenAccount: no such ledger`).
+
+**Whose book it is.** `CreateLedger` records its caller as the book's owner,
+and every action that reaches a book compares that owner against the
+authenticated principal before it does anything else — the reads included.
+`GetLedger`, `GetBudgetReport` and `GetReportStatus` are gated exactly as the
+writes are, because a book's accounts, balances and statements are the thing
+worth protecting. A principal that does not own the book is refused
+`<Action>: this book belongs to another principal`; one that does not exist is
+still refused `<Action>: no such ledger`, and the two stay distinguishable so
+an owner debugging a dead id is not told it is a permissions problem.
+
+The rule lives in the models, through the relation
+(`ledger/db/book_access.hpp`, `examples/IMPLEMENTATION.md` rule 4, the shape
+`bank::db::loadOwned` established at rung 1), never at the authorizer:
+`LedgerAuthorizer::authorizeInstance` compares one register-time owner against
+the caller, and `LedgerModel`'s instances are keyed by `ledgerId` and shared
+across every client that opens the same book, so it has no single owning
+caller to compare against. `RunReportJob` is the one exception, and it is not
+one really — it admits only `kReportRunnerPrincipal`, the server's own runner,
+which is a stronger gate than ownership rather than a hole in it.
+
+One book shape predates all of this: a `ledgers` row written before the
+`owner` column existed (migration `20260819000015`) records no owner, and
+stays readable and writable by every authenticated principal, exactly as it
+was. SQLite cannot add a `NOT NULL` column to a table that may already hold
+rows, and there is no principal to attribute those rows to; `NULL` therefore
+means "created before ownership existed", the same reading `params_json`
+already has on a report job. Nothing writes a new one — `CreateLedger` always
+stamps its caller — but the scenario corpus's fixture books are seeded by raw
+`INSERT` and are unowned for this reason. Added by morph#382.
+
+**There are no roles.** Ownership here is one principal per book, not a
+membership table: there is no way to share a book with a second principal, and
+no `kanban`-style `project_roles` to promote anyone through. A book is its
+creator's, and everyone else is refused.
+
+**Two actions a client cannot drive to a result (morph#362).** Every action
+below is registered on the wire, but two of them answer only with a refusal
+no matter what a client sends, for two different reasons. Both are recorded
+in `scripts/scenario/coverage_allowlist.json` so the workflow-coverage gate
+does not chase them.
+
+- **`RunReportJob` is the report runner's, not a client's.**
+  `LedgerModel::execute(const RunReportJob&)` refuses every principal but
+  `kReportRunnerPrincipal` with `RunReportJob: only the report runner may run
+  a report job`. That is step 7's submit→poll split working as designed —
+  `ledger::app::App` sweeps for `Pending` rows on a timer and dispatches the
+  run under its own service principal (see step 7 below). The consequence for
+  a client author is that the *submit → run → poll* triple has no client-side
+  middle step: a client submits, gets a job id, polls, and either sees the
+  runner's own tick land or does not. It cannot advance its own job, and
+  asking to is a refusal, not a slow success.
+- **`UndoTransaction` needs a `journalId` no action hands out.**
+  `UndoTransaction { ledgerId, journalId }` reverses one journal entry, and
+  `JournalId` appears in exactly one wire DTO in this rung — that action's own
+  input. Nothing returns one: `StoreTransaction` and `UndoTransaction` answer
+  `GetLedgerResult` (accounts and balances), `GetLedger` the same,
+  `ImportLedgerChunk` answers counts, and there is no `GetJournal` or
+  `ListTransactions`. So the only outcome a client can reach is the not-found
+  refusal `UndoTransaction: no such journal`, against an id it guessed; the
+  in-process tests get the id from the database instead. Undo itself is
+  implemented and exercised (step 5) — it is the *naming* of an entry that has
+  no client story. Whether to close that with an action that returns journal
+  ids, or to record undo as a server-side path deliberately, is open on
+  morph#362.
 
 Build order (status as of rung 5's implementation, see
 `docs/superpowers/plans/2026-08-19-ledger-rung5.md`):
