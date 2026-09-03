@@ -27,7 +27,7 @@
 #   6. a manifest of nothing but blank lines            -> fail, saying so
 #   7. a manifest naming a binary that was not built    -> fail, naming it
 #
-6 and 7 are the standalone-run cases. Run through coverage.sh this gate is
+# 6 and 7 are the standalone-run cases. Run through coverage.sh this gate is
 # preceded by check_coverage_objects.sh, which rejects both; run on its own it
 # would otherwise abort on `objects[0]: unbound variable` under `set -u`, or
 # hand llvm-cov a path that does not exist, and neither message mentions

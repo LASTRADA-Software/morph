@@ -538,7 +538,23 @@ endfunction()
 # redundant with it: the default above is overridable, and the failure is a
 # silence that no exit code reports.
 if(AF_COVERAGE)
-    if(NOT DEFINED USE_COMPILER_CACHE)
+    if(DEFINED CMAKE_CXX_COMPILER_LAUNCHER OR DEFINED CMAKE_C_COMPILER_LAUNCHER)
+        # cmake/CompileCache.cmake returns early when a launcher is already set,
+        # so USE_COMPILER_CACHE decides nothing on this path and setting it here
+        # would print "cache disabled" over a build that is still caching. CI's
+        # linux-coverage job takes exactly this route: it passes
+        # -DCMAKE_C[XX]_COMPILER_LAUNCHER=sccache on its configure line. That is
+        # safe there -- one checkout, so there is no second worktree for a path
+        # to come from -- and it is the caller's decision either way, so this
+        # says what is true rather than overriding it.
+        message(STATUS
+            "morph: coverage: a compiler launcher is set externally "
+            "(CXX='${CMAKE_CXX_COMPILER_LAUNCHER}'), so this build caches "
+            "regardless of USE_COMPILER_CACHE. Safe on a single checkout; on a "
+            "machine with several worktrees of this repository a cache hit can "
+            "carry another worktree's source paths into the coverage mapping "
+            "(morph#426), which scripts/check_coverage_roots.sh will catch.")
+    elseif(NOT DEFINED USE_COMPILER_CACHE)
         set(USE_COMPILER_CACHE OFF)
         message(STATUS
             "morph: coverage: compiler cache disabled by default -- a shared cache "

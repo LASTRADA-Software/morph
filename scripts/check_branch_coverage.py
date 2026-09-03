@@ -287,6 +287,13 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None, objects_pat
     partial_lines = partial_line_set(files)
 
     failures = []
+    # Kept apart from `failures` because the two are enforced under different
+    # conditions. A structural finding -- a stale table, a subsystem nothing
+    # scores, an allowlist entry that no longer describes the code -- is true of
+    # the tree and fatal whatever was built. A floor is a comparison against a
+    # number measured under CI's configure, and is only meaningful when this
+    # build is that configure.
+    floor_failures = []
     if allowlist_path is None:
         allowlist_path = os.path.join(repo_root, ALLOWLIST)
     allowlisted = resolve_allowlist(repo_root, partial_lines, allowlist_path, failures)
@@ -345,7 +352,7 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None, objects_pat
         marker = ""
         if floor is not None and percent < floor:
             marker = "  <-- BELOW FLOOR"
-            failures.append(
+            floor_failures.append(
                 f"{name} branch coverage is {percent:.2f}%, below its {floor:.0f}% floor "
                 f"(measured at {FLOORS[name][1]:.2f}% when the floor was set). A branch "
                 f"that stopped being taken both ways is a test that stopped checking "
@@ -358,7 +365,7 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None, objects_pat
     print(f"{'include/morph TOTAL':26} {total_arms:7} {total_taken:7} "
           f"{total_percent:9.2f} {TOTAL_FLOOR:6.0f}% {total_partial:14}", file=out)
     if total_arms and total_percent < TOTAL_FLOOR:
-        failures.append(
+        floor_failures.append(
             f"include/morph branch coverage is {total_percent:.2f}%, below its "
             f"{TOTAL_FLOOR:.0f}% floor (measured at {TOTAL_MEASURED:.2f}%)."
         )
@@ -374,6 +381,9 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None, objects_pat
           f"{os.path.relpath(allowlist_path, repo_root)} as uncoverable, with a reason each; "
           f"the remaining {total_partial - len(allowlisted)} are untested.", file=out)
 
+    if not unbuilt:
+        failures.extend(floor_failures)
+
     if unbuilt:
         # Report, do not enforce. The floors above were measured under CI's
         # configure, where several binaries contribute coverage to the same
@@ -387,8 +397,14 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None, objects_pat
                   file=out)
         print("The floors above are calibrated to CI's configure "
               "(MORPH_BUILD_NET/OFFLINE_SQLITE/QT/LADDER=ON, MORPH_LADDER_RUNGS=all); "
-              "this build is a subset, so the numbers are printed and not gated.",
+              "this build is a subset, so the floors are printed and not gated.",
               file=out)
+        for breach in floor_failures:
+            print(f"  would fail under CI's configure: {breach}", file=out)
+        print("Structural findings -- a stale table, an unscored subsystem, an "
+              "allowlist entry that no longer matches the code -- are still fatal "
+              "below, because those are true of the tree rather than of the "
+              "configure.", file=out)
         if failures:
             print(file=out)
             for failure in failures:
@@ -601,9 +617,6 @@ def self_test():
     else:
         note("ok: an allowlist entry with no stated reason is rejected")
 
-    if failures:
-        print(f"\n{failures} self-test check(s) failed", file=sys.stderr)
-        return 1
     # ── The manifest-aware vacuity rule (morph#404 follow-up) ───────────────
     # `cmake --preset clang-coverage` with nothing else profiles morph_tests
     # alone, and morph_tests compiles nothing under include/morph/net or
@@ -645,6 +658,41 @@ def self_test():
         note("ok: a top-level header does not become an unfixable FLOORS key")
     else:
         fail("a top-level header produced a floor demand naming a file", output)
+
+    # A floor breach is a comparison against a number measured under a different
+    # configure, so it is reported on a subset build and enforced on a full one.
+    # Without the first of these the documented local flow -- `cmake --preset
+    # clang-coverage` and nothing else -- fails at its last step on floors it
+    # cannot reach; without the second, "not gated" would quietly become "never
+    # gated".
+    low_core = {f"include/morph/core/covered.hpp": [(10, 1, [True, True]),
+                                                    (11, 1, [True, False]),
+                                                    (12, 1, [True, False]),
+                                                    (13, 1, [True, False])]}
+    subset_low = {name: recs for name, recs in _every_subsystem(low_core).items()
+                  if not name.startswith(("include/morph/net/", "include/morph/qt/"))}
+
+    code, output = run(subset_low, profiled=["morph_tests"])
+    if code == 0 and "would fail under CI's configure" in output:
+        note("ok: a floor breach on a subset build is reported, not failed")
+    else:
+        fail("a subset build was failed on a floor it cannot reach", output)
+
+    code, output = run(_every_subsystem(low_core),
+                       profiled=["morph_tests", "morph_net_tests", "morph_qt_tests"])
+    if code != 0 and "below its 90% floor" in output:
+        note("ok: a floor breach on a full build still fails")
+    else:
+        fail("a floor breach was accepted on a full build", output)
+
+    # Last, and it has to be: a check placed after this one runs, prints its
+    # error, increments the counter -- and then the function falls through to
+    # "all self-test checks passed" and exits 0. That is what happened when the
+    # manifest-aware cases above were appended below an earlier copy of this
+    # block, and drift-guard.yml would have reported green over a broken gate.
+    if failures:
+        print(f"\n{failures} self-test check(s) failed", file=sys.stderr)
+        return 1
 
     print("\nall self-test checks passed")
     return 0
