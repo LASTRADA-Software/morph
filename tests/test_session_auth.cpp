@@ -72,7 +72,15 @@ TEST_CASE("base64url round-trips every remainder length", "[session_auth][crypto
 }
 
 TEST_CASE("base64url rejects invalid characters", "[session_auth][crypto]") {
+    // "has space" is 9 characters -- 9 % 4 == 1 -- so this is rejected by the
+    // impossible-length guard (session_auth.hpp:228) before the per-character
+    // loop ever runs; the alphabet check itself (223/236-238) was never
+    // exercised anywhere in the suite (~87.5k characters decoded, never once
+    // an out-of-alphabet one). "ab+d" is 4 characters (a valid length) and
+    // contains '+', which is not in the url-safe alphabet (only '-'/'_' are),
+    // so this reaches and fails the per-character check specifically.
     REQUIRE_FALSE(morph::session::detail::base64UrlDecode("has space").has_value());
+    REQUIRE_FALSE(morph::session::detail::base64UrlDecode("ab+d").has_value());
 }
 
 TEST_CASE("an issued token verifies and returns its claims", "[session_auth]") {
