@@ -811,6 +811,117 @@ here as though it already existed, but it has never been built (morph#255):
    (there is no scheduled workflow in this repo yet), so nothing in the
    ladder should assume a cadence the rest of the project doesn't have.
 
+## What `examples/common`'s coverage number measures (audit, 2026-09)
+
+`codecov.yml`'s `ladder` component scores `examples/common/**` against a 95%
+target. That number was reported as 90.39% on `master` and read as a five-point
+regression (morph#411). It is a real figure, it is reproducible, and the
+regression is real — but two things about it have to be said before the figure
+means anything, because both of them were being read the other way.
+
+### Two numbers, both correct, four points apart
+
+`llvm-cov report`'s line coverage and Codecov's component percentage are not
+the same measurement. Codecov reads the uploaded LCOV and scores
+`hits / (hits + misses + partials)`, where a *partial* is a line that executed
+but carries a branch nothing took. `llvm-cov` counts that line as covered.
+Measured on the same profile, on the tree this section was written against:
+
+|                              | `llvm-cov` lines | Codecov component |
+|------------------------------|------------------|-------------------|
+| `examples/common`            | 96.94%           | 93.68%            |
+
+Whenever the two are quoted side by side without saying which is which, the
+gap looks like a regression or a contradiction. It is neither: it is 39 lines
+with a one-sided branch. **Quote the Codecov figure when arguing about the
+component's target, because that is the one the target is checked against.**
+
+Reproduce either from a coverage run — `cmake --preset clang-coverage` (plus
+`-DMORPH_BUILD_{NET,OFFLINE_SQLITE,QT,LADDER}=ON`), `ctest`, then
+`bash scripts/coverage.sh`. `llvm-cov`'s figure is in that script's own report;
+Codecov's arithmetic runs over `build/clang-coverage/coverage.lcov`.
+
+A prior local measurement of this component disagreed with the uploaded one by
+five points for a *different* reason — a shared compiler cache served objects
+built in another worktree, whose absolute paths matched none of
+`scripts/coverage.sh`'s relative filters, so the records were dropped rather
+than mis-attributed (morph#426). That is fixed at configure time and gated by
+`scripts/check_coverage_roots.sh`; run it before trusting any local figure.
+
+### Where the drop came from: four files that did not exist at the measurement
+
+`codecov.yml` records `examples/common` at 95.85% when rungs 2-4 entered the
+report (morph#142, 2026-08-21). Splitting today's figure by whether a file
+existed then answers the question that ticket asked and could not answer:
+
+|                                    | hits | miss | partial | lines | Codecov |
+|------------------------------------|-----:|-----:|--------:|------:|--------:|
+| files present at that measurement  |  658 |   17 |      12 |   687 |  95.78% |
+| `qml_surface.cpp`, `process_pool.hpp`, `journey.hpp`, `step_executor.hpp` |  505 |   49 |      40 |   594 |  85.02% |
+
+The code that was measured at 95.85% still measures 95.78%. **Nothing
+regressed.** The component's denominator nearly doubled, and every line of the
+growth is testkit written to serve a later rung and not itself tested to the
+standard the rest of the directory holds. `qml_surface.cpp` alone was 493 of
+the 1281 lines and 70 of the 118 non-hits.
+
+### The artifact set, re-derived
+
+`codecov.yml` names seven lines as measurement artifacts and puts the ceiling
+at 478/485 = 98.56%. That list is still correct about the lines it names and is
+no longer the whole set — the tree it was written against was a third of
+today's size. Re-derived, and split by *why* each line reads uncovered:
+
+**Measurement artifacts — the statement ran; the counter on it did not.**
+llvm-cov puts a "control reached past this block" counter on certain closing
+braces, and there is no `LCOV_EXCL_LINE` equivalent to suppress one.
+
+* `backend_rig.hpp` 218, 225, 255 — the three switch-case `}` after `break;`,
+  one per `Mode`. The three the current comment names.
+* `strand_interleaver.hpp` 71, 97 — `step()` and `runSchedule()`, whose one
+  statement calls a `std::function<void()>`. The two the current comment names;
+  in today's LCOV the zero lands on the `task();` line itself rather than the
+  brace below it.
+* `step_executor.hpp` 89 — the same shape in `runOne()`. **New**: the file
+  postdates the comment.
+* `qml_surface.cpp` 599 — a switch-case `}` after `break;`. **New**, same
+  reason.
+
+**Unreachable by design — the guard cannot fire through the callers it has.**
+
+* `backend_rig.hpp` 256, 267 — the `default:` label and its `throw`. Present
+  only because `-Wswitch-default` demands one on a switch that already covers
+  every enumerator; the file says so at the site. **New.**
+* `fault_proxy.cpp` 68-69 — `onClientConnection`'s null guard. The one the
+  current comment names; `isValidIncomingConnection` is unit-tested directly.
+* `qml_surface.cpp` 92-93, 96-97 — `signalNameOf`'s "not in handler shape"
+  guards. Both call sites match `on[A-Z]\w*`, so the name it is handed can
+  never be too short, unprefixed, or lower-cased at position 2. **New.**
+* `qml_surface.cpp` 353-354 — `record()`'s empty-name early return,
+  unreachable for exactly that reason. **New.**
+
+**Untested, and reachable.** These are not artifacts and are not excused:
+
+* `qml_surface.cpp` 55, 83-84 — the unbalanced-`{` and unterminated-`(`
+  fallbacks, reachable only from QML that does not parse.
+* `qml_surface.cpp` 441-443 — the "cannot read" finding for a `.qml` file
+  `QDirIterator` lists but `QFile::open` refuses. Needs a permission-denied
+  file, which does not survive a git checkout and does not reproduce for a
+  root-running CI container.
+* `fault_proxy.cpp` 17-19 — `~FaultProxy`'s client-socket teardown; every
+  test today closes the leg before the proxy dies.
+* `journey.hpp` 69-72 — the two `catch` arms around a journey step. Pinning
+  them needs a harness that can assert a Catch2 `FAIL` *happened*, which this
+  suite does not have.
+* `process_pool.hpp` 51-53 — `~ClientProcess`'s kill-if-still-running.
+* `process_pool.hpp` 129-130 — `spawn()`'s failed-to-start arm.
+
+**Dead API — no caller anywhere in the tree.** Not a coverage problem; the
+lines are uncovered because nothing wants them:
+
+* `process_pool.hpp` 67 — `ClientProcess::waitForFinished`.
+* `process_pool.hpp` 160-166 — `ProcessPool::killAll`.
+
 ## Framework gaps this strategy exposed (all since closed)
 
 This list was written as candidate issues to schedule. **Every item on it has

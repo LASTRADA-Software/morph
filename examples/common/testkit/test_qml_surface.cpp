@@ -80,6 +80,15 @@ public:
     Q_INVOKABLE void ping() {}
 };
 
+/// @brief A bridge that declares no QML-visible member of its own.
+///
+/// `Q_OBJECT` and nothing else: every name on its metaobject comes from
+/// `QObject`, so `Scope::Own` sees an empty surface. This is what a controller
+/// looks like when the `Q_INVOKABLE`/`Q_PROPERTY` markers were forgotten.
+class EmptyFixtureBridge : public QObject {
+    Q_OBJECT
+};
+
 /// @brief A shared base that publishes one signal — the shape `bank`'s
 ///        `BankController` has, with six controllers inheriting its `error`.
 class BaseFixtureBridge : public QObject {
@@ -860,4 +869,283 @@ TEST_CASE("QmlSurfaceAudit: a guarded read of a member the bridge DOES have stil
     const QStringList findings = audit.run();
     INFO(describe(findings));
     CHECK(findings.isEmpty());
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// The arms nothing executed — each one a promise the audit's own header
+// makes and, until now, kept only by inspection (morph#411)
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("blankCommentsAndStrings blanks single-quoted and template strings, not just double-quoted",
+          "[testkit][qml-surface]") {
+    // QML takes all three quote forms, and every case above this one used
+    // double quotes only. A blanker that handled `"` alone would leave the
+    // contents of a `'...'` or a `` `...` `` visible to the reference scanner,
+    // so a member named in a log line or a translated label would be reported
+    // as a binding site that does not exist. The assertion is the *contents*
+    // are gone while the surrounding code survives, because a blanker that
+    // simply erased the line would also pass a length check.
+    const QString source = QStringLiteral("a 'one' b\nc `two` d\ne \"three\" f\n");
+    const QString blanked = blankCommentsAndStrings(source);
+    REQUIRE(blanked.size() == source.size());
+    CHECK(blanked.count(QLatin1Char('\n')) == source.count(QLatin1Char('\n')));
+    CHECK_THAT(blanked.toStdString(), !Catch::Matchers::ContainsSubstring("one"));
+    CHECK_THAT(blanked.toStdString(), !Catch::Matchers::ContainsSubstring("two"));
+    CHECK_THAT(blanked.toStdString(), !Catch::Matchers::ContainsSubstring("three"));
+    for (const char* code : {"a", "b", "c", "d", "e", "f"}) {
+        CHECK_THAT(blanked.toStdString(), Catch::Matchers::ContainsSubstring(code));
+    }
+}
+
+TEST_CASE("QmlSurfaceAudit: a member named only inside a single-quoted string is not a reference",
+          "[testkit][qml-surface]") {
+    // The end-to-end half of the case above: `blankCommentsAndStrings` runs
+    // before the scanner, so a ghost member inside `'...'` must reach neither
+    // the reference list nor the findings.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    writeQml(dir, QStringLiteral("Main.qml"),
+             cleanQml().append(QStringLiteral("\nItem { property string doc: 'page.fixture.ghost()' }\n")));
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    CHECK(findings.isEmpty());
+}
+
+TEST_CASE("QmlSurfaceAudit: an identifier merely ending in the bound alias is not that alias",
+          "[testkit][qml-surface]") {
+    // `page.subfixture.ghost()` and `page.sub\u00e9fixture.ghost()` both contain
+    // `fixture.ghost()`. The ASCII one is refused by the scanner's own `\b`;
+    // the accented one is not, because QRegularExpression's `\b` is ASCII-only
+    // while the guard beside it asks `QChar::isLetterOrNumber()`, which is not.
+    // Both are asserted here, because which of the two mechanisms rejects a
+    // given spelling is exactly the thing that goes wrong silently: a false
+    // reference on an alias no one addressed is a finding against a bridge
+    // that is innocent.
+    const auto spelling = GENERATE(QStringLiteral("subfixture"), QStringLiteral("sub\u00e9fixture"));
+
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    writeQml(dir, QStringLiteral("Main.qml"),
+             cleanQml().append(QStringLiteral("\nItem { function stray() { page.%1.ghost() } }\n").arg(spelling)));
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(spelling.toStdString() << ": " << describe(findings));
+    CHECK(findings.isEmpty());
+}
+
+TEST_CASE("QmlSurfaceAudit: a property-style Connections handler is scanned like a function one",
+          "[testkit][qml-surface]") {
+    // `onListed: expr` is the other handler syntax QML accepts, and every case
+    // above binds `listed` through `function onListed(...)`. Both patterns run
+    // over the same `Connections` body, so a rung written in the property
+    // style was, until this case, audited as if it bound nothing at all —
+    // silence that reads exactly like agreement.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString propertyStyle = cleanQml().replace(QStringLiteral(R"(        function onListed(rows, ok) {
+            console.log(rows, ok)
+        })"),
+                                                     QStringLiteral("        onListed: console.log(1)"));
+    REQUIRE_THAT(propertyStyle.toStdString(), Catch::Matchers::ContainsSubstring("onListed: console.log(1)"));
+    writeQml(dir, QStringLiteral("Main.qml"), propertyStyle);
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    SECTION("binding the signal this way is silence, not an unbound-member finding") {
+        const QStringList findings = audit.run();
+        INFO(describe(findings));
+        CHECK(findings.isEmpty());
+    }
+}
+
+TEST_CASE("QmlSurfaceAudit: a property-style handler for a signal the bridge lacks is a finding",
+          "[testkit][qml-surface]") {
+    // The other direction of the case above: the property-style scan must be
+    // able to *fail*, or it would be silencing rather than auditing.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString qml = cleanQml().replace(QStringLiteral(R"(        function onListed(rows, ok) {
+            console.log(rows, ok)
+        })"),
+                                           QStringLiteral("        onListed: console.log(1)\n        onVanished: console.log(2)"));
+    writeQml(dir, QStringLiteral("Main.qml"), qml);
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    REQUIRE(findings.size() == 1);
+    CHECK_THAT(findings.first().toStdString(), Catch::Matchers::ContainsSubstring("onVanished"));
+    CHECK_THAT(findings.first().toStdString(), Catch::Matchers::ContainsSubstring("emits no signal"));
+}
+
+TEST_CASE("QmlSurfaceAudit: a name inside Connections that is not in handler shape binds nothing",
+          "[testkit][qml-surface]") {
+    // `onListed` is a handler; `onlisted` is an ordinary property assignment
+    // that happens to start with the same three letters, and reading it as a
+    // binding would silence a genuinely unbound signal. Both handler patterns
+    // require `on[A-Z]`, so it is the pattern rather than `signalNameOf`'s own
+    // shape guard that rejects this spelling — see the audit in
+    // examples/TESTING.md, which classifies that guard as unreachable from
+    // either caller. Asserted through the sweep: the signal must still be
+    // reported as bound by nothing.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString qml = cleanQml().replace(QStringLiteral(R"(        function onListed(rows, ok) {
+            console.log(rows, ok)
+        })"),
+                                           QStringLiteral("        onlisted: console.log(1)"));
+    writeQml(dir, QStringLiteral("Main.qml"), qml);
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    REQUIRE(findings.size() == 1);
+    CHECK_THAT(findings.first().toStdString(), Catch::Matchers::ContainsSubstring("listed"));
+    CHECK_THAT(findings.first().toStdString(), Catch::Matchers::ContainsSubstring("no scanned .qml"));
+}
+
+TEST_CASE("QmlSurfaceAudit: a Connections block with no target is skipped rather than mis-attributed",
+          "[testkit][qml-surface]") {
+    // A `Connections` block whose `target` is set elsewhere (or not at all)
+    // names no alias, so its handlers belong to nothing this audit knows
+    // about. Skipping it is what stops those handlers being charged to
+    // whichever alias happened to be scanned last.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    writeQml(dir, QStringLiteral("Main.qml"), cleanQml().append(QStringLiteral(R"(
+Item {
+    Connections {
+        function onSomethingElse() {}
+    }
+}
+)")));
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    CHECK(findings.isEmpty());
+}
+
+TEST_CASE("QmlSurfaceAudit: calling a signal as if it were an invokable says so specifically",
+          "[testkit][qml-surface]") {
+    // Drift direction 1, in its most confusing shape: the member exists, so
+    // "no such invokable" would send the reader looking for a typo. The
+    // audit's own header promises the distinction; nothing executed the arm
+    // that draws it.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    writeQml(dir, QStringLiteral("Main.qml"),
+             cleanQml().replace(QStringLiteral("page.fixture.refresh()"), QStringLiteral("page.fixture.listed()")));
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    // Two: the mis-call itself, and `refresh` now bound by nothing.
+    REQUIRE(findings.size() == 2);
+    const std::string joined = describe(findings);
+    CHECK_THAT(joined, Catch::Matchers::ContainsSubstring("declares it as a signal, not an invokable"));
+    CHECK_THAT(joined, !Catch::Matchers::ContainsSubstring("has no such invokable"));
+}
+
+TEST_CASE("QmlSurfaceAudit: reading an invokable by name counts as binding it, not as a missing property",
+          "[testkit][qml-surface]") {
+    // `onClicked: page.fixture.refresh` — a handler assigned the function
+    // itself rather than calling it — is a *reference* to a method, and the
+    // scanner classifies it as a read because there is no `(`. Resolving a
+    // read against the method table before reporting "no such property" is
+    // what stops that idiom being a false finding, and it must also mark the
+    // method bound so the unreferenced sweep does not then report it.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    writeQml(dir, QStringLiteral("Main.qml"),
+             cleanQml().replace(QStringLiteral("page.fixture.refresh()"), QStringLiteral("page.fixture.refresh")));
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    CHECK(findings.isEmpty());
+}
+
+TEST_CASE("QmlSurfaceAudit: a bound object with no QML-visible members at all is a finding",
+          "[testkit][qml-surface]") {
+    // The vacuity family's missing member. An object with nothing to audit
+    // cannot disagree with any QML, so pointing the guard at one is a
+    // configuration mistake that would otherwise read as a clean pass — the
+    // same failure the "no bridge bound" and "no .qml files" cases above
+    // exist to refuse.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    // The QML *does* address the second alias, so the "referenced by no
+    // scanned .qml" arm above it stays quiet and this case isolates the one
+    // it is named for. That is also the realistic shape: the object is wired
+    // up and used, and the `Q_INVOKABLE`/`Q_PROPERTY` markers were forgotten.
+    writeQml(dir, QStringLiteral("Main.qml"),
+             cleanQml().append(QStringLiteral("\nItem { function go() { page.bare.ping() } }\n")));
+
+    SurfaceFixtureBridge bridge;
+    EmptyFixtureBridge bare;
+    QmlSurfaceAudit audit{dir.path()};
+    audit.bind(QStringLiteral("fixture"), bridge);
+    audit.bind(QStringLiteral("bare"), bare);
+
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    REQUIRE(findings.size() == 1);
+    CHECK_THAT(findings.first().toStdString(),
+               Catch::Matchers::ContainsSubstring("declares no QML-visible members at all"));
+    CHECK_THAT(findings.first().toStdString(), Catch::Matchers::ContainsSubstring("bare"));
+}
+
+TEST_CASE("QmlSurfaceAudit: addDirectory() audits the second directory too", "[testkit][qml-surface]") {
+    // The header offers `addDirectory()` for a rung whose QML lives beside a
+    // shared renderer's, and nothing called it. A second directory that is
+    // merely stored and never walked would drop every finding in it, which is
+    // the guard silently covering less than it claims to.
+    QTemporaryDir first;
+    QTemporaryDir second;
+    REQUIRE(first.isValid());
+    REQUIRE(second.isValid());
+    writeQml(first, QStringLiteral("Main.qml"), cleanQml());
+    writeQml(second, QStringLiteral("Extra.qml"),
+             QStringLiteral("import QtQuick\nItem { id: page\n  property var fixture: null\n"
+                            "  function go() { page.fixture.ghost() }\n}\n"));
+
+    SurfaceFixtureBridge bridge;
+    QmlSurfaceAudit audit{first.path()};
+    audit.addDirectory(second.path());
+    audit.bind(QStringLiteral("fixture"), bridge);
+
+    INFO("scanned: " << audit.scannedFiles().join(QStringLiteral(", ")).toStdString());
+    CHECK(audit.scannedFiles().size() == 2);
+    const QStringList findings = audit.run();
+    INFO(describe(findings));
+    REQUIRE(findings.size() == 1);
+    CHECK_THAT(findings.first().toStdString(), Catch::Matchers::ContainsSubstring("Extra.qml"));
+    CHECK_THAT(findings.first().toStdString(), Catch::Matchers::ContainsSubstring("no such invokable"));
 }

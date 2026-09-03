@@ -27,10 +27,12 @@
 // fire, deterministically and without any sleep_for (examples/TESTING.md,
 // "Pumping discipline -- no sleeps").
 
+#include <QString>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <condition_variable>
+#include <exception>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -698,4 +700,41 @@ TEST_CASE("EventPoller tolerates an empty onFatalError callback on a non-timeout
     REQUIRE(morph::ladder::testkit::pumpUntil([&] { return !poller.busy(); }));
     CHECK(poller.fatalErrorReported());
     CHECK_FALSE(poller.running());
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// The two failure-classifier helpers, called directly (morph#411)
+// ═════════════════════════════════════════════════════════════════════════
+//
+// `isClientTimeout` and `describeFailure` are declared in
+// `event_poller.hpp`'s `detail` namespace with a documented answer for a null
+// `std::exception_ptr` and for a throw that is not a `std::exception`. Both
+// answers were reachable only through `handleError`, which never produces
+// either shape, so what the header promises was held up by nothing. They are
+// free functions taking an `exception_ptr`, so the promise can simply be
+// called.
+
+TEST_CASE("isClientTimeout: a null exception is not a timeout", "[testkit][event-poller]") {
+    // The distinction this classifier draws decides whether the poller retries
+    // or stops for good. "No exception information" must fall on the *stop*
+    // side: a tick that failed for a reason nobody captured is not evidence
+    // the transport is merely slow.
+    CHECK_FALSE(morph::ladder::gui::detail::isClientTimeout(nullptr));
+    CHECK_FALSE(morph::ladder::gui::detail::isClientTimeout(
+        std::make_exception_ptr(std::runtime_error{"not a timeout"})));
+    CHECK(morph::ladder::gui::detail::isClientTimeout(
+        std::make_exception_ptr(morph::backend::ClientTimeoutError{})));
+}
+
+TEST_CASE("describeFailure: every input yields a non-empty message", "[testkit][event-poller]") {
+    // `onFatalError`'s message is the only account a GUI gets of why polling
+    // stopped, and the header promises it is never empty. The two arms that
+    // make that true — a null exception and a throw that is not a
+    // `std::exception` — are the ones no poller path produces.
+    CHECK(morph::ladder::gui::detail::describeFailure(nullptr).contains(
+        QStringLiteral("no exception information")));
+    CHECK(morph::ladder::gui::detail::describeFailure(std::make_exception_ptr(42))
+              .contains(QStringLiteral("non-std::exception")));
+    CHECK(morph::ladder::gui::detail::describeFailure(std::make_exception_ptr(std::runtime_error{"boom"})) ==
+          QStringLiteral("boom"));
 }
