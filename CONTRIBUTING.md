@@ -60,7 +60,14 @@ serialising independent rungs behind one file.
 
 ## Quality gates
 
-- **Tests:** behavior changes come with Catch2 tests under `tests/`.
+- **Tests:** behavior changes come with Catch2 tests under `tests/`. For what
+  this repository's test instruments collectively guarantee — the coverage
+  floor CI enforces, which SQLite-style techniques are adopted or declined and
+  why, and each instrument's known reach limits (`oom_injector` disabled under
+  sanitizers, `fault_proxy` is ladder-only, no I/O-failure seam for
+  `include/morph/net`) — see
+  [`docs/spec/testing_charter.md`](docs/spec/testing_charter.md) before
+  deciding what a change needs beyond an ordinary Catch2 case.
 - **Doxygen is strict:** the Docs CI job runs with
   `WARN_AS_ERROR = FAIL_ON_WARNINGS` — every public symbol needs complete
   `@param`/`@tparam`/`@return` docs. Reproduce locally with
