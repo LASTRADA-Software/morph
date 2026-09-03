@@ -324,3 +324,57 @@ TEST_CASE("QuoteModel journals its edits against the attached identity", "[crm][
         CHECK(entry.outcome == morph::journal::Outcome::Succeeded);
     }
 }
+
+// ── GetQuote: registered on the wire, driven by nothing (morph#412) ──────
+//
+// `BRIDGE_REGISTER_ACTION(crm::QuoteModel, crm::GetQuote, "GetQuote", ...)`
+// puts this action on the rung's wire surface, and the per-miss audit of
+// crm's uncovered lines (README, "What the uncovered lines in crm's models
+// are") found
+// its whole body — every line of it — executed by no test, no presenter and
+// no scenario. A read action that is never read back is where a wrong answer
+// hides longest: `ListQuotes` exercises the same `toView`/`fetchLines` pair
+// in aggregate, so a `GetQuote` that fetched the wrong row, or that answered
+// an unknown id with a default-constructed `QuoteView` instead of refusing,
+// would look identical to a working one from anywhere else in the suite.
+
+TEST_CASE("GetQuote answers with that quote, its lines and its computed total", "[crm][quote]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    crm::AccountModel accounts;
+    crm::OpportunityModel opportunities;
+    crm::QuoteModel quotes;
+
+    const auto dealA = createDeal(accounts, opportunities);
+    const auto dealB = createDeal(accounts, opportunities);
+    const auto wanted =
+        quotes.execute(crm::CreateQuote{.opportunityId = dealA, .lines = twoLines(), .taxRate = fraction(0, 100, 2)});
+    // A second quote exists, on a different opportunity, so "returns a quote"
+    // and "returns *this* quote" are distinguishable.
+    quotes.execute(crm::CreateQuote{.opportunityId = dealB, .lines = twoLines(), .taxRate = fraction(0, 100, 2)});
+
+    const auto fetched = quotes.execute(crm::GetQuote{.quoteId = wanted.quote.id});
+    CHECK(fetched.id == wanted.quote.id);
+    CHECK(fetched.opportunityId == dealA);
+    CHECK(fetched.status == crm::QuoteStatus::Draft);
+    CHECK(fetched.lines.size() == wanted.quote.lines.size());
+    CHECK(fetched.grandTotal == wanted.quote.grandTotal);
+    CHECK(fetched.version == wanted.quote.version);
+}
+
+TEST_CASE("GetQuote refuses an id that names no quote rather than answering an empty one", "[crm][quote]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    crm::AccountModel accounts;
+    crm::OpportunityModel opportunities;
+    crm::QuoteModel quotes;
+
+    const auto opportunityId = createDeal(accounts, opportunities);
+    const auto created = quotes.execute(
+        crm::CreateQuote{.opportunityId = opportunityId, .lines = twoLines(), .taxRate = fraction(0, 100, 2)});
+
+    CHECK_THROWS_AS(quotes.execute(crm::GetQuote{.quoteId = crm::QuoteId{*created.quote.id + 1}}), crm::NotFound);
+    // An unset id is a client error, not a missing row: the two are different
+    // refusals and a caller that cannot tell them apart cannot retry correctly.
+    CHECK_THROWS_AS(quotes.execute(crm::GetQuote{}), crm::ValidationError);
+}
