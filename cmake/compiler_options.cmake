@@ -537,14 +537,35 @@ endfunction()
 # scripts/check_coverage_roots.sh is the second half of this, and is not
 # redundant with it: the default above is overridable, and the failure is a
 # silence that no exit code reports.
-if(AF_COVERAGE AND NOT DEFINED USE_COMPILER_CACHE)
-    set(USE_COMPILER_CACHE OFF)
-    message(STATUS
-        "morph: coverage: compiler cache disabled by default -- a shared cache "
-        "can serve objects built in another worktree, whose absolute source "
-        "paths then match none of scripts/coverage.sh's filters (morph#426). "
-        "Pass -DUSE_COMPILER_CACHE=ON to override where the cache is known "
-        "not to be shared across checkouts.")
+if(AF_COVERAGE)
+    if(NOT DEFINED USE_COMPILER_CACHE)
+        set(USE_COMPILER_CACHE OFF)
+        message(STATUS
+            "morph: coverage: compiler cache disabled by default -- a shared cache "
+            "can serve objects built in another worktree, whose absolute source "
+            "paths then match none of scripts/coverage.sh's filters (morph#426). "
+            "Pass -DUSE_COMPILER_CACHE=ON to override where the cache is known "
+            "not to be shared across checkouts.")
+    elseif(USE_COMPILER_CACHE)
+        # DEFINED is true for a value the *previous* configure left in the cache,
+        # not only for one someone passed. A tree first configured without
+        # AF_COVERAGE carries USE_COMPILER_CACHE:BOOL=ON from CompileCache.cmake's
+        # own option(), so reconfiguring it with -DAF_COVERAGE=ON would take the
+        # default above and skip it -- silently, which is the failure mode this
+        # block exists to prevent. It cannot be distinguished from a deliberate
+        # -DUSE_COMPILER_CACHE=ON, so it is not overridden; it is said out loud,
+        # and scripts/check_coverage_roots.sh is what turns it into an error if
+        # the cache did in fact lend this build another worktree's paths.
+        message(WARNING
+            "morph: coverage: USE_COMPILER_CACHE is ON for a coverage build. If it "
+            "is shared across checkouts it can serve objects compiled in another "
+            "worktree, whose absolute source paths match none of "
+            "scripts/coverage.sh's filters and are dropped from the report "
+            "(morph#426). This is expected on a single-checkout CI runner; on a "
+            "developer machine with several worktrees, reconfigure with "
+            "-DUSE_COMPILER_CACHE=OFF, or delete this build tree so the coverage "
+            "default applies.")
+    endif()
 endif()
 
 # @brief Instrument a target for llvm-cov coverage; `TEST` also registers it

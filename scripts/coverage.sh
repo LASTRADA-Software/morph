@@ -260,4 +260,4 @@ python3 scripts/aggregate_lcov_branches.py \
 # read aggregate_lcov_branches.py's output, since llvm-cov emits one BRDA
 # record per template instantiation and a header-only template library scores
 # one source branch dozens of times in the raw file.
-python3 scripts/check_branch_coverage.py "$OUT/coverage.lcov"
+python3 scripts/check_branch_coverage.py "$OUT/coverage.lcov" --objects "$MANIFEST"

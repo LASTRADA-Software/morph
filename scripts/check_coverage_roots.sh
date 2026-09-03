@@ -92,11 +92,34 @@ else
     fi
 
     SUFFIX="${CLANG_VERSION:+-${CLANG_VERSION}}"
+    # Trimmed rather than merely tested for emptiness: a line of spaces is
+    # non-empty, and passing it on turns "the manifest names nothing" into a
+    # complaint that a binary called "   " was not built.
     objects=()
     while IFS= read -r _object; do
+        _object="${_object#"${_object%%[![:space:]]*}"}"
+        _object="${_object%"${_object##*[![:space:]]}"}"
         [ -n "$_object" ] || continue
         objects+=("$_object")
     done < "$manifest"
+
+    # A manifest of nothing but blank lines is non-empty on disk and empty here,
+    # and "${objects[0]}" under `set -u` would abort with an unbound-variable
+    # message that says nothing about coverage. Its sibling gate
+    # (check_coverage_objects.sh, which coverage.sh runs first) already refuses a
+    # manifest naming a binary that was not built; this covers a standalone run.
+    if [ "${#objects[@]}" -eq 0 ]; then
+        echo "check_coverage_roots: ${manifest} contains no binary paths." >&2
+        echo "  A coverage report over no objects is coverage over nothing." >&2
+        exit 1
+    fi
+    for _object in "${objects[@]}"; do
+        if [ ! -x "$_object" ]; then
+            echo "check_coverage_roots: ${manifest} names a binary that was not built:" >&2
+            echo "  ${_object}" >&2
+            exit 1
+        fi
+    done
 
     object_args=()
     for _object in "${objects[@]:1}"; do

@@ -2,7 +2,7 @@
 """Gate include/morph's *branch* coverage, which nothing has ever scored.
 
 Usage:
-    python3 scripts/check_branch_coverage.py [LCOV]       # default: build/clang-coverage/coverage.lcov
+    python3 scripts/check_branch_coverage.py [LCOV] [--objects coverage_objects.txt]
     python3 scripts/check_branch_coverage.py --self-test
 
 Why this exists (morph#404)
@@ -95,6 +95,37 @@ FLOORS = {
 TOTAL_FLOOR = 88.0
 TOTAL_MEASURED = 91.19
 
+# Subsystems that only reach the report when an off-by-default CMake option is
+# on, and the test binary whose presence in coverage_objects.txt proves it was.
+#
+# `cmake --preset clang-coverage` alone -- the flow scripts/coverage.sh's own
+# usage line documents -- profiles exactly one binary, morph_tests, and
+# morph_tests compiles nothing under include/morph/net or include/morph/qt:
+# those come from tests/net and tests/qt, gated behind MORPH_BUILD_NET and
+# MORPH_BUILD_QT, both `option(... OFF)`. Without this table the vacuity check
+# below fails that configure while blaming morph#403 -- a fixed defect -- for an
+# option simply being off, which is the same shape of wrong diagnosis as a
+# citation that has drifted.
+#
+# The mapping is checked in both directions rather than trusted, so it cannot
+# rot into a permanent skip: a subsystem whose binary is absent must have *no*
+# records (otherwise the mapping is stale and this gate says so), and one whose
+# binary is present must have records (which is the morph#403 shape and stays
+# fatal). A subsystem not named here is required unconditionally, so a new
+# directory under include/morph defaults to the strict side.
+OPTIONAL_SUBSYSTEMS = {
+    "include/morph/net": "morph_net_tests",
+    "include/morph/qt": "morph_qt_tests",
+}
+
+# Headers directly under include/morph/ (attributes.hpp, version.hpp) belong to
+# no subsystem directory. Today both are macros and constexpr and emit no
+# branch records at all, so this bucket never appears; if one ever does, it is
+# reported in the table and counted in the include/morph TOTAL rather than
+# failing with "carries no floor", which is a message no FLOORS edit can
+# satisfy while the key names a file instead of a directory.
+TOP_LEVEL_BUCKET = "include/morph (top level)"
+
 
 def parse_lcov(path, repo_root):
     """{source path: {line: {"hits": int, "arms": [taken, ...]}}}"""
@@ -128,7 +159,8 @@ def summarise(files):
     for path, lines in files.items():
         if not path.startswith("include/morph/"):
             continue
-        subsystem = "/".join(path.split("/")[:3])
+        parts = path.split("/")
+        subsystem = "/".join(parts[:3]) if len(parts) > 3 else TOP_LEVEL_BUCKET
         bucket = subsystems[subsystem]
         for record in lines.values():
             bucket[0] += len(record["arms"])
@@ -236,7 +268,20 @@ def partial_line_set(files):
     return partials
 
 
-def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None):
+def read_profiled_binaries(objects_path):
+    """Basenames from coverage_objects.txt, or None when it was not supplied.
+
+    None means "assume the full configure and enforce everything", which is what
+    a hand invocation on an LCOV file gets. scripts/coverage.sh always passes the
+    manifest, so the gate it runs knows what the build actually contained.
+    """
+    if not objects_path or not os.path.exists(objects_path):
+        return None
+    with open(objects_path, encoding="utf-8") as handle:
+        return {os.path.basename(line.strip()) for line in handle if line.strip()}
+
+
+def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None, objects_path=None):
     files = parse_lcov(lcov_path, repo_root)
     subsystems, per_file = summarise(files)
     partial_lines = partial_line_set(files)
@@ -253,7 +298,26 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None):
     # through three occurrences. A subsystem the report contains but this gate
     # does not name is the same defect mirrored: a new directory under
     # include/morph would be scored by nothing.
+    profiled = read_profiled_binaries(objects_path)
+    unbuilt = []
     for name in FLOORS:
+        optional_suite = OPTIONAL_SUBSYSTEMS.get(name)
+        suite_absent = (
+            profiled is not None
+            and optional_suite is not None
+            and optional_suite not in profiled
+        )
+        if suite_absent:
+            # Both directions, so the mapping above cannot rot into a silent skip.
+            if subsystems.get(name, [0])[0] != 0:
+                failures.append(
+                    f"{name} has branch records, but {optional_suite} -- the binary "
+                    f"this gate's OPTIONAL_SUBSYSTEMS table says brings it in -- was "
+                    f"not profiled. The table is stale: find what compiles {name} now."
+                )
+            else:
+                unbuilt.append((name, optional_suite))
+            continue
         if subsystems.get(name, [0])[0] == 0:
             failures.append(
                 f"{name} contributes no branch records to {lcov_path}. Either it was "
@@ -261,7 +325,7 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None):
                 f"longer exists and this gate's table is stale. Both are errors."
             )
     for name in subsystems:
-        if name not in FLOORS:
+        if name not in FLOORS and name != TOP_LEVEL_BUCKET:
             failures.append(
                 f"{name} is in the report but carries no floor in this script's FLOORS "
                 f"table, so its branches are scored by nothing. Measure it and add it."
@@ -309,6 +373,28 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None):
     print(f"{len(allowlisted)} of {total_partial} partial lines are recorded in "
           f"{os.path.relpath(allowlist_path, repo_root)} as uncoverable, with a reason each; "
           f"the remaining {total_partial - len(allowlisted)} are untested.", file=out)
+
+    if unbuilt:
+        # Report, do not enforce. The floors above were measured under CI's
+        # configure, where several binaries contribute coverage to the same
+        # header; a subset build reads lower on subsystems that are present too,
+        # not only on the ones that are missing, so failing any of them here
+        # would be scoring this configure against another one's denominator.
+        # CI always takes the enforcing path, because it builds every suite.
+        print(file=out)
+        for name, suite in unbuilt:
+            print(f"not enforced: {name} was not built ({suite} was not profiled).",
+                  file=out)
+        print("The floors above are calibrated to CI's configure "
+              "(MORPH_BUILD_NET/OFFLINE_SQLITE/QT/LADDER=ON, MORPH_LADDER_RUNGS=all); "
+              "this build is a subset, so the numbers are printed and not gated.",
+              file=out)
+        if failures:
+            print(file=out)
+            for failure in failures:
+                print(f"error: {failure}", file=sys.stderr)
+            return 1
+        return 0
 
     if failures:
         print(file=out)
@@ -366,7 +452,7 @@ def self_test():
 
     import io
 
-    def run(records, allowlist=None, sources=None):
+    def run(records, allowlist=None, sources=None, profiled=None):
         # stderr is captured along with stdout: the diagnostics below are the
         # gate working correctly, and letting them escape would make a passing
         # self-test read like a failing one.
@@ -381,10 +467,16 @@ def self_test():
             allowlist_path = os.path.join(work, "allowlist.json")
             with open(allowlist_path, "w") as handle:
                 json.dump({"entries": allowlist or []}, handle)
+            objects_path = None
+            if profiled is not None:
+                objects_path = os.path.join(work, "coverage_objects.txt")
+                with open(objects_path, "w") as handle:
+                    handle.write("".join(f"{work}/{name}\n" for name in profiled))
             buffer = io.StringIO()
             saved, sys.stderr = sys.stderr, buffer
             try:
-                code = check(path, work, out=buffer, allowlist_path=allowlist_path)
+                code = check(path, work, out=buffer, allowlist_path=allowlist_path,
+                             objects_path=objects_path)
             finally:
                 sys.stderr = saved
             return code, buffer.getvalue()
@@ -512,6 +604,48 @@ def self_test():
     if failures:
         print(f"\n{failures} self-test check(s) failed", file=sys.stderr)
         return 1
+    # ── The manifest-aware vacuity rule (morph#404 follow-up) ───────────────
+    # `cmake --preset clang-coverage` with nothing else profiles morph_tests
+    # alone, and morph_tests compiles nothing under include/morph/net or
+    # include/morph/qt. Before these four cases the gate failed that configure
+    # while naming morph#403 -- a fixed defect -- as the cause.
+    partial_build = {name: recs for name, recs in _every_subsystem().items()
+                     if not name.startswith(("include/morph/net/", "include/morph/qt/"))}
+
+    code, output = run(partial_build, profiled=["morph_tests"])
+    if code == 0 and "not enforced: include/morph/net was not built" in output:
+        note("ok: a configure that did not build tests/net is reported, not failed")
+    else:
+        fail("a subset configure was failed rather than reported", output)
+
+    code, output = run(partial_build, profiled=["morph_tests", "morph_net_tests",
+                                                "morph_qt_tests"])
+    if code != 0 and "morph#403" in output:
+        note("ok: a subsystem missing while its suite WAS profiled still fails")
+    else:
+        fail("a profiled-but-absent subsystem was accepted", output)
+
+    code, output = run(_every_subsystem(), profiled=["morph_tests"])
+    if code != 0 and "table is stale" in output:
+        note("ok: records present while the mapped suite was not profiled fails")
+    else:
+        fail("a stale OPTIONAL_SUBSYSTEMS mapping was accepted", output)
+
+    code, output = run(partial_build)
+    if code != 0 and "morph#403" in output:
+        note("ok: with no manifest the gate still enforces every subsystem")
+    else:
+        fail("omitting the manifest silently disabled the vacuity check", output)
+
+    # A header directly under include/morph/ has no subsystem directory. It must
+    # not be turned into a key naming a file, which no FLOORS edit could satisfy.
+    code, output = run(_every_subsystem({"include/morph/version.hpp":
+                                         [(3, 1, [True, True])]}))
+    if code == 0 and "include/morph/version.hpp is in the report" not in output:
+        note("ok: a top-level header does not become an unfixable FLOORS key")
+    else:
+        fail("a top-level header produced a floor demand naming a file", output)
+
     print("\nall self-test checks passed")
     return 0
 
@@ -519,7 +653,20 @@ def self_test():
 def main(argv):
     if "--self-test" in argv:
         return self_test()
-    lcov = argv[0] if argv else "build/clang-coverage/coverage.lcov"
+    objects = None
+    positional = []
+    rest = list(argv)
+    while rest:
+        arg = rest.pop(0)
+        if arg == "--objects":
+            if not rest:
+                print("error: --objects needs a path to coverage_objects.txt",
+                      file=sys.stderr)
+                return 1
+            objects = rest.pop(0)
+        else:
+            positional.append(arg)
+    lcov = positional[0] if positional else "build/clang-coverage/coverage.lcov"
     if not os.path.exists(lcov):
         print(f"error: {lcov} does not exist. It is produced by scripts/coverage.sh, "
               f"which must run first.", file=sys.stderr)
@@ -531,7 +678,7 @@ def main(argv):
               "source branch dozens of times -- see scripts/aggregate_lcov_branches.py.",
               file=sys.stderr)
         return 1
-    return check(lcov, os.getcwd())
+    return check(lcov, os.getcwd(), objects_path=objects)
 
 
 if __name__ == "__main__":

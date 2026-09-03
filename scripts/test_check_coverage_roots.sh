@@ -24,6 +24,14 @@
 #   3. a sibling directory sharing the root's prefix   -> fail
 #   4. a mapping naming no files at all                -> fail, not a vacuous pass
 #   5. no manifest / no profile in the build directory -> fail
+#   6. a manifest of nothing but blank lines            -> fail, saying so
+#   7. a manifest naming a binary that was not built    -> fail, naming it
+#
+6 and 7 are the standalone-run cases. Run through coverage.sh this gate is
+# preceded by check_coverage_objects.sh, which rejects both; run on its own it
+# would otherwise abort on `objects[0]: unbound variable` under `set -u`, or
+# hand llvm-cov a path that does not exist, and neither message mentions
+# coverage.
 #
 # 3 and 4 matter as much as 2. A prefix comparison written without the trailing
 # separator accepts `/repo/morph-wt/372-old/...` as living under
@@ -117,6 +125,32 @@ if run_checker "$tmp/emptybuild" "" > "$tmp/5.out" 2>&1; then
     fail "5: a build directory with no coverage manifest was accepted"
 else
     note "ok 5: a build directory with no coverage manifest fails"
+fi
+
+# 6. A manifest that is non-empty on disk and names nothing.
+mkdir -p "$tmp/blankbuild"
+printf '\n\n   \n' > "$tmp/blankbuild/coverage_objects.txt"
+printf 'not a real profile' > "$tmp/blankbuild/merged.profdata"
+if run_checker "$tmp/blankbuild" "" > "$tmp/6.out" 2>&1; then
+    fail "6: a manifest of blank lines was accepted"
+elif grep -q "contains no binary paths" "$tmp/6.out"; then
+    note "ok 6: a manifest of blank lines fails, and says why"
+else
+    fail "6: rejected, but not with the coverage diagnostic"
+    cat "$tmp/6.out" >&2
+fi
+
+# 7. A manifest naming a binary the build did not produce.
+mkdir -p "$tmp/stalebuild"
+printf '%s\n' "$tmp/stalebuild/morph_gone_tests" > "$tmp/stalebuild/coverage_objects.txt"
+printf 'not a real profile' > "$tmp/stalebuild/merged.profdata"
+if run_checker "$tmp/stalebuild" "" > "$tmp/7.out" 2>&1; then
+    fail "7: a manifest naming an unbuilt binary was accepted"
+elif grep -q "morph_gone_tests" "$tmp/7.out"; then
+    note "ok 7: a manifest naming an unbuilt binary fails, and names it"
+else
+    fail "7: rejected, but did not name the missing binary"
+    cat "$tmp/7.out" >&2
 fi
 
 if [ "$failures" -ne 0 ]; then
