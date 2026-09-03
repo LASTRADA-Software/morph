@@ -457,8 +457,8 @@ public:
     /// @brief Installs @p policy, consulted by every subsequent `register` and
     ///        `execute`. Thread-safe.
     ///
-    /// All-zero fields (the default-constructed value) mean "unbounded" — the
-    /// server behaves exactly as it did before this method was ever called.
+    /// All-zero fields (the default-constructed value) mean "unbounded" — an
+    /// unconfigured server never applies any of the limits below.
     /// @param policy Resource limits to apply from this call onward.
     void setLimitPolicy(LimitPolicy policy) {
         std::scoped_lock const lock{_limitsMtx};
@@ -596,6 +596,38 @@ public:
 private:
     /// @brief Directory key: the `(model type id, primary)` pair an instance is filed under.
     using DirectoryKey = std::pair<std::string, std::string>;
+
+    /// @brief Authenticates @p env's session and makes the verified identity
+    ///        authoritative on it.
+    ///
+    /// A verifying `_authorizer` returns the principal it extracted from a
+    /// valid token; that overwrites `env.session.principal` so model code
+    /// reading `session::current()->principal` can trust it. If
+    /// `authenticate()` returns `nullopt` the authorizer cannot vouch for the
+    /// caller, so the client-asserted principal is cleared rather than passed
+    /// through unverified — every envelope kind this is called for (register,
+    /// attach, assign, instances, schemas, execute) makes an authorization or
+    /// ownership decision that must key on the verified identity, never the
+    /// client's raw claim. See docs/spec/security.md.
+    /// @param env Envelope whose `session.principal` is stamped or cleared in place.
+    void stampVerifiedPrincipal(::morph::wire::Envelope& env) {
+        if (auto verified = _authorizer->authenticate(env.session)) {
+            env.session.principal = std::move(*verified);
+        } else {
+            env.session.principal.clear();
+        }
+    }
+
+    /// @brief Returns a copy of the currently installed `LimitPolicy`. Thread-safe.
+    ///
+    /// A snapshot rather than a reference: the caller checks it against
+    /// values that can change concurrently via `setLimitPolicy`, so it must
+    /// see one atomic value throughout its own check, not `_limits` re-read
+    /// mid-decision.
+    [[nodiscard]] LimitPolicy snapshotLimits() const {
+        std::scoped_lock const lock{_limitsMtx};
+        return _limits;
+    }
 
     /// @brief Releases one reference to @p mid, destroying it at zero. Caller holds `_regMtx`.
     ///
@@ -747,11 +779,7 @@ private:
     ///                       on it will run anyway.
     void acquireSharedInstance(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply,
                                ConnectionId cid, ::morph::exec::detail::ModelId releaseCurrent) {
-        LimitPolicy limits;
-        {
-            std::scoped_lock const lock{_limitsMtx};
-            limits = _limits;
-        }
+        LimitPolicy const limits = snapshotLimits();
         DirectoryKey dirKey{env.typeId, env.primary};
         {
             std::scoped_lock const lock{_regMtx};
@@ -1080,11 +1108,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("register requires a typeId");
                 }
-                LimitPolicy limits;
-                {
-                    std::scoped_lock const lock{_limitsMtx};
-                    limits = _limits;
-                }
+                LimitPolicy const limits = snapshotLimits();
                 // Cheap early rejection, so a server already at its cap does not
                 // pay for authorize()/authenticate() and a model construction it
                 // is about to discard. Advisory only — the binding check is the
@@ -1111,16 +1135,11 @@ private:
                 // (including allow-all) clears it, so the register decision
                 // below — and the owner recorded from it — never key on the
                 // client's unverified claim.
-                if (auto verified = _authorizer->authenticate(env.session)) {
-                    env.session.principal = std::move(*verified);
-                } else {
-                    env.session.principal.clear();
-                }
+                stampVerifiedPrincipal(env);
                 // Bound *who may create* an instance. The default hook allows
-                // all, so an unconfigured server registers any known type
-                // exactly as before; a deployer opts into gating registration
-                // by overriding authorizeRegister. No instance is constructed
-                // on denial.
+                // all, so an unconfigured server registers any known type; a
+                // deployer opts into gating registration by overriding
+                // authorizeRegister. No instance is constructed on denial.
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
@@ -1209,11 +1228,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("attach requires a typeId");
                 }
-                if (auto verified = _authorizer->authenticate(env.session)) {
-                    env.session.principal = std::move(*verified);
-                } else {
-                    env.session.principal.clear();
-                }
+                stampVerifiedPrincipal(env);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
@@ -1230,11 +1245,7 @@ private:
                 // constructs a model, but it still changes what a future
                 // attacher of `primary` reaches, so it must not be reachable
                 // by an unauthenticated or unauthorized caller either.
-                if (auto verified = _authorizer->authenticate(env.session)) {
-                    env.session.principal = std::move(*verified);
-                } else {
-                    env.session.principal.clear();
-                }
+                stampVerifiedPrincipal(env);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
@@ -1248,11 +1259,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("instances requires a typeId");
                 }
-                if (auto verified = _authorizer->authenticate(env.session)) {
-                    env.session.principal = std::move(*verified);
-                } else {
-                    env.session.principal.clear();
-                }
+                stampVerifiedPrincipal(env);
                 // Enumeration is a read channel over the directory: gate it with
                 // `authorize` for the model type (empty action id) so a deployer
                 // can refuse listing without refusing use. It discloses the live
@@ -1266,11 +1273,7 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("schemas requires a typeId");
                 }
-                if (auto verified = _authorizer->authenticate(env.session)) {
-                    env.session.principal = std::move(*verified);
-                } else {
-                    env.session.principal.clear();
-                }
+                stampVerifiedPrincipal(env);
                 // Gated exactly like `instances`, and for the same reason: a
                 // description is a read channel over the model type, so
                 // `authorize` with an empty action id lets a deployer refuse
@@ -1375,11 +1378,7 @@ private:
             ticketGuard.release();
             reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
         };
-        LimitPolicy limits;
-        {
-            std::scoped_lock const lock{_limitsMtx};
-            limits = _limits;
-        }
+        LimitPolicy const limits = snapshotLimits();
         // Cheap early shed, so an overloaded server does not pay for
         // authorize()/authenticate() on work it is about to refuse. Advisory
         // only — the binding check is the atomic reservation further below,
@@ -1404,11 +1403,7 @@ private:
         // principal, never the attacker's claim), and (2) an authorize-only or
         // allow-all authorizer that never authenticates (the model never sees an
         // untrusted principal as authoritative). See docs/spec/security.md.
-        if (auto verified = _authorizer->authenticate(env.session)) {
-            env.session.principal = std::move(*verified);
-        } else {
-            env.session.principal.clear();
-        }
+        stampVerifiedPrincipal(env);
         ::morph::exec::detail::ModelId const mid{env.modelId};
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
         std::string owner;
@@ -1845,7 +1840,7 @@ private:
     detail::OpaqueIdGenerator _idGen;
     std::mutex _logProviderMtx;
     LogProvider _logProvider;
-    std::mutex _limitsMtx;
+    mutable std::mutex _limitsMtx;
     LimitPolicy _limits;
     // Concurrent in-flight executes: incremented when dispatchExecute admits a
     // call for dispatch (post-authorization), decremented exactly once when
@@ -1885,12 +1880,11 @@ public:
     ///
     /// Every `register`/`deregister`/`attach`/`assign`/`instances` call this
     /// backend makes uses `ConnectionId{0}` — the server's "unscoped" sentinel
-    /// (`backend.md`, "Connection scopes") — exactly as before connection
-    /// scopes existed. Use the `ConnectionId` constructor below to give this
-    /// backend its own scope instead, so tests can exercise connection-scoped
-    /// state (rate limiting, connection-drop recovery, shared-instance
-    /// attach/detach across connections) deterministically without a real
-    /// socket.
+    /// (`backend.md`, "Connection scopes"). Use the `ConnectionId` constructor
+    /// below to give this backend its own scope instead, so tests can
+    /// exercise connection-scoped state (rate limiting, connection-drop
+    /// recovery, shared-instance attach/detach across connections)
+    /// deterministically without a real socket.
     /// @param server The `RemoteServer` instance to forward calls to. Borrowed,
     ///               not owned: it must outlive this backend — a backend holding
     ///               a `RemoteServer&` that has been destroyed is a

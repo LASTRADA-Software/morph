@@ -127,8 +127,8 @@ struct IBackend {
     ///
     /// The default implementation offers no async path and returns `false`
     /// without calling either callback — the caller (`Bridge::registerHandler`)
-    /// falls back to `registerModelWithContext` in that case, matching every
-    /// caller's behavior before this method existed.
+    /// falls back to `registerModelWithContext` in that case, so a backend
+    /// with no override behaves synchronously.
     ///
     /// @note Scope: only `Bridge::registerHandler()`'s plain (non-shared)
     ///       registration path — a `BridgeHandler`'s initial construction —
@@ -173,8 +173,8 @@ struct IBackend {
     ///
     /// The default implementation offers no async path and returns `false`
     /// without calling either callback — the caller (`Bridge::ensureBoundAsync`)
-    /// falls back to the synchronous `registerModelShared` in that case,
-    /// matching every caller's behavior before this method existed.
+    /// falls back to the synchronous `registerModelShared` in that case, so a
+    /// backend with no override behaves synchronously.
     ///
     /// @param typeId     String type-id of the model.
     /// @param factory    Callable that constructs the `IModelHolder` (local path only).
@@ -349,8 +349,8 @@ struct IBackend {
     ///
     /// The default implementation offers no async path and returns `false`
     /// without calling either callback — the caller (`Bridge::assignHandlerPrimary`)
-    /// falls back to `assignPrimary` in that case, matching every caller's
-    /// behavior before this method existed.
+    /// falls back to `assignPrimary` in that case, so a backend with no
+    /// override behaves synchronously.
     ///
     /// @param mid          Live instance to promote.
     /// @param typeId       Model type id — the directory's first key component.
@@ -586,14 +586,8 @@ public:
         const std::string& /*typeId*/,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override {
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
-        ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};
         std::scoped_lock const lock{_regMtx};
-        auto holder = factory();
-        if (holder->isBackendChangeAware()) {
-            _changeAware.insert(mid);
-        }
-        _models[mid] = std::move(holder);
-        return mid;
+        return createAndTrack(std::move(factory));
     }
 
     /// @brief Registers or attaches to the shared instance holding @p primary.
@@ -630,12 +624,7 @@ public:
                 return foundMid;
             }
         }
-        ::morph::exec::detail::ModelId const mid{_nextId.fetch_add(1) + 1};
-        auto holder = factory();
-        if (holder->isBackendChangeAware()) {
-            _changeAware.insert(mid);
-        }
-        _models[mid] = std::move(holder);
+        ::morph::exec::detail::ModelId const mid = createAndTrack(std::move(factory));
         _directory.emplace(dirKey, mid);
         _sharedKeyOf.emplace(mid, std::move(dirKey));
         _attachCount[mid] = 1;
@@ -874,6 +863,27 @@ public:
     }
 
 private:
+    /// @brief Builds a holder via @p factory, records it under a fresh id, and
+    ///        returns that id. Caller holds `_regMtx`.
+    ///
+    /// Shared by `registerModel`'s private-instance path and
+    /// `registerModelShared`'s fresh-instance path: both need exactly this —
+    /// construct, note change-awareness, file into `_models` — before going on
+    /// to their own, differing bookkeeping (`registerModelShared` also fills
+    /// the shared-instance directory).
+    /// @param factory Callable that constructs the `IModelHolder`.
+    /// @return Newly assigned `ModelId`.
+    ::morph::exec::detail::ModelId createAndTrack(
+        std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) {
+        ::morph::exec::detail::ModelId const mid{_nextId.fetch_add(1) + 1};
+        auto holder = factory();
+        if (holder->isBackendChangeAware()) {
+            _changeAware.insert(mid);
+        }
+        _models[mid] = std::move(holder);
+        return mid;
+    }
+
     void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
         std::scoped_lock const lock{_pendingMtx};
         std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });

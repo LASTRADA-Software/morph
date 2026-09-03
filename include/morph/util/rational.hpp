@@ -777,14 +777,39 @@ private:
         widenPrecisionTo(other);
     }
 
+    /// @brief The factors that scale `*this` and @p rhs's numerators (and
+    ///        `*this`'s denominator) to their least common denominator.
+    struct DenominatorScale {
+        std::int64_t leftScaled;
+        std::int64_t rightScaled;
+    };
+
+    /// @brief Computes the scale factors for `a/b op c/d == (a*d' op c*b')/(b*d')`,
+    ///        where `b' = b/gcd(b,d)`, `d' = d/gcd(b,d)`.
+    ///
+    /// The reduced cross-multiplication both `+=`/`-=`'s arithmetic and their
+    /// overflow checks need identically. Returns the bare factors rather than
+    /// the scaled numerators themselves: `addWouldOverflow`/`subWouldOverflow`
+    /// must run `detail::mulOverflows` on `numerator * rightScaled` *before*
+    /// forming that product, so a helper that returns the already-multiplied
+    /// values would have to compute the very product being checked for.
+    /// @param rhs The other operand.
+    /// @return `leftScaled` multiplies `this->denominator`/`numerator`;
+    ///         `rightScaled` multiplies `rhs.numerator`.
+    [[nodiscard]] constexpr DenominatorScale scaleFactorsFor(const Rational& rhs) const noexcept {
+        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
+        return DenominatorScale{
+            .leftScaled = denominator / denominatorGcd,
+            .rightScaled = rhs.denominator / denominatorGcd,
+        };
+    }
+
     /// @brief `operator+=`'s arithmetic, without the overflow check.
     /// @param rhs Value to add.
     constexpr void addAssignUnchecked(const Rational& rhs) noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
-        auto const leftDenominatorScaled = denominator / denominatorGcd;
-        numerator = (numerator * rightDenominatorScaled) + (rhs.numerator * leftDenominatorScaled);
-        denominator = denominator * rightDenominatorScaled;
+        auto const scale = scaleFactorsFor(rhs);
+        numerator = (numerator * scale.rightScaled) + (rhs.numerator * scale.leftScaled);
+        denominator = denominator * scale.rightScaled;
         widenPrecisionTo(rhs.decimalPlaces);
         canonicalise();
     }
@@ -792,11 +817,9 @@ private:
     /// @brief `operator-=`'s arithmetic, without the overflow check.
     /// @param rhs Value to subtract.
     constexpr void subAssignUnchecked(const Rational& rhs) noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
-        auto const leftDenominatorScaled = denominator / denominatorGcd;
-        numerator = (numerator * rightDenominatorScaled) - (rhs.numerator * leftDenominatorScaled);
-        denominator = denominator * rightDenominatorScaled;
+        auto const scale = scaleFactorsFor(rhs);
+        numerator = (numerator * scale.rightScaled) - (rhs.numerator * scale.leftScaled);
+        denominator = denominator * scale.rightScaled;
         widenPrecisionTo(rhs.decimalPlaces);
         canonicalise();
     }
@@ -839,28 +862,26 @@ public:
     /// @param rhs The addend.
     /// @return `true` if the addition cannot be performed exactly.
     [[nodiscard]] constexpr bool addWouldOverflow(const Rational& rhs) const noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightScaled = rhs.denominator / denominatorGcd;
-        auto const leftScaled = denominator / denominatorGcd;
-        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled) ||
-            detail::mulOverflows(denominator, rightScaled)) {
+        auto const scale = scaleFactorsFor(rhs);
+        if (detail::mulOverflows(numerator, scale.rightScaled) ||
+            detail::mulOverflows(rhs.numerator, scale.leftScaled) ||
+            detail::mulOverflows(denominator, scale.rightScaled)) {
             return true;
         }
-        return detail::addOverflows(numerator * rightScaled, rhs.numerator * leftScaled);
+        return detail::addOverflows(numerator * scale.rightScaled, rhs.numerator * scale.leftScaled);
     }
 
     /// @brief Whether `*this - rhs` would overflow any intermediate or the result.
     /// @param rhs The subtrahend.
     /// @return `true` if the subtraction cannot be performed exactly.
     [[nodiscard]] constexpr bool subWouldOverflow(const Rational& rhs) const noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightScaled = rhs.denominator / denominatorGcd;
-        auto const leftScaled = denominator / denominatorGcd;
-        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled) ||
-            detail::mulOverflows(denominator, rightScaled)) {
+        auto const scale = scaleFactorsFor(rhs);
+        if (detail::mulOverflows(numerator, scale.rightScaled) ||
+            detail::mulOverflows(rhs.numerator, scale.leftScaled) ||
+            detail::mulOverflows(denominator, scale.rightScaled)) {
             return true;
         }
-        return detail::subOverflows(numerator * rightScaled, rhs.numerator * leftScaled);
+        return detail::subOverflows(numerator * scale.rightScaled, rhs.numerator * scale.leftScaled);
     }
 
     /// @brief Whether `*this * rhs` would overflow, after cross-cancelling.
@@ -894,17 +915,17 @@ private:
         constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
         constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
 
-        // Neither component may be INT64_MIN past this point. Canonicalising
+        // Neither component may be INT64_MIN past this point: canonicalising
         // needs `|value|` and a sign flip, and `-INT64_MIN` is not
-        // representable -- negating it is undefined behaviour, which this
-        // function used to commit. It was reachable two ways: constructing a
-        // Rational with such a numerator directly, and *ordinary arithmetic*
-        // landing on it exactly (`-INT64_MAX - 1` is a perfectly legal
-        // subtraction whose result is INT64_MIN).
+        // representable -- negating it is undefined behaviour. INT64_MIN is
+        // reachable two ways: constructing a Rational with such a numerator
+        // directly, and *ordinary arithmetic* landing on it exactly
+        // (`-INT64_MAX - 1` is a perfectly legal subtraction whose result is
+        // INT64_MIN).
         //
         // Clamped to the adjacent representable magnitude, matching what
-        // `setWire` already does for the same values arriving off the wire.
-        // The value is off by one ulp; it is not undefined.
+        // `setWire` does for the same values arriving off the wire. The value
+        // is off by one ulp; it is not undefined.
         if (numerator == minValue || denominator == minValue) {
             reportClamp();
             numerator = numerator == minValue ? -maxValue : numerator;
@@ -1209,6 +1230,30 @@ template <typename Left, typename Right>
     }
 }
 
+/// @brief Lifts both mixed-type operands to `Rational`, at their shared precision.
+///
+/// Shared by the free `+`/`-`/`*`/`/` operators below: each lifts `lhs` then
+/// `rhs` to `liftPrecision(lhs, rhs)`, propagating the first error encountered
+/// left to right, and differs only in which operator it applies to the two
+/// lifted values afterward.
+/// @param lhs Left operand (Rational, expected-Rational, or floating point).
+/// @param rhs Right operand (Rational, expected-Rational, or floating point).
+/// @return Both operands as `Rational`, or the first error encountered left to right.
+template <typename Left, typename Right>
+[[nodiscard]] inline std::expected<std::pair<Rational, Rational>, RationalError> liftBoth(const Left& lhs,
+                                                                                          const Right& rhs) noexcept {
+    auto const precision = liftPrecision(lhs, rhs);
+    auto const leftExpected = lift(lhs, precision);
+    if (!leftExpected) {
+        return std::unexpected(leftExpected.error());
+    }
+    auto const rightExpected = lift(rhs, precision);
+    if (!rightExpected) {
+        return std::unexpected(rightExpected.error());
+    }
+    return std::pair<Rational, Rational>{*leftExpected, *rightExpected};
+}
+
 }  // namespace detail
 
 /// @brief Mixed-type addition with automatic expected-propagation.
@@ -1220,16 +1265,11 @@ template <typename Left, typename Right>
             (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
             (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator+(const Left& lhs, const Right& rhs) noexcept {
-    auto const precision = detail::liftPrecision(lhs, rhs);
-    auto const leftExpected = detail::lift(lhs, precision);
-    if (!leftExpected) {
-        return std::unexpected(leftExpected.error());
+    auto const lifted = detail::liftBoth(lhs, rhs);
+    if (!lifted) {
+        return std::unexpected(lifted.error());
     }
-    auto const rightExpected = detail::lift(rhs, precision);
-    if (!rightExpected) {
-        return std::unexpected(rightExpected.error());
-    }
-    return *leftExpected + *rightExpected;
+    return lifted->first + lifted->second;
 }
 
 /// @brief Mixed-type subtraction with automatic expected-propagation.
@@ -1241,16 +1281,11 @@ template <typename Left, typename Right>
             (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
             (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator-(const Left& lhs, const Right& rhs) noexcept {
-    auto const precision = detail::liftPrecision(lhs, rhs);
-    auto const leftExpected = detail::lift(lhs, precision);
-    if (!leftExpected) {
-        return std::unexpected(leftExpected.error());
+    auto const lifted = detail::liftBoth(lhs, rhs);
+    if (!lifted) {
+        return std::unexpected(lifted.error());
     }
-    auto const rightExpected = detail::lift(rhs, precision);
-    if (!rightExpected) {
-        return std::unexpected(rightExpected.error());
-    }
-    return *leftExpected - *rightExpected;
+    return lifted->first - lifted->second;
 }
 
 /// @brief Mixed-type multiplication with automatic expected-propagation.
@@ -1262,16 +1297,11 @@ template <typename Left, typename Right>
             (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
             (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator*(const Left& lhs, const Right& rhs) noexcept {
-    auto const precision = detail::liftPrecision(lhs, rhs);
-    auto const leftExpected = detail::lift(lhs, precision);
-    if (!leftExpected) {
-        return std::unexpected(leftExpected.error());
+    auto const lifted = detail::liftBoth(lhs, rhs);
+    if (!lifted) {
+        return std::unexpected(lifted.error());
     }
-    auto const rightExpected = detail::lift(rhs, precision);
-    if (!rightExpected) {
-        return std::unexpected(rightExpected.error());
-    }
-    return *leftExpected * *rightExpected;
+    return lifted->first * lifted->second;
 }
 
 /// @brief Mixed-type division with automatic expected-propagation.
@@ -1283,16 +1313,11 @@ template <typename Left, typename Right>
             (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
             (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator/(const Left& lhs, const Right& rhs) noexcept {
-    auto const precision = detail::liftPrecision(lhs, rhs);
-    auto const leftExpected = detail::lift(lhs, precision);
-    if (!leftExpected) {
-        return std::unexpected(leftExpected.error());
+    auto const lifted = detail::liftBoth(lhs, rhs);
+    if (!lifted) {
+        return std::unexpected(lifted.error());
     }
-    auto const rightExpected = detail::lift(rhs, precision);
-    if (!rightExpected) {
-        return std::unexpected(rightExpected.error());
-    }
-    return *leftExpected / *rightExpected;
+    return lifted->first / lifted->second;
 }
 
 // ---------------------------------------------------------------------------

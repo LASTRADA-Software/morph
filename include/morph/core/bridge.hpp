@@ -787,7 +787,7 @@ public:
     /// a caller reading `binding->primary()` never sees a promotion that the
     /// backend has not actually completed. Falls back to the synchronous
     /// `assignPrimary` when the backend offers no async path, publishing
-    /// immediately exactly as before this method existed.
+    /// immediately in that case.
     ///
     /// `_attachMtx` is released *before* calling `assignPrimaryAsync` — not
     /// held across it — mirroring `registerHandlerImpl`'s discipline for
@@ -1081,9 +1081,8 @@ public:
     /// — serialisation, transport, server-side work, and the reply's journey
     /// back — not just the time spent waiting after dispatch.
     ///
-    /// Disabled (`std::chrono::milliseconds{0}`, the default) reproduces
-    /// today's exact behavior: a dropped frame or a hung server leaves the
-    /// `Completion` pending forever, same as before this method existed.
+    /// Disabled (`std::chrono::milliseconds{0}`, the default): a dropped
+    /// frame or a hung server leaves the `Completion` pending forever.
     ///
     /// The backing `TimeoutScheduler` (and its one background thread) is
     /// created lazily on the first call that enables a deadline, so a `Bridge`
@@ -1461,38 +1460,23 @@ public:
                 if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
                     if (holder.hasActionLog()) {
                         // entityKey/principal/timestampMs are filled in by recordIfAttached.
-                        holder.recordIfAttached(::morph::journal::LogEntry{
-                            .seq = 0,
-                            .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                            .entityKey = {},
-                            .actionType = std::string{::morph::model::ActionTraits<Action>::typeId()},
-                            .payload = ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
-                            .schema = ::morph::model::detail::actionPayloadSchema<Action>(),
-                            .result = ::morph::model::ActionTraits<Action>::resultToJson(*result),
-                            .outcome = ::morph::journal::Outcome::Succeeded,
-                            .error = {},
-                            .principal = {},
-                            .timestampMs = 0,
-                        });
+                        ::morph::model::detail::recordActionSuccess(
+                            holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
+                            std::string{::morph::model::ActionTraits<Action>::typeId()},
+                            ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
+                            ::morph::model::detail::actionPayloadSchema<Action>(),
+                            ::morph::model::ActionTraits<Action>::resultToJson(*result));
                     }
                 }
                 return result;
             } catch (const std::exception& exc [[maybe_unused]]) {
                 if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
                     if (holder.hasActionLog()) {
-                        holder.recordIfAttached(::morph::journal::LogEntry{
-                            .seq = 0,
-                            .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                            .entityKey = {},
-                            .actionType = std::string{::morph::model::ActionTraits<Action>::typeId()},
-                            .payload = ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
-                            .schema = ::morph::model::detail::actionPayloadSchema<Action>(),
-                            .result = {},
-                            .outcome = ::morph::journal::Outcome::Failed,
-                            .error = exc.what(),
-                            .principal = {},
-                            .timestampMs = 0,
-                        });
+                        ::morph::model::detail::recordActionFailure(
+                            holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
+                            std::string{::morph::model::ActionTraits<Action>::typeId()},
+                            ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
+                            ::morph::model::detail::actionPayloadSchema<Action>(), exc.what());
                     }
                 }
                 throw;
@@ -1994,8 +1978,9 @@ public:
             // The attach goes through Bridge::attachHandlerAsync, which uses
             // the backend's `attachModelAsync` when it has one and otherwise
             // runs the identical synchronous attach inline and calls back
-            // before returning — so a backend that has not opted in behaves
-            // exactly as it did before this path existed.
+            // before returning — so a backend with no async attach path
+            // still behaves synchronously here, just through the async
+            // interface.
             auto state = std::make_shared<::morph::async::detail::CompletionState<R>>();
             ::morph::async::Completion<R> pending{state, _guiExec};
             auto* const bridgePtr = &_bridge;
