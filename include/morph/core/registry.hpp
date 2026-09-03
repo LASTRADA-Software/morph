@@ -1006,16 +1006,35 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, ::morph::model::Loggable::Yes)
 // clang-format on
 
+/// @brief Shared body for `ActionTraits<A>`'s specialisation, its local-execute
+///        registrar, and its dispatch-registry registrar — everything
+///        `BRIDGE_REGISTER_ACTION_4` and `BRIDGE_REGISTER_ACTION_FOR_CLIENT_5`
+///        expand to alike, parameterised only on how `Result` is spelled.
+///
+/// `BRIDGE_REGISTER_ACTION_4` deduces `Result` from `M::execute(A)`, which
+/// requires `M` complete at the call site; `BRIDGE_REGISTER_ACTION_FOR_CLIENT_5`
+/// takes `RESULT_ALIAS` as an explicit type instead, so `M` may stay
+/// declaration-only (see `BRIDGE_REGISTER_ACTION_FOR_CLIENT`'s doc comment).
+/// That one line is the only difference between the two public macros; every
+/// other member here is byte-identical between them.
+/// @param M           Model type (see each public macro's own doc comment for
+///                     the completeness requirement `RESULT_ALIAS` differs on).
+/// @param A            Concrete action type.
+/// @param RESULT_ALIAS Expression naming the action's result type -- either
+///                      `RESULT` (named explicitly) or the `decltype(...)`
+///                      deduction from `M::execute(A)`.
+/// @param NAME         String literal used as the action type-id.
+/// @param LOGGABLE     A `morph::model::Loggable` value.
 // clang-format off -- public macro surface: hand-aligned on purpose.
 // These definitions are the framework's documented API; contributors read them
 // as reference, and the continuation backslashes line up so the body is legible
 // as a block. Leaving them to the formatter means any unrelated edit nearby
 // re-wraps the whole definition, and in one case it broke a token-paste
 // invocation apart. Freeze them; realign by hand if a body changes.
-#define BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, LOGGABLE)                                      \
+#define BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, RESULT_ALIAS, NAME, LOGGABLE)                                   \
     template <>                                                                                                \
     struct morph::model::ActionTraits<A> {                                                                     \
-        using Result = RESULT;                                                                                 \
+        using Result = RESULT_ALIAS;                                                                           \
         static constexpr std::string_view typeId() { return NAME; }                                            \
         static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                       \
         /* Structural fingerprint of the JSON shape the codecs below read and write.  */                       \
@@ -1082,6 +1101,16 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
     }
 // clang-format on
+
+// clang-format off -- public macro surface: hand-aligned on purpose.
+// These definitions are the framework's documented API; contributors read them
+// as reference, and the continuation backslashes line up so the body is legible
+// as a block. Leaving them to the formatter means any unrelated edit nearby
+// re-wraps the whole definition, and in one case it broke a token-paste
+// invocation apart. Freeze them; realign by hand if a body changes.
+#define BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, LOGGABLE) \
+    BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, RESULT, NAME, LOGGABLE)
+// clang-format on
 /// @endcond
 
 /// @cond detail
@@ -1095,75 +1124,8 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 // as a block. Leaving them to the formatter means any unrelated edit nearby
 // re-wraps the whole definition, and in one case it broke a token-paste
 // invocation apart. Freeze them; realign by hand if a body changes.
-#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE)                                                         \
-    template <>                                                                                                \
-    struct morph::model::ActionTraits<A> {                                                                     \
-        using Result = decltype(std::declval<M&>().execute(std::declval<A>()));                                \
-        static constexpr std::string_view typeId() { return NAME; }                                            \
-        static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                       \
-        /* Structural fingerprint of the JSON shape the codecs below read and write.  */                       \
-        /* Stamped on every journal entry and checked on replay -- see                */                       \
-        /* morph::model::payloadFingerprint and docs/spec/journal/journal.md.          */                      \
-        static const std::string& payloadSchema() { return ::morph::model::payloadFingerprint<A>(); }          \
-        static std::string toJson(const A& action) {                                                           \
-            std::string out;                                                                                   \
-            /* EscapingWriteOpts, not write_json: a raw control byte in any     */                             \
-            /* caller-supplied string field would otherwise produce a body the  */                             \
-            /* peer's reader rejects, or be silently mangled by glaze's chunked */                             \
-            /* fast path — see its doc comment in registry.hpp.                 */                             \
-            if (auto errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(action, out)) {         \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
-            }                                                                                                  \
-            return out;                                                                                        \
-        }                                                                                                      \
-        static A fromJson(std::string_view jsonStr) {                                                          \
-            A action{};                                                                                        \
-            /* null_terminated=false: jsonStr is a caller-supplied view with no      */                        \
-            /* guaranteed trailing '\0' (e.g. an execute envelope's `body`) — see    */                        \
-            /* the identical fix + rationale on morph::wire::decode (wire.hpp).      */                        \
-            static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
-            /* The codec boundary for an action payload: morph::wire carries `body` as                         \
-               an opaque string and never parses it, so this is the first and only                             \
-               place a Rational inside it is decoded. A Rational decode cannot fail --                         \
-               it clamps what it cannot represent -- so {"num":5,"den":0,"dp":2} would                         \
-               otherwise arrive as a plausible 5/1 that no model-level validate() could                        \
-               recognise as altered. Deciding that a silently-altered payload is a                             \
-               protocol violation belongs here, where we know the bytes came off a wire. */                    \
-            ::morph::math::WireClampScope clampedRationals;                                                    \
-            if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                     \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
-            }                                                                                                  \
-            if (clampedRationals.clamped() != 0) {                                                             \
-                throw morph::model::detail::ParseError{                                                        \
-                    "action body contains a Rational that cannot be represented exactly"};                     \
-            }                                                                                                  \
-            return action;                                                                                     \
-        }                                                                                                      \
-        static std::string resultToJson(const Result& result) {                                                \
-            std::string out;                                                                                   \
-            /* EscapingWriteOpts: see toJson() above — a result body carries    */                             \
-            /* caller data back (a paste's content, a fetched record) and needs */                             \
-            /* the identical treatment.                                          */                            \
-            if (auto errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(result, out)) {         \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
-            }                                                                                                  \
-            return out;                                                                                        \
-        }                                                                                                      \
-        static Result resultFromJson(std::string_view jsonStr) {                                               \
-            Result result{};                                                                                   \
-            /* null_terminated=false: see the identical fix on fromJson() above. */                            \
-            static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
-            if (auto errCode = glz::read<kLenientRead>(result, jsonStr)) {                                     \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
-            }                                                                                                  \
-            return result;                                                                                     \
-        }                                                                                                      \
-    };                                                                                                         \
-    MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)                                                             \
-    namespace {                                                                                                \
-    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                      \
-        morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
-    }
+#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE) \
+    BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, decltype(std::declval<M&>().execute(std::declval<A>())), NAME, LOGGABLE)
 // clang-format on
 /// @endcond
 
