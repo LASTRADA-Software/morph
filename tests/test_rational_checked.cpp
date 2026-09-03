@@ -87,6 +87,69 @@ TEST_CASE("checkedAdd catches an overflowing cross-term whose result would have 
     CHECK(sum.error() == RationalError::Overflow);
 }
 
+// Coverage: rational.hpp:845 and rational.hpp:859, addWouldOverflow's and
+// subWouldOverflow's first two disjuncts (the numerator-side cross-term
+// overflow checks). Every existing overflow test above only ever triggers
+// the final addOverflows/subOverflows check (849/863) or, for addition, the
+// denominator-product clause -- never a numerator whose *rescaled* product
+// alone overflows. These two constructions isolate each clause: a large
+// numerator on one side against a small, non-unit denominator on the other
+// (so rightScaled/leftScaled == 3), with nothing else overflowing.
+TEST_CASE("checkedAdd/checkedSub catch a numerator whose rescaled product alone overflows", "[rational][checked]") {
+    // *this's numerator, rescaled by rightScaled == 3, overflows (845/859's
+    // first disjunct: mulOverflows(numerator, rightScaled)).
+    const Rational lhs{Numerator{kMax}, Denominator{1}, DecimalPlaces{0}};
+    const Rational rhs{Numerator{1}, Denominator{3}, DecimalPlaces{0}};
+
+    const auto addResult = checkedAdd(lhs, rhs);
+    REQUIRE_FALSE(addResult.has_value());
+    CHECK(addResult.error() == RationalError::Overflow);
+    const auto subResult = checkedSub(lhs, rhs);
+    REQUIRE_FALSE(subResult.has_value());
+    CHECK(subResult.error() == RationalError::Overflow);
+
+    // Mirrored: rhs's numerator, rescaled by leftScaled == 3, overflows
+    // (845/859's second disjunct: mulOverflows(rhs.numerator, leftScaled)).
+    const Rational lhsSmall{Numerator{1}, Denominator{3}, DecimalPlaces{0}};
+    const Rational rhsLarge{Numerator{kMax}, Denominator{1}, DecimalPlaces{0}};
+
+    const auto addResult2 = checkedAdd(lhsSmall, rhsLarge);
+    REQUIRE_FALSE(addResult2.has_value());
+    CHECK(addResult2.error() == RationalError::Overflow);
+    const auto subResult2 = checkedSub(lhsSmall, rhsLarge);
+    REQUIRE_FALSE(subResult2.has_value());
+    CHECK(subResult2.error() == RationalError::Overflow);
+}
+
+// Coverage: rational.hpp:860, subWouldOverflow's third disjunct (the
+// denominator-product overflow check) -- covered for addWouldOverflow
+// already, but never observed true for subWouldOverflow. Numerators of 1 on
+// both sides make the first two disjuncts false (1 * anything representable
+// never overflows), isolating the denominator product.
+TEST_CASE("checkedSub catches a denominator-product overflow that checkedAdd's own third clause already covers",
+          "[rational][checked]") {
+    const Rational lhs{Numerator{1}, Denominator{4'000'000'000LL}, DecimalPlaces{0}};
+    const Rational rhs{Numerator{1}, Denominator{4'000'000'001LL}, DecimalPlaces{0}};
+
+    const auto subResult = checkedSub(lhs, rhs);
+    REQUIRE_FALSE(subResult.has_value());
+    CHECK(subResult.error() == RationalError::Overflow);
+}
+
+// Coverage: rational.hpp:882, mulWouldOverflow's denominator-side product
+// check. The numerator-side product (881) is exercised elsewhere; unit
+// numerators on both sides keep cross-cancellation trivial (crossDivisorOne
+// == crossDivisorTwo == 1) so the denominator product alone overflows.
+TEST_CASE("checkedMul catches a denominator-side product overflow after trivial cross-cancellation",
+          "[rational][checked]") {
+    const Rational lhs{Numerator{1}, Denominator{4'000'000'000LL}, DecimalPlaces{0}};
+    const Rational rhs{Numerator{1}, Denominator{4'000'000'000LL}, DecimalPlaces{0}};
+
+    const auto product = checkedMul(lhs, rhs);
+    REQUIRE_FALSE(product.has_value());
+    CHECK(product.error() == RationalError::Overflow);
+}
+
 TEST_CASE("checkedSub mirrors checkedAdd", "[rational][checked]") {
     const auto ok = checkedSub(whole(5), whole(3));
     REQUIRE(ok.has_value());
@@ -311,6 +374,26 @@ TEST_CASE("A numerator of INT64_MIN is clamped, not undefined", "[rational][chec
     // -INT64_MAX - 1 is a legal subtraction whose result is INT64_MIN.
     const auto landedOn = whole(-kMax) - whole(1);
     CHECK(landedOn.numerator == -kMax);
+
+    REQUIRE_FALSE(logged.empty());
+}
+
+// Coverage: rational.hpp:908/910/911. Every existing clamp test (including
+// the one just above) triggers via numerator == INT64_MIN; denominator ==
+// INT64_MIN had never been exercised. The public constructor documents
+// wantedDenominator as "may be negative or zero on input" and assigns it
+// verbatim before canonicalising, so this reaches the clamp directly.
+TEST_CASE("A denominator of INT64_MIN is clamped, not undefined", "[rational][checked][saturate]") {
+    std::vector<std::string> logged;
+    const morph::log::ScopedLoggerOverride capture{
+        [&logged](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); },
+        morph::log::LogLevel::error};
+
+    const Rational direct{Numerator{1}, Denominator{kMin}, DecimalPlaces{2}};
+    // -INT64_MIN clamps to -INT64_MAX, then the sign-normalisation a few
+    // lines below (denominator < 0) flips both components' signs.
+    CHECK(direct.denominator == kMax);
+    CHECK(direct.numerator == -1);
 
     REQUIRE_FALSE(logged.empty());
 }
