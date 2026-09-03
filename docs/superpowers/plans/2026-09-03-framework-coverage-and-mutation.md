@@ -165,6 +165,92 @@ EOF
 
 ---
 
+### Task 4b: Fix #437 (SocketServer macOS/BSD teardown hang) before net measurement
+
+**Added after Phase 0/1 execution, not part of the original plan text.** Task 1's baseline
+build (macOS, no Linux CI access on this machine) found that `morph::net::SocketServer`'s
+destructor hangs forever on macOS/BSD: `SocketServer::close()`
+(`include/morph/net/socket_server.hpp:84-114`) calls `_listenSocket.shutdownBoth()` —
+`::shutdown(fd, SHUT_RDWR)` — specifically to unblock a thread parked in a blocking
+`accept()`, then joins that thread. This works on Linux (confirmed via the code's own
+comment and this repo's CI history) but `shutdown(2)` on a **listening** (unconnected)
+socket is a documented no-op for waking a peer thread blocked in `accept()` on macOS/BSD
+kernels — the accept-loop thread never wakes, the join never returns, and the destructor
+hangs. Filed as issue #437 (full diagnosis, `sample(1)` stack traces, and scope — 21
+affected tests across `tests/net/test_socket_backend.cpp`, `tests/net/test_socket_server.cpp`,
+and one interop test — are in the issue). Confirmed unaffected: `morph::qt::QtWebSocketBackend`/
+`QtWebSocketServer` (a separate, Qt-event-loop-driven implementation).
+
+This blocks running `tests/net`'s full suite locally on macOS at all, which in turn blocks
+getting a trustworthy local coverage baseline for Phase 2 — every test that constructs a
+`SocketServer` and lets it go out of scope hits the hang. The user chose to fix this now
+(rather than work around it or defer net) so Phase 2 can measure and iterate normally on
+this machine.
+
+**Files:**
+- Modify: `include/morph/net/socket_server.hpp` (the `close()`/destructor teardown path)
+- Modify (if the fix needs it): `include/morph/net/detail/tcp_socket.hpp` (`shutdownBoth()`
+  and/or a new `close()`-the-fd primitive, if one doesn't already exist there)
+- Test: a new or extended test in `tests/net/test_socket_server.cpp` that reproduces the
+  hang scenario with a bounded timeout (e.g. a test-level watchdog/timeout around
+  destructing a `SocketServer` whose accept-loop thread is parked in `accept()`) — the
+  regression test must actually fail (timeout/hang) against the pre-fix code and pass
+  against the fix; a test that merely constructs-and-destroys without ever having a
+  parked accept-loop thread would not exercise the bug at all.
+
+**Suggested fix shape** (from the issue's own recommendation — the implementer should
+verify and adjust as needed, this is a starting point, not a mandate): `close(2)` the
+listening file descriptor itself (not merely `shutdown(2)` it) before or as part of the
+teardown, ahead of/instead of relying on `shutdown` alone to unblock `accept()`. Closing a
+fd that a thread is blocked in `accept()` on reliably unblocks it with `EBADF` on both
+Linux and macOS/BSD (unlike `shutdown`, which is Linux-reliable but BSD-unreliable for this
+specific case). The fix must stay correct on Linux (this repo's CI platform) — do not trade
+a macOS fix for a Linux regression; if unsure, reason through (or research) both platforms'
+`close()`-during-blocking-`accept()` semantics before committing to an approach, and note
+in the report what was verified vs. assumed for each platform.
+
+- [ ] **Step 1: Write a regression test** in `tests/net/test_socket_server.cpp` that starts
+  a `SocketServer` listening, lets its accept-loop thread block in `accept()`, then
+  destructs the server with a bounded wall-clock expectation (the test framework/CI
+  environment's own timeout is not a substitute — the test itself should demonstrate the
+  hang was real, e.g. by checking destruction completes within a short deadline like a
+  few seconds, not relying on ctest's 120s timeout to eventually kill a hung process).
+- [ ] **Step 2: Confirm the test reproduces the hang** against the current (unfixed) code —
+  run it standalone with a short timeout and confirm it fails/hangs as expected. Do not
+  skip this step; a "regression test" that was never seen to fail against the bug it
+  claims to catch is not verified.
+- [ ] **Step 3: Implement the fix** in `socket_server.hpp` (and `tcp_socket.hpp` if needed).
+- [ ] **Step 4: Run the new test** — confirm it now passes, and completes promptly (no
+  hang).
+- [ ] **Step 5: Run the full previously-excluded set** to confirm the fix generalizes
+  beyond the one regression test:
+
+```bash
+LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage \
+  -R "^(SocketServer:|SocketBackend:|QtWebSocketBackend interop: connects to a SocketServer)"
+```
+
+Expected: all 21 previously-excluded tests now pass (not "excluded" — actually run and
+green), with no hang.
+
+- [ ] **Step 6: Run the complete suite** (no exclusion needed anymore) to confirm nothing
+  else regressed:
+
+```bash
+LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage
+```
+
+- [ ] **Step 7: Commit**, referencing #437.
+- [ ] **Step 8: Close or comment on #437** noting the fix (commit hash) once merged —
+  or leave it to whoever finishes the branch; at minimum the task report should state
+  the fix is ready to close the issue.
+
+This task's own diff should be small and tightly scoped to the teardown mechanism — it is
+a bug fix, not a refactor, and should not touch unrelated parts of `socket_server.hpp`/
+`tcp_socket.hpp`.
+
+---
+
 ## Phase 2: net — the largest gap
 
 net is 77.61% lines / 75.15% branches over 1,949 header lines across `socket_server.hpp`, `socket_backend.hpp`, and `detail/{ws_handshake,sha1,tcp_socket,base64,ws_frame}.hpp`. It has its own test directory (`tests/net/`, one file per header) — gaps belong in the matching existing file, not a new "coverage gap" file, unless a specific header's gaps are numerous enough to warrant grouping (judgment call at Task 5 time; if a single header has >15 genuine gaps, a companion `test_<header>_coverage_gaps.cpp` following the `test_coverage_push95.cpp` convention is reasonable).
