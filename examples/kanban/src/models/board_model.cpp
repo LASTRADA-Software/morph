@@ -260,14 +260,15 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
 /// id; `from_chars` on an unsigned type does neither.
 ///
 /// The spelling has to be *canonical*, not merely parseable, because
-/// `_projectIdStr` has a second reader: `logAction`/`logFailure` stamp it as
-/// each entry's `entityKey`, and `execute(GetActivity)` reads entries back by
-/// that exact string. `from_chars` accepts "007" for project 7, so a client
+/// `OpenBoard` -- the other writer -- always stores `std::to_string` of a
+/// real row id, and every attach guard's invariant is **engaged implies it
+/// parses as a project id, spelled the way `OpenBoard` would spell it**.
+/// `from_chars` accepts "007" for project 7, so without this check a client
 /// registering with `contextKey=007` would pass every attach guard and every
-/// `requireRole` while journaling under a key no other client -- and no
-/// `GetActivity` -- ever asks for, silently splitting one board's activity
-/// stream in two. Comparing against `std::to_string(value)` is what rules that
-/// out.
+/// `requireRole` while attached to a project id no `OpenBoard` call for that
+/// project would ever produce the same string for -- two spellings of one
+/// attach state where the invariant assumes there is only ever one.
+/// Comparing against `std::to_string(value)` is what rules that out.
 [[nodiscard]] bool namesAProject(std::string_view key) noexcept {
     std::uint64_t value = 0;
     const char* const end = key.data() + key.size();
@@ -281,8 +282,28 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
 
 void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
     _log = std::move(log);
-    // A key that does not name a project does not become one -- this
-    // condition is load-bearing, not defensive. `_projectIdStr` is also the
+    // _entityKeyStr does not follow a second attachActionLog call away from
+    // a board already attached via OpenBoard -- kept only for the case
+    // exercised by this file's own "empty entityKey does not un-attach"
+    // test, a caller invoking attachActionLog directly on an already
+    // OpenBoard-attached instance. This never happens through the registry:
+    // attachActionLog runs exactly once per instance, immediately after
+    // ModelFactory::create()'s std::make_unique -- always on a brand-new
+    // instance with _projectIdStr still disengaged -- and BoardModel's
+    // shared-instance directory key *is* the project id
+    // (BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)), so a
+    // second attach naming a *different* project can never even reach an
+    // already-live instance: attachExistingLocked's re-attach-by-key path
+    // only bumps a refcount and never calls attachActionLog again, and a
+    // genuinely different key routes to a different, freshly-constructed
+    // instance via the registry instead. _projectIdStr therefore has no
+    // matching guard: nothing can drive it to a state this one would need
+    // to protect against.
+    if (!_projectIdStr.has_value() || entityKey == *_projectIdStr) {
+        _entityKeyStr = entityKey;
+    }
+    // A key that does not name a project does not become the attach state --
+    // this condition is load-bearing, not defensive. `_projectIdStr` is the
     // answer to "which project is this handler attached to", which every
     // `execute()` overload asks as `has_value()` before dereferencing it into
     // `std::stoull`; adopting the key unconditionally made that question
@@ -302,7 +323,7 @@ void BoardModel::logAction(const Action& action, const Result& result, std::stri
     }
     ::morph::journal::LogEntry entry;
     entry.modelType = "BoardModel";
-    entry.entityKey = _projectIdStr.value_or(std::string{});
+    entry.entityKey = _entityKeyStr.value_or(std::string{});
     entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
     entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
     // Stamp the payload's shape fingerprint, the same value morph's own two
@@ -344,7 +365,7 @@ void BoardModel::logFailure(const Action& action, const std::string& error) cons
     }
     ::morph::journal::LogEntry entry;
     entry.modelType = "BoardModel";
-    entry.entityKey = _projectIdStr.value_or(std::string{});
+    entry.entityKey = _entityKeyStr.value_or(std::string{});
     entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
     entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
     entry.schema = ::morph::model::detail::actionPayloadSchema<Action>();
@@ -390,7 +411,14 @@ GetBoardResult BoardModel::execute(const OpenBoard& action) {
     // principal with no standing on this project never observes its data by
     // attaching to it.
     requireRoleOn(project.id.Value(), Role::Viewer);
+    // Both attach state and journal key take the same canonical row-id
+    // string -- the value execute(GetActivity)'s own `_log->entries(
+    // *_projectIdStr)` looks entries up by, so a session that opened its
+    // board this way keeps finding the entries logAction/logFailure wrote
+    // during it once _entityKeyStr and _projectIdStr are no longer the same
+    // member (#422).
     _projectIdStr = std::to_string(project.id.Value());
+    _entityKeyStr = *_projectIdStr;
     return buildState(mapper.Get(), project);
 }
 

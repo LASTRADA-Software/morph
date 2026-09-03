@@ -280,13 +280,14 @@ TEST_CASE("A partly-numeric contextKey does not attach to the board its prefix n
           "GetBoardState: handler was never attached via OpenBoard");
 }
 
-// A zero-padded key parses, and that is exactly the problem: `_projectIdStr`
-// is read twice -- by `std::stoull` for the board, and verbatim as every
-// entry's `entityKey`, which `execute(GetActivity)` looks entries up by. A
-// handler attached as "007" would work against project 7 while journaling
-// under a key no other client and no `GetActivity` ever asks for, splitting
-// one board's activity stream in two. So the spelling has to be canonical,
-// not merely parseable.
+// A zero-padded key parses, and that is exactly the problem: `OpenBoard`
+// always stores `std::to_string` of a real row id, so the attach invariant
+// ("engaged implies it parses as a project id, spelled the way `OpenBoard`
+// would spell it") assumes one canonical spelling per project. A handler
+// attached as "007" would answer for project 7 under a spelling no
+// `OpenBoard` call for that project would ever produce, two spellings of one
+// attach state where the invariant assumes there is only ever one. So the
+// spelling has to be canonical, not merely parseable.
 TEST_CASE("A zero-padded contextKey does not attach the handler", "[kanban][model][unattached]") {
     DbFixture fixture;
     const auto projectId = createProjectAs("alice", "Padded");
@@ -309,8 +310,55 @@ TEST_CASE("Attaching a log with an empty entityKey does not un-attach an open bo
     const ScopedPrincipal alice{"alice"};
     model.execute(kanban::OpenBoard{.projectId = projectId});
 
-    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(), {});
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    model.attachActionLog(log, {});
 
     const auto state = model.execute(kanban::GetBoardState{});
     CHECK(state.projectId == projectId);
+
+    // #422's own version of this hazard: an empty entityKey must not pull
+    // _entityKeyStr away from the board _projectIdStr still names either --
+    // otherwise every entry logged after this second attach call would carry
+    // entityKey="" while execute(GetActivity) keeps reading entries by
+    // *_projectIdStr, making them invisible to it despite the handler still
+    // answering as attached. Proven by round-tripping through GetActivity
+    // itself, not by reading the member directly.
+    model.execute(kanban::CreateColumn{.name = "Doing", .wipLimit = 0});
+    const auto activity = model.execute(kanban::GetActivity{});
+    REQUIRE(activity.events.size() == 1);
+    CHECK(activity.events.front().actionType == "CreateColumn");
+}
+
+// #422's own residue: a `contextKey` the attach guard rejects used to produce
+// two different journal entity keys for the *same* attach call -- the raw
+// key from a holder-wrapped instance's `_contextKey` (`IModelHolder`,
+// `morph/core/model.hpp`, set unconditionally), and the empty string from
+// this `BoardModel`'s own `_projectIdStr`, which the guard had correctly
+// left disengaged. `_entityKeyStr` closes that gap by taking the same
+// unconditional assignment `_contextKey` does, so the two now agree even
+// though the attach guard still refuses "foo" as a board.
+TEST_CASE("A rejected contextKey still produces the raw key as the journal entityKey, matching IModelHolder",
+          "[kanban][model][unattached]") {
+    DbFixture fixture;
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+
+    model.attachActionLog(log, "foo");
+
+    // CreateColumn, not GetBoardState: GetBoardState is Loggable::No and its
+    // execute() has no try/catch at all, so it never reaches logFailure.
+    // CreateColumn's own attach guard throw is caught by its execute()'s
+    // KanbanError handler, which does. The attach guard still refuses "foo"
+    // as a board either way -- this is the existing #368 behavior, unaffected
+    // by #422's split.
+    CHECK_THROWS_AS(model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}), kanban::NotFound);
+
+    // The refusal above is a KanbanError, so CreateColumn's own catch block
+    // already ran logFailure for it before rethrowing -- exactly the path
+    // that used to stamp "" instead of "foo".
+    const auto entries = log->entries();
+    REQUIRE(entries.size() == 1);
+    CHECK(entries.front().entityKey == "foo");
+    CHECK(entries.front().outcome == morph::journal::Outcome::Failed);
 }

@@ -47,16 +47,70 @@ MANIFEST="$OUT/coverage_objects.txt"
 # green whether or not it still detects anything, and
 # scripts/test_check_coverage_objects.sh can exercise it without a build.
 #
-# Checked before the gate runs, cheap first: without profile data there is
-# nothing to report either way, and the gate's own ctest query is the slowest
-# thing in this script. Running it only to die twenty lines later on an empty
-# profraw set is the wrong order for anyone driving this by hand.
-PROFILES=$(find "$OUT" -name "*.profraw" 2>/dev/null | tr '\n' ' ')
-if [ -z "$PROFILES" ]; then
-    echo "ERROR: No .profraw files found in $OUT." >&2
-    echo "Did you set LLVM_PROFILE_FILE and run ctest --preset clang-coverage?" >&2
-    exit 1
-fi
+# -- The profile set this run merges: bounded, not discovered ---------------
+#
+# `find "$OUT" -name '*.profraw'` used to be unbounded and had no cleanup of
+# its own (morph#430). `LLVM_PROFILE_FILE`'s `%p` (process id) template means
+# a stale file is never overwritten by a later run -- it just sits there and
+# the next `find` picks it up alongside the current run's output, with no
+# upper bound on how old "alongside" can be. 2,445 such files were found
+# sitting in one such tree, left by prior runs and hand-run binaries, folded
+# into `merged.profdata` by nothing more than the fact that they matched the
+# name pattern. A stale line's counts joining the current report is wrong in
+# the flattering direction -- a line covered by a since-deleted test still
+# reads as covered -- and it is the same failure shape this script's own
+# comments already document twice over for morph#141 and morph#179: the
+# script runs, the report uploads, and the figure is computed over the wrong
+# input.
+#
+# The fix is at the trailing edge rather than the leading one: `coverage.sh`
+# does not control when `ctest` runs (CI and a local checkout both invoke them
+# as two separate steps), so it cannot clean "before ctest" itself. What it
+# can do -- and does -- is delete every `.profraw` it merges once the merge
+# has succeeded, every time. That makes the profile set for *this* run exactly
+# "everything written since the last successful `coverage.sh`", which is a
+# bound with no reliance on wall-clock time or on the caller remembering a
+# separate clean step: a workspace that runs `coverage.sh` at all, including a
+# persistent self-hosted-runner workspace across many CI runs, can never carry
+# a `.profraw` forward past the run that consumed it. `check_coverage_profiles.sh`
+# holds this as a gate of its own, on the same terms as the two neighbouring
+# ones below -- a separate script because a gate nobody tests reports green
+# whether or not it still detects anything, and
+# scripts/test_check_coverage_profiles.sh exercises it without a build.
+#
+# Checked before the object-manifest gate runs, cheap first: without profile
+# data there is nothing to report either way, and that gate's own ctest query
+# is the slowest thing in this script. Running it only to die twenty lines
+# later on an empty profraw set is the wrong order for anyone driving this by
+# hand.
+# An array, not a space-joined string: PROFILES is used unquoted below (both
+# to merge and to delete), and a space-joined string word-splits a path
+# containing a space into fragments -- `rm -f` then silently no-ops on the
+# fragments (its whole point is to not fail on a missing file) and leaves the
+# real .profraw undeleted, which is morph#430's own staleness shape
+# reappearing through the one script meant to close it. Nothing in this
+# repository's own paths triggers this today, but the fix costs nothing and
+# matches COVERAGE_OBJECTS' own array-of-paths shape below.
+PROFILES=()
+while IFS= read -r _profile; do
+    [ -n "$_profile" ] || continue
+    PROFILES+=("$_profile")
+done < <(bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_profiles.sh" "$OUT")
+
+# A gate between here and the merge below (the object-manifest check next,
+# the roots check after it) can still fail under `set -e` before PROFILES is
+# ever merged or deleted. That is deliberate, not an oversight: those gates
+# are configure/build-time mistakes (a suite never wired into
+# apply_coverage(), a compiler cache serving foreign paths) a caller fixes
+# and reruns coverage.sh for, without re-running `ctest` -- and re-running
+# `ctest` is the only thing that would put a *second* set of profraw
+# alongside this one, since this script's own discovery is deterministic
+# over an unchanged tree. If a caller reruns `ctest` in between fixing such a
+# gate and rerunning this script, the two sets are merged together and this
+# script cannot tell that happened; that residual case is accepted rather
+# than solved here, since closing it needs either idempotent (content-
+# addressed) merging or a persisted record of which files this run already
+# consumed, both larger than this fix's scope.
 
 bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_objects.sh" "$OUT"
 
@@ -194,7 +248,20 @@ done
 # bar means to hold to that standard — only the real testkit/GUI code is.
 IGNORE_REGEX='.*/testkit/test_[^/]+\.cpp$'
 
-${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
+${LLVM_PROFDATA} merge -sparse "${PROFILES[@]}" -o "$MERGED"
+
+# Deleted the moment they are safely folded into "$MERGED", not at the end of
+# this script: every .profraw's data is now durably captured there, so
+# holding them past this point buys nothing, while a later failure --
+# llvm-cov, the branch gate, anything below -- would otherwise leave them
+# in place for a retried `coverage.sh` to merge a second time alongside
+# whatever a rerun of `ctest` also wrote. That second merge would not be
+# additive counting error (llvm-profdata's counts are absolute per process
+# execution, not deltas), but it is the same "profile set for a run is
+# discovered, not defined" shape morph#430 exists to remove, just triggered
+# by a retry instead of an old worktree. See PROFILES' own assignment above
+# for the full account.
+rm -f "${PROFILES[@]}"
 
 # Before any filter is applied, and deliberately so: the exports below keep
 # only records that matched a relative SOURCES entry, so a record rooted in

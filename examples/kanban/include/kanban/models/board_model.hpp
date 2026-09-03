@@ -279,29 +279,44 @@ public:
     /// functionally the same effect `recordIfAttached` gives a
     /// holder-wrapped instance, achieved without one.
     /// @param log Sink entries are forwarded to.
-    /// @param entityKey This rung's project id, as a string. Accepted only
-    ///        if it is the complete *canonical* decimal spelling of one --
-    ///        `"7"`, never `"007"`, because this member is also each entry's
-    ///        `entityKey` and `execute(GetActivity)` reads entries back by that
-    ///        exact string, so a second spelling would silently split one
-    ///        board's activity stream. Anything else is
-    ///        discarded, and the entries this instance stamps then carry the
-    ///        empty key (`logAction` reads `_projectIdStr`, the one member
-    ///        both purposes share). Two keys that are not project ids reach
-    ///        here, and both used to pose as a board (#368):
+    /// @param entityKey Stamped verbatim as every subsequent entry's
+    ///        `entityKey` (`_entityKeyStr`) -- the same contract
+    ///        `IModelHolder::_contextKey` keeps for a holder-wrapped instance
+    ///        (`morph/core/model.hpp`), so the two writers a caller might
+    ///        compare never disagree, for the ordinary case this method is
+    ///        ever called under: once, before any `execute()` reaches this
+    ///        instance (`ModelFactory::create`/`Remote::attachLogIfConfigured`
+    ///        both call it exactly there). The one case it is *not*
+    ///        unconditional: a board already attached (`_projectIdStr`
+    ///        engaged) and @p entityKey naming a *different* one -- there
+    ///        `_entityKeyStr` keeps its current value rather than following
+    ///        @p entityKey, so a direct second call (not one the registry
+    ///        ever makes -- see below) cannot pull the journal key away from
+    ///        the board `_projectIdStr` still names and
+    ///        `execute(GetActivity)`'s `_log->entries(*_projectIdStr)` reads
+    ///        by. `_projectIdStr` needs no matching guard: `BoardModel`'s
+    ///        shared-instance directory key *is* the project id
+    ///        (`BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)`),
+    ///        so a call naming a *different* project can never reach an
+    ///        already-attached instance in the first place -- it routes to a
+    ///        different, freshly-constructed one via the registry, with
+    ///        `_projectIdStr` still disengaged when `attachActionLog` reaches
+    ///        it. Two keys that are not project ids reach here in practice:
     ///        `ModelFactory::create` passes an *empty* key when it hands the
     ///        process-wide default log to a newly constructed holder, and
     ///        `Remote::attachLogIfConfigured` forwards the client's
     ///        `contextKey` *verbatim off the wire*, so it can be any text at
-    ///        all. The `log` itself is attached either way.
+    ///        all. The `log` itself is attached regardless of what
+    ///        @p entityKey contains.
     ///
-    ///        Consequence worth knowing before relying on the stamp: for a
-    ///        discarded key, the holder still records `_contextKey` verbatim
-    ///        (`morph/core/model.hpp`) while this instance records `""`, so
-    ///        the two writers disagree in one log. Only garbage keys are
-    ///        affected. Giving journal stamping its own member -- the shape
-    ///        `ledger::LedgerModel` and lims/crm already use -- would settle
-    ///        it, and is the larger change #368's triage deferred.
+    ///        Separately, and only if @p entityKey is the complete *canonical*
+    ///        decimal spelling of a project id -- `"7"`, never `"007"` --
+    ///        `_projectIdStr` is also set to it. A key that is not one leaves
+    ///        `_projectIdStr` disengaged, so every `has_value()` attach guard
+    ///        in this class still refuses to serve a handler no `OpenBoard`
+    ///        or canonical keyed attach ever named a board for (#368) --
+    ///        independently of what @p entityKey was, since `_entityKeyStr`'s
+    ///        assignment above no longer has any bearing on that guard.
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
 private:
@@ -439,6 +454,41 @@ private:
     ///        declines any key that is not one. See #368 for what the
     ///        fifteen guards did while it did not hold.
     std::optional<std::string> _projectIdStr;
+
+    /// @brief The key every subsequent `logAction`/`logFailure` call stamps
+    ///        as its `LogEntry::entityKey` -- kept as its own member, separate
+    ///        from `_projectIdStr` (the attach state), rather than one member
+    ///        serving both -- the same *shape* `ledger::LedgerModel::
+    ///        _entityKeyStr` (`ledger_model.cpp`) and lims/crm already use
+    ///        (#422; #368's triage deferred exactly this split). Not the same
+    ///        *assignment*: `LedgerModel` has no attach-state member to guard
+    ///        against at all (every one of its actions carries its own
+    ///        `ledgerId`, so nothing there plays `_projectIdStr`'s role), so
+    ///        its `attachActionLog` sets `_entityKeyStr` with one unconditional
+    ///        line and stops. `BoardModel`'s guard below is this class's own
+    ///        addition, for a hazard only a class with a separate attach-state
+    ///        member has to guard against in the first place.
+    ///
+    ///        Set two ways. Unlike `_projectIdStr`, nothing here is validated
+    ///        as a project id, matching `IModelHolder::_contextKey`'s own
+    ///        unconditional assignment (`morph/core/model.hpp`) for the
+    ///        ordinary case of one attach per instance: `OpenBoard` sets it to
+    ///        the same canonical row-id string it sets `_projectIdStr` to,
+    ///        which is what keeps `execute(GetActivity)`'s
+    ///        `_log->entries(*_projectIdStr)` finding entries this handler's
+    ///        own `OpenBoard`-attached session wrote; `attachActionLog` sets
+    ///        it to its `entityKey` argument verbatim, whatever that string
+    ///        is -- *unless* `_projectIdStr` already names a different board,
+    ///        in which case it keeps its current value rather than following
+    ///        a direct second attach call away from the board `_projectIdStr`
+    ///        still names (see `attachActionLog`'s own doc comment for why
+    ///        `_projectIdStr` itself needs no matching guard). Empty (the
+    ///        default) until one of the writers runs, so an unattached
+    ///        handler's entries -- reachable only via `logFailure`, since
+    ///        every mutating `execute()` throws before `logAction` when
+    ///        unattached -- carry the empty key, same as before this member
+    ///        existed.
+    std::optional<std::string> _entityKeyStr;
 
     /// @brief Durable action log this instance appends to, if any -- set by
     ///        `attachActionLog`. Null (the default) for a handler that never

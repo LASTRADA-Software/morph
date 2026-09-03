@@ -189,7 +189,8 @@ ctest_binaries="$(
             # *runs* every PRE_TEST discovery script, which executes the
             # instrumented test binaries with --list-tests. Left alone they
             # would each drop a default.profraw into the build tree, and
-            # scripts/coverage.sh's `find ... -name '*.profraw'` would sweep
+            # scripts/check_coverage_profiles.sh's `find ... -name
+            # '*.profraw'` (invoked from scripts/coverage.sh) would sweep
             # those listing runs into the next merge.
             LLVM_PROFILE_FILE="${ctest_profile_scratch}/discovery-%p.profraw" \
                 ctest --test-dir "$build_dir" --show-only=json-v1
