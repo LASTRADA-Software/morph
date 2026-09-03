@@ -720,10 +720,9 @@ TEST_CASE("isClientTimeout: a null exception is not a timeout", "[testkit][event
     // side: a tick that failed for a reason nobody captured is not evidence
     // the transport is merely slow.
     CHECK_FALSE(morph::ladder::gui::detail::isClientTimeout(nullptr));
-    CHECK_FALSE(morph::ladder::gui::detail::isClientTimeout(
-        std::make_exception_ptr(std::runtime_error{"not a timeout"})));
-    CHECK(morph::ladder::gui::detail::isClientTimeout(
-        std::make_exception_ptr(morph::backend::ClientTimeoutError{})));
+    CHECK_FALSE(
+        morph::ladder::gui::detail::isClientTimeout(std::make_exception_ptr(std::runtime_error{"not a timeout"})));
+    CHECK(morph::ladder::gui::detail::isClientTimeout(std::make_exception_ptr(morph::backend::ClientTimeoutError{})));
 }
 
 TEST_CASE("describeFailure: every input yields a non-empty message", "[testkit][event-poller]") {
@@ -731,8 +730,7 @@ TEST_CASE("describeFailure: every input yields a non-empty message", "[testkit][
     // stopped, and the header promises it is never empty. The two arms that
     // make that true — a null exception and a throw that is not a
     // `std::exception` — are the ones no poller path produces.
-    CHECK(morph::ladder::gui::detail::describeFailure(nullptr).contains(
-        QStringLiteral("no exception information")));
+    CHECK(morph::ladder::gui::detail::describeFailure(nullptr).contains(QStringLiteral("no exception information")));
     CHECK(morph::ladder::gui::detail::describeFailure(std::make_exception_ptr(42))
               .contains(QStringLiteral("non-std::exception")));
     CHECK(morph::ladder::gui::detail::describeFailure(std::make_exception_ptr(std::runtime_error{"boom"})) ==

@@ -975,10 +975,11 @@ TEST_CASE("QmlSurfaceAudit: a property-style handler for a signal the bridge lac
     // able to *fail*, or it would be silencing rather than auditing.
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
-    const QString qml = cleanQml().replace(QStringLiteral(R"(        function onListed(rows, ok) {
+    const QString qml =
+        cleanQml().replace(QStringLiteral(R"(        function onListed(rows, ok) {
             console.log(rows, ok)
         })"),
-                                           QStringLiteral("        onListed: console.log(1)\n        onVanished: console.log(2)"));
+                           QStringLiteral("        onListed: console.log(1)\n        onVanished: console.log(2)"));
     writeQml(dir, QStringLiteral("Main.qml"), qml);
 
     SurfaceFixtureBridge bridge;
