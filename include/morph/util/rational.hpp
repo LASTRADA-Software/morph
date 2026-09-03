@@ -777,14 +777,39 @@ private:
         widenPrecisionTo(other);
     }
 
+    /// @brief The factors that scale `*this` and @p rhs's numerators (and
+    ///        `*this`'s denominator) to their least common denominator.
+    struct DenominatorScale {
+        std::int64_t leftScaled;
+        std::int64_t rightScaled;
+    };
+
+    /// @brief Computes the scale factors for `a/b op c/d == (a*d' op c*b')/(b*d')`,
+    ///        where `b' = b/gcd(b,d)`, `d' = d/gcd(b,d)`.
+    ///
+    /// The reduced cross-multiplication both `+=`/`-=`'s arithmetic and their
+    /// overflow checks need identically. Returns the bare factors rather than
+    /// the scaled numerators themselves: `addWouldOverflow`/`subWouldOverflow`
+    /// must run `detail::mulOverflows` on `numerator * rightScaled` *before*
+    /// forming that product, so a helper that returns the already-multiplied
+    /// values would have to compute the very product being checked for.
+    /// @param rhs The other operand.
+    /// @return `leftScaled` multiplies `this->denominator`/`numerator`;
+    ///         `rightScaled` multiplies `rhs.numerator`.
+    [[nodiscard]] constexpr DenominatorScale scaleFactorsFor(const Rational& rhs) const noexcept {
+        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
+        return DenominatorScale{
+            .leftScaled = denominator / denominatorGcd,
+            .rightScaled = rhs.denominator / denominatorGcd,
+        };
+    }
+
     /// @brief `operator+=`'s arithmetic, without the overflow check.
     /// @param rhs Value to add.
     constexpr void addAssignUnchecked(const Rational& rhs) noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
-        auto const leftDenominatorScaled = denominator / denominatorGcd;
-        numerator = (numerator * rightDenominatorScaled) + (rhs.numerator * leftDenominatorScaled);
-        denominator = denominator * rightDenominatorScaled;
+        auto const scale = scaleFactorsFor(rhs);
+        numerator = (numerator * scale.rightScaled) + (rhs.numerator * scale.leftScaled);
+        denominator = denominator * scale.rightScaled;
         widenPrecisionTo(rhs.decimalPlaces);
         canonicalise();
     }
@@ -792,11 +817,9 @@ private:
     /// @brief `operator-=`'s arithmetic, without the overflow check.
     /// @param rhs Value to subtract.
     constexpr void subAssignUnchecked(const Rational& rhs) noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
-        auto const leftDenominatorScaled = denominator / denominatorGcd;
-        numerator = (numerator * rightDenominatorScaled) - (rhs.numerator * leftDenominatorScaled);
-        denominator = denominator * rightDenominatorScaled;
+        auto const scale = scaleFactorsFor(rhs);
+        numerator = (numerator * scale.rightScaled) - (rhs.numerator * scale.leftScaled);
+        denominator = denominator * scale.rightScaled;
         widenPrecisionTo(rhs.decimalPlaces);
         canonicalise();
     }
@@ -839,28 +862,26 @@ public:
     /// @param rhs The addend.
     /// @return `true` if the addition cannot be performed exactly.
     [[nodiscard]] constexpr bool addWouldOverflow(const Rational& rhs) const noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightScaled = rhs.denominator / denominatorGcd;
-        auto const leftScaled = denominator / denominatorGcd;
-        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled) ||
-            detail::mulOverflows(denominator, rightScaled)) {
+        auto const scale = scaleFactorsFor(rhs);
+        if (detail::mulOverflows(numerator, scale.rightScaled) ||
+            detail::mulOverflows(rhs.numerator, scale.leftScaled) ||
+            detail::mulOverflows(denominator, scale.rightScaled)) {
             return true;
         }
-        return detail::addOverflows(numerator * rightScaled, rhs.numerator * leftScaled);
+        return detail::addOverflows(numerator * scale.rightScaled, rhs.numerator * scale.leftScaled);
     }
 
     /// @brief Whether `*this - rhs` would overflow any intermediate or the result.
     /// @param rhs The subtrahend.
     /// @return `true` if the subtraction cannot be performed exactly.
     [[nodiscard]] constexpr bool subWouldOverflow(const Rational& rhs) const noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightScaled = rhs.denominator / denominatorGcd;
-        auto const leftScaled = denominator / denominatorGcd;
-        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled) ||
-            detail::mulOverflows(denominator, rightScaled)) {
+        auto const scale = scaleFactorsFor(rhs);
+        if (detail::mulOverflows(numerator, scale.rightScaled) ||
+            detail::mulOverflows(rhs.numerator, scale.leftScaled) ||
+            detail::mulOverflows(denominator, scale.rightScaled)) {
             return true;
         }
-        return detail::subOverflows(numerator * rightScaled, rhs.numerator * leftScaled);
+        return detail::subOverflows(numerator * scale.rightScaled, rhs.numerator * scale.leftScaled);
     }
 
     /// @brief Whether `*this * rhs` would overflow, after cross-cancelling.
