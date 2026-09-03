@@ -492,6 +492,61 @@ function(apply_sanitizers target mode)
     endif()
 endfunction()
 
+# ── A coverage build does not share a compiler cache (morph#426) ─────────────
+#
+# Set before cmake/CompileCache.cmake is included, so its option() -- which
+# honours a normal variable of the same name under CMP0077 -- picks this up as
+# the default. `NOT DEFINED` rather than an unconditional set: an explicit
+# -DUSE_COMPILER_CACHE=ON is still honoured, because on a single-checkout CI
+# runner the cache is safe and worth having, and the decision belongs to
+# whoever knows whether their cache is shared.
+#
+# What goes wrong without this. A cache entry is keyed on content; the object
+# it returns embeds absolute source paths, because nothing here passes
+# -ffile-prefix-map / -fcoverage-prefix-map. So a hit served across two
+# worktrees of this repository yields an object whose *coverage mapping* names
+# the other worktree. Demonstrated directly by compiling one translation unit
+# in worktree A through the launcher and then the byte-identical unit in
+# worktree B: B's binary exports `SF:/.../wtA/lib.hpp`, and the same unit
+# compiled with no launcher exports B's own path, which is what identifies the
+# launcher rather than the compiler as the cause.
+#
+# The damage is not mis-attribution. scripts/coverage.sh filters by *relative*
+# path, so a record rooted in another worktree matches no filter and is
+# dropped: in the run that found this, 246 of 688 records were foreign and all
+# eight of examples/crm/src/models/*.cpp appeared only under the foreign root,
+# so codecov.yml's entire crm src component was missing from the report while
+# its tests ran and passed. llvm-cov additionally discards function records it
+# cannot reconcile, because the same header arriving under two roots hashes two
+# ways -- worth 33 points on examples/common/gui/event_poller.hpp.
+#
+# The alternative fix, rejected with reasons. Adding -fcoverage-prefix-map so
+# the recorded paths are worktree-independent does produce correct paths
+# (measured: `SF:lib.hpp`), but it does not keep the cache hits it was supposed
+# to buy -- the flag carries the absolute source root, so the launcher keys the
+# two worktrees differently and misses anyway (measured: the mapped object
+# built in a third worktree carries that worktree's own paths, i.e. it
+# compiled locally). It also breaks the report it was meant to fix: with
+# relative recorded paths, llvm-cov's positional source filters match nothing,
+# and llvm-cov's behaviour when a filter matches nothing is to emit *every*
+# file -- so coverage.sh would silently widen to include demos, `gui/` shells,
+# fetched _deps and the test files it deliberately excludes. Correct paths at
+# the cost of rewriting the filter mechanism whose silent shrinkage this issue
+# is about was the worse trade.
+#
+# scripts/check_coverage_roots.sh is the second half of this, and is not
+# redundant with it: the default above is overridable, and the failure is a
+# silence that no exit code reports.
+if(AF_COVERAGE AND NOT DEFINED USE_COMPILER_CACHE)
+    set(USE_COMPILER_CACHE OFF)
+    message(STATUS
+        "morph: coverage: compiler cache disabled by default -- a shared cache "
+        "can serve objects built in another worktree, whose absolute source "
+        "paths then match none of scripts/coverage.sh's filters (morph#426). "
+        "Pass -DUSE_COMPILER_CACHE=ON to override where the cache is known "
+        "not to be shared across checkouts.")
+endif()
+
 # @brief Instrument a target for llvm-cov coverage; `TEST` also registers it
 #        as a binary scripts/coverage.sh must map profile data through.
 #

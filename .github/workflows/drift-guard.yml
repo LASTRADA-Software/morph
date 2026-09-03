@@ -132,6 +132,21 @@ jobs:
       - name: Self-test the coverage-object checker
         run: bash scripts/test_check_coverage_objects.sh
 
+      # scripts/check_coverage_roots.sh, on the same terms: the gate itself runs
+      # inside scripts/coverage.sh (it needs the built objects and the merged
+      # profile), and its self-test reads hand-written `llvm-cov export
+      # -summary-only` documents, so it needs neither.
+      #
+      # Its defect is a silence too, and a wider one. A shared compiler cache
+      # served objects built in another worktree; clang had embedded that
+      # worktree's absolute paths in their coverage mappings; coverage.sh
+      # filters by relative path, so those records matched nothing and were
+      # dropped -- 246 of 688 in the run that found it, and with them the whole
+      # of examples/crm/src/models, whose tests ran and passed throughout
+      # (morph#426). Nothing in the pipeline returned nonzero.
+      - name: Self-test the coverage-roots checker
+        run: bash scripts/test_check_coverage_roots.sh
+
       # scripts/check_branch_coverage.py, on the same terms: the gate itself
       # runs inside scripts/coverage.sh (it reads the aggregated LCOV that leg
       # produces), and its self-test needs only hand-written fixtures.

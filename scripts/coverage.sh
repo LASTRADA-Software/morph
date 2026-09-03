@@ -196,6 +196,18 @@ IGNORE_REGEX='.*/testkit/test_[^/]+\.cpp$'
 
 ${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
 
+# Before any filter is applied, and deliberately so: the exports below keep
+# only records that matched a relative SOURCES entry, so a record rooted in
+# another checkout is gone by the time they run and every path left is under
+# this tree by construction. A shared compiler cache can serve objects built in
+# another worktree, and their coverage mappings name that worktree -- 246 of
+# 688 records in the run that found it, taking the whole of crm's src models
+# out of the report while its tests ran and passed (morph#426). The cause is
+# removed at configure time (cmake/compiler_options.cmake defaults
+# USE_COMPILER_CACHE to OFF under AF_COVERAGE); this is the check that the
+# removal held, because the failure it guards against reports nothing.
+bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_roots.sh" "$OUT"
+
 mkdir -p "$REPORT_DIR"
 ${LLVM_COV} show "$PRIMARY_OBJECT" \
     "${OBJECT_ARGS[@]}" \
