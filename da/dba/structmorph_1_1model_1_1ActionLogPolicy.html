@@ -134,14 +134,14 @@ Static Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Action&gt;<br />
 struct morph::model::ActionLogPolicy&lt; Action &gt;</div><p>Per-action policy deciding how repeated executions are checkpointed into a durable action log. </p>
-<p>Deliberately minimal for now — only <span class="tt"><a class="el" href="#a2da3306697c2b77909bef7eea39ee668" title="If true, a checkpoint keeps only the most recent entry per (modelType, entityKey, actionType)....">coalesce</a></span> exists, and it has no registration macro yet. Specialise directly for the rare action where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via <span class="tt">BridgeHandler::set&lt;...&gt;</span>); every other action defaults to <span class="tt">false</span>, meaning every execution is treated as a distinct, permanent fact (the right default for anything resembling a business event). </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+<p>Deliberately minimal for now — only <span class="tt"><a class="el" href="#a2da3306697c2b77909bef7eea39ee668" title="If true, a checkpoint keeps only the most recent entry per (modelType, entityKey, actionType)....">coalesce</a></span> exists, and it has no registration macro yet. Specialise directly for the rare action where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via <span class="tt"><a class="el" href="../../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a743bbec73e0942f8d860c2861577423d" title="Sets one field of the current step&#39;s draft and dispatches the step as soon as its ActionValidator rep...">morph::flows::FlowSession::set</a>&lt;&gt;</span>); every other action defaults to <span class="tt">false</span>, meaning every execution is treated as a distinct, permanent fact (the right default for anything resembling a business event). </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Action</td><td>Concrete action type. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00167">167</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a2da3306697c2b77909bef7eea39ee668" name="a2da3306697c2b77909bef7eea39ee668"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2da3306697c2b77909bef7eea39ee668">&#9670;&#160;</a></span>coalesce</h2>
@@ -167,7 +167,7 @@ template&lt;typename Action&gt; </div>
 
 <p>If <span class="tt">true</span>, a checkpoint keeps only the most recent entry per <span class="tt">(modelType, entityKey, actionType)</span>. If <span class="tt">false</span> (default), every entry survives. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00171">171</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 
 </div>
 </div>

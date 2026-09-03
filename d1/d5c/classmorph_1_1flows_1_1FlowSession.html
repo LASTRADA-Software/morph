@@ -142,11 +142,11 @@ Public Member Functions</h2></td></tr>
 <a class="el" href="#a45863ef8a48eedab36a185e5b1d09d9c">FlowSession</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a45863ef8a48eedab36a185e5b1d09d9c">FlowSession</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a743bbec73e0942f8d860c2861577423d" id="r_a743bbec73e0942f8d860c2861577423d"><td class="memTemplParams" colspan="2">template&lt;auto FieldPtr&gt; </td></tr>
 <tr class="memitem:a743bbec73e0942f8d860c2861577423d template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a743bbec73e0942f8d860c2861577423d">set</a> (typename ::morph::bridge::detail::MemberPointerTraits&lt; decltype(FieldPtr)&gt;::ValueType value)</td></tr>
-<tr class="memdesc:a743bbec73e0942f8d860c2861577423d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets one field of the current step's draft and forwards it to the handler's ordinary <span class="tt"><a class="el" href="#a743bbec73e0942f8d860c2861577423d" title="Sets one field of the current step&#39;s draft and forwards it to the handler&#39;s ordinary set&lt;&gt; (auto-fire...">set</a>&lt;&gt;</span> (auto-fires when the step's <span class="tt">ActionValidator</span> is ready, exactly as a standalone form).  <br /></td></tr>
+<tr class="memdesc:a743bbec73e0942f8d860c2861577423d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets one field of the current step's draft and dispatches the step as soon as its <span class="tt">ActionValidator</span> reports the draft ready.  <br /></td></tr>
 <tr class="memitem:ac398cda25d834bc244338dc1812b7025" id="r_ac398cda25d834bc244338dc1812b7025"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ac398cda25d834bc244338dc1812b7025">advance</a> ()</td></tr>
 <tr class="memdesc:ac398cda25d834bc244338dc1812b7025"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves to the next step, if the current step has already produced a successful result (a not-ready step does not advance).  <br /></td></tr>
 <tr class="memitem:a29dd07a64f9bdb1ad3e537db4e1d30f7" id="r_a29dd07a64f9bdb1ad3e537db4e1d30f7"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a29dd07a64f9bdb1ad3e537db4e1d30f7">back</a> ()</td></tr>
-<tr class="memdesc:a29dd07a64f9bdb1ad3e537db4e1d30f7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns to the previous step. Its draft (and the handler's own per-action draft) were never reset, so its entered values are intact.  <br /></td></tr>
+<tr class="memdesc:a29dd07a64f9bdb1ad3e537db4e1d30f7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns to the previous step. Its draft — this session's own <span class="tt">std::get&lt;A&gt;(_drafts)</span> slot, the only draft in play — was never reset, so its entered values are intact.  <br /></td></tr>
 <tr class="memitem:a7565d216e36a85f86fd6cf2c22aa4866" id="r_a7565d216e36a85f86fd6cf2c22aa4866"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a7565d216e36a85f86fd6cf2c22aa4866">finished</a> () const noexcept</td></tr>
 <tr class="memdesc:a7565d216e36a85f86fd6cf2c22aa4866"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the flow has advanced past the last step.  <br /></td></tr>
 <tr class="memitem:a70fb7a85ff0e1470e5ba1af94a0e36de" id="r_a70fb7a85ff0e1470e5ba1af94a0e36de"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a70fb7a85ff0e1470e5ba1af94a0e36de">ready</a> () const noexcept</td></tr>
@@ -166,7 +166,8 @@ Static Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Model, typename... Steps&gt;<br />
 class morph::flows::FlowSession&lt; Model, Steps &gt;</div><p>Sequences an ordered list of registered actions (<span class="tt">Steps...</span>) as one multi-step flow sharing captured values across steps. </p>
-<p>Each step is fired through the handler's ordinary reactive path (<span class="tt">BridgeHandler::set&lt;&gt;</span> / <span class="tt">subscribe&lt;&gt;</span>, <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>) — a <span class="tt"><a class="el" href="../../d1/d5c/classmorph_1_1flows_1_1FlowSession.html" title="Sequences an ordered list of registered actions (Steps...) as one multi-step flow sharing captured va...">FlowSession</a></span> contributes only sequencing (<span class="tt"><a class="el" href="#ac398cda25d834bc244338dc1812b7025" title="Moves to the next step, if the current step has already produced a successful result (a not-ready ste...">advance</a></span>/<span class="tt"><a class="el" href="#a29dd07a64f9bdb1ad3e537db4e1d30f7" title="Returns to the previous step. Its draft (and the handler&#39;s own per-action draft) were never reset,...">back</a></span>) and a resolved-values map callers use to prefill a later step from an earlier one's submitted fields or result. <span class="tt">Steps...</span> must be pairwise distinct action types: this session's drafts live in a <span class="tt">std::tuple&lt;Steps...&gt;</span> addressed by type (<span class="tt">std::get&lt;A&gt;(_drafts)</span>), and <span class="tt">std::get&lt;T&gt;</span> is ill-formed when <span class="tt">T</span> occurs more than once — which is what the <span class="tt">AllDistinct&lt;Steps...&gt;</span> assert below enforces.</p>
+<p>Each step is fired through the handler's ordinary one-shot dispatch (<span class="tt">BridgeHandler::execute&lt;A&gt;()</span> → <span class="tt">Completion&lt;R&gt;</span>, <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>) — a <span class="tt"><a class="el" href="../../d1/d5c/classmorph_1_1flows_1_1FlowSession.html" title="Sequences an ordered list of registered actions (Steps...) as one multi-step flow sharing captured va...">FlowSession</a></span> contributes only sequencing (<span class="tt"><a class="el" href="#ac398cda25d834bc244338dc1812b7025" title="Moves to the next step, if the current step has already produced a successful result (a not-ready ste...">advance</a></span>/<span class="tt"><a class="el" href="#a29dd07a64f9bdb1ad3e537db4e1d30f7" title="Returns to the previous step. Its draft — this session&#39;s own std::get&lt;A&gt;(_drafts) slot,...">back</a></span>), the per-step drafts and their readiness gate, and a resolved-values map callers use to prefill a later step from an earlier one's submitted fields or result. The handler holds no draft on a flow's behalf: nothing here goes through handler-side draft machinery.</p>
+<p><span class="tt">Steps...</span> must be pairwise distinct action types: this session's drafts live in a <span class="tt">std::tuple&lt;Steps...&gt;</span> addressed by type (<span class="tt">std::get&lt;A&gt;(_drafts)</span>), and <span class="tt">std::get&lt;T&gt;</span> is ill-formed when <span class="tt">T</span> occurs more than once — which is what the <span class="tt">AllDistinct&lt;Steps...&gt;</span> assert below enforces.</p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Model</td><td>Concrete model type owning the <span class="tt">BridgeHandler</span> this flow dispatches through. </td></tr>
@@ -175,7 +176,7 @@ class morph::flows::FlowSession&lt; Model, Steps &gt;</div><p>Sequences an order
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00196">196</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a45863ef8a48eedab36a185e5b1d09d9c" name="a45863ef8a48eedab36a185e5b1d09d9c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a45863ef8a48eedab36a185e5b1d09d9c">&#9670;&#160;</a></span>FlowSession()</h2>
@@ -210,12 +211,12 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handler</td><td>Handler the flow dispatches every step through. Must outlive this <span class="tt"><a class="el" href="../../d1/d5c/classmorph_1_1flows_1_1FlowSession.html" title="Sequences an ordered list of registered actions (Steps...) as one multi-step flow sharing captured va...">FlowSession</a></span> (only <em>destruction</em> order is unconstrained; see bridge.md's Lifetime &amp; ownership). </td></tr>
-    <tr><td class="paramname">onError</td><td>Optional callback invoked when the current step's fire fails (e.g. <span class="tt">BackendChangedError</span> mid-flight). When absent, the error is logged via <span class="tt">morph::log::logError</span>, matching <span class="tt">BridgeHandler</span>'s own no-<span class="tt">errSink</span> default. Stored and invoked for this session's whole lifetime, so anything the callable refers to must outlive the session. </td></tr>
+    <tr><td class="paramname">onError</td><td>Optional callback invoked when the current step's fire fails (e.g. <span class="tt">BackendChangedError</span> mid-flight). When absent, the error is logged via <span class="tt">morph::log::logError</span>, which is how <span class="tt">BridgeHandler</span> itself reports a failure no caller is holding a <span class="tt">Completion</span> for (<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>). A handler offers no error callback to inherit a default from: <span class="tt">subscribe&lt;R&gt;</span> is notified of results only, and an <span class="tt">execute()</span> failure reaches the caller through the <span class="tt">Completion</span> it returned. Stored and invoked for this session's whole lifetime, so anything the callable refers to must outlive the session. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,11 +246,11 @@ template&lt;typename Model, typename... Steps&gt; </div>
 </div><div class="memdoc">
 
 <p>Refuses every callback this session installed. </p>
-<p>Dropping the handler's subscription would not be enough on its own: <span class="tt">unsubscribe()</span> only removes the sink from the handler's map, and says nothing about a callback already copied out of that map and in flight on another thread. <span class="tt">_callbacks</span> gates every installed callback on a token the callback checks <em>before</em> touching <span class="tt">this</span>, so a callback still in flight when this destructor runs is refused instead of touching a partially- or fully-destroyed object.</p>
+<p>There is nothing to detach. A step's callbacks are <span class="tt">.then</span>/<span class="tt">.onError</span> continuations on the <span class="tt">Completion</span> that <span class="tt">BridgeHandler::execute&lt;A&gt;()</span> returned — already owned by the in-flight dispatch, not held in a map this session could remove itself from, and possibly running on another thread the moment this destructor starts. <span class="tt">_callbacks</span> gates every installed callback on a token the callback checks <em>before</em> touching <span class="tt">this</span>, so a callback still in flight when this destructor runs is refused instead of touching a partially- or fully-destroyed object.</p>
 <p><span class="tt">requestStop()</span> is called explicitly rather than left to the member's own destruction, even though <span class="tt">_callbacks</span> is declared last: members are destroyed only <em>after</em> the destructor body, so anything this body does that can pump an event loop (a <span class="tt">sendSync</span>-style blocking call) would otherwise deliver into a half-dead session. This is the "teardown that
 pumps" escape hatch docs/spec/core/callback_scope.md documents. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00233">233</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00243">243</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -281,7 +282,9 @@ template&lt;auto FieldPtr&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Sets one field of the current step's draft and forwards it to the handler's ordinary <span class="tt"><a class="el" href="#a743bbec73e0942f8d860c2861577423d" title="Sets one field of the current step&#39;s draft and forwards it to the handler&#39;s ordinary set&lt;&gt; (auto-fire...">set</a>&lt;&gt;</span> (auto-fires when the step's <span class="tt">ActionValidator</span> is ready, exactly as a standalone form). </p>
+<p>Sets one field of the current step's draft and dispatches the step as soon as its <span class="tt">ActionValidator</span> reports the draft ready. </p>
+<p>The draft is this session's own (<span class="tt">std::get&lt;A&gt;(_drafts)</span>), the readiness check is made here, and a ready draft is fired by this session's <span class="tt">fireStep&lt;A&gt;</span> through <span class="tt">BridgeHandler::execute&lt;A&gt;()</span>. The handler keeps no draft of its own, so there is nothing to forward to.</p>
+<dl class="section user"><dt>No in-flight coalescing</dt><dd><b>Every <span class="tt"><a class="el" href="#a743bbec73e0942f8d860c2861577423d" title="Sets one field of the current step&#39;s draft and dispatches the step as soon as its ActionValidator rep...">set</a>&lt;&gt;</span> that leaves the draft ready dispatches, including one made while an earlier dispatch is still in flight.</b> Keystroke-rate calls on an already-complete draft therefore produce one request each, and their results arrive in whatever order the backend answers them — the last reply to land wins, which need not be the last call made. An earlier handler-side draft did collapse patches arriving during a flight; nothing does now, here or on the standalone-form path (the shipped renderer's <span class="tt">DynamicForm</span> calls <span class="tt">submitIfValid</span> on every change that leaves the form ready, with no in-flight suppression either). A caller that wants one request per pause throttles or debounces on its own side.</dd></dl>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">FieldPtr</td><td>Pointer-to-data-member of the current step's action struct. </td></tr>
@@ -301,7 +304,7 @@ template&lt;auto FieldPtr&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00247">247</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -333,7 +336,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>Moves to the next step, if the current step has already produced a successful result (a not-ready step does not advance). </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the flow advanced, <span class="tt">false</span> if the current step is not ready or the flow is already <span class="tt"><a class="el" href="#a7565d216e36a85f86fd6cf2c22aa4866" title="Whether the flow has advanced past the last step.">finished()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -362,10 +365,10 @@ template&lt;typename Model, typename... Steps&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Returns to the previous step. Its draft (and the handler's own per-action draft) were never reset, so its entered values are intact. </p>
+<p>Returns to the previous step. Its draft — this session's own <span class="tt">std::get&lt;A&gt;(_drafts)</span> slot, the only draft in play — was never reset, so its entered values are intact. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the flow moved back, <span class="tt">false</span> if already at step 0. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -397,7 +400,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>Whether the flow has advanced past the last step. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once <span class="tt"><a class="el" href="#ac398cda25d834bc244338dc1812b7025" title="Moves to the next step, if the current step has already produced a successful result (a not-ready ste...">advance()</a></span> has been called successfully on the last step. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00349">349</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -429,7 +432,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>Whether the current step already has a captured, successful result. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <span class="tt"><a class="el" href="#ac398cda25d834bc244338dc1812b7025" title="Moves to the next step, if the current step has already produced a successful result (a not-ready ste...">advance()</a></span> would move the flow forward right now. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00353">353</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -461,7 +464,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>The current 0-based step position. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">sizeof...(Steps)</span> once <span class="tt"><a class="el" href="#a7565d216e36a85f86fd6cf2c22aa4866" title="Whether the flow has advanced past the last step.">finished()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00360">360</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -493,7 +496,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>The number of steps in this flow. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">sizeof...(Steps)</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00336">336</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00364">364</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -525,7 +528,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>The registered type-id of the current step's action. </p>
 <dl class="section return"><dt>Returns</dt><dd>Empty when <span class="tt"><a class="el" href="#a7565d216e36a85f86fd6cf2c22aa4866" title="Whether the flow has advanced past the last step.">finished()</a></span> (no current step). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00340">340</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -563,7 +566,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The field's JSON-encoded value, or <span class="tt">std::nullopt</span> if <code class="param">path</code> was never captured (the step never fired, or never had that field). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00380">380</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>

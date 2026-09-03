@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d92/structm
 </div><!--header-->
 <div class="contents">
 
-<p>Per-action validator used by <span class="tt">BridgeHandler::set&lt;...&gt;</span> to decide whether the in-progress draft is ready to execute.  
+<p>Per-action readiness predicate deciding whether an action may execute.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>&gt;</code></p>
@@ -133,9 +133,10 @@ Static Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Action&gt;<br />
-struct morph::model::ActionValidator&lt; Action &gt;</div><p>Per-action validator used by <span class="tt">BridgeHandler::set&lt;...&gt;</span> to decide whether the in-progress draft is ready to execute. </p>
+struct morph::model::ActionValidator&lt; Action &gt;</div><p>Per-action readiness predicate deciding whether an action may execute. </p>
+<p>Enforced on every dispatch path that reaches <span class="tt">Model::execute</span> (see <span class="tt"><a class="el" href="../../d7/d1a/structmorph_1_1model_1_1ValidationError.html" title="Thrown when a decoded action fails ActionValidator&lt;Action&gt;::ready(...) on a server-side or local exec...">ValidationError</a></span> below for the sites), and consulted by <span class="tt"><a class="el" href="../../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a743bbec73e0942f8d860c2861577423d" title="Sets one field of the current step&#39;s draft and dispatches the step as soon as its ActionValidator rep...">morph::flows::FlowSession::set</a>&lt;&gt;</span> (<a class="el" href="../../d0/d67/flows_8hpp.html" title="Multi-step wizards: an ordered sequence of registered actions that share a &quot;flow draft&quot; spanning the ...">forms/flows.hpp</a>) to decide whether an in-progress draft is complete enough to fire.</p>
 <p>Resolution order (highest-priority first):</p><ol type="1">
-<li><b>Explicit specialisation</b> of <span class="tt"><a class="el" href="../../d5/d92/structmorph_1_1model_1_1ActionValidator.html" title="Per-action validator used by BridgeHandler::set&lt;...&gt; to decide whether the in-progress draft is ready...">ActionValidator</a>&lt;Action&gt;</span> — typically via <span class="tt">BRIDGE_REGISTER_VALIDATOR(Action, fn)</span>. Wins over everything.</li>
+<li><b>Explicit specialisation</b> of <span class="tt"><a class="el" href="../../d5/d92/structmorph_1_1model_1_1ActionValidator.html" title="Per-action readiness predicate deciding whether an action may execute.">ActionValidator</a>&lt;Action&gt;</span> — typically via <span class="tt">BRIDGE_REGISTER_VALIDATOR(Action, fn)</span>. Wins over everything.</li>
 <li><b><span class="tt">bool validate() const</span></b> member on <span class="tt">Action</span> — picked up automatically. Co-locates the predicate with the data it inspects; preferred when you own the action type.</li>
 <li><b>Default</b> — returns <span class="tt">true</span>, matching one-shot semantics (the first <span class="tt">set&lt;&gt;</span> lands and the action fires).</li>
 </ol>
@@ -154,7 +155,7 @@ struct morph::model::ActionValidator&lt; Action &gt;</div><p>Per-action validato
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a3741692227c70903fcc7fa93011f636d" name="a3741692227c70903fcc7fa93011f636d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3741692227c70903fcc7fa93011f636d">&#9670;&#160;</a></span>ready()</h2>
@@ -191,7 +192,7 @@ template&lt;typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the action should fire, <span class="tt">false</span> to keep collecting fields. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 
 </div>
 </div>
