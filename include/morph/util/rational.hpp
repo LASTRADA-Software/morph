@@ -1230,6 +1230,30 @@ template <typename Left, typename Right>
     }
 }
 
+/// @brief Lifts both mixed-type operands to `Rational`, at their shared precision.
+///
+/// Shared by the free `+`/`-`/`*`/`/` operators below: each lifts `lhs` then
+/// `rhs` to `liftPrecision(lhs, rhs)`, propagating the first error encountered
+/// left to right, and differs only in which operator it applies to the two
+/// lifted values afterward.
+/// @param lhs Left operand (Rational, expected-Rational, or floating point).
+/// @param rhs Right operand (Rational, expected-Rational, or floating point).
+/// @return Both operands as `Rational`, or the first error encountered left to right.
+template <typename Left, typename Right>
+[[nodiscard]] inline std::expected<std::pair<Rational, Rational>, RationalError> liftBoth(const Left& lhs,
+                                                                                          const Right& rhs) noexcept {
+    auto const precision = liftPrecision(lhs, rhs);
+    auto const leftExpected = lift(lhs, precision);
+    if (!leftExpected) {
+        return std::unexpected(leftExpected.error());
+    }
+    auto const rightExpected = lift(rhs, precision);
+    if (!rightExpected) {
+        return std::unexpected(rightExpected.error());
+    }
+    return std::pair<Rational, Rational>{*leftExpected, *rightExpected};
+}
+
 }  // namespace detail
 
 /// @brief Mixed-type addition with automatic expected-propagation.
@@ -1241,16 +1265,11 @@ template <typename Left, typename Right>
             (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
             (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator+(const Left& lhs, const Right& rhs) noexcept {
-    auto const precision = detail::liftPrecision(lhs, rhs);
-    auto const leftExpected = detail::lift(lhs, precision);
-    if (!leftExpected) {
-        return std::unexpected(leftExpected.error());
+    auto const lifted = detail::liftBoth(lhs, rhs);
+    if (!lifted) {
+        return std::unexpected(lifted.error());
     }
-    auto const rightExpected = detail::lift(rhs, precision);
-    if (!rightExpected) {
-        return std::unexpected(rightExpected.error());
-    }
-    return *leftExpected + *rightExpected;
+    return lifted->first + lifted->second;
 }
 
 /// @brief Mixed-type subtraction with automatic expected-propagation.
@@ -1262,16 +1281,11 @@ template <typename Left, typename Right>
             (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
             (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator-(const Left& lhs, const Right& rhs) noexcept {
-    auto const precision = detail::liftPrecision(lhs, rhs);
-    auto const leftExpected = detail::lift(lhs, precision);
-    if (!leftExpected) {
-        return std::unexpected(leftExpected.error());
+    auto const lifted = detail::liftBoth(lhs, rhs);
+    if (!lifted) {
+        return std::unexpected(lifted.error());
     }
-    auto const rightExpected = detail::lift(rhs, precision);
-    if (!rightExpected) {
-        return std::unexpected(rightExpected.error());
-    }
-    return *leftExpected - *rightExpected;
+    return lifted->first - lifted->second;
 }
 
 /// @brief Mixed-type multiplication with automatic expected-propagation.
@@ -1283,16 +1297,11 @@ template <typename Left, typename Right>
             (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
             (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator*(const Left& lhs, const Right& rhs) noexcept {
-    auto const precision = detail::liftPrecision(lhs, rhs);
-    auto const leftExpected = detail::lift(lhs, precision);
-    if (!leftExpected) {
-        return std::unexpected(leftExpected.error());
+    auto const lifted = detail::liftBoth(lhs, rhs);
+    if (!lifted) {
+        return std::unexpected(lifted.error());
     }
-    auto const rightExpected = detail::lift(rhs, precision);
-    if (!rightExpected) {
-        return std::unexpected(rightExpected.error());
-    }
-    return *leftExpected * *rightExpected;
+    return lifted->first * lifted->second;
 }
 
 /// @brief Mixed-type division with automatic expected-propagation.
@@ -1304,16 +1313,11 @@ template <typename Left, typename Right>
             (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>) &&
             (detail::LiftableOperand<Left> && detail::LiftableOperand<Right>)
 [[nodiscard]] inline detail::ExpectedRational operator/(const Left& lhs, const Right& rhs) noexcept {
-    auto const precision = detail::liftPrecision(lhs, rhs);
-    auto const leftExpected = detail::lift(lhs, precision);
-    if (!leftExpected) {
-        return std::unexpected(leftExpected.error());
+    auto const lifted = detail::liftBoth(lhs, rhs);
+    if (!lifted) {
+        return std::unexpected(lifted.error());
     }
-    auto const rightExpected = detail::lift(rhs, precision);
-    if (!rightExpected) {
-        return std::unexpected(rightExpected.error());
-    }
-    return *leftExpected / *rightExpected;
+    return lifted->first / lifted->second;
 }
 
 // ---------------------------------------------------------------------------
