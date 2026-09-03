@@ -1461,38 +1461,23 @@ public:
                 if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
                     if (holder.hasActionLog()) {
                         // entityKey/principal/timestampMs are filled in by recordIfAttached.
-                        holder.recordIfAttached(::morph::journal::LogEntry{
-                            .seq = 0,
-                            .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                            .entityKey = {},
-                            .actionType = std::string{::morph::model::ActionTraits<Action>::typeId()},
-                            .payload = ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
-                            .schema = ::morph::model::detail::actionPayloadSchema<Action>(),
-                            .result = ::morph::model::ActionTraits<Action>::resultToJson(*result),
-                            .outcome = ::morph::journal::Outcome::Succeeded,
-                            .error = {},
-                            .principal = {},
-                            .timestampMs = 0,
-                        });
+                        ::morph::model::detail::recordActionSuccess(
+                            holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
+                            std::string{::morph::model::ActionTraits<Action>::typeId()},
+                            ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
+                            ::morph::model::detail::actionPayloadSchema<Action>(),
+                            ::morph::model::ActionTraits<Action>::resultToJson(*result));
                     }
                 }
                 return result;
             } catch (const std::exception& exc [[maybe_unused]]) {
                 if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
                     if (holder.hasActionLog()) {
-                        holder.recordIfAttached(::morph::journal::LogEntry{
-                            .seq = 0,
-                            .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                            .entityKey = {},
-                            .actionType = std::string{::morph::model::ActionTraits<Action>::typeId()},
-                            .payload = ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
-                            .schema = ::morph::model::detail::actionPayloadSchema<Action>(),
-                            .result = {},
-                            .outcome = ::morph::journal::Outcome::Failed,
-                            .error = exc.what(),
-                            .principal = {},
-                            .timestampMs = 0,
-                        });
+                        ::morph::model::detail::recordActionFailure(
+                            holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
+                            std::string{::morph::model::ActionTraits<Action>::typeId()},
+                            ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
+                            ::morph::model::detail::actionPayloadSchema<Action>(), exc.what());
                     }
                 }
                 throw;

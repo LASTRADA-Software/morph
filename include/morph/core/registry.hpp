@@ -238,6 +238,69 @@ inline std::string actionPayloadSchema() {
     }
 }
 
+/// @brief Records one executed action's *successful* outcome to @p holder's
+///        attached action log, if any (`IModelHolder::recordIfAttached` is
+///        itself a no-op with none attached).
+///
+/// Shared by the two sites that actually execute an action and must record
+/// the result either way: `ActionDispatcher::registerAction`'s runner
+/// (server-side dispatch, this file) and `Bridge::executeVia`'s local op
+/// (`bridge.hpp`, the in-process `LocalBackend` path). Paired with
+/// `recordActionFailure` below rather than a single outcome-plus-two-strings
+/// function, so a call site cannot transpose `result`/`error` into the wrong
+/// slot for the outcome it is actually recording. `seq`, `entityKey`,
+/// `principal`, and `timestampMs` are left at their `LogEntry` defaults —
+/// `recordIfAttached` overwrites `entityKey`/`principal`/`timestampMs`
+/// itself, and the sink assigns `seq` on append.
+/// @param holder     Model holder to record against.
+/// @param modelType  `ModelTraits<Model>::typeId()`.
+/// @param actionType `ActionTraits<Action>::typeId()`.
+/// @param payload    JSON-encoded request (`ActionTraits<Action>::toJson`).
+/// @param schema     `actionPayloadSchema<Action>()`, computed once by the caller.
+/// @param result     JSON-encoded result (`ActionTraits<Action>::resultToJson`).
+inline void recordActionSuccess(IModelHolder& holder, std::string modelType, std::string actionType,
+                                std::string payload, std::string schema, std::string result) {
+    holder.recordIfAttached(::morph::journal::LogEntry{
+        .seq = 0,
+        .modelType = std::move(modelType),
+        .entityKey = {},
+        .actionType = std::move(actionType),
+        .payload = std::move(payload),
+        .schema = std::move(schema),
+        .result = std::move(result),
+        .outcome = ::morph::journal::Outcome::Succeeded,
+        .error = {},
+        .principal = {},
+        .timestampMs = 0,
+    });
+}
+
+/// @brief Records one executed action's *failed* outcome to @p holder's
+///        attached action log, if any. See `recordActionSuccess` above (its
+///        paired counterpart) for the shared rationale.
+/// @param holder     Model holder to record against.
+/// @param modelType  `ModelTraits<Model>::typeId()`.
+/// @param actionType `ActionTraits<Action>::typeId()`.
+/// @param payload    JSON-encoded request (`ActionTraits<Action>::toJson`).
+/// @param schema     `actionPayloadSchema<Action>()`, computed once by the caller.
+/// @param error      `std::exception::what()`.
+inline void recordActionFailure(IModelHolder& holder, std::string modelType, std::string actionType,
+                                std::string payload, std::string schema, std::string error) {
+    holder.recordIfAttached(::morph::journal::LogEntry{
+        .seq = 0,
+        .modelType = std::move(modelType),
+        .entityKey = {},
+        .actionType = std::move(actionType),
+        .payload = std::move(payload),
+        .schema = std::move(schema),
+        .result = {},
+        .outcome = ::morph::journal::Outcome::Failed,
+        .error = std::move(error),
+        .principal = {},
+        .timestampMs = 0,
+    });
+}
+
 /// @brief Exception thrown when JSON serialisation or deserialisation fails.
 struct ParseError : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -442,38 +505,20 @@ public:
                 if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
                     if (holder.hasActionLog()) {
                         // entityKey/principal/timestampMs are filled in by recordIfAttached.
-                        holder.recordIfAttached(::morph::journal::LogEntry{
-                            .seq = 0,
-                            .modelType = std::string{ModelTraits<Model>::typeId()},
-                            .entityKey = {},
-                            .actionType = std::string{ActionTraits<Action>::typeId()},
-                            .payload = std::string{payloadJson},
-                            .schema = detail::actionPayloadSchema<Action>(),
-                            .result = resultJson,
-                            .outcome = ::morph::journal::Outcome::Succeeded,
-                            .error = {},
-                            .principal = {},
-                            .timestampMs = 0,
-                        });
+                        detail::recordActionSuccess(holder, std::string{ModelTraits<Model>::typeId()},
+                                                    std::string{ActionTraits<Action>::typeId()},
+                                                    std::string{payloadJson}, detail::actionPayloadSchema<Action>(),
+                                                    resultJson);
                     }
                 }
                 return resultJson;
             } catch (const std::exception& exc [[maybe_unused]]) {
                 if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
                     if (holder.hasActionLog()) {
-                        holder.recordIfAttached(::morph::journal::LogEntry{
-                            .seq = 0,
-                            .modelType = std::string{ModelTraits<Model>::typeId()},
-                            .entityKey = {},
-                            .actionType = std::string{ActionTraits<Action>::typeId()},
-                            .payload = std::string{payloadJson},
-                            .schema = detail::actionPayloadSchema<Action>(),
-                            .result = {},
-                            .outcome = ::morph::journal::Outcome::Failed,
-                            .error = exc.what(),
-                            .principal = {},
-                            .timestampMs = 0,
-                        });
+                        detail::recordActionFailure(holder, std::string{ModelTraits<Model>::typeId()},
+                                                    std::string{ActionTraits<Action>::typeId()},
+                                                    std::string{payloadJson}, detail::actionPayloadSchema<Action>(),
+                                                    exc.what());
                     }
                 }
                 throw;
