@@ -47,16 +47,43 @@ MANIFEST="$OUT/coverage_objects.txt"
 # green whether or not it still detects anything, and
 # scripts/test_check_coverage_objects.sh can exercise it without a build.
 #
-# Checked before the gate runs, cheap first: without profile data there is
-# nothing to report either way, and the gate's own ctest query is the slowest
-# thing in this script. Running it only to die twenty lines later on an empty
-# profraw set is the wrong order for anyone driving this by hand.
-PROFILES=$(find "$OUT" -name "*.profraw" 2>/dev/null | tr '\n' ' ')
-if [ -z "$PROFILES" ]; then
-    echo "ERROR: No .profraw files found in $OUT." >&2
-    echo "Did you set LLVM_PROFILE_FILE and run ctest --preset clang-coverage?" >&2
-    exit 1
-fi
+# -- The profile set this run merges: bounded, not discovered ---------------
+#
+# `find "$OUT" -name '*.profraw'` used to be unbounded and had no cleanup of
+# its own (morph#430). `LLVM_PROFILE_FILE`'s `%p` (process id) template means
+# a stale file is never overwritten by a later run -- it just sits there and
+# the next `find` picks it up alongside the current run's output, with no
+# upper bound on how old "alongside" can be. 2,445 such files were found
+# sitting in one such tree, left by prior runs and hand-run binaries, folded
+# into `merged.profdata` by nothing more than the fact that they matched the
+# name pattern. A stale line's counts joining the current report is wrong in
+# the flattering direction -- a line covered by a since-deleted test still
+# reads as covered -- and it is the same failure shape this script's own
+# comments already document twice over for morph#141 and morph#179: the
+# script runs, the report uploads, and the figure is computed over the wrong
+# input.
+#
+# The fix is at the trailing edge rather than the leading one: `coverage.sh`
+# does not control when `ctest` runs (CI and a local checkout both invoke them
+# as two separate steps), so it cannot clean "before ctest" itself. What it
+# can do -- and does -- is delete every `.profraw` it merges once the merge
+# has succeeded, every time. That makes the profile set for *this* run exactly
+# "everything written since the last successful `coverage.sh`", which is a
+# bound with no reliance on wall-clock time or on the caller remembering a
+# separate clean step: a workspace that runs `coverage.sh` at all, including a
+# persistent self-hosted-runner workspace across many CI runs, can never carry
+# a `.profraw` forward past the run that consumed it. `check_coverage_profiles.sh`
+# holds this as a gate of its own, on the same terms as the two neighbouring
+# ones below -- a separate script because a gate nobody tests reports green
+# whether or not it still detects anything, and
+# scripts/test_check_coverage_profiles.sh exercises it without a build.
+#
+# Checked before the object-manifest gate runs, cheap first: without profile
+# data there is nothing to report either way, and that gate's own ctest query
+# is the slowest thing in this script. Running it only to die twenty lines
+# later on an empty profraw set is the wrong order for anyone driving this by
+# hand.
+PROFILES=$(bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_profiles.sh" "$OUT")
 
 bash "$(dirname "${BASH_SOURCE[0]}")/check_coverage_objects.sh" "$OUT"
 
@@ -261,3 +288,12 @@ python3 scripts/aggregate_lcov_branches.py \
 # record per template instantiation and a header-only template library scores
 # one source branch dozens of times in the raw file.
 python3 scripts/check_branch_coverage.py "$OUT/coverage.lcov" --objects "$MANIFEST"
+
+# Every .profraw merged above is now folded into "$MERGED" and reflected in
+# every report this run produced -- deleting them here loses nothing this run
+# needed and is what keeps the next run's PROFILES bounded to its own output
+# (see the comment at this script's PROFILES assignment, morph#430). Reached
+# only after every gate and export above has exited 0: a failed run leaves its
+# .profraw in place, so a rerun after a fix still has profile data to merge
+# instead of needing `ctest` run again from scratch.
+rm -f $PROFILES

@@ -132,6 +132,21 @@ jobs:
       - name: Self-test the coverage-object checker
         run: bash scripts/test_check_coverage_objects.sh
 
+      # scripts/check_coverage_profiles.sh, on the same terms: the gate itself
+      # runs inside scripts/coverage.sh, first, before the object-manifest
+      # check above -- it only lists build-dir-shaped directory contents, so
+      # its self-test needs no build either.
+      #
+      # Its defect is also a silence, in the flattering direction rather than
+      # the shrinking one this job's other two guard against: an unbounded,
+      # recursive `find` picked up 2,445 stale .profraw files left by prior
+      # runs, with nothing that ever deleted them, and folded their counts
+      # into the current report as if they belonged to it (morph#430). A gate
+      # that had gone blind to an empty profile set would report exactly the
+      # same green this one does when a real run's data is present.
+      - name: Self-test the coverage-profiles checker
+        run: bash scripts/test_check_coverage_profiles.sh
+
       # scripts/check_coverage_roots.sh, on the same terms: the gate itself runs
       # inside scripts/coverage.sh (it needs the built objects and the merged
       # profile), and its self-test reads hand-written `llvm-cov export
