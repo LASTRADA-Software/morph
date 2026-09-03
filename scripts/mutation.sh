@@ -223,6 +223,13 @@ fi
 # printing the score. The mutants are large: cxx_remove_void_call quotes the
 # whole call it deletes, and remote.hpp's dispatch lambdas run to dozens of
 # lines. The IDE reporter writes the same information as text and does not.
+# `set +e` around the runner, and it is load-bearing rather than sloppy:
+# mull-runner exits non-zero whenever mutants survive, which is the normal
+# outcome and the one this script exists to report. Under `set -e` that ended the
+# script immediately after a 46-minute run and before the score was printed --
+# with the log ending on mull's own "Surviving mutants: N" line, which reads
+# exactly like a successful finish.
+set +e
 MULL_CONFIG="${PWD}/${build_dir}/mull.yml" "$runner" \
     --workers "${MULL_WORKERS:-$(nproc)}" \
     --timeout "${MULL_TIMEOUT_MS:-60000}" \
@@ -230,6 +237,9 @@ MULL_CONFIG="${PWD}/${build_dir}/mull.yml" "$runner" \
     --report-dir "${build_dir}" \
     --report-name "mutation-${scope}" \
     "${build_dir}/${binary}"
+runner_status=$?
+set -e
+readonly runner_status
 
 # Printed here rather than left to Mull. mull-runner emits its own
 # "Mutation score: N%" line for some reporter selections and not for others --
@@ -239,6 +249,14 @@ MULL_CONFIG="${PWD}/${build_dir}/mull.yml" "$runner" \
 # line carries both halves, so the score is derived from the artefact rather
 # than from stdout.
 readonly report="${build_dir}/mutation-${scope}.txt"
+# The report is the artefact, so its absence is the real failure -- and it is
+# also how a genuine runner error (a missing library, a crashed baseline) is told
+# apart from the ordinary non-zero of "some mutants survived".
+if [ ! -s "$report" ]; then
+    echo "scripts/mutation.sh: mull-runner exited ${runner_status} and wrote no" >&2
+    echo "  report at ${report}." >&2
+    exit 1
+fi
 python3 - "$report" "$scope" <<'PYTHON'
 import re, sys
 
