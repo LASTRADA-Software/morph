@@ -394,7 +394,33 @@ TEST_CASE("morph::offline::NetworkMonitor: stop() from inside probe detaches and
     REQUIRE(stopCalled.load());
 }
 
-// ── bridge.hpp: SubscriberState weak-lock fails when handler dies mid-flight (489-490, 518-519, 532-533)
+// ── bridge.hpp: Bridge's subscription and handler bookkeeping on the paths
+// where nothing matches — removeSubscription's erase_if predicate (977-980),
+// publishResult's fan-out and dispatch loops (1026-1031, 1033-1039), and
+// deregisterHandler's find_if predicate (1307-1310).
+//
+// The identifiers are the key here and the line numbers are a hint. This marker
+// previously claimed a weak-lock failure "when handler dies mid-flight" at
+// 489-490, 518-519 and 532-533, and named a type to go with it. By the time
+// anyone checked, that name matched nothing anywhere in the tree and all three
+// ranges had drifted onto unrelated code — mid-sentence in a doc comment, a
+// ModelId load, a parkIfInFrame guard (morph#419, after morph#349 and morph#355
+// in the same shape). The dead name is not repeated here on purpose: a grep for
+// it must come back empty, or the comment reads as a live reference to whoever
+// runs that grep next. Nothing verifies either half of such a citation, so when
+// a name and a number disagree, believe the name.
+//
+// The type that does exist is Bridge::InstanceSubscription (bridge.hpp:1848) —
+// a weak_ptr to a detail::HandlerBinding, the result type it wants, and where to
+// deliver it.
+//
+// What the three cases below reach is the empty and non-matching arms: an
+// unsubscribe with no entry to erase, a publishResult with no subscription to
+// fan out to, and a deregisterHandler walking past a live binding that is not
+// the one being removed. What they do not reach is the weak-lock-failure arms
+// the old text named — `!owner` (979), `entry.binding.expired()` (1024) and a
+// falsy `sptr` (1309) — each of which needs a binding destroyed while an entry
+// for it is still listed, which nothing here arranges.
 //
 // File-scope (not anonymous namespace) for glaze reflection.
 
