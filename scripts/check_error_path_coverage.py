@@ -58,6 +58,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import check_branch_coverage  # noqa: E402 -- see parse_lcov_hits() below
+
 REPO_ROOT_MARKER = "include/morph"
 
 # Matches the issue's own methodology exactly (`grep -rn 'throw '`,
@@ -93,39 +96,35 @@ def find_sites(repo_root):
 def parse_lcov_hits(path, repo_root):
     """{source path: {line: hit_count}} -- the DA: half of the aggregated LCOV.
 
-    Deliberately ignores BRDA: records: a throw/catch site's own coverage
-    question is "did control reach this line", which DA: answers directly,
-    not "which arm of a branch on it was taken".
+    A thin adapter over check_branch_coverage.parse_lcov(), which already
+    parses this exact file format (SF:/DA:/BRDA:/end_of_record, with the same
+    repo_root-prefix stripping) for morph#404's branch gate. Reimplementing
+    that loop here would be the second copy of it in this repository, and the
+    first one is already a fix for a defect found three times over
+    (morph#349, morph#355, morph#419) -- a second, independently-maintained
+    parser is how that class of defect gets a fourth chance. Only `hits` is
+    read out of each record; `arms` (BRDA: data) is branch-arm information a
+    throw/catch site's own question -- "did control reach this line" -- has
+    no use for.
     """
-    prefix = os.path.realpath(repo_root) + os.sep
-    files: dict[str, dict[int, int]] = {}
-    current = None
-    with open(path, encoding="utf-8") as handle:
-        for raw in handle:
-            line = raw.rstrip("\n")
-            if line.startswith("SF:"):
-                source = line[3:]
-                if source.startswith(prefix):
-                    source = source[len(prefix):]
-                current = files.setdefault(source, {})
-            elif line.startswith("DA:") and current is not None:
-                number, _, hits = line[3:].partition(",")
-                current[int(number)] = current.get(int(number), 0) + int(hits)
-            elif line == "end_of_record":
-                current = None
-    return files
+    files = check_branch_coverage.parse_lcov(path, repo_root)
+    return {source: {line: record["hits"] for line, record in lines.items()}
+            for source, lines in files.items()}
 
 
 def resolve_allowlist(repo_root, sites, hits, allowlist_path, failures):
     """Audit scripts/error_path_allowlist.json in both directions; return the
     {(path, line, kind)} set it accounts for.
 
-    Same shape as check_branch_coverage.py's resolve_allowlist: keyed by
-    `source` text (matched against the file's current contents), not by line
-    number alone, because a comment citing a bare line number is a defect
-    this repository has already found three times over in the branch-coverage
-    allowlist (morph#349, morph#355, morph#419) before this script existed at
-    all -- no reason to reintroduce it here.
+    The source-text-keyed line resolution (find `source`'s current line,
+    catching a moved or ambiguous hint) is check_branch_coverage.py's
+    resolve_allowlist_source_line() -- shared rather than reimplemented, since
+    it is the fix for a defect this repository has already found three times
+    over in an allowlist keyed by line number alone (morph#349, morph#355,
+    morph#419). What is specific to this script, and stays here: validating
+    `kind`, checking the resolved line is still a throw/catch site of that
+    kind (not just any line), and checking it against `hits` rather than a
+    branch-arm partial set.
     """
     accounted = set()
     if not os.path.exists(allowlist_path):
@@ -139,7 +138,6 @@ def resolve_allowlist(repo_root, sites, hits, allowlist_path, failures):
     with open(allowlist_path, encoding="utf-8") as handle:
         document = json.load(handle)
 
-    site_texts = {(path, line): text for (path, line, _kind), text in sites.items()}
     site_kinds = {(path, line, kind) for (path, line, kind) in sites}
 
     for entry in document.get("entries", []):
@@ -154,36 +152,9 @@ def resolve_allowlist(repo_root, sites, hits, allowlist_path, failures):
                             f"suppression is not a disposition.")
             continue
 
-        source_file = os.path.join(repo_root, path)
-        if not os.path.exists(source_file):
-            failures.append(f"{allowlist_path} names {path}, which does not exist.")
-            continue
-        with open(source_file, encoding="utf-8") as handle:
-            source_lines = handle.read().splitlines()
-
-        matches = [n for n, text in enumerate(source_lines, 1) if text.strip() == wanted]
-        if not matches:
-            failures.append(
-                f"{path}:{hint} is allowlisted for a line reading {wanted!r}, which is "
-                f"nowhere in the file any more. The code changed and the disposition "
-                f"did not; re-read it rather than moving the number."
-            )
-            continue
-        if hint in matches:
-            resolved = hint
-        elif len(matches) == 1:
-            resolved = matches[0]
-            failures.append(
-                f"{path}:{hint} has moved to line {resolved}. The text still matches, so "
-                f"nothing is wrong with the disposition -- update the `line` hint."
-            )
-            continue
-        else:
-            failures.append(
-                f"{path}:{hint} is allowlisted by a source line that appears {len(matches)} "
-                f"times (lines {matches}), and none of them is {hint}, so which one is "
-                f"meant is not decidable. Make the entry unambiguous."
-            )
+        resolved, _source_lines = check_branch_coverage.resolve_allowlist_source_line(
+            repo_root, path, hint, wanted, allowlist_path, failures)
+        if resolved is None:
             continue
 
         if (path, resolved, kind) not in site_kinds:
