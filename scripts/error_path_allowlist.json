@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "throw/catch sites in include/morph that no test can reach, with the reason each",
+    "(morph#406).",
+    "",
+    "scripts/check_error_path_coverage.py counts every throw statement and catch arm under",
+    "include/morph/**/*.hpp and cross-references each against the aggregated coverage LCOV's",
+    "line-hit counts. A raw throw-site count is not itself a target -- some sites are",
+    "defensive guards this repository has already decided are unreachable in practice, the",
+    "same discipline codecov.yml's own artifact audits apply to ordinary lines. The ones here",
+    "are those sites, and the reason has to say why rather than asserting it: 'a bare",
+    "suppression is not a disposition.'",
+    "",
+    "Each entry is audited in both directions on every run, the same mechanism",
+    "scripts/branch_partial_allowlist.json uses: an entry whose site now has a nonzero hit",
+    "count fails the gate and must be deleted (a test now covers it); an entry whose source",
+    "text no longer exists, or is no longer a throw/catch site, fails too. `line` is a hint,",
+    "not the key -- the key is `source`, matched against the file's current contents, so a",
+    "stale line number does not silently keep suppressing the wrong statement after the file",
+    "moves around it."
+  ],
+  "entries": []
+}

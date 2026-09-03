@@ -174,6 +174,23 @@ jobs:
       - name: Self-test the branch-coverage checker
         run: python3 scripts/check_branch_coverage.py --self-test
 
+      # scripts/check_error_path_coverage.py, on the same terms: it also reads
+      # the aggregated LCOV scripts/coverage.sh produces, and its self-test
+      # needs only hand-written fixture headers and a hand-written LCOV
+      # fragment.
+      #
+      # This one measures a question no other instrument in the repository
+      # answers: not "was this line executed" but "did a test drive this
+      # specific throw statement or catch arm" (morph#406). Line coverage
+      # cannot tell the difference between a throw that ran because a test
+      # exercised the failure and one that ran only because the happy path
+      # passes through it; a catch arm that swallows the wrong thing changes
+      # nothing an ordinary assertion observes. morph#347 and morph#348 were
+      # both exactly that shape, both in include/morph/core, both live in
+      # production before anyone noticed.
+      - name: Self-test the error-path coverage checker
+        run: python3 scripts/check_error_path_coverage.py --self-test
+
   # ── The wire/action surface <-> the scenario corpus that covers it ──────
   # scripts/scenario/scenario_coverage.py enumerates two surfaces straight out
   # of the source -- every envelope kind and refusal RemoteServer can put on
