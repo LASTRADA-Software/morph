@@ -733,7 +733,7 @@ TEST_CASE("A rule firing on move-to-column adds a tag, journaled with a causal p
 
     const auto ruleId = model
                             .execute(kanban::CreateRule{.projectId = projectId,
-                                                        .triggerColumnId = doneColumnId,
+                                                        .triggerColumnId = *doneColumnId,
                                                         .mutationType = kanban::RuleMutationType::AddTag,
                                                         .mutationValue = "closed"})
                             .ruleId;
@@ -786,7 +786,7 @@ TEST_CASE("Replaying a move-to-Done journal entry does not re-fire its rule", "[
             .tasks.front()
             .id;
     model.execute(kanban::CreateRule{.projectId = projectId,
-                                     .triggerColumnId = doneColumnId,
+                                     .triggerColumnId = *doneColumnId,
                                      .mutationType = kanban::RuleMutationType::AddTag,
                                      .mutationValue = "closed"});
 
@@ -849,7 +849,7 @@ TEST_CASE("GetRules refuses another project's id rather than answering with the 
     model.execute(kanban::OpenBoard{.projectId = projectA});
     const auto columnOnA = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.front().id;
     model.execute(kanban::CreateRule{.projectId = projectA,
-                                     .triggerColumnId = columnOnA,
+                                     .triggerColumnId = *columnOnA,
                                      .mutationType = kanban::RuleMutationType::AddTag,
                                      .mutationValue = "shipped"});
 
@@ -875,7 +875,7 @@ TEST_CASE("CreateRule refuses another project's id rather than creating the rule
     // that used to succeed, writing the rule onto A and reporting an id for
     // it as though B had been served.
     CHECK_THROWS_AS(model.execute(kanban::CreateRule{.projectId = projectB,
-                                                     .triggerColumnId = columnOnA,
+                                                     .triggerColumnId = *columnOnA,
                                                      .mutationType = kanban::RuleMutationType::AddTag,
                                                      .mutationValue = "shipped"}),
                     kanban::NotFound);

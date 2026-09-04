@@ -194,7 +194,7 @@ TEST_CASE("Every action on an unattached handler is refused by name, never with 
           }) == "RemoveAttachment: handler was never attached via OpenBoard");
     CHECK(errorTextOf([&] {
               return model.execute(kanban::CreateRule{.projectId = projectId,
-                                                      .triggerColumnId = kanban::ColumnId{1},
+                                                      .triggerColumnId = std::int64_t{1},
                                                       .mutationType = kanban::RuleMutationType::AddTag,
                                                       .mutationValue = "urgent"});
           }) == "CreateRule: handler was never attached via OpenBoard");

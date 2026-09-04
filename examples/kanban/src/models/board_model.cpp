@@ -771,7 +771,11 @@ CreateRuleResult BoardModel::execute(const CreateRule& action) {
         // The rule's trigger column must belong to this project -- same "trust
         // nothing read before this call" discipline requireColumnBelongsToProject
         // already applies to CreateTask/MoveTaskPosition's destination column.
-        requireColumnBelongsToProject(mapper.Get(), project, action.triggerColumnId);
+        // action.triggerColumnId is a forms::Choice (a user-chosen foreign
+        // key, rule 3) on the wire; the model works in the plain ColumnId
+        // every other trigger-column check here already uses.
+        const auto triggerColumnId = ColumnId::fromOptional(action.triggerColumnId.value);
+        requireColumnBelongsToProject(mapper.Get(), project, triggerColumnId);
 
         ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
         db::RuleRecord rec;
@@ -784,7 +788,7 @@ CreateRuleResult BoardModel::execute(const CreateRule& action) {
         // exactly one member), so this mapping needs no per-trigger-kind
         // dispatch today.
         rec.conditionField = "columnId";
-        rec.conditionValue = std::to_string(*action.triggerColumnId);
+        rec.conditionValue = std::to_string(*triggerColumnId);
         rec.mutationType = std::string{ruleMutationTypeToString(action.mutationType)};
         rec.mutationValue = action.mutationValue;
         mapper->Create(rec);

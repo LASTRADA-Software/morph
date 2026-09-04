@@ -87,6 +87,19 @@ public:
     /// @param bodyJson   Fully-assembled JSON body, as `DynamicForm` builds it.
     void submitForm(const QString& actionType, const QString& bodyJson);
 
+    /// @brief Executes @p optionsAction with @p bodyJson to fetch a `Choice`
+    ///        field's combo-box options -- `CreateRule::triggerColumnId`'s
+    ///        `GetBoardState` provider is this presenter's first one. Routed
+    ///        through the same type-erased `executeJson` path `submitForm`
+    ///        uses, since the options action is named by the schema, not
+    ///        known at compile time. Emits `optionsFetched` on success,
+    ///        `formReplyReceived`-shaped `failed` on error -- mirrors
+    ///        `morph::qt::forms::FormsControllerCore::fetchOptions`.
+    /// @param optionsAction Registered action type id that serves the options.
+    /// @param bodyJson      Fully-assembled JSON body for the options action
+    ///                      (`"{}"` for an independent `Choice`).
+    void fetchOptions(const QString& optionsAction, const QString& bodyJson);
+
     /// @brief Creates a new column on this handler's attached board. Emits
     ///        `boardOpened` (with the board's full post-creation state) on
     ///        success, `failed` on error.
@@ -278,6 +291,12 @@ signals:
     /// @param ok         Whether the dispatch succeeded.
     /// @param payload    Result JSON on success, the error message otherwise.
     void formReplyReceived(QString actionType, bool ok, QString payload);
+    /// @brief Emitted once per `fetchOptions`, carrying that `Choice` field's
+    ///        options-action outcome.
+    /// @param optionsAction Registered action type id that served the options.
+    /// @param ok            Whether the dispatch succeeded.
+    /// @param payload       Result JSON on success, the error message otherwise.
+    void optionsFetched(QString optionsAction, bool ok, QString payload);
     /// @brief Emitted for any action's typed error — @p message is
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);

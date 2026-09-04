@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/forms/forms.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -95,6 +98,13 @@ enum class RuleMutationType : std::uint8_t { AddTag, RemoveTag };
     return RuleMutationType::AddTag;
 }
 
+/// @brief `forms::Choice` over a column id, backed by `GetBoardState`
+///        (`board_dto.hpp`, whose `GetBoardResult` returns `columns` as its
+///        first array member) -- the trigger-column picker
+///        `examples/IMPLEMENTATION.md` rule 3 prescribes for a user-chosen
+///        foreign key.
+using TriggerColumnChoice = ::morph::forms::Choice<std::int64_t, "GetBoardState", "id", "name">;
+
 /// @brief Creates an automation rule on `projectId`'s board: "when a task is
 ///        moved to `triggerColumnId`, apply `mutationType`/`mutationValue`."
 ///        `triggerColumnId` is this rung's only supported condition --
@@ -110,12 +120,32 @@ enum class RuleMutationType : std::uint8_t { AddTag, RemoveTag };
 ///        served from the attached one.
 struct CreateRule {
     ProjectId projectId;
-    ColumnId triggerColumnId;
+    TriggerColumnChoice triggerColumnId;
     RuleMutationType mutationType = RuleMutationType::AddTag;
     std::string mutationValue;
 
+    /// `projectId` is **context, not input**: a rule is created on whichever
+    /// board is open, and `gui/qml/RulesView.qml` supplies it from the
+    /// attached `BoardBridge`. `hidden` says exactly that to every renderer --
+    /// the field still travels in the payload, and `BoardModel::execute()`
+    /// still re-checks it names the attached board
+    /// (`requireProjectMatchesAttachedBoard`), so this is presentation and
+    /// never a security control (`docs/spec/forms/forms.md`, "Field metadata
+    /// is not a security control"). Same shape as `CreateTask::columnId`/
+    /// `swimlaneId` (board_dto.hpp) and `SetMemberRole::projectId`
+    /// (project_dto.hpp).
+    static constexpr std::array<::morph::forms::FieldMeta, 1> fieldMetadata{
+        ::morph::forms::FieldMeta{.field = "projectId", .hidden = true},
+    };
+
+    /// Side-effectful, so the renderer draws its own Submit button rather
+    /// than firing the moment the draft is ready -- same declaration, for the
+    /// same reason, as every other mutating board form (`CreateColumn`,
+    /// `CreateSwimlane`, `CreateTask`, board_dto.hpp).
+    static constexpr bool explicitSubmit = true;
+
     [[nodiscard]] bool validate() const noexcept {
-        return projectId.hasValue() && triggerColumnId.hasValue() && !mutationValue.empty() &&
+        return projectId.hasValue() && triggerColumnId.value.has_value() && !mutationValue.empty() &&
                mutationValue.size() <= kMaxRuleMutationValueBytes;
     }
 };

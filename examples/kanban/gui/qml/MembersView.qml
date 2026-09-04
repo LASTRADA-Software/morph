@@ -4,24 +4,22 @@
 // GetProjectRoles' MemberRole{principal, role} rows (ProjectAdminBridge.roles),
 // each row a principal label, a role ComboBox (Viewer/Member/Manager) calling
 // setMemberRole(principal, role) on selection change, and a remove button
-// calling removeMember(principal). Adding a member is a text field
-// (principal) + role picker, calling setMemberRole directly -- there is no
-// "add member by search," per the minimal-bootstrap scope decision (design
-// spec §1).
+// calling removeMember(principal). Adding a member is a schema-driven
+// `SetMemberRole` form (`morph::forms::schemaJson<SetMemberRole>()` through
+// the shipped MorphForms DynamicForm) -- there is no "add member by search,"
+// per the minimal-bootstrap scope decision (design spec §1).
 //
-// This is one of two screens in this rung whose inputs stay hand-built, under
-// examples/IMPLEMENTATION.md rule 2's justification (a) -- "the generated UI
-// cannot express the interaction" -- and, per that rule, the gap is filed:
-// morph#386. Concretely: `SetMemberRole::role` is a `kanban::Role` enum class,
-// which `morph::forms::schemaJson` emits as a fully-described closed set
-// ({"type":"string","oneOf":[{"title":"Viewer","const":"Viewer"},...]}), and
-// the shipped DynamicForm renders that as a plain free-text field --
-// measured, not assumed: with that exact schema it draws
-// TextField(objectName "field_role"), reports ready == true for
-// role = "Emperor", and submits {"role":"Emperor"}. Replacing the three-item
-// ComboBox below with a text box that accepts any string at all would be a
-// worse screen, so it stays until morph#386 lands. Everything else about this
-// view is already schema-shaped and converts in one step once it does.
+// The per-row role ComboBox above stays hand-built: it edits one field of an
+// existing row in place, on selection change, with no Submit gesture and no
+// draft -- not the create-a-new-thing shape DynamicForm renders. Converting
+// it would mean a form dialog per row, not a control swap, which is a
+// different and worse interaction than the inline picker it would replace.
+// This is examples/IMPLEMENTATION.md rule 2's justification (a) on the
+// row-editing interaction, the same grounds BoardView.qml's header comment
+// gives for why MoveTaskPosition's drag gesture stays hand-built -- not the
+// enum-rendering gap morph#386 fixed, which this file no longer has (the "add
+// member" row's role picker is now the schema-driven combo box DynamicForm
+// draws for `SetMemberRole::role`'s closed set). See morph#393.
 //
 // `projectAdminBridge` defaults to null and `projectId` defaults to -1 so
 // this same file also loads standalone with nothing wired up, which is
@@ -33,6 +31,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import MorphForms
 
 ColumnLayout {
     id: page
@@ -41,6 +40,15 @@ ColumnLayout {
     property var projectAdminBridge: null
     property int projectId: -1
     property string projectName: ""
+
+    /// The bridge's schema document, parsed once. `({})` while unwired, which
+    /// is what the smoke test loads. Mirrors ProjectListView.qml's identical
+    /// property; this view has its own copy rather than threading one down
+    /// from the parent, matching this file's existing standalone-load
+    /// convention (`projectAdminBridge`/`projectId` above).
+    readonly property var schemas: page.projectAdminBridge === null
+                                   ? ({})
+                                   : JSON.parse(page.projectAdminBridge.schemasJson)
 
     readonly property var roleNames: ["Viewer", "Member", "Manager"]
 
@@ -89,28 +97,45 @@ ColumnLayout {
         }
     }
 
-    RowLayout {
+    DynamicForm {
+        id: addMemberForm
+        objectName: "addMemberForm"
         Layout.fillWidth: true
+        actionType: "SetMemberRole"
+        schema: page.schemas["SetMemberRole"] || ({})
+        controller: page.projectAdminBridge
 
-        TextField {
-            id: newPrincipal
-            Layout.fillWidth: true
-            placeholderText: "principal to add"
+        // The one hidden context field (see project_dto.hpp's own comment on
+        // it). Seeded on creation and re-seeded after every successful
+        // submit, since resetFields() clears hidden fields too -- same
+        // discipline BoardView.qml's createTaskForm delegate documents for
+        // CreateTask's own hidden columnId/swimlaneId.
+        function bindContext() {
+            setFieldValue("projectId", String(page.projectId))
         }
 
-        ComboBox {
-            id: newRole
-            model: page.roleNames
-            currentIndex: 1
+        function rebind() {
+            resetFields()
+            bindContext()
         }
 
-        Button {
-            text: "Add"
-            enabled: page.projectAdminBridge !== null && page.projectId >= 0 && newPrincipal.text.length > 0
-            onClicked: {
-                page.projectAdminBridge.setMemberRole(page.projectId, newPrincipal.text,
-                                                       page.roleNames[newRole.currentIndex])
-                newPrincipal.text = ""
+        Component.onCompleted: bindContext()
+    }
+
+    // `page.projectId` changes while this view's DynamicForm instance stays
+    // alive -- ProjectListView.qml keeps one MembersView and swaps which
+    // project it shows (`membersProjectId`) rather than recreating the view
+    // per selection -- so the hidden field needs an explicit re-seed here,
+    // not just the Component.onCompleted above.
+    onProjectIdChanged: addMemberForm.bindContext()
+
+    Connections {
+        target: page.projectAdminBridge
+        enabled: page.projectAdminBridge !== null
+
+        function onReplyReceived(actionType, ok, payload) {
+            if (actionType === "SetMemberRole" && ok) {
+                addMemberForm.rebind()
             }
         }
     }
