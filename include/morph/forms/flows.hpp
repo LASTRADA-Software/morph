@@ -223,7 +223,7 @@ public:
         beginStep();
     }
 
-    /// @brief Refuses every callback this session installed.
+    /// @brief Stops every callback this session installed from being delivered.
     ///
     /// There is nothing to detach. A step's callbacks are `.then`/`.onError`
     /// continuations on the `Completion` that `BridgeHandler::execute<A>()`
@@ -231,15 +231,28 @@ public:
     /// this session could remove itself from, and possibly running on another
     /// thread the moment this destructor starts. `_callbacks` gates every
     /// installed callback on a token the callback checks *before* touching
-    /// `this`, so a callback still in flight when this destructor runs is
-    /// refused instead of touching a partially- or fully-destroyed object.
+    /// `this`.
+    ///
+    /// The strength of that gate depends on which thread destroys this
+    /// session, exactly as `CallbackScope`'s "Boundary of the guarantee"
+    /// describes: destroying it on the same thread the step's continuations
+    /// are delivered on makes check-then-run atomic, so a callback still in
+    /// flight is refused instead of touching a partially- or fully-destroyed
+    /// object. Destroying it from another thread is advisory only — a
+    /// continuation that read `Active` a moment before `requestStop()` lands
+    /// can still go on to run against a destroyed session — since `_callbacks`
+    /// gates delivery but never blocks until an in-flight callback finishes.
+    /// A caller destroying a `FlowSession` off the delivery thread is
+    /// responsible for its own synchronisation.
     ///
     /// `requestStop()` is called explicitly rather than left to the member's own
     /// destruction, even though `_callbacks` is declared last: members are
-    /// destroyed only *after* the destructor body, so anything this body does
-    /// that can pump an event loop (a `sendSync`-style blocking call) would
+    /// destroyed only *after* the destructor body, so a body that grew a call
+    /// pumping an event loop (a `sendSync`-style blocking call) would
     /// otherwise deliver into a half-dead session. This is the "teardown that
-    /// pumps" escape hatch docs/spec/core/callback_scope.md documents.
+    /// pumps" escape hatch docs/spec/core/callback_scope.md documents; the
+    /// body here does not do that today, but stopping first keeps the
+    /// destructor correct if one is added.
     ~FlowSession() { _callbacks.requestStop(); }
 
     FlowSession(const FlowSession&) = delete;
