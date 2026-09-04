@@ -131,7 +131,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a45863ef8a48eedab36a185e5b1d09d9c" id="r_a45863ef8a48eedab36a185e5b1d09d9c"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a45863ef8a48eedab36a185e5b1d09d9c">FlowSession</a> (<a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">::morph::bridge::BridgeHandler</a>&lt; Model &gt; &amp;handler, std::function&lt; void(std::exception_ptr)&gt; onError=nullptr)</td></tr>
 <tr class="memdesc:a45863ef8a48eedab36a185e5b1d09d9c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a flow over <code class="param">handler</code>, starting at step 0.  <br /></td></tr>
 <tr class="memitem:a15245d500bf9ac9c384f7e849cdf0366" id="r_a15245d500bf9ac9c384f7e849cdf0366"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a15245d500bf9ac9c384f7e849cdf0366">~FlowSession</a> ()</td></tr>
-<tr class="memdesc:a15245d500bf9ac9c384f7e849cdf0366"><td class="mdescLeft">&#160;</td><td class="mdescRight">Refuses every callback this session installed.  <br /></td></tr>
+<tr class="memdesc:a15245d500bf9ac9c384f7e849cdf0366"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stops every callback this session installed from being delivered.  <br /></td></tr>
 <tr class="memitem:a9265b0b90ed6f74cd6f97150a537f777" id="r_a9265b0b90ed6f74cd6f97150a537f777"><td class="memItemLeft"><a id="a9265b0b90ed6f74cd6f97150a537f777" name="a9265b0b90ed6f74cd6f97150a537f777"></a>
 &#160;</td><td class="memItemRight"><b>FlowSession</b> (const FlowSession &amp;)=delete</td></tr>
 <tr class="memitem:a27d9f508bb27f30914b8332d2e30e71c" id="r_a27d9f508bb27f30914b8332d2e30e71c"><td class="memItemLeft"><a id="a27d9f508bb27f30914b8332d2e30e71c" name="a27d9f508bb27f30914b8332d2e30e71c"></a>
@@ -245,12 +245,13 @@ template&lt;typename Model, typename... Steps&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Refuses every callback this session installed. </p>
-<p>There is nothing to detach. A step's callbacks are <span class="tt">.then</span>/<span class="tt">.onError</span> continuations on the <span class="tt">Completion</span> that <span class="tt">BridgeHandler::execute&lt;A&gt;()</span> returned — already owned by the in-flight dispatch, not held in a map this session could remove itself from, and possibly running on another thread the moment this destructor starts. <span class="tt">_callbacks</span> gates every installed callback on a token the callback checks <em>before</em> touching <span class="tt">this</span>, so a callback still in flight when this destructor runs is refused instead of touching a partially- or fully-destroyed object.</p>
-<p><span class="tt">requestStop()</span> is called explicitly rather than left to the member's own destruction, even though <span class="tt">_callbacks</span> is declared last: members are destroyed only <em>after</em> the destructor body, so anything this body does that can pump an event loop (a <span class="tt">sendSync</span>-style blocking call) would otherwise deliver into a half-dead session. This is the "teardown that
-pumps" escape hatch docs/spec/core/callback_scope.md documents. </p>
+<p>Stops every callback this session installed from being delivered. </p>
+<p>There is nothing to detach. A step's callbacks are <span class="tt">.then</span>/<span class="tt">.onError</span> continuations on the <span class="tt">Completion</span> that <span class="tt">BridgeHandler::execute&lt;A&gt;()</span> returned — already owned by the in-flight dispatch, not held in a map this session could remove itself from, and possibly running on another thread the moment this destructor starts. <span class="tt">_callbacks</span> gates every installed callback on a token the callback checks <em>before</em> touching <span class="tt">this</span>.</p>
+<p>The strength of that gate depends on which thread destroys this session, exactly as <span class="tt">CallbackScope</span>'s "Boundary of the guarantee" describes: destroying it on the same thread the step's continuations are delivered on makes check-then-run atomic, so a callback still in flight is refused instead of touching a partially- or fully-destroyed object. Destroying it from another thread is advisory only — a continuation that read <span class="tt">Active</span> a moment before <span class="tt">requestStop()</span> lands can still go on to run against a destroyed session — since <span class="tt">_callbacks</span> gates delivery but never blocks until an in-flight callback finishes. A caller destroying a <span class="tt"><a class="el" href="../../d1/d5c/classmorph_1_1flows_1_1FlowSession.html" title="Sequences an ordered list of registered actions (Steps...) as one multi-step flow sharing captured va...">FlowSession</a></span> off the delivery thread is responsible for its own synchronisation.</p>
+<p><span class="tt">requestStop()</span> is called explicitly rather than left to the member's own destruction, even though <span class="tt">_callbacks</span> is declared last: members are destroyed only <em>after</em> the destructor body, so a body that grew a call pumping an event loop (a <span class="tt">sendSync</span>-style blocking call) would otherwise deliver into a half-dead session. This is the "teardown that
+pumps" escape hatch docs/spec/core/callback_scope.md documents; the body here does not do that today, but stopping first keeps the destructor correct if one is added. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00243">243</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -304,7 +305,7 @@ template&lt;auto FieldPtr&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -336,7 +337,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>Moves to the next step, if the current step has already produced a successful result (a not-ready step does not advance). </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the flow advanced, <span class="tt">false</span> if the current step is not ready or the flow is already <span class="tt"><a class="el" href="#a7565d216e36a85f86fd6cf2c22aa4866" title="Whether the flow has advanced past the last step.">finished()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -368,7 +369,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>Returns to the previous step. Its draft — this session's own <span class="tt">std::get&lt;A&gt;(_drafts)</span> slot, the only draft in play — was never reset, so its entered values are intact. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the flow moved back, <span class="tt">false</span> if already at step 0. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00346">346</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -400,7 +401,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>Whether the flow has advanced past the last step. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once <span class="tt"><a class="el" href="#ac398cda25d834bc244338dc1812b7025" title="Moves to the next step, if the current step has already produced a successful result (a not-ready ste...">advance()</a></span> has been called successfully on the last step. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00349">349</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00362">362</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -432,7 +433,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>Whether the current step already has a captured, successful result. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <span class="tt"><a class="el" href="#ac398cda25d834bc244338dc1812b7025" title="Moves to the next step, if the current step has already produced a successful result (a not-ready ste...">advance()</a></span> would move the flow forward right now. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00353">353</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00366">366</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -464,7 +465,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>The current 0-based step position. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">sizeof...(Steps)</span> once <span class="tt"><a class="el" href="#a7565d216e36a85f86fd6cf2c22aa4866" title="Whether the flow has advanced past the last step.">finished()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00360">360</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00373">373</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -496,7 +497,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>The number of steps in this flow. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">sizeof...(Steps)</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00364">364</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00377">377</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -528,7 +529,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 <p>The registered type-id of the current step's action. </p>
 <dl class="section return"><dt>Returns</dt><dd>Empty when <span class="tt"><a class="el" href="#a7565d216e36a85f86fd6cf2c22aa4866" title="Whether the flow has advanced past the last step.">finished()</a></span> (no current step). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00381">381</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -566,7 +567,7 @@ template&lt;typename Model, typename... Steps&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The field's JSON-encoded value, or <span class="tt">std::nullopt</span> if <code class="param">path</code> was never captured (the step never fired, or never had that field). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00380">380</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
