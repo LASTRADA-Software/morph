@@ -45,7 +45,7 @@ void BoardPresenter::getBoardState() {
 }
 
 void BoardPresenter::submitForm(const QString& actionType, const QString& bodyJson) {
-    // The four board forms `kanban_schemas.hpp` publishes, and nothing else.
+    // The five board forms `kanban_schemas.hpp` publishes, and nothing else.
     // Checked against a literal list rather than handed straight to
     // `executeJson`: `BoardModel` also registers actions no form renders
     // (`MoveTaskPosition`, `DeleteRule`, `ApplyTagMutation`, ...), and a
@@ -54,9 +54,37 @@ void BoardPresenter::submitForm(const QString& actionType, const QString& bodyJs
     // to serve it. QML names types as strings; an unroutable one has to arrive
     // somewhere a human reads it.
     const std::string type = actionType.toStdString();
-    if (type != "CreateColumn" && type != "CreateSwimlane" && type != "CreateTask" && type != "AddComment") {
+    if (type != "CreateColumn" && type != "CreateSwimlane" && type != "CreateTask" && type != "AddComment" &&
+        type != "CreateRule") {
         emit formReplyReceived(actionType, false,
                                QStringLiteral("no board form in this client serves action '") + actionType + u'\'');
+        return;
+    }
+    // `CreateRule` returns `CreateRuleResult{ruleId}`, not the rebuilt board
+    // state every other form here returns -- decoded on its own branch below,
+    // mirroring the typed `createRule()` call's own reply handling, rather
+    // than forced through the `GetBoardResult` decode the other four share.
+    if (type == "CreateRule") {
+        track<std::string>(
+            _handler.executeJson(type, bodyJson.toStdString()),
+            [this, actionType](std::string resultJson) {
+                CreateRuleResult result;
+                if (glz::read_json(result, resultJson)) {
+                    emit formReplyReceived(actionType, false,
+                                           QStringLiteral("the action succeeded but its reply could not be decoded"));
+                    return;
+                }
+                // Rules are on-demand state (see `getRules()`'s own doc
+                // comment) and this reply does not carry the new listing, so
+                // `ruleCreated` is what tells a view to re-list -- the same
+                // signal the typed `createRule()` call emits, and the same
+                // `onRuleCreated -> getRules()` QML handler already relies on.
+                emit ruleCreated();
+                emit formReplyReceived(actionType, true, QString::fromStdString(resultJson));
+            },
+            [this, actionType](const std::exception_ptr& err) {
+                emit formReplyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
+            });
         return;
     }
     // `AddComment`'s taskId, echoed back on `commentAdded` below. Decoded from
@@ -89,6 +117,30 @@ void BoardPresenter::submitForm(const QString& actionType, const QString& bodyJs
         },
         [this, actionType](const std::exception_ptr& err) {
             emit formReplyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
+        });
+}
+
+void BoardPresenter::fetchOptions(const QString& optionsAction, const QString& bodyJson) {
+    // The one options provider a board form declares today:
+    // `CreateRule::triggerColumnId`'s `x-optionsAction` (kanban/dto/rule_dto.hpp's
+    // TriggerColumnChoice). Same allowlist discipline as submitForm() above,
+    // for the same reason -- a renderer names an action as a string, and an
+    // unroutable one has to be reported rather than silently reaching
+    // whatever BoardModel action happens to share that name.
+    const std::string type = optionsAction.toStdString();
+    if (type != "GetBoardState") {
+        emit optionsFetched(
+            optionsAction, false,
+            QStringLiteral("no options provider in this client serves action '") + optionsAction + u'\'');
+        return;
+    }
+    track<std::string>(
+        _handler.executeJson(type, bodyJson.toStdString()),
+        [this, optionsAction](std::string resultJson) {
+            emit optionsFetched(optionsAction, true, QString::fromStdString(resultJson));
+        },
+        [this, optionsAction](const std::exception_ptr& err) {
+            emit optionsFetched(optionsAction, false, ::morph::ladder::gui::errorText(err));
         });
 }
 
@@ -170,9 +222,13 @@ void BoardPresenter::getActivity() {
 }
 
 void BoardPresenter::createRule(ColumnId triggerColumnId, const QString& mutationType, const QString& mutationValue) {
+    // CreateRule::triggerColumnId is a forms::Choice<std::int64_t, ...> on the
+    // wire (rule 3's shape for a user-chosen foreign key); this typed call
+    // still takes the plain ColumnId every other typed call on this presenter
+    // uses, and adapts it at the one point it crosses into the DTO.
     track<CreateRuleResult>(
         _handler.execute(CreateRule{.projectId = _projectId,
-                                    .triggerColumnId = triggerColumnId,
+                                    .triggerColumnId = *triggerColumnId,
                                     .mutationType = ruleMutationTypeFromString(mutationType.toStdString()),
                                     .mutationValue = mutationValue.toStdString()}),
         [this](CreateRuleResult) { emit ruleCreated(); }, [this](const std::exception_ptr& err) { reportError(err); });

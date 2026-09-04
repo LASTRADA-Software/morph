@@ -146,7 +146,7 @@ TEST_CASE("CreateRule/GetRules/DeleteRule validate() and enum string round-trips
     // DeleteRule's actual model-level execute() is a later task's job (rule
     // evaluation), not this one.
     kanban::CreateRule createRule{.projectId = kanban::ProjectId{1},
-                                  .triggerColumnId = kanban::ColumnId{2},
+                                  .triggerColumnId = std::int64_t{2},
                                   .mutationType = kanban::RuleMutationType::AddTag,
                                   .mutationValue = "urgent"};
     CHECK(createRule.validate());
@@ -154,7 +154,7 @@ TEST_CASE("CreateRule/GetRules/DeleteRule validate() and enum string round-trips
     kanban::CreateRule missingColumn{.projectId = kanban::ProjectId{1}, .mutationValue = "urgent"};
     CHECK_FALSE(missingColumn.validate());
 
-    kanban::CreateRule emptyValue{.projectId = kanban::ProjectId{1}, .triggerColumnId = kanban::ColumnId{2}};
+    kanban::CreateRule emptyValue{.projectId = kanban::ProjectId{1}, .triggerColumnId = std::int64_t{2}};
     CHECK_FALSE(emptyValue.validate());
 
     kanban::GetRules getRules{.projectId = kanban::ProjectId{1}};

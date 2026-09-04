@@ -249,6 +249,7 @@ BoardBridge::BoardBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
     });
     connect(&_presenter, &BoardPresenter::failed, this, &BoardBridge::failed);
     connect(&_presenter, &BoardPresenter::formReplyReceived, this, &BoardBridge::replyReceived);
+    connect(&_presenter, &BoardPresenter::optionsFetched, this, &BoardBridge::optionsReceived);
 
     _networkManager = new QNetworkAccessManager{this};
 }
@@ -257,6 +258,10 @@ QString BoardBridge::schemasJson() const { return QString::fromStdString(kanbanS
 
 void BoardBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
     _presenter.submitForm(actionType, bodyJson);
+}
+
+void BoardBridge::fetchOptions(const QString& optionsAction, const QString& bodyJson) {
+    _presenter.fetchOptions(optionsAction, bodyJson);
 }
 
 void BoardBridge::applyBoard(const GetBoardResult& result) {

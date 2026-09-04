@@ -134,6 +134,17 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
         QStringLiteral("called by the shipped MorphForms DynamicForm, whose .qml is outside this rung's tree");
     audit.allowUnbound(QStringLiteral("projectAdminBridge"), QStringLiteral("submitIfValid"), rendererCalled);
     audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("submitIfValid"), rendererCalled);
+    // `fetchOptions`/`optionsReceived` are the same seam, one field kind over:
+    // `CreateRule::triggerColumnId` (morph#393) is this rung's first
+    // `morph::forms::Choice` field, and DynamicForm.qml's own
+    // Component.onCompleted calls `controller.fetchOptions(...)` and its
+    // `Connections { target: controller }` block declares `onOptionsReceived`
+    // unconditionally for every attached controller (see
+    // tests/test_gui_forms_render.cpp's "one tolerated warning" doc comment on
+    // that same unconditional declaration) -- neither call site is under
+    // examples/kanban/gui/qml/.
+    audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("fetchOptions"), rendererCalled);
+    audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("optionsReceived"), rendererCalled);
 #ifndef MORPH_BUILD_OFFLINE_SQLITE
     // `syncStatusChanged` is declared unconditionally (board_qml_bridge.hpp's
     // signals block) while *both* properties naming it as their NOTIFY --

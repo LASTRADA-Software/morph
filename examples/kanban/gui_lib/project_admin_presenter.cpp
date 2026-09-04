@@ -70,6 +70,25 @@ void ProjectAdminPresenter::submitForm(const QString& actionType, const QString&
             });
         return;
     }
+    if (type == "SetMemberRole") {
+        // `SetMemberRole` returns a bare `Ack`, not a listing, and neither
+        // `setMemberRole()`'s own typed reply nor this one carries the
+        // updated role list -- `ProjectListView.qml`'s `onMemberRoleSet`
+        // re-lists via `listRoles()`, exactly as the typed call's
+        // `memberRoleSet` signal already drives. Emitting the same signal
+        // here keeps that handler the single place that re-lists, whichever
+        // path submitted.
+        track<std::string>(
+            _projectHandler.executeJson(type, bodyJson.toStdString()),
+            [this, actionType](std::string resultJson) {
+                emit memberRoleSet();
+                emit formReplyReceived(actionType, true, QString::fromStdString(resultJson));
+            },
+            [this, actionType](const std::exception_ptr& err) {
+                emit formReplyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
+            });
+        return;
+    }
     if (type != "Login") {
         emit formReplyReceived(actionType, false,
                                QStringLiteral("no model in this client serves action '") + actionType + u'\'');

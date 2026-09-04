@@ -2034,6 +2034,27 @@ inline void annotateDeclaredBounds(glz::generic_u64& property, const FieldMeta& 
 /// @param name     Wire (JSON) name of the member, for `FieldMeta`/widget-override lookup.
 template <typename Owner, typename Member>
 void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view name) {
+    // A plain `enum class` with no `glz::meta`/`glz::enumerate` fails glaze's
+    // `glaze_enum_t` and falls through `to_json_schema<T>`'s final branch: a
+    // six-way wildcard (`{"type": ["number","string","boolean","object",
+    // "array","null"]}`) that states nothing. The shipped Qt/QML `DynamicForm`
+    // then fires two mutually exclusive kind flags on it (`isBoolean` and
+    // `isArray` both true) and draws a checkbox whose payload is a JSON array
+    // of the string "false", reporting the form `ready` for a value nobody
+    // chose (morph#392). `glz::glaze_enum_t` is the same trait glaze's own
+    // enum schema specialisation gates on, so this fires exactly when that
+    // specialisation would not have been reached -- a `static_assert` whose
+    // condition depends on @p Member, so it only fires for the specific
+    // offending member type, not every call.
+    if constexpr (std::is_enum_v<Member>) {
+        static_assert(glz::glaze_enum_t<Member>,
+                      "morph::forms: an enum class rendered as a form field must declare a glz::meta with "
+                      "glz::enumerate -- without one, schemaJson<A>() cannot describe its closed set of "
+                      "values (glaze emits a six-way wildcard type instead), and the shipped DynamicForm "
+                      "renders that wildcard as a checkbox reporting the form ready for a value the user "
+                      "never chose. See docs/spec/forms/forms.md, \"Closed sets\", and examples/"
+                      "IMPLEMENTATION.md rule 3.");
+    }
     const FieldMeta* fieldMeta = findFieldMeta<Owner>(name);
     std::string_view const declaredLabel = fieldMeta != nullptr ? fieldMeta->label : std::string_view{};
     property["title"] = declaredLabel.empty() ? inferTitle(name) : std::string{declaredLabel};

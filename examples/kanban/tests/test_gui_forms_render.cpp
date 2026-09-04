@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The five schema-driven forms of this rung's GUI, driven through the *shipped*
+// The seven schema-driven forms of this rung's GUI, driven through the *shipped*
 // renderer in a real QML engine: `CreateProject` (ProjectListView.qml),
-// `CreateColumn`/`CreateSwimlane`/`CreateTask` (BoardView.qml) and `AddComment`
+// `SetMemberRole` (MembersView.qml), `CreateColumn`/`CreateSwimlane`/
+// `CreateTask`/`CreateRule` (BoardView.qml/RulesView.qml) and `AddComment`
 // (TaskDetailPopup.qml).
 //
 // Why this exists as its own file, next to test_gui_qml_smoke.cpp rather than
@@ -271,6 +272,105 @@ TEST_CASE("ProjectListView renders CreateProject through the shipped renderer an
     CHECK_FALSE(isReady(form));
 }
 
+TEST_CASE("MembersView renders SetMemberRole through the shipped renderer and submits it",
+          "[kanban][gui][qml-forms][issue344][issue393]") {
+    // Loaded directly (not via ProjectListView's "Members" button, which this
+    // rule-6 file cannot click): MembersView.qml's own projectAdminBridge/
+    // projectId initial properties are exactly what ProjectListView.qml wires
+    // into it, and SetMemberRole::role is the closed-set field morph#386 used
+    // to force to a free-text field.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    const qlonglong projectId = seedProject(*rig);
+    REQUIRE(projectId > 0);
+
+    kanban::gui::ProjectAdminBridge bridge{rig->bridge(0), rig->executor()};
+
+    QQmlApplicationEngine engine;
+    QObject* root = loadRoot(engine, "MembersView",
+                             {{QStringLiteral("projectAdminBridge"), QVariant::fromValue(&bridge)},
+                              {QStringLiteral("projectId"), projectId}});
+
+    QObject* form = root->findChild<QObject*>(QStringLiteral("addMemberForm"));
+    REQUIRE(form != nullptr);
+    CHECK(form->property("actionType").toString() == QStringLiteral("SetMemberRole"));
+
+    // `role` is a closed `oneOf`-of-`const`s (Role's glz::meta/glz::enumerate)
+    // -- the renderer draws it as a ComboBox with the three named rows, not
+    // a free-text field, which is exactly the gap morph#386 closed.
+    QObject* roleControl = control(form, QStringLiteral("field_role"));
+    REQUIRE(roleControl != nullptr);
+    const QVariantList roleOptions = form->property("fields").toList();
+    bool foundRoleField = false;
+    for (const QVariant& entry : roleOptions) {
+        const QVariantMap field = entry.toMap();
+        if (field.value(QStringLiteral("name")).toString() != QStringLiteral("role")) continue;
+        foundRoleField = true;
+        const QVariantList enumOptions = field.value(QStringLiteral("enumOptions")).toList();
+        REQUIRE(enumOptions.size() == 3);
+        QStringList labels;
+        for (const QVariant& option : enumOptions) {
+            labels.append(option.toMap().value(QStringLiteral("label")).toString());
+        }
+        CHECK(labels.contains(QStringLiteral("Viewer")));
+        CHECK(labels.contains(QStringLiteral("Member")));
+        CHECK(labels.contains(QStringLiteral("Manager")));
+    }
+    CHECK(foundRoleField);
+
+    // `projectId` is hidden context, engaged from the view -- not typed here.
+    QObject* hiddenProject = control(form, QStringLiteral("column_projectId"));
+    REQUIRE(hiddenProject != nullptr);
+    CHECK_FALSE(hiddenProject->property("visible").toBool());
+
+    // Unlike a boolean's seeded "false", an enum ComboBox starts at
+    // currentIndex -1 -- "no selection" -- so the gate needs `role` engaged
+    // too, not just `principal` (DynamicForm.qml's resetFields()/currentIndex
+    // comments). Membership is decidable client-side once the schema states
+    // the closed set (morph#386): an out-of-set value here would leave the
+    // field's own JSON literal null and the gate unsatisfied, which is a
+    // stronger property than the free-text field this form replaced ever had.
+    CHECK_FALSE(isReady(form));
+    type(form, QStringLiteral("principal"), QStringLiteral("bob"));
+    CHECK_FALSE(isReady(form));
+    type(form, QStringLiteral("role"), QStringLiteral(R"("Member")"));
+    CHECK(isReady(form));
+    CHECK(bodyOf(form) == QStringLiteral(R"({"projectId":%1,"principal":"bob","role":"Member"})").arg(projectId));
+
+    bool roleSet = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::memberRoleSet, [&roleSet] { roleSet = true; });
+    pressSubmit(form);
+    REQUIRE(pumpUntil([&roleSet] { return roleSet; }));
+
+    bool listed = false;
+    QVariantList rows;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::rolesListed, [&](const QVariantList& roles) {
+        rows = roles;
+        listed = true;
+    });
+    bridge.listRoles(projectId);
+    REQUIRE(pumpUntil([&listed] { return listed; }));
+    // Two rows, not one: `seedProject()` makes "alice" the project's first
+    // Manager (CreateProject's own doc comment), and this submit adds "bob"
+    // alongside her rather than replacing her.
+    REQUIRE(rows.size() == 2);
+    QVariantMap bobRow;
+    bool foundBob = false;
+    for (const QVariant& entry : rows) {
+        const QVariantMap row = entry.toMap();
+        if (row.value(QStringLiteral("principal")).toString() == QStringLiteral("bob")) {
+            bobRow = row;
+            foundBob = true;
+        }
+    }
+    REQUIRE(foundBob);
+    CHECK(bobRow.value(QStringLiteral("role")).toString() == QStringLiteral("Member"));
+
+    // The view cleared and re-seeded the form on the reply, so a second add
+    // starts with the hidden projectId already engaged and nothing else.
+    CHECK_FALSE(isReady(form));
+}
+
 TEST_CASE("BoardView renders CreateColumn/CreateSwimlane/CreateTask through the shipped renderer and submits them",
           "[kanban][gui][qml-forms][issue344]") {
     DbFixture fixture;
@@ -384,6 +484,106 @@ TEST_CASE("BoardView renders CreateColumn/CreateSwimlane/CreateTask through the 
     CHECK(task.value(QStringLiteral("swimlaneId")).toString() == swimlaneId);
 }
 
+TEST_CASE("RulesView renders CreateRule through the shipped renderer and submits it",
+          "[kanban][gui][qml-forms][issue344][issue393]") {
+    // Loaded directly (not via BoardView's "Rules" popup button, which this
+    // rule-6 file cannot click): RulesView.qml's own boardBridge initial
+    // property is exactly what BoardView.qml wires into it.
+    // `CreateRule::mutationType` is the closed-set field morph#386 used to
+    // force to a free-text field; `triggerColumnId` is the Choice field this
+    // rung's first server-fetched combo box (morph#393).
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    const qlonglong projectId = seedProject(*rig);
+    REQUIRE(projectId > 0);
+
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+    bool changed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&changed] { changed = true; });
+    bridge.openBoard(QString::number(projectId));
+    REQUIRE(pumpUntil([&changed] { return changed; }));
+    bridge.stopPolling();
+
+    changed = false;
+    bridge.createColumn(QStringLiteral("To Do"), 0);
+    REQUIRE(pumpUntil([&changed] { return changed; }));
+    const QString columnId =
+        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value("id").toString();
+
+    QQmlApplicationEngine engine;
+    QObject* root = loadRoot(engine, "RulesView", {{QStringLiteral("boardBridge"), QVariant::fromValue(&bridge)}});
+
+    QObject* form = root->findChild<QObject*>(QStringLiteral("createRuleForm"));
+    REQUIRE(form != nullptr);
+    CHECK(form->property("actionType").toString() == QStringLiteral("CreateRule"));
+
+    // `mutationType` is a closed `oneOf`-of-`const`s (RuleMutationType's
+    // glz::meta/glz::enumerate) -- a ComboBox, not the free-text field
+    // morph#386 used to force.
+    REQUIRE(control(form, QStringLiteral("field_mutationType")) != nullptr);
+
+    // `triggerColumnId` is a Choice (`x-optionsAction: "GetBoardState"`), so
+    // the renderer fetches its own options through the controller on load --
+    // DynamicForm.qml's own Component.onCompleted, no explicit call from
+    // this test -- rather than reading them off `board.columns` by hand. This
+    // is this rung's first Choice field, so it is also the first thing to
+    // exercise the fetchOptions/optionsReceived seam added for it.
+    bool optionsFetched = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::optionsReceived,
+                     [&](const QString& optionsAction, bool ok, const QString&) {
+                         if (optionsAction == QStringLiteral("GetBoardState") && ok) optionsFetched = true;
+                     });
+    REQUIRE(pumpUntil([&optionsFetched] { return optionsFetched; }));
+
+    QVariantMap triggerColumnField;
+    for (const QVariant& entry : form->property("fields").toList()) {
+        const QVariantMap field = entry.toMap();
+        if (field.value(QStringLiteral("name")).toString() == QStringLiteral("triggerColumnId")) {
+            triggerColumnField = field;
+            break;
+        }
+    }
+    CHECK(triggerColumnField.value(QStringLiteral("isChoice")).toBool());
+    CHECK(triggerColumnField.value(QStringLiteral("optionsAction")).toString() == QStringLiteral("GetBoardState"));
+
+    // `projectId` is hidden context, engaged from the view -- not typed here.
+    QObject* hiddenProject = control(form, QStringLiteral("column_projectId"));
+    REQUIRE(hiddenProject != nullptr);
+    CHECK_FALSE(hiddenProject->property("visible").toBool());
+
+    CHECK_FALSE(isReady(form));
+    type(form, QStringLiteral("triggerColumnId"), columnId);
+    type(form, QStringLiteral("mutationType"), QStringLiteral(R"("AddTag")"));
+    type(form, QStringLiteral("mutationValue"), QStringLiteral("urgent"));
+    CHECK(isReady(form));
+    CHECK(bodyOf(form) == QStringLiteral(R"({"projectId":%1,"triggerColumnId":%2,"mutationType":"AddTag",)"
+                                         R"("mutationValue":"urgent"})")
+                              .arg(projectId)
+                              .arg(columnId));
+
+    bool ruleCreated = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::ruleCreated, [&ruleCreated] { ruleCreated = true; });
+    pressSubmit(form);
+    REQUIRE(pumpUntil([&ruleCreated] { return ruleCreated; }));
+
+    bool listed = false;
+    QVariantList rows;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::rulesListed, [&](const QVariantList& rules) {
+        rows = rules;
+        listed = true;
+    });
+    bridge.getRules();
+    REQUIRE(pumpUntil([&listed] { return listed; }));
+    REQUIRE(rows.size() == 1);
+    CHECK(rows.front().toMap().value(QStringLiteral("triggerColumnId")).toString() == columnId);
+    CHECK(rows.front().toMap().value(QStringLiteral("mutationType")).toString() == QStringLiteral("AddTag"));
+    CHECK(rows.front().toMap().value(QStringLiteral("mutationValue")).toString() == QStringLiteral("urgent"));
+
+    // The view cleared and re-seeded the form on the reply, so a second add
+    // starts with the hidden projectId already engaged and nothing else.
+    CHECK_FALSE(isReady(form));
+}
+
 TEST_CASE("TaskDetailPopup renders AddComment through the shipped renderer and submits it",
           "[kanban][gui][qml-forms][issue344]") {
     DbFixture fixture;
@@ -493,7 +693,7 @@ TEST_CASE("A board form refuses an action its controller does not serve", "[kanb
                          boardReplied = true;
                      });
     // `MoveTaskPosition` is a registered BoardModel action, and deliberately
-    // still refused here: it is not one of the four forms this bridge renders,
+    // still refused here: it is not one of the five forms this bridge renders,
     // and reaching a model action through the form seam just because the model
     // serves it is the hole the literal action list closes.
     board.submitIfValid(QStringLiteral("MoveTaskPosition"), QStringLiteral("{}"));

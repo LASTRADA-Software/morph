@@ -46,6 +46,53 @@ enum class RuleAction : std::uint8_t { SetCategory };
 enum class ReportKind : std::uint8_t { MonthlyStatement, BudgetReport };
 enum class ReportStatus : std::uint8_t { Pending, Done, Failed };
 
+}  // namespace ledger
+
+/// @brief Every closed-set enum above, declared with a `glz::meta`/
+///        `glz::enumerate` so glaze reflects it (travels as its enumerator
+///        name, not its underlying integer) and `morph::forms::schemaJson<A>()`
+///        can describe it as a closed set. Without this, `schemaJson<A>()` --
+///        called unconditionally by `BRIDGE_REGISTER_ACTION`
+///        (`morph::model::detail::buildActionDescription`), independent of
+///        whether a rung renders any form -- fails to compile: glaze emits a
+///        six-way wildcard type for a metaless enum, and the shipped Qt/QML
+///        `DynamicForm` draws that as a checkbox reporting the form `ready`
+///        for a value nobody chose (morph#392). Same shape as
+///        `kanban::Role`/`kanban::RuleMutationType`
+///        (examples/kanban/include/kanban/core/types.hpp), the rungs that
+///        established this convention.
+template <>
+struct glz::meta<ledger::AccountKind> {
+    using enum ledger::AccountKind;
+    static constexpr auto value = glz::enumerate(Asset, Expense, Revenue, Liability);
+};
+
+template <>
+struct glz::meta<ledger::RuleTrigger> {
+    using enum ledger::RuleTrigger;
+    static constexpr auto value = glz::enumerate(DescriptionContains);
+};
+
+template <>
+struct glz::meta<ledger::RuleAction> {
+    using enum ledger::RuleAction;
+    static constexpr auto value = glz::enumerate(SetCategory);
+};
+
+template <>
+struct glz::meta<ledger::ReportKind> {
+    using enum ledger::ReportKind;
+    static constexpr auto value = glz::enumerate(MonthlyStatement, BudgetReport);
+};
+
+template <>
+struct glz::meta<ledger::ReportStatus> {
+    using enum ledger::ReportStatus;
+    static constexpr auto value = glz::enumerate(Pending, Done, Failed);
+};
+
+namespace ledger {
+
 /// @brief The service principal `ledger::app::App`'s report runner dispatches
 ///        `RunReportJob` under, and the only principal
 ///        `LedgerModel::execute(const RunReportJob&)` accepts.

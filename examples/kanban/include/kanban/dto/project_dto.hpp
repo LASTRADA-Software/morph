@@ -46,6 +46,24 @@ struct SetMemberRole {
     std::string principal;
     Role role = Role::Viewer;
 
+    /// `projectId` is **context, not input**: a member is added to whichever
+    /// project's member pane is open, and `gui/qml/MembersView.qml` supplies
+    /// it from the page the form is embedded in. `hidden` says exactly that
+    /// to every renderer -- the field still travels in the payload, and
+    /// `ProjectAdminModel::execute()` still re-checks the caller is a Manager
+    /// on the named project, so this is presentation and never a security
+    /// control (`docs/spec/forms/forms.md`, "Field metadata is not a security
+    /// control"). Same shape as `CreateTask::columnId`/`swimlaneId`
+    /// (kanban/dto/board_dto.hpp).
+    static constexpr std::array<::morph::forms::FieldMeta, 1> fieldMetadata{
+        ::morph::forms::FieldMeta{.field = "projectId", .hidden = true},
+    };
+
+    /// Side-effectful, so the renderer draws its own Submit button rather
+    /// than firing the moment `principal` is non-empty -- same declaration,
+    /// for the same reason, as `kanban::CreateProject`.
+    static constexpr bool explicitSubmit = true;
+
     /// Bounds `principal` the same way `Login::validate()` does (reuses
     /// `auth::isValidPrincipal`) -- `ProjectRoleRecord::principal` is a
     /// `SqlAnsiString<auth::kMaxPrincipalBytes>` column, and

@@ -189,6 +189,20 @@ public:
     /// @param bodyJson   Fully-assembled JSON body, as `DynamicForm` builds it.
     Q_INVOKABLE void submitIfValid(const QString& actionType, const QString& bodyJson);
 
+    /// @brief Executes @p optionsAction with @p bodyJson to fetch a `Choice`
+    ///        field's combo-box options -- the entry point `MorphForms`'
+    ///        `DynamicForm` calls for a field like `CreateRule::triggerColumnId`
+    ///        (`x-optionsAction: "GetBoardState"`).
+    ///
+    /// Named to match the controller contract the shipped renderer expects
+    /// (`morph::qt::forms::FormsControllerCore::fetchOptions`), so a
+    /// `DynamicForm`'s `controller:` binding can point straight at this
+    /// bridge. Emits `optionsReceived`.
+    /// @param optionsAction Registered action type id that serves the options.
+    /// @param bodyJson      Fully-assembled JSON body for the options action
+    ///                      (`"{}"` for an independent `Choice`).
+    Q_INVOKABLE void fetchOptions(const QString& optionsAction, const QString& bodyJson);
+
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     /// @brief The offline queue's current depth (see `queueDepth` property).
     /// @return The most recent `syncStatusChanged` queue-depth value.
@@ -266,11 +280,14 @@ public:
     /// @brief Creates a new automation rule on the attached board: "when a
     ///        task moves into `triggerColumnId`, apply `mutationType`/
     ///        `mutationValue`." Manager-only. Emits `ruleCreated`, or `failed`.
+    ///
+    /// Not `Q_INVOKABLE` — see `createColumn`: `RulesView.qml` submits
+    /// `CreateRule` through the schema renderer now (morph#393), so nothing in
+    /// `gui/qml/` calls this either.
     /// @param triggerColumnId The triggering column, as its plain number.
     /// @param mutationType    `"AddTag"` or `"RemoveTag"`.
     /// @param mutationValue   The tag name the mutation adds or removes.
-    Q_INVOKABLE void createRule(const QString& triggerColumnId, const QString& mutationType,
-                                const QString& mutationValue);
+    void createRule(const QString& triggerColumnId, const QString& mutationType, const QString& mutationValue);
 
     /// @brief Lists every automation rule on the attached board. Emits
     ///        `rulesListed` (and updates the `rules` property), or `failed`.
@@ -453,6 +470,14 @@ signals:
     /// @param ok         Whether the dispatch succeeded.
     /// @param payload    Result JSON on success, the error message otherwise.
     void replyReceived(const QString& actionType, bool ok, const QString& payload);
+    /// @brief Emitted once per `fetchOptions`, carrying that `Choice` field's
+    ///        options-action outcome. The name `DynamicForm` listens for
+    ///        unconditionally (see `morph::qt::forms::FormsControllerCore`'s
+    ///        own doc comment on the same contract).
+    /// @param optionsAction The options action the reply belongs to.
+    /// @param ok            Whether the dispatch succeeded.
+    /// @param payload       Result JSON on success, the error message otherwise.
+    void optionsReceived(const QString& optionsAction, bool ok, const QString& payload);
     /// @brief A `getRules` succeeded — see `rules` property.
     /// @param rules The listing's rows.
     void rulesListed(const QVariantList& rules);
