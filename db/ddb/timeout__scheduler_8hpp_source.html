@@ -289,7 +289,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/ddb/timeout
 <div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>                <span class="keywordflow">try</span> {</div>
 <div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>                    entry.callback();</div>
 <div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>                } <span class="keywordflow">catch</span> (<span class="keyword">const</span> std::exception&amp; exc) {</div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>                    ::morph::log::logError(<span class="stringliteral">&quot;[timeout-scheduler] callback threw: &quot;</span> + std::string{exc.what()});</div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>                    ::morph::log::logError(<span class="stringliteral">&quot;[timeout-scheduler] callback threw: {}&quot;</span>, exc.what());</div>
 <div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>                } <span class="keywordflow">catch</span> (...) {</div>
 <div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>                    ::morph::log::logError(<span class="stringliteral">&quot;[timeout-scheduler] callback threw unknown exception&quot;</span>);</div>
 <div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>                }</div>
@@ -417,7 +417,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/ddb/timeout
 <div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span>        <span class="keywordflow">try</span> {</div>
 <div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>            callback();</div>
 <div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>        } <span class="keywordflow">catch</span> (<span class="keyword">const</span> std::exception&amp; exc) {</div>
-<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>            ::morph::log::logError(<span class="stringliteral">&quot;[timeout-scheduler] callback threw: &quot;</span> + std::string{exc.what()});</div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>            ::morph::log::logError(<span class="stringliteral">&quot;[timeout-scheduler] callback threw: {}&quot;</span>, exc.what());</div>
 <div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span>        } <span class="keywordflow">catch</span> (...) {</div>
 <div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>            ::morph::log::logError(<span class="stringliteral">&quot;[timeout-scheduler] callback threw unknown exception&quot;</span>);</div>
 <div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span>        }</div>

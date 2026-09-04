@@ -929,8 +929,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d5e/backend
 <div class="line"><a id="l00783" name="l00783"></a><span class="lineno">  783</span>        trackPending(compState);</div>
 <div class="line"><a id="l00784" name="l00784"></a><span class="lineno">  784</span>        <span class="keyword">auto</span> localOp = std::move(call.localOp);</div>
 <div class="line"><a id="l00785" name="l00785"></a><span class="lineno">  785</span>        <span class="keyword">auto</span> session = std::move(call.session);</div>
-<div class="line"><a id="l00786" name="l00786"></a><span class="lineno">  786</span>        <span class="keyword">auto</span> modelTypeId = call.modelTypeId;</div>
-<div class="line"><a id="l00787" name="l00787"></a><span class="lineno">  787</span>        <span class="keyword">auto</span> actionTypeId = call.actionTypeId;</div>
+<div class="line"><a id="l00786" name="l00786"></a><span class="lineno">  786</span>        <span class="keyword">auto</span> modelTypeId = std::move(call.modelTypeId);</div>
+<div class="line"><a id="l00787" name="l00787"></a><span class="lineno">  787</span>        <span class="keyword">auto</span> actionTypeId = std::move(call.actionTypeId);</div>
 <div class="line"><a id="l00788" name="l00788"></a><span class="lineno">  788</span>        <span class="comment">// Captured by shared_ptr, never by raw `this`: see the Global</span></div>
 <div class="line"><a id="l00789" name="l00789"></a><span class="lineno">  789</span>        <span class="comment">// Constraints note on `~StrandExecutor`&#39;s member-destruction-order</span></div>
 <div class="line"><a id="l00790" name="l00790"></a><span class="lineno">  790</span>        <span class="comment">// subtlety. A shared_ptr copy has its own lifetime, independent of</span></div>

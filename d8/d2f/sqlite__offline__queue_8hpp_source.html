@@ -246,307 +246,318 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span>            }</div>
 <div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{msg};</div>
 <div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span>        }</div>
-<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>        execOrThrow(<span class="stringliteral">&quot;PRAGMA journal_mode=WAL;&quot;</span>);</div>
-<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>        execOrThrow(</div>
-<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span>            <span class="stringliteral">&quot;CREATE TABLE IF NOT EXISTS morph_offline_queue (&quot;</span></div>
-<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span>            <span class="stringliteral">&quot;  id              INTEGER PRIMARY KEY AUTOINCREMENT,&quot;</span></div>
-<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span>            <span class="stringliteral">&quot;  payload         TEXT    NOT NULL,&quot;</span></div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>            <span class="stringliteral">&quot;  idempotency_key TEXT    NOT NULL DEFAULT &#39;&#39;,&quot;</span></div>
-<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>            <span class="stringliteral">&quot;  attempts        INTEGER NOT NULL DEFAULT 0,&quot;</span></div>
-<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span>            <span class="stringliteral">&quot;  enqueued_at     INTEGER NOT NULL&quot;</span></div>
-<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span>            <span class="stringliteral">&quot;);&quot;</span>);</div>
-<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>        execOrThrow(</div>
-<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>            <span class="stringliteral">&quot;CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem &quot;</span></div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>            <span class="stringliteral">&quot;ON morph_offline_queue(idempotency_key) WHERE idempotency_key &lt;&gt; &#39;&#39;;&quot;</span>);</div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>    }</div>
+<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>        <span class="comment">// _db is a live, open connection from here on -- if any schema-setup</span></div>
+<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>        <span class="comment">// statement below throws, this constructor never completes, so</span></div>
+<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span>        <span class="comment">// ~SqliteOfflineQueue() never runs to close it. Close it here before</span></div>
+<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span>        <span class="comment">// rethrowing, the same discipline the open-failure branch above</span></div>
+<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span>        <span class="comment">// already applies to its own failure path.</span></div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>        <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>            execOrThrow(<span class="stringliteral">&quot;PRAGMA journal_mode=WAL;&quot;</span>);</div>
+<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span>            execOrThrow(</div>
+<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span>                <span class="stringliteral">&quot;CREATE TABLE IF NOT EXISTS morph_offline_queue (&quot;</span></div>
+<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>                <span class="stringliteral">&quot;  id              INTEGER PRIMARY KEY AUTOINCREMENT,&quot;</span></div>
+<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>                <span class="stringliteral">&quot;  payload         TEXT    NOT NULL,&quot;</span></div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>                <span class="stringliteral">&quot;  idempotency_key TEXT    NOT NULL DEFAULT &#39;&#39;,&quot;</span></div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>                <span class="stringliteral">&quot;  attempts        INTEGER NOT NULL DEFAULT 0,&quot;</span></div>
+<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span>                <span class="stringliteral">&quot;  enqueued_at     INTEGER NOT NULL&quot;</span></div>
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>                <span class="stringliteral">&quot;);&quot;</span>);</div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>            execOrThrow(</div>
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>                <span class="stringliteral">&quot;CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem &quot;</span></div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>                <span class="stringliteral">&quot;ON morph_offline_queue(idempotency_key) WHERE idempotency_key &lt;&gt; &#39;&#39;;&quot;</span>);</div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>        } <span class="keywordflow">catch</span> (...) {</div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>            sqlite3_close(_db);</div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span>            _db = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>            <span class="keywordflow">throw</span>;</div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>        }</div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span>    }</div>
 </div>
-<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment"></span> </div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment">    /// @brief Closes the underlying SQLite connection.</span></div>
-<div class="foldopen" id="foldopen00138" data-start="{" data-end="}">
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b">  138</a></span>    <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b">~SqliteOfflineQueue</a>()<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>        <span class="keywordflow">if</span> (_db != <span class="keyword">nullptr</span>) {</div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>            sqlite3_close(_db);</div>
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>        }</div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>    }</div>
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment"></span> </div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment">    /// @brief Closes the underlying SQLite connection.</span></div>
+<div class="foldopen" id="foldopen00149" data-start="{" data-end="}">
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b">  149</a></span>    <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b">~SqliteOfflineQueue</a>()<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span>        <span class="keywordflow">if</span> (_db != <span class="keyword">nullptr</span>) {</div>
+<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span>            sqlite3_close(_db);</div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span>        }</div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span>    }</div>
 </div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span> </div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>    <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>(<span class="keyword">const</span> <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>    <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp; operator=(<span class="keyword">const</span> <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span>    <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>(<a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span>    <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp; operator=(<a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment"></span> </div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment">    /// @brief Inserts @p payload with an empty idempotency key.</span></div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">    /// @param payload Serialised action to persist.</span></div>
-<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">    /// @return The new row&#39;s id (`SELECT last_insert_rowid()`).</span></div>
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment">    /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.</span></div>
-<div class="foldopen" id="foldopen00153" data-start="{" data-end="}">
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a88bbf14621e61b7a11c6d390b80922e2">  153</a></span>    uint64_t <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a88bbf14621e61b7a11c6d390b80922e2">enqueue</a>(std::string payload)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span>        checkCapacityLocked();</div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span>        detail::StatementGuard guard{</div>
-<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span>            prepare(<span class="stringliteral">&quot;INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) &quot;</span></div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span>                    <span class="stringliteral">&quot;VALUES (?, &#39;&#39;, 0, ?);&quot;</span>)};</div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>        bindText(guard.get(), 1, payload);</div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>        bindInt64(guard.get(), 2, nowMillis());</div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>        stepOrThrow(guard.get(), <span class="stringliteral">&quot;enqueue&quot;</span>);</div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_last_insert_rowid(_db));</div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>    }</div>
+<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span> </div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span>    <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>(<span class="keyword">const</span> <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span>    <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp; operator=(<span class="keyword">const</span> <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span>    <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>(<a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span>    <a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp; operator=(<a class="code hl_class" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">SqliteOfflineQueue</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment"></span> </div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment">    /// @brief Inserts @p payload with an empty idempotency key.</span></div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">    /// @param payload Serialised action to persist.</span></div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">    /// @return The new row&#39;s id (`SELECT last_insert_rowid()`).</span></div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="comment">    /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.</span></div>
+<div class="foldopen" id="foldopen00164" data-start="{" data-end="}">
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a88bbf14621e61b7a11c6d390b80922e2">  164</a></span>    [[nodiscard]] uint64_t <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a88bbf14621e61b7a11c6d390b80922e2">enqueue</a>(std::string payload)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>        checkCapacityLocked();</div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>        detail::StatementGuard guard{</div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>            prepare(<span class="stringliteral">&quot;INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) &quot;</span></div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>                    <span class="stringliteral">&quot;VALUES (?, &#39;&#39;, 0, ?);&quot;</span>)};</div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>        bindText(guard.get(), 1, payload);</div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>        bindInt64(guard.get(), 2, nowMillis());</div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>        stepOrThrow(guard.get(), <span class="stringliteral">&quot;enqueue&quot;</span>);</div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_last_insert_rowid(_db));</div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>    }</div>
 </div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment"></span> </div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span><span class="comment">    /// @brief Inserts @p payload carrying @p idempotencyKey in one write. A</span></div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment">    ///        non-empty key already present on a row is deduplicated: the</span></div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">    ///        existing row&#39;s id is returned and nothing new is inserted.</span></div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    /// @param payload        Serialised action to persist.</span></div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// @param idempotencyKey Stable dedup token; empty means &quot;no dedup&quot;.</span></div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    /// @return The new row&#39;s id, or the existing row&#39;s id on a dedup hit.</span></div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.</span></div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    ///         Checked before the insert is attempted, so a call that would</span></div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">    ///         have resolved to a dedup hit (inserting nothing) can also be</span></div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">    ///         rejected when the queue happens to be full at the same time —</span></div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">    ///         a documented, accepted conservatism rather than an extra</span></div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">    ///         round trip to special-case it.</span></div>
-<div class="foldopen" id="foldopen00177" data-start="{" data-end="}">
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa3342ce935ef2cae8b2c7390c00d9175">  177</a></span>    uint64_t <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa3342ce935ef2cae8b2c7390c00d9175">enqueue</a>(std::string payload, std::string idempotencyKey)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>        <span class="keywordflow">if</span> (idempotencyKey.empty()) {</div>
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span>            checkCapacityLocked();</div>
-<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span>            detail::StatementGuard guard{</div>
-<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span>                prepare(<span class="stringliteral">&quot;INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) &quot;</span></div>
-<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>                        <span class="stringliteral">&quot;VALUES (?, &#39;&#39;, 0, ?);&quot;</span>)};</div>
-<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>            bindText(guard.get(), 1, payload);</div>
-<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>            bindInt64(guard.get(), 2, nowMillis());</div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>            stepOrThrow(guard.get(), <span class="stringliteral">&quot;enqueue&quot;</span>);</div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>            <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_last_insert_rowid(_db));</div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>        }</div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span> </div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span>        checkCapacityLocked();</div>
-<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span>        detail::StatementGuard insertGuard{</div>
-<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span>            prepare(<span class="stringliteral">&quot;INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) &quot;</span></div>
-<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span>                    <span class="stringliteral">&quot;VALUES (?, ?, 0, ?) &quot;</span></div>
-<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span>                    <span class="stringliteral">&quot;ON CONFLICT(idempotency_key) WHERE idempotency_key &lt;&gt; &#39;&#39; DO NOTHING;&quot;</span>)};</div>
-<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span>        bindText(insertGuard.get(), 1, payload);</div>
-<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span>        bindText(insertGuard.get(), 2, idempotencyKey);</div>
-<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>        bindInt64(insertGuard.get(), 3, nowMillis());</div>
-<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>        stepOrThrow(insertGuard.get(), <span class="stringliteral">&quot;enqueue&quot;</span>);</div>
-<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span>        <span class="keywordflow">if</span> (sqlite3_changes(_db) &gt; 0) {</div>
-<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span>            <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_last_insert_rowid(_db));</div>
-<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span>        }</div>
-<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span> </div>
-<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span>        <span class="comment">// Conflict fired (DO NOTHING) -- a row for this key already exists.</span></div>
-<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>        detail::StatementGuard lookupGuard{prepare(<span class="stringliteral">&quot;SELECT id FROM morph_offline_queue WHERE idempotency_key = ?;&quot;</span>)};</div>
-<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>        bindText(lookupGuard.get(), 1, idempotencyKey);</div>
-<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span>        <span class="keywordtype">int</span> <span class="keyword">const</span> lookupResult = sqlite3_step(lookupGuard.get());</div>
-<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span>        <span class="keywordflow">if</span> (lookupResult != SQLITE_ROW) {</div>
-<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>            <span class="comment">// The conflict proved a row exists, so anything but a row here is a</span></div>
-<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span>            <span class="comment">// real failure. Returning the `0` this used to fall through with</span></div>
-<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span>            <span class="comment">// would hand the caller an id that matches nothing: `markDone(0)`</span></div>
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span>            <span class="comment">// silently deletes no row, and the item is stranded in the queue</span></div>
-<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>            <span class="comment">// forever with no error ever reported.</span></div>
-<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: enqueue could not resolve the existing id &quot;</span></div>
-<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>                                                      <span class="stringliteral">&quot;for a deduplicated idempotency key: &quot;</span>} +</div>
-<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>                                          sqlite3_errmsg(_db)};</div>
-<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>        }</div>
-<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_column_int64(lookupGuard.get(), 0));</div>
-<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span>    }</div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment"></span> </div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">    /// @brief Inserts @p payload carrying @p idempotencyKey in one write. A</span></div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="comment">    ///        non-empty key already present on a row is deduplicated: the</span></div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment">    ///        existing row&#39;s id is returned and nothing new is inserted.</span></div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">    /// @param payload        Serialised action to persist.</span></div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span><span class="comment">    /// @param idempotencyKey Stable dedup token; empty means &quot;no dedup&quot;.</span></div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="comment">    /// @return The new row&#39;s id, or the existing row&#39;s id on a dedup hit.</span></div>
+<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span><span class="comment">    /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.</span></div>
+<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span><span class="comment">    ///         Checked before the insert is attempted, so a call that would</span></div>
+<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span><span class="comment">    ///         have resolved to a dedup hit (inserting nothing) can also be</span></div>
+<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span><span class="comment">    ///         rejected when the queue happens to be full at the same time —</span></div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span><span class="comment">    ///         a documented, accepted conservatism rather than an extra</span></div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment">    ///         round trip to special-case it.</span></div>
+<div class="foldopen" id="foldopen00188" data-start="{" data-end="}">
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa3342ce935ef2cae8b2c7390c00d9175">  188</a></span>    [[nodiscard]] uint64_t <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa3342ce935ef2cae8b2c7390c00d9175">enqueue</a>(std::string payload, std::string idempotencyKey)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span>        <span class="keywordflow">if</span> (idempotencyKey.empty()) {</div>
+<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span>            checkCapacityLocked();</div>
+<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span>            detail::StatementGuard guard{</div>
+<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span>                prepare(<span class="stringliteral">&quot;INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) &quot;</span></div>
+<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span>                        <span class="stringliteral">&quot;VALUES (?, &#39;&#39;, 0, ?);&quot;</span>)};</div>
+<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span>            bindText(guard.get(), 1, payload);</div>
+<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span>            bindInt64(guard.get(), 2, nowMillis());</div>
+<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>            stepOrThrow(guard.get(), <span class="stringliteral">&quot;enqueue&quot;</span>);</div>
+<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>            <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_last_insert_rowid(_db));</div>
+<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span>        }</div>
+<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span> </div>
+<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span>        checkCapacityLocked();</div>
+<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span>        detail::StatementGuard insertGuard{</div>
+<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span>            prepare(<span class="stringliteral">&quot;INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) &quot;</span></div>
+<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>                    <span class="stringliteral">&quot;VALUES (?, ?, 0, ?) &quot;</span></div>
+<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>                    <span class="stringliteral">&quot;ON CONFLICT(idempotency_key) WHERE idempotency_key &lt;&gt; &#39;&#39; DO NOTHING;&quot;</span>)};</div>
+<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span>        bindText(insertGuard.get(), 1, payload);</div>
+<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span>        bindText(insertGuard.get(), 2, idempotencyKey);</div>
+<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>        bindInt64(insertGuard.get(), 3, nowMillis());</div>
+<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span>        stepOrThrow(insertGuard.get(), <span class="stringliteral">&quot;enqueue&quot;</span>);</div>
+<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span>        <span class="keywordflow">if</span> (sqlite3_changes(_db) &gt; 0) {</div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span>            <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_last_insert_rowid(_db));</div>
+<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>        }</div>
+<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span> </div>
+<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>        <span class="comment">// Conflict fired (DO NOTHING) -- a row for this key already exists.</span></div>
+<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>        detail::StatementGuard lookupGuard{prepare(<span class="stringliteral">&quot;SELECT id FROM morph_offline_queue WHERE idempotency_key = ?;&quot;</span>)};</div>
+<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>        bindText(lookupGuard.get(), 1, idempotencyKey);</div>
+<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>        <span class="keywordtype">int</span> <span class="keyword">const</span> lookupResult = sqlite3_step(lookupGuard.get());</div>
+<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span>        <span class="keywordflow">if</span> (lookupResult != SQLITE_ROW) {</div>
+<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span>            <span class="comment">// The conflict proved a row exists, so anything but a row here is a</span></div>
+<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span>            <span class="comment">// real failure. Returning the `0` this used to fall through with</span></div>
+<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span>            <span class="comment">// would hand the caller an id that matches nothing: `markDone(0)`</span></div>
+<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span>            <span class="comment">// silently deletes no row, and the item is stranded in the queue</span></div>
+<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span>            <span class="comment">// forever with no error ever reported.</span></div>
+<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: enqueue could not resolve the existing id &quot;</span></div>
+<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span>                                                      <span class="stringliteral">&quot;for a deduplicated idempotency key: &quot;</span>} +</div>
+<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span>                                          sqlite3_errmsg(_db)};</div>
+<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span>        }</div>
+<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_column_int64(lookupGuard.get(), 0));</div>
+<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span>    }</div>
 </div>
-<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment"></span> </div>
-<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// @brief Returns all pending rows in ascending-id (enqueue) order.</span></div>
-<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">    /// @return Snapshot of all pending items; the table is unchanged.</span></div>
-<div class="foldopen" id="foldopen00222" data-start="{" data-end="}">
-<div class="line"><a id="l00222" name="l00222"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7d84c59b8a7487daff9ae3d10b8ae868">  222</a></span>    std::vector&lt;QueueItem&gt; <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7d84c59b8a7487daff9ae3d10b8ae868">drain</a>()<span class="keyword"> const override </span>{</div>
-<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span>        detail::StatementGuard guard{</div>
-<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span>            prepare(<span class="stringliteral">&quot;SELECT id, payload, idempotency_key, attempts FROM morph_offline_queue ORDER BY id;&quot;</span>)};</div>
-<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span>        std::vector&lt;QueueItem&gt; out;</div>
-<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span>        <span class="keywordflow">for</span> (;;) {</div>
-<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span>            <span class="keywordtype">int</span> <span class="keyword">const</span> stepResult = sqlite3_step(guard.get());</div>
-<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span>            <span class="keywordflow">if</span> (stepResult == SQLITE_DONE) {</div>
-<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span>                <span class="keywordflow">break</span>;</div>
-<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span>            }</div>
-<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span>            <span class="keywordflow">if</span> (stepResult != SQLITE_ROW) {</div>
-<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span>                <span class="comment">// `while (step() == SQLITE_ROW)` treated an I/O error, a corrupt</span></div>
-<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>                <span class="comment">// page, or SQLITE_BUSY as &quot;no more rows&quot;, so drain() returned a</span></div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>                <span class="comment">// silently truncated set that the caller takes for the complete</span></div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>                <span class="comment">// list of pending work -- and SyncWorker then reports a clean</span></div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>                <span class="comment">// pass over a queue it never fully read.</span></div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>                <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: drain failed part-way through after &quot;</span>} +</div>
-<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>                                              std::to_string(out.size()) + <span class="stringliteral">&quot; row(s): &quot;</span> + sqlite3_errmsg(_db)};</div>
-<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>            }</div>
-<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>            <a class="code hl_struct" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> item;</div>
-<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>            item.<a class="code hl_variable" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84">id</a> = <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 0));</div>
-<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>            item.<a class="code hl_variable" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a910247a6d17dd7b29660b9cb009c2918">payload</a> = textColumn(guard.get(), 1);</div>
-<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>            item.<a class="code hl_variable" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c">idempotencyKey</a> = textColumn(guard.get(), 2);</div>
-<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>            item.<a class="code hl_variable" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f">attempts</a> = <span class="keyword">static_cast&lt;</span>uint32_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 3));</div>
-<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>            out.push_back(std::move(item));</div>
-<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>        }</div>
-<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>        <span class="keywordflow">return</span> out;</div>
-<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>    }</div>
+<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="comment"></span> </div>
+<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="comment">    /// @brief Returns all pending rows in ascending-id (enqueue) order.</span></div>
+<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span><span class="comment">    /// @return Snapshot of all pending items; the table is unchanged.</span></div>
+<div class="foldopen" id="foldopen00233" data-start="{" data-end="}">
+<div class="line"><a id="l00233" name="l00233"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7d84c59b8a7487daff9ae3d10b8ae868">  233</a></span>    [[nodiscard]] std::vector&lt;QueueItem&gt; <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7d84c59b8a7487daff9ae3d10b8ae868">drain</a>()<span class="keyword"> const override </span>{</div>
+<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>        detail::StatementGuard guard{</div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>            prepare(<span class="stringliteral">&quot;SELECT id, payload, idempotency_key, attempts FROM morph_offline_queue ORDER BY id;&quot;</span>)};</div>
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>        std::vector&lt;QueueItem&gt; out;</div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>        <span class="keywordflow">for</span> (;;) {</div>
+<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>            <span class="keywordtype">int</span> <span class="keyword">const</span> stepResult = sqlite3_step(guard.get());</div>
+<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>            <span class="keywordflow">if</span> (stepResult == SQLITE_DONE) {</div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>                <span class="keywordflow">break</span>;</div>
+<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>            }</div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>            <span class="keywordflow">if</span> (stepResult != SQLITE_ROW) {</div>
+<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>                <span class="comment">// `while (step() == SQLITE_ROW)` treated an I/O error, a corrupt</span></div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>                <span class="comment">// page, or SQLITE_BUSY as &quot;no more rows&quot;, so drain() returned a</span></div>
+<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>                <span class="comment">// silently truncated set that the caller takes for the complete</span></div>
+<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>                <span class="comment">// list of pending work -- and SyncWorker then reports a clean</span></div>
+<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>                <span class="comment">// pass over a queue it never fully read.</span></div>
+<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>                <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: drain failed part-way through after &quot;</span>} +</div>
+<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span>                                              std::to_string(out.size()) + <span class="stringliteral">&quot; row(s): &quot;</span> + sqlite3_errmsg(_db)};</div>
+<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span>            }</div>
+<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span>            <a class="code hl_struct" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> item;</div>
+<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span>            item.<a class="code hl_variable" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84">id</a> = <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 0));</div>
+<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span>            item.<a class="code hl_variable" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a910247a6d17dd7b29660b9cb009c2918">payload</a> = textColumn(guard.get(), 1);</div>
+<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>            item.<a class="code hl_variable" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c">idempotencyKey</a> = textColumn(guard.get(), 2);</div>
+<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span>            item.<a class="code hl_variable" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f">attempts</a> = <span class="keyword">static_cast&lt;</span>uint32_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 3));</div>
+<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span>            out.push_back(std::move(item));</div>
+<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span>        }</div>
+<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span>        <span class="keywordflow">return</span> out;</div>
+<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span>    }</div>
 </div>
-<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span><span class="comment"></span> </div>
-<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span><span class="comment">    /// @brief Deletes the row identified by @p itemId. No-op if absent.</span></div>
-<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span><span class="comment">    /// @param itemId Id returned by the corresponding `enqueue()` call.</span></div>
-<div class="foldopen" id="foldopen00253" data-start="{" data-end="}">
-<div class="line"><a id="l00253" name="l00253"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#af7af4a3bd277014c911b0e3d4652a398">  253</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#af7af4a3bd277014c911b0e3d4652a398">markDone</a>(uint64_t itemId)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;DELETE FROM morph_offline_queue WHERE id = ?;&quot;</span>)};</div>
-<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span>        bindInt64(guard.get(), 1, <span class="keyword">static_cast&lt;</span>std::int64_t<span class="keyword">&gt;</span>(itemId));</div>
-<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span>        stepOrThrow(guard.get(), <span class="stringliteral">&quot;markDone&quot;</span>);</div>
-<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span>    }</div>
-</div>
-<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span><span class="comment"></span> </div>
-<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span><span class="comment">    /// @brief Persists an updated attempt count for @p itemId. No-op if absent.</span></div>
-<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span><span class="comment">    /// @param itemId   Id of the item whose count changed.</span></div>
-<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span><span class="comment">    /// @param attempts New cumulative attempt count to store.</span></div>
-<div class="foldopen" id="foldopen00263" data-start="{" data-end="}">
-<div class="line"><a id="l00263" name="l00263"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">  263</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">setAttempts</a>(uint64_t itemId, uint32_t attempts)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;UPDATE morph_offline_queue SET attempts = ? WHERE id = ?;&quot;</span>)};</div>
-<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span>        bindInt64(guard.get(), 1, <span class="keyword">static_cast&lt;</span>std::int64_t<span class="keyword">&gt;</span>(attempts));</div>
-<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span>        bindInt64(guard.get(), 2, <span class="keyword">static_cast&lt;</span>std::int64_t<span class="keyword">&gt;</span>(itemId));</div>
-<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span>        stepOrThrow(guard.get(), <span class="stringliteral">&quot;setAttempts&quot;</span>);</div>
+<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span><span class="comment"></span> </div>
+<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span><span class="comment">    /// @brief Deletes the row identified by @p itemId. No-op if absent.</span></div>
+<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span><span class="comment">    /// @param itemId Id returned by the corresponding `enqueue()` call.</span></div>
+<div class="foldopen" id="foldopen00264" data-start="{" data-end="}">
+<div class="line"><a id="l00264" name="l00264"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#af7af4a3bd277014c911b0e3d4652a398">  264</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#af7af4a3bd277014c911b0e3d4652a398">markDone</a>(uint64_t itemId)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;DELETE FROM morph_offline_queue WHERE id = ?;&quot;</span>)};</div>
+<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span>        bindInt64(guard.get(), 1, <span class="keyword">static_cast&lt;</span>std::int64_t<span class="keyword">&gt;</span>(itemId));</div>
+<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span>        stepOrThrow(guard.get(), <span class="stringliteral">&quot;markDone&quot;</span>);</div>
 <div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span>    }</div>
 </div>
 <div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment"></span> </div>
-<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">    /// @brief Returns the number of pending rows. Thread-safe.</span></div>
-<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">    /// @return Current pending item count (`COUNT(*)` against the table).</span></div>
-<div class="foldopen" id="foldopen00273" data-start="{" data-end="}">
-<div class="line"><a id="l00273" name="l00273"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">  273</a></span>    std::size_t <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">size</a>()<span class="keyword"> const override </span>{</div>
-<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span>        <span class="keywordflow">return</span> countLocked();</div>
-<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>    }</div>
+<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">    /// @brief Persists an updated attempt count for @p itemId. No-op if absent.</span></div>
+<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">    /// @param itemId   Id of the item whose count changed.</span></div>
+<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="comment">    /// @param attempts New cumulative attempt count to store.</span></div>
+<div class="foldopen" id="foldopen00274" data-start="{" data-end="}">
+<div class="line"><a id="l00274" name="l00274"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">  274</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">setAttempts</a>(uint64_t itemId, uint32_t attempts)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;UPDATE morph_offline_queue SET attempts = ? WHERE id = ?;&quot;</span>)};</div>
+<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>        bindInt64(guard.get(), 1, <span class="keyword">static_cast&lt;</span>std::int64_t<span class="keyword">&gt;</span>(attempts));</div>
+<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span>        bindInt64(guard.get(), 2, <span class="keyword">static_cast&lt;</span>std::int64_t<span class="keyword">&gt;</span>(itemId));</div>
+<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>        stepOrThrow(guard.get(), <span class="stringliteral">&quot;setAttempts&quot;</span>);</div>
+<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>    }</div>
 </div>
-<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span><span class="comment"></span> </div>
-<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span><span class="comment">    /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.</span></div>
-<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span><span class="comment">    /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.</span></div>
-<div class="line"><a id="l00280" name="l00280"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">  280</a></span>    std::optional&lt;std::size_t&gt; <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">maxDepth</a>()<span class="keyword"> const override </span>{ <span class="keywordflow">return</span> _maxDepth; }</div>
-<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span> </div>
-<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span><span class="keyword">protected</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span><span class="comment">    /// @brief Stamps an idempotency key onto an already-inserted row. No-op if</span></div>
-<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span><span class="comment">    ///        @p itemId is absent. Reachable only if a caller invokes the base</span></div>
-<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span><span class="comment">    ///        `IOfflineQueue::enqueue(payload, key)` default through an</span></div>
-<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span><span class="comment">    ///        `IOfflineQueue&amp;` -- this class&#39;s own `enqueue(payload, key)`</span></div>
-<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span><span class="comment">    ///        override above stamps the key inline in the same INSERT instead.</span></div>
-<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span><span class="comment">    /// @param itemId         Id of the row to stamp.</span></div>
-<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span><span class="comment">    /// @param idempotencyKey Key to store.</span></div>
-<div class="foldopen" id="foldopen00290" data-start="{" data-end="}">
-<div class="line"><a id="l00290" name="l00290"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">  290</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">setIdempotencyKey</a>(uint64_t itemId, std::string idempotencyKey)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span>        <span class="comment">// `WHERE NOT EXISTS (...)` rather than a bare UPDATE: the partial</span></div>
-<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>        <span class="comment">// unique index `ix_queue_idem` rejects stamping a non-empty key a</span></div>
-<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span>        <span class="comment">// pending row already holds, and a bare UPDATE turned that into a</span></div>
-<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span>        <span class="comment">// thrown SqliteOfflineQueueError -- while this class&#39;s own</span></div>
-<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>        <span class="comment">// `enqueue(payload, key)` resolves the identical conflict silently, by</span></div>
-<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>        <span class="comment">// keeping the existing row (morph#249). Same conflict, two answers,</span></div>
-<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>        <span class="comment">// and only one of them matched the documented dedup contract.</span></div>
-<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span>        <span class="comment">//</span></div>
-<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>        <span class="comment">// Throwing also bought nothing. This hook is called by the *base*</span></div>
-<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span>        <span class="comment">// `IOfflineQueue::enqueue(payload, key)` default, which has already</span></div>
-<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span>        <span class="comment">// inserted the row by the time it stamps; on a conflict the row exists</span></div>
-<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>        <span class="comment">// either way, so the throw added an exception to an outcome it could</span></div>
-<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span>        <span class="comment">// not undo. Leaving the key unset is the same end state without it.</span></div>
-<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span>        detail::StatementGuard <span class="keyword">const</span> guard{</div>
-<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span>            prepare(<span class="stringliteral">&quot;UPDATE morph_offline_queue SET idempotency_key = ?1 WHERE id = ?2 &quot;</span></div>
-<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span>                    <span class="stringliteral">&quot;AND (?1 = &#39;&#39; OR NOT EXISTS (SELECT 1 FROM morph_offline_queue &quot;</span></div>
-<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span>                    <span class="stringliteral">&quot;WHERE idempotency_key = ?1 AND id &lt;&gt; ?2));&quot;</span>)};</div>
-<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>        bindText(guard.get(), 1, idempotencyKey);</div>
-<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span>        bindInt64(guard.get(), 2, <span class="keyword">static_cast&lt;</span>std::int64_t<span class="keyword">&gt;</span>(itemId));</div>
-<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span>        stepOrThrow(guard.get(), <span class="stringliteral">&quot;setIdempotencyKey&quot;</span>);</div>
-<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span>    }</div>
+<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span><span class="comment"></span> </div>
+<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span><span class="comment">    /// @brief Returns the number of pending rows. Thread-safe.</span></div>
+<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span><span class="comment">    /// @return Current pending item count (`COUNT(*)` against the table).</span></div>
+<div class="foldopen" id="foldopen00284" data-start="{" data-end="}">
+<div class="line"><a id="l00284" name="l00284"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">  284</a></span>    [[nodiscard]] std::size_t <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">size</a>()<span class="keyword"> const override </span>{</div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>        <span class="keywordflow">return</span> countLocked();</div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>    }</div>
 </div>
-<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span> </div>
-<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span><span class="keyword">private</span>:</div>
-<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span>    <span class="keywordtype">void</span> execOrThrow(<span class="keyword">const</span> <span class="keywordtype">char</span>* sql) {</div>
-<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span>        <span class="keywordtype">char</span>* errMsg = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span>        <span class="keywordflow">if</span> (sqlite3_exec(_db, sql, <span class="keyword">nullptr</span>, <span class="keyword">nullptr</span>, &amp;errMsg) != SQLITE_OK) {</div>
-<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span>            std::string msg = errMsg != <span class="keyword">nullptr</span> ? errMsg : <span class="stringliteral">&quot;unknown sqlite error&quot;</span>;</div>
-<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span>            sqlite3_free(errMsg);</div>
-<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{<span class="stringliteral">&quot;SqliteOfflineQueue: &quot;</span> + msg};</div>
-<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span>        }</div>
-<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span>    }</div>
-<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span> </div>
-<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span>    sqlite3_stmt* prepare(<span class="keyword">const</span> <span class="keywordtype">char</span>* sql)<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span>        sqlite3_stmt* stmt = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>        <span class="keywordflow">if</span> (sqlite3_prepare_v2(_db, sql, -1, &amp;stmt, <span class="keyword">nullptr</span>) != SQLITE_OK) {</div>
-<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: prepare failed: &quot;</span>} + sqlite3_errmsg(_db)};</div>
-<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span>        }</div>
-<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span>        <span class="keywordflow">return</span> stmt;</div>
-<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span>    }</div>
-<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span> </div>
-<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span>    <span class="keywordtype">void</span> bindText(sqlite3_stmt* stmt, <span class="keywordtype">int</span> index, <span class="keyword">const</span> std::string&amp; value)<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span>        <span class="keywordflow">if</span> (sqlite3_bind_text(stmt, index, value.c_str(), -1, detail::kSqliteTransient) != SQLITE_OK) {</div>
-<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: bind failed: &quot;</span>} + sqlite3_errmsg(_db)};</div>
-<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span>        }</div>
-<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span>    }</div>
-<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span> </div>
-<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span>    <span class="keywordtype">void</span> bindInt64(sqlite3_stmt* stmt, <span class="keywordtype">int</span> index, std::int64_t value)<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span>        <span class="keywordflow">if</span> (sqlite3_bind_int64(stmt, index, value) != SQLITE_OK) {</div>
-<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: bind failed: &quot;</span>} + sqlite3_errmsg(_db)};</div>
-<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span>        }</div>
-<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span>    }</div>
-<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span> </div>
-<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span>    <span class="keywordtype">void</span> stepOrThrow(sqlite3_stmt* stmt, <span class="keyword">const</span> <span class="keywordtype">char</span>* what)<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span>        <span class="comment">// A busy/error code is treated the same as reaching the end -- a</span></div>
-<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span>        <span class="comment">// production consumer wanting to distinguish SQLITE_BUSY should retry</span></div>
-<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span>        <span class="comment">// instead, but a single in-process mutex around the whole connection</span></div>
-<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span>        <span class="comment">// makes SQLITE_BUSY practically unreachable for this reference queue.</span></div>
-<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span>        <span class="keywordflow">if</span> (sqlite3_step(stmt) != SQLITE_DONE) {</div>
-<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: &quot;</span>} + what +</div>
-<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span>                                          <span class="stringliteral">&quot; failed: &quot;</span> + sqlite3_errmsg(_db)};</div>
+<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span><span class="comment"></span> </div>
+<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span><span class="comment">    /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.</span></div>
+<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span><span class="comment">    /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.</span></div>
+<div class="line"><a id="l00291" name="l00291"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">  291</a></span>    [[nodiscard]] std::optional&lt;std::size_t&gt; <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">maxDepth</a>()<span class="keyword"> const override </span>{ <span class="keywordflow">return</span> _maxDepth; }</div>
+<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span> </div>
+<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span><span class="keyword">protected</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span><span class="comment">    /// @brief Stamps an idempotency key onto an already-inserted row. No-op if</span></div>
+<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span><span class="comment">    ///        @p itemId is absent. Reachable only if a caller invokes the base</span></div>
+<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span><span class="comment">    ///        `IOfflineQueue::enqueue(payload, key)` default through an</span></div>
+<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span><span class="comment">    ///        `IOfflineQueue&amp;` -- this class&#39;s own `enqueue(payload, key)`</span></div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span><span class="comment">    ///        override above stamps the key inline in the same INSERT instead.</span></div>
+<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span><span class="comment">    /// @param itemId         Id of the row to stamp.</span></div>
+<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span><span class="comment">    /// @param idempotencyKey Key to store.</span></div>
+<div class="foldopen" id="foldopen00301" data-start="{" data-end="}">
+<div class="line"><a id="l00301" name="l00301"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">  301</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">setIdempotencyKey</a>(uint64_t itemId, std::string idempotencyKey)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>        <span class="comment">// `WHERE NOT EXISTS (...)` rather than a bare UPDATE: the partial</span></div>
+<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span>        <span class="comment">// unique index `ix_queue_idem` rejects stamping a non-empty key a</span></div>
+<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span>        <span class="comment">// pending row already holds, and a bare UPDATE turned that into a</span></div>
+<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span>        <span class="comment">// thrown SqliteOfflineQueueError -- while this class&#39;s own</span></div>
+<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span>        <span class="comment">// `enqueue(payload, key)` resolves the identical conflict silently, by</span></div>
+<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span>        <span class="comment">// keeping the existing row (morph#249). Same conflict, two answers,</span></div>
+<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>        <span class="comment">// and only one of them matched the documented dedup contract.</span></div>
+<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span>        <span class="comment">//</span></div>
+<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span>        <span class="comment">// Throwing also bought nothing. This hook is called by the *base*</span></div>
+<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span>        <span class="comment">// `IOfflineQueue::enqueue(payload, key)` default, which has already</span></div>
+<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span>        <span class="comment">// inserted the row by the time it stamps; on a conflict the row exists</span></div>
+<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span>        <span class="comment">// either way, so the throw added an exception to an outcome it could</span></div>
+<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span>        <span class="comment">// not undo. Leaving the key unset is the same end state without it.</span></div>
+<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span>        detail::StatementGuard <span class="keyword">const</span> guard{</div>
+<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span>            prepare(<span class="stringliteral">&quot;UPDATE morph_offline_queue SET idempotency_key = ?1 WHERE id = ?2 &quot;</span></div>
+<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span>                    <span class="stringliteral">&quot;AND (?1 = &#39;&#39; OR NOT EXISTS (SELECT 1 FROM morph_offline_queue &quot;</span></div>
+<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span>                    <span class="stringliteral">&quot;WHERE idempotency_key = ?1 AND id &lt;&gt; ?2));&quot;</span>)};</div>
+<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span>        bindText(guard.get(), 1, idempotencyKey);</div>
+<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span>        bindInt64(guard.get(), 2, <span class="keyword">static_cast&lt;</span>std::int64_t<span class="keyword">&gt;</span>(itemId));</div>
+<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span>        stepOrThrow(guard.get(), <span class="stringliteral">&quot;setIdempotencyKey&quot;</span>);</div>
+<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span>    }</div>
+</div>
+<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span> </div>
+<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>    <span class="keywordtype">void</span> execOrThrow(<span class="keyword">const</span> <span class="keywordtype">char</span>* sql) {</div>
+<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>        <span class="keywordtype">char</span>* errMsg = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span>        <span class="keywordflow">if</span> (sqlite3_exec(_db, sql, <span class="keyword">nullptr</span>, <span class="keyword">nullptr</span>, &amp;errMsg) != SQLITE_OK) {</div>
+<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span>            std::string msg = errMsg != <span class="keyword">nullptr</span> ? errMsg : <span class="stringliteral">&quot;unknown sqlite error&quot;</span>;</div>
+<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span>            sqlite3_free(errMsg);</div>
+<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{<span class="stringliteral">&quot;SqliteOfflineQueue: &quot;</span> + msg};</div>
+<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span>        }</div>
+<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span>    }</div>
+<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span> </div>
+<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span>    sqlite3_stmt* prepare(<span class="keyword">const</span> <span class="keywordtype">char</span>* sql)<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span>        sqlite3_stmt* stmt = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span>        <span class="keywordflow">if</span> (sqlite3_prepare_v2(_db, sql, -1, &amp;stmt, <span class="keyword">nullptr</span>) != SQLITE_OK) {</div>
+<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: prepare failed: &quot;</span>} + sqlite3_errmsg(_db)};</div>
+<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span>        }</div>
+<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span>        <span class="keywordflow">return</span> stmt;</div>
+<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span>    }</div>
+<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span> </div>
+<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span>    <span class="keywordtype">void</span> bindText(sqlite3_stmt* stmt, <span class="keywordtype">int</span> index, <span class="keyword">const</span> std::string&amp; value)<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span>        <span class="keywordflow">if</span> (sqlite3_bind_text(stmt, index, value.c_str(), -1, detail::kSqliteTransient) != SQLITE_OK) {</div>
+<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: bind failed: &quot;</span>} + sqlite3_errmsg(_db)};</div>
+<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span>        }</div>
+<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span>    }</div>
+<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span> </div>
+<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span>    <span class="keywordtype">void</span> bindInt64(sqlite3_stmt* stmt, <span class="keywordtype">int</span> index, std::int64_t value)<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span>        <span class="keywordflow">if</span> (sqlite3_bind_int64(stmt, index, value) != SQLITE_OK) {</div>
+<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: bind failed: &quot;</span>} + sqlite3_errmsg(_db)};</div>
 <div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span>        }</div>
 <div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span>    }</div>
 <div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span> </div>
-<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span>    <span class="keyword">static</span> std::string textColumn(sqlite3_stmt* stmt, <span class="keywordtype">int</span> index) {</div>
-<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span>        <span class="keyword">const</span> <span class="keyword">auto</span>* text = <span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span><span class="keywordtype">char</span>*<span class="keyword">&gt;</span>(sqlite3_column_text(stmt, index));</div>
-<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span>        <span class="keywordflow">return</span> text != <span class="keyword">nullptr</span> ? std::string{text} : std::string{};</div>
-<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span>    }</div>
-<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span> </div>
-<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span>    <span class="keyword">static</span> std::int64_t nowMillis() {</div>
-<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span>        <span class="keywordflow">return</span> std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</div>
-<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span>                   std::chrono::system_clock::now().time_since_epoch())</div>
-<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span>            .count();</div>
+<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span>    <span class="keywordtype">void</span> stepOrThrow(sqlite3_stmt* stmt, <span class="keyword">const</span> <span class="keywordtype">char</span>* what)<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span>        <span class="comment">// A busy/error code is treated the same as reaching the end -- a</span></div>
+<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span>        <span class="comment">// production consumer wanting to distinguish SQLITE_BUSY should retry</span></div>
+<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span>        <span class="comment">// instead, but a single in-process mutex around the whole connection</span></div>
+<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span>        <span class="comment">// makes SQLITE_BUSY practically unreachable for this reference queue.</span></div>
+<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span>        <span class="keywordflow">if</span> (sqlite3_step(stmt) != SQLITE_DONE) {</div>
+<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: &quot;</span>} + what +</div>
+<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span>                                          <span class="stringliteral">&quot; failed: &quot;</span> + sqlite3_errmsg(_db)};</div>
+<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span>        }</div>
 <div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span>    }</div>
-<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span><span class="comment"></span> </div>
-<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span><span class="comment">    /// @brief Returns the current row count. Caller must hold `_mtx`.</span></div>
-<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span><span class="comment">    /// @return `COUNT(*)` against `morph_offline_queue`.</span></div>
-<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span>    std::size_t countLocked()<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;SELECT COUNT(*) FROM morph_offline_queue;&quot;</span>)};</div>
-<div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span>        sqlite3_step(guard.get());</div>
-<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>std::size_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 0));</div>
-<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span>    }</div>
-<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span><span class="comment"></span> </div>
-<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span><span class="comment">    /// @brief Throws `OfflineQueueFullError` if the queue is already at</span></div>
-<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span><span class="comment">    ///        `maxDepth()`. Caller must hold `_mtx`. No-op if unbounded.</span></div>
-<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span>    <span class="keywordtype">void</span> checkCapacityLocked()<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span>        <span class="keywordflow">if</span> (!_maxDepth) {</div>
-<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span>            <span class="keywordflow">return</span>;</div>
-<div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span>        }</div>
-<div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span>        std::size_t <span class="keyword">const</span> current = countLocked();</div>
-<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span>        <span class="keywordflow">if</span> (current &gt;= *_maxDepth) {</div>
-<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span>            ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,</div>
-<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span>                                                 <span class="keyword">static_cast&lt;</span><span class="keywordtype">double</span><span class="keyword">&gt;</span>(current));</div>
-<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html">OfflineQueueFullError</a>{*_maxDepth, current};</div>
-<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span>        }</div>
-<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span>    }</div>
-<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span> </div>
-<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>    std::filesystem::path _path;</div>
-<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span>    <span class="keyword">mutable</span> sqlite3* _db = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
-<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>    std::optional&lt;std::size_t&gt; _maxDepth;</div>
-<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span>};</div>
+<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span> </div>
+<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span>    <span class="keyword">static</span> std::string textColumn(sqlite3_stmt* stmt, <span class="keywordtype">int</span> index) {</div>
+<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span>        <span class="keyword">const</span> <span class="keyword">auto</span>* text = <span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span><span class="keywordtype">char</span>*<span class="keyword">&gt;</span>(sqlite3_column_text(stmt, index));</div>
+<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span>        <span class="keywordflow">return</span> text != <span class="keyword">nullptr</span> ? std::string{text} : std::string{};</div>
+<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span>    }</div>
+<div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span> </div>
+<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span>    <span class="keyword">static</span> std::int64_t nowMillis() {</div>
+<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span>        <span class="keywordflow">return</span> std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</div>
+<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span>                   std::chrono::system_clock::now().time_since_epoch())</div>
+<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span>            .count();</div>
+<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span>    }</div>
+<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span><span class="comment"></span> </div>
+<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span><span class="comment">    /// @brief Returns the current row count. Caller must hold `_mtx`.</span></div>
+<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span><span class="comment">    /// @return `COUNT(*)` against `morph_offline_queue`.</span></div>
+<div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span>    std::size_t countLocked()<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;SELECT COUNT(*) FROM morph_offline_queue;&quot;</span>)};</div>
+<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span>        sqlite3_step(guard.get());</div>
+<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>std::size_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 0));</div>
+<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span>    }</div>
+<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span><span class="comment"></span> </div>
+<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span><span class="comment">    /// @brief Throws `OfflineQueueFullError` if the queue is already at</span></div>
+<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span><span class="comment">    ///        `maxDepth()`. Caller must hold `_mtx`. No-op if unbounded.</span></div>
+<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span>    <span class="keywordtype">void</span> checkCapacityLocked()<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>        <span class="keywordflow">if</span> (!_maxDepth) {</div>
+<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>        }</div>
+<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>        std::size_t <span class="keyword">const</span> current = countLocked();</div>
+<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span>        <span class="keywordflow">if</span> (current &gt;= *_maxDepth) {</div>
+<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span>            ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,</div>
+<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span>                                                 <span class="keyword">static_cast&lt;</span><span class="keywordtype">double</span><span class="keyword">&gt;</span>(current));</div>
+<div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html">OfflineQueueFullError</a>{*_maxDepth, current};</div>
+<div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span>        }</div>
+<div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span>    }</div>
+<div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span> </div>
+<div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span>    std::filesystem::path _path;</div>
+<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>    <span class="keyword">mutable</span> sqlite3* _db = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
+<div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span>    std::optional&lt;std::size_t&gt; _maxDepth;</div>
+<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span>};</div>
 </div>
-<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span> </div>
-<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span>}  <span class="comment">// namespace morph::offline</span></div>
+<div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span> </div>
+<div class="line"><a id="l00405" name="l00405"></a><span class="lineno">  405</span>}  <span class="comment">// namespace morph::offline</span></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">morph::offline::SqliteOfflineQueue</a></div><div class="ttdoc">Reference SQLite-backed IOfflineQueue: persists payload, idempotencyKey, and attempts across process ...</div><div class="ttdef"><b>Definition</b> <a href="#l00098">sqlite_offline_queue.hpp:98</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a158cd872caa3d353fd4a7a04e0327b5c"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">morph::offline::SqliteOfflineQueue::setIdempotencyKey</a></div><div class="ttdeci">void setIdempotencyKey(uint64_t itemId, std::string idempotencyKey) override</div><div class="ttdoc">Stamps an idempotency key onto an already-inserted row. No-op if itemId is absent....</div><div class="ttdef"><b>Definition</b> <a href="#l00290">sqlite_offline_queue.hpp:290</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a502fb36fc3b6d06d0b71562886764d70"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">morph::offline::SqliteOfflineQueue::maxDepth</a></div><div class="ttdeci">std::optional&lt; std::size_t &gt; maxDepth() const override</div><div class="ttdoc">Returns the configured maximum depth, or std::nullopt if unbounded.</div><div class="ttdef"><b>Definition</b> <a href="#l00280">sqlite_offline_queue.hpp:280</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a6ba81485a0911150f8aa9919869fa67c"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">morph::offline::SqliteOfflineQueue::size</a></div><div class="ttdeci">std::size_t size() const override</div><div class="ttdoc">Returns the number of pending rows. Thread-safe.</div><div class="ttdef"><b>Definition</b> <a href="#l00273">sqlite_offline_queue.hpp:273</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a7d84c59b8a7487daff9ae3d10b8ae868"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7d84c59b8a7487daff9ae3d10b8ae868">morph::offline::SqliteOfflineQueue::drain</a></div><div class="ttdeci">std::vector&lt; QueueItem &gt; drain() const override</div><div class="ttdoc">Returns all pending rows in ascending-id (enqueue) order.</div><div class="ttdef"><b>Definition</b> <a href="#l00222">sqlite_offline_queue.hpp:222</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a85ca32148c89705c70d9f1ac6d4fca91"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">morph::offline::SqliteOfflineQueue::setAttempts</a></div><div class="ttdeci">void setAttempts(uint64_t itemId, uint32_t attempts) override</div><div class="ttdoc">Persists an updated attempt count for itemId. No-op if absent.</div><div class="ttdef"><b>Definition</b> <a href="#l00263">sqlite_offline_queue.hpp:263</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a88bbf14621e61b7a11c6d390b80922e2"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a88bbf14621e61b7a11c6d390b80922e2">morph::offline::SqliteOfflineQueue::enqueue</a></div><div class="ttdeci">uint64_t enqueue(std::string payload) override</div><div class="ttdoc">Inserts payload with an empty idempotency key.</div><div class="ttdef"><b>Definition</b> <a href="#l00153">sqlite_offline_queue.hpp:153</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_aa3342ce935ef2cae8b2c7390c00d9175"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa3342ce935ef2cae8b2c7390c00d9175">morph::offline::SqliteOfflineQueue::enqueue</a></div><div class="ttdeci">uint64_t enqueue(std::string payload, std::string idempotencyKey) override</div><div class="ttdoc">Inserts payload carrying idempotencyKey in one write. A non-empty key already present on a row is ded...</div><div class="ttdef"><b>Definition</b> <a href="#l00177">sqlite_offline_queue.hpp:177</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_aa793d4340bf8da09261b51613389ca4b"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b">morph::offline::SqliteOfflineQueue::~SqliteOfflineQueue</a></div><div class="ttdeci">~SqliteOfflineQueue() override</div><div class="ttdoc">Closes the underlying SQLite connection.</div><div class="ttdef"><b>Definition</b> <a href="#l00138">sqlite_offline_queue.hpp:138</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a158cd872caa3d353fd4a7a04e0327b5c"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">morph::offline::SqliteOfflineQueue::setIdempotencyKey</a></div><div class="ttdeci">void setIdempotencyKey(uint64_t itemId, std::string idempotencyKey) override</div><div class="ttdoc">Stamps an idempotency key onto an already-inserted row. No-op if itemId is absent....</div><div class="ttdef"><b>Definition</b> <a href="#l00301">sqlite_offline_queue.hpp:301</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a502fb36fc3b6d06d0b71562886764d70"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">morph::offline::SqliteOfflineQueue::maxDepth</a></div><div class="ttdeci">std::optional&lt; std::size_t &gt; maxDepth() const override</div><div class="ttdoc">Returns the configured maximum depth, or std::nullopt if unbounded.</div><div class="ttdef"><b>Definition</b> <a href="#l00291">sqlite_offline_queue.hpp:291</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a6ba81485a0911150f8aa9919869fa67c"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">morph::offline::SqliteOfflineQueue::size</a></div><div class="ttdeci">std::size_t size() const override</div><div class="ttdoc">Returns the number of pending rows. Thread-safe.</div><div class="ttdef"><b>Definition</b> <a href="#l00284">sqlite_offline_queue.hpp:284</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a7d84c59b8a7487daff9ae3d10b8ae868"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7d84c59b8a7487daff9ae3d10b8ae868">morph::offline::SqliteOfflineQueue::drain</a></div><div class="ttdeci">std::vector&lt; QueueItem &gt; drain() const override</div><div class="ttdoc">Returns all pending rows in ascending-id (enqueue) order.</div><div class="ttdef"><b>Definition</b> <a href="#l00233">sqlite_offline_queue.hpp:233</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a85ca32148c89705c70d9f1ac6d4fca91"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">morph::offline::SqliteOfflineQueue::setAttempts</a></div><div class="ttdeci">void setAttempts(uint64_t itemId, uint32_t attempts) override</div><div class="ttdoc">Persists an updated attempt count for itemId. No-op if absent.</div><div class="ttdef"><b>Definition</b> <a href="#l00274">sqlite_offline_queue.hpp:274</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a88bbf14621e61b7a11c6d390b80922e2"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a88bbf14621e61b7a11c6d390b80922e2">morph::offline::SqliteOfflineQueue::enqueue</a></div><div class="ttdeci">uint64_t enqueue(std::string payload) override</div><div class="ttdoc">Inserts payload with an empty idempotency key.</div><div class="ttdef"><b>Definition</b> <a href="#l00164">sqlite_offline_queue.hpp:164</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_aa3342ce935ef2cae8b2c7390c00d9175"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa3342ce935ef2cae8b2c7390c00d9175">morph::offline::SqliteOfflineQueue::enqueue</a></div><div class="ttdeci">uint64_t enqueue(std::string payload, std::string idempotencyKey) override</div><div class="ttdoc">Inserts payload carrying idempotencyKey in one write. A non-empty key already present on a row is ded...</div><div class="ttdef"><b>Definition</b> <a href="#l00188">sqlite_offline_queue.hpp:188</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_aa793d4340bf8da09261b51613389ca4b"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b">morph::offline::SqliteOfflineQueue::~SqliteOfflineQueue</a></div><div class="ttdeci">~SqliteOfflineQueue() override</div><div class="ttdoc">Closes the underlying SQLite connection.</div><div class="ttdef"><b>Definition</b> <a href="#l00149">sqlite_offline_queue.hpp:149</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_abc451fbe9de29b202afe66293b668fc5"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#abc451fbe9de29b202afe66293b668fc5">morph::offline::SqliteOfflineQueue::SqliteOfflineQueue</a></div><div class="ttdeci">SqliteOfflineQueue(std::filesystem::path path, std::optional&lt; std::size_t &gt; maxDepth=std::nullopt)</div><div class="ttdoc">Opens (or creates) the queue database at path, creating the schema if it does not already exist.</div><div class="ttdef"><b>Definition</b> <a href="#l00112">sqlite_offline_queue.hpp:112</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_af7af4a3bd277014c911b0e3d4652a398"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#af7af4a3bd277014c911b0e3d4652a398">morph::offline::SqliteOfflineQueue::markDone</a></div><div class="ttdeci">void markDone(uint64_t itemId) override</div><div class="ttdoc">Deletes the row identified by itemId. No-op if absent.</div><div class="ttdef"><b>Definition</b> <a href="#l00253">sqlite_offline_queue.hpp:253</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_af7af4a3bd277014c911b0e3d4652a398"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#af7af4a3bd277014c911b0e3d4652a398">morph::offline::SqliteOfflineQueue::markDone</a></div><div class="ttdeci">void markDone(uint64_t itemId) override</div><div class="ttdoc">Deletes the row identified by itemId. No-op if absent.</div><div class="ttdef"><b>Definition</b> <a href="#l00264">sqlite_offline_queue.hpp:264</a></div></div>
 <div class="ttc" id="astructmorph_1_1offline_1_1IOfflineQueue_html"><div class="ttname"><a href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">morph::offline::IOfflineQueue</a></div><div class="ttdoc">Interface for durable storage of actions that could not be delivered.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d1c/offline__queue_8hpp_source.html#l00104">offline_queue.hpp:104</a></div></div>
 <div class="ttc" id="astructmorph_1_1offline_1_1IOfflineQueue_html_a580ca19c41a025fd3a6f45f2f7fb9490"><div class="ttname"><a href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">morph::offline::IOfflineQueue::enqueue</a></div><div class="ttdeci">virtual uint64_t enqueue(std::string payload)=0</div><div class="ttdoc">Appends payload to the queue with no idempotency key.</div></div>
 <div class="ttc" id="astructmorph_1_1offline_1_1OfflineQueueFullError_html"><div class="ttname"><a href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html">morph::offline::OfflineQueueFullError</a></div><div class="ttdoc">Thrown by enqueue() when the queue is at its configured maxDepth().</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d1c/offline__queue_8hpp_source.html#l00080">offline_queue.hpp:80</a></div></div>
