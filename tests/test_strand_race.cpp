@@ -119,13 +119,15 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
 // tasks that could never run, hanging every post() forever. The constructor now
 // clamps the worker count to at least 1, so a pool built with 0 is still usable.
 TEST_CASE("ThreadPoolExecutor(0) yields a usable pool", "[executor][race]") {
-    morph::exec::ThreadPoolExecutor pool{0};
-
     std::atomic<bool> ran{false};
-    pool.post([&] { ran.store(true); });
 
-    for (int i = 0; i < 1000 && !ran.load(); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    // Scoped so ~ThreadPoolExecutor's own drain-before-join (executor.hpp's own
+    // doc comment on it) is the wait, not a fixed-iteration poll: the posted
+    // task is queued before this block ends, so the destructor's join is
+    // guaranteed not to return until it has run (morph#396).
+    {
+        morph::exec::ThreadPoolExecutor pool{0};
+        pool.post([&] { ran.store(true); });
     }
 
     REQUIRE(ran.load());
