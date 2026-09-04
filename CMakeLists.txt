@@ -401,8 +401,24 @@ if(MORPH_BUILD_OFFLINE_SQLITE)
     if(NOT TARGET SQLite3::SQLite3)
         add_library(SQLite3::SQLite3 UNKNOWN IMPORTED GLOBAL)
         set_target_properties(SQLite3::SQLite3 PROPERTIES
-            IMPORTED_LOCATION "${SQLite3_LIBRARIES}"
+            IMPORTED_LOCATION "${SQLite3_LIBRARY}"
             INTERFACE_INCLUDE_DIRECTORIES "${_morph_sqlite_includes}")
+        # IMPORTED_LOCATION takes exactly one path to a library file, which is
+        # what SQLite3_LIBRARY (singular) is. SQLite3_LIBRARIES (plural) is
+        # FindSQLite3's link-requirements variable and can carry extra
+        # entries beyond the library itself (e.g. `dl` on platforms where
+        # SQLite needs libdl) -- a shape that only INTERFACE_LINK_LIBRARIES
+        # accepts. Thread anything beyond the library path itself through
+        # there instead of concatenating it into IMPORTED_LOCATION, which
+        # only resolves a single file (morph#440).
+        set(_morph_sqlite_extra_libs "${SQLite3_LIBRARIES}")
+        if(_morph_sqlite_extra_libs)
+            list(REMOVE_ITEM _morph_sqlite_extra_libs "${SQLite3_LIBRARY}")
+        endif()
+        if(_morph_sqlite_extra_libs)
+            set_target_properties(SQLite3::SQLite3 PROPERTIES
+                INTERFACE_LINK_LIBRARIES "${_morph_sqlite_extra_libs}")
+        endif()
     else()
         set_target_properties(SQLite3::SQLite3 PROPERTIES IMPORTED_GLOBAL TRUE)
         # The module built the target itself, so strip the same directory from
