@@ -879,11 +879,15 @@ The value on the wire is the enumerator name as a JSON string — `"role":"Manag
 parse error, so a renderer that submitted free text was relying on the server to
 say what the client already knew.
 
-An enum **without** a `glz::meta` is a different, and worse, case: glaze emits a
-`$ref` to a `$defs` entry that is the six-way wildcard
-`{"type": ["number", "string", "boolean", "object", "array", "null"]}`, naming
-neither the enumerators nor even a single type. There is nothing for a renderer
-to recognise — see morph#392.
+An enum **without** a `glz::meta` is refused at compile time. Without the
+declaration, glaze would emit a `$ref` to a `$defs` entry that is the six-way
+wildcard `{"type": ["number", "string", "boolean", "object", "array", "null"]}`,
+naming neither the enumerators nor even a single type — the shipped
+`DynamicForm` drew that wildcard as a checkbox, reporting the form ready for a
+value nobody chose (morph#392). `schemaJson<A>()` now `static_assert`s on
+`glz::glaze_enum_t` for every `enum class` member it reaches, so a rung that
+declares one without `glz::meta`/`glz::enumerate` fails to build rather than
+shipping a form that lies about being ready.
 ### Exact numeric bounds — `x-exactMinimum` / `x-exactMaximum`
 
 `minimum` and `maximum` are standard JSON-Schema vocabulary, stamped by glaze.
