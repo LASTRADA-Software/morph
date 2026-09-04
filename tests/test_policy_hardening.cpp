@@ -350,9 +350,9 @@ TEST_CASE("offline queue stores an idempotency key when enqueued with one", "[po
 
 TEST_CASE("an idempotency key survives drain and can dedup a replay", "[policy][queue]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("a", "k1");
-    queue.enqueue("b", "k1");  // same logical op re-enqueued (same key)
-    queue.enqueue("c", "k2");
+    (void)queue.enqueue("a", "k1");
+    (void)queue.enqueue("b", "k1");  // same logical op re-enqueued (same key)
+    (void)queue.enqueue("c", "k2");
 
     // A replay consumer deduping by idempotencyKey applies each key once.
     std::vector<std::string> applied;

@@ -1786,8 +1786,20 @@ private:
                 if (!binding) {
                     continue;
                 }
-                auto newId =
-                    pinned->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey);
+                // Same branch as switchBackend()'s phase 1: a shared binding
+                // that never attached has no instance to re-create on the
+                // reconnected backend either, and a shared binding that did
+                // attach must come back through registerModelShared (not
+                // registerModelWithContext), or it re-registers as a
+                // non-shared instance and silently drops the sharing.
+                if (binding->shared && binding->primary.empty()) {
+                    continue;
+                }
+                auto newId = binding->shared ? pinned->registerModelShared(
+                                                   binding->typeId, binding->modelFactory,
+                                                   {.contextKey = binding->contextKey, .primary = binding->primary})
+                                             : pinned->registerModelWithContext(binding->typeId, binding->modelFactory,
+                                                                                binding->contextKey);
                 binding->currentId.store(newId.v);
             }
         });

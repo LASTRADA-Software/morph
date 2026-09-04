@@ -413,8 +413,8 @@ TEST_CASE("Issue 10: in-flight execute after deregisterModel completes without c
 TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run does not corrupt queue",
           "[sync][issue12]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("pre1");
-    queue.enqueue("pre2");
+    (void)queue.enqueue("pre1");
+    (void)queue.enqueue("pre2");
 
     std::atomic<bool> replayStarted{false};
 
@@ -426,7 +426,7 @@ TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run do
 
     std::thread enqueuer{[&] {
         waitUntil([&] { return replayStarted.load(); });
-        queue.enqueue("concurrent");
+        (void)queue.enqueue("concurrent");
     }};
 
     auto result = worker.run();

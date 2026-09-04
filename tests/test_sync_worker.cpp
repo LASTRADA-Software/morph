@@ -22,8 +22,8 @@ TEST_CASE("morph::offline::SyncWorker: run on empty queue returns zero successfu
 
 TEST_CASE("morph::offline::SyncWorker: successful replay removes items from queue", "[sync]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("item1");
-    queue.enqueue("item2");
+    (void)queue.enqueue("item1");
+    (void)queue.enqueue("item2");
 
     morph::offline::SyncWorker worker{queue, [](const std::string&) { return true; }};
     auto result = worker.run();
@@ -35,8 +35,8 @@ TEST_CASE("morph::offline::SyncWorker: successful replay removes items from queu
 
 TEST_CASE("morph::offline::SyncWorker: failed replay leaves items in queue", "[sync]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("item1");
-    queue.enqueue("item2");
+    (void)queue.enqueue("item1");
+    (void)queue.enqueue("item2");
 
     morph::offline::SyncWorker worker{queue, [](const std::string&) { return false; }};
     auto result = worker.run();
@@ -48,8 +48,8 @@ TEST_CASE("morph::offline::SyncWorker: failed replay leaves items in queue", "[s
 
 TEST_CASE("morph::offline::SyncWorker: partial replay  -  first succeeds, second fails", "[sync]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("good");
-    queue.enqueue("bad");
+    (void)queue.enqueue("good");
+    (void)queue.enqueue("bad");
 
     int call = 0;
     morph::offline::SyncWorker worker{queue, [&](const std::string&) {
@@ -66,8 +66,8 @@ TEST_CASE("morph::offline::SyncWorker: partial replay  -  first succeeds, second
 
 TEST_CASE("morph::offline::SyncWorker: replay function receives the correct payload", "[sync]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("hello");
-    queue.enqueue("world");
+    (void)queue.enqueue("hello");
+    (void)queue.enqueue("world");
 
     std::vector<std::string> received;
     morph::offline::SyncWorker worker{queue, [&](const std::string& payload) {
@@ -84,7 +84,7 @@ TEST_CASE("morph::offline::SyncWorker: replay function receives the correct payl
 TEST_CASE("morph::offline::SyncWorker: stop() aborts run() before processing items", "[sync][stop]") {
     morph::offline::InMemoryOfflineQueue queue;
     for (int i = 0; i < 10; ++i) {
-        queue.enqueue("item" + std::to_string(i));
+        (void)queue.enqueue("item" + std::to_string(i));
     }
 
     morph::offline::SyncWorker worker{queue, [](const std::string&) { return true; }};
@@ -101,8 +101,8 @@ TEST_CASE("morph::offline::SyncWorker: stop() aborts run() before processing ite
 TEST_CASE("morph::offline::SyncWorker: replay exception is caught  -  item stays in queue, run continues",
           "[sync][exception]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("throws");
-    queue.enqueue("ok");
+    (void)queue.enqueue("throws");
+    (void)queue.enqueue("ok");
 
     morph::offline::SyncWorker worker{queue, [](const std::string& payload) -> bool {
                                           if (payload == "throws") {
@@ -124,7 +124,7 @@ TEST_CASE("morph::offline::SyncWorker: concurrent run() calls are serialised  - 
           "[sync][threading]") {
     morph::offline::InMemoryOfflineQueue queue;
     for (int i = 0; i < 4; ++i) {
-        queue.enqueue("item" + std::to_string(i));
+        (void)queue.enqueue("item" + std::to_string(i));
     }
 
     std::atomic<int> replayCount{0};
@@ -148,8 +148,8 @@ TEST_CASE("morph::offline::SyncWorker: concurrent run() calls are serialised  - 
 
 TEST_CASE("morph::offline::SyncWorker: stop resets after run  -  next run proceeds normally", "[sync][stop]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("a");
-    queue.enqueue("b");
+    (void)queue.enqueue("a");
+    (void)queue.enqueue("b");
 
     morph::offline::SyncWorker worker{queue, [](const std::string&) { return true; }};
 
@@ -160,7 +160,7 @@ TEST_CASE("morph::offline::SyncWorker: stop resets after run  -  next run procee
     // Items remain because run() was aborted.
     // (If by chance 0 items were enqueued, re-enqueue to guarantee the next run has work.)
     if (queue.drain().empty()) {
-        queue.enqueue("c");
+        (void)queue.enqueue("c");
     }
 
     // Second run must not inherit the stop flag  -  processes all remaining items.
@@ -180,7 +180,7 @@ TEST_CASE("morph::offline::SyncWorker: no DeadLetterSink set  -  default log-and
     morph::log::setLogger([&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); });
 
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("poison-payload");
+    (void)queue.enqueue("poison-payload");
     morph::offline::SyncWorker worker{queue, [](const std::string&) { return false; }};
 
     morph::offline::SyncResult result;
@@ -248,7 +248,7 @@ TEST_CASE("morph::offline::SyncWorker: a throwing DeadLetterSink is caught  -  i
     morph::log::setLogger([&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); });
 
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("poison");
+    (void)queue.enqueue("poison");
 
     morph::offline::SyncWorker worker{
         queue, [](const std::string&) { return false; },
@@ -279,7 +279,7 @@ TEST_CASE(
     morph::log::setLogger([](morph::log::LogLevel, std::string_view) {});
 
     morph::offline::InMemoryOfflineQueue queue;  // overrides setAttempts -> persists across "restarts"
-    queue.enqueue("poison");
+    (void)queue.enqueue("poison");
 
     morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
@@ -320,7 +320,7 @@ TEST_CASE(
     "morph::offline::SyncWorker: a queue that does not override setAttempts resets the count on a new SyncWorker",
     "[sync][attempts]") {
     NonDurableQueue queue;
-    queue.enqueue("poison");
+    (void)queue.enqueue("poison");
 
     {
         morph::offline::SyncWorker worker{queue, [](const std::string&) { return false; }};
@@ -346,9 +346,9 @@ TEST_CASE("morph::offline::SyncWorker: run() emits queueDepth with the pending c
           "[sync][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("item1");
-    queue.enqueue("item2");
-    queue.enqueue("item3");
+    (void)queue.enqueue("item1");
+    (void)queue.enqueue("item2");
+    (void)queue.enqueue("item3");
 
     std::vector<double> samples;
     morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
@@ -370,9 +370,9 @@ TEST_CASE("morph::offline::SyncWorker: run() over a queue at maxDepth still drai
     // full queue still drains and replays every pending item exactly as an
     // unbounded one would.
     morph::offline::InMemoryOfflineQueue queue{3};
-    queue.enqueue("a");
-    queue.enqueue("b");
-    queue.enqueue("c");
+    (void)queue.enqueue("a");
+    (void)queue.enqueue("b");
+    (void)queue.enqueue("c");
     REQUIRE_THROWS_AS(queue.enqueue("d"), morph::offline::OfflineQueueFullError);
 
     morph::offline::SyncWorker worker{queue, [](const std::string&) { return true; }};
@@ -415,9 +415,9 @@ TEST_CASE("morph::offline::SyncWorker: an Undelivered replay never exhausts the 
     // The finding's own reproduction: five reconnect flaps, each replaying
     // into a connection that drops before the server commits anything.
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("card-move-0");
-    queue.enqueue("card-move-1");
-    queue.enqueue("card-move-2");
+    (void)queue.enqueue("card-move-0");
+    (void)queue.enqueue("card-move-1");
+    (void)queue.enqueue("card-move-2");
 
     std::vector<morph::offline::QueueItem> dead;
     morph::offline::SyncWorker worker{queue,
@@ -448,7 +448,7 @@ TEST_CASE("morph::offline::SyncWorker: an Undelivered replay does not advance th
     // The budget survives process restarts via setAttempts(), so "charges no
     // attempt" has to mean the durable count too -- not just the in-memory map.
     AttemptRecordingQueue queue;
-    queue.enqueue("payload");
+    (void)queue.enqueue("payload");
 
     morph::offline::SyncWorker worker{queue,
                                       [](const std::string&) { return morph::offline::ReplayOutcome::Undelivered; }};
@@ -465,7 +465,7 @@ TEST_CASE("morph::offline::SyncWorker: an Undelivered replay does not advance th
 TEST_CASE("morph::offline::SyncWorker: a Rejected replay spends the budget exactly as `false` always did",
           "[sync][issue343]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("refused");
+    (void)queue.enqueue("refused");
 
     std::vector<morph::offline::QueueItem> dead;
     morph::offline::SyncWorker worker{queue,
@@ -491,7 +491,7 @@ TEST_CASE("morph::offline::SyncWorker: undelivered flaps between rejections do n
     // shape of a flaky link: a genuine refusal still costs one attempt, and no
     // number of undelivered attempts in between brings the cap any closer.
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("payload");
+    (void)queue.enqueue("payload");
 
     bool deliver = false;
     std::vector<morph::offline::QueueItem> dead;
@@ -526,7 +526,7 @@ TEST_CASE("morph::offline::SyncWorker: the bool ReplayFunction keeps its exact p
     morph::log::setLogger([](morph::log::LogLevel, std::string_view) {});
 
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("poison");
+    (void)queue.enqueue("poison");
 
     morph::offline::SyncWorker worker{queue, [](const std::string&) { return false; }};
     morph::offline::SyncResult result;
@@ -546,7 +546,7 @@ TEST_CASE("morph::offline::SyncWorker: a throwing detailed replay still charges 
     morph::log::setLogger([](morph::log::LogLevel, std::string_view) {});
 
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("throws");
+    (void)queue.enqueue("throws");
 
     morph::offline::SyncWorker worker{queue, [](const std::string&) -> morph::offline::ReplayOutcome {
                                           throw std::runtime_error{"replay blew up"};

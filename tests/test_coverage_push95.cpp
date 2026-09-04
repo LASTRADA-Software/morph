@@ -507,7 +507,7 @@ TEST_CASE("morph::offline::SyncWorker: a payload is dead-lettered after kMaxAtte
     ::morph::log::setLogger([](::morph::log::LogLevel, std::string_view) {});
 
     ::morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("always-fails");
+    (void)queue.enqueue("always-fails");
     ::morph::offline::SyncWorker worker{queue, [](const std::string&) { return false; }};
 
     // kMaxAttempts is 5. Attempts 1-4 keep the item (failed); the 5th trips the

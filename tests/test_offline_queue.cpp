@@ -20,9 +20,9 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue returns a unique id per
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: drain returns items in enqueue order", "[queue]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("a");
-    queue.enqueue("b");
-    queue.enqueue("c");
+    (void)queue.enqueue("a");
+    (void)queue.enqueue("b");
+    (void)queue.enqueue("c");
 
     auto items = queue.drain();
     REQUIRE(items.size() == 3);
@@ -49,7 +49,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone removes item from futu
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone on unknown id is a no-op", "[queue]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("y");
+    (void)queue.enqueue("y");
     REQUIRE_NOTHROW(queue.markDone(9999));
     REQUIRE(queue.drain().size() == 1);
 }
@@ -57,7 +57,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone on unknown id is a no-
 TEST_CASE("morph::offline::InMemoryOfflineQueue: drain does not remove items (items survive until markDone)",
           "[queue]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("z");
+    (void)queue.enqueue("z");
 
     auto first = queue.drain();
     auto second = queue.drain();
@@ -78,7 +78,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: concurrent enqueue from multipl
     for (int i = 0; i < nThreads; ++i) {
         threads.emplace_back([&, i] {
             for (int j = 0; j < nPerThread; ++j) {
-                queue.enqueue("t" + std::to_string(i) + "_" + std::to_string(j));
+                (void)queue.enqueue("t" + std::to_string(i) + "_" + std::to_string(j));
             }
         });
     }
@@ -157,7 +157,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: two-arg enqueue stores the idem
 TEST_CASE("morph::offline::QueueItem: attempts defaults to 0 and round-trips through enqueue/drain",
           "[queue][attempts]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("payload");
+    (void)queue.enqueue("payload");
 
     auto items = queue.drain();
     REQUIRE(items.size() == 1);
@@ -178,7 +178,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: setAttempts updates the in-dequ
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: setAttempts on an unknown id is a no-op", "[queue][attempts]") {
     morph::offline::InMemoryOfflineQueue queue;
-    queue.enqueue("payload");
+    (void)queue.enqueue("payload");
 
     REQUIRE_NOTHROW(queue.setAttempts(9999, 5));
 
@@ -211,8 +211,8 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue below maxDepth succeeds
 TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth throws OfflineQueueFullError",
           "[queue][overflow]") {
     morph::offline::InMemoryOfflineQueue queue{2};
-    queue.enqueue("a");
-    queue.enqueue("b");
+    (void)queue.enqueue("a");
+    (void)queue.enqueue("b");
     REQUIRE_THROWS_AS(queue.enqueue("c"), morph::offline::OfflineQueueFullError);
     REQUIRE(queue.size() == 2);  // the rejected item must not grow the queue
 }
@@ -241,9 +241,9 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: default constructor is unbounde
 TEST_CASE("morph::offline::IOfflineQueue: default size() delegates to drain().size()", "[queue][overflow]") {
     MinimalQueue queue;
     morph::offline::IOfflineQueue& base = queue;
-    base.enqueue("a");
-    base.enqueue("b");
-    base.enqueue("c");
+    (void)base.enqueue("a");
+    (void)base.enqueue("b");
+    (void)base.enqueue("c");
     // MinimalQueue does not override size(), so this resolves to
     // IOfflineQueue's default, which calls drain().size().
     REQUIRE(base.size() == 3);
@@ -262,7 +262,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth emits queue
           "[queue][overflow][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::offline::InMemoryOfflineQueue queue{1};
-    queue.enqueue("a");
+    (void)queue.enqueue("a");
 
     std::vector<double> samples;
     morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {

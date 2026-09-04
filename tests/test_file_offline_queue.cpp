@@ -76,7 +76,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: markDone persists across a reopen",
     {
         morph::offline::FileOfflineQueue queue{path};
         auto id1 = queue.enqueue("gone");
-        queue.enqueue("stays");
+        (void)queue.enqueue("stays");
         queue.markDone(id1);
     }
     {
@@ -131,8 +131,8 @@ TEST_CASE("morph::offline::FileOfflineQueue: empty idempotencyKey items are neve
     {
         morph::offline::FileOfflineQueue queue{path};
 
-        queue.enqueue("a");
-        queue.enqueue("b");
+        (void)queue.enqueue("a");
+        (void)queue.enqueue("b");
 
         REQUIRE(queue.drain().size() == 2);
     }  // close the queue's file handle before removing it -- required on Windows
@@ -244,9 +244,9 @@ TEST_CASE("morph::offline::FileOfflineQueue: surviving items are intact after re
     auto const path = tempQueuePath();
     {
         morph::offline::FileOfflineQueue queue{path};
-        queue.enqueue("keep-a");
+        (void)queue.enqueue("keep-a");
         auto const gone = queue.enqueue("drop");
-        queue.enqueue("keep-b");
+        (void)queue.enqueue("keep-b");
         queue.markDone(gone);
     }
     for (int restart = 0; restart < 3; ++restart) {
@@ -391,7 +391,7 @@ TEST_CASE(
     std::filesystem::remove(path);
     {
         morph::offline::FileOfflineQueue queue{path};
-        queue.enqueue("first");
+        (void)queue.enqueue("first");
     }
     {
         // Insert a complete-but-malformed line, then a well-formed line after
@@ -523,8 +523,8 @@ TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth throws OfflineQ
     {
         morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 2};
         REQUIRE(queue.maxDepth() == std::optional<std::size_t>{2});
-        queue.enqueue("a");
-        queue.enqueue("b");
+        (void)queue.enqueue("a");
+        (void)queue.enqueue("b");
         REQUIRE_THROWS_AS(queue.enqueue("c"), morph::offline::OfflineQueueFullError);
         REQUIRE(queue.drain().size() == 2);
     }
@@ -547,7 +547,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: maxDepth survives destroying and re
     std::filesystem::remove(path);
     {
         morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
-        queue.enqueue("a");
+        (void)queue.enqueue("a");
         REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
     }
     {
@@ -583,7 +583,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: size() reflects live pending count"
         morph::offline::FileOfflineQueue queue{path};
         REQUIRE(queue.size() == 0);
         auto id1 = queue.enqueue("a");
-        queue.enqueue("b");
+        (void)queue.enqueue("b");
         REQUIRE(queue.size() == 2);
         queue.markDone(id1);
         REQUIRE(queue.size() == 1);
@@ -598,7 +598,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth emits queueOver
     std::filesystem::remove(path);
     {
         morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
-        queue.enqueue("a");
+        (void)queue.enqueue("a");
 
         std::vector<double> samples;
         morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {

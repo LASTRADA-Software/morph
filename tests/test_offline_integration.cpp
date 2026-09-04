@@ -72,9 +72,9 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     morph::bridge::BridgeHandler<OffModel> handler{bridge, &cbExec};
 
     // Enqueue payloads that were written while offline.
-    queue.enqueue("{\"x\":1}");
-    queue.enqueue("{\"x\":2}");
-    queue.enqueue("{\"x\":3}");
+    (void)queue.enqueue("{\"x\":1}");
+    (void)queue.enqueue("{\"x\":2}");
+    (void)queue.enqueue("{\"x\":3}");
 
     // Probe starts returning false — network is down.
     std::atomic<bool> networkOnline{false};

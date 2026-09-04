@@ -274,7 +274,7 @@ TEST_CASE("Discarding a conflict closes it and leaves the server's value standin
     auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
     lims::offline::FieldOutbox gerard{queue, "gerard"};
     gerard.observe(lab.sample);
-    gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
+    (void)gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
 
     // Somebody else moves the sample on first.
     lims::SampleModel bench;
@@ -315,7 +315,7 @@ TEST_CASE("Applying a conflict anyway rebases it onto the current version", "[li
     auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
     lims::offline::FieldOutbox gerard{queue, "gerard"};
     gerard.observe(lab.sample);
-    gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
+    (void)gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
 
     lims::SampleModel bench;
     open(bench, lab.sample.id);
@@ -460,7 +460,7 @@ TEST_CASE("An update for a sample that left the bench is flagged, with the speci
     auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
     lims::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(lab.sample);
-    fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
+    (void)fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
 
     // The lab submits the sample for verification while Fiona is out of signal.
     lims::SampleModel bench;
@@ -487,11 +487,11 @@ TEST_CASE("An undecodable queued payload is journaled and dropped, never left to
 
     auto log = std::make_shared<morph::journal::InMemoryActionLog>();
     auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
-    queue->enqueue("{ this is not json");
+    (void)queue->enqueue("{ this is not json");
 
     lims::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(lab.sample);
-    fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
+    (void)fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
 
     reconnect(queue, "fiona", log);
 
@@ -564,8 +564,8 @@ TEST_CASE("Replay is journaled: applied and flagged updates both name their oper
     lims::offline::FieldOutbox gerard{gerardQueue, "gerard"};
     fiona.observe(lab.sample);
     gerard.observe(lab.sample);
-    fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
-    gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
+    (void)fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
+    (void)gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
 
     reconnect(fionaQueue, "fiona", log);
     reconnect(gerardQueue, "gerard", log);
@@ -627,8 +627,8 @@ TEST_CASE("The definition-of-done flow holds on the durable queue, across a rest
         lims::offline::FieldOutbox gerard{gerardQueue, "gerard"};
         fiona.observe(lab.sample);
         gerard.observe(lab.sample);
-        fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
-        gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
+        (void)fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
+        (void)gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
         CHECK(fionaQueue->size() == 1);
         CHECK(gerardQueue->size() == 1);
     }
@@ -686,7 +686,7 @@ TEST_CASE("The durable queue dedups a re-enqueued operation where the in-memory 
     lims::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(lab.sample);
     const auto queued = fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
-    queue->enqueue(morph::model::ActionTraits<lims::QueuedCapture>::toJson(queued), *queued.operationKey);
+    (void)queue->enqueue(morph::model::ActionTraits<lims::QueuedCapture>::toJson(queued), *queued.operationKey);
     REQUIRE(queue->size() == 2);
 
     reconnect(queue, "fiona");

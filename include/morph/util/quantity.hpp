@@ -731,9 +731,13 @@ struct Quantity {
         adjusted.decimalPlaces = math::DecimalPlaces{math::detail::clampWireDecimalPlaces(newPrecision.value)};
         Quantity out;
         out.payload = adjusted;
-#if MORPH_QUANTITY_PROVENANCE
-        out._ctx = _ctx;
-#endif
+        // Not `out._ctx = _ctx`: that would copy this quantity's derivation
+        // node verbatim, so equation() and operator<<(std::format) would
+        // disagree -- the node's own recorded `result` is still *this*
+        // quantity's old payload/precision, but `out.payload` is the
+        // retagged one. A fresh node (same convention as operator
+        // Quantity<To>()'s unit conversion above) keeps the two consistent.
+        MORPH_Q_BUILD(out, "retag decimal places", payload, std::nullopt, out.payload, MORPH_Q_NODE(*this), nullptr);
         return out;
     }
 
@@ -756,9 +760,13 @@ struct Quantity {
         }
         Quantity out;
         out.payload = math::roundToDecimalPlaces(*payload, newPrecision, mode);
-#if MORPH_QUANTITY_PROVENANCE
-        out._ctx = _ctx;
-#endif
+        // Same reasoning as withDecimalPlaces() above: this call changes the
+        // exact value, not just its tag, so copying _ctx verbatim would leave
+        // the derivation node's recorded result pointing at the pre-rounding
+        // payload while out.payload holds the rounded one. Stamp a fresh node
+        // instead.
+        MORPH_Q_BUILD(out, "round to decimal places", payload, std::nullopt, out.payload, MORPH_Q_NODE(*this),
+                      nullptr);
         return out;
     }
 

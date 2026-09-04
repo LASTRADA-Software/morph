@@ -167,7 +167,7 @@ private:
                 try {
                     entry.callback();
                 } catch (const std::exception& exc) {
-                    ::morph::log::logError("[timeout-scheduler] callback threw: " + std::string{exc.what()});
+                    ::morph::log::logError("[timeout-scheduler] callback threw: {}", exc.what());
                 } catch (...) {
                     ::morph::log::logError("[timeout-scheduler] callback threw unknown exception");
                 }
@@ -295,7 +295,7 @@ private:
         try {
             callback();
         } catch (const std::exception& exc) {
-            ::morph::log::logError("[timeout-scheduler] callback threw: " + std::string{exc.what()});
+            ::morph::log::logError("[timeout-scheduler] callback threw: {}", exc.what());
         } catch (...) {
             ::morph::log::logError("[timeout-scheduler] callback threw unknown exception");
         }

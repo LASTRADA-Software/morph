@@ -100,7 +100,15 @@ Central dispatcher. Non-copyable, non-movable. Thread-safe.
 
 **Construction** takes ownership of an `IBackend` and installs a reconnect
 handler so backends with recoverable transports (e.g. `QtWebSocketBackend`)
-re-register all live bindings on reconnection.
+re-register all live bindings on reconnection. The handler branches on
+`binding->shared` exactly as `switchBackend()`'s phase 1 does: an unattached
+shared binding (`binding->primary` empty) has no instance to recreate and is
+skipped, and an attached shared binding re-registers through
+`registerModelShared(typeId, modelFactory, {contextKey, primary})` rather than
+`registerModelWithContext` — otherwise the reconnected registration would come
+back as an ordinary non-shared instance, silently dropping the sharing a
+surviving handler had before the disconnect. A non-shared binding is
+unaffected and still re-registers via `registerModelWithContext`.
 
 **`registerHandler<Model>()`** creates a `HandlerBinding` with the default
 `ModelFactory::create<Model>()` factory and registers it on the active
