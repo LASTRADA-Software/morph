@@ -381,7 +381,7 @@ TEST_CASE("morph::offline::SyncWorker: stop() called mid-replay aborts before pr
     morph::offline::InMemoryOfflineQueue queue;
     constexpr int total = 10;
     for (int idx = 0; idx < total; ++idx) {
-        queue.enqueue("item" + std::to_string(idx));
+        (void)queue.enqueue("item" + std::to_string(idx));
     }
 
     morph::offline::SyncWorker* workerPtr = nullptr;

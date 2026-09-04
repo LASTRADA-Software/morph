@@ -67,7 +67,7 @@ TEST_CASE("offline queue: enqueue -> drain -> markDone", "[concepts][offline]") 
 
 TEST_CASE("offline queue: SyncWorker dead-letters an item that always fails to replay", "[concepts][offline][sync]") {
     InMemoryOfflineQueue queue;
-    queue.enqueue("poison-payload", "op-1");  // "op-1" is this item's idempotencyKey
+    (void)queue.enqueue("poison-payload", "op-1");  // "op-1" is this item's idempotencyKey
 
     std::vector<QueueItem> deadLettered;
     SyncWorker worker{

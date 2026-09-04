@@ -275,11 +275,6 @@ public:
         auto compState = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         ::morph::async::Completion<std::shared_ptr<void>> comp{compState, cbExec};
 
-        if (!_connected.load()) {
-            compState->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
-            return comp;
-        }
-
         std::uint64_t const callId = ++_nextCallId;
         ::morph::wire::Envelope env;
         env.kind = "execute";
@@ -290,8 +285,23 @@ public:
         env.body = call.serializeAction();
         env.session = std::move(call.session);
 
+        // _connected is re-checked here, under _pendingMtx, rather than only
+        // before this block: onDisconnected() stores _connected = false and
+        // then sweeps _pending under the same mutex. Checking _connected
+        // before taking the lock (and nowhere else) leaves a window where a
+        // disconnect's sweep can run strictly between that check and this
+        // insert -- this entry would land in _pending *after* the sweep
+        // already drained it, and nothing would ever resolve its Completion.
+        // Checking again here, still holding the lock the sweep also takes,
+        // closes that window: either this insert happens-before the sweep
+        // (and gets cancelled by it), or it happens-after and observes
+        // _connected already false (and is rejected immediately below).
         {
             std::scoped_lock lock{_pendingMtx};
+            if (!_connected.load()) {
+                compState->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+                return comp;
+            }
             _pending[callId] = PendingExecute{compState, std::move(call.deserializeResult), cbExec};
         }
 
@@ -512,6 +522,19 @@ private:
                 } catch (...) {
                     pending.state->setException(std::current_exception());
                 }
+            } else if (env.message == ::morph::wire::kExecuteTimeoutMessage) {
+                // The server's own `LimitPolicy::executeTimeout` reply (see
+                // remote.hpp's use of `wire::kExecuteTimeoutMessage`), not a
+                // generic application error -- surfaced as the same
+                // TimeoutError type QtWebSocketBackend/SimulatedRemoteBackend
+                // give callers for this case, so callers can distinguish
+                // "server gave up on this specific call" from an arbitrary
+                // `err` message. Matched against the shared constant, not a
+                // hand-typed literal: see its own doc comment for why a
+                // literal here would risk misclassifying a genuine
+                // application exception whose text happens to read
+                // "timeout".
+                pending.state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
             } else {
                 pending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
             }

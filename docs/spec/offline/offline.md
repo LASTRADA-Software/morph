@@ -208,6 +208,14 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 default can call it (and so can an application) without needing a non-`const`
 reference to the queue.
 
+Both `enqueue` overloads, `drain`, `size`, and `maxDepth` are `[[nodiscard]]`
+on the interface and on every shipped override (`InMemoryOfflineQueue`,
+`FileOfflineQueue`, `SqliteOfflineQueue`) — each returns the one piece of
+information the call exists to produce (the item's id, the snapshot, the
+count, the cap), and silently discarding it is always a caller mistake rather
+than a legitimate fire-and-forget use, so the compiler flags it instead of
+leaving it to be noticed at runtime.
+
 #### Depth bound and overflow policy
 
 `IOfflineQueue` has no depth bound by default — `maxDepth()` returns
@@ -335,6 +343,13 @@ CREATE TABLE IF NOT EXISTS morph_offline_queue (
 CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem
     ON morph_offline_queue(idempotency_key) WHERE idempotency_key <> '';
 ```
+
+Construction never leaks the SQLite connection: once `sqlite3_open()` has
+succeeded, a failure in one of the schema-setup statements above closes `_db`
+before rethrowing, rather than leaving a live handle behind with no
+`SqliteOfflineQueue` object left to close it in its destructor. A caller can
+therefore treat a thrown constructor as leaving no resource open, exactly as
+if construction had failed at `sqlite3_open()` itself.
 
 `id` is `AUTOINCREMENT`: ids are never reused, and a re-opened queue
 re-presents each row under its **stored, stable** id — restarting does not

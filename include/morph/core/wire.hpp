@@ -412,6 +412,25 @@ inline Envelope makeErr(std::string message, uint64_t callId = 0) {
     return env;
 }
 
+/// @brief The `err` reply message `RemoteServer` sends when
+///        `LimitPolicy::executeTimeout` fires server-side (see
+///        `RemoteServer::execute`'s `_timeoutScheduler` path).
+///
+/// `"timeout"` exactly is the documented wire contract (`docs/spec/core/
+/// backend.md`'s `executeTimeout` row, `docs/spec/core/completion.md`'s
+/// `TimeoutError` row, `docs/spec/error_handling.md`'s `"timeout"` row) —
+/// real clients on the wire, not just this codebase's own backends, match
+/// against this literal, so it cannot change. Callers matching a reply
+/// against it should still use this constant rather than a hand-typed
+/// literal, purely to keep the one producer and its consumers from drifting
+/// apart by typo; it does not, on its own, rule out an application
+/// exception whose `what()` happens to read exactly "timeout" being
+/// misclassified the same way (see `makeErr`'s docs above on `message`
+/// carrying caught exception text) — that is a narrow, pre-existing
+/// ambiguity inherent to a free-text wire field, not something this
+/// constant can close without breaking the documented contract.
+inline constexpr std::string_view kExecuteTimeoutMessage = "timeout";
+
 /// @brief Builds a `hello` envelope announcing the sender's protocol version.
 ///
 /// Exchanged once per connection, before any `register`/`execute`. See

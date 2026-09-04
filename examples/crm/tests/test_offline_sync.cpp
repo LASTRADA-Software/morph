@@ -471,7 +471,7 @@ TEST_CASE("An undecodable queued payload is journaled and dropped, never left to
 
     auto log = std::make_shared<morph::journal::InMemoryActionLog>();
     auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
-    queue->enqueue("{ this is not json");
+    (void)queue->enqueue("{ this is not json");
 
     crm::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(deal.opportunity);

@@ -107,8 +107,8 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: empty idempotencyKey items are ne
     removeDbFiles(dbPath);
     morph::offline::SqliteOfflineQueue queue{dbPath};
 
-    queue.enqueue("a");
-    queue.enqueue("b");
+    (void)queue.enqueue("a");
+    (void)queue.enqueue("b");
 
     REQUIRE(queue.drain().size() == 2);
     removeDbFiles(dbPath);
@@ -168,8 +168,8 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth throws Offlin
     removeDbFiles(dbPath);
     {
         morph::offline::SqliteOfflineQueue queue{dbPath, 2};
-        queue.enqueue("a");
-        queue.enqueue("b");
+        (void)queue.enqueue("a");
+        (void)queue.enqueue("b");
         REQUIRE_THROWS_AS(queue.enqueue("c"), morph::offline::OfflineQueueFullError);
         REQUIRE(queue.drain().size() == 2);
     }
@@ -182,7 +182,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: maxDepth survives destroying and 
     removeDbFiles(dbPath);
     {
         morph::offline::SqliteOfflineQueue queue{dbPath, 1};
-        queue.enqueue("a");
+        (void)queue.enqueue("a");
         REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
     }
     {
@@ -201,9 +201,9 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: size() matches COUNT(*) against t
     {
         morph::offline::SqliteOfflineQueue queue{dbPath};
         REQUIRE(queue.size() == 0);
-        queue.enqueue("a");
-        queue.enqueue("b");
-        queue.enqueue("c");
+        (void)queue.enqueue("a");
+        (void)queue.enqueue("b");
+        (void)queue.enqueue("c");
         REQUIRE(queue.size() == 3);
 
         // Cross-check via a raw query against the same database file.
@@ -227,7 +227,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a dedup hit at capacity is reject
     removeDbFiles(dbPath);
     {
         morph::offline::SqliteOfflineQueue queue{dbPath, 1};
-        queue.enqueue("first-payload", "op-1");
+        (void)queue.enqueue("first-payload", "op-1");
         // The keyed path checks capacity BEFORE attempting the insert, so a
         // call that would otherwise resolve to a dedup hit (inserting
         // nothing) is still rejected once the queue is full -- documented
@@ -245,7 +245,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth emits queueOv
     removeDbFiles(dbPath);
     {
         morph::offline::SqliteOfflineQueue queue{dbPath, 1};
-        queue.enqueue("a");
+        (void)queue.enqueue("a");
 
         std::vector<double> samples;
         morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
@@ -343,7 +343,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a non-conflicting setIdempotencyK
     removeDbFiles(dbPath);
     {
         morph::offline::SqliteOfflineQueue queue{dbPath};
-        queue.enqueue("payload-A", "K1");
+        (void)queue.enqueue("payload-A", "K1");
         // Control: without it, the case above would pass against a hook that
         // silently stamped nothing at all.
         auto const fresh = queue.morph::offline::IOfflineQueue::enqueue("payload-B", "K2");

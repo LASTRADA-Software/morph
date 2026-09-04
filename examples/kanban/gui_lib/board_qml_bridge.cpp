@@ -319,7 +319,11 @@ void BoardBridge::moveTask(const QString& taskId, const QString& columnId, const
                                       .swimlaneId = parseId<SwimlaneId>(swimlaneId),
                                       .position = static_cast<std::int64_t>(position),
                                       .opId = opId.toStdString()};
-        _offlineQueue->enqueue(serializeMoveTaskPosition(action), action.opId);
+        // The queue-local id is discarded on purpose: SyncWorker's own
+        // markDone() call drains and identifies items by that id itself, and
+        // nothing here needs to hold onto it -- the action's own opId (already
+        // stamped above) is this call's durable identity.
+        (void)_offlineQueue->enqueue(serializeMoveTaskPosition(action), action.opId);
         _queueDepth = static_cast<int>(_offlineQueue->size());
         emit syncStatusChanged(_queueDepth, _deadLetteredCount);
         return;

@@ -172,9 +172,9 @@ TEST_CASE("ConflictResolution: no conflicts  -  all items markDone on switchBack
     SyncExec cbExec;
     morph::offline::InMemoryOfflineQueue queue;
 
-    queue.enqueue(R"({"amount":10})");
-    queue.enqueue(R"({"amount":20})");
-    queue.enqueue(R"({"amount":30})");
+    (void)queue.enqueue(R"({"amount":10})");
+    (void)queue.enqueue(R"({"amount":20})");
+    (void)queue.enqueue(R"({"amount":30})");
 
     auto binding = makeOrderBinding(
         queue, [](const std::string&) { return false; },      // no conflicts
@@ -199,9 +199,9 @@ TEST_CASE("ConflictResolution: conflicting items discarded  -  resolver returns 
     SyncExec cbExec;
     morph::offline::InMemoryOfflineQueue queue;
 
-    queue.enqueue("clean");
-    queue.enqueue("CONFLICT");
-    queue.enqueue("clean2");
+    (void)queue.enqueue("clean");
+    (void)queue.enqueue("CONFLICT");
+    (void)queue.enqueue("clean2");
 
     auto binding = makeOrderBinding(
         queue, [](const std::string& payload) { return payload.contains("CONFLICT"); },
@@ -223,9 +223,9 @@ TEST_CASE("ConflictResolution: conflicting items merged  -  resolver returns non
     SyncExec cbExec;
     morph::offline::InMemoryOfflineQueue queue;
 
-    queue.enqueue("CONFLICT_A");
-    queue.enqueue("CONFLICT_B");
-    queue.enqueue("clean");
+    (void)queue.enqueue("CONFLICT_A");
+    (void)queue.enqueue("CONFLICT_B");
+    (void)queue.enqueue("clean");
 
     auto binding = makeOrderBinding(
         queue, [](const std::string& payload) { return payload.contains("CONFLICT"); },
@@ -292,9 +292,9 @@ TEST_CASE("ConflictResolution: full offline scenario  -  accumulate offline, syn
     morph::offline::InMemoryOfflineQueue queue;
 
     // Simulate three offline writes.
-    queue.enqueue(R"({"item":"order_A"})");        // clean
-    queue.enqueue(R"({"item":"order_B_stale"})");  // stale  -  conflicts with server
-    queue.enqueue(R"({"item":"order_C"})");        // clean
+    (void)queue.enqueue(R"({"item":"order_A"})");        // clean
+    (void)queue.enqueue(R"({"item":"order_B_stale"})");  // stale  -  conflicts with server
+    (void)queue.enqueue(R"({"item":"order_C"})");        // clean
 
     auto binding = makeOrderBinding(
         queue,

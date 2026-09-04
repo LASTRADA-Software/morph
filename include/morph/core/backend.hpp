@@ -783,8 +783,8 @@ public:
         trackPending(compState);
         auto localOp = std::move(call.localOp);
         auto session = std::move(call.session);
-        auto modelTypeId = call.modelTypeId;
-        auto actionTypeId = call.actionTypeId;
+        auto modelTypeId = std::move(call.modelTypeId);
+        auto actionTypeId = std::move(call.actionTypeId);
         // Captured by shared_ptr, never by raw `this`: see the Global
         // Constraints note on `~StrandExecutor`'s member-destruction-order
         // subtlety. A shared_ptr copy has its own lifetime, independent of

@@ -177,7 +177,7 @@ public:
     /// @brief Appends @p payload with no idempotency key.
     /// @param payload Serialised action to persist.
     /// @return A stable id that can be passed to `markDone()`.
-    uint64_t enqueue(std::string payload) override { return enqueue(std::move(payload), {}); }
+    [[nodiscard]] uint64_t enqueue(std::string payload) override { return enqueue(std::move(payload), {}); }
 
     /// @brief Appends @p payload carrying @p idempotencyKey. A non-empty key
     ///        already present on a pending item is deduplicated: the existing
@@ -187,7 +187,7 @@ public:
     /// @return The new item's id, or the existing item's id on a dedup hit.
     /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`
     ///         (a dedup hit above bypasses this check and always succeeds).
-    uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
+    [[nodiscard]] uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
         std::scoped_lock const lock{_mtx};
         if (!idempotencyKey.empty()) {
             for (const auto& [existingId, item] : _items) {
@@ -210,7 +210,7 @@ public:
 
     /// @brief Returns all pending items in ascending-id (enqueue) order.
     /// @return Snapshot of all pending items; the file itself is unchanged.
-    std::vector<QueueItem> drain() const override {
+    [[nodiscard]] std::vector<QueueItem> drain() const override {
         std::scoped_lock const lock{_mtx};
         std::vector<QueueItem> out;
         out.reserve(_items.size());
@@ -222,14 +222,14 @@ public:
 
     /// @brief Returns the number of pending items. Thread-safe.
     /// @return Current pending item count.
-    std::size_t size() const override {
+    [[nodiscard]] std::size_t size() const override {
         std::scoped_lock const lock{_mtx};
         return _items.size();
     }
 
     /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.
     /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.
-    std::optional<std::size_t> maxDepth() const override { return _maxDepth; }
+    [[nodiscard]] std::optional<std::size_t> maxDepth() const override { return _maxDepth; }
 
     /// @brief Tombstones @p itemId. No-op if not found.
     /// @param itemId Id returned by the corresponding `enqueue()` call.

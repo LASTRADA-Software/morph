@@ -120,18 +120,29 @@ public:
             }
             throw SqliteOfflineQueueError{msg};
         }
-        execOrThrow("PRAGMA journal_mode=WAL;");
-        execOrThrow(
-            "CREATE TABLE IF NOT EXISTS morph_offline_queue ("
-            "  id              INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "  payload         TEXT    NOT NULL,"
-            "  idempotency_key TEXT    NOT NULL DEFAULT '',"
-            "  attempts        INTEGER NOT NULL DEFAULT 0,"
-            "  enqueued_at     INTEGER NOT NULL"
-            ");");
-        execOrThrow(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem "
-            "ON morph_offline_queue(idempotency_key) WHERE idempotency_key <> '';");
+        // _db is a live, open connection from here on -- if any schema-setup
+        // statement below throws, this constructor never completes, so
+        // ~SqliteOfflineQueue() never runs to close it. Close it here before
+        // rethrowing, the same discipline the open-failure branch above
+        // already applies to its own failure path.
+        try {
+            execOrThrow("PRAGMA journal_mode=WAL;");
+            execOrThrow(
+                "CREATE TABLE IF NOT EXISTS morph_offline_queue ("
+                "  id              INTEGER PRIMARY KEY AUTOINCREMENT,"
+                "  payload         TEXT    NOT NULL,"
+                "  idempotency_key TEXT    NOT NULL DEFAULT '',"
+                "  attempts        INTEGER NOT NULL DEFAULT 0,"
+                "  enqueued_at     INTEGER NOT NULL"
+                ");");
+            execOrThrow(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem "
+                "ON morph_offline_queue(idempotency_key) WHERE idempotency_key <> '';");
+        } catch (...) {
+            sqlite3_close(_db);
+            _db = nullptr;
+            throw;
+        }
     }
 
     /// @brief Closes the underlying SQLite connection.
@@ -150,7 +161,7 @@ public:
     /// @param payload Serialised action to persist.
     /// @return The new row's id (`SELECT last_insert_rowid()`).
     /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.
-    uint64_t enqueue(std::string payload) override {
+    [[nodiscard]] uint64_t enqueue(std::string payload) override {
         std::scoped_lock const lock{_mtx};
         checkCapacityLocked();
         detail::StatementGuard guard{
@@ -174,7 +185,7 @@ public:
     ///         rejected when the queue happens to be full at the same time —
     ///         a documented, accepted conservatism rather than an extra
     ///         round trip to special-case it.
-    uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
+    [[nodiscard]] uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
         std::scoped_lock const lock{_mtx};
         if (idempotencyKey.empty()) {
             checkCapacityLocked();
@@ -219,7 +230,7 @@ public:
 
     /// @brief Returns all pending rows in ascending-id (enqueue) order.
     /// @return Snapshot of all pending items; the table is unchanged.
-    std::vector<QueueItem> drain() const override {
+    [[nodiscard]] std::vector<QueueItem> drain() const override {
         std::scoped_lock const lock{_mtx};
         detail::StatementGuard guard{
             prepare("SELECT id, payload, idempotency_key, attempts FROM morph_offline_queue ORDER BY id;")};
@@ -270,14 +281,14 @@ public:
 
     /// @brief Returns the number of pending rows. Thread-safe.
     /// @return Current pending item count (`COUNT(*)` against the table).
-    std::size_t size() const override {
+    [[nodiscard]] std::size_t size() const override {
         std::scoped_lock const lock{_mtx};
         return countLocked();
     }
 
     /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.
     /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.
-    std::optional<std::size_t> maxDepth() const override { return _maxDepth; }
+    [[nodiscard]] std::optional<std::size_t> maxDepth() const override { return _maxDepth; }
 
 protected:
     /// @brief Stamps an idempotency key onto an already-inserted row. No-op if

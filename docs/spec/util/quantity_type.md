@@ -368,6 +368,16 @@ specific display width; it changes only the tag, never the exact value.
 using the same half-away-from-zero rule this formatter uses — so a rounded value
 and its rendering agree digit for digit, and re-rendering it is a no-op.
 
+Both stamp a **fresh** provenance node for their result (`MORPH_Q_BUILD`, the
+same convention `operator Quantity<To>()`'s unit conversion uses) rather than
+copying the input's node verbatim. A copied node's own recorded result would
+still be the pre-call payload while `out.payload` holds the retagged or
+rounded one, so `equation()` — and any `std::format` output that walks the
+chain — would print a value inconsistent with what the call actually returned.
+A fresh node records the real operation (`"retag decimal places"` /
+`"round to decimal places"`) against the input node, keeping the derivation
+and the returned value in agreement.
+
 ## Provenance — a build-time toggle, on by default
 
 Whether a quantity carries its derivation is a **build-wide decision, selected

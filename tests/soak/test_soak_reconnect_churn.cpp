@@ -89,7 +89,7 @@ TEST_CASE("soak: NetworkMonitor/ReconnectCoordinator/SyncWorker offline-online f
         morph::offline::NetworkMonitorConfig{.probeInterval = 1ms, .failureThreshold = 1, .onlineThreshold = 1}};
 
     for (int cycle = 0; cycle < flapCycles; ++cycle) {
-        queue.enqueue("{\"cycle\":" + std::to_string(cycle) + "}");
+        (void)queue.enqueue("{\"cycle\":" + std::to_string(cycle) + "}");
         netOnline.store(false);
         REQUIRE(morph::testing::waitUntil([&] { return activateLocalCalls.load() > cycle; }));
         netOnline.store(true);

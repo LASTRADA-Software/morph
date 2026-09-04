@@ -1529,6 +1529,16 @@ private:
         if (limits.executeTimeout.count() > 0) {
             std::scoped_lock const lock{_limitsMtx};
             if (_timeoutScheduler) {
+                // The literal, not wire::kExecuteTimeoutMessage, on purpose:
+                // scripts/scenario/scenario_coverage.py statically scans this
+                // file for a string literal passed directly to makeErr to
+                // enumerate every refusal a scenario can assert against, and
+                // does not follow named constants across headers (see that
+                // script's own module docstring on its scan scope). This is
+                // the single call site that produces this message, so the
+                // typo-drift risk a shared constant guards against doesn't
+                // apply here the way it does for the consumer-side
+                // comparisons below.
                 timeoutHandle = _timeoutScheduler->schedule(limits.executeTimeout, [complete, callId]() mutable {
                     complete(::morph::wire::encode(::morph::wire::makeErr("timeout", callId)));
                 });
@@ -2151,7 +2161,7 @@ public:
                     auto reply = ::morph::wire::decode(replyJson);
                     if (reply.kind == "ok") {
                         state->setValue(deser(reply.body));
-                    } else if (reply.message == "timeout") {
+                    } else if (reply.message == ::morph::wire::kExecuteTimeoutMessage) {
                         throw TimeoutError{};
                     } else {
                         throw std::runtime_error(reply.message.empty() ? "malformed reply" : reply.message);

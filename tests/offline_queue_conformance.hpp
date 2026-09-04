@@ -148,9 +148,9 @@ inline void checkIdempotencyKeyContract(const std::string& name, KeyDedup declar
     // ── Pending items are presented in enqueue order ──
     {
         auto queue = make();
-        queue->enqueue("payload-A", "K1");
-        queue->enqueue("payload-B", "K2");
-        queue->enqueue("payload-C", "K3");
+        (void)queue->enqueue("payload-A", "K1");
+        (void)queue->enqueue("payload-B", "K2");
+        (void)queue->enqueue("payload-C", "K3");
         auto const items = queue->drain();
         INFO("drain must present pending items in enqueue order");
         REQUIRE(items.size() == 3);

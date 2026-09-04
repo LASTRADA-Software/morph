@@ -113,8 +113,8 @@ TEST_CASE("FileOfflineQueue: a control byte in payload survives being written an
         // heuristic, but rethrows on any earlier malformed line, so this
         // shape exercises the escaping path itself rather than the
         // torn-line tolerance.
-        queue.enqueue(payload);
-        queue.enqueue("second");
+        (void)queue.enqueue(payload);
+        (void)queue.enqueue("second");
     }  // close the file handle before reopening/removing -- required on Windows
 
     std::vector<morph::offline::QueueItem> items;

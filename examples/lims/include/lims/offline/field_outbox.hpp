@@ -90,7 +90,10 @@ public:
         };
         // The same token in both places: the queue's own dedup slot, and the
         // payload, so replay can enforce at-most-once however the item arrives.
-        _queue->enqueue(::morph::model::ActionTraits<QueuedCapture>::toJson(queued), *queued.operationKey);
+        // The queue-local id is discarded on purpose: dedup and replay both
+        // key on operationKey, and this outbox's own contract returns the
+        // envelope, not the queue's internal id.
+        (void)_queue->enqueue(::morph::model::ActionTraits<QueuedCapture>::toJson(queued), *queued.operationKey);
         // The client's *own* next edit of this sample chains onto this one.
         _localVersion[*sampleId] = base + 1;
         return queued;

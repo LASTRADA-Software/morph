@@ -108,7 +108,7 @@ struct IOfflineQueue {
     ///
     /// @param payload Serialised action to persist.
     /// @return A stable id that can be passed to `markDone()`.
-    virtual uint64_t enqueue(std::string payload) = 0;
+    [[nodiscard]] virtual uint64_t enqueue(std::string payload) = 0;
 
     /// @brief Appends @p payload carrying the cross-subsystem @p idempotencyKey.
     ///
@@ -155,7 +155,7 @@ struct IOfflineQueue {
     /// @return A stable id that can be passed to `markDone()`.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Woverloaded-virtual"
-    virtual uint64_t enqueue(std::string payload, std::string idempotencyKey) {
+    [[nodiscard]] virtual uint64_t enqueue(std::string payload, std::string idempotencyKey) {
         const uint64_t itemId = enqueue(std::move(payload));
         setIdempotencyKey(itemId, std::move(idempotencyKey));
         return itemId;
@@ -168,7 +168,7 @@ struct IOfflineQueue {
     /// call `drain()` multiple times — items survive a crash between `drain()`
     /// and the corresponding `markDone()` call.
     /// @return Snapshot of all pending items.
-    virtual std::vector<QueueItem> drain() const = 0;
+    [[nodiscard]] virtual std::vector<QueueItem> drain() const = 0;
 
     /// @brief Removes the item identified by @p itemId.
     ///
@@ -182,14 +182,14 @@ struct IOfflineQueue {
     /// allocates a full snapshot vector to answer a size query. Override for
     /// an O(1) or index-backed answer.
     /// @return Current pending item count.
-    virtual std::size_t size() const { return drain().size(); }
+    [[nodiscard]] virtual std::size_t size() const { return drain().size(); }
 
     /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.
     ///
     /// Default: `std::nullopt` (unbounded) — preserves current behavior for any
     /// `IOfflineQueue` subclass that predates this method.
     /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.
-    virtual std::optional<std::size_t> maxDepth() const { return std::nullopt; }
+    [[nodiscard]] virtual std::optional<std::size_t> maxDepth() const { return std::nullopt; }
 
     /// @brief Persists an updated attempt count for an item. Default: no-op.
     ///
@@ -237,7 +237,7 @@ public:
     /// @brief Appends @p payload and returns a monotonically increasing id.
     /// @param payload Serialised action to store.
     /// @return Unique id for this item.
-    uint64_t enqueue(std::string payload) override { return enqueue(std::move(payload), {}); }
+    [[nodiscard]] uint64_t enqueue(std::string payload) override { return enqueue(std::move(payload), {}); }
 
     /// @brief Appends @p payload carrying @p idempotencyKey and returns a
     ///        monotonically increasing id.
@@ -245,7 +245,7 @@ public:
     /// @param idempotencyKey Stable dedup token; stored verbatim on the item.
     /// @return Unique id for this item.
     /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.
-    uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
+    [[nodiscard]] uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
         std::scoped_lock const lock{_mtx};
         if (_maxDepth && _items.size() >= *_maxDepth) {
             ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,
@@ -260,21 +260,21 @@ public:
 
     /// @brief Returns a snapshot of all pending items. Thread-safe.
     /// @return Copy of all items in insertion order.
-    std::vector<QueueItem> drain() const override {
+    [[nodiscard]] std::vector<QueueItem> drain() const override {
         std::scoped_lock const lock{_mtx};
         return std::vector<QueueItem>{_items.begin(), _items.end()};
     }
 
     /// @brief Returns the number of pending items. Thread-safe.
     /// @return Current pending item count.
-    std::size_t size() const override {
+    [[nodiscard]] std::size_t size() const override {
         std::scoped_lock const lock{_mtx};
         return _items.size();
     }
 
     /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.
     /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.
-    std::optional<std::size_t> maxDepth() const override { return _maxDepth; }
+    [[nodiscard]] std::optional<std::size_t> maxDepth() const override { return _maxDepth; }
 
     /// @brief Removes the item with @p itemId from the queue. Thread-safe.
     ///
