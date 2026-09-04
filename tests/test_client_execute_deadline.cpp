@@ -102,6 +102,34 @@ private:
     std::vector<std::shared_ptr<morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
 };
 
+/// @brief Pumps @p exec in bounded steps until @p pred is true or the budget
+///        expires, then returns whether it succeeded.
+///
+/// `MainThreadExecutor::runFor()` already blocks internally for its own
+/// timeout waiting for a posted task, so a single generous `runFor()` call
+/// would work for "wait for the deadline to fire" -- but it always spends its
+/// whole budget (its own doc comment: "does not return early when the queue
+/// drains"), where the loop this replaces exits the moment @p pred flips.
+/// Chunking through `morph::testing::kDefaultWaitStep` keeps that early exit
+/// while sharing the same budget every other polling site in this suite now
+/// uses, instead of each call site guessing its own iteration count.
+/// @param exec The executor to pump each step.
+/// @param pred Predicate polled after each pump.
+/// @param budget Total wall-clock budget across all steps.
+/// @return `true` if @p pred became true within @p budget, `false` otherwise.
+template <typename Pred>
+[[nodiscard]] bool pumpUntil(morph::exec::MainThreadExecutor& exec, Pred pred,
+                             std::chrono::milliseconds budget = morph::testing::kDefaultWaitBudget) {
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+    while (!pred()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        exec.runFor(morph::testing::kDefaultWaitStep);
+    }
+    return true;
+}
+
 }  // namespace
 
 template <>
@@ -154,14 +182,15 @@ TEST_CASE("Bridge::setExecuteDeadline fires ClientTimeoutError when no reply arr
         } catch (...) {
         }
     });
-    // Poll rather than a single runFor(): the deadline fires on the
+    // Pump rather than a single runFor(): the deadline fires on the
     // TimeoutScheduler's own background thread, which posts to `exec` --
     // give it real wall-clock slack, matching this codebase's other
-    // cross-thread test patterns.
-    for (int i = 0; i < 50 && !failed; ++i) {
-        exec.runFor(std::chrono::milliseconds{20});
-    }
-    REQUIRE(failed);
+    // cross-thread test patterns. REQUIRE on the pump's own return, not on
+    // `failed` afterwards (morph#396): if the budget expires first, this
+    // reports "the wait itself timed out" rather than failing a REQUIRE on
+    // `failed` that would abort the case before `threwClientTimeout` --
+    // naming the wrong half of the answer -- is ever checked.
+    REQUIRE(pumpUntil(exec, [&] { return failed; }));
     CHECK(threwClientTimeout);
 }
 
@@ -186,9 +215,7 @@ TEST_CASE("A deadline that is cancelled by a real, on-time reply does not also f
     handler.execute(DeadlineCount{.x = 7})
         .then([&result](int r) { result = r; })
         .onError([&failed](const std::exception_ptr&) { failed = true; });
-    for (int i = 0; i < 50 && result == -1 && !failed; ++i) {
-        guiExec.runFor(std::chrono::milliseconds{10});
-    }
+    CHECK(pumpUntil(guiExec, [&] { return result != -1 || failed; }));
     CHECK(result == 7);
     CHECK_FALSE(failed);
     // If the disarm did not work, the 2000ms deadline would still be pending on
@@ -218,9 +245,7 @@ TEST_CASE("An on-time reply releases the deadline's scheduler entry (and the sta
         stateWatch = completion.state();  // Completion<T>::state(), completion.hpp:208
         completion.then([&result](int r) { result = r; });
     }
-    for (int i = 0; i < 50 && result == -1; ++i) {
-        guiExec.runFor(std::chrono::milliseconds{10});
-    }
+    REQUIRE(pumpUntil(guiExec, [&] { return result != -1; }));
     REQUIRE(result == 7);
     guiExec.runFor(std::chrono::milliseconds{100});
     // Without the disarm, the timer entry still owns the state for 5 s.
@@ -258,9 +283,11 @@ TEST_CASE("A real reply that arrives after the deadline already fired is silentl
             }
         });
 
-    for (int i = 0; i < 50 && settleCount == 0; ++i) {
-        exec.runFor(std::chrono::milliseconds{20});
-    }
+    // REQUIRE on the pump's own return, not on `settleCount` afterwards
+    // (morph#396's own shape): if the 50ms deadline never fires within budget,
+    // this reports "the wait itself timed out" rather than a `settleCount ==
+    // 1` REQUIRE that would abort before `threwClientTimeout` is ever checked.
+    REQUIRE(pumpUntil(exec, [&] { return settleCount != 0; }));
     REQUIRE(settleCount == 1);
     REQUIRE(threwClientTimeout);
 

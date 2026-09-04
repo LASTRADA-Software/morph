@@ -120,8 +120,6 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     // morph::bridge::Bridge now routes to remotePool — execute still works.
     std::atomic<int> result{-1};
     handler.execute(OffAction{5}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {});
-    for (int i = 0; i < 50 && result.load() == -1; ++i) {
-        std::this_thread::sleep_for(10ms);
-    }
+    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
     REQUIRE(result.load() == 50);
 }
