@@ -304,8 +304,7 @@ TEST_CASE("MembersView renders SetMemberRole through the shipped renderer and su
     bool foundRoleField = false;
     for (const QVariant& entry : roleOptions) {
         const QVariantMap field = entry.toMap();
-        if (field.value(QStringLiteral("name")).toString() != QStringLiteral("role"))
-            continue;
+        if (field.value(QStringLiteral("name")).toString() != QStringLiteral("role")) continue;
         foundRoleField = true;
         const QVariantList enumOptions = field.value(QStringLiteral("enumOptions")).toList();
         REQUIRE(enumOptions.size() == 3);
@@ -336,8 +335,7 @@ TEST_CASE("MembersView renders SetMemberRole through the shipped renderer and su
     CHECK_FALSE(isReady(form));
     type(form, QStringLiteral("role"), QStringLiteral(R"("Member")"));
     CHECK(isReady(form));
-    CHECK(bodyOf(form) ==
-          QStringLiteral(R"({"projectId":%1,"principal":"bob","role":"Member"})").arg(projectId));
+    CHECK(bodyOf(form) == QStringLiteral(R"({"projectId":%1,"principal":"bob","role":"Member"})").arg(projectId));
 
     bool roleSet = false;
     QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::memberRoleSet, [&roleSet] { roleSet = true; });
@@ -501,8 +499,7 @@ TEST_CASE("RulesView renders CreateRule through the shipped renderer and submits
         bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value("id").toString();
 
     QQmlApplicationEngine engine;
-    QObject* root =
-        loadRoot(engine, "RulesView", {{QStringLiteral("boardBridge"), QVariant::fromValue(&bridge)}});
+    QObject* root = loadRoot(engine, "RulesView", {{QStringLiteral("boardBridge"), QVariant::fromValue(&bridge)}});
 
     QObject* form = root->findChild<QObject*>(QStringLiteral("createRuleForm"));
     REQUIRE(form != nullptr);
@@ -522,8 +519,7 @@ TEST_CASE("RulesView renders CreateRule through the shipped renderer and submits
     bool optionsFetched = false;
     QObject::connect(&bridge, &kanban::gui::BoardBridge::optionsReceived,
                      [&](const QString& optionsAction, bool ok, const QString&) {
-                         if (optionsAction == QStringLiteral("GetBoardState") && ok)
-                             optionsFetched = true;
+                         if (optionsAction == QStringLiteral("GetBoardState") && ok) optionsFetched = true;
                      });
     REQUIRE(pumpUntil([&optionsFetched] { return optionsFetched; }));
 

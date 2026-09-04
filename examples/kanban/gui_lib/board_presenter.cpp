@@ -70,8 +70,8 @@ void BoardPresenter::submitForm(const QString& actionType, const QString& bodyJs
             [this, actionType](std::string resultJson) {
                 CreateRuleResult result;
                 if (glz::read_json(result, resultJson)) {
-                    emit formReplyReceived(
-                        actionType, false, QStringLiteral("the action succeeded but its reply could not be decoded"));
+                    emit formReplyReceived(actionType, false,
+                                           QStringLiteral("the action succeeded but its reply could not be decoded"));
                     return;
                 }
                 // Rules are on-demand state (see `getRules()`'s own doc
@@ -129,9 +129,9 @@ void BoardPresenter::fetchOptions(const QString& optionsAction, const QString& b
     // whatever BoardModel action happens to share that name.
     const std::string type = optionsAction.toStdString();
     if (type != "GetBoardState") {
-        emit optionsFetched(optionsAction, false,
-                            QStringLiteral("no options provider in this client serves action '") + optionsAction +
-                                u'\'');
+        emit optionsFetched(
+            optionsAction, false,
+            QStringLiteral("no options provider in this client serves action '") + optionsAction + u'\'');
         return;
     }
     track<std::string>(
