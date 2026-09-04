@@ -54,9 +54,7 @@ TEST_CASE(
         handler.execute(HBAction{10}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
         });
 
-        for (int i = 0; i < 50 && result.load() == -1; ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
+        REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
         REQUIRE(result.load() == 11);
         // handler destroyed here  -  deregisterModel called on backend
     }
@@ -70,9 +68,7 @@ TEST_CASE(
             .then([&](int val) { result2.store(val); })
             .onError([](const std::exception_ptr&) {});
 
-        for (int i = 0; i < 50 && result2.load() == -1; ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
+        REQUIRE(morph::testing::waitUntil([&] { return result2.load() != -1; }));
         REQUIRE(result2.load() == 21);
     }
 }
@@ -136,9 +132,7 @@ TEST_CASE(
     morph::bridge::BridgeHandler<HBModel> live{bridge, &cbExec};
     live.execute(HBAction{99}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {});
 
-    for (int i = 0; i < 50 && result.load() == -1; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
     REQUIRE(result.load() == 100);
 }
 

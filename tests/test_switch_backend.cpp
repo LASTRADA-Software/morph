@@ -128,9 +128,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  handler works before and aft
     // Execute on original backend.
     std::atomic<int> res1{-1};
     handler.execute(CountAction{5}).then([&](int val) { res1.store(val); }).onError([](const std::exception_ptr&) {});
-    for (int i = 0; i < 50 && res1.load() == -1; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    REQUIRE(morph::testing::waitUntil([&] { return res1.load() != -1; }));
     REQUIRE(res1.load() == 5);
 
     // Switch to a fresh backend  -  model state resets (new instance).
@@ -139,9 +137,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  handler works before and aft
 
     std::atomic<int> res2{-1};
     handler.execute(CountAction{7}).then([&](int val) { res2.store(val); }).onError([](const std::exception_ptr&) {});
-    for (int i = 0; i < 50 && res2.load() == -1; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    REQUIRE(morph::testing::waitUntil([&] { return res2.load() != -1; }));
     REQUIRE(res2.load() == 7);
 }
 
@@ -175,9 +171,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  multiple live handlers all r
     });
     handler2.execute(CountAction{20}).then([&](int val) { res2.store(val); }).onError([](const std::exception_ptr&) {
     });
-    for (int i = 0; i < 50 && (res1.load() == -1 || res2.load() == -1); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    REQUIRE(morph::testing::waitUntil([&] { return res1.load() != -1 && res2.load() != -1; }));
     REQUIRE(res1.load() == 10);
     REQUIRE(res2.load() == 20);
 }
@@ -208,9 +202,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend(shared_ptr)  -  caller-owned ins
 
     std::atomic<int> res{-1};
     handler.execute(CountAction{9}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
-    for (int i = 0; i < 50 && res.load() == -1; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    REQUIRE(morph::testing::waitUntil([&] { return res.load() != -1; }));
     REQUIRE(res.load() == 9);
 }
 
@@ -228,9 +220,7 @@ TEST_CASE(
 
     std::atomic<int> res{-1};
     handler.execute(CountAction{3}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
-    for (int i = 0; i < 50 && res.load() == -1; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    REQUIRE(morph::testing::waitUntil([&] { return res.load() != -1; }));
     REQUIRE(res.load() == 3);
 }
 
@@ -252,9 +242,7 @@ TEST_CASE(
     handler.execute(SwitchCountAction{})
         .then([&](int val) { count.store(val); })
         .onError([](const std::exception_ptr&) {});
-    for (int i = 0; i < 50 && count.load() == -1; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    REQUIRE(morph::testing::waitUntil([&] { return count.load() != -1; }));
     REQUIRE(count.load() == 1);
 }
 
@@ -278,9 +266,7 @@ TEST_CASE(
     handler.execute(SwitchCountAction{})
         .then([&](int val) { count.store(val); })
         .onError([](const std::exception_ptr&) {});
-    for (int i = 0; i < 50 && count.load() == -1; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    REQUIRE(morph::testing::waitUntil([&] { return count.load() != -1; }));
     REQUIRE(count.load() == 1);
 }
 

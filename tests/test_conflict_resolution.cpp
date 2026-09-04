@@ -139,9 +139,7 @@ static std::shared_ptr<morph::bridge::detail::HandlerBinding> makeOrderBinding(m
 static int waitInt(auto completion) {
     std::atomic<int> result{-999};
     std::move(completion).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {});
-    for (int i = 0; i < 100 && result.load() == -999; ++i) {
-        std::this_thread::sleep_for(10ms);
-    }
+    morph::testing::waitUntil([&] { return result.load() != -999; });
     return result.load();
 }
 
@@ -163,13 +161,7 @@ static int waitInt(auto completion) {
 // the exact moment every item has been handled and markDone'd. Bounded, not
 // unbounded: returns false (rather than hanging) if it never empties.
 static bool waitForQueueDrained(morph::offline::InMemoryOfflineQueue& queue) {
-    for (int i = 0; i < 200; ++i) {
-        if (queue.drain().empty()) {
-            return true;
-        }
-        std::this_thread::sleep_for(10ms);
-    }
-    return false;
+    return morph::testing::waitUntil([&] { return queue.drain().empty(); });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
