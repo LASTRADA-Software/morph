@@ -350,9 +350,21 @@ TEST_CASE("MembersView renders SetMemberRole through the shipped renderer and su
     });
     bridge.listRoles(projectId);
     REQUIRE(pumpUntil([&listed] { return listed; }));
-    REQUIRE(rows.size() == 1);
-    CHECK(rows.front().toMap().value(QStringLiteral("principal")).toString() == QStringLiteral("bob"));
-    CHECK(rows.front().toMap().value(QStringLiteral("role")).toString() == QStringLiteral("Member"));
+    // Two rows, not one: `seedProject()` makes "alice" the project's first
+    // Manager (CreateProject's own doc comment), and this submit adds "bob"
+    // alongside her rather than replacing her.
+    REQUIRE(rows.size() == 2);
+    QVariantMap bobRow;
+    bool foundBob = false;
+    for (const QVariant& entry : rows) {
+        const QVariantMap row = entry.toMap();
+        if (row.value(QStringLiteral("principal")).toString() == QStringLiteral("bob")) {
+            bobRow = row;
+            foundBob = true;
+        }
+    }
+    REQUIRE(foundBob);
+    CHECK(bobRow.value(QStringLiteral("role")).toString() == QStringLiteral("Member"));
 
     // The view cleared and re-seeded the form on the reply, so a second add
     // starts with the hidden projectId already engaged and nothing else.
