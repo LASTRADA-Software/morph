@@ -404,6 +404,66 @@ TEST_CASE("ProjectAdminBridge::submitIfValid creates a project and still emits p
     CHECK(rows.front().toMap().value(QStringLiteral("name")).toString() == QStringLiteral("Sprint Board"));
 }
 
+TEST_CASE("ProjectAdminBridge::submitIfValid sets a member role and still emits memberRoleSet",
+          "[kanban][gui][qml-bridge][issue344][issue393]") {
+    // MembersView.qml's "add member" row is a DynamicForm now (morph#393):
+    // submitForm's SetMemberRole branch decodes a bare Ack and re-emits
+    // memberRoleSet exactly as the typed setMemberRole() call does, so
+    // whichever path submitted, ProjectListView.qml's existing
+    // onMemberRoleSet -> listRoles() handler still fires.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    kanban::gui::ProjectAdminBridge bridge{rig->bridge(0), rig->executor()};
+
+    qlonglong projectId = -1;
+    bool created = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectCreated, [&](qlonglong id, const QString&) {
+        projectId = id;
+        created = true;
+    });
+    bridge.createProject(QStringLiteral("Sprint Board"));
+    REQUIRE(pumpUntil([&] { return created; }));
+    REQUIRE(projectId > 0);
+
+    bool roleSet = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::memberRoleSet, [&] { roleSet = true; });
+    QString repliedFor;
+    bool ok = false;
+    bool replied = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::replyReceived,
+                     [&](const QString& actionType, bool succeeded, const QString&) {
+                         if (actionType != QStringLiteral("SetMemberRole")) {
+                             return;
+                         }
+                         ok = succeeded;
+                         replied = true;
+                     });
+
+    // Exactly the body DynamicForm builds: projectId hidden and seeded by the
+    // view, principal and role typed.
+    bridge.submitIfValid(QStringLiteral("SetMemberRole"),
+                         QStringLiteral(R"({"projectId":%1,"principal":"bob","role":"Member"})").arg(projectId));
+    REQUIRE(pumpUntil([&] { return replied && roleSet; }));
+    CHECK(ok);
+
+    bool rolesListed = false;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::rolesListed,
+                     [&](const QVariantList&) { rolesListed = true; });
+    bridge.listRoles(projectId);
+    REQUIRE(pumpUntil([&] { return rolesListed; }));
+    REQUIRE(bridge.roles().size() == 2);
+
+    bool foundBob = false;
+    for (const QVariant& entry : bridge.roles()) {
+        const QVariantMap row = entry.toMap();
+        if (row.value(QStringLiteral("principal")).toString() == QStringLiteral("bob")) {
+            foundBob = true;
+            CHECK(row.value(QStringLiteral("role")).toString() == QStringLiteral("Member"));
+        }
+    }
+    CHECK(foundBob);
+}
+
 TEST_CASE("ProjectAdminBridge::submitIfValid refuses an action its own models do not serve",
           "[kanban][gui][qml-bridge][issue344]") {
     // Both bridges publish the same schema document, so a form bound to the

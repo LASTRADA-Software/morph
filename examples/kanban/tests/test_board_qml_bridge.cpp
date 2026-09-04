@@ -381,7 +381,122 @@ TEST_CASE("BoardBridge::submitIfValid runs the board forms and keeps the board p
     CHECK(comments.front().toMap().value(QStringLiteral("body")).toString() == QStringLiteral("looks good"));
 }
 
-TEST_CASE("BoardBridge::submitIfValid refuses an action outside the four forms it renders",
+TEST_CASE("BoardBridge::submitIfValid submits CreateRule and re-lists rules",
+          "[kanban][gui][qml-bridge][issue344][issue393]") {
+    // CreateRule is the fifth form (morph#393) and the only one that does not
+    // return the rebuilt board state -- BoardPresenter::submitForm decodes
+    // CreateRuleResult on its own branch and re-emits ruleCreated instead of
+    // boardOpened, exactly as the typed createRule() call does.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    const auto projectId = seedProject(*rig);
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+
+    bool changed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&] { changed = true; });
+    bridge.openBoard(QString::number(projectId));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    changed = false;
+    bridge.submitIfValid(QStringLiteral("CreateColumn"), QStringLiteral(R"({"name":"To Do"})"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString columnId = bridge.board()
+                                 .value(QStringLiteral("columns"))
+                                 .toList()
+                                 .front()
+                                 .toMap()
+                                 .value(QStringLiteral("id"))
+                                 .toString();
+
+    bool ruleCreated = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::ruleCreated, [&] { ruleCreated = true; });
+    QString repliedFor;
+    bool ok = false;
+    bool replied = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::replyReceived,
+                     [&](const QString& actionType, bool succeeded, const QString&) {
+                         repliedFor = actionType;
+                         ok = succeeded;
+                         replied = true;
+                     });
+    bridge.submitIfValid(
+        QStringLiteral("CreateRule"),
+        QStringLiteral(R"({"projectId":%1,"triggerColumnId":%2,"mutationType":"AddTag","mutationValue":"urgent"})")
+            .arg(projectId)
+            .arg(columnId));
+    REQUIRE(pumpUntil([&] { return replied && ruleCreated; }));
+    CHECK(ok);
+    CHECK(repliedFor == QStringLiteral("CreateRule"));
+
+    bool listed = false;
+    QVariantList rules;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::rulesListed, [&](const QVariantList& result) {
+        rules = result;
+        listed = true;
+    });
+    bridge.getRules();
+    REQUIRE(pumpUntil([&] { return listed; }));
+    REQUIRE(rules.size() == 1);
+    CHECK(rules.front().toMap().value(QStringLiteral("triggerColumnId")).toString() == columnId);
+    CHECK(rules.front().toMap().value(QStringLiteral("mutationValue")).toString() == QStringLiteral("urgent"));
+}
+
+TEST_CASE("BoardBridge::fetchOptions fetches CreateRule::triggerColumnId's GetBoardState options",
+          "[kanban][gui][qml-bridge][issue393]") {
+    // The one options provider a board form declares (rule_dto.hpp's
+    // TriggerColumnChoice). Exercised directly here -- DynamicForm.qml calls
+    // this on load for every Choice field, but this file's tests do not go
+    // through QML, so the seam gets its own direct call.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    const auto projectId = seedProject(*rig);
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+
+    bool changed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&] { changed = true; });
+    bridge.openBoard(QString::number(projectId));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    changed = false;
+    bridge.submitIfValid(QStringLiteral("CreateColumn"), QStringLiteral(R"({"name":"To Do"})"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString columnId = bridge.board()
+                                 .value(QStringLiteral("columns"))
+                                 .toList()
+                                 .front()
+                                 .toMap()
+                                 .value(QStringLiteral("id"))
+                                 .toString();
+
+    QString repliedFor;
+    bool ok = false;
+    QString payload;
+    bool replied = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::optionsReceived,
+                     [&](const QString& optionsAction, bool succeeded, const QString& text) {
+                         repliedFor = optionsAction;
+                         ok = succeeded;
+                         payload = text;
+                         replied = true;
+                     });
+    bridge.fetchOptions(QStringLiteral("GetBoardState"), QStringLiteral("{}"));
+    REQUIRE(pumpUntil([&] { return replied; }));
+    CHECK(ok);
+    CHECK(repliedFor == QStringLiteral("GetBoardState"));
+    CHECK(payload.contains(columnId));
+
+    // The one options provider a board form declares, and nothing else --
+    // the same allowlist discipline submitForm() applies, checked here on a
+    // *registered* action rather than a nonsense string.
+    replied = false;
+    ok = true;
+    bridge.fetchOptions(QStringLiteral("GetRules"), QStringLiteral("{}"));
+    REQUIRE(pumpUntil([&] { return replied; }));
+    CHECK_FALSE(ok);
+    CHECK(payload.contains(QStringLiteral("GetRules")));
+}
+
+TEST_CASE("BoardBridge::submitIfValid refuses an action outside the five forms it renders",
           "[kanban][gui][qml-bridge][issue344]") {
     // The renderer names actions as strings. `BoardModel` registers plenty of
     // actions no form renders, and reaching one through this seam just because
