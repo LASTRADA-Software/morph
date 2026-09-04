@@ -73,6 +73,19 @@ using UnitTraits = morph::units::UnitTraits<E>;
 
 }  // namespace ledger
 
+/// @brief `Currency` is a bare struct field as well as a `Quantity` unit tag
+///        (`account_dto.hpp`'s `Currency currency;`, `budget_dto.hpp`'s
+///        `Currency currency;`) -- so, like every other closed-set field this
+///        rung declares, it needs a `glz::meta`/`glz::enumerate` for
+///        `morph::forms::schemaJson<A>()` to describe it (morph#392). Spelled
+///        the same as `currencyToCode`'s own 3-letter codes, so the wire
+///        encoding and the DB column encoding agree.
+template <>
+struct glz::meta<ledger::Currency> {
+    using enum ledger::Currency;
+    static constexpr auto value = glz::enumerate(USD, EUR, JPY, KRW);
+};
+
 template <>
 struct morph::units::UnitTraits<ledger::Currency> {
     /// @brief Static metadata for one `Currency` enumerator.
