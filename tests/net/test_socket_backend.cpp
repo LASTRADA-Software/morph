@@ -382,6 +382,139 @@ TEST_CASE("SocketBackend: server dropping mid-call resolves the pending completi
     REQUIRE(gotDisconnected.load());
 }
 
+TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completion unresolved",
+          "[net][socket_backend][disconnect]") {
+    // Targets the exact TOCTOU window execute()'s _pendingMtx re-check of
+    // _connected closes (see that function's own comment): onDisconnected()
+    // sets _connected = false and then sweeps _pending, both under
+    // _pendingMtx. Before the fix, execute() checked _connected once, *before*
+    // taking that lock; a disconnect's sweep landing strictly between that
+    // check and the _pending insert drained a table the about-to-be-inserted
+    // entry had not joined yet, leaving that one Completion permanently
+    // unresolved -- a silent hang, not a crash.
+    //
+    // The window is a handful of instructions wide and cannot be hit
+    // deterministically without a test-only hook this header does not have.
+    // A modest handful of concurrent execute() calls against a connection
+    // dropped mid-stream, repeated over a few iterations on fresh sockets
+    // each time, drives the same race statistically instead: every run below
+    // either the fix holds on every call it happens to interleave with, or
+    // it doesn't and this test hangs (turned into a failure by ctest's
+    // per-test TIMEOUT), exactly the failure mode a single well-aimed hit
+    // would also produce.
+    //
+    // Deliberately NOT a heavier stress shape (many threads x many calls):
+    // that reliably trips a separate, already-filed bug
+    // (RemoteServer::awaitExecuteTurn stranding an execute-ordering ticket
+    // when a connection with several executes in flight drops -- morph#449)
+    // whose own hang would masquerade as a failure of *this* fix instead of
+    // the ticket-ordering issue it actually is. The call volume here is low
+    // enough that morph#449 was not observed to reproduce across many local
+    // runs; revisit alongside that issue's fix rather than raising it again
+    // here.
+    for (int iter = 0; iter < 3; ++iter) {
+        morph::exec::ThreadPoolExecutor serverPool{2};
+        auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+        auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
+        REQUIRE(wsServer->listen());
+
+        std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer->port()));
+        auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
+        REQUIRE(backendPtr->waitForConnected());
+
+        morph::exec::ThreadPoolExecutor cbPool{2};
+        morph::bridge::Bridge bridge{std::move(backendPtr)};
+        morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &cbPool};
+
+        constexpr int callsPerThread = 3;
+        constexpr int producerThreads = 2;
+        std::atomic<int> settled{0};
+        std::vector<std::thread> producers;
+        producers.reserve(producerThreads);
+        for (int t = 0; t < producerThreads; ++t) {
+            producers.emplace_back([&] {
+                for (int i = 0; i < callsPerThread; ++i) {
+                    handler.execute(SbEchoAction{i})
+                        .then([&](int) { settled.fetch_add(1); })
+                        .onError([&](const std::exception_ptr&) { settled.fetch_add(1); });
+                }
+            });
+        }
+
+        // Drop the connection while calls are still being issued and in
+        // flight, aiming squarely at the window between "still connected"
+        // and "the entry is in _pending".
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+        wsServer->close();
+        wsServer.reset();
+
+        for (auto& producer : producers) {
+            producer.join();
+        }
+
+        // Every call this iteration issued must have settled -- as either a
+        // real reply or DisconnectedError, never neither. spinUntil's own
+        // bounded retry count (200 * 10ms = 2s) is what turns a genuine
+        // regression into a REQUIRE failure instead of an indefinite hang.
+        int const totalCalls = producerThreads * callsPerThread;
+        spinUntil([&] { return settled.load() == totalCalls; }, 200);
+        REQUIRE(settled.load() == totalCalls);
+
+        // Let the OS release this iteration's port and the thread pools
+        // above finish tearing down before the next iteration opens a new
+        // socket -- same reasoning as "reconnects to a fresh server on the
+        // same port"'s own 100ms pause.
+        std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    }
+}
+
+TEST_CASE("SocketBackend: executeTimeout surfaces as backend::TimeoutError, not a generic runtime_error",
+          "[net][socket_backend][timeout]") {
+    // Regression coverage for dispatchIncomingEnvelope's env.message ==
+    // wire::kExecuteTimeoutMessage branch (added alongside the SqliteOfflineQueue
+    // and bridge.hpp fixes in #447): a server-side LimitPolicy::executeTimeout
+    // reply must resolve the Completion with backend::TimeoutError specifically,
+    // the same type QtWebSocketBackend/SimulatedRemoteBackend give callers for
+    // this case -- not the generic std::runtime_error the `else` branch below it
+    // produces for an arbitrary `err` message. Mirrors
+    // tests/test_limit_policy.cpp's SimulatedRemoteBackend analog of this same
+    // scenario, over the real WebSocket transport instead.
+    morph::exec::ThreadPoolExecutor serverPool{4};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::backend::LimitPolicy policy;
+    policy.executeTimeout = std::chrono::milliseconds{50};
+    server->setLimitPolicy(policy);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
+    auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    // SbSlowModel's execute() sleeps 300ms unconditionally -- well past the
+    // 50ms executeTimeout above, so the server's timeout scheduler fires
+    // before the strand result ever comes back.
+    morph::bridge::BridgeHandler<SbSlowModel> handler{bridge, &cbPool};
+
+    std::atomic<bool> gotTimeoutError{false};
+    std::atomic<bool> gotSomethingElse{false};
+    handler.execute(SbSlowAction{5}).then([](int) {}).onError([&](const std::exception_ptr& exc) {
+        try {
+            std::rethrow_exception(exc);
+        } catch (const morph::backend::TimeoutError&) {
+            gotTimeoutError.store(true);
+        } catch (...) {
+            gotSomethingElse.store(true);
+        }
+    });
+
+    spinUntil([&] { return gotTimeoutError.load() || gotSomethingElse.load(); });
+    CHECK_FALSE(gotSomethingElse.load());
+    REQUIRE(gotTimeoutError.load());
+}
+
 TEST_CASE("SocketBackend: reconnects to a fresh server on the same port", "[net][socket_backend][disconnect]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
