@@ -289,5 +289,83 @@
       "of the 352 are affected."
     ],
     "filed_as": "morph#434"
+  },
+  "mechanism_confirmed": {
+    "verdict": "The linker-dedup hypothesis above is REFUTED. The real mechanism is a Mull codegen bug: cxx_remove_void_call's IR pass does not remove the call it claims to remove, for a member-function call site, in Mull 0.34.0.",
+    "verification_status": "measured, 2026-09-04, in an isolated WSL Ubuntu 24.04 environment, Mull-19 0.34.0 / LLVM 19.1.7, clang 19.1.7 -- a different build (Windows) and toolchain from every prior measurement in this file, so the finding is not specific to one environment's linker.",
+    "method": [
+      "The linker-dedup hypothesis predicts the bug disappears once a function has only one copy",
+      "to be discarded -- i.e. a single translation unit, linked alone, with no duplicate object",
+      "to compete with. Four minimal C++ programs were built, each ONE .cpp including a header",
+      "with an inline function containing exactly one call site, compiled with",
+      "-fpass-plugin=mull-ir-frontend-19 and linked ALONE (no second TU, no dedup possible by",
+      "construction). Each was run under mull-runner-19 and, separately, its mutant machine code",
+      "was read directly with objdump to check whether the claimed removal actually happened."
+    ],
+    "results": [
+      {
+        "case": "holder.attachIdentity(std::string{primary}) -- a member call with a temporary argument, one statement, last in its function",
+        "single_tu_result": "Survived, even with zero possibility of linker dedup",
+        "disassembly_finding": "The mutant function body (labelled cxx_remove_void_call:...) is byte-identical to the mull__..._original twin: both still `call Holder::attachIdentity`. The removal was never emitted."
+      },
+      {
+        "case": "holder.attachIdentity(primary) -- same member call, no temporary, argument passed as a plain named value",
+        "single_tu_result": "Survived, same disassembly signature (call still present in both copies)",
+        "note": "Rules out 'destructor cleanup on a temporary blocks the removal' as the cause -- there is no temporary here and the bug is identical."
+      },
+      {
+        "case": "bumpCounter() -- a free function call, void return, discarded, same statement shape",
+        "single_tu_result": "Killed correctly",
+        "disassembly_finding": "The mutant function body genuinely omits the call; only the destructor/cleanup code remains. This confirms the IR pass and the runner's activation plumbing (the getenv-gated dispatch) both work correctly in general -- the defect is scoped to the member-call shape, not the mutator or the runner as a whole."
+      }
+    ],
+    "consequence_for_the_352_survivor_list": [
+      "cxx_remove_void_call is 148 of 352 survivors, per runs[1].survivors_by_mutator. remote.hpp's",
+      "reply(...) and complete(...) sites and bridge.hpp's calls into stored callbacks are member/",
+      "operator() calls, the exact shape shown broken here -- not free-function calls. Every",
+      "cxx_remove_void_call survivor on a member-function call site (almost certainly the large",
+      "majority of the 148, given the shapes named in the 'unasserted' class above) is now known",
+      "to be a tool artifact by the same direct mechanism the four hand-applied samples in",
+      "false_positive_finding demonstrated indirectly. This does not need re-verification by",
+      "hand-applying more of them one at a time -- the codegen defect is general to the call",
+      "shape, not to any one call site.",
+      "",
+      "It does NOT clear the other four mutator families reported among the 352",
+      "(cxx_replace_scalar_call 97, cxx_init_const 26, cxx_assign_const 23, cxx_add_to_sub 13,",
+      "cxx_gt_to_ge 8, other 37 -- see runs[1].survivors_by_mutator). The isolated boundary-",
+      "comparison test in this same investigation (cxx_gt_to_ge and cxx_gt_to_le on `value >",
+      "limit`) both mutated and killed correctly in a single-TU build, so that mutator family is",
+      "not implicated by this finding and its survivors should still be read as real until shown",
+      "otherwise."
+    ],
+    "not_yet_done": [
+      "Confirming the defect against the CI-pinned clang major (20): attempted 2026-09-04 via a",
+      "root-free llvm.org LLVM-20.1.2-Linux-X64 tarball (no sudo available in the investigation",
+      "environment for apt's clang-20 package) paired with the official Mull-20-0.34.0 .deb.",
+      "The pairing failed to load at all -- 'undefined symbol: ...ASTUnit19LoadFromCommandLine...,",
+      "version LLVM_20.1' from mull-ir-frontend-20 against the tarball's libclang-cpp.so.20.1 --",
+      "an ABI/build-flag mismatch between llvm.org's generic release tarball and whatever LLVM 20",
+      "build Mull's Ubuntu 24.04 package was actually linked against (apt's own clang-18/19",
+      "packages did not have this problem against Mull's -18/-19 packages, so this is specific to",
+      "sourcing 20 from the tarball rather than apt). Not re-attempted with apt's clang-20",
+      "package, which needs sudo this environment did not have. The clang-19 finding above does",
+      "not depend on this: it is a plain LLVM-IR-level codegen defect with no dependency on any",
+      "clang-19-specific behavior, and 0.34.0 (checked 2026-09-04) is Mull's latest release, so",
+      "there is no newer version to test regardless of compiler major.",
+      "Checking whether cxx_remove_void_call has a variant that only breaks on this exact",
+      "column-range shape (11:5:11:35 in the no-temporary case pointed at a superset of the call",
+      "that includes an adjacent std::string copy-construction in the disassembly) -- the",
+      "prevailing guess is a source-range mapping bug in the mutator (it identifies the right",
+      "statement to remove but the codegen path miscompiles or silently no-ops for this call",
+      "shape), not confirmed against mull-ir-frontend's own source.",
+      "Filing this upstream (mull-project/mull) -- searched their issue tracker on 2026-09-04",
+      "and found no existing report matching this exact shape.",
+      "Re-scoping morph#431 with this: its reply(...)-deletion findings should be closed as tool",
+      "artifacts (not real gaps) on the strength of this mechanism, freeing #431 to a much",
+      "smaller residual list of genuinely mutator-diverse survivors worth checking by hand.",
+      "morph#408's CI-gate design can now exclude cxx_remove_void_call on member-call sites",
+      "wholesale (or the whole mutator, pending an upstream fix) rather than needing a",
+      "per-site allowlist for it."
+    ]
   }
 }
