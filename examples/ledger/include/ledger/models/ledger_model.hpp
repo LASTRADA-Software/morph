@@ -485,8 +485,7 @@ BRIDGE_KEY_FROM(ledger::GetLedger, &ledger::GetLedger::ledgerId);
 // log is an audit trail of what changed the book, and listing it changes
 // nothing. Keyed on `ledgerId` like every other action that names a book, so
 // it runs on that book's own strand.
-BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::ListTransactions, "ListTransactions",
-                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::ListTransactions, "ListTransactions", ::morph::model::Loggable::No)
 
 BRIDGE_KEY_FROM(ledger::ListTransactions, &ledger::ListTransactions::ledgerId);
 
