@@ -674,10 +674,9 @@ function(apply_coverage target)
     # buys something is: dispose of the partial branches first, then measure
     # MC/DC against what is left.
     #
-    # Unverified: the CI coverage leg pins clang 20 and only clang 22.1.8 is
-    # installed on the machine this was measured on, so the flag's behaviour on
-    # clang 20 -- which supports it, the feature having landed in LLVM 18 -- has
-    # not been observed here. Whoever adopts it should re-measure on the pin.
+    # The flag is available on the pin: CI pins clang 22 and this was measured
+    # on clang 22.1.8, and -fcoverage-mcdc landed in LLVM 18. So adopting it is
+    # a question of the two reasons above, not of toolchain availability.
     target_compile_options(${target} PRIVATE
         -fprofile-instr-generate -fcoverage-mapping -g -O0)
     target_link_options(${target} PRIVATE

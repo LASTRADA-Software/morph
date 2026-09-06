@@ -37,14 +37,17 @@
 #     built for. <N> must equal the clang major doing the compiling, exactly.
 #   * `mull-runner-<N>` re-runs the instrumented binary once per mutant.
 #
-# Mull ships prebuilt packages for LLVM 13 through 22, so both the CI pin
-# (clang 20, .github/workflows/ci.yml) and this workstation (clang 22) are
-# covered -- but by *different packages*. Measured here on
-# `mull-runner-22 0.34.0`, LLVM 22.1.2, against clang 22.1.8. Nothing about
-# these numbers has been observed on clang 20; whoever moves this into CI
-# should install the -20 package and re-measure rather than assume the score
-# carries over, because the mutant set is generated from LLVM IR and two clang
-# majors do not emit the same IR.
+# Mull ships prebuilt packages for LLVM 13 through 22. CI pins clang 22
+# (.github/workflows/ci.yml's CLANG_VERSION, kept honest by
+# scripts/check_ci_clang_pin.sh) and this workstation runs clang 22.1.8, so
+# both are served by the same -22 package and the numbers below were taken on
+# the compiler CI itself uses. That removes the obstacle this comment used to
+# name: the mutant set is generated from LLVM IR and two clang majors do not
+# emit the same IR, but there is no major difference here to carry the score
+# across. Measured on `mull-runner-22 0.34.0`, LLVM 22.1.2, against clang
+# 22.1.8. What still keeps a campaign out of CI is its cost -- 46+ minutes for
+# core and forms alone -- and that Mull is on no runner image; see
+# docs/spec/testing_charter.md and morph#408, not a toolchain mismatch.
 #
 # Installing the tool (not automated on purpose -- this is a local
 # investigation tool, and a script that downloads a toolchain behind your back

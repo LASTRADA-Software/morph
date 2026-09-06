@@ -20,7 +20,9 @@ name: Drift guard
 #      behavior that is worth exercising on all of them, not just one.
 #   2. The prose-vs-manifest lint (scripts/check_spec_citations.sh) is a
 #      repo-wide text scan, unrelated to compilation -- it runs here, in its
-#      own fast, dependency-free job.
+#      own fast, dependency-free job, alongside the CI-clang-pin lint
+#      (scripts/check_ci_clang_pin.sh, morph#457), which is the same shape of
+#      scan against a different source of truth: ci.yml's own CLANG_VERSION.
 #
 # Unlike .github/workflows/spec-sync.yml, this gate has no "no docs update"
 # label escape hatch: a wrong citation or a reintroduced banned term is never
@@ -42,7 +44,7 @@ permissions:
 
 jobs:
   prose-lint:
-    name: Spec-citation & banned-terminology lint
+    name: Spec-citation, banned-terminology & CI-clang-pin lint
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +59,27 @@ jobs:
 
       - name: Run prose-vs-manifest lint
         run: bash scripts/check_spec_citations.sh
+
+      # scripts/check_ci_clang_pin.sh, on the same terms and in the same job:
+      # it is another repo-wide text scan that compiles nothing, and the drift
+      # it catches is the same family -- a mechanical fact stated in prose that
+      # silently stopped matching the thing it describes.
+      #
+      # Its own history (morph#457) is the argument for the self-test running
+      # first. ci.yml's CLANG_VERSION moved 20 -> 22 on 2026-07-19 and six
+      # places went on asserting 20, including docs/spec/testing_charter.md,
+      # which is a spec and therefore the document a reader is told to trust.
+      # The stale fact was load-bearing: it was the largest stated obstacle to
+      # moving the mutation campaign into CI (morph#408), and it did not exist.
+      # Nothing returned nonzero for a month, because a sentence about a
+      # compiler version keeps compiling after the version changes -- and a
+      # gate that had gone blind to it would look exactly like the tree being
+      # correct, which it is today.
+      - name: Self-test the CI-clang-pin checker
+        run: bash scripts/test_check_ci_clang_pin.sh
+
+      - name: Check every stated CI clang pin matches ci.yml
+        run: bash scripts/check_ci_clang_pin.sh
 
   # ── Ladder rung list <-> the CI filters that are supposed to track it ──
   # examples/rungs.txt is the ladder's single authoritative rung list, and

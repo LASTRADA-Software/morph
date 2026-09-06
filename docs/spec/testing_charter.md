@@ -129,15 +129,18 @@ hand later.
   path in this subsystem is exercised only by whatever a real socket can be
   made to do in a test (closing the peer end, binding a taken port), not by
   injecting a specific `errno` on demand.
-- **Mutation testing is local-only and does not run on CI's compiler.**
-  `scripts/mutation.sh` requires Mull, pinned to LLVM 22.1.2/clang 22.1.8; CI
-  pins clang 20 for its own legs. Mull generates its mutant set from LLVM IR,
-  so the mutant set — and therefore the score — is not guaranteed to
-  reproduce on a different clang major version. The 64.06% figure
-  (`scripts/mutation_survivors.json`, morph#429) is a clang-22.1.8
-  measurement over `include/morph/core` and `include/morph/forms` only; it
-  has not been extended to `net`, `offline`, `journal`, `util`, or `session`,
-  and is not re-taken automatically when either subsystem changes.
+- **Mutation testing is local-only — on cost and tooling, not on a compiler
+  mismatch.** `scripts/mutation.sh` requires Mull, which is on no runner
+  image, whose IR frontend has to be version-matched to the compiler by hand,
+  and whose campaign takes 46+ minutes over `core` and `forms` alone. What
+  does *not* keep it out is a toolchain difference: CI pins clang 22
+  (`.github/workflows/ci.yml`, enforced by `scripts/check_ci_clang_pin.sh`)
+  and the 64.06% figure (`scripts/mutation_survivors.json`, morph#429) was
+  measured on that same major — clang 22.1.8 — so the mutant set Mull derives
+  from LLVM IR is the one the compiler CI itself uses would emit. That figure
+  covers `include/morph/core` and `include/morph/forms` only; it has not been
+  extended to `net`, `offline`, `journal`, `util`, or `session`, and is not
+  re-taken automatically when either subsystem changes.
 - **Error-path coverage (morph#406) measures execution, not assertion
   quality.** `scripts/check_error_path_coverage.py` answers "did a test drive
   this specific `throw` statement or enter this specific `catch` arm", cross-
