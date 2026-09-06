@@ -45,10 +45,10 @@ expect ok capture who=$.principal
 client books model=LedgerModel
 session principal=$who token=$token
 
-do OpenAccount ledgerId=1 name="Imported current" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Imported current" kind="Asset" currency="EUR"
 expect ok capture current=$.id
 
-do OpenAccount ledgerId=1 name="Imported suspense" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Imported suspense" kind="Expense" currency="EUR"
 expect ok capture suspense=$.id
 
 # ── The first chunk ──────────────────────────────────────────────────────
@@ -59,8 +59,8 @@ expect ok field duplicates == 0
 # The read is the proof: two rows, -5.50 off the current account and the
 # matching +5.50 in suspense.
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-550"
-expect ok field accounts ~ "\"id\":$suspense,\"name\":\"Imported suspense\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":550"
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-550"
+expect ok field accounts ~ "\"id\":$suspense,\"name\":\"Imported suspense\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":550"
 
 # ── The same chunk again, same opId: nothing is posted ───────────────────
 do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-a-$current" csvChunk="date,description,account_id,amount\n2026-08-01T00:00:00.000Z,latte $current,$current,-3.50\n2026-08-02T00:00:00.000Z,bagel $current,$current,-2.00\n"
@@ -68,7 +68,7 @@ expect ok field imported == 0
 expect ok field duplicates == 2
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-550"
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-550"
 
 # ── The same rows under a *new* opId: still nothing, by content ──────────
 # This is the assertion that separates the two mechanisms. If dedup were only
@@ -78,7 +78,7 @@ expect ok field imported == 0
 expect ok field duplicates == 2
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-550"
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-550"
 
 # ── A chunk that overlaps: one old row, one new ─────────────────────────
 do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-c-$current" csvChunk="date,description,account_id,amount\n2026-08-02T00:00:00.000Z,bagel $current,$current,-2.00\n2026-08-03T00:00:00.000Z,newspaper $current,$current,-1.25\n"
@@ -86,7 +86,7 @@ expect ok field imported == 1
 expect ok field duplicates == 1
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-675"
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-675"
 
 # ── A chunk with no rows at all is not an error ─────────────────────────
 do ImportLedgerChunk ledgerId=1 counterAccountId=$suspense opId="stmt-d-$current" csvChunk="date,description,account_id,amount\n"
@@ -105,4 +105,4 @@ expect err message == "ImportLedgerChunk: no such account"
 
 # None of the three refusals posted anything.
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-675"
+expect ok field accounts ~ "\"id\":$current,\"name\":\"Imported current\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-675"

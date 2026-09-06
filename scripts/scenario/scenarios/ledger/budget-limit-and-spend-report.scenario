@@ -15,7 +15,7 @@
 # A month with no limit row set does not report a limit of zero and does not
 # refuse. `BudgetModel::execute(GetBudgetReport)` sets **limit = spent** in
 # that case ("no limit was ever set, which reports as a limit equal to what
-# was spent"), and falls back to Currency::USD -- 0 on the wire -- for the
+# was spent"), and falls back to Currency::USD -- "USD" on the wire -- for the
 # report currency, because the currency is read off the limit row that does
 # not exist. So an unlimited month always reads as exactly on budget, in
 # dollars, whatever the ledger is denominated in.
@@ -34,10 +34,10 @@ expect ok capture who=$.principal
 client books model=LedgerModel
 session principal=$who token=$token
 
-do OpenAccount ledgerId=1 name="Budgeted cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Budgeted cash" kind="Asset" currency="EUR"
 expect ok capture cash=$.id
 
-do OpenAccount ledgerId=1 name="Budgeted groceries" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Budgeted groceries" kind="Expense" currency="EUR"
 expect ok capture groceries=$.id
 
 client budgets model=BudgetModel
@@ -52,14 +52,14 @@ expect ok
 do CreateBudget ledgerId=1 name="Budgeted month" categoryId=$food
 expect ok capture budget=$
 
-do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":30000,"den":1,"dp":2} currency=1
+do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":30000,"den":1,"dp":2} currency="EUR"
 expect ok
 
 # ── Before any spending ───────────────────────────────────────────────────
 do GetBudgetReport budgetId=$budget month="2026-08"
 expect ok field limit.num == 30000
 expect ok field spent.num == 0
-expect ok field currency == 1
+expect ok field currency == "EUR"
 
 # ── Two entries in August ─────────────────────────────────────────────────
 use books
@@ -79,7 +79,7 @@ do GetBudgetReport budgetId=$budget month="2026-08"
 expect ok field limit.num == 30000
 expect ok field spent.num == 5425
 expect ok field spent.dp == 2
-expect ok field currency == 1
+expect ok field currency == "EUR"
 
 # ── One entry in September, which August must not see ────────────────────
 use books
@@ -97,10 +97,10 @@ expect ok field spent.num == 5425
 do GetBudgetReport budgetId=$budget month="2026-09"
 expect ok field spent.num == 9900
 expect ok field limit.num == 9900
-expect ok field currency == 0
+expect ok field currency == "USD"
 
 # ── Setting September's limit changes September and not August ───────────
-do SetBudgetLimit budgetId=$budget month="2026-09" limit={"num":12000,"den":1,"dp":2} currency=1
+do SetBudgetLimit budgetId=$budget month="2026-09" limit={"num":12000,"den":1,"dp":2} currency="EUR"
 expect ok
 
 do GetBudgetReport budgetId=$budget month="2026-09"
@@ -117,7 +117,7 @@ expect ok field spent.num == 5425
 do GetBudgetReport budgetId=$budget month="2026-07"
 expect ok field limit.num == 0
 expect ok field spent.num == 0
-expect ok field currency == 0
+expect ok field currency == "USD"
 
 # ── The refusals ─────────────────────────────────────────────────────────
 do GetBudgetReport budgetId=999999 month="2026-08"

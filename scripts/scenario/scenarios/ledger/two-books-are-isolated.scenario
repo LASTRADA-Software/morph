@@ -24,16 +24,16 @@ session principal=$who token=$token
 
 # ── One account in each book, with deliberately identical names ────────
 # Identical names, so nothing below can pass by matching on a name alone.
-do OpenAccount ledgerId=1 name="Isolated wallet" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Isolated wallet" kind="Asset" currency="EUR"
 expect ok capture first=$.id
 
-do OpenAccount ledgerId=2 name="Isolated wallet" kind=0 currency=1
+do OpenAccount ledgerId=2 name="Isolated wallet" kind="Asset" currency="EUR"
 expect ok capture second=$.id
 
-do OpenAccount ledgerId=1 name="Isolated spend" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Isolated spend" kind="Expense" currency="EUR"
 expect ok capture firstSpend=$.id
 
-do OpenAccount ledgerId=2 name="Isolated spend" kind=1 currency=1
+do OpenAccount ledgerId=2 name="Isolated spend" kind="Expense" currency="EUR"
 expect ok capture secondSpend=$.id
 
 # ── Each book's listing holds its own accounts and not the other's ─────
@@ -51,18 +51,18 @@ expect ok field accounts !~ "\"id\":$firstSpend,"
 
 # ── A transaction in book one moves book one's balances only ───────────
 do StoreTransaction ledgerId=1 description="book one only" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$first,"amount":{"num":-4000,"den":1,"dp":2}},{"accountId":$firstSpend,"amount":{"num":4000,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4000"
+expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-4000"
 expect ok field accounts !~ "\"id\":$second,"
 
 do GetLedger ledgerId=2
-expect ok field accounts ~ "\"id\":$second,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":0"
+expect ok field accounts ~ "\"id\":$second,\"name\":\"Isolated wallet\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":0"
 
 # ── ...and one in book two leaves book one alone ───────────────────────
 do StoreTransaction ledgerId=2 description="book two only" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$second,"amount":{"num":-1500,"den":1,"dp":2}},{"accountId":$secondSpend,"amount":{"num":1500,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$second,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1500"
+expect ok field accounts ~ "\"id\":$second,\"name\":\"Isolated wallet\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1500"
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4000"
+expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-4000"
 
 # ── Budgets are scoped to their own book too ───────────────────────────
 client budgets model=BudgetModel
@@ -84,7 +84,7 @@ expect ok
 do CreateBudget ledgerId=1 name="Isolated budget" categoryId=$category
 expect ok capture budget=$
 
-do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency=1
+do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency="EUR"
 expect ok
 
 # 40.00 from book one, and nothing from book two's 15.00, even though both
@@ -96,17 +96,17 @@ expect ok field limit.num == 100000
 # ── A report submitted for one book names that book ────────────────────
 use books
 
-do SubmitReport ledgerId=1 kind=0 params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
+do SubmitReport ledgerId=1 kind="MonthlyStatement" params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
 expect ok capture jobOne=$
 
-do SubmitReport ledgerId=2 kind=0 params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
+do SubmitReport ledgerId=2 kind="MonthlyStatement" params="{\"year\":2026,\"month\":8,\"timezoneOffsetMinutes\":0}"
 expect ok capture jobTwo=$
 
 do GetReportStatus jobId=$jobOne
-expect ok field status == 0
+expect ok field status == "Pending"
 
 do GetReportStatus jobId=$jobTwo
-expect ok field status == 0
+expect ok field status == "Pending"
 
 # ── A leg may not name another book's account ──────────────────────────
 #
@@ -131,10 +131,10 @@ expect err message == "StoreTransaction: account does not belong to this ledger"
 
 # Neither book moved: book one is still at the 40.00 it posted for itself...
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4000"
+expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-4000"
 # ...and book two still at its own 15.00, with no foreign posting on top.
 do GetLedger ledgerId=2
-expect ok field accounts ~ "\"id\":$secondSpend,\"name\":\"Isolated spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1500"
+expect ok field accounts ~ "\"id\":$secondSpend,\"name\":\"Isolated spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":1500"
 
 # ── An account that exists in no book at all is refused differently ────
 # Which is what shows the two refusals are not one: this leg's id names no row
@@ -143,7 +143,7 @@ do StoreTransaction ledgerId=1 description="a leg from nowhere" date="2026-08-03
 expect err message == "StoreTransaction: no such account"
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4000"
+expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-4000"
 
 # ── An import chunk may not reach into the other book either ───────────
 # Both of `ImportLedgerChunk`'s account lookups are scoped: the chunk-wide
@@ -159,9 +159,9 @@ expect err message == "ImportLedgerChunk: account does not belong to this ledger
 
 # Neither refusal posted anything, in either book.
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4000"
-expect ok field accounts ~ "\"id\":$firstSpend,\"name\":\"Isolated spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":4000"
+expect ok field accounts ~ "\"id\":$first,\"name\":\"Isolated wallet\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-4000"
+expect ok field accounts ~ "\"id\":$firstSpend,\"name\":\"Isolated spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":4000"
 
 do GetLedger ledgerId=2
-expect ok field accounts ~ "\"id\":$second,\"name\":\"Isolated wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1500"
-expect ok field accounts ~ "\"id\":$secondSpend,\"name\":\"Isolated spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1500"
+expect ok field accounts ~ "\"id\":$second,\"name\":\"Isolated wallet\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1500"
+expect ok field accounts ~ "\"id\":$secondSpend,\"name\":\"Isolated spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":1500"

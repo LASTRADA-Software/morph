@@ -15,8 +15,10 @@
 # ── Wire shapes, from the ledger rung's own conventions ───────────────────
 #   * every strong id is its bare underlying number, and an empty one is
 #     omitted from the JSON rather than sent as null;
-#   * enums are their integer values: AccountKind::Asset is 0 and ::Expense
-#     is 1, Currency::USD is 0 and ::EUR is 1;
+#   * enums are their enumerator names, not their integer values:
+#     AccountKind::Asset is "Asset" and ::Expense is "Expense",
+#     Currency::USD is "USD" and ::EUR is "EUR" -- inside the inline `legs`
+#     JSON too, where a leg's `foreignCurrency` is "USD" rather than 0;
 #   * a Rational is {"num","den","dp"} and comes back *canonicalised* --
 #     -500/1 at dp=2 is stored and returned as -500/1 dp=2, but 250/100 would
 #     come back as 5/2;
@@ -38,22 +40,22 @@ expect ok capture who=$.principal
 client books model=LedgerModel
 session principal=$who token=$token
 
-do OpenAccount ledgerId=1 name="Zero-sum EUR cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Zero-sum EUR cash" kind="Asset" currency="EUR"
 expect ok capture eurCash=$.id
 
-do OpenAccount ledgerId=1 name="Zero-sum EUR food" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Zero-sum EUR food" kind="Expense" currency="EUR"
 expect ok capture eurFood=$.id
 
-do OpenAccount ledgerId=1 name="Zero-sum USD cash" kind=0 currency=0
+do OpenAccount ledgerId=1 name="Zero-sum USD cash" kind="Asset" currency="USD"
 expect ok capture usdCash=$.id
 
-do OpenAccount ledgerId=1 name="Zero-sum USD fees" kind=1 currency=0
+do OpenAccount ledgerId=1 name="Zero-sum USD fees" kind="Expense" currency="USD"
 expect ok capture usdFees=$.id
 
 # ── Four legs, two currencies, each partition balanced ────────────────────
 do StoreTransaction ledgerId=1 description="one entry, two currencies" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$eurCash,"amount":{"num":-500,"den":1,"dp":2}},{"accountId":$eurFood,"amount":{"num":500,"den":1,"dp":2}},{"accountId":$usdCash,"amount":{"num":-700,"den":1,"dp":2}},{"accountId":$usdFees,"amount":{"num":700,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-500"
-expect ok field accounts ~ "\"id\":$usdCash,\"name\":\"Zero-sum USD cash\",\"kind\":0,\"currency\":0,\"balance\":.\"num\":-700"
+expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-500"
+expect ok field accounts ~ "\"id\":$usdCash,\"name\":\"Zero-sum USD cash\",\"kind\":\"Asset\",\"currency\":\"USD\",\"balance\":.\"num\":-700"
 
 # ── One currency out of balance rejects the whole entry ───────────────────
 # The EUR legs balance; the USD legs do not. The message names USD, which is
@@ -64,7 +66,7 @@ expect err message !~ "EUR"
 
 # The EUR legs of that rejected entry were not posted either: all-or-nothing.
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-500"
+expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-500"
 
 # ── Two legs that cancel numerically but not within a currency ────────────
 # -1000 and +1000, which any single global sum would accept. Each currency's
@@ -73,13 +75,13 @@ do StoreTransaction ledgerId=1 description="cross-currency, numerically zero" da
 expect err message ~ "zero-sum violation"
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-500"
-expect ok field accounts ~ "\"id\":$usdCash,\"name\":\"Zero-sum USD cash\",\"kind\":0,\"currency\":0,\"balance\":.\"num\":-700"
+expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-500"
+expect ok field accounts ~ "\"id\":$usdCash,\"name\":\"Zero-sum USD cash\",\"kind\":\"Asset\",\"currency\":\"USD\",\"balance\":.\"num\":-700"
 
 # ── A foreign-amount pair is display metadata, never part of the sum ──────
 # The EUR legs balance on their own; the foreign amount and currency ride
 # along for audit and are not summed against anything.
-do StoreTransaction ledgerId=1 description="paid in EUR, priced in USD" date="2026-08-04T00:00:00.000Z" legs=[{"accountId":$eurCash,"amount":{"num":-100,"den":1,"dp":2},"foreignAmount":{"num":110,"den":1,"dp":2},"foreignCurrency":0},{"accountId":$eurFood,"amount":{"num":100,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-600"
+do StoreTransaction ledgerId=1 description="paid in EUR, priced in USD" date="2026-08-04T00:00:00.000Z" legs=[{"accountId":$eurCash,"amount":{"num":-100,"den":1,"dp":2},"foreignAmount":{"num":110,"den":1,"dp":2},"foreignCurrency":"USD"},{"accountId":$eurFood,"amount":{"num":100,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$eurCash,\"name\":\"Zero-sum EUR cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-600"
 # The USD side is untouched: a foreign amount posts nothing.
-expect ok field accounts ~ "\"id\":$usdCash,\"name\":\"Zero-sum USD cash\",\"kind\":0,\"currency\":0,\"balance\":.\"num\":-700"
+expect ok field accounts ~ "\"id\":$usdCash,\"name\":\"Zero-sum USD cash\",\"kind\":\"Asset\",\"currency\":\"USD\",\"balance\":.\"num\":-700"

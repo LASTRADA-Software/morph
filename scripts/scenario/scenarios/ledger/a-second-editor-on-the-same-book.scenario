@@ -32,11 +32,11 @@ session principal=$bob token=$bobToken
 # ── She opens the accounts ─────────────────────────────────────────────
 use hers
 
-do OpenAccount ledgerId=1 name="Shared book cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Shared book cash" kind="Asset" currency="EUR"
 expect ok capture cash=$.id
 expect ok field balance.num == 0
 
-do OpenAccount ledgerId=1 name="Shared book spend" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Shared book spend" kind="Expense" currency="EUR"
 expect ok capture spend=$.id
 
 # ── He sees them, on his own connection ────────────────────────────────
@@ -45,50 +45,50 @@ expect ok capture spend=$.id
 use his
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":0"
-expect ok field accounts ~ "\"id\":$spend,\"name\":\"Shared book spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":0"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":0"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Shared book spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":0"
 
 # ── He posts ───────────────────────────────────────────────────────────
 do StoreTransaction ledgerId=1 description="his entry" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-2000,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":2000,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-2000"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-2000"
 
 # ── ...and she sees it without reopening anything ─────────────────────
 use hers
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-2000"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-2000"
 
 # ── She posts on top of his ───────────────────────────────────────────
 do StoreTransaction ledgerId=1 description="her entry" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-500,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":500,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-2500"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-2500"
 
 use his
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-2500"
-expect ok field accounts ~ "\"id\":$spend,\"name\":\"Shared book spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":2500"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-2500"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Shared book spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":2500"
 
 # ── An account he opens is hers to post against ───────────────────────
-do OpenAccount ledgerId=1 name="Shared book third" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Shared book third" kind="Expense" currency="EUR"
 expect ok capture third=$.id
 
 use hers
 
 do StoreTransaction ledgerId=1 description="against his account" date="2026-08-03T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-750,"den":1,"dp":2}},{"accountId":$third,"amount":{"num":750,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$third,\"name\":\"Shared book third\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":750"
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-3250"
+expect ok field accounts ~ "\"id\":$third,\"name\":\"Shared book third\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":750"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-3250"
 
 # ── An exactly-once key is scoped to the ledger, not to the connection ─
 # She spends the key; his identical send is the retry, and it must not post.
 do StoreTransaction ledgerId=1 description="keyed by her" date="2026-08-04T00:00:00.000Z" opId="shared-$cash" legs=[{"accountId":$cash,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":100,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-3350"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-3350"
 
 use his
 
 do StoreTransaction ledgerId=1 description="keyed by her" date="2026-08-04T00:00:00.000Z" opId="shared-$cash" legs=[{"accountId":$cash,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":100,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-3350"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-3350"
 
 use hers
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-3350"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Shared book cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-3350"

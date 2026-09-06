@@ -32,7 +32,7 @@ client editorOne model=RuleModel
 session principal=$who token=$token
 
 # CreateRule answers with a bare rule id, so the capture reads `$`.
-do CreateRule ledgerId=1 trigger=0 matchText="corner shop" action=0 actionValue="Groceries"
+do CreateRule ledgerId=1 trigger="DescriptionContains" matchText="corner shop" action="SetCategory" actionValue="Groceries"
 expect ok capture rule=$
 
 # ── Both editors read the rule at version 1 ──────────────────────────────
@@ -105,10 +105,10 @@ expect err message == "UpdateRule: no such rule"
 client books model=LedgerModel
 session principal=$who token=$token
 
-do OpenAccount ledgerId=1 name="Conflicted cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Conflicted cash" kind="Asset" currency="EUR"
 expect ok capture cash=$.id
 
-do OpenAccount ledgerId=1 name="Conflicted spend" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Conflicted spend" kind="Expense" currency="EUR"
 expect ok capture spend=$.id
 
 client budgets model=BudgetModel
@@ -123,7 +123,7 @@ expect ok capture loser=$
 do CreateBudget ledgerId=1 name="Conflicted survivor budget $cash" categoryId=$survivor
 expect ok capture survivorBudget=$
 
-do SetBudgetLimit budgetId=$survivorBudget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency=1
+do SetBudgetLimit budgetId=$survivorBudget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency="EUR"
 expect ok
 
 # Point the surviving rule at the surviving category, under its current
@@ -140,7 +140,7 @@ do SetCategory accountId=$spend categoryId=$loser ruleId=$rule ruleVersion=7
 expect ok
 
 do StoreTransaction ledgerId=1 description="CORNER-$cash shop" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1200,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":1200,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$spend,\"name\":\"Conflicted spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1200"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Conflicted spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":1200"
 
 use budgets
 

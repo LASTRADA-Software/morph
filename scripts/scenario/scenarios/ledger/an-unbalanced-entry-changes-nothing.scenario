@@ -32,30 +32,30 @@ expect ok capture who=$.principal
 client books model=LedgerModel
 session principal=$who token=$token
 
-do OpenAccount ledgerId=1 name="Untouched cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Untouched cash" kind="Asset" currency="EUR"
 expect ok capture cash=$.id
 
-do OpenAccount ledgerId=1 name="Untouched spend" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Untouched spend" kind="Expense" currency="EUR"
 expect ok capture spend=$.id
 
 # ── A known-good baseline to measure the refusals against ──────────────
 do StoreTransaction ledgerId=1 description="the only entry that lands" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1000,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":1000,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1000"
 
 # ── Refused: the legs do not cancel ────────────────────────────────────
 do StoreTransaction ledgerId=1 description="short by one euro" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1100,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":1000,"den":1,"dp":2}}]
 expect err message ~ "zero-sum violation in EUR"
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
-expect ok field accounts ~ "\"id\":$spend,\"name\":\"Untouched spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1000"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1000"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Untouched spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":1000"
 
 # ── Refused: one leg names nothing ─────────────────────────────────────
 do StoreTransaction ledgerId=1 description="a leg from nowhere" date="2026-08-03T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-500,"den":1,"dp":2}},{"accountId":999999,"amount":{"num":500,"den":1,"dp":2}}]
 expect err message == "StoreTransaction: no such account"
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1000"
 
 # ── Refused: fewer legs than an entry can have ─────────────────────────
 do StoreTransaction ledgerId=1 description="one leg only" date="2026-08-04T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-500,"den":1,"dp":2}}]
@@ -65,7 +65,7 @@ do StoreTransaction ledgerId=1 description="no legs at all" date="2026-08-04T00:
 expect err message == "action failed validation: LedgerModel/StoreTransaction"
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1000"
 
 # ── The other door: the same invariant, reached through the import ─────
 # A CSV row posts a two-leg entry against the row's account and the chunk's
@@ -77,7 +77,7 @@ do ImportLedgerChunk ledgerId=1 counterAccountId=999999 opId="untouched-$cash" c
 expect err message == "ImportLedgerChunk: no such account"
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1000"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1000"
 
 # ── Where the all-or-nothing stops: a malformed row mid-chunk ──────────
 #
@@ -107,8 +107,8 @@ do ImportLedgerChunk ledgerId=1 counterAccountId=$spend opId="untouched-2-$cash"
 expect err message == "ImportLedgerChunk: malformed date"
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1100"
-expect ok field accounts ~ "\"id\":$spend,\"name\":\"Untouched spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1100"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1100"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Untouched spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":1100"
 
 # ── ...and the corrected chunk imports only what is missing ────────────
 # The content hash recognises the row that already landed, so re-uploading the
@@ -120,8 +120,8 @@ expect ok field imported == 1
 expect ok field duplicates == 1
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1300"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1300"
 
 # ── ...and the books still take good work afterwards ───────────────────
 do StoreTransaction ledgerId=1 description="the second entry that lands" date="2026-08-07T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-250,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":250,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-1550"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Untouched cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1550"

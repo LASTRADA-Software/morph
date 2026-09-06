@@ -28,42 +28,42 @@ expect ok capture who=$.principal
 client books model=LedgerModel
 session principal=$who token=$token
 
-do OpenAccount ledgerId=1 name="Exactly-once cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Exactly-once cash" kind="Asset" currency="EUR"
 expect ok capture cash=$.id
 
-do OpenAccount ledgerId=1 name="Exactly-once spend" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Exactly-once spend" kind="Expense" currency="EUR"
 expect ok capture spend=$.id
 
 # ── Without an opId: two identical sends post twice ───────────────────────
 # The disengaged default takes the ordinary insert-only path, so this is what
 # a retry costs a client that does not carry a key.
 do StoreTransaction ledgerId=1 description="no key" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":100,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-100"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-100"
 
 do StoreTransaction ledgerId=1 description="no key" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":100,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-200"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-200"
 
 # ── With an opId: the second send changes nothing ─────────────────────────
 do StoreTransaction ledgerId=1 description="keyed" date="2026-08-02T00:00:00.000Z" opId="once-$cash" legs=[{"accountId":$cash,"amount":{"num":-50,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":50,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-250"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-250"
 
 do StoreTransaction ledgerId=1 description="keyed" date="2026-08-02T00:00:00.000Z" opId="once-$cash" legs=[{"accountId":$cash,"amount":{"num":-50,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":50,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-250"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-250"
 
 # A third send under the same key is still a no-op.
 do StoreTransaction ledgerId=1 description="keyed" date="2026-08-02T00:00:00.000Z" opId="once-$cash" legs=[{"accountId":$cash,"amount":{"num":-50,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":50,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-250"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-250"
 
 # ── The independent read agrees, so this is the ledger and not the reply ──
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-250"
-expect ok field accounts ~ "\"id\":$spend,\"name\":\"Exactly-once spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":250"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-250"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Exactly-once spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":250"
 
 # ── A *different* key posts, even with an identical body ──────────────────
 # The key is the operation's identity, not the payload's -- so a genuine
 # second occurrence of the same purchase is not swallowed.
 do StoreTransaction ledgerId=1 description="keyed" date="2026-08-02T00:00:00.000Z" opId="twice-$cash" legs=[{"accountId":$cash,"amount":{"num":-50,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":50,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-300"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-300"
 
 # ── A key does not excuse an unbalanced entry ────────────────────────────
 do StoreTransaction ledgerId=1 description="keyed but wrong" date="2026-08-03T00:00:00.000Z" opId="bad-$cash" legs=[{"accountId":$cash,"amount":{"num":-10,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":90,"den":1,"dp":2}}]
@@ -72,4 +72,4 @@ expect err message ~ "zero-sum violation"
 # ...and the refused key was not spent: the same key now works with legs that
 # balance, which is what makes a retry after a client-side fix possible.
 do StoreTransaction ledgerId=1 description="keyed and right" date="2026-08-03T00:00:00.000Z" opId="bad-$cash" legs=[{"accountId":$cash,"amount":{"num":-90,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":90,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-390"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Exactly-once cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-390"

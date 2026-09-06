@@ -30,8 +30,9 @@
 #     bare-scalar replies do;
 #   * every strong id is its bare underlying number on the wire
 #     (ledger/core/types.hpp's LEDGER_DEFINE_STRONG_ID_WIRE);
-#   * enums are their integer values — AccountKind::Asset is 0 and
-#     ::Expense is 1, Currency::EUR is 1;
+#   * enums are their enumerator names, not their integer values —
+#     AccountKind::Asset is "Asset" and ::Expense is "Expense",
+#     Currency::EUR is "EUR";
 #   * a Rational is `{"num","den","dp"}` and comes back canonicalised.
 
 # ── Sign in ────────────────────────────────────────────────────────────────
@@ -54,11 +55,11 @@ do GetLedger ledgerId=$book
 expect ok field accounts !~ "\"id\""
 
 # ── ...and the whole of step 1 now hangs off it ─────────────────────────────
-do OpenAccount ledgerId=$book name="Wallet" kind=0 currency=1
+do OpenAccount ledgerId=$book name="Wallet" kind="Asset" currency="EUR"
 expect ok capture wallet=$.id
 expect ok field name == "Wallet"
 
-do OpenAccount ledgerId=$book name="Groceries" kind=1 currency=1
+do OpenAccount ledgerId=$book name="Groceries" kind="Expense" currency="EUR"
 expect ok capture groceries=$.id
 
 # Two legs in one currency summing to canonical zero. The posted balances are
@@ -66,8 +67,8 @@ expect ok capture groceries=$.id
 # file created — pinned against captured ids, so no other row in a shared
 # database can satisfy them by accident.
 do StoreTransaction ledgerId=$book description="weekly shop" date="2026-08-30T10:00:00.000Z" legs=[{"accountId":$wallet,"amount":{"num":-4250,"den":1,"dp":2}},{"accountId":$groceries,"amount":{"num":4250,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$wallet,\"name\":\"Wallet\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-4250"
-expect ok field accounts ~ "\"id\":$groceries,\"name\":\"Groceries\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":4250"
+expect ok field accounts ~ "\"id\":$wallet,\"name\":\"Wallet\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-4250"
+expect ok field accounts ~ "\"id\":$groceries,\"name\":\"Groceries\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":4250"
 
 do GetLedger ledgerId=$book
 expect ok field accounts ~ "\"id\":$wallet,"
