@@ -1,0 +1,169 @@
+# ledger (rung 5) — post entries, list them, and reverse one by the id the
+# listing handed back.
+#
+#   sign in -> create a book -> open two accounts -> post two entries ->
+#   list the month -> undo the entry the listing named -> watch the balances
+#   come back
+#
+# ── What this file replaces ────────────────────────────────────────────────
+# This was `undo-needs-a-journal-id-nothing-hands-out.scenario`, and its whole
+# premise was an absence: it asserted `@body !~ "journalId"` on every reply,
+# because no action in this rung's wire surface ever returned one. The rung
+# ships `UndoTransaction{ledgerId, journalId}` and a GUI Undo button whose
+# only input is that id, and a client could only ever pass a number it had
+# guessed — so the only assertable path was the not-found refusal.
+#
+# `ListTransactions` closed that (morph#428), the same way `CreateLedger`
+# closed the equivalent hole one level up (morph#361/#384): by adding the
+# action, not by documenting the gap. So this file now drives the reversal
+# itself, and the step that proves the gap is closed is the capture below —
+# `capture journal=$.entries[0].id` could not resolve against any reply the
+# tree produced before this change.
+#
+# The refusals the old file pinned are kept: a journal that does not exist,
+# and a second reversal of one already reversed.
+#
+# ── Design spec §6: undo is a compensating entry, not an erasure ───────────
+# `UndoTransaction` posts a *second*, reversing journal whose legs are the
+# original legs negated. The original stays in the book and stays listed —
+# asserted below, because an implementation that deleted the row would satisfy
+# the balance assertions and nothing else.
+#
+# Re-runnable against a database it has already run on: like
+# `bootstrap-a-book-over-the-wire.scenario`, each pass creates its own book
+# with `CreateLedger` and captures its id, so the listing below contains this
+# pass's entries and nothing else. A file listing a *seeded* book's August
+# would see the previous pass's entries too, and `$.entries[0]` would name an
+# entry that had already been reversed.
+#
+# ── Wire shapes that are not guessable from the DTOs ───────────────────────
+#   * `ListTransactions` answers `{"entries":[{"id","description","date",
+#     "legs":[...]}]}`, oldest first, ordered by the journal's own row id;
+#   * `id` is `JournalId` as its bare underlying number
+#     (ledger/core/types.hpp's LEDGER_DEFINE_STRONG_ID_WIRE), which is exactly
+#     what `UndoTransaction.journalId` takes;
+#   * `month` is `"YYYY-MM"` — the same shape and the same validator
+#     `GetBudgetReport` uses — and bounds the answer to a half-open UTC
+#     `[start, end)` range over the entry's stored date;
+#   * enums travel as their *enumerator names*, not as integers:
+#     `kind="Asset"`, `currency="EUR"`. That is what morph#444 made of them
+#     when it gave every ledger enum a `glz::meta`/`glz::enumerate`
+#     (ledger/core/types.hpp), and it is what a real server accepts today.
+#     Every other file in this directory still sends the pre-#444 integers and
+#     is refused by the running server for it — a corpus-wide breakage that
+#     predates this change and is filed as morph#460; this file is written
+#     against the wire as it actually is.
+
+# ── Sign in ────────────────────────────────────────────────────────────────
+client auth model=AuthModel
+do Login username=alice
+expect ok capture token=$.token
+expect ok capture who=$.principal
+
+client books model=LedgerModel
+session principal=$who token=$token
+
+do CreateLedger name="Undo book"
+expect ok capture book=$.id
+
+do OpenAccount ledgerId=$book name="Undo cash" kind="Asset" currency="EUR"
+expect ok capture cash=$.id
+
+do OpenAccount ledgerId=$book name="Undo spend" kind="Expense" currency="EUR"
+expect ok capture spend=$.id
+
+# ── A month with nothing in it lists empty, and is not a refusal ───────────
+do ListTransactions ledgerId=$book month="2026-08"
+expect ok field entries !~ "\"id\""
+
+# ── Two entries worth reversing ────────────────────────────────────────────
+do StoreTransaction ledgerId=$book description="first entry" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-700,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":700,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Undo cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-700"
+
+do StoreTransaction ledgerId=$book description="second entry" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-300,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":300,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Undo cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-1000"
+
+# ── The step that could not exist before ───────────────────────────────────
+# The id comes out of a reply, from a client holding nothing but a socket.
+# There is no `DataMapper` on this side of the wire, which is what made the
+# rung's own in-process tests no evidence at all that a client could do this.
+do ListTransactions ledgerId=$book month="2026-08"
+expect ok capture journal=$.entries[0].id
+expect ok field entries[0].description == "first entry"
+expect ok field entries[1].description == "second entry"
+# Oldest first, and the legs come back exactly as they were posted -- the same
+# Rational triple, never a float (design spec §7).
+expect ok field entries[0].legs[0].accountId == $cash
+expect ok field entries[0].legs[0].amount.num == -700
+expect ok field entries[0].legs[1].accountId == $spend
+expect ok field entries[0].legs[1].amount.num == 700
+
+# ── ...and the reversal it makes possible ──────────────────────────────────
+# Reversing the *first* entry (-700) leaves the second (-300) standing, so a
+# reversal that undid the wrong entry, or all of them, lands on a different
+# number than this one.
+do UndoTransaction ledgerId=$book journalId=$journal
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Undo cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-300"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Undo spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":300"
+
+# Design spec §6 again: the reversed entry is still there, still first, still
+# carrying the id the listing gave out. An "undo" that deleted the row would
+# have satisfied the balances above and fails here.
+do ListTransactions ledgerId=$book month="2026-08"
+expect ok field entries[0].id == $journal
+expect ok field entries[0].description == "first entry"
+
+# ── The two refusals the old file pinned, kept ─────────────────────────────
+# A second reversal of the same entry is refused: without this guard two
+# devices that both queued the undo while offline each post one, and the money
+# comes back twice. The per-currency zero-sum invariant does not catch it -- a
+# reversal is itself zero-sum.
+do UndoTransaction ledgerId=$book journalId=$journal
+expect err message == "undo rejected: this transaction has already been reversed"
+
+# ...and an id that names no journal at all.
+do UndoTransaction ledgerId=$book journalId=999999
+expect err message == "UndoTransaction: no such journal"
+expect err message !~ "first entry"
+
+# The refused calls left the balances exactly where the one successful
+# reversal put them.
+do GetLedger ledgerId=$book
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Undo cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-300"
+
+# ── A listing is scoped to the book it names ───────────────────────────────
+# A second book, same month, no entries of its own. A `ListTransactions` that
+# dropped its `WHERE ledger` would answer this one with the first book's
+# entries -- and would have passed every assertion above.
+do CreateLedger name="Someone else's month"
+expect ok capture other=$.id
+
+do ListTransactions ledgerId=$other month="2026-08"
+expect ok field entries !~ "first entry"
+expect ok field entries !~ "second entry"
+expect ok field entries !~ "\"id\""
+
+# ── ...and to the month it names ───────────────────────────────────────────
+# Both entries are dated in August, so the months either side of it come back
+# empty. Two months in the *past*, deliberately: `UndoTransaction`'s own
+# reversal is dated when the undo happened (design spec §6 -- the reversal is
+# its own event, not a copy of the original's date), so it lands in whatever
+# month this file is run in. A month after August would therefore be empty or
+# not depending on the wall clock, which is the dependence this runner forbids
+# by design (morph#147); a month before it never can be.
+do ListTransactions ledgerId=$book month="2026-07"
+expect ok field entries !~ "first entry"
+expect ok field entries !~ "\"id\""
+
+do ListTransactions ledgerId=$book month="2026-06"
+expect ok field entries !~ "first entry"
+expect ok field entries !~ "\"id\""
+
+# A malformed month is refused at the DTO boundary, by the dispatcher's own
+# `validate()` pass -- so the framework's generic text, not a model message.
+do ListTransactions ledgerId=$book month="2026-13"
+expect err message == "action failed validation: LedgerModel/ListTransactions"
+
+# ── The book still accepts work afterwards ─────────────────────────────────
+do StoreTransaction ledgerId=$book description="third entry" date="2026-08-03T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-100,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":100,"den":1,"dp":2}}]
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Undo cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-400"

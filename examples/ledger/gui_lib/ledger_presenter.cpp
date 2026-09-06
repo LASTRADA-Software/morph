@@ -41,6 +41,13 @@ void LedgerPresenter::storeTransaction(LedgerId ledgerId, const QString& descrip
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 
+void LedgerPresenter::listTransactions(LedgerId ledgerId, const QString& month) {
+    track<ListTransactionsResult>(
+        _handler.execute(ListTransactions{.ledgerId = ledgerId, .month = month.toStdString()}),
+        [this](ListTransactionsResult result) { emit transactionsListed(std::move(result)); },
+        [this](const std::exception_ptr& err) { reportError(err); });
+}
+
 void LedgerPresenter::undoTransaction(LedgerId ledgerId, JournalId journalId) {
     track<GetLedgerResult>(
         _handler.execute(UndoTransaction{.ledgerId = ledgerId, .journalId = journalId}),

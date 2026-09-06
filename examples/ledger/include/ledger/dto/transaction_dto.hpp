@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ledger/core/import_op_id.hpp"
+#include "ledger/core/time_util.hpp"
 #include "ledger/core/types.hpp"
 #include "ledger/core/units.hpp"
 
@@ -112,6 +113,71 @@ struct UndoTransaction {
     JournalId journalId;
 
     [[nodiscard]] bool validate() const noexcept { return ledgerId.hasValue() && journalId.hasValue(); }
+};
+
+/// @brief Lists the journal entries `ledgerId` recorded during `month`, so a
+///        client can name one -- to `UndoTransaction`, or to anything else
+///        that takes a `JournalId`.
+///
+///        This action exists because nothing else in the rung's wire surface
+///        ever hands a `journalId` back (morph#428). `StoreTransaction` and
+///        `UndoTransaction` both answer with `GetLedgerResult` -- the
+///        accounts and their balances -- `GetLedger` the same, and
+///        `ImportLedgerChunk` with counts. `JournalId` appeared in exactly
+///        one DTO field in the whole rung, and that field was
+///        `UndoTransaction`'s own *input*. The rung's own tests reached
+///        around that by querying the row through a `DataMapper`, which is
+///        precisely what a WebSocket client and the QML bridge do not have,
+///        so the shipped Undo control had no source for the one number it
+///        asks for.
+///
+///        Month-bounded, in the exact `"YYYY-MM"` shape
+///        `GetBudgetReport::month` uses and validated by the same
+///        `detail::isValidYearMonth`, so the result cannot grow without
+///        bound as a book ages. That bound is the whole bounding mechanism --
+///        deliberately no cursor and no page size (morph#428's own scope):
+///        one month of one book is a quantity a client can hold, and a
+///        pagination protocol is a wire contract worth designing on its own
+///        evidence rather than inventing here.
+struct ListTransactions {
+    LedgerId ledgerId;
+    std::string month;  // "YYYY-MM", the exact shape GetBudgetReport::month uses
+
+    [[nodiscard]] bool validate() const noexcept { return ledgerId.hasValue() && detail::isValidYearMonth(month); }
+};
+
+/// @brief One journal entry as a client sees it: the id it can name, plus
+///        enough of the entry to recognise which one it is.
+///
+///        `legs` are the rung's existing `TransactionLeg` aggregate, so an
+///        entry's own amounts travel in the same exact `Rational` form
+///        `StoreTransaction` sent them in -- never a float, per design spec
+///        §7. `foreignAmount`/`foreignCurrency` come back disengaged for a
+///        leg that carried none, exactly as they were stored.
+///
+///        No balance and no account names: this is a listing of *entries*,
+///        and `GetLedger` already answers the account question. Keeping the
+///        two apart is what lets this one stay a cheap month-scoped read.
+struct TransactionEntryInfo {
+    JournalId id;
+    std::string description;
+    morph::time::Timestamp date;
+    std::vector<TransactionLeg> legs;
+};
+
+/// @brief `ListTransactions`' answer: the month's entries, oldest first.
+///
+///        Ordered by the journal's own row id rather than by `date`, which is
+///        client-supplied and therefore not required to be monotonic: two
+///        entries can carry the same instant, and an import can post an older
+///        date after a newer one. Row id is the order the book recorded them
+///        in, which is the order an audit trail is read in and the only one
+///        this rung can guarantee is total.
+///
+///        An empty vector for a month with no entries -- that is an answer,
+///        not a refusal.
+struct ListTransactionsResult {
+    std::vector<TransactionEntryInfo> entries;
 };
 
 }  // namespace ledger

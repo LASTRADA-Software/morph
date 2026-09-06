@@ -91,6 +91,17 @@ public:
     void storeTransaction(LedgerId ledgerId, const QString& description, morph::time::Timestamp date,
                           std::vector<TransactionLeg> legs, const ImportOpId& opId);
 
+    /// @brief Lists @p ledgerId's journal entries for @p month. Emits
+    ///        `transactionsListed` on success, `failed` on error.
+    ///
+    ///        The read that gives `undoTransaction` below a source for its
+    ///        `journalId` (morph#428): before it, the Undo control this
+    ///        rung's `LedgerView.qml` ships had to be typed a number no
+    ///        screen ever displayed.
+    /// @param ledgerId The ledger whose entries to list.
+    /// @param month    The month to list, as `"YYYY-MM"`.
+    void listTransactions(LedgerId ledgerId, const QString& month);
+
     /// @brief Reverses @p journalId with a compensating entry. Emits
     ///        `transactionUndone` with the post-undo ledger state on
     ///        success, `failed` on error.
@@ -121,6 +132,10 @@ signals:
     /// @brief A transaction was stored.
     /// @param result The ledger's state after the store.
     void transactionStored(ledger::GetLedgerResult result);
+
+    /// @brief A month's journal entries were listed.
+    /// @param result That month's entries, each carrying its own id.
+    void transactionsListed(ledger::ListTransactionsResult result);
 
     /// @brief A transaction was reversed.
     /// @param result The ledger's state after the reversal.

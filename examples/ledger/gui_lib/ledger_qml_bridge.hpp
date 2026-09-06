@@ -41,6 +41,12 @@ class LedgerQmlBridge : public QObject {
     ///        `id`/`name`/`kind`/`currency`/`balance`.
     Q_PROPERTY(QVariantList accounts READ accounts NOTIFY accountsChanged)
 
+    /// @brief The last listed month's journal entries, each a map of
+    ///        `id`/`description`/`dateText` -- the `id` being the number
+    ///        `undoTransaction` asks for, which until morph#428 no screen in
+    ///        this rung ever displayed.
+    Q_PROPERTY(QVariantList entries READ entries NOTIFY entriesChanged)
+
     /// @brief `true` while any dispatch is in flight, for a busy indicator.
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
 
@@ -55,6 +61,9 @@ public:
 
     /// @return The attached ledger's accounts as QML-ready maps.
     [[nodiscard]] QVariantList accounts() const { return _accounts; }
+
+    /// @return The last listed month's entries as QML-ready maps.
+    [[nodiscard]] QVariantList entries() const { return _entries; }
 
     /// @return Whether a dispatch is in flight.
     [[nodiscard]] bool busy() const;
@@ -89,13 +98,28 @@ public:
     Q_INVOKABLE void storeTransaction(const QString& fromAccountId, const QString& toAccountId, qlonglong amountMinor,
                                       const QString& description);
 
+    /// @brief Lists the attached ledger's entries for @p month, publishing
+    ///        them on `entries`.
+    ///
+    ///        The Undo control's source: a view lists a month, shows what
+    ///        came back, and hands one of those entries' own `id` straight to
+    ///        `undoTransaction` below. Re-run automatically after a
+    ///        successful undo, so the list a user is looking at is not one
+    ///        the reversal has already invalidated.
+    /// @param month The month to list, as `"YYYY-MM"`.
+    Q_INVOKABLE void listTransactions(const QString& month);
+
     /// @brief Reverses @p journalId with a compensating entry.
-    /// @param journalId The journal to reverse, as a plain-number string.
+    /// @param journalId The journal to reverse, as a plain-number string --
+    ///        an `id` taken from `entries`, never typed.
     Q_INVOKABLE void undoTransaction(const QString& journalId);
 
 signals:
     /// @brief The account list changed.
     void accountsChanged();
+
+    /// @brief The entry list changed.
+    void entriesChanged();
 
     /// @brief `busy()` changed.
     void busyChanged();
@@ -108,6 +132,10 @@ private:
     /// @param result The ledger state to publish.
     void publishLedger(const GetLedgerResult& result);
 
+    /// @brief Replaces `_entries` from @p result and notifies QML.
+    /// @param result The listing to publish.
+    void publishEntries(const ListTransactionsResult& result);
+
     /// @brief Records @p message as `lastError` and notifies QML.
     /// @param message The presenter's error text.
     void publishError(const QString& message);
@@ -115,6 +143,11 @@ private:
     LedgerPresenter _presenter;
     LedgerId _ledgerId;
     QVariantList _accounts;
+    QVariantList _entries;
+    /// The month `listTransactions` was last called with, so an undo can
+    /// re-list it. Empty until a view has listed something, which is what
+    /// keeps a bare `openLedger` from dispatching a read nobody asked for.
+    QString _listedMonth;
     QString _lastError;
 };
 
