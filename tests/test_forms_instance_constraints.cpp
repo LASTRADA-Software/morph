@@ -315,6 +315,30 @@ TEST_CASE("Declaring the same field twice replaces, never duplicates", "[forms][
     CHECK(!constraints.empty());
 }
 
+TEST_CASE("Declaring a second, different field falls through to push_back", "[forms][instance-constraints]") {
+    // The replace test above only ever exercises the loop body against a
+    // vector holding zero (first `declare()`) or one *matching* entry
+    // (second `declare()` of the same field, replaced on iteration 1). It
+    // never runs the loop to completion against a non-matching entry and
+    // falls through to `push_back` — which is the branch a third field, or a
+    // second *different* field, actually needs.
+    InstanceConstraints constraints;
+    constraints.declare(FieldConstraint{.field = "a", .maximum = exact(1, 1, 0)});
+    constraints.declare(FieldConstraint{.field = "b", .maximum = exact(2, 1, 0)});
+
+    REQUIRE(constraints.fields().size() == 2);
+    REQUIRE(constraints.forField("a") != nullptr);
+    REQUIRE(constraints.forField("b") != nullptr);
+    CHECK((*constraints.forField("a")->maximum).numerator == 1);
+    CHECK((*constraints.forField("b")->maximum).numerator == 2);
+
+    // Declaring a third field now runs the loop against two non-matching
+    // entries before falling through — the same branch, exercised twice.
+    constraints.declare(FieldConstraint{.field = "c", .maximum = exact(3, 1, 0)});
+    REQUIRE(constraints.fields().size() == 3);
+    CHECK((*constraints.forField("c")->maximum).numerator == 3);
+}
+
 TEST_CASE("Decoration never mangles a schema it cannot read", "[forms][instance-constraints]") {
     const auto constraints = version(1, 10);
     CHECK(constraints.decorate("not json at all") == "not json at all");
@@ -322,6 +346,53 @@ TEST_CASE("Decoration never mangles a schema it cannot read", "[forms][instance-
 
     // No declarations means the input is handed straight back.
     CHECK(InstanceConstraints{}.decorate(R"({"properties":{"value":{}}})") == R"({"properties":{"value":{}}})");
+}
+
+TEST_CASE("Decorating with only a minimum declared emits only that key", "[forms][instance-constraints]") {
+    // Every other decorate() test in this file declares all three of
+    // decimalPlaces/minimum/maximum together, so the `has_value()` checks that
+    // guard each key never see a constraint that leaves one or two unset. A
+    // constraint naming only `minimum` must add `x-minimum` and nothing else —
+    // in particular it must leave the compiled `x-decimalPlaces` (3, from
+    // `ICConcentration`'s template parameter) alone rather than blanking it.
+    InstanceConstraints constraints;
+    constraints.declare(FieldConstraint{.field = "value", .minimum = exact(2, 1, 0)});
+    const auto schema = morph::forms::instanceSchemaJson<ICCapture>(constraints);
+
+    CHECK(boundNumerator(schema, "x-minimum") == 2);
+    CHECK(boundNumerator(schema, "x-maximum") == -1);         // never declared, never emitted
+    CHECK(valuePropertyInt(schema, "x-decimalPlaces") == 3);  // untouched compiled value
+    CHECK(stampedFields(schema) == std::vector<std::string>{"value"});
+}
+
+TEST_CASE("Decorating with only a maximum declared emits only that key", "[forms][instance-constraints]") {
+    // The mirror image of the minimum-only case above, closing the `maximum`
+    // and `minimum` `has_value()` branches the other way round.
+    InstanceConstraints constraints;
+    constraints.declare(FieldConstraint{.field = "value", .maximum = exact(9, 1, 0)});
+    const auto schema = morph::forms::instanceSchemaJson<ICCapture>(constraints);
+
+    CHECK(boundNumerator(schema, "x-maximum") == 9);
+    CHECK(boundNumerator(schema, "x-minimum") == -1);
+    CHECK(valuePropertyInt(schema, "x-decimalPlaces") == 3);
+}
+
+TEST_CASE("checkValue with no declared decimalPlaces never reports PrecisionExceeded",
+          "[forms][instance-constraints]") {
+    // Every other checkValue()/checkAction() test declares decimalPlaces
+    // alongside a bound, so `entry->decimalPlaces.has_value()` never sees a
+    // constraint that leaves it unset. -1/3 at 5 decimal places is not exactly
+    // representable at *any* precision, so if the guard were missing and
+    // `exactAtDecimals` ran against a default-constructed `decimalPlaces` of 0
+    // this would (correctly, by coincidence) still report PrecisionExceeded —
+    // the value is deliberately chosen to also violate `minimum`, so a missing
+    // short-circuit would surface as a spurious *second* violation.
+    InstanceConstraints constraints;
+    constraints.declare(FieldConstraint{.field = "value", .minimum = exact(0, 1, 0)});
+
+    const auto violations = constraints.checkValue("value", exact(-1, 3, 5));
+    REQUIRE(violations.size() == 1);
+    CHECK(violations.front().kind == ConstraintViolationKind::BelowMinimum);
 }
 
 // ---------------------------------------------------------------------------
