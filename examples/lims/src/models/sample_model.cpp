@@ -340,8 +340,28 @@ ListResultQualifiersResult SampleModel::execute(const ListResultQualifiers& acti
                                       }};
 }
 
-ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentration& capture,
-                                     const std::string& author) {
+namespace {
+
+/// @brief Records @p opKey as decided, so a redelivery is skipped.
+///
+/// A free function rather than a member: it touches no state of its own, and
+/// keeping `Lightweight::DataMapper` out of `sample_model.hpp` is what lets
+/// the client link. `ladder_lims_gui_lib` includes that header (through the
+/// presenters) and is built for wasm under `MORPH_CLIENT_ONLY`, where the ORM
+/// does not exist -- so a single mapper-typed declaration in the header broke
+/// the WASM client build for the whole rung. Every other rung's model header
+/// is ORM-free for the same reason.
+void markDecided(Lightweight::DataMapper& mapper, const std::string& opKey) {
+    db::ReplayedOpRecord row;
+    row.opKey = Lightweight::SqlAnsiString<128>{opKey};
+    row.decidedAt = nowMillis();
+    mapper.Create(row);
+}
+
+}  // namespace
+
+ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentration& capture, const std::string& author,
+                                     const OperationKey& opKey) {
     if (!capture.validate()) {
         // `exactlyOneOf` failing is the interesting half: it is what makes
         // "a number *and* a below-LOD flag" unrepresentable rather than
@@ -487,6 +507,19 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
     sampleRow.version = sampleRow.version.Value() + 1;
     mapper.Update(sampleRow);
 
+    if (!(*opKey).empty()) {
+        // Inside this transaction, on this connection, and nowhere else: a
+        // capture that commits without its op-key beside it is a reading this
+        // server can no longer recognise as its own, and the redelivery it
+        // invites is then decided on stale-base grounds instead of skipped.
+        // Exactly-once is a claim about the *pair*, not about either write.
+        // The caller cannot make that claim from outside -- `SqlTransaction`
+        // has no nesting: its destructor issues a plain `SQLEndTran` and turns
+        // autocommit back on, so a second one over the same connection ends
+        // this one rather than nesting inside it.
+        markDecided(mapper, *opKey);
+    }
+
     sqlTxn.Commit();
     return toResultView(row);
 }
@@ -541,26 +574,6 @@ bool SampleModel::alreadyDecided(const std::string& opKey) {
                 .All()
                 .empty();
 }
-
-namespace {
-
-/// @brief Records @p opKey as decided, so a redelivery is skipped.
-///
-/// A free function rather than a member: it touches no state of its own, and
-/// keeping `Lightweight::DataMapper` out of `sample_model.hpp` is what lets
-/// the client link. `ladder_lims_gui_lib` includes that header (through the
-/// presenters) and is built for wasm under `MORPH_CLIENT_ONLY`, where the ORM
-/// does not exist -- so a single mapper-typed declaration in the header broke
-/// the WASM client build for the whole rung. Every other rung's model header
-/// is ORM-free for the same reason.
-void markDecided(Lightweight::DataMapper& mapper, const std::string& opKey) {
-    db::ReplayedOpRecord row;
-    row.opKey = Lightweight::SqlAnsiString<128>{opKey};
-    row.decidedAt = nowMillis();
-    mapper.Create(row);
-}
-
-}  // namespace
 
 ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
     requirePrincipal();
@@ -640,9 +653,7 @@ ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
             return flagged;
         }
 
-        static_cast<void>(applyCapture(action.sampleId, action.capture, action.capturedBy));
-        Lightweight::DataMapper keyMapper;
-        markDecided(keyMapper, *action.operationKey);
+        static_cast<void>(applyCapture(action.sampleId, action.capture, action.capturedBy, action.operationKey));
 
         ReplayCaptureResult applied{
             .outcome = ReplayOutcome::Applied,

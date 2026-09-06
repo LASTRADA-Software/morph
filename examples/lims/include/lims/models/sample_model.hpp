@@ -321,8 +321,18 @@ private:
     /// @param sampleId The sample to write against.
     /// @param capture What to record.
     /// @param author The principal the stored result is attributed to.
+    /// @param opKey The replayed operation's dedup token, recorded in the
+    ///        same transaction as the capture itself; empty (the default)
+    ///        records nothing, for the two callers that are not replaying a
+    ///        queued item. Passed in rather than written by the caller
+    ///        afterwards because the two writes have to commit together and
+    ///        this function owns the only transaction they can share:
+    ///        `Lightweight::SqlTransaction` does not nest, so a caller-side
+    ///        transaction over the same connection would end this one rather
+    ///        than contain it.
     /// @return The stored result.
-    ResultView applyCapture(SampleId sampleId, const CaptureConcentration& capture, const std::string& author);
+    ResultView applyCapture(SampleId sampleId, const CaptureConcentration& capture, const std::string& author,
+                            const OperationKey& opKey = {});
 
     /// @brief Throws `IllegalTransition` unless every result captured against
     ///        the attached sample has a verification recorded.

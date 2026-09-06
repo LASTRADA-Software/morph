@@ -422,8 +422,16 @@ ReplayOpportunityUpdateResult OpportunityModel::execute(const QueuedOpportunityU
         row.expectedCloseValueDen = std::nullopt;
     }
     row.version = serverVersion + 1;
+    // One transaction over both writes, for the same reason the conflict
+    // branch above uses one: an apply that commits without its op-key beside
+    // it is an apply this server can no longer recognise as its own, and the
+    // redelivery it invites is then decided on stale-base grounds instead of
+    // skipped. Exactly-once is a claim about the *pair*, not about either
+    // statement.
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     mapper.Update(row);
     markDecided(mapper, *action.operationKey);
+    sqlTxn.Commit();
 
     ReplayOpportunityUpdateResult applied{
         .outcome = ReplayOutcome::Applied,

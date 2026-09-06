@@ -14,6 +14,7 @@
 // own two-legged structure exactly (its own comment explains why the durable
 // leg is opt-in — MORPH_BUILD_OFFLINE_SQLITE, off by default).
 
+#include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/journal/action_log.hpp>
@@ -89,6 +90,26 @@ void reconnect(const std::shared_ptr<morph::offline::IOfflineQueue>& queue, cons
     }
     replaying.attachOfflineQueue(queue);
     replaying.onBackendChanged();
+}
+
+/// @brief Makes every INSERT into @p table fail, leaving reads of it alone.
+///
+/// The seam replay actually has: `markDecided()` writes exactly one row, and
+/// this makes that write — and only that write — fail, *after* the apply above
+/// it has run. `alreadyDecided()`'s SELECT is untouched, so the replay reaches
+/// the apply the way it always does. Nothing here is mocked: the statement
+/// that fails is the one the model really issues.
+/// @param table The table whose inserts must fail.
+void failInsertsInto(const std::string& table) {
+    Lightweight::SqlStatement stmt;
+    (void)stmt.ExecuteDirect("CREATE TRIGGER morph_fail_insert BEFORE INSERT ON \"" + table +
+                             "\" BEGIN SELECT RAISE(ABORT, 'injected: the op-key record never landed'); END");
+}
+
+/// @brief Undoes `failInsertsInto`, so the recovery replay can be observed.
+void allowInserts() {
+    Lightweight::SqlStatement stmt;
+    (void)stmt.ExecuteDirect("DROP TRIGGER morph_fail_insert");
 }
 
 }  // namespace
@@ -400,6 +421,48 @@ TEST_CASE("Redelivering an operation is skipped, not applied twice", "[crm][offl
     crm::OpportunityModel reader;
     const auto view = reader.execute(crm::GetOpportunity{.opportunityId = deal.opportunity.id});
     CHECK(view.version == deal.opportunity.version + 1);
+    CHECK(reader.execute(crm::ListConflicts{.opportunityId = deal.opportunity.id}).conflicts.empty());
+}
+
+TEST_CASE("An apply whose op-key record is lost is rolled back, not left half-applied",
+          "[crm][offline][idempotency]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    Deal deal;
+    const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
+
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    crm::offline::FieldOutbox fiona{queue, "fiona"};
+    fiona.observe(deal.opportunity);
+    const auto queued =
+        fiona.enqueue(deal.opportunity.id, accountChoice, crm::PrimaryContactChoice{}, "Fiona's edit", usd(100000));
+
+    const ScopedPrincipal asFiona{"fiona"};
+    crm::OpportunityModel replaying;
+
+    // The crash the op-key ledger exists to survive: the apply commits, and
+    // the process (or the connection) dies before the key is recorded.
+    failInsertsInto("crm_opportunity_replayed_ops");
+    CHECK_THROWS(replaying.execute(queued));
+    allowInserts();
+
+    crm::OpportunityModel reader;
+    // Either both writes landed or neither did. A version that moved with no
+    // op-key behind it is an apply this server can no longer recognise as its
+    // own — the redelivery below is then decided on stale-base grounds rather
+    // than skipped, which is a wrong answer about an edit that really was
+    // already applied.
+    CHECK(reader.execute(crm::GetOpportunity{.opportunityId = deal.opportunity.id}).version ==
+          deal.opportunity.version);
+
+    // Redelivery: the queue retries what it never saw acknowledged. Exactly
+    // once, counted on the version and on the absence of a spurious conflict.
+    const auto again = replaying.execute(queued);
+    CHECK(again.outcome == crm::ReplayOutcome::Applied);
+
+    const auto view = reader.execute(crm::GetOpportunity{.opportunityId = deal.opportunity.id});
+    CHECK(view.version == deal.opportunity.version + 1);
+    CHECK(view.name == "Fiona's edit");
     CHECK(reader.execute(crm::ListConflicts{.opportunityId = deal.opportunity.id}).conflicts.empty());
 }
 
