@@ -226,18 +226,28 @@ TEST_CASE(
 // both cope when their model's execute gate has already fully drained and
 // been erased" -- built the same way as its siblings below (a
 // ThreadPoolExecutor, a bespoke IAuthorizer, a full register round-trip) to
-// force three same-model executes into an interleaving where the gate drains
-// and erases its map entry while an earlier ticket is still outstanding, then
-// asserted the server did not crash or hang. That is a direct test of the
-// gate's own "already gone" defensive branches
-// (`ExecuteOrderGate::awaitTurn`/`release` finding no map entry) with none of
-// its assertions actually about `RemoteServer`'s wiring -- so it is now
+// force three same-model executes into an interleaving meant to reach the
+// gate's "already gone" defensive branches.
+//
+// It no longer can. That interleaving was reachable before issue #449's fix:
+// the gate used to erase a model's map entry the moment the *last* ticket
+// released, even with an earlier ticket still outstanding, which is exactly
+// what let a third, later-arriving ticket find the entry gone. Since #449's
+// fix (a released-out-of-order ticket is now recorded rather than applied,
+// and the entry is erased only once every ticket up to it has released in
+// order), that specific interleaving can no longer surface a missing entry --
+// confirmed directly: instrumenting both defensive branches and re-running
+// this test's pre-removal body showed neither one firing. So this test had
+// already stopped covering what its name claimed *before* this extraction;
+// removing it here isn't a migration of live coverage so much as retiring a
+// test whose target moved out from under it. The branches it meant to reach
+// are covered directly and deterministically instead by
 // `tests/test_execute_order_gate.cpp`'s "awaitTurn and release both cope once
-// a gate has fully drained mid-sequence" (a synchronous, threadless
-// equivalent, since the erased-map-entry state is reachable directly without
-// forcing a thread interleaving at all). Removed here rather than duplicated,
-// per this extraction's "migrate coverage, don't discard it" mandate --
-// tracked in the assertion-count accounting in this task's report.
+// a gate has fully drained mid-sequence" (a synchronous, threadless case that
+// reaches the erased-map-entry state without needing any thread interleaving
+// at all, since `ExecuteOrderGate` exposes it directly). Removed here rather
+// than duplicated -- tracked in the assertion-count accounting in this task's
+// report.
 
 namespace {
 

@@ -299,11 +299,35 @@ TEST_CASE("ExecuteTicketGuard: constructed with no ticket is inert", "[remote][e
 
 TEST_CASE("ExecuteTicketGuard: awaitTurn forwards to the gate for the held ticket",
           "[remote][execute-order-gate][guard]") {
+    // A ticket whose turn has already come is not a discriminating case here:
+    // a no-op `awaitTurn()` body would pass it identically (confirmed while
+    // writing this test -- an earlier version used exactly that shape and
+    // stayed green after `ExecuteTicketGuard::awaitTurn()`'s single call-through
+    // line was temporarily replaced with a no-op). To actually prove
+    // forwarding, hold the guard's ticket *behind* an unreleased earlier one,
+    // same shape as the plain-gate blocking test above, and confirm the call
+    // genuinely parks and then genuinely resolves.
     ExecuteOrderGate gate;
     ModelId const mid{1};
-    auto const ticket = gate.take(mid);
-    ExecuteTicketGuard guard{gate, std::make_pair(mid, ticket)};
-    guard.awaitTurn();  // nextToRun already 0 == ticket -- returns immediately.
+    auto const t0 = gate.take(mid);
+    auto const t1 = gate.take(mid);
+    ExecuteTicketGuard guard{gate, std::make_pair(mid, t1)};
+
+    std::atomic<bool> t1Turn{false};
+    std::thread waiter{[&] {
+        guard.awaitTurn();
+        t1Turn.store(true);
+    }};
+
+    // t1 is not next in line (t0 hasn't released) -- if awaitTurn() forwarded
+    // to nothing (or returned immediately regardless of ticket), this would
+    // already be true.
+    REQUIRE_FALSE(morph::testing::waitUntil([&] { return t1Turn.load(); }, std::chrono::milliseconds{100}));
+
+    gate.release(mid, t0);  // Closes the gap: nextToRun 0 -> 1, matching t1.
+    REQUIRE(morph::testing::waitUntil([&] { return t1Turn.load(); }));
+    waiter.join();
+
     guard.release();
     CHECK(gate.gateCount() == 0U);
 }

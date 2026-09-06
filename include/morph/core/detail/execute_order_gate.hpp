@@ -2,6 +2,7 @@
 
 #pragma once
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -10,6 +11,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "../../attributes.hpp"
 #include "../strand.hpp"
 
 /// @file
@@ -192,7 +194,7 @@ public:
     /// @param ticket This call's ticket from `ExecuteOrderGate::take`, or
     ///               `std::nullopt` if it took none, in which case the guard
     ///               is inert.
-    ExecuteTicketGuard(ExecuteOrderGate& gate,
+    ExecuteTicketGuard(ExecuteOrderGate& gate MORPH_LIFETIMEBOUND,
                        std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> ticket) noexcept
         : _gate{gate}, _ticket{std::move(ticket)} {}
 
