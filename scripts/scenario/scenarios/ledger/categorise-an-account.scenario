@@ -26,10 +26,10 @@ expect ok capture who=$.principal
 client books model=LedgerModel
 session principal=$who token=$token
 
-do OpenAccount ledgerId=1 name="Categorised cash" kind="Asset" currency="EUR"
+do OpenAccount ledgerId=1 name="Categorised cash" kind=0 currency=1
 expect ok capture cash=$.id
 
-do OpenAccount ledgerId=1 name="Categorised coffee" kind="Expense" currency="EUR"
+do OpenAccount ledgerId=1 name="Categorised coffee" kind=1 currency=1
 expect ok capture coffee=$.id
 
 client budgets model=BudgetModel
@@ -51,7 +51,7 @@ expect ok
 client rules model=RuleModel
 session principal=$who token=$token
 
-do CreateRule ledgerId=1 trigger="DescriptionContains" matchText="flat white" action="SetCategory" actionValue="Categorised drinks"
+do CreateRule ledgerId=1 trigger=0 matchText="flat white" action=0 actionValue="Categorised drinks"
 expect ok capture rule=$
 
 use books
@@ -71,7 +71,7 @@ use budgets
 do CreateBudget ledgerId=1 name="Categorised budget" categoryId=$drinks
 expect ok capture budget=$
 
-do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":50000,"den":1,"dp":2} currency="EUR"
+do SetBudgetLimit budgetId=$budget month="2026-08" limit={"num":50000,"den":1,"dp":2} currency=1
 expect ok
 
 use books
@@ -85,7 +85,7 @@ use budgets
 # the second SetCategory -- so the entry above is counted once for each side.
 do GetBudgetReport budgetId=$budget month="2026-08"
 expect ok field limit.num == 50000
-expect ok field currency == "EUR"
+expect ok field currency == 1
 
 # ── The refusals ──────────────────────────────────────────────────────────
 do LinkAccountToCategory accountId=999999 categoryId=$drinks
@@ -101,4 +101,4 @@ expect err message == "SetCategory: no such account or category"
 
 # Nothing the refusals touched changed: the ledger still reads.
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$coffee,\"name\":\"Categorised coffee\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":350"
+expect ok field accounts ~ "\"id\":$coffee,\"name\":\"Categorised coffee\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":350"
