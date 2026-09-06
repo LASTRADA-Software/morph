@@ -118,6 +118,16 @@ expect_caught "the generated ci.yml regex silently omitting a rung" \
     "edit scripts/ladder_rungs.sh -e 's@alternation+=\"examples/@[ \"\$rung\" = lims ] || alternation+=\"examples/@'" \
     "ci.yml ladder filter does NOT match examples/lims/src/models/probe.cpp"
 
+# The scenario corpus dropping out of the generated filter. This is the pin
+# morph#462 asked for: ci.yml's `ladder-tests` runs the corpus, so a corpus-only
+# pull request that skipped the job would skip the only run of it -- and a
+# filter that stopped matching would say nothing at all, exactly as morph#179's
+# did. Nothing about ci.yml changes here; the generator alone is made to drop
+# the entry, and the gate must still notice.
+expect_caught "the generated ci.yml regex silently omitting scripts/scenario/" \
+    "edit scripts/ladder_rungs.sh -e \"/^    'scripts\\/scenario\\/'\$/d\"" \
+    "ci.yml ladder filter does NOT match scripts/scenario/scenarios/ledger/probe.scenario"
+
 # The other direction: a rung directory that declares itself but is absent from
 # the authority, so nothing builds, tests or filters on it.
 expect_caught "a declared rung missing from examples/rungs.txt" \

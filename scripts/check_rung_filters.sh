@@ -149,6 +149,30 @@ else
     note "ci.yml contains no hand-written rung alternation"
 fi
 
+# ── 1b. The scenario corpus must also trigger the ladder jobs ────────────────
+# ci.yml's `ladder-tests` runs scripts/scenario/run_scenarios.py against the
+# rung servers it has just built, so scripts/scenario/ is now a ladder input in
+# the same sense examples/<rung>/ is. It was not in the generated filter when
+# that step was added (morph#462): a pull request that touched only the corpus
+# matched nothing, skipped `ladder-tests` altogether, and so skipped the only
+# job that can tell whether a scenario still passes -- on precisely the changes
+# most able to break one. Same shape as morph#179, one directory over.
+#
+# Behavioural, like check 1: real paths are matched against the generated
+# regex, so a pattern rewritten into something that matches nothing fails here
+# rather than passing on the strength of containing the right words.
+for probe in \
+    "scripts/scenario/scenarios/ledger/probe.scenario" \
+    "scripts/scenario/run_scenarios.py"
+do
+    checks=$((checks + 1))
+    if printf '%s\n' "$probe" | grep -qE "$ci_regex"; then
+        note "ci.yml ladder filter matches ${probe}"
+    else
+        fail "ci.yml ladder filter does NOT match ${probe} -- a change confined to the scenario corpus would skip ladder-tests, and with it the only job that runs the corpus"
+    fi
+done
+
 # ── 2. wasm-ladder.yml's literal path lists must cover every rung ────────────
 for event in push pull_request; do
     globs="$(workflow_paths "$wasm_workflow" "$event")"
