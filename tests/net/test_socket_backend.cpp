@@ -93,6 +93,19 @@ void spinUntil(const std::function<bool()>& done, int maxIterations = 200) {
     }
 }
 
+// Polls until `backend` reports disconnected, or `maxIterations` * spinUntil's
+// own 10ms step elapses (200 -> ~2s; 25 -> ~250ms for the tighter
+// abortive-close races below, which already run inside their own 40-iteration
+// outer loop). waitForConnected()'s own wait_for predicate is already
+// satisfied while _connected is still true, so polling it with a zero timeout
+// alone would spin through every iteration in a few microseconds, never
+// giving the io thread a chance to notice the disconnect -- spinUntil's real
+// wall-clock sleep between checks is what actually gives it that chance.
+bool waitForDisconnect(morph::net::SocketBackend& backend, int maxIterations = 200) {
+    spinUntil([&] { return !backend.waitForConnected(std::chrono::milliseconds{0}); }, maxIterations);
+    return !backend.waitForConnected(std::chrono::milliseconds{0});
+}
+
 // Rejects every authorize()/authorizeRegister() call. Used to force the
 // server-side `err "unauthorized"` reply SocketBackend's control-call error
 // paths (registerModel/sendControlForId/listInstances) otherwise never see
@@ -957,17 +970,7 @@ TEST_CASE("SocketBackend: a malformed WebSocket frame from the server is treated
     // (a malformed frame arriving from the *client*).
     fake.sendFrame(morph::net::detail::WsOpcode::kContinuation, "");
 
-    // waitForConnected()'s wait_for predicate is already satisfied while
-    // _connected is still true, so it returns instantly without actually
-    // waiting -- looping on it alone would spin through every iteration in a
-    // few microseconds, never giving the io thread a chance to notice the
-    // disconnect. Sleep for real wall-clock time between checks instead.
-    bool disconnected = false;
-    for (int i = 0; i < 100 && !disconnected; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds{20});
-        disconnected = !backend.waitForConnected(std::chrono::milliseconds{0});
-    }
-    REQUIRE(disconnected);
+    REQUIRE(waitForDisconnect(backend));
 }
 
 TEST_CASE("SocketBackend: a Close frame from the server is echoed and ends the connection",
@@ -981,17 +984,7 @@ TEST_CASE("SocketBackend: a Close frame from the server is echoed and ends the c
     auto echoed = fake.receiveFrame();
     REQUIRE(echoed.opcode == morph::net::detail::WsOpcode::kClose);
 
-    // waitForConnected()'s wait_for predicate is already satisfied while
-    // _connected is still true, so it returns instantly without actually
-    // waiting -- looping on it alone would spin through every iteration in a
-    // few microseconds, never giving the io thread a chance to notice the
-    // disconnect. Sleep for real wall-clock time between checks instead.
-    bool disconnected = false;
-    for (int i = 0; i < 100 && !disconnected; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds{20});
-        disconnected = !backend.waitForConnected(std::chrono::milliseconds{0});
-    }
-    REQUIRE(disconnected);
+    REQUIRE(waitForDisconnect(backend));
 }
 
 TEST_CASE("SocketBackend: a Ping frame from the server is answered with a matching Pong",
@@ -1034,12 +1027,7 @@ TEST_CASE("SocketBackend: a Ping frame followed by an abortive close does not ha
         fake.sendFrame(morph::net::detail::WsOpcode::kPing, "racing-the-rst");
         fake.closeAbruptly();
 
-        bool disconnected = false;
-        for (int i = 0; i < 50 && !disconnected; ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds{5});
-            disconnected = !backend.waitForConnected(std::chrono::milliseconds{0});
-        }
-        REQUIRE(disconnected);
+        REQUIRE(waitForDisconnect(backend, 25));
     }
 }
 
@@ -1056,12 +1044,7 @@ TEST_CASE("SocketBackend: a Close frame followed by an abortive close does not h
         fake.sendFrame(morph::net::detail::WsOpcode::kClose, "");
         fake.closeAbruptly();
 
-        bool disconnected = false;
-        for (int i = 0; i < 50 && !disconnected; ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds{5});
-            disconnected = !backend.waitForConnected(std::chrono::milliseconds{0});
-        }
-        REQUIRE(disconnected);
+        REQUIRE(waitForDisconnect(backend, 25));
     }
 }
 
@@ -1100,17 +1083,7 @@ TEST_CASE("SocketBackend: with reconnectEnabled=false, the backend does not retr
     REQUIRE(backend.waitForConnected());
     wsServer.reset();  // drop the connection
 
-    // waitForConnected()'s wait_for predicate is already satisfied while
-    // _connected is still true, so it returns instantly without actually
-    // waiting -- looping on it alone would spin through every iteration in a
-    // few microseconds, never giving the io thread a chance to notice the
-    // disconnect. Sleep for real wall-clock time between checks instead.
-    bool disconnected = false;
-    for (int i = 0; i < 100 && !disconnected; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds{20});
-        disconnected = !backend.waitForConnected(std::chrono::milliseconds{0});
-    }
-    REQUIRE(disconnected);
+    REQUIRE(waitForDisconnect(backend));
 
     // A fresh listener on the same port must not bring the backend back --
     // with reconnectEnabled=false, the io thread already returned for good.
