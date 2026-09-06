@@ -269,6 +269,76 @@ TEST_CASE("SocketBackend: a plain handler keeps its own instance over the wire",
     REQUIRE(lastPriv.load() == 1);
 }
 
+TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not consumed by a parked sync call",
+          "[net][socket_backend]") {
+    // Regression coverage for morph#454 -- morph#65 reintroduced in this
+    // transport. `deregisterModel` sends fire-and-forget, but the server still
+    // answers it with an `ok` (remote.hpp's deregister branch), and that reply
+    // carries whatever `callId` the request had. With `callId == 0` -- the
+    // sentinel `dispatchIncomingEnvelope` reads as "hand this payload to
+    // whichever sendSync() is parked" -- the deregister's own stray `ok` was
+    // handed to the *next* synchronous control call instead of that call's
+    // real reply.
+    //
+    // `attachModel`'s private-handoff branch is the shortest path to the
+    // collision: with an empty primary it deregisters `current` and then
+    // immediately registers a fresh instance over the same connection, so the
+    // register parks on `_syncCv` with the deregister's reply already in
+    // flight ahead of its own. An `ok` for a deregister carries `modelId ==
+    // 0`, so the register returned `ModelId{0}` -- while the server had in
+    // fact created the instance, which then leaked until the connection
+    // closed.
+    //
+    // The assertion has to be that the returned id is a *real, different* id:
+    // "attachModel did not throw" holds with the bug present, and so does "an
+    // id came back" if 0 is allowed to count as one.
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
+    morph::net::SocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    auto const mid1 = backend.registerModel("SbEchoModel", nullptr);
+    REQUIRE(mid1.v != 0U);
+
+    // Empty primary => the private-handoff branch: deregister(mid1) then
+    // register, back to back on one connection.
+    auto const mid2 = backend.attachModel("SbEchoModel", nullptr, {}, mid1);
+    REQUIRE(mid2.v != 0U);
+    REQUIRE(mid2.v != mid1.v);
+
+    // …and the id handed back has to be one the server actually holds, which
+    // is what proves the reply that woke the register was the register's own
+    // rather than some other message's that happened to carry an id.
+    // Hand-built ActionCall (rather than a BridgeHandler) so the backend's
+    // own attachModel result is the thing under test; the raw reply body is
+    // kept as a string so this test needs no JSON dependency of its own.
+    morph::backend::detail::ActionCall call{
+        .modelTypeId = "SbEchoModel",
+        .actionTypeId = "SbEchoAction",
+        .serializeAction = [] { return std::string{R"({"value":7})"}; },
+        .deserializeResult =
+            [](std::string_view body) { return std::static_pointer_cast<void>(std::make_shared<std::string>(body)); },
+        .localOp = nullptr,
+        .session = {},
+    };
+
+    morph::exec::ThreadPoolExecutor cbPool{1};
+    std::atomic<bool> settled{false};
+    std::string echoed;
+    backend.execute(mid2, std::move(call), &cbPool)
+        .then([&](const std::shared_ptr<void>& res) {
+            echoed = *std::static_pointer_cast<std::string>(res);
+            settled.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { settled.store(true); });
+    spinUntil([&] { return settled.load(); });
+    REQUIRE(echoed == "7");
+}
+
 TEST_CASE("SocketBackend: registerModel on a never-connected socket throws, does not hang",
           "[net][socket_backend][disconnect]") {
     // Port 1 is reserved (root-only) on Linux/macOS and never listening — the
