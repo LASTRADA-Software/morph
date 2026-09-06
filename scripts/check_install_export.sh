@@ -214,7 +214,8 @@ CONSUMER_CMAKE
 
 cat > "${consumer_dir}/main.cpp" <<'CONSUMER_MAIN'
 // Compiled entirely outside the repository, against the install prefix alone.
-#include <morph/core/bridge.hpp>
+#include <morph/core/bridge.hpp>       // includes morph/core/detail/subscription_registry.hpp
+#include <morph/core/remote.hpp>       // includes morph/core/detail/execute_order_gate.hpp
 #include <morph/forms/forms.hpp>      // includes morph/detail/fixed_string.hpp
 #include <morph/net/socket_backend.hpp>
 #include <morph/util/quantity.hpp>    // includes morph/detail/quantity_equation.hpp

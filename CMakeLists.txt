@@ -249,7 +249,9 @@ target_sources(morph
     FILES
         include/morph/detail/fixed_string.hpp
         include/morph/detail/quantity_equation.hpp
+        include/morph/core/detail/execute_order_gate.hpp
         include/morph/core/detail/reply_router.hpp
+        include/morph/core/detail/subscription_registry.hpp
 )
 set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)
 

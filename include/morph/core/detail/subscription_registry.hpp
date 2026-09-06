@@ -4,7 +4,6 @@
 #include <any>
 #include <atomic>
 #include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -12,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "../executor.hpp"
 #include "../strand.hpp"
 
 /// @file
