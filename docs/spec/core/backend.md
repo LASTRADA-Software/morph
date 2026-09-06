@@ -1325,15 +1325,45 @@ The `reply` callback (which runs on a
 under a per-connection write mutex; if the connection closed before the reply
 is ready, a `weak_ptr` check drops the write silently — the same behavior
 `QtWebSocketServer`'s `QPointer` gives. `close()` (also run by the destructor)
-is idempotent: it shuts down the listening socket and every client socket
-(unblocking their threads' blocked reads/accepts), then joins every thread it
-started, so destruction leaves no dangling threads. It marks each connection
-closed and then calls `shutdownBoth()` **without** taking that connection's
-write mutex: a client thread blocked in `sendAll` against a stalled peer holds
-that mutex for as long as the send is stuck, and the shutdown is precisely what
-unblocks it — waiting for the lock first would block `close()` (and therefore
-the destructor) indefinitely, with no timeout. `shutdownBoth()` is documented
-safe to call from any thread for exactly this purpose.
+is idempotent: it wakes the accept thread, shuts down every client socket
+(unblocking their threads' blocked reads), then joins every thread it started,
+so destruction leaves no dangling threads. It marks each connection closed and
+then calls `shutdownBoth()` **without** taking that connection's write mutex: a
+client thread blocked in `sendAll` against a stalled peer holds that mutex for
+as long as the send is stuck, and the shutdown is precisely what unblocks it —
+waiting for the lock first would block `close()` (and therefore the destructor)
+indefinitely, with no timeout. `shutdownBoth()` is documented safe to call from
+any thread for exactly this purpose, on a **connected** socket.
+
+**The accept loop owns its own wakeup, and does not borrow the kernel's**
+(morph#437). The accept thread never parks in `accept(2)`. `listen()` sets
+`O_NONBLOCK` on the listening socket and creates a self-pipe; the loop waits in
+a single `poll()` over the listening fd and the pipe's read end, and takes a
+ready connection with `TcpSocket::tryAccept()`, which answers `std::nullopt`
+rather than parking when a readiness report has gone stale. `close()` writes one
+byte to the pipe before `join()`, which is what ends the loop.
+
+That replaces, rather than supplements, the previous mechanism: `close()` no
+longer calls `shutdownBoth()` on the *listening* socket at all. It used to, and
+relied on `shutdown(2)` kicking a parked `accept()` — true on Linux, not a POSIX
+guarantee, and false on macOS/BSD, where the accept thread stayed parked and
+`~SocketServer()` hung with no timeout on its join. Because the pipe is now the
+only wakeup, the mechanism is exercised by every teardown on every platform,
+including CI's: deleting the wakeup `write()` hangs the Linux build too. A
+platform-conditional wakeup would instead have been a macOS-only path that
+Linux-only CI could never execute.
+
+Two consequences follow, both deliberate:
+
+- `listen()` **fails closed** if the pipe cannot be created (`pipe(2)`
+  answering `EMFILE`/`ENFILE`): it returns `false` and spawns no thread, rather
+  than starting an accept loop nothing could ever interrupt.
+- `close()` **releases the listening descriptor** once the accept thread has
+  joined — after the join, so no fd number can be reused under a `poll()` still
+  holding it. Without `shutdownBoth()`, leaving it open would let the kernel
+  keep completing handshakes into a backlog nobody drains, and a client would
+  hang in the WebSocket Upgrade read instead of failing fast. `port()` therefore
+  reads `0` after `close()`, matching `QtWebSocketServer`.
 
 ## Lifetime & ownership
 
@@ -1645,9 +1675,9 @@ not a behavior change to the existing loopback-only default.
 | Method | Notes |
 |---|---|
 | `SocketServer(server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server`. Does not start listening. |
-| `listen()` | Binds `127.0.0.1:port` and spawns the accept thread; returns success. |
+| `listen()` | Binds `127.0.0.1:port`, makes the listening socket non-blocking, creates the accept loop's wakeup pipe, and spawns the accept thread; returns success. Fails closed (`false`, no thread) if the wakeup pipe cannot be created — an accept loop nothing can interrupt is worse than not listening (morph#437). |
 | `port()` | Bound port (OS-assigned when constructed with `0`), or `0` before `listen()` succeeds. |
-| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete (morph#451: the previous `_closing.exchange` guard let a second caller reach `_acceptThread.join()` while the first was inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++). Racing `close()` against the *destructor* remains out of contract, as for any member call. |
+| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Interrupts the accept loop by writing one byte to the wakeup pipe it polls (morph#437) — **not** by `shutdownBoth()` on the listening socket, which only worked because Linux kicks a parked `accept(2)` on shutdown and left macOS/BSD teardown hanging forever. Releases the listening descriptor after the join, so `port()` reads `0` afterwards. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete (morph#451: the previous `_closing.exchange` guard let a second caller reach `_acceptThread.join()` while the first was inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++). The wakeup write runs under that same mutex and at most once per `listen()`/`close()` cycle. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
 
 ## Design decisions
 
@@ -1758,7 +1788,22 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
 - **`morph::net` is Linux/macOS only.** `TcpSocket` is a thin wrapper over
   POSIX `sys/socket.h`; `MORPH_BUILD_NET=ON` on Windows produces a
   `message(WARNING ...)` and builds nothing. Windows/Winsock2 support is
-  documented future work, not implemented today.
+  documented future work, not implemented today. Nothing in `SocketServer`'s
+  teardown depends on which of those kernels it runs on any more: the accept
+  loop is interrupted by a wakeup file descriptor the server owns, not by any
+  kernel's treatment of `shutdown(2)` on a listening socket (morph#437). One
+  half of that is still unverified first-hand — **the macOS symptom has never
+  been reproduced on a Darwin machine by this project's own measurement**; the
+  original report's `sample(1)` backtrace and documented BSD semantics are the
+  evidence for it, and the Linux half (that `shutdown()` is what unblocks the
+  old code, and that a `poll()`/self-pipe wakeup replaces it deterministically)
+  is measured. There is no macOS CI leg.
+- **`SocketServer` has no bound on how long a *client* thread takes to
+  finish.** The accept thread is now interruptible on every platform, but
+  `close()` still joins each per-connection thread, and those are unblocked by
+  `shutdownBoth()` on their own connected sockets — portable, but with no
+  timeout. A peer that keeps a send stalled therefore still bounds teardown by
+  the OS's own error reporting.
 - **`morph::net` has no TLS.** `SocketBackend`/`SocketServer` speak plaintext
   `ws://` only; `parseWsUrl` throws immediately on a `wss://` URL. A `wss://`
   variant needing a TLS library (e.g. OpenSSL) is future work.
