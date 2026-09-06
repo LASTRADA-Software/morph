@@ -330,6 +330,20 @@ TEST_CASE("Forms::FieldBounds::CheckedDivOverflowIsTreatedAsAViolation", "[forms
     CHECK_FALSE(action.validate());
 }
 
+TEST_CASE("Forms::FieldBounds::BareRationalSatisfyingItsDeclaredBoundPasses", "[forms][bounds]") {
+    // allFieldBoundsSatisfied's `std::same_as<Member, Rational>` arm
+    // (satisfiesDeclaredBounds's result *not* gating `satisfied`) was only
+    // ever exercised via the overflow-as-violation case above -- every
+    // FBOverflowAction this suite constructed had a nonzero `value`, which
+    // multiplied by that field's near-INT64_MAX-reciprocal multipleOf always
+    // overflows checkedDiv. Zero is a multiple of everything and 0 *
+    // INT64_MAX is exactly representable, so checkedDiv succeeds with an
+    // integral quotient and the bound is genuinely satisfied here, not
+    // merely un-violated by construction.
+    FBOverflowAction const action{.value = Rational{0, DecimalPlaces{0}}};
+    CHECK(action.validate());
+}
+
 // ---------------------------------------------------------------------------
 // annotateExactBound's std::cmp_greater(...) arm for a user-declared bound.
 //
