@@ -93,19 +93,47 @@ ColumnLayout {
         }
     }
 
+    // ── Entries, and the Undo control they feed ──────────────────────────
+    // The journal id is shown rather than typed. Until morph#428 this was a
+    // bare "Journal id to undo" TextField, and no screen in this rung -- and
+    // no reply on the wire -- ever displayed a journal id, so the only way to
+    // fill it in was to guess. `listTransactions` is where the ids come from
+    // now; `undoTransaction` is handed one of them straight back.
     RowLayout {
         Layout.fillWidth: true
+        Label { text: qsTr("Entries") ; font.bold: true }
         TextField {
-            id: undoJournalId
-            placeholderText: qsTr("Journal id to undo")
+            id: entryMonth
+            placeholderText: qsTr("Month (YYYY-MM)")
+            // The listing is month-bounded on the wire, so a malformed month
+            // is a refusal from the model rather than an unbounded read. The
+            // mask keeps the ordinary case from having to see that refusal.
+            inputMask: "9999-99"
             Layout.fillWidth: true
         }
         Button {
-            text: qsTr("Undo")
-            enabled: view.bridge !== null && undoJournalId.text.length > 0
-            onClicked: {
-                view.bridge.undoTransaction(undoJournalId.text);
-                undoJournalId.text = "";
+            text: qsTr("List")
+            enabled: view.bridge !== null && entryMonth.text.length === 7
+            onClicked: view.bridge.listTransactions(entryMonth.text)
+        }
+    }
+
+    ListView {
+        Layout.fillWidth: true
+        Layout.preferredHeight: 120
+        clip: true
+        model: view.bridge ? view.bridge.entries : []
+        delegate: RowLayout {
+            width: ListView.view ? ListView.view.width : 0
+            Label { text: modelData.id; font.family: "monospace"; opacity: 0.7 }
+            Label { text: modelData.description; Layout.fillWidth: true }
+            Label { text: modelData.dateText; opacity: 0.7 }
+            Button {
+                text: qsTr("Undo")
+                enabled: view.bridge !== null
+                // The id comes from the row the user is looking at. Nothing
+                // here parses a number a person typed.
+                onClicked: view.bridge.undoTransaction(modelData.id)
             }
         }
     }

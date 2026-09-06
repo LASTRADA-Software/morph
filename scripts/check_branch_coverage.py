@@ -42,18 +42,18 @@ per file so a regression is localisable rather than averaged into one number.
 The floors, and their margin
 ----------------------------
 Set from measurement, the way every target in codecov.yml is, and deliberately
-three points below it. The margin is not slack: these numbers were measured on
-clang 22.1.8 locally while the coverage leg pins clang 20, and branch counts are
-a property of the instrumentation, not of the tests -- two clang versions can
-disagree about how many arms a decision has. Three points absorbs that while
-still catching a real regression: the drop codecov.yml's own history records as
-the thing nobody noticed was 5.46 points.
+three points below it. The margin is not slack: branch counts are a property of
+the instrumentation, not of the tests, so a patch-level toolchain difference can
+still move an arm total even though the majors agree -- these numbers were
+measured on clang 22.1.8 locally and CI pins clang 22. Three points absorbs that
+while still catching a real regression: the drop codecov.yml's own history
+records as the thing nobody noticed was 5.46 points.
 
 **The margin is provisional and should be tightened to about one point once the
-coverage leg has produced a clang-20 number**, at which point these become
-floors in the same sense the line targets are. Until then a gate that cannot
-fire on toolchain noise is worth more than a tight one that fires on it and
-gets deleted.
+coverage leg has produced a number of its own to compare against**, at which
+point these become floors in the same sense the line targets are. Until then a
+gate that cannot fire on toolchain noise is worth more than a tight one that
+fires on it and gets deleted.
 
 Two floors are not measured-minus-three. detail, render and qt measure 100%, and
 a floor of 97% there would fail the moment anyone adds an untested branch to a

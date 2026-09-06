@@ -137,6 +137,38 @@ public:
     ///         full-rebuilt-state convention.
     GetLedgerResult execute(const GetLedger& action);
 
+    /// @brief Lists the journal entries `action.ledgerId` recorded during
+    ///        `action.month`, oldest first, each carrying the `JournalId` a
+    ///        client needs to name it (morph#428).
+    ///
+    ///        The read that makes `UndoTransaction` -- and the Undo control
+    ///        `gui/qml/LedgerView.qml` ships -- drivable at all: before this,
+    ///        `JournalId` appeared in exactly one DTO field in the rung, and
+    ///        that field was `UndoTransaction`'s own input, so a client could
+    ///        only ever pass an id it had guessed.
+    ///
+    ///        Gated by `db::requireOwnedBook` exactly as `GetLedger`,
+    ///        `GetBudgetReport` and `GetReportStatus` are (morph#382): a
+    ///        listing of a book's entries is precisely the kind of read that
+    ///        gate exists for. Carries no `EmptyPrincipalError` gate, for the
+    ///        same reason `execute(GetLedger)` does not -- an empty principal
+    ///        never matches a recorded owner, so it is refused on an owned
+    ///        book and admitted only on an unowned one.
+    ///
+    ///        The month is a half-open UTC `[start, end)` millisecond range
+    ///        over `TransactionJournalRecord::date`, via the shared
+    ///        `monthRangeMs` (`ledger/core/time_util.hpp`) that
+    ///        `BudgetModel::execute(const GetBudgetReport&)` also uses, so
+    ///        the two agree on what "August" means.
+    /// @param action The ledger id and the `"YYYY-MM"` month to list.
+    /// @return That month's entries, each with its id, description, date and
+    ///         legs; an empty list for a month with nothing in it.
+    /// @throws ValidationError if the ledger id is unengaged or the month is
+    ///         not a well-formed `"YYYY-MM"`.
+    /// @throws NotFound if no book has that id.
+    /// @throws Forbidden if the book belongs to a different principal.
+    ListTransactionsResult execute(const ListTransactions& action);
+
     /// @brief Records a multi-leg transaction against `action.ledgerId`'s
     ///        accounts, enforcing the per-currency zero-sum invariant
     ///        (design spec §1): each leg's amount is partitioned by the
@@ -448,6 +480,14 @@ BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::GetLedger, "GetLedger", ::mo
 // refusal into a rejected `Completion`.
 BRIDGE_KEY_FROM(ledger::OpenAccount, &ledger::OpenAccount::ledgerId);
 BRIDGE_KEY_FROM(ledger::GetLedger, &ledger::GetLedger::ledgerId);
+
+// A pure read, so `Loggable::No` exactly like `GetLedger` above: the action
+// log is an audit trail of what changed the book, and listing it changes
+// nothing. Keyed on `ledgerId` like every other action that names a book, so
+// it runs on that book's own strand.
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::ListTransactions, "ListTransactions", ::morph::model::Loggable::No)
+
+BRIDGE_KEY_FROM(ledger::ListTransactions, &ledger::ListTransactions::ledgerId);
 
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::StoreTransaction, "StoreTransaction")
 

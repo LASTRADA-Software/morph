@@ -5,6 +5,7 @@
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <glaze/glaze.hpp>
@@ -729,6 +730,84 @@ GetLedgerResult LedgerModel::execute(const GetLedger& action) {
     // helper (also used by execute(StoreTransaction) against its own
     // in-flight transaction's mapper -- see that helper's doc comment).
     return buildLedgerState(mapper, action.ledgerId);
+}
+
+ListTransactionsResult LedgerModel::execute(const ListTransactions& action) {
+    if (!action.validate()) {
+        throw ValidationError{"ListTransactions: ledgerId and a YYYY-MM month are required"};
+    }
+    Lightweight::DataMapper mapper;
+    // Same gate, same reason, as execute(GetLedger) directly above: a listing
+    // of a book's entries is a read of the book, so it goes through
+    // db::requireOwnedBook (morph#382) and needs no EmptyPrincipalError gate
+    // of its own -- an empty principal never matches a recorded owner.
+    static_cast<void>(db::requireOwnedBook(mapper, action.ledgerId, db::currentPrincipal(), "ListTransactions"));
+
+    // The month bound, as a half-open UTC [start, end) over the stored epoch
+    // millis -- the same monthRangeMs BudgetModel::execute(GetBudgetReport)
+    // uses (ledger/core/time_util.hpp), so "August" means the same thing to
+    // both actions.
+    const auto [monthStartMs, monthEndMs] = monthRangeMs(action.month);
+    // WHERE ledger, and it is load-bearing rather than an optimisation: two
+    // books share one journals table, so dropping it would list another
+    // principal's entries through a gate that had just passed. Ordered by row
+    // id -- see ListTransactionsResult's own doc comment for why not by date.
+    auto journalRows =
+        mapper.Query<db::TransactionJournalRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::ledger>, "=", *action.ledgerId)
+            .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::date>, ">=", monthStartMs)
+            .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::date>, "<", monthEndMs)
+            .OrderBy(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::id>)
+            .All();
+
+    ListTransactionsResult result;
+    result.entries.reserve(journalRows.size());
+    for (const auto& journalRow : journalRows) {
+        // One leg query per journal rather than one WhereIn over all of them:
+        // the legs have to be grouped back per entry either way, and a month
+        // of one book is the bound this action is built around (see
+        // ListTransactions' own doc comment) -- so the simple shape is the
+        // right one until a measurement says otherwise.
+        auto legRows =
+            mapper.Query<db::TransactionLegRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::journal>, "=", journalRow.id.Value())
+                .OrderBy(::Lightweight::FieldNameOf<&db::TransactionLegRecord::id>)
+                .All();
+
+        TransactionEntryInfo entry;
+        entry.id = JournalId{static_cast<std::int64_t>(journalRow.id.Value())};
+        entry.description = std::string{journalRow.description.Value().ToStringView()};
+        entry.date = morph::time::Timestamp{morph::time::DateTime{
+            std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{journalRow.date.Value()}}}};
+        entry.legs.reserve(legRows.size());
+        for (const auto& legRow : legRows) {
+            TransactionLeg leg;
+            leg.accountId = AccountId{static_cast<std::int64_t>(legRow.account.Value())};
+            // Rebuilt from the stored triple, never from a double: the exact
+            // numerator/denominator/decimal-places a leg was written with come
+            // back out unchanged (design spec §7's no-float rule).
+            leg.amount = morph::math::Rational{
+                morph::math::Numerator{legRow.amountNum.Value()}, morph::math::Denominator{legRow.amountDen.Value()},
+                morph::math::DecimalPlaces{static_cast<std::uint32_t>(legRow.amountDp.Value())}};
+            // The foreign-amount triple is nullable as a group (design spec §1
+            // step 3), so it is engaged only when all of it is -- a
+            // half-written pair would otherwise decode as a foreign amount
+            // with no currency, which is display metadata nobody can read.
+            const auto& foreignNum = legRow.foreignAmountNum.Value();
+            const auto& foreignDen = legRow.foreignAmountDen.Value();
+            const auto& foreignDp = legRow.foreignAmountDp.Value();
+            const auto& foreignCode = legRow.foreignCurrencyCode.Value();
+            if (foreignNum.has_value() && foreignDen.has_value() && foreignDp.has_value() && foreignCode.has_value()) {
+                leg.foreignAmount =
+                    morph::math::Rational{morph::math::Numerator{*foreignNum}, morph::math::Denominator{*foreignDen},
+                                          morph::math::DecimalPlaces{static_cast<std::uint32_t>(*foreignDp)}};
+                leg.foreignCurrency = codeToCurrency(foreignCode->ToStringView());
+            }
+            entry.legs.push_back(std::move(leg));
+        }
+        result.entries.push_back(std::move(entry));
+    }
+    return result;
 }
 
 GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {

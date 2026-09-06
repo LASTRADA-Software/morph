@@ -2,7 +2,6 @@
 #include "ledger/models/budget_model.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
-#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <morph/core/registry.hpp>
@@ -13,59 +12,11 @@
 #include "clock.hpp"
 #include "ledger/core/errors.hpp"
 #include "ledger/core/money.hpp"
+#include "ledger/core/time_util.hpp"  // monthRangeMs -- shared with LedgerModel's ListTransactions (morph#428)
 #include "ledger/db/book_access.hpp"
 #include "ledger/db/ledger_entity.hpp"
 
 namespace ledger {
-
-namespace {
-
-/// @brief Parses a `"YYYY-MM"` month string into a half-open UTC
-///        `[start, end)` millisecond range, matching
-///        `TransactionJournalRecord::date`'s stored epoch-millis form.
-///
-///        A plain UTC month range -- not the local-timezone month-boundary
-///        machinery a later task ("local-time month boundary handling")
-///        builds; this task's scope only needs a defensible, simple
-///        conversion. Callers (`SetBudgetLimit::validate()` /
-///        `GetBudgetReport::validate()`, `ledger/dto/budget_dto.hpp`) reject
-///        a malformed month -- wrong length, non-digit characters, or a
-///        month number outside `[1, 12]` -- before this ever runs. This
-///        function still double-checks both the `from_chars` parse status
-///        and `year_month_day::ok()` and throws `ValidationError` rather
-///        than silently returning a garbage range, as defense in depth
-///        against a caller that bypasses `validate()`.
-/// @param month The `"YYYY-MM"` string to parse. Must already have passed
-///        `detail::isValidYearMonth` (see `budget_dto.hpp`).
-/// @return The `[start, end)` epoch-millisecond range for that UTC month.
-/// @throws ValidationError if `month` cannot be parsed as digits or does
-///         not name a valid calendar month.
-[[nodiscard]] std::pair<std::int64_t, std::int64_t> monthRangeMs(const std::string& month) {
-    int year = 0;
-    int monthNum = 0;
-    const auto yearResult = std::from_chars(month.data(), month.data() + 4, year);
-    const auto monthResult = std::from_chars(month.data() + 5, month.data() + 7, monthNum);
-    if (yearResult.ec != std::errc{} || monthResult.ec != std::errc{}) {
-        throw ValidationError{"monthRangeMs: \"" + month + "\" is not a well-formed YYYY-MM month"};
-    }
-
-    const auto startDate = std::chrono::year_month_day{
-        std::chrono::year{year}, std::chrono::month{static_cast<unsigned>(monthNum)}, std::chrono::day{1}};
-    if (!startDate.ok()) {
-        throw ValidationError{"monthRangeMs: \"" + month + "\" is not a valid calendar month"};
-    }
-    const auto startSysDays = static_cast<std::chrono::sys_days>(startDate);
-    const auto endSysDays =
-        static_cast<std::chrono::sys_days>(startDate.year() / startDate.month() / std::chrono::last) +
-        std::chrono::days{1};
-
-    const auto startMs =
-        std::chrono::duration_cast<std::chrono::milliseconds>(startSysDays.time_since_epoch()).count();
-    const auto endMs = std::chrono::duration_cast<std::chrono::milliseconds>(endSysDays.time_since_epoch()).count();
-    return {startMs, endMs};
-}
-
-}  // namespace
 
 void BudgetModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
     _log = std::move(log);

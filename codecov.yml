@@ -105,10 +105,11 @@ component_management:
     #
     # **This target is provisional and must be re-derived from the first
     # Codecov report produced after morph#403 lands.** Two reasons, and the
-    # second is the one that matters. First, it was measured on clang 22.1.8
-    # while the coverage leg pins clang 20, and the method reproduces Codecov
+    # second is the one that matters. First, the method reproduces Codecov
     # to about a third of a point (examples/common: 90.72% computed here
-    # against 90.39% from the Codecov API on master) rather than exactly.
+    # against 90.39% from the Codecov API on master) rather than exactly --
+    # the compiler is not a source of the discrepancy: it was measured on
+    # clang 22.1.8 and CI pins clang 22.
     # Second, and unavoidably: morph#403 moved the *denominator*. Handing
     # llvm-cov the binaries whose profile data it used to drop brought whole
     # files into the report that had never been in it, so include/morph's line

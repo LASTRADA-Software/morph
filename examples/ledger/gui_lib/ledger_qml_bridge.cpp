@@ -89,6 +89,28 @@ using ::morph::ladder::gui::idNumber;
     };
 }
 
+/// @brief One journal entry as the map QML binds to.
+///
+///        `id` is the whole point of the listing: it is the number
+///        `undoTransaction` asks for, published so a view can hand it back
+///        rather than asking a user to guess it (morph#428).
+///
+///        No amounts. A `TransactionLeg` carries no currency of its own --
+///        the currency belongs to the account the leg names (design spec §2)
+///        -- so rendering money here would mean resolving every leg's account
+///        first, and `accounts` already answers the balance question. The
+///        description and date are what identify an entry to the person
+///        choosing one.
+/// @param entry The entry to render.
+/// @return The QML-ready map.
+[[nodiscard]] QVariantMap toVariantMap(const TransactionEntryInfo& entry) {
+    return QVariantMap{
+        {"id", idNumber(entry.id)},
+        {"description", QString::fromStdString(entry.description)},
+        {"dateText", entry.date.hasValue() ? QString::fromStdString(entry.date.value->toIso8601()) : QString{}},
+    };
+}
+
 }  // namespace
 
 LedgerQmlBridge::LedgerQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
@@ -97,8 +119,18 @@ LedgerQmlBridge::LedgerQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec:
             [this](const GetLedgerResult& result) { publishLedger(result); });
     connect(&_presenter, &LedgerPresenter::transactionStored, this,
             [this](const GetLedgerResult& result) { publishLedger(result); });
-    connect(&_presenter, &LedgerPresenter::transactionUndone, this,
-            [this](const GetLedgerResult& result) { publishLedger(result); });
+    connect(&_presenter, &LedgerPresenter::transactionsListed, this,
+            [this](const ListTransactionsResult& result) { publishEntries(result); });
+    connect(&_presenter, &LedgerPresenter::transactionUndone, this, [this](const GetLedgerResult& result) {
+        publishLedger(result);
+        // A reversal adds an entry and makes the reversed one un-reversible,
+        // so the list a user is looking at is stale the moment this arrives.
+        // Re-listing the month they asked for is the smallest honest answer;
+        // it dispatches nothing if they never listed one.
+        if (!_listedMonth.isEmpty()) {
+            _presenter.listTransactions(_ledgerId, _listedMonth);
+        }
+    });
     // An opened account does not carry the whole ledger, so re-read rather
     // than append: the balances of *other* accounts are unaffected, but the
     // model is the authority on the list's order and contents.
@@ -117,6 +149,16 @@ void LedgerQmlBridge::publishLedger(const GetLedgerResult& result) {
     }
     _accounts = std::move(accounts);
     emit accountsChanged();
+}
+
+void LedgerQmlBridge::publishEntries(const ListTransactionsResult& result) {
+    QVariantList entries;
+    entries.reserve(static_cast<qsizetype>(result.entries.size()));
+    for (const auto& entry : result.entries) {
+        entries.push_back(toVariantMap(entry));
+    }
+    _entries = std::move(entries);
+    emit entriesChanged();
 }
 
 void LedgerQmlBridge::publishError(const QString& message) {
@@ -167,6 +209,12 @@ void LedgerQmlBridge::storeTransaction(const QString& fromAccountId, const QStri
     _presenter.storeTransaction(
         _ledgerId, description, morph::time::Timestamp::now(),
         {TransactionLeg{.accountId = from, .amount = debit}, TransactionLeg{.accountId = to, .amount = credit}}, opId);
+    emit busyChanged();
+}
+
+void LedgerQmlBridge::listTransactions(const QString& month) {
+    _listedMonth = month;
+    _presenter.listTransactions(_ledgerId, month);
     emit busyChanged();
 }
 

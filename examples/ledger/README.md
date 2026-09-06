@@ -60,9 +60,9 @@ was created by no registered action at all, and a freshly started
 **Whose book it is.** `CreateLedger` records its caller as the book's owner,
 and every action that reaches a book compares that owner against the
 authenticated principal before it does anything else — the reads included.
-`GetLedger`, `GetBudgetReport` and `GetReportStatus` are gated exactly as the
-writes are, because a book's accounts, balances and statements are the thing
-worth protecting. A principal that does not own the book is refused
+`GetLedger`, `ListTransactions`, `GetBudgetReport` and `GetReportStatus` are
+gated exactly as the writes are, because a book's accounts, balances, entries
+and statements are the thing worth protecting. A principal that does not own the book is refused
 `<Action>: this book belongs to another principal`; one that does not exist is
 still refused `<Action>: no such ledger`, and the two stay distinguishable so
 an owner debugging a dead id is not told it is a permissions problem.
@@ -92,11 +92,15 @@ membership table: there is no way to share a book with a second principal, and
 no `kanban`-style `project_roles` to promote anyone through. A book is its
 creator's, and everyone else is refused.
 
-**Two actions a client cannot drive to a result (morph#362).** Every action
-below is registered on the wire, but two of them answer only with a refusal
-no matter what a client sends, for two different reasons. Both are recorded
-in `scripts/scenario/coverage_allowlist.json` so the workflow-coverage gate
-does not chase them.
+**One action a client cannot drive to a result (morph#362).** Every action
+below is registered on the wire, and one of them answers only with a refusal
+no matter what a client sends. It is recorded in
+`scripts/scenario/coverage_allowlist.json` so the workflow-coverage gate does
+not chase it.
+
+This used to be two. `UndoTransaction` was the other, and morph#428 closed it
+by adding the missing read rather than by writing the gap down — see
+"`ListTransactions` is how an entry gets named" below.
 
 - **`RunReportJob` is the report runner's, not a client's.**
   `LedgerModel::execute(const RunReportJob&)` refuses every principal but
@@ -108,19 +112,28 @@ does not chase them.
   middle step: a client submits, gets a job id, polls, and either sees the
   runner's own tick land or does not. It cannot advance its own job, and
   asking to is a refusal, not a slow success.
-- **`UndoTransaction` needs a `journalId` no action hands out.**
-  `UndoTransaction { ledgerId, journalId }` reverses one journal entry, and
-  `JournalId` appears in exactly one wire DTO in this rung — that action's own
-  input. Nothing returns one: `StoreTransaction` and `UndoTransaction` answer
-  `GetLedgerResult` (accounts and balances), `GetLedger` the same,
-  `ImportLedgerChunk` answers counts, and there is no `GetJournal` or
-  `ListTransactions`. So the only outcome a client can reach is the not-found
-  refusal `UndoTransaction: no such journal`, against an id it guessed; the
-  in-process tests get the id from the database instead. Undo itself is
-  implemented and exercised (step 5) — it is the *naming* of an entry that has
-  no client story. Whether to close that with an action that returns journal
-  ids, or to record undo as a server-side path deliberately, is open on
-  morph#362.
+
+**`ListTransactions` is how an entry gets named (morph#428).**
+`UndoTransaction { ledgerId, journalId }` reverses one journal entry, and until
+morph#428 `JournalId` appeared in exactly one wire DTO in this rung — that
+action's own input. Nothing returned one: `StoreTransaction` and
+`UndoTransaction` answer `GetLedgerResult` (accounts and balances), `GetLedger`
+the same, `ImportLedgerChunk` answers counts, and there was no `GetJournal` and
+no listing. So the only outcome a client could reach was the not-found refusal
+`UndoTransaction: no such journal`, against an id it guessed, while the
+in-process tests got the id from the database — and the desktop client shipped
+an Undo button whose only input was a number no screen ever displayed.
+
+That question is settled, the same way morph#361/#384 settled the equivalent
+one for `CreateLedger`: by adding the action. `ListTransactions { ledgerId,
+month }` answers `{ entries: [{ id, description, date, legs }] }` for one
+`"YYYY-MM"` month of one book, oldest first, gated by `db::requireOwnedBook`
+like every other book-reaching read. `LedgerView.qml`'s Undo control now takes
+its id from a listed row instead of from a text field.
+
+Two things it deliberately is not: paginated (the month bound is the whole
+bounding mechanism — if that proves insufficient, that is its own issue), and a
+change to `StoreTransaction`'s result, which still answers with ledger state.
 
 Build order (status as of rung 5's implementation, see
 `docs/superpowers/plans/2026-08-19-ledger-rung5.md`):

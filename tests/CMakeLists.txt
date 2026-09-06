@@ -1,3 +1,14 @@
+# ── The SYSTEM-include demotion helper's own self-test (morph#438) ───────────
+# cmake/morph_demote_interface_includes.cmake moves unixODBC's `-I` out of the
+# fetched Lightweight target's INTERFACE_COMPILE_OPTIONS. On Linux that flag is
+# empty, so nothing observable here would change if the helper's body were
+# deleted -- the self-test hands it a synthetic fixture instead and
+# FATAL_ERRORs unless the transform is exactly right. Configure-time, no build,
+# and it runs wherever tests are configured rather than only on the platform
+# that has the symptom.
+include(${CMAKE_SOURCE_DIR}/cmake/morph_demote_interface_includes.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/demote_interface_includes_selftest.cmake)
+
 include(${CMAKE_SOURCE_DIR}/cmake/pinned_facts.cmake)
 morph_generate_pinned_facts_header(
     ${CMAKE_SOURCE_DIR}/docs/spec/pinned_facts.toml

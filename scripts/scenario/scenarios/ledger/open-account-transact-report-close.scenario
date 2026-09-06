@@ -122,11 +122,14 @@ do RunReportJob jobId=$job ledgerId=1
 expect err message == "RunReportJob: only the report runner may run a report job"
 
 # ── Close out ───────────────────────────────────────────────────────────────
-# UndoTransaction reverses a journal entry by id -- but no action in this
-# rung's wire surface hands a journalId back (StoreTransaction answers with
-# ledger state, GetLedger with accounts), so a client cannot name a real one.
-# What is assertable is the refusal for an id that does not exist, which still
-# pins the action's own not-found path.
+# UndoTransaction's not-found path, which is still worth pinning here: an id
+# that names no journal is refused rather than silently doing nothing, and the
+# refusal says nothing about the entries that do exist.
+#
+# A *real* journal id is nameable now -- `ListTransactions` hands them out
+# (morph#428) -- and the reversal it makes possible is driven end to end by
+# `store-list-and-undo-an-entry.scenario`. This file keeps the guessed id on
+# purpose, because the refusal is a different path from the reversal.
 do UndoTransaction ledgerId=1 journalId=999999
 expect err message ~ "journal"
 expect err message !~ "flat white"
