@@ -62,6 +62,14 @@ FetchContent_MakeAvailable(Lightweight)
 set(CMAKE_SKIP_INSTALL_RULES ${_morph_saved_skip_install_rules})
 unset(_morph_saved_skip_install_rules)
 
+# Same demotion as examples/common/CMakeLists.txt's own Lightweight fetch, and
+# it has to be here too: whichever of the two sites configures first is the one
+# that actually defines the target, so only calling it from the other would
+# leave the `-I` in place whenever bank configures first. The helper is
+# idempotent, so calling it twice is a no-op the second time (morph#438).
+include(${PROJECT_SOURCE_DIR}/cmake/morph_demote_interface_includes.cmake)
+morph_demote_lightweight_odbc_includes()
+
 # ── Bank domain library ──────────────────────────────────────────────────────
 add_library(bank_lib STATIC
     src/core/money.cpp

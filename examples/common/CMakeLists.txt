@@ -154,6 +154,16 @@ FetchContent_MakeAvailable(Lightweight)
 set(CMAKE_SKIP_INSTALL_RULES ${_morph_saved_skip_install_rules})
 unset(_morph_saved_skip_install_rules)
 
+# Lightweight propagates unixODBC's include path as a PUBLIC *compile option*
+# (target_compile_options(Lightweight PUBLIC ${ODBC_CFLAGS}), its
+# CMakeLists.txt at the pinned SHA), so it reaches every consumer as a plain
+# `-I` — which clang coverage-instruments, unlike an `-isystem` one. This
+# target is on the coverage path; morph#438 is the failing gate. See
+# cmake/morph_demote_interface_includes.cmake for the whole chain and for why
+# the fix belongs here rather than on each of the five consumers.
+include(${PROJECT_SOURCE_DIR}/cmake/morph_demote_interface_includes.cmake)
+morph_demote_lightweight_odbc_includes()
+
 find_package(Catch2 3 CONFIG QUIET)
 if(NOT Catch2_FOUND)
     message(FATAL_ERROR "Catch2 not found; MORPH_BUILD_TESTS=ON should have fetched it already (see root CMakeLists.txt).")
