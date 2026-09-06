@@ -43,6 +43,16 @@ readonly rung_file="${repo_root}/examples/rungs.txt"
 #                          this job's own definition, and this filter itself
 #   examples/{LADDER,IMPLEMENTATION,TESTING}.md
 #                          the ladder's normative rules
+#   scripts/scenario/      the scenario corpus and its driver, which
+#                          `ladder-tests` now *runs* against the servers it has
+#                          just built (morph#462). Without this entry a pull
+#                          request that touched only the corpus would match
+#                          nothing and skip the job -- so the one gate that can
+#                          catch a broken scenario would be absent from exactly
+#                          the changes most able to break one. That is
+#                          morph#179's defect in a second location, and
+#                          drift-guard.yml's scenario-coverage job carries no
+#                          path filter at all for the same reason.
 # Not `readonly`: this script has to stay runnable under the bash 3.2 that
 # macOS still ships, where `readonly` on an array assignment is a syntax error.
 _extra_patterns=(
@@ -56,6 +66,7 @@ _extra_patterns=(
     'CMakePresets\.json$'
     '\.github/workflows/ci\.yml$'
     'scripts/ladder_rungs\.sh$'
+    'scripts/scenario/'
     'examples/LADDER\.md'
     'examples/IMPLEMENTATION\.md'
     'examples/TESTING\.md'

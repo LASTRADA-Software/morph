@@ -256,9 +256,12 @@ jobs:
   #
   # What this job does NOT do is *run* the corpus: that needs the five
   # ladder_<rung>_server binaries built, which is a build this workflow does
-  # not have and would stop being fast and dependency-free to acquire. Running
-  # scripts/scenario/run_scenarios.py in CI is its own change -- see the PR
-  # that added the corpus.
+  # not have and would stop being fast and dependency-free to acquire. That run
+  # lives in ci.yml's `ladder-tests` job, which already builds every one of
+  # those binaries -- see its "Run the scenario corpus against the built
+  # servers" step (morph#462). The two are complementary and neither replaces
+  # the other: this job sees a surface nothing covers, that one sees a covered
+  # surface a real server refuses.
   #
   # No path filter, on the same reasoning as rung-filter-lint above: the
   # surface this tracks is spread across include/, examples/ and
