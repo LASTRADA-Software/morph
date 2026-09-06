@@ -81,6 +81,28 @@ jobs:
       - name: Check every stated CI clang pin matches ci.yml
         run: bash scripts/check_ci_clang_pin.sh
 
+      # ── Catch2 test names that are read as a filter expression (#466) ──
+      # Another text-only scan, so it rides this job rather than paying for a
+      # runner of its own. catch_discover_tests hands each test's own name
+      # back to the binary as the Catch2 *filter* argument, and Catch2 parses
+      # that as a test spec: a name beginning with `~` (or `exclude:`) is a
+      # negation, so its ctest entry runs every OTHER test in the binary,
+      # never its own, and exits 0 reporting "All tests passed". Verified on
+      # ladder_pastebin_tests: 56 of 57 cases ran, exit 0.
+      #
+      # Same reasoning as every other gate in this file, and the defect is
+      # again a silence -- an unusually complete one, since the test, the
+      # ctest entry and the run all look correct. It has already cost real
+      # work once (morph#391's `~App ...` guard tests ran 16 unrelated cases
+      # and reported green), and no name on master triggers it today, so this
+      # gate exists to keep the trap unrepresentable rather than to fix a
+      # live break. Self-tested first, for the usual reason.
+      - name: Self-test the Catch2 test-name checker
+        run: bash scripts/test_check_catch_test_names.sh
+
+      - name: Check every test name selects itself as a Catch2 filter
+        run: bash scripts/check_catch_test_names.sh
+
   # ── Ladder rung list <-> the CI filters that are supposed to track it ──
   # examples/rungs.txt is the ladder's single authoritative rung list, and
   # almost every consumer now derives from it at run time. Two cannot --
