@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <functional>
 #include <morph/core/backend.hpp>
+#include <morph/core/detail/reply_router.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <mutex>
@@ -291,7 +292,7 @@ public:
         auto compState = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         ::morph::async::Completion<std::shared_ptr<void>> comp{compState, cbExec};
 
-        std::uint64_t const callId = ++_nextCallId;
+        std::uint64_t const callId = _pending.nextCallId();
         ::morph::wire::Envelope env;
         env.kind = "execute";
         env.callId = callId;
@@ -301,24 +302,18 @@ public:
         env.body = call.serializeAction();
         env.session = std::move(call.session);
 
-        // _connected is re-checked here, under _pendingMtx, rather than only
-        // before this block: onDisconnected() stores _connected = false and
-        // then sweeps _pending under the same mutex. Checking _connected
-        // before taking the lock (and nowhere else) leaves a window where a
-        // disconnect's sweep can run strictly between that check and this
-        // insert -- this entry would land in _pending *after* the sweep
-        // already drained it, and nothing would ever resolve its Completion.
-        // Checking again here, still holding the lock the sweep also takes,
-        // closes that window: either this insert happens-before the sweep
-        // (and gets cancelled by it), or it happens-after and observes
-        // _connected already false (and is rejected immediately below).
-        {
-            std::scoped_lock lock{_pendingMtx};
-            if (!_connected.load()) {
-                compState->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
-                return comp;
-            }
-            _pending[callId] = PendingExecute{compState, std::move(call.deserializeResult), cbExec};
+        // _connected is re-checked *inside* the table's lock, via insertIf's
+        // admit predicate, rather than only before this block: onDisconnected()
+        // stores _connected = false and then sweeps the table (cancelPending ->
+        // drain()) under the same mutex. Checking _connected before taking that
+        // lock (and nowhere else) leaves a window where a disconnect's sweep can
+        // run strictly between the check and the insert -- this entry would land
+        // in the table *after* the sweep already drained it, and nothing would
+        // ever resolve its Completion. See PendingCallTable::insertIf's own docs.
+        if (!_pending.insertIf(callId, PendingExecute{compState, std::move(call.deserializeResult), cbExec},
+                               [this] { return _connected.load(); })) {
+            compState->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+            return comp;
         }
 
         try {
@@ -336,11 +331,7 @@ public:
     /// @brief Resolves every pending execute call's `Completion` with @p exc.
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
-        std::unordered_map<std::uint64_t, PendingExecute> drained;
-        {
-            std::scoped_lock lock{_pendingMtx};
-            drained.swap(_pending);
-        }
+        auto drained = _pending.drain();
         for (auto& [callId, pending] : drained) {
             (void)callId;
             if (pending.state) {
@@ -522,37 +513,38 @@ private:
             return;
         }
         if (env.callId != 0U) {
-            PendingExecute pending;
-            {
-                std::scoped_lock lock{_pendingMtx};
-                auto iter = _pending.find(env.callId);
-                if (iter == _pending.end()) {
-                    return;  // late/cancelled reply — dropped silently
-                }
-                pending = std::move(iter->second);
-                _pending.erase(iter);
+            auto pending = _pending.take(env.callId);
+            if (!pending) {
+                return;  // late/cancelled reply — dropped silently
             }
-            if (env.kind == "ok") {
-                try {
-                    pending.state->setValue(pending.deserialize(env.body));
-                } catch (...) {
-                    pending.state->setException(std::current_exception());
-                }
-            } else if (env.message == ::morph::wire::kExecuteTimeoutMessage) {
-                // The server's own `LimitPolicy::executeTimeout` reply (see
-                // remote.hpp's use of `wire::kExecuteTimeoutMessage`), not a
-                // generic application error -- surfaced as the same
-                // TimeoutError type QtWebSocketBackend/SimulatedRemoteBackend
-                // give callers for this case, so callers can distinguish
-                // "server gave up on this specific call" from an arbitrary
-                // `err` message. Matched against the shared constant, not a
-                // hand-typed literal: see its own doc comment for why a
-                // literal here would risk misclassifying a genuine
-                // application exception whose text happens to read
-                // "timeout".
-                pending.state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
-            } else {
-                pending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
+            // Triage shared with SimulatedRemoteBackend and QtWebSocketBackend
+            // (core/detail/reply_router.hpp), so the three cannot drift. The
+            // Timeout arm is the server's own `LimitPolicy::executeTimeout`
+            // reply, not a generic application error -- surfaced as the same
+            // TimeoutError type the other two backends give callers for this
+            // case, so callers can distinguish "server gave up on this
+            // specific call" from an arbitrary `err` message.
+            switch (::morph::backend::detail::classifyExecuteReply(env)) {
+                case ::morph::backend::detail::ExecuteReplyKind::Value:
+                    try {
+                        pending->state->setValue(pending->deserialize(env.body));
+                    } catch (...) {
+                        pending->state->setException(std::current_exception());
+                    }
+                    break;
+                case ::morph::backend::detail::ExecuteReplyKind::Timeout:
+                    pending->state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
+                    break;
+                case ::morph::backend::detail::ExecuteReplyKind::Error:
+                default:
+                    // `default:` only because the project builds with
+                    // -Wswitch-default; ExecuteReplyKind is a closed enum and
+                    // all three enumerators are handled explicitly. Sharing
+                    // the arm with Error also makes a value manufactured by an
+                    // out-of-range static_cast land somewhere safe. Mirrors
+                    // forms/layout.hpp's groupKindName.
+                    pending->state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
+                    break;
             }
             return;
         }
@@ -680,9 +672,7 @@ private:
     bool _syncInFlight{false};
     std::optional<std::string> _syncReply;
 
-    std::atomic<std::uint64_t> _nextCallId{0};
-    std::mutex _pendingMtx;
-    std::unordered_map<std::uint64_t, PendingExecute> _pending;
+    ::morph::backend::detail::PendingCallTable<PendingExecute> _pending;
 
     std::mutex _reconnectHandlerMtx;
     std::function<void()> _reconnectHandler;

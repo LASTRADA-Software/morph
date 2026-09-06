@@ -78,6 +78,7 @@ add_executable(morph_tests
     test_wire_encode_fault.cpp
     test_wire_hardening.cpp
     test_remote_reply_envelopes.cpp
+    test_reply_router.cpp
     test_wire_schemas.cpp
     test_protocol_version.cpp
     test_limit_policy.cpp

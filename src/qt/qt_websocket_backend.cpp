@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <algorithm>
 #include <cctype>
+#include <morph/core/detail/reply_router.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <stdexcept>
@@ -570,16 +571,29 @@ void QtWebSocketBackend::onTextMessage(const QString& message) {
             }
         }
         if (foundExecute) {
-            if (env.kind == "ok") {
-                try {
-                    execPending.state->setValue(execPending.deserialize(env.body));
-                } catch (...) {
-                    execPending.state->setException(std::current_exception());
-                }
-            } else if (env.message == "timeout") {
-                execPending.state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
-            } else {
-                execPending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
+            // Triage shared with net::SocketBackend and SimulatedRemoteBackend
+            // (core/detail/reply_router.hpp). This site used to match a
+            // hand-typed "timeout" literal instead of
+            // wire::kExecuteTimeoutMessage -- the exact typo-drift that
+            // constant exists to prevent, found while extracting the router.
+            switch (::morph::backend::detail::classifyExecuteReply(env)) {
+                case ::morph::backend::detail::ExecuteReplyKind::Value:
+                    try {
+                        execPending.state->setValue(execPending.deserialize(env.body));
+                    } catch (...) {
+                        execPending.state->setException(std::current_exception());
+                    }
+                    break;
+                case ::morph::backend::detail::ExecuteReplyKind::Timeout:
+                    execPending.state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
+                    break;
+                case ::morph::backend::detail::ExecuteReplyKind::Error:
+                default:
+                    // `default:` only because the project builds with
+                    // -Wswitch-default; every enumerator of the closed
+                    // ExecuteReplyKind is handled explicitly above.
+                    execPending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
+                    break;
             }
             return;
         }

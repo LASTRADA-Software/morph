@@ -25,6 +25,7 @@
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
 #include "backend.hpp"
+#include "detail/reply_router.hpp"
 #include "logger.hpp"
 #include "observability.hpp"
 #include "timeout_scheduler.hpp"
@@ -2206,12 +2207,23 @@ public:
             [state, deser = std::move(deser)](const std::string& replyJson) mutable {
                 try {
                     auto reply = ::morph::wire::decode(replyJson);
-                    if (reply.kind == "ok") {
-                        state->setValue(deser(reply.body));
-                    } else if (reply.message == ::morph::wire::kExecuteTimeoutMessage) {
-                        throw TimeoutError{};
-                    } else {
-                        throw std::runtime_error(reply.message.empty() ? "malformed reply" : reply.message);
+                    // Triage shared with net::SocketBackend and
+                    // QtWebSocketBackend (detail/reply_router.hpp), so the
+                    // three cannot drift apart. The error text stays
+                    // backend-specific: this one substitutes "malformed reply"
+                    // for an empty message, which the socket backends do not.
+                    switch (detail::classifyExecuteReply(reply)) {
+                        case detail::ExecuteReplyKind::Value:
+                            state->setValue(deser(reply.body));
+                            break;
+                        case detail::ExecuteReplyKind::Timeout:
+                            throw TimeoutError{};
+                        case detail::ExecuteReplyKind::Error:
+                        default:
+                            // `default:` only because the project builds with
+                            // -Wswitch-default; every enumerator of the closed
+                            // ExecuteReplyKind is handled explicitly above.
+                            throw std::runtime_error(reply.message.empty() ? "malformed reply" : reply.message);
                     }
                 } catch (...) {
                     state->setException(std::current_exception());
