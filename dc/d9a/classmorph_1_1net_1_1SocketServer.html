@@ -332,9 +332,10 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Stops accepting new connections and closes every client connection. </p>
-<p>Idempotent: safe to call more than once (including implicitly, via the destructor, after an explicit call). </p>
+<p>Idempotent: safe to call more than once (including implicitly, via the destructor, after an explicit call), and safe to call from several threads at once <b>on a live object</b> — concurrent callers are serialized, and every one of them returns only once the teardown is complete. Racing a call against the <em>destructor</em> is still the caller's problem (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
+ordering"): no lock inside this object can outlive the object holding it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>

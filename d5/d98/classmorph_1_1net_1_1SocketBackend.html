@@ -579,6 +579,9 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Sends a <span class="tt">deregister</span> message fire-and-forget (does not wait for a reply). </p>
+<p>Carries a real, non-zero <span class="tt">callId</span> drawn from the same <span class="tt">_nextCallId</span> counter <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute()</a></span> uses, exactly as <span class="tt">QtWebSocketBackend</span> does (see issue #65, and #454 for this transport's own reoccurrence of it): <span class="tt">callId == 0</span> is <span class="tt">dispatchIncomingEnvelope</span>'s discriminator for "hand
+this payload to whichever `sendSync()` is parked", so a fire-and-forget <span class="tt">deregister</span> sharing that sentinel had its own stray <span class="tt">ok</span> reply delivered to an unrelated <span class="tt">register</span>/<span class="tt">attach</span> waiting on <span class="tt">_syncCv</span> whenever the two landed back to back on one connection.</p>
+<p>Unlike <span class="tt">QtWebSocketBackend</span> this needs no <span class="tt">_pendingDeregisters</span> set to recognise the reply and drop it: the non-zero branch of <span class="tt">dispatchIncomingEnvelope</span> already drops any <span class="tt">callId</span> that is not in <span class="tt">_pending</span>, and a <span class="tt">deregister</span> never registers one.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">mid</td><td>Id of the model to remove on the server. </td></tr>
@@ -586,7 +589,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00233">233</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -633,7 +636,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00252">252</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -680,7 +683,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion resolved asynchronously when the server's reply arrives, or immediately with <span class="tt">DisconnectedError</span> if not connected. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00272">272</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -709,7 +712,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -744,7 +747,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -779,7 +782,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00354">354</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -814,7 +817,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00363">363</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>

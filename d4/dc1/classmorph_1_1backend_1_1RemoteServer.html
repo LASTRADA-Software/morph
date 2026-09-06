@@ -174,7 +174,7 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>Heap allocation requirement</dt><dd><span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> <b>must</b> be heap-allocated via <span class="tt">std::make_shared</span>. <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> captures <span class="tt">shared_from_this()</span> to prevent use-after-free when the worker pool outlives the server object.</dd></dl>
 <dl class="section user"><dt>Wire format</dt><dd>All requests and replies are encoded as <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></span> JSON. See <span class="tt"><a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a></span> for the field semantics. The <span class="tt">kind</span> field is the discriminator. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a7a5bff8cb318d46f4347cc5211b92e81" name="a7a5bff8cb318d46f4347cc5211b92e81"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7a5bff8cb318d46f4347cc5211b92e81">&#9670;&#160;</a></span>LogProvider</h2>
@@ -193,7 +193,7 @@ Public Member Functions</h2></td></tr>
 <p>Callable that supplies the action log to attach to a newly registered instance, given its model type and <span class="tt">contextKey</span>. </p>
 <p>Return <span class="tt">nullptr</span> to register the instance with no log attached (e.g. for model types or context keys the host app doesn't want journaled). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00440">440</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00441">441</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -241,7 +241,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -293,7 +293,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -336,7 +336,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -384,7 +384,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00279">279</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -422,7 +422,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00297">297</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -464,7 +464,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -495,7 +495,7 @@ Public Member Functions</h2></td></tr>
 <p>Call once per accepted transport connection (e.g. from a WebSocket server's "new connection" callback). The returned id is never <span class="tt">0</span>, so it can always be distinguished from the reserved "unscoped" value. Pass it to the scoped <span class="tt">handle(msg, reply, cid)</span> overload for every message received on that connection, and to <span class="tt">closeConnection(cid)</span> once the connection is gone.</p>
 <p>Thread-safe. </p><dl class="section return"><dt>Returns</dt><dd>A fresh, non-zero <span class="tt">ConnectionId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00388">388</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -533,7 +533,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00414">414</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -568,7 +568,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00452">452</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00453">453</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -603,7 +603,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00463">463</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -650,7 +650,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00483">483</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -686,7 +686,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00501">501</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00502">502</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -716,7 +716,7 @@ Public Member Functions</h2></td></tr>
 <p>Returns the configured payload-completeness rule. </p>
 <dl class="section return"><dt>Returns</dt><dd>The current <span class="tt">PayloadCompleteness</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00505">505</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00506">506</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -746,7 +746,7 @@ Public Member Functions</h2></td></tr>
 <p>Snapshots the server's current health. Cheap; safe from any thread. </p>
 <dl class="section return"><dt>Returns</dt><dd>Current <span class="tt"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html" title="Snapshot of a RemoteServer&#39;s current health.">HealthStatus</a></span> (<span class="tt">liveModels</span> from the registry, <span class="tt">inFlight</span> from the same counter the <span class="tt">executeInFlight</span> metric reads). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -781,7 +781,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00534">534</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -812,7 +812,7 @@ Public Member Functions</h2></td></tr>
 <p>Idempotent — safe to call more than once, and safe to call while <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span>/<span class="tt"><a class="el" href="#abcdee5e1504ebcbef2415b029eec8818" title="Synchronously processes a JSON Envelope on the calling thread and returns the reply.">handleInline()</a></span> calls are concurrently in flight on other threads. There is no way back: a restarted service constructs a fresh <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> rather than un-shutting-down this one.</p>
 <p>Also flips <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a>.ready</span> to <span class="tt">false</span> and, if a handler is installed via <span class="tt"><a class="el" href="#a5cff8e36190c13564e05bb05fb35bcbe" title="Installs handler, invoked immediately with the current health() snapshot, and again whenever readines...">setHealthHandler()</a></span>, re-invokes it with the post-shutdown snapshot — the same "invoked again whenever readiness changes" contract <span class="tt"><a class="el" href="#a5cff8e36190c13564e05bb05fb35bcbe" title="Installs handler, invoked immediately with the current health() snapshot, and again whenever readines...">setHealthHandler</a></span> documents. This is what lets an orchestrator stop routing to this server while <span class="tt"><a class="el" href="#aa3de29a47fe56d091889756e7e1faadd" title="Blocks until every in-flight execute has delivered its reply, or deadline elapses.">drainedWithin()</a></span>'s drain runs. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00561">561</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00562">562</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -848,7 +848,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the in-flight count reached zero before <code class="param">deadline</code> elapsed; <span class="tt">false</span> on timeout. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00590">590</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00591">591</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
