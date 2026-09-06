@@ -539,14 +539,39 @@ shutdown gate (issue #348) and by every exception unwinding out of
 `dispatchExecute` (issue #351, below). Both are pinned by regression tests, and
 neither could recur through a hand-written release being forgotten again.
 
-**Bookkeeping.** A gate is `{nextTicket, nextToRun, condition_variable}`, held
-in a map keyed by `ModelId` under a dedicated mutex. The entry is created on
-demand by the first ticket and **erased** once `nextToRun` catches up with
+**Bookkeeping.** A gate is
+`{nextTicket, nextToRun, releasedOutOfOrder, condition_variable}`, held in a
+map keyed by `ModelId` under a dedicated mutex. The entry is created on demand
+by the first ticket and **erased** once `nextToRun` catches up with
 `nextTicket` — a model with no in-flight `execute` leaves no trace, so the map
 does not grow across the server's lifetime. A waiter holds the gate by
 `shared_ptr` so a release that erases the entry mid-wait cannot pull it out
 from under it, and `awaitExecuteTurn` returns immediately if the entry is
 already gone.
+
+**Releases are not ordered, and `nextToRun` must survive that.** `nextToRun`
+means *the lowest ticket that has not released yet* — which is exactly what
+`awaitExecuteTurn`'s `nextToRun == ticket` predicate needs it to mean. It is
+not "one past the ticket that released last", and the difference is not
+cosmetic: the fast-reject paths above release *without ever waiting for their
+turn*, by design, so a later ticket routinely releases before an earlier one.
+`releaseExecuteTicket` therefore records an out-of-order release in
+`releasedOutOfOrder` and advances `nextToRun` only across a contiguous run of
+released tickets, consuming that set as it goes.
+
+Assigning `nextToRun = ticket + 1` unconditionally instead — which is what the
+gate did originally — pushed it straight *past* an earlier ticket's number
+whenever a rejection got there first. That earlier ticket's waiter then held a
+predicate that could never become true again, with the same three costs listed
+for the shutdown gate below: a caller that never receives a reply, a pool
+worker blocked for the process's remaining lifetime, and `drainedWithin()`
+unable to succeed. It is why the bug class closed by issues #348 and #351
+returned a third time as issue #449, reproducing under `morph::net` in
+particular — dropping a connection reclaims that connection's models, so the
+executes still in flight for one model split into some that find it and some
+that reject with `"model not found"`, which manufactures precisely this
+interleaving. Making the *release* unmissable (below) was necessary and not
+sufficient; the release also has to be order-tolerant.
 
 **What is not ordered.** Only same-model requests, and only relative to
 `handle()` call order:
@@ -611,7 +636,16 @@ way, holding back one request's pool task through a wrapping executor so the
 rather than raced; its throwing-hook case reuses that same wrapping executor
 and arms an authorizer only *after* the later request has parked in
 `awaitExecuteTurn`, so exactly one request — the held, earlier one — throws,
-from `authorize`, `authenticate` or `authorizeInstance` in turn.
+from `authorize`, `authenticate` or `authorizeInstance` in turn. Its
+out-of-order-release case (issue #449) extends the same wrapping executor to
+hold three posts at once, so all three tickets exist before any of them runs,
+and then releases the *middle* one first: a rejection skipping over ticket 0
+while ticket 2 is still outstanding, which is the interleaving the two-ticket
+version cannot produce because the gate is erased instead.
+`tests/net/test_socket_backend.cpp` carries the transport-level shape that
+found it (concurrent executes against one shared model, connection dropped
+mid-stream), whose failure mode is the teardown hanging rather than an
+assertion.
 
 ### Protocol-version negotiation
 

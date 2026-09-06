@@ -12,6 +12,7 @@
 #include <mutex>
 #include <optional>
 #include <random>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1556,6 +1557,13 @@ private:
         // hold this one up, and it can only hold it up for as long as *its own*
         // pre-strand work (identical in kind to this one's) takes, not for the
         // duration of whatever the model's strand does with it afterward.
+        //
+        // Those immediate releases are also *out of ticket order* whenever the
+        // rejected request was sent after this one, which is why
+        // `releaseExecuteTicket` advances `nextToRun` over a contiguous run of
+        // released tickets rather than jumping to `ticket + 1`: jumping was
+        // what let a rejection skip past this wait's ticket and park it here
+        // for good (issue #449).
         ticketGuard.awaitTurn();
         _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), complete, timeoutHandle]() mutable {
             ::morph::exec::detail::ModelId const targetMid{env.modelId};
@@ -1709,6 +1717,14 @@ private:
     struct ExecuteGate {
         std::uint64_t nextTicket = 0;
         std::uint64_t nextToRun = 0;
+        // Tickets released *before* their turn came, held aside until every
+        // ticket ahead of them has released too. Not an optimisation: it is
+        // what makes `nextToRun` mean "the lowest ticket not yet released"
+        // rather than "one past whichever ticket released last". See
+        // `releaseExecuteTicket` (issue #449). Ordered, because the release
+        // loop consumes it from the front; small by construction (it holds at
+        // most the executes in flight for one model, minus one).
+        std::set<std::uint64_t> releasedOutOfOrder;
         std::condition_variable cv;
     };
     std::mutex _executeGateMtx;
@@ -1788,14 +1804,45 @@ private:
         if (iter == _executeGates.end()) {
             return;  // Defensive; should not happen (this ticket's own take() created the entry).
         }
-        iter->second->nextToRun = ticket + 1;
-        if (iter->second->nextToRun == iter->second->nextTicket) {
+        auto& gate = *iter->second;
+        // `nextToRun` is the lowest ticket that has *not* released yet, which
+        // is exactly what `awaitExecuteTurn`'s `nextToRun == ticket` predicate
+        // needs it to be. Advancing it to `ticket + 1` unconditionally was
+        // only correct if tickets released in order, and they deliberately do
+        // not: every `rejectAndRelease` branch in `dispatchExecute` and
+        // `dispatchMessage`'s shutdown gate release *without* first waiting
+        // for their turn, precisely so a rejection cannot hold up the live
+        // executes behind it. A later ticket releasing first therefore used to
+        // push `nextToRun` straight past an earlier ticket's number, whose
+        // waiter then had a predicate that could never become true again --
+        // a pool worker parked forever, `_inFlightExecutes` permanently above
+        // zero, and `~ThreadPoolExecutor` hanging in join() (issue #449, the
+        // third occurrence of the stranded-ticket class #348 and #351 closed
+        // from the other end by making the release itself unmissable).
+        //
+        // So an out-of-order release is recorded rather than applied, and
+        // `nextToRun` walks forward only over a contiguous run of released
+        // tickets. `ticket < nextToRun` cannot happen: every ticket is
+        // released exactly once (`ExecuteTicketGuard` guarantees that), and
+        // `nextToRun` only moves past tickets that have already released.
+        if (ticket == gate.nextToRun) {
+            ++gate.nextToRun;
+            while (!gate.releasedOutOfOrder.empty() && *gate.releasedOutOfOrder.begin() == gate.nextToRun) {
+                gate.releasedOutOfOrder.erase(gate.releasedOutOfOrder.begin());
+                ++gate.nextToRun;
+            }
+        } else {
+            gate.releasedOutOfOrder.insert(ticket);
+        }
+        if (gate.nextToRun == gate.nextTicket) {
             // No ticket is currently waiting and none can arrive for a ticket
             // number already handed out — safe to drop the entry so a model
-            // with no in-flight executes leaves no trace in this map.
+            // with no in-flight executes leaves no trace in this map. Reaching
+            // `nextTicket` this way means every ticket handed out has released,
+            // so `releasedOutOfOrder` is necessarily empty here.
             _executeGates.erase(iter);
         } else {
-            iter->second->cv.notify_all();
+            gate.cv.notify_all();
         }
     }
     // mutable: health() is const and must still be able to lock this to read
