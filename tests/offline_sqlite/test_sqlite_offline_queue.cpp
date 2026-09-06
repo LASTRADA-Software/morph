@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <morph/core/observability.hpp>
 #include <morph/offline/sqlite_offline_queue.hpp>
@@ -352,5 +353,149 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a non-conflicting setIdempotencyK
         REQUIRE(item != items.end());
         CHECK(item->idempotencyKey == "K2");
     }
+    removeDbFiles(dbPath);
+}
+
+// ── Constructor failure paths (Task 12, findings #1/#2) ────────────────────
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: construction throws if sqlite3_open() cannot open the file",
+          "[sqlite]") {
+    // sqlite3_open()'s default flags (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+    // fail with SQLITE_CANTOPEN when the parent directory does not exist -- no
+    // fault injection seam needed, exact mirror of FileOfflineQueue's own
+    // nonexistent-directory technique for its own throw-on-open-failure test.
+    auto const path = std::filesystem::path{"/no/such/directory/at/all/q.db"};
+    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(path), morph::offline::SqliteOfflineQueueError);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: construction throws if the schema-setup PRAGMA fails", "[sqlite]") {
+    // sqlite3_open() succeeds lazily without validating the file format --
+    // pre-create a plain-text file at the path first. sqlite3_open() itself
+    // succeeds, but the very first schema-setup statement
+    // (PRAGMA journal_mode=WAL;) fails with SQLite's own "file is not a
+    // database" error inside execOrThrow(), which throws and is caught by
+    // the constructor's own catch (...) block, closing _db and rethrowing.
+    // Closes both line clusters in one test: execOrThrow's own throw and the
+    // constructor's wrapping catch block.
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        std::ofstream notADatabase{dbPath};
+        notADatabase << "not a database";
+    }
+    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(dbPath), morph::offline::SqliteOfflineQueueError);
+    removeDbFiles(dbPath);
+}
+
+// ── maxDepth() accessor (Task 12, finding #10) ─────────────────────────────
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: maxDepth() reports the configured cap", "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath, 5};
+        REQUIRE(queue.maxDepth() == 5);
+    }
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: maxDepth() reports nullopt when unbounded", "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath};
+        REQUIRE_FALSE(queue.maxDepth().has_value());
+    }
+    removeDbFiles(dbPath);
+}
+
+// ── Second-connection cluster (Task 12, findings #5/#6/#9) ─────────────────
+//
+// Three findings share one seam: a second raw sqlite3 connection to the same
+// database file, opened alongside the SqliteOfflineQueue instance under
+// test. Each of stepOrThrow()'s, prepare()'s, and drain()'s own
+// non-ROW/DONE-step error branches is unreachable through this class's own
+// single-connection, single-mutex API alone -- reaching them needs a
+// genuinely separate connection racing (or, for #6/#5, having already
+// altered the schema) against the first. Mechanisms below were verified via
+// a standalone compiled probe against this exact SQLite build (3.51.0)
+// before being written up as Catch2 cases, per the corrected task-11 audit.
+
+TEST_CASE(
+    "morph::offline::SqliteOfflineQueue: enqueue surfaces SQLITE_BUSY from a second connection's "
+    "BEGIN IMMEDIATE transaction",
+    "[sqlite]") {
+    // Finding #9. A single-instance mutex serialises this class's own calls,
+    // but does nothing for lock contention from a genuinely separate
+    // connection -- a second raw sqlite3 connection holding an exclusive
+    // write lock via BEGIN IMMEDIATE deterministically makes the first
+    // instance's own write-statement step() return SQLITE_BUSY.
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    morph::offline::SqliteOfflineQueue queue{dbPath};
+    (void)queue.enqueue("seed");
+
+    sqlite3* second = nullptr;
+    REQUIRE(sqlite3_open(dbPath.string().c_str(), &second) == SQLITE_OK);
+    char* err = nullptr;
+    REQUIRE(sqlite3_exec(second, "BEGIN IMMEDIATE;", nullptr, nullptr, &err) == SQLITE_OK);
+
+    REQUIRE_THROWS_AS(queue.enqueue("blocked-by-second-connection"), morph::offline::SqliteOfflineQueueError);
+
+    REQUIRE(sqlite3_exec(second, "ROLLBACK;", nullptr, nullptr, &err) == SQLITE_OK);
+    sqlite3_close(second);
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE(
+    "morph::offline::SqliteOfflineQueue: a second connection's DROP TABLE surfaces drain()'s own "
+    "step()-level SQLITE_ERROR, then prepare()'s own failure on a later call",
+    "[sqlite]") {
+    // Findings #5 and #6, sharing one setup. Verified empirically (compiled
+    // probe): after a second connection drops the table, the FIRST
+    // statement the first instance prepares against the stale schema still
+    // returns SQLITE_OK (the connection's cached schema cookie has not yet
+    // been invalidated) -- but that statement's own first step() returns
+    // SQLITE_ERROR, not SQLITE_ROW/SQLITE_DONE (finding #5, drain()'s own
+    // branch). The schema invalidation surfaces to the *next* prepare()
+    // call, which now genuinely fails at the prepare() level itself with
+    // "no such table" (finding #6).
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    morph::offline::SqliteOfflineQueue queue{dbPath};
+    (void)queue.enqueue("seed");
+
+    {
+        sqlite3* second = nullptr;
+        REQUIRE(sqlite3_open(dbPath.string().c_str(), &second) == SQLITE_OK);
+        char* err = nullptr;
+        REQUIRE(sqlite3_exec(second, "DROP TABLE morph_offline_queue;", nullptr, nullptr, &err) == SQLITE_OK);
+        sqlite3_close(second);
+    }
+
+    // Finding #5: drain()'s prepare() succeeds (stale cached schema), but its
+    // own first sqlite3_step() returns SQLITE_ERROR rather than
+    // SQLITE_ROW/SQLITE_DONE.
+    bool drainThrew = false;
+    try {
+        (void)queue.drain();
+    } catch (const morph::offline::SqliteOfflineQueueError& exc) {
+        drainThrew = true;
+        CHECK(std::string{exc.what()}.find("drain failed part-way through") != std::string::npos);
+    }
+    REQUIRE(drainThrew);
+
+    // Finding #6: this second, later prepare() call on the same instance now
+    // genuinely fails at the prepare() level -- the schema-cookie mismatch
+    // drain() triggered above is now visible to a fresh prepare().
+    bool enqueueThrew = false;
+    try {
+        (void)queue.enqueue("after-drop");
+    } catch (const morph::offline::SqliteOfflineQueueError& exc) {
+        enqueueThrew = true;
+        CHECK(std::string{exc.what()}.find("prepare failed") != std::string::npos);
+    }
+    REQUIRE(enqueueThrew);
+
     removeDbFiles(dbPath);
 }
