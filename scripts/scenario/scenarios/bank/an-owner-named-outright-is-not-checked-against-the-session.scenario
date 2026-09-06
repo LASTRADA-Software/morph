@@ -6,7 +6,10 @@
 #
 # This file asserts behaviour that is **wrong**, deliberately, because it is the
 # behaviour bank has and a corpus that only recorded the parts that work would
-# be worth less than nothing on the day somebody changed them.
+# be worth less than nothing on the day somebody changed them. It is filed as
+# morph#471 (https://github.com/LASTRADA-Software/morph/issues/471); the
+# `expect ok`s below are that issue's acceptance criteria in reverse, so a
+# reader must not take this file passing for an endorsement.
 #
 # Bank has two ways of deciding whose data an action touches:
 #
@@ -25,9 +28,10 @@
 # *write* to it. `SpendingByKind` is worse again: it takes a bare `accountId`,
 # consults no owner at all, and reports on any account in the database.
 #
-# When this is fixed, this file will fail, and it should: the fix is to compare
-# the resolved owner with `sessionPrincipal()` and refuse when they differ. The
-# `expect ok`s below are the inventory of everything that change has to cover.
+# When morph#471 is fixed, this file will fail, and it should: the fix is to
+# compare the resolved owner with `sessionPrincipal()` and refuse when they
+# differ. The `expect ok`s below are the inventory of everything that change
+# has to cover.
 
 model AuthModel
 

@@ -96,9 +96,24 @@ it would pass against a database the driver never touched. Every other rung
 creates its own root entity over the wire and is seeded with nothing.
 
 `scenarios/` holds one directory per server, and one file per workflow. Five of
-the six are ladder rungs; `bank` is not one (see `SERVER_RUNGS` in
-`scenario_coverage.py`), which is why the column below says "server" rather
-than "rung":
+the six are ladder rungs; `bank` is not one, which is why the column below says
+"server" rather than "rung".
+
+That asymmetry is deliberate and is not drift to be tidied away. `bank` appears
+in `run_scenarios.py`'s `RUNGS` and in `scenario_coverage.py`'s `SERVER_RUNGS`,
+and is absent from [`examples/rungs.txt`](../../examples/rungs.txt) — the
+ladder's authoritative rung list — because those lists answer different
+questions. `rungs.txt` decides what the ladder *builds and gates on*: every
+entry is pulled into `ci.yml`'s `ladder-tests` and `ladder-sanitizers`,
+`wasm-ladder.yml`'s build loop, `coverage.sh` and `codecov.yml`'s per-rung
+components. The two tuples here decide only
+what a scenario can *reach*, and have always selected on "ships a
+`src/server/main.cpp`". Bank ships one — built by a local `add_executable`, not
+by `morph_add_rung()` — and is unnumbered prior art that predates the ladder
+(`examples/LADDER.md` records that status next to its numbered table). The
+independence already ran the other way too: `lims` and `crm` are rungs with no
+scenarios. `--rung bank` and the `bank` column below are therefore spellings of
+"the `bank` directory", not a rung claim.
 
 | Directory | Server | What it covers |
 |---|---|---|
@@ -108,6 +123,22 @@ than "rung":
 | `kanban/` | `ladder_kanban_server` | projects and boards, moves and WIP limits, per-project RBAC across three roles, rules and their cascades, comments, attachments, both event streams |
 | `ledger/` | `ladder_ledger_server` | bootstrapping a book from nothing, per-currency zero-sum bookkeeping, categories and budgets, rules and version conflicts, CSV import, submit-then-poll reporting, two books |
 | `bank/` | `ladder_bank_server` | registration and password-only sign-in, accounts and the ledger behind them, overdraft boundaries, transfers, bills and scheduled/standing instructions, cards, loans and amortisation, budgets, notifications, statements; two customers, the anonymous session, and the stateful account cache |
+
+Some of the bank files assert behaviour that is **wrong**, deliberately, and
+say so in their own header comments. The largest is
+[morph#471](https://github.com/LASTRADA-Software/morph/issues/471):
+`bank::resolveOwner()` prefers a caller-supplied owner name over the session
+principal, so ten actions serve a signed-in customer another customer's data
+and `MarkAllRead` writes to it —
+`bank/an-owner-named-outright-is-not-checked-against-the-session.scenario` is
+the inventory, its cross-owner steps all `expect ok`. `SpendingByKind`
+answering a caller
+with no session at all, and `GenerateStatement` reporting a live balance in a
+field named `closingBalanceMinor`, are pinned the same way. An `expect ok` over
+a defect records what the server does today so the day it changes is not a
+silent one; it is not an endorsement, and the fix is meant to turn those
+assertions red. That is the opposite arrangement from
+`broken-on-purpose.scenario`, which fails today by design.
 
 The rung a scenario belongs to is its parent directory name — that is how
 per-rung action coverage is attributed, so a file loose in `scenarios/` is
@@ -317,9 +348,11 @@ Two conditions must hold per rung, from `scenarios/<rung>/`:
 - every registered action is dispatched (appears in some scenario's `do`
   step) by some file in that rung's directory;
 - the rung has at least as many qualifying workflow files as its floor in
-  `WORKFLOW_FLOORS` (`pastebin` 8, `polls` 10, `bookmarks` 12, `ledger` 15,
-  `kanban` 20) — floors scaled to how finite that rung's space of meaningful
-  journeys is, not quotas: a rung may carry more.
+  `WORKFLOW_FLOORS` (`pastebin` 8, `polls` 10, `bookmarks` 12, `ledger` 16,
+  `kanban` 20, `bank` 22) — floors scaled to how finite that directory's space
+  of meaningful journeys is, not quotas: it may carry more. `bank`'s is the
+  highest because its 41 registered actions across eleven models are the
+  largest surface measured here.
 
 An action that genuinely cannot be driven by any WebSocket client — because
 the server refuses every principal but its own internal caller, or because no

@@ -178,10 +178,10 @@ RUNGS: dict[str, RungSpec] = {
     # server is a local target in examples/bank/CMakeLists.txt. Being a rung and
     # having scenarios were always independent -- `lims` and `crm` are rungs
     # with no scenarios -- and this is the same independence from the other
-    # side: a scenario corpus over a server, with no claim to a rung number
-    # (morph#87 reserves that decision). Everything this table needs is a
-    # binary name and two environment variables, all three of which
-    # examples/bank/src/server/main.cpp defines.
+    # side: a scenario corpus over a server, with no claim to a rung number --
+    # bank takes none, per examples/rungs.txt and examples/LADDER.md.
+    # Everything this table needs is a binary name and two environment
+    # variables, all three of which examples/bank/src/server/main.cpp defines.
     #
     # No `token_secret_var`: bank's AuthModel mints no bearer token. It verifies
     # a password and returns the principal for the *client* to install, so a

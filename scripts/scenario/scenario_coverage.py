@@ -257,11 +257,12 @@ def floor_violations(surface: Surface) -> list[str]:
 # separately.
 #
 # `bank` is here and is *not* a ladder rung: it is absent from
-# examples/rungs.txt and never calls morph_add_rung(), and morph#87 leaves the
-# question of its slot in the ladder to the maintainer. What this tuple has
-# always actually meant is "the set with a src/server/main.cpp" -- the property
-# that decides whether a scenario can reach the thing -- and bank has had a
-# model surface worth driving for far longer than it has lacked a server. Being
+# examples/rungs.txt, never calls morph_add_rung(), and takes no rung number --
+# it is unnumbered prior art that predates the ladder, which examples/LADDER.md
+# records beside its numbered table. What this tuple has always actually meant
+# is "the set with a src/server/main.cpp" -- the property that decides whether a
+# scenario can reach the thing -- and bank has had a model surface worth driving
+# for far longer than it has lacked a server. Being
 # a rung and having scenarios were already independent in the other direction:
 # `lims` and `crm` are rungs with no scenarios.
 SERVER_RUNGS = ("pastebin", "bookmarks", "polls", "kanban", "ledger", "bank")

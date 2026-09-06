@@ -104,7 +104,8 @@ apply_bigobj(bank_cli)
 # Named `ladder_bank_server` because that is the name the scenario tooling
 # derives from a rung name (`run_scenarios.py`'s `RungSpec.binary`,
 # `find_server()`); the prefix is that tool's convention, not a claim to a rung
-# number, which issue #87 leaves to the maintainer.
+# number. Bank takes no rung number -- see examples/rungs.txt and
+# examples/LADDER.md.
 #
 # Written out here rather than obtained by calling morph_add_rung(). That macro
 # emits this exact block (cmake/morph_add_rung.cmake, "ladder_<rung>_server"),
@@ -115,10 +116,10 @@ apply_bigobj(bank_cli)
 # documents that "omitting a rung here while examples/<rung>/CMakeLists.txt
 # calls morph_add_rung() is a hard configure error, by design", so the call
 # would force bank into that file -- and with it into ladder CI, the sanitizer
-# and WASM matrices, codecov components and coverage.sh. That is the numbering
-# decision #87 reserves for the maintainer, so this stays a local target: it
-# gives bank a server without asserting anything about bank's slot in the
-# ladder. Everything else here mirrors the macro's block line for line.
+# and WASM matrices, codecov components and coverage.sh. Bank is deliberately
+# outside all of that, so this stays a local target: it gives bank a server
+# without making it a rung. Everything else here mirrors the macro's block line
+# for line.
 #
 # Gated on Qt because the transport is morph::qt's QtWebSocketServer, exactly
 # as the macro's version is; MORPH_BUILD_BANK_GUI is *not* the gate, since this

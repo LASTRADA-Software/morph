@@ -91,6 +91,35 @@ built server-side, no client — its own defining framework question was
 independently resolved by the extension-bag spike, which is why it carries
 no `*` here; 7b's go/no-go gate was passed on that answer).
 
+**`bank` is not on that table and has no rung number.**
+[`examples/bank`](bank) predates the ladder — the intro above cites it as
+prior art, and the effort accounting below still measures rungs in
+"bank-equivalents" — and it stays *unnumbered prior art* rather than taking a
+slot: numbering it would mean renumbering everything from rung 4 down, and the
+numbers here are load-bearing (rung 7 reuses rung 4's board pieces, rung 8
+reuses rung 2's job pattern). Concretely, bank is absent from
+[`rungs.txt`](rungs.txt) and never calls `morph_add_rung()`, which is what
+keeps it out of `ci.yml`'s `ladder-tests` and `ladder-sanitizers`,
+`wasm-ladder.yml`'s build loop, `coverage.sh` and `codecov.yml`'s
+per-rung components. It is nonetheless the largest
+model surface in the tree — eleven models, 41 registered actions — and it has
+the two things a rung has downstream of a number: a `ladder_bank_server`,
+built by a local `add_executable` in its own `CMakeLists.txt`, and a 22-file
+scenario corpus under `scripts/scenario/scenarios/bank/` that dispatches all
+41 of those actions. What it does not have is this document's conventions:
+no schema-driven forms, no `examples/common/gui` presenter, and no dual-mode
+[`TESTING.md`](TESTING.md) rig (it does use the shared testkit's QML surface
+audit). [`bank/README.md`](bank/README.md) sets out which conventions it
+shares and which it does not, and carries the two warnings that go with the
+server: it authenticates nobody — it trusts whatever principal a client
+asserts, because bank's `AuthModel` mints no token — and its corpus pins
+several known defects as `expect ok` rather than hiding them, chief among
+them
+[morph#471](https://github.com/LASTRADA-Software/morph/issues/471). Bank's
+relationship to the ladder is
+[morph#87](https://github.com/LASTRADA-Software/morph/issues/87); the rest of
+that issue — bringing bank's *conventions* into line — is open.
+
 ## Cross-cutting stress map
 
 Every subsystem is hit by at least two rungs:
