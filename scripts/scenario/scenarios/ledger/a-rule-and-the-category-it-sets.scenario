@@ -28,8 +28,10 @@
 # The server records what it is told here -- it is an audit stamp, not an
 # optimistic-concurrency check (that is `UpdateRule`'s `expectedVersion`).
 #
-# Wire shapes: RuleTrigger::DescriptionContains is 0 and RuleAction::
-# SetCategory is 0. CreateRule, CreateCategory, CreateBudget and SetBudgetLimit
+# Wire shapes: enums travel as their enumerator names, so RuleTrigger is
+# "DescriptionContains" and RuleAction is "SetCategory" -- each has one
+# enumerator today, and neither is an integer on the wire.
+# CreateRule, CreateCategory, CreateBudget and SetBudgetLimit
 # each answer with a bare id, so their captures read `$`.
 #
 # ── How this file stays re-runnable ─────────────────────────────────────
@@ -53,10 +55,10 @@ client books model=LedgerModel
 session principal=$who token=$token
 
 # The nonce: the first account's own id, which no earlier run had.
-do OpenAccount ledgerId=1 name="Ruled cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Ruled cash" kind="Asset" currency="EUR"
 expect ok capture cash=$.id
 
-do OpenAccount ledgerId=1 name="Ruled spend" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Ruled spend" kind="Expense" currency="EUR"
 expect ok capture spend=$.id
 
 client budgets model=BudgetModel
@@ -71,7 +73,7 @@ expect ok capture household=$
 client rules model=RuleModel
 session principal=$who token=$token
 
-do CreateRule ledgerId=1 trigger=0 matchText="SUPERMARKET-$cash" action=0 actionValue="Ruled household $cash"
+do CreateRule ledgerId=1 trigger="DescriptionContains" matchText="SUPERMARKET-$cash" action="SetCategory" actionValue="Ruled household $cash"
 expect ok capture rule=$
 
 # ── Two budgets, so both sides of the move are observable ────────────────
@@ -83,10 +85,10 @@ expect ok capture groceryBudget=$
 do CreateBudget ledgerId=1 name="Ruled household budget $cash" categoryId=$household
 expect ok capture householdBudget=$
 
-do SetBudgetLimit budgetId=$groceryBudget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency=1
+do SetBudgetLimit budgetId=$groceryBudget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency="EUR"
 expect ok
 
-do SetBudgetLimit budgetId=$householdBudget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency=1
+do SetBudgetLimit budgetId=$householdBudget month="2026-08" limit={"num":100000,"den":1,"dp":2} currency="EUR"
 expect ok
 
 # ── The account starts on groceries, stamped with the rule that put it there
@@ -97,7 +99,7 @@ expect ok
 
 # ── A transaction the rule does *not* match ─────────────────────────────
 do StoreTransaction ledgerId=1 description="corner bakery" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-1000,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":1000,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$spend,\"name\":\"Ruled spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":1000"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Ruled spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":1000"
 
 use budgets
 
@@ -111,7 +113,7 @@ expect ok field spent.num == 0
 use books
 
 do StoreTransaction ledgerId=1 description="SUPERMARKET-$cash run" date="2026-08-02T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-2000,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":2000,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$spend,\"name\":\"Ruled spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":3000"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Ruled spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":3000"
 
 use budgets
 

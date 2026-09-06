@@ -49,10 +49,10 @@
 #     `kind="Asset"`, `currency="EUR"`. That is what morph#444 made of them
 #     when it gave every ledger enum a `glz::meta`/`glz::enumerate`
 #     (ledger/core/types.hpp), and it is what a real server accepts today.
-#     Every other file in this directory still sends the pre-#444 integers and
-#     is refused by the running server for it — a corpus-wide breakage that
-#     predates this change and is filed as morph#460; this file is written
-#     against the wire as it actually is.
+#     Every other file in this directory sends the same enumerator names --
+#     they spelled the pre-#444 integers until morph#460 rewrote them, which
+#     is why nothing in this directory carries a bare integer for an enum any
+#     more.
 
 # ── Sign in ────────────────────────────────────────────────────────────────
 client auth model=AuthModel

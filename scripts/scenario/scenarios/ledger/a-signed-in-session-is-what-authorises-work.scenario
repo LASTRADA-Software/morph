@@ -37,7 +37,7 @@ expect ok field principal == accountant
 # ── No session at all: every model refuses ─────────────────────────────
 client books model=LedgerModel
 
-do OpenAccount ledgerId=1 name="Authorised cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Authorised cash" kind="Asset" currency="EUR"
 expect err message == "unauthorized"
 
 client budgets model=BudgetModel
@@ -47,27 +47,27 @@ expect err message == "unauthorized"
 
 client rules model=RuleModel
 
-do CreateRule ledgerId=1 trigger=0 matchText="anything" action=0 actionValue="Authorised category"
+do CreateRule ledgerId=1 trigger="DescriptionContains" matchText="anything" action="SetCategory" actionValue="Authorised category"
 expect err message == "unauthorized"
 
 # ── A token shaped like one, signed by nobody ──────────────────────────
 use books
 session principal=accountant token="eyJwcmluY2lwYWwiOiJhY2NvdW50YW50In0.not-a-real-signature"
 
-do OpenAccount ledgerId=1 name="Authorised cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Authorised cash" kind="Asset" currency="EUR"
 expect err message == "unauthorized"
 
 # ── The real one ───────────────────────────────────────────────────────
 session principal=$who token=$token
 
-do OpenAccount ledgerId=1 name="Authorised cash" kind=0 currency=1
+do OpenAccount ledgerId=1 name="Authorised cash" kind="Asset" currency="EUR"
 expect ok capture cash=$.id
 
-do OpenAccount ledgerId=1 name="Authorised spend" kind=1 currency=1
+do OpenAccount ledgerId=1 name="Authorised spend" kind="Expense" currency="EUR"
 expect ok capture spend=$.id
 
 do StoreTransaction ledgerId=1 description="authorised work" date="2026-08-01T00:00:00.000Z" legs=[{"accountId":$cash,"amount":{"num":-800,"den":1,"dp":2}},{"accountId":$spend,"amount":{"num":800,"den":1,"dp":2}}]
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Authorised cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-800"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Authorised cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-800"
 
 # ── The same token authorises the other models ────────────────────────
 use budgets
@@ -82,7 +82,7 @@ expect ok
 use rules
 session principal=$who token=$token
 
-do CreateRule ledgerId=1 trigger=0 matchText="authorised" action=0 actionValue="Authorised category"
+do CreateRule ledgerId=1 trigger="DescriptionContains" matchText="authorised" action="SetCategory" actionValue="Authorised category"
 expect ok capture rule=$
 
 do UpdateRule ruleId=$rule matchText="authorised work" actionValue="Authorised category" expectedVersion=1
@@ -92,7 +92,7 @@ expect ok field version == 2
 use books
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$spend,\"name\":\"Authorised spend\",\"kind\":1,\"currency\":1,\"balance\":.\"num\":800"
+expect ok field accounts ~ "\"id\":$spend,\"name\":\"Authorised spend\",\"kind\":\"Expense\",\"currency\":\"EUR\",\"balance\":.\"num\":800"
 
 # ── Dropping the session closes the doors again ───────────────────────
 session principal="" token=""
@@ -107,4 +107,4 @@ expect err message == "unauthorized"
 session principal=$who token=$token
 
 do GetLedger ledgerId=1
-expect ok field accounts ~ "\"id\":$cash,\"name\":\"Authorised cash\",\"kind\":0,\"currency\":1,\"balance\":.\"num\":-800"
+expect ok field accounts ~ "\"id\":$cash,\"name\":\"Authorised cash\",\"kind\":\"Asset\",\"currency\":\"EUR\",\"balance\":.\"num\":-800"
