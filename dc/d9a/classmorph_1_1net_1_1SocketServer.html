@@ -150,7 +150,7 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>Threading</dt><dd>Owns one accept thread plus one thread per accepted connection — there is no shared event loop. <span class="tt">RemoteServer::handle()</span> replies arrive on the server's worker-pool thread and are marshalled back onto the owning connection's own write path, serialized by a per-connection mutex.</dd></dl>
 <dl class="section user"><dt>Lifetime</dt><dd>Holds <span class="tt">RemoteServer&amp; _server</span> by reference, exactly like <span class="tt">QtWebSocketServer</span> — the server's owning <span class="tt">shared_ptr</span> must outlive this object (see <span class="tt">docs/spec/core/backend.md</span>'s Lifetime &amp; ownership section). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a6e68ace78449e4090392a28fa8c86ca1" name="a6e68ace78449e4090392a28fa8c86ca1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6e68ace78449e4090392a28fa8c86ca1">&#9670;&#160;</a></span>Config</h2>
@@ -166,7 +166,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the config struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,7 +214,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -243,7 +243,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Stops accepting and closes every client connection. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,9 +272,9 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Starts listening for incoming WebSocket connections. </p>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the server successfully bound to the requested port. </dd></dl>
+<p>Fails closed: the accept loop's only way to stop waiting is the wakeup pipe (see <span class="tt">acceptLoop()</span>), so if the pipe cannot be created — <span class="tt">pipe(2)</span> answering <span class="tt">EMFILE</span>/<span class="tt">ENFILE</span> — this reports failure and spawns no thread rather than starting a loop nothing could ever interrupt. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the server bound the requested port <em>and</em> armed its wakeup pipe. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -304,7 +304,7 @@ Public Member Functions</h2></td></tr>
 <p>Returns the port the server is currently bound to. </p>
 <dl class="section return"><dt>Returns</dt><dd>Bound TCP port (OS-assigned when constructed with port 0), or <span class="tt">0</span> before <span class="tt"><a class="el" href="#a301440fb07aa2382ab0fffae6798db3a" title="Starts listening for incoming WebSocket connections.">listen()</a></span> succeeds. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -332,10 +332,11 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Stops accepting new connections and closes every client connection. </p>
+<p>Releases the listening socket once the accept thread has joined, so <span class="tt"><a class="el" href="#a63cf6271f02c0a166bd37efa222deee4" title="Returns the port the server is currently bound to.">port()</a></span> reads <span class="tt">0</span> afterwards and the bound port is free to rebind — the same post-close observation <span class="tt">QtWebSocketServer</span> makes.</p>
 <p>Idempotent: safe to call more than once (including implicitly, via the destructor, after an explicit call), and safe to call from several threads at once <b>on a live object</b> — concurrent callers are serialized, and every one of them returns only once the teardown is complete. Racing a call against the <em>destructor</em> is still the caller's problem (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
 ordering"): no lock inside this object can outlive the object holding it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
