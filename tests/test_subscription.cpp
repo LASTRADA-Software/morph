@@ -13,6 +13,7 @@
 // produce it, so adding an action that also yields an `R` never breaks an
 // existing subscriber.
 
+#include <any>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -23,6 +24,7 @@
 #include <morph/core/remote.hpp>
 #include <stdexcept>
 #include <string>
+#include <typeindex>
 
 #include "test_support.hpp"
 
@@ -290,6 +292,38 @@ TEST_CASE("a private handler's results stay private", "[bridge][subscription]") 
     // instance the watcher is attached to.
     drain(priv.execute(SubBump{.id = 100, .by = 1}));
     REQUIRE_FALSE(fired);
+}
+
+TEST_CASE("SubscriptionRegistry prunes a subscription whose handler was destroyed without unsubscribing",
+          "[bridge][subscription][subscription-registry]") {
+    // The Bridge-level "delivery stops once the subscribing handler is
+    // destroyed" test above proves the *observable* behaviour (no more
+    // callbacks fire), but a `BridgeHandler`'s destructor never calls
+    // `unsubscribe()` -- deregisterHandler only removes the binding from
+    // `Bridge::_handlers`, not from the subscription list -- so that test
+    // cannot tell "the stale entry was actually erased" apart from "the
+    // entry is still sitting there, silently skipped forever because its
+    // weak_ptr is expired". Driving `SubscriptionRegistry` directly, with no
+    // `Bridge`/`BridgeHandler`/action round trip at all, lets us assert the
+    // erasure itself via `size()`.
+    morph::bridge::detail::SubscriptionRegistry<morph::bridge::detail::HandlerBinding> registry;
+    auto const type = std::type_index{typeid(SubCounterState)};
+
+    {
+        auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+        binding->currentId.store(123);
+        registry.addSubscription(binding, type, [](const std::any&) {}, nullptr);
+        REQUIRE(registry.size() == 1);
+        // `binding` is destroyed here, without any call to removeSubscription
+        // -- exactly the "handler destroyed without unsubscribing" case.
+    }
+
+    // The stale entry is not erased just by its binding dying: nothing prunes
+    // the list until the next publishResult() walks it.
+    REQUIRE(registry.size() == 1);
+
+    registry.publishResult(morph::exec::detail::ModelId{123}, type, std::any{});
+    REQUIRE(registry.size() == 0);
 }
 
 TEST_CASE("instance subscriptions work under SimulatedRemoteBackend", "[bridge][subscription][remote]") {

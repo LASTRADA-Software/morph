@@ -759,14 +759,20 @@ That is what lets a waiter be queued from a GUI thread and settled from a
 backend's transport thread without either blocking on the bridge's own locks —
 see [Registration readiness](#registration-readiness--isbound--whenbound).
 
-`subscribe`/`unsubscribe` mutate the bridge's subscription registry under
-`_subMtx`. Callbacks never run under that mutex: `publishResult` snapshots the
-matching sinks under the lock and invokes them outside it, marshalled to the
-`guiExec` executor passed at construction, so a subscriber that re-enters the
-bridge cannot deadlock. A subscription holds a `weak_ptr` to its binding, so one
-belonging to a destroyed handler is skipped and pruned rather than dangling. The
-intended usage remains **single-GUI-thread affinity**: a handler and its
-subscriptions belong to one GUI thread.
+`subscribe`/`unsubscribe` mutate `_subscriptions`, a
+`morph::bridge::detail::SubscriptionRegistry<HandlerBinding>` (its own header,
+`core/detail/subscription_registry.hpp`, extracted out of `Bridge` the way
+`morph::backend::detail::ExecuteOrderGate` was extracted out of `RemoteServer`
+— see [backend.md](backend.md)'s "Per-model execute ordering" section for the
+sibling extraction), under that registry's own internal mutex. Callbacks never
+run under that mutex: `publishResult` snapshots the matching sinks under the
+lock and invokes them outside it, marshalled to the `guiExec` executor passed
+at construction, so a subscriber that re-enters the bridge cannot deadlock. A
+subscription holds a `weak_ptr` to its binding, so one belonging to a
+destroyed handler is skipped and pruned — on the next `publishResult` call,
+not the moment the handler dies — rather than dangling. The intended usage
+remains **single-GUI-thread affinity**: a handler and its subscriptions belong
+to one GUI thread.
 
 ## Lifetime & ownership
 
