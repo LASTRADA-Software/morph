@@ -18,6 +18,35 @@ desktop GUI** — which also builds to **WebAssembly** and runs entirely in the 
 > Everything runs client-side — no server. First load fetches a ~31 MB `.wasm`, so
 > give it a few seconds. (See [WebAssembly demo](#webassembly-demo-self-contained-github-pages).)
 
+## Bank and the application ladder
+
+Bank predates [the application ladder](../LADDER.md) and is **unnumbered prior
+art**: `LADDER.md` cites it in its intro, measures rung effort in
+"bank-equivalents", and gives it no rung number. That is deliberate — the
+numbers in `LADDER.md`'s table are load-bearing for the rungs that consume each
+other's answers, and bank has nothing to take but a renumbering. Concretely,
+bank is absent from [`examples/rungs.txt`](../rungs.txt) and never calls
+`morph_add_rung()`, which is what keeps it out of `ci.yml`'s `ladder-tests`
+and `ladder-sanitizers`, `wasm-ladder.yml`'s build loop, `coverage.sh` and
+`codecov.yml`'s per-rung components — the only workflow that builds bank at all
+is `wasm-demo.yml`, and only its WebAssembly GUI. `ladder_bank_server` below is a local `add_executable` for the same
+reason; the `ladder_` prefix is the scenario tooling's naming convention, not a
+rung claim.
+
+Conventions bank **shares** with the rungs: persistence exclusively through the
+Lightweight ORM, with the schema owned by `LIGHTWEIGHT_SQL_MIGRATION`
+definitions — [`LADDER.md`](../LADDER.md) calls that "bank's pattern" and binds
+every rung to it — models as the application, plain aggregates on the wire, and
+the shared testkit's `QmlSurfaceAudit`. Conventions it does **not** follow: no
+schema-driven forms (its GUI hand-rolls one QObject controller per domain
+rather than using `morph::qt::forms::FormsControllerCore`), no
+`examples/common/gui` presenter architecture, and no
+[`TESTING.md`](../TESTING.md) dual-deployment-mode rig — its remote coverage is
+`SimulatedRemoteBackend` in `test_remote.cpp` plus the scenario corpus below.
+Bringing those conventions into line is
+[morph#87](https://github.com/LASTRADA-Software/morph/issues/87), which remains
+open; the numbering question that issue also raises is the part that is settled.
+
 ## Architecture: two type layers
 
 morph actions/results must be plain aggregates (Glaze serialises them onto the wire).
@@ -157,6 +186,100 @@ registered with unixODBC (the connection string is `DRIVER=SQLite3;Database=…`
 # Run the scripted tour (same scenario on local, then remote, backend)
 ./build/examples/bank/bank_cli
 ```
+
+### Standalone server (`ladder_bank_server`)
+
+`src/server/main.cpp` builds a headless WebSocket server that hosts every bank
+model over `morph::wire`, so a real out-of-process client can drive them. It
+needs `-DMORPH_BUILD_QT=ON` (the transport is `morph::qt`'s `QtWebSocketServer`;
+no GUI is involved):
+
+```sh
+cmake -G Ninja -B build -S . -DMORPH_BUILD_BANK_EXAMPLE=ON -DMORPH_BUILD_QT=ON
+cmake --build build --target ladder_bank_server
+
+BANK_DB="DRIVER=SQLite3;Database=$PWD/bank.db;Timeout=5000" BANK_PORT=0 \
+    ./build/examples/bank/ladder_bank_server
+# bank-server: listening on ws://127.0.0.1:54321
+```
+
+`BANK_PORT=0` lets the OS pick a free port, which the server prints. It writes
+an audit trail to `bank_actions.jsonl` in its working directory, the same
+`morph::journal::FileActionLog` the CLI installs — the models' read-only actions
+carry `Loggable::No`, so what lands there is the mutating half of the surface.
+
+#### Scenarios
+
+`scripts/scenario/scenarios/bank/` holds 22 scenario files that drive this
+binary as a real out-of-process WebSocket client, between them dispatching all
+41 of bank's registered actions. `run_scenarios.py` starts the server, runs the
+directory against it on a throwaway SQLite database, and tears it down:
+
+```sh
+python3 scripts/scenario/run_scenarios.py --rung bank --build-dir build
+```
+
+`--build-dir` names the directory `ladder_bank_server` was built into; add
+`--twice` to rerun the directory against the database the first pass left
+behind. The format, the flags and what the corpus is measured against are in
+[`scripts/scenario/README.md`](../../scripts/scenario/README.md). Note that
+`--rung bank` is the runner's spelling for "the `bank` directory" — bank is not
+a rung, per the section above.
+
+#### This server authenticates nobody — do not copy it as an authentication example
+
+**It trusts the principal the client asserts.** Bank's `AuthModel` mints no
+bearer token: `LoginRequest` verifies a password and returns the *principal* for
+the client to install (which is what `App::login()` does with it). There is
+therefore no signed artefact for a server to verify, and morph's default
+`allowAllAuthorizer()` does not authenticate at all — it leaves the principal
+unvouched-for, `RemoteServer` *clears* it, and every bank action then fails with
+"no session principal". So `main.cpp` installs an authorizer that vouches for
+whatever non-empty principal arrives, and anyone who can open a socket can claim
+to be any customer.
+
+What that does and does not leave standing: per-row ownership *is* enforced by
+the models (`db::loadOwned` navigates a row to its owner and compares that with
+the session principal), so cross-customer isolation is real and testable — it is
+what `another-customer-cannot-touch-your-account.scenario` pins. What is absent
+is credential *proof*. A server that needs it swaps in
+`morph::session::SigningAuthorizer` and issues a token to verify against; bank
+has none to issue.
+
+#### Defects the scenario corpus pins on purpose
+
+Three things the corpus asserts as current behaviour because they are true, not
+because they are right. A scenario passing over any of them is a record, not an
+endorsement; when one is fixed, the file that pins it is meant to fail.
+
+- **[morph#471](https://github.com/LASTRADA-Software/morph/issues/471) — a
+  caller-supplied owner beats the session principal.**
+  `bank::resolveOwner()` ([`include/bank/core/principal.hpp:24`](include/bank/core/principal.hpp))
+  returns `action.owner` whenever it is non-empty and only falls back to the
+  session principal when it is not; nothing compares the two. Ten actions across
+  eight models resolve their scope through it — `ListAccounts`, `ListCards`,
+  `ListPayees`, `ListPayments`, `ListLoans`, `ListBudgets`,
+  `ListNotifications`, `GenerateStatement`, `OpenAccount` and `MarkAllRead` —
+  so a signed-in customer who types another customer's username is served that
+  customer's data, and `MarkAllRead` *writes* to it. `SpendingByKind` consults
+  no owner at all and answers a caller with no session. Actions addressed by
+  row id are unaffected: they load the row and check its owner, which is the
+  pattern the ten should follow.
+  `an-owner-named-outright-is-not-checked-against-the-session.scenario` is the
+  inventory: every cross-owner read and the `MarkAllRead` write are `expect
+  ok` there, beside the id-addressed calls that are correctly refused.
+- **A DTO's `validate()` shadows the model's own `ValidationError`.** Fifteen
+  bank actions carry a `validate()` predicate on the wire DTO *and* open their
+  `execute()` with `if (!action.validate()) throw ValidationError{"…"}`. Over
+  the wire morph's dispatch path runs `validate()` first and refuses with
+  `"action failed validation: <Model>/<Action>"`, so those fifteen hand-written
+  messages are unreachable from a remote client and the scenarios assert the
+  generic string instead.
+- **`GenerateStatement`'s `closingBalanceMinor` is not a closing balance.** It
+  reports each account's *current* balance
+  (`src/models/statement_model.cpp:48`), not the balance as at `toMs`, so a
+  statement over a past window still moves when the account does. The debit and
+  credit totals beside it are windowed correctly.
 
 ### Qt 6 QML GUI
 

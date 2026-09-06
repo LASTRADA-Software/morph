@@ -1,0 +1,98 @@
+# bank — a recurring instruction: an interval, a first due date, and no money
+# moving on any of them.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/a-standing-order-recurs-on-paper-only.scenario
+#
+# `CreateStandingOrder` is the third of bank's payment shapes and the only one
+# carrying an `intervalDays`. Like `SchedulePayment` it writes an instruction
+# and nothing else; unlike it, the instruction claims to repeat. Bank has no
+# component that acts on either claim, so what is genuinely testable here is
+# the record and its lifecycle, and that is all this file asserts.
+
+model AuthModel
+client front
+do RegisterUser username=dijkstra password=dijkstra-pass displayName="E. Dijkstra"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=dijkstra password=dijkstra-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$acct amountMinor=150000 description="funding"
+expect ok field balanceAfterMinor == 150000
+
+client book model=PayeeModel principal=$who
+do AddPayee name="Gym Membership" iban=NL91ABNA0417164300 bankName="ABN AMRO"
+expect ok capture payee=$.id
+expect ok field name == "Gym Membership"
+
+# ── The order ───────────────────────────────────────────────────────────────
+client bills model=PaymentModel principal=$who
+
+# schedule 2 is PaymentSchedule::Standing, status 0 is Pending. `firstDueAtMs`
+# lands in the record's `dueAtMs` — the field is named for when it was set, not
+# for what it holds.
+do CreateStandingOrder fromAccountId=$acct payeeId=$payee amountMinor=5000 intervalDays=30 firstDueAtMs=2000000000000 description="monthly gym"
+expect ok capture order=$.id
+expect ok field amountMinor == 5000
+expect ok field intervalDays == 30
+expect ok field dueAtMs == 2000000000000
+expect ok field schedule == 2
+expect ok field status == 0
+
+# An interval is what makes it standing rather than scheduled, so
+# `CreateStandingOrder::validate()` demands a positive one.
+do CreateStandingOrder fromAccountId=$acct payeeId=$payee amountMinor=5000 intervalDays=0 firstDueAtMs=2000000000000 description="no interval"
+expect err message == "action failed validation: PaymentModel/CreateStandingOrder"
+
+# ── Nothing has been collected ──────────────────────────────────────────────
+client single model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 150000
+
+use teller
+do History accountId=$acct limit=10 offset=0
+expect ok field entries !~ "[}],[{]"
+expect ok field entries[0].kind == 0
+
+# ── The three shapes side by side ───────────────────────────────────────────
+# One account, one payee, one list, and three rows that differ only in the two
+# fields that decide what each one is.
+use bills
+do PayBill fromAccountId=$acct payeeId=$payee amountMinor=5000 description="this month, by hand"
+expect ok capture paid=$.id
+expect ok field schedule == 0
+expect ok field status == 1
+
+do SchedulePayment fromAccountId=$acct payeeId=$payee amountMinor=5000 dueAtMs=2000000000000 description="next month, once"
+expect ok capture once=$.id
+expect ok field schedule == 1
+expect ok field status == 0
+
+do ListPayments owner=$who
+expect ok field payments ~ "\"id\":$order,"
+expect ok field payments ~ "\"id\":$paid,"
+expect ok field payments ~ "\"id\":$once,"
+
+# Only the hand-made payment actually took money.
+use single
+do GetAccount id=$acct
+expect ok field balanceMinor == 145000
+
+# ── Cancelling the pending two ──────────────────────────────────────────────
+use bills
+do CancelPayment id=$order
+expect ok field ok == true
+expect ok field message == "payment cancelled"
+
+do CancelPayment id=$once
+expect ok field ok == true
+
+# The completed one is untouchable, then and now.
+do CancelPayment id=$paid
+expect err message == "only pending payments can be cancelled"

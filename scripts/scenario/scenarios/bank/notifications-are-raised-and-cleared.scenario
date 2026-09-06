@@ -1,0 +1,111 @@
+# bank — alerts: raised unread, cleared one at a time or all at once, and
+# counted in a way that does not depend on how the list was filtered.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/notifications-are-raised-and-cleared.scenario
+#
+# The subtle part of `ListNotifications` is that `unreadOnly` filters the list
+# but *not* the count: `unreadCount` is always the owner's true unread total,
+# even on a call that asked for only unread rows and could therefore have
+# computed it by taking the length. Those two numbers agree in the filtered case
+# and differ in the unfiltered one, so a single call can never tell them apart —
+# which is why this file makes the same assertion both ways round.
+#
+# The file finishes by marking everything read, so a second pass over the same
+# database starts from the same clean slate this one did.
+
+model AuthModel
+client front
+do RegisterUser username=clarke password=clarke-pass displayName="E. Clarke"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=clarke password=clarke-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client alerts model=NotificationModel principal=$who
+
+# Nothing outstanding to begin with — guaranteed by this file's own final step
+# on every previous pass.
+do ListNotifications owner=$who unreadOnly=false
+expect ok field unreadCount == 0
+
+# ── Raising them ────────────────────────────────────────────────────────────
+# Severity 0..2; a notification is always created unread, whatever is asked.
+do Notify message="Your statement is ready" severity=0
+expect ok capture first=$.id
+expect ok field message == "Your statement is ready"
+expect ok field severity == 0
+expect ok field read == false
+expect ok field owner == "clarke"
+
+do Notify message="Unusual card activity" severity=2
+expect ok capture second=$.id
+expect ok field severity == 2
+expect ok field read == false
+
+# `Notify::validate()` bounds the severity at 0..2 and demands a message, so
+# both refusals come from morph rather than from `NotificationModel`.
+do Notify message="Off the scale" severity=9
+expect err message == "action failed validation: NotificationModel/Notify"
+
+do Notify message="" severity=1
+expect err message == "action failed validation: NotificationModel/Notify"
+
+# ── Counting ────────────────────────────────────────────────────────────────
+do ListNotifications owner=$who unreadOnly=false
+expect ok field unreadCount == 2
+expect ok field notifications ~ "\"id\":$first,"
+expect ok field notifications ~ "\"id\":$second,"
+
+# Same count, filtered list. Here the two happen to agree.
+do ListNotifications owner=$who unreadOnly=true
+expect ok field unreadCount == 2
+expect ok field notifications ~ "\"id\":$first,"
+
+# ── Clearing one ────────────────────────────────────────────────────────────
+do MarkRead id=$first
+expect ok field ok == true
+expect ok field message == "marked read"
+
+# Unfiltered: both rows are still listed, but only one is still unread. This is
+# the call where the count and the list length disagree.
+do ListNotifications owner=$who unreadOnly=false
+expect ok field unreadCount == 1
+expect ok field notifications ~ "\"id\":$first,"
+expect ok field notifications ~ "\"id\":$second,"
+
+# Filtered: the read one is gone from the list, and the count is the same 1.
+do ListNotifications owner=$who unreadOnly=true
+expect ok field unreadCount == 1
+expect ok field notifications !~ "\"id\":$first,"
+expect ok field notifications ~ "\"id\":$second,"
+
+# Marking a read notification read again is accepted rather than refused — it
+# sets the flag without checking it first.
+do MarkRead id=$first
+expect ok field ok == true
+
+do MarkRead id=999999
+expect err message == "notification not found"
+
+# ── Clearing the rest ───────────────────────────────────────────────────────
+# The acknowledgement counts the rows it actually changed, so the already-read
+# one is not counted again.
+do MarkAllRead owner=$who
+expect ok field ok == true
+expect ok field message == "1 marked read"
+
+do ListNotifications owner=$who unreadOnly=false
+expect ok field unreadCount == 0
+expect ok field notifications ~ "\"id\":$second,"
+
+# Nothing left to clear, and that is reported rather than refused.
+do MarkAllRead owner=$who
+expect ok field ok == true
+expect ok field message == "0 marked read"
+
+# The unread-only view of a fully-read inbox is empty, and the rows are still
+# there — marking read is not deleting.
+do ListNotifications owner=$who unreadOnly=true
+expect ok field notifications == []
+expect ok field unreadCount == 0

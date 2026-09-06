@@ -1,0 +1,150 @@
+# bank — issuing a card and every state it can be put into, ending in the one
+# it cannot come back from.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/a-card-through-its-whole-lifecycle.scenario
+#
+# Freezing is reversible and cancelling is not, and `CardModel` is where that
+# asymmetry lives: `UnfreezeCard` checks for `Cancelled` and refuses, while
+# `CancelCard` checks nothing and will happily cancel a frozen card. Walking the
+# whole lifecycle in one file is what makes the one-way door visible.
+#
+# The card's PAN is also worth noting for what is *absent*: bank stores only the
+# last four digits (`panLast4`) and there is no action anywhere on this model
+# that returns a full number. That is a property of the schema, not a masking
+# step some client remembered to apply — see morph#86, where the proposed
+# `QQmlPropertyMap` projection was rejected partly for undoing it.
+
+model AuthModel
+client front
+do RegisterUser username=thompson password=thompson-pass displayName="K. Thompson"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=thompson password=thompson-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+
+# ── Issuing ─────────────────────────────────────────────────────────────────
+client wallet model=CardModel principal=$who
+
+# kind 0 is CardKind::Debit, status 0 is CardStatus::Active.
+do IssueCard accountId=$acct kind=0 dailyLimitMinor=50000
+expect ok capture card=$.id
+expect ok field accountId == $acct
+expect ok field kind == 0
+expect ok field status == 0
+expect ok field dailyLimitMinor == 50000
+expect ok field owner == "thompson"
+# Four digits and no more: there is no field here that could carry a full PAN.
+expect ok field panLast4 ~ "^[0-9]{4}$"
+
+# kind 1 is CardKind::Credit; anything outside 0..1 fails `IssueCard::validate()`
+# and is refused by morph before `CardModel` runs.
+do IssueCard accountId=$acct kind=9 dailyLimitMinor=1000
+expect err message == "action failed validation: CardModel/IssueCard"
+
+# A card can only be issued against an account the caller owns.
+do IssueCard accountId=999999 kind=0 dailyLimitMinor=1000
+expect err message == "account not found"
+
+do ListCards owner=$who
+expect ok field cards ~ "\"id\":$card,"
+
+# ── Frozen, and back ────────────────────────────────────────────────────────
+# status 1 is CardStatus::Frozen.
+do FreezeCard id=$card
+expect ok field ok == true
+expect ok field message == "card frozen"
+
+do ListCards owner=$who
+expect ok field cards ~ "\"status\":1"
+
+do UnfreezeCard id=$card
+expect ok field ok == true
+expect ok field message == "card active"
+
+do ListCards owner=$who
+expect ok field cards ~ "\"status\":0"
+
+# ── Limits and PINs ─────────────────────────────────────────────────────────
+# `SetCardLimit` carries no `validate()` predicate, so its bound is checked by
+# the model and the message is bank's own rather than the framework's. That is
+# the visible difference between a DTO that declares `validate()` and one that
+# does not, and both spellings appear in this one file.
+do SetCardLimit id=$card dailyLimitMinor=-1
+expect err message == "limit must be non-negative"
+
+do SetCardLimit id=$card dailyLimitMinor=125000
+expect ok field ok == true
+expect ok field message == "limit updated"
+
+do ListCards owner=$who
+expect ok field cards ~ "\"dailyLimitMinor\":125000"
+
+# A zero limit is a limit, not an absence of one.
+do SetCardLimit id=$card dailyLimitMinor=0
+expect ok field ok == true
+
+# `ChangePin` *does* declare `validate()` (exactly four characters), so a short
+# PIN is refused by morph and the model's own message never reaches a client.
+#
+# The quotes are load-bearing: `newPin` is a `std::string`, and an unquoted
+# `1234` in this runner is a JSON *number*, which the server rejects at decode
+# time with a parser diagnostic rather than as a validation failure. A PIN that
+# is all digits but must travel as text is exactly the field where that bites.
+do ChangePin id=$card newPin="12"
+expect err message == "action failed validation: CardModel/ChangePin"
+
+# The same PIN sent unquoted never reaches `validate()` at all: it fails to
+# decode into the action's `std::string`.
+do ChangePin id=$card newPin=4821
+expect err message ~ "^1:[0-9]+: expected_quote"
+
+do ChangePin id=$card newPin="4821"
+expect ok field ok == true
+expect ok field message == "PIN changed"
+
+# Nothing on this model ever hands a PIN back — only the acknowledgement above.
+do ListCards owner=$who
+expect ok field cards !~ "4821"
+expect ok field cards !~ "pin"
+
+# ── Cancelled, and that is the end ──────────────────────────────────────────
+# A frozen card can still be cancelled: `CancelCard` gates on nothing.
+do FreezeCard id=$card
+expect ok field ok == true
+
+# status 2 is CardStatus::Cancelled.
+do CancelCard id=$card
+expect ok field ok == true
+expect ok field message == "card cancelled"
+
+do ListCards owner=$who
+expect ok field cards ~ "\"status\":2"
+
+# The one-way door: this is the only refusal `CardModel` raises about state.
+do UnfreezeCard id=$card
+expect err message == "cancelled cards cannot be reactivated"
+
+# Freezing a cancelled card is *not* refused — `FreezeCard` checks no state at
+# all, so it moves a cancelled card back to Frozen. Asserted because it is a
+# real asymmetry in the model, not because it is the behaviour one would want.
+do FreezeCard id=$card
+expect ok field ok == true
+
+# And from Frozen it can be unfrozen again, so the "one-way door" is only shut
+# for as long as nothing reopens it this way.
+do UnfreezeCard id=$card
+expect ok field ok == true
+expect ok field message == "card active"
+
+# Left cancelled, which is where a finished lifecycle should end.
+do CancelCard id=$card
+expect ok field ok == true
+
+# A card that does not exist is a lookup failure like any other.
+do FreezeCard id=999999
+expect err message == "card not found"

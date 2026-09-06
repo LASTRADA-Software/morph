@@ -1,0 +1,96 @@
+# bank — setting a monthly limit twice for the same category updates it rather
+# than adding a second one.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/budgets-are-upserted-by-category.scenario
+#
+# `SetBudget` is an upsert keyed on (owner, category), and there is nothing in
+# its name or its result to say so — it returns a `BudgetInfo` either way, and
+# the second call returns the *same* id as the first. That identity is the whole
+# assertion: a client that assumed "set" meant "create" would accumulate a
+# duplicate row per save, and only a caller who kept the first id could tell.
+#
+# Being an upsert is also what makes this file re-runnable: a second pass over
+# the same database re-sets the same categories rather than colliding with them.
+
+model AuthModel
+client front
+do RegisterUser username=wing password=wing-pass displayName="J. Wing"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=wing password=wing-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client plan model=BudgetModel principal=$who
+
+# ── Setting one ─────────────────────────────────────────────────────────────
+do SetBudget category=groceries monthlyLimitMinor=60000 currency=0
+expect ok capture groceries=$.id
+expect ok field category == "groceries"
+expect ok field monthlyLimitMinor == 60000
+expect ok field currency == 0
+expect ok field owner == "wing"
+
+# ── Setting it again is an update, and the id proves it ─────────────────────
+do SetBudget category=groceries monthlyLimitMinor=75000 currency=0
+expect ok field id == $groceries
+expect ok field monthlyLimitMinor == 75000
+expect ok field category == "groceries"
+
+# A different category is a different budget.
+do SetBudget category=transport monthlyLimitMinor=20000 currency=0
+expect ok capture transport=$.id
+expect ok field monthlyLimitMinor == 20000
+expect ok field id != $groceries
+
+# ── Both are listed, at their current limits ────────────────────────────────
+do ListBudgets owner=$who
+expect ok field budgets ~ "\"id\":$groceries,"
+expect ok field budgets ~ "\"id\":$transport,"
+expect ok field budgets ~ "\"monthlyLimitMinor\":75000"
+expect ok field budgets ~ "\"monthlyLimitMinor\":20000"
+# The superseded limit is gone rather than sitting beside its replacement.
+expect ok field budgets !~ "\"monthlyLimitMinor\":60000"
+
+# ── A zero limit is a budget; a negative one is not ─────────────────────────
+# `SetBudget::validate()` allows `monthlyLimitMinor >= 0`, so "spend nothing on
+# this" is expressible, and morph refuses the negative case before the model.
+do SetBudget category=takeaway monthlyLimitMinor=0 currency=0
+expect ok capture takeaway=$.id
+expect ok field monthlyLimitMinor == 0
+
+do SetBudget category=impossible monthlyLimitMinor=-1 currency=0
+expect err message == "action failed validation: BudgetModel/SetBudget"
+
+# A category is required — an unnamed limit belongs to nothing.
+do SetBudget category="" monthlyLimitMinor=1000 currency=0
+expect err message == "action failed validation: BudgetModel/SetBudget"
+
+# The refused pair added nothing.
+do ListBudgets owner=$who
+expect ok field budgets !~ "impossible"
+
+# ── Deleting ────────────────────────────────────────────────────────────────
+do DeleteBudget id=$takeaway
+expect ok field ok == true
+expect ok field message == "budget deleted"
+
+do ListBudgets owner=$who
+expect ok field budgets !~ "\"id\":$takeaway,"
+expect ok field budgets ~ "\"id\":$groceries,"
+
+# Deleting is once-only, and a hard delete: there is no tombstone to find.
+do DeleteBudget id=$takeaway
+expect err message == "budget not found"
+
+do DeleteBudget id=999999
+expect err message == "budget not found"
+
+# ── Left as found, so the next pass sees the same starting point ────────────
+do DeleteBudget id=$groceries
+expect ok field ok == true
+do DeleteBudget id=$transport
+expect ok field ok == true
+
+do ListBudgets owner=$who
+expect ok field budgets == []

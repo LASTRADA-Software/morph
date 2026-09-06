@@ -1,0 +1,89 @@
+# bank — the amortisation schedule: a pure computation over a loan, which must
+# end at exactly nothing outstanding.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/a-loan-schedule-amortises-to-zero.scenario
+#
+# `LoanScheduleRequest` writes nothing and moves nothing; it is the one bank
+# action that is entirely derivation. What makes it worth a scenario is the last
+# row: an amortisation built from a rounded monthly payment does not naturally
+# land on zero, so `LoanModel` forces the final instalment's principal share to
+# clear whatever remains. A rounding change that left a few minor units behind
+# would be invisible to any assertion that only checked the first row.
+#
+# The zero-interest loan is here for the same reason from the other side: with
+# `rateBps=0` every instalment is pure principal, so the arithmetic is exactly
+# predictable and a schedule that quietly charged interest anyway would show up.
+
+model AuthModel
+client front
+do RegisterUser username=hamilton password=hamilton-pass displayName="M. Hamilton"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=hamilton password=hamilton-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+
+client desk model=LoanModel principal=$who
+
+# ── An interest-free loan divides exactly ───────────────────────────────────
+# 12000 minor units over 12 months at 0bps: 1000 a month, no interest anywhere.
+do ApplyLoan accountId=$acct principalMinor=12000 rateBps=0 termMonths=12
+expect ok capture free=$.id
+expect ok field outstandingMinor == 12000
+
+do LoanScheduleRequest loanId=$free
+expect ok field loanId == $free
+expect ok field monthlyPaymentMinor == 1000
+expect ok field installments[0].month == 1
+expect ok field installments[0].paymentMinor == 1000
+expect ok field installments[0].principalMinor == 1000
+expect ok field installments[0].interestMinor == 0
+expect ok field installments[0].remainingMinor == 11000
+expect ok field installments[1].month == 2
+expect ok field installments[1].remainingMinor == 10000
+# The last row is month 12 and it clears the balance exactly.
+expect ok field installments[11].month == 12
+expect ok field installments[11].interestMinor == 0
+expect ok field installments[11].remainingMinor == 0
+
+# ── An interest-bearing loan still ends at zero ─────────────────────────────
+# The point of this one is the final `remainingMinor`, which is forced rather
+# than arrived at.
+do ApplyLoan accountId=$acct principalMinor=1000000 rateBps=1200 termMonths=24
+expect ok capture bearing=$.id
+
+do LoanScheduleRequest loanId=$bearing
+expect ok capture monthly=$.monthlyPaymentMinor
+expect ok field loanId == $bearing
+expect ok field installments[0].month == 1
+# Each instalment pays the same total; only the principal/interest split moves.
+expect ok field installments[0].paymentMinor == $monthly
+expect ok field installments[1].paymentMinor == $monthly
+# Interest is charged on the outstanding balance, so month 1 charges a full
+# month at 1200bps on the whole principal: 1000000 * 1200 / 10000 / 12 = 10000.
+expect ok field installments[0].interestMinor == 10000
+expect ok field installments[23].month == 24
+expect ok field installments[23].remainingMinor == 0
+
+# ── It is a projection, not a payment ───────────────────────────────────────
+# Asking for a schedule twice gives the same answer and changes nothing: the
+# loan is still fully outstanding and the account still holds both disbursements.
+do LoanScheduleRequest loanId=$bearing
+expect ok field installments[23].remainingMinor == 0
+
+do GetLoan id=$bearing
+expect ok field outstandingMinor == 1000000
+expect ok field status == 0
+
+client single model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 1012000
+
+# A schedule for a loan that does not exist.
+use desk
+do LoanScheduleRequest loanId=999999
+expect err message == "loan not found"

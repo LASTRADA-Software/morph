@@ -1,0 +1,173 @@
+# bank — the gap between the actions that check who is asking and the ones that
+# take an owner's name at face value.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/an-owner-named-outright-is-not-checked-against-the-session.scenario
+#
+# This file asserts behaviour that is **wrong**, deliberately, because it is the
+# behaviour bank has and a corpus that only recorded the parts that work would
+# be worth less than nothing on the day somebody changed them. It is filed as
+# morph#471 (https://github.com/LASTRADA-Software/morph/issues/471); the
+# `expect ok`s below are that issue's acceptance criteria in reverse, so a
+# reader must not take this file passing for an endorsement.
+#
+# Bank has two ways of deciding whose data an action touches:
+#
+#   * By **row id**, through `db::loadOwned` — which navigates the row to its
+#     owner and compares that with the session principal. That is genuine
+#     enforcement, and another-customer-cannot-touch-your-account.scenario is
+#     the file that pins it.
+#
+#   * By **owner name**, through `bank::resolveOwner(action.owner)` — which
+#     returns whatever string the caller put in the `owner` field and only falls
+#     back to the session principal when that field is empty. Nothing compares
+#     the two. The resolved name is used solely to look a `users` row up.
+#
+# So every list-shaped action carrying an `owner` field will read another
+# customer's data for anyone who types their username, and `MarkAllRead` will
+# *write* to it. `SpendingByKind` is worse again: it takes a bare `accountId`,
+# consults no owner at all, and reports on any account in the database.
+#
+# When morph#471 is fixed, this file will fail, and it should: the fix is to
+# compare the resolved owner with `sessionPrincipal()` and refuse when they
+# differ. The `expect ok`s below are the inventory of everything that change
+# has to cover.
+
+model AuthModel
+
+client mallory-auth
+do RegisterUser username=snooper password=snooper-pass displayName="Snooper"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=snooper password=snooper-pass
+expect ok capture snoop=$.principal
+expect ok field ok == true
+
+client target-auth
+do RegisterUser username=quarry password=quarry-pass displayName="Quarry"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=quarry password=quarry-pass
+expect ok capture prey=$.principal
+expect ok field ok == true
+
+# ── The quarry's private banking ────────────────────────────────────────────
+client q-vault model=CustomerModel principal=$prey
+do OpenAccount owner=$prey kind=0 currency=0
+expect ok capture qAcct=$.id
+
+client q-teller model=TransactionModel principal=$prey
+do Deposit accountId=$qAcct amountMinor=750000 description="quarry's salary"
+expect ok field balanceAfterMinor == 750000
+do Withdraw accountId=$qAcct amountMinor=25000 description="quarry's rent"
+expect ok field balanceAfterMinor == 725000
+
+client q-book model=PayeeModel principal=$prey
+do AddPayee name="Quarry's Therapist" iban=CH9300762011623852957 bankName="UBS"
+expect ok capture qPayee=$.id
+
+client q-bills model=PaymentModel principal=$prey
+do PayBill fromAccountId=$qAcct payeeId=$qPayee amountMinor=15000 description="a private matter"
+expect ok capture qPayment=$.id
+
+client q-desk model=LoanModel principal=$prey
+do ApplyLoan accountId=$qAcct principalMinor=50000 rateBps=0 termMonths=6
+expect ok capture qLoan=$.id
+
+client q-plan model=BudgetModel principal=$prey
+do SetBudget category=quarry-secret monthlyLimitMinor=99000 currency=0
+expect ok capture qBudget=$.id
+
+client q-alerts model=NotificationModel principal=$prey
+do Notify message="Quarry's confidential alert" severity=2
+expect ok capture qNote=$.id
+
+# ── Everything the snooper can read by simply naming them ───────────────────
+# The session below is `snooper` throughout. Every one of these succeeds.
+
+client s-vault model=CustomerModel principal=$snoop
+do ListAccounts owner=$prey
+expect ok field accounts ~ "\"id\":$qAcct,"
+# 750000 in, 25000 rent out, 15000 bill out, 50000 loan disbursed in.
+expect ok field accounts ~ "\"balanceMinor\":760000"
+
+client s-book model=PayeeModel principal=$snoop
+do ListPayees owner=$prey
+expect ok field payees ~ "\"id\":$qPayee,"
+expect ok field payees ~ "Quarry's Therapist"
+
+client s-bills model=PaymentModel principal=$snoop
+do ListPayments owner=$prey
+expect ok field payments ~ "\"id\":$qPayment,"
+expect ok field payments ~ "a private matter"
+
+client s-desk model=LoanModel principal=$snoop
+do ListLoans owner=$prey
+expect ok field loans ~ "\"id\":$qLoan,"
+
+client s-plan model=BudgetModel principal=$snoop
+do ListBudgets owner=$prey
+expect ok field budgets ~ "\"id\":$qBudget,"
+expect ok field budgets ~ "quarry-secret"
+
+client s-alerts model=NotificationModel principal=$snoop
+do ListNotifications owner=$prey unreadOnly=false
+expect ok field notifications ~ "Quarry's confidential alert"
+expect ok field unreadCount == 1
+
+client s-paper model=StatementModel principal=$snoop
+# Pinned to this pass's account rather than to the statement's totals: a
+# statement fans out over every account its owner has ever held, and this file
+# opens one more on each pass. 25000 rent plus a 15000 bill.
+do GenerateStatement owner=$prey fromMs=0 toMs=0
+expect ok field owner == "quarry"
+expect ok field lines ~ "\"accountId\":$qAcct,[^}]*\"debitsMinor\":40000,"
+
+# `SpendingByKind` needs no owner at all — just an account id, which
+# `ListAccounts` above has already handed over. It lives on `BudgetModel`.
+use s-plan
+do SpendingByKind accountId=$qAcct sinceMs=0
+expect ok field accountId == $qAcct
+expect ok field totalDebitsMinor == 40000
+
+# ── And the one that lets a stranger *write* ────────────────────────────────
+# `MarkAllRead` resolves its owner the same way, so this marks the quarry's
+# notification read from the snooper's session.
+use s-alerts
+do MarkAllRead owner=$prey
+expect ok field ok == true
+expect ok field message == "1 marked read"
+
+use s-alerts
+do ListNotifications owner=$prey unreadOnly=false
+expect ok field unreadCount == 0
+
+# ── Where the line actually holds ───────────────────────────────────────────
+# The moment an action names a *row* instead of an owner, the guard bites — and
+# the two spellings sit side by side on the same model.
+client s-single model=AccountModel principal=$snoop
+do GetAccount id=$qAcct
+expect err message == "account belongs to a different owner"
+
+use s-alerts
+do MarkRead id=$qNote
+expect err message == "notification belongs to a different owner"
+
+use s-plan
+do DeleteBudget id=$qBudget
+expect err message == "budget belongs to a different owner"
+
+use s-desk
+do GetLoan id=$qLoan
+expect err message == "loan belongs to a different owner"
+
+# ── An owner that was never registered is still refused ─────────────────────
+# The resolved name has to reach a `users` row, so this is a lookup failure
+# rather than an authorization one — which is itself a way of asking the server
+# whether a username exists.
+use s-vault
+do ListAccounts owner=no-such-customer
+expect err message == "unknown user: no-such-customer"
+
+# Left as found.
+use q-plan
+do DeleteBudget id=$qBudget
+expect ok field ok == true
