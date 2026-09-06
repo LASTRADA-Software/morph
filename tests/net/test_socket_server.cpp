@@ -295,6 +295,50 @@ TEST_CASE("SocketServer: each client's models are reclaimed independently", "[ne
     REQUIRE(execReply.body == "7");
 }
 
+// ── Teardown must not depend on shutdown(2) waking a blocking accept() ──────
+// `SocketServer::close()` has to unblock its accept-loop thread before joining
+// it. Doing that by shutting down the *listening* socket works on Linux but is
+// a no-op on macOS/BSD kernels, where the join then never returns and every
+// destructor of a listening server hangs forever (morph#437). The destruction
+// runs on its own thread here so the deadline can be observed and reported as a
+// failure instead of wedging the whole test binary until ctest's timeout.
+TEST_CASE("SocketServer: destruction completes promptly with the accept loop parked in accept()",
+          "[net][socket_server]") {
+    // The whole server stack in one heap block so the thread below can destroy
+    // it in a single step (members die in reverse order: SocketServer first, so
+    // its close() still sees a live RemoteServer and executor). Held through a
+    // shared_ptr the destroying thread owns, which is what keeps it alive if the
+    // deadline is missed: that thread is then still inside close() and must not
+    // observe these objects destroyed.
+    struct ServerStack {
+        morph::exec::ThreadPoolExecutor pool{2};
+        std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(pool);
+        morph::net::SocketServer wsServer{*server, 0};
+    };
+    auto stack = std::make_shared<ServerStack>();
+    REQUIRE(stack->wsServer.listen());
+
+    // A completed handshake proves the accept loop really reached accept(2),
+    // returned a connection, and went back to park in accept(2) again -- a
+    // server that was merely constructed and destroyed would not exercise the
+    // bug at all.
+    {
+        RawWsClient const probe{stack->wsServer.port()};
+    }
+
+    auto const destroyed = std::make_shared<std::atomic<bool>>(false);
+    std::thread destroyer{[owned = std::move(stack), destroyed] mutable {
+        owned.reset();  // ~SocketServer -> close() -> join the accept thread
+        destroyed->store(true);
+    }};
+
+    if (!morph::testing::waitUntil([destroyed] { return destroyed->load(); }, std::chrono::seconds{5})) {
+        destroyer.detach();  // still parked in close(); the thread keeps `owned` alive on purpose
+        FAIL("SocketServer destruction did not complete within 5s: the accept loop was never unblocked (morph#437)");
+    }
+    destroyer.join();
+}
+
 TEST_CASE("SocketServer::close() reclaims every connected client's models", "[net][socket_server]") {
     morph::exec::ThreadPoolExecutor pool{4};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
