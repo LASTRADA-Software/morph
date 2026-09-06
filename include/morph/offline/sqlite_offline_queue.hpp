@@ -222,22 +222,20 @@ public:
             // silently deletes no row, and the item is stranded in the queue
             // forever with no error ever reported.
             //
-            // COVERAGE GAP, documented not closed (Task 12 / task-11 audit
-            // finding #3): reaching this branch needs a second writer on the
-            // same underlying file to delete this exact row in the narrow
-            // window between the INSERT above and this SELECT -- a genuine
-            // cross-connection race, not reachable through this class's own
-            // single-instance mutex or its own single-connection API at all.
-            // Unlike findings #5/#6/#9 (closed elsewhere in this file via a
-            // second-connection helper), this window opens and closes within
+            // COVERAGE GAP, documented not closed: reaching this branch needs
+            // a second writer on the same underlying file to delete this
+            // exact row in the narrow window between the INSERT above and
+            // this SELECT -- a genuine cross-connection race, not reachable
+            // through this class's own single-instance mutex or its own
+            // single-connection API at all. Unlike the drain()/prepare()/
+            // stepOrThrow() gaps closed elsewhere in this file via a
+            // second-connection helper, this window opens and closes within
             // one function call on one thread, with no existing seam to pause
             // mid-statement and no SQLite-level hook (commit hook / custom
             // VFS) in this codebase to force it deterministically. A tight
             // busy-loop second thread could occasionally win the race, but
-            // that is exactly the fragile/expensive-for-low-value test this
-            // plan declines to force (mirrors the net audit's fd-exhaustion
-            // disposition) -- left open, evaluated and documented per
-            // task-11's own corrected recommendation rather than closed.
+            // that is a fragile, non-deterministic test for one low-value
+            // branch arm -- left open and documented rather than forced.
             throw SqliteOfflineQueueError{std::string{"SqliteOfflineQueue: enqueue could not resolve the existing id "
                                                       "for a deduplicated idempotency key: "} +
                                           sqlite3_errmsg(_db)};
@@ -357,22 +355,18 @@ private:
         return stmt;
     }
 
-    // COVERAGE GAP, documented not closed (Task 12 / task-11 audit finding
-    // #7): this throw's only realistic non-misuse trigger is SQLITE_TOOBIG,
-    // raised when `value` exceeds SQLite's SQLITE_LIMIT_LENGTH -- confirmed
-    // ~2 GB on this SDK's SQLite 3.51 via sqlite3_limit(), not the ~1 GB the
-    // audit originally guessed (a 1,000,000,001-byte string was confirmed to
+    // COVERAGE GAP, documented not closed: this throw's only realistic
+    // non-misuse trigger is SQLITE_TOOBIG, raised when `value` exceeds
+    // SQLite's SQLITE_LIMIT_LENGTH -- confirmed ~2 GB on this SDK's SQLite
+    // 3.51 via sqlite3_limit() (a 1,000,000,001-byte string was confirmed to
     // still bind SQLITE_OK). This class does not expose the raw sqlite3*
     // handle for a test to lower that limit via sqlite3_limit(), so the only
     // way to reach this branch is allocating and binding an actual >2 GB
-    // std::string -- SQLITE_TRANSIENT above means SQLite additionally copies
+    // std::string -- kSqliteTransient below means SQLite additionally copies
     // it, so the peak footprint is >4 GB for one assertion. Evaluated and
     // declined as not worth the memory/CI risk on an 8 GB development
-    // machine for a single low-value branch; mirrors this plan's accepted
-    // disposition for bindInt64's sibling throw immediately below (mutation-
-    // and-mostly-unreachable-without-OOM-injection) and the net audit's
-    // fd-exhaustion cluster (a real, reachable condition left undocumented
-    // rather than forced at excessive cost).
+    // machine for a single low-value branch that a legitimate offline-queue
+    // payload will never approach in practice.
     void bindText(sqlite3_stmt* stmt, int index, const std::string& value) const {
         if (sqlite3_bind_text(stmt, index, value.c_str(), -1, detail::kSqliteTransient) != SQLITE_OK) {
             throw SqliteOfflineQueueError{std::string{"SqliteOfflineQueue: bind failed: "} + sqlite3_errmsg(_db)};
