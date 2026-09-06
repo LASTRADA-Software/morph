@@ -342,10 +342,12 @@ TEST_CASE("TcpSocket: self-move-assignment leaves the socket valid", "[net][tcp]
 }
 
 TEST_CASE("TcpSocket::connect: rejects a malformed host without a DNS round-trip", "[net][tcp]") {
-    // A hostname past RFC 1035's length limit fails getaddrinfo()'s local
-    // syntax validation before any resolver/network activity -- confirmed
-    // instant (0ms) and portable, unlike a name that merely looks made up
-    // (still routed through a real, possibly slow, DNS lookup).
+    // A hostname past RFC 1035's length limit fails without a DNS round-trip
+    // (EAI_NONAME, ~3ms on this machine) -- deterministic and portable,
+    // unlike a name that merely looks made up (still routed through a real,
+    // possibly slow, DNS lookup). It does still touch the local resolver on
+    // this platform, which is exactly where this file's permanent resolver
+    // fd comes from -- see FdLimitClamp's comment above.
     std::string const tooLong(300, 'x');
     REQUIRE_THROWS_AS(TcpSocket::connect(tooLong, 80, std::chrono::milliseconds{500}), std::runtime_error);
 }
