@@ -82,8 +82,33 @@ public:
     /// @brief Stops accepting new connections and closes every client connection.
     ///
     /// Idempotent: safe to call more than once (including implicitly, via the
-    /// destructor, after an explicit call).
+    /// destructor, after an explicit call), and safe to call from several
+    /// threads at once **on a live object** — concurrent callers are
+    /// serialized, and every one of them returns only once the teardown is
+    /// complete. Racing a call against the *destructor* is still the caller's
+    /// problem (see `docs/spec/concurrency_and_lifetimes.md`, "Destruction
+    /// ordering"): no lock inside this object can outlive the object holding
+    /// it.
     void close() {
+        // Serialize the whole body, not just the guard below (morph#451).
+        // `_closing.exchange` alone cannot exclude a second caller: the loser
+        // still sees a *joinable* accept thread — the winner has not joined it
+        // yet and cannot have, since that thread is blocked in accept(2) until
+        // the winner's shutdownBoth() releases it — so it falls through and
+        // calls join() on the same std::thread the winner is joining. That is
+        // UB, and it is not a theoretical one: on Linux/glibc the loser parks
+        // forever in pthread_join's futex on a descriptor the winner already
+        // reaped; on macOS/libc++ it throws std::system_error. Holding the
+        // mutex across the join makes the second caller wait for the first and
+        // then observe !joinable(), which is exactly the outcome the guard was
+        // written to produce.
+        //
+        // Deadlock-free because nothing inside this class calls close():
+        // neither acceptLoop() nor a per-client thread does, so no thread this
+        // function joins can be waiting on this mutex.
+        std::scoped_lock const teardownLock{_closeMtx};
+        // Kept as-is despite the mutex: acceptLoop() reads `_closing` from the
+        // accept thread, which never takes `_closeMtx`.
         bool const wasAlreadyClosing = _closing.exchange(true);
         if (wasAlreadyClosing && !_acceptThread.joinable()) {
             return;
@@ -280,6 +305,9 @@ private:
     std::uint16_t _requestedPort;
     Config _cfg;
     ::morph::net::detail::TcpSocket _listenSocket;
+    /// Serializes `close()` against itself so only one caller ever reaches
+    /// `_acceptThread.join()` (morph#451). Not taken anywhere else.
+    std::mutex _closeMtx;
     std::atomic<bool> _closing{true};
     std::thread _acceptThread;
     std::mutex _clientsMtx;

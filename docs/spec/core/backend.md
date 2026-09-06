@@ -1433,7 +1433,11 @@ receives frames on its own per-connection thread, hands them to
 `RemoteServer::handle` (server pool / model strand, as above), and writes the
 reply back on whichever thread produces it (serialized per connection by a
 write mutex) — there is no separate marshalling step because there is no GUI
-thread to marshal onto.
+thread to marshal onto. `SocketServer::close()` is likewise callable from any
+thread, including concurrently with another `close()` on the same live server:
+it takes its own teardown mutex for the whole body so exactly one caller ever
+joins the accept thread. That mutex is deadlock-free precisely because nothing
+inside the class calls `close()` — no thread it joins can be waiting on it.
 
 ## API reference
 
@@ -1609,7 +1613,7 @@ not a behavior change to the existing loopback-only default.
 | `SocketServer(server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server`. Does not start listening. |
 | `listen()` | Binds `127.0.0.1:port` and spawns the accept thread; returns success. |
 | `port()` | Bound port (OS-assigned when constructed with `0`), or `0` before `listen()` succeeds. |
-| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. |
+| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete (morph#451: the previous `_closing.exchange` guard let a second caller reach `_acceptThread.join()` while the first was inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++). Racing `close()` against the *destructor* remains out of contract, as for any member call. |
 
 ## Design decisions
 

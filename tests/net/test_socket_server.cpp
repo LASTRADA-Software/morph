@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "../test_support.hpp"
 
@@ -312,4 +313,83 @@ TEST_CASE("SocketServer::close() reclaims every connected client's models", "[ne
     // teardown on the way out.
     wsServer->close();
     REQUIRE(server->health().liveModels == 0U);
+}
+
+// The Catch2 assertion macros, not branching logic, are what push this over the
+// cognitive-complexity threshold -- as in the sibling cases above.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("SocketServer: two threads calling close() concurrently do not both reach join()", "[net][socket_server]") {
+    // Regression coverage for morph#451. close() guarded itself with
+    //
+    //     bool const wasAlreadyClosing = _closing.exchange(true);
+    //     if (wasAlreadyClosing && !_acceptThread.joinable()) { return; }
+    //
+    // which is not a mutual exclusion: the loser of the exchange still sees a
+    // *joinable* accept thread (the winner has not joined it yet, and cannot
+    // have -- it is still blocked in accept(2) until the winner's
+    // shutdownBoth() releases it), falls through, and calls join() on the very
+    // same std::thread the winner is joining. Two concurrent join()s on one
+    // thread is UB, and the two platforms cash it out differently: on
+    // Linux/glibc the loser parks forever in pthread_join's futex on a thread
+    // descriptor the winner already reaped, on macOS/libc++ it throws
+    // std::system_error. Serialising the whole body on a dedicated mutex makes
+    // the second caller wait and then observe !joinable(), which is what the
+    // atomic exchange was already trying, and failing, to express.
+    //
+    // The try/catch matters as much as the ctest TIMEOUT does: this test has
+    // to fail on both of those outcomes, and asserting only "nothing was
+    // thrown" would go green on Linux with the bug present -- the hang is
+    // caught by the timeout, the exception by the catch.
+    //
+    // Deliberately scoped to close()-vs-close() on a *live* server.
+    // close()-vs-destruction is out of contract (see
+    // docs/spec/concurrency_and_lifetimes.md, "Destruction ordering") and is
+    // not fixable here anyway: member destruction would destroy the mutex
+    // itself out from under a caller still blocked on it.
+    constexpr int kIterations = 20;
+    for (int iter = 0; iter < kIterations; ++iter) {
+        morph::exec::ThreadPoolExecutor pool{2};
+        auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+        morph::net::SocketServer wsServer{*server, 0};
+        REQUIRE(wsServer.listen());
+
+        // Spin barrier rather than a sleep: the window is a handful of
+        // instructions between the exchange and the join, so both racers have
+        // to be released as close to simultaneously as the scheduler allows.
+        std::atomic<int> ready{0};
+        std::atomic<bool> released{false};
+        std::atomic<int> threw{0};
+        std::atomic<int> returned{0};
+
+        std::vector<std::thread> racers;
+        racers.reserve(2);
+        for (int racer = 0; racer < 2; ++racer) {
+            racers.emplace_back([&] {
+                ready.fetch_add(1);
+                while (!released.load()) {
+                    // busy-wait, deliberately: yielding here would let one
+                    // racer finish close() before the other is scheduled.
+                }
+                try {
+                    wsServer.close();
+                } catch (...) {
+                    threw.fetch_add(1);
+                }
+                returned.fetch_add(1);
+            });
+        }
+        while (ready.load() != 2) {
+            std::this_thread::yield();
+        }
+        released.store(true);
+
+        // Pre-fix this join is where the run stops: the losing close() never
+        // returns, so its thread is never joinable-complete.
+        for (auto& racer : racers) {
+            racer.join();
+        }
+
+        REQUIRE(threw.load() == 0);
+        REQUIRE(returned.load() == 2);
+    }
 }
