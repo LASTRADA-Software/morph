@@ -326,9 +326,9 @@ TEST_CASE("SocketServer: two threads calling close() concurrently do not both re
     //
     // which is not a mutual exclusion: the loser of the exchange still sees a
     // *joinable* accept thread (the winner has not joined it yet, and cannot
-    // have -- it is still blocked in accept(2) until the winner's
-    // shutdownBoth() releases it), falls through, and calls join() on the very
-    // same std::thread the winner is joining. Two concurrent join()s on one
+    // have -- it is still parked in poll() until the winner's wakeup byte
+    // releases it), falls through, and calls join() on the very same
+    // std::thread the winner is joining. Two concurrent join()s on one
     // thread is UB, and the two platforms cash it out differently: on
     // Linux/glibc the loser parks forever in pthread_join's futex on a thread
     // descriptor the winner already reaped, on macOS/libc++ it throws
@@ -391,5 +391,141 @@ TEST_CASE("SocketServer: two threads calling close() concurrently do not both re
 
         REQUIRE(threw.load() == 0);
         REQUIRE(returned.load() == 2);
+    }
+}
+
+// The Catch2 assertion macros, not branching logic, are what push this over the
+// cognitive-complexity threshold -- as in the sibling cases above.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("SocketServer: tearing down a parked accept loop finishes promptly", "[net][socket_server]") {
+    // Regression coverage for morph#437. close() used to interrupt the accept
+    // thread with `_listenSocket.shutdownBoth()` -- ::shutdown(fd, SHUT_RDWR)
+    // on the *listening* socket -- and then join() it. That works only because
+    // Linux chooses to kick a parked accept(2) when its listener is shut down.
+    // It is not a POSIX guarantee and macOS/BSD do not do it, so on those
+    // kernels the accept thread stayed parked, join() never returned, and
+    // ~SocketServer() hung until something external killed the process.
+    //
+    // Why this can fail *here*, on Linux, which is the whole point of writing
+    // it (AGENTS.md, "would this still pass if the feature did nothing?"): the
+    // fix does not add a second wakeup beside the kernel's, it *replaces* it.
+    // close() no longer touches the listening socket at all, so the pipe write
+    // is now the only thing that ends the loop on every platform. Delete that
+    // one write() and this test hangs on Linux exactly as the shutdown-based
+    // teardown hung on Darwin -- which is the falsification the PR records.
+    //
+    // No client, pending or established: the accept thread has to be genuinely
+    // parked in poll() with nothing else that could return it.
+    constexpr auto kBudget = std::chrono::seconds{2};
+
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+    REQUIRE(wsServer->port() != 0U);
+
+    // Let the accept thread actually reach its wait. Without this the test
+    // could measure a loop that had not started, which is not the parked case.
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+    auto const closeStart = std::chrono::steady_clock::now();
+    wsServer->close();
+    auto const closeElapsed = std::chrono::steady_clock::now() - closeStart;
+
+    // A bounded time, not "we reached this line": reaching the next line only
+    // proves the process was not killed, and cannot tell a prompt teardown from
+    // one that stalled for a minute under ctest's 120s cap.
+    REQUIRE(closeElapsed < kBudget);
+
+    // And the same for destruction, which is how every other test in this file
+    // (and every application) actually tears a server down.
+    auto const dtorStart = std::chrono::steady_clock::now();
+    wsServer.reset();
+    auto const dtorElapsed = std::chrono::steady_clock::now() - dtorStart;
+    REQUIRE(dtorElapsed < kBudget);
+}
+
+TEST_CASE("SocketServer: a parked accept loop survives repeated listen/close cycles", "[net][socket_server]") {
+    // The wakeup pipe is per-listen(): each cycle must get a fresh one, or the
+    // byte the previous close() left undrained would make the next accept loop
+    // return the instant it started -- a server that binds a port and then
+    // silently refuses to accept anything, which no timing assertion above
+    // would catch.
+    constexpr auto kBudget = std::chrono::seconds{2};
+    constexpr int kCycles = 5;
+
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{*server, 0};
+
+    for (int cycle = 0; cycle < kCycles; ++cycle) {
+        REQUIRE(wsServer.listen());
+        REQUIRE(wsServer.port() != 0U);
+
+        // Proof the loop is still accepting on this cycle, not merely running:
+        // a real client completes the handshake against it.
+        RawWsClient client{wsServer.port()};
+        client.send(morph::wire::makeRegister("NetEchoModel"));
+        REQUIRE(client.receive().kind == "ok");
+
+        auto const started = std::chrono::steady_clock::now();
+        wsServer.close();
+        REQUIRE(std::chrono::steady_clock::now() - started < kBudget);
+    }
+}
+
+TEST_CASE("SocketServer::close() releases the listening port", "[net][socket_server]") {
+    // close() stops calling shutdownBoth() on the listener (morph#437), so it
+    // has to drop the descriptor instead -- left open with no accept thread,
+    // the kernel would keep completing handshakes into a backlog nobody drains
+    // and a client would hang in the WebSocket Upgrade read rather than fail
+    // fast. Same post-close observation QtWebSocketServer already makes.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+    std::uint16_t const port = wsServer.port();
+    REQUIRE(port != 0U);
+
+    wsServer.close();
+    REQUIRE(wsServer.port() == 0U);
+
+    // The port is genuinely free again, not merely forgotten.
+    morph::net::SocketServer rebound{*server, port};
+    REQUIRE(rebound.listen());
+    REQUIRE(rebound.port() == port);
+}
+
+TEST_CASE("SocketServer: teardown racing a connecting client still finishes promptly", "[net][socket_server]") {
+    // The interleaving the parked-loop case above deliberately excludes: a
+    // client arriving while close() is already under way, so the accept loop
+    // may be anywhere between poll(), tryAccept(), and spawning a client
+    // thread. Complements the parked case; it does not replace it, because a
+    // pending connection is itself something that returns poll().
+    constexpr auto kBudget = std::chrono::seconds{5};
+    constexpr int kIterations = 10;
+
+    for (int iter = 0; iter < kIterations; ++iter) {
+        morph::exec::ThreadPoolExecutor pool{2};
+        auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+        morph::net::SocketServer wsServer{*server, 0};
+        REQUIRE(wsServer.listen());
+        std::uint16_t const port = wsServer.port();
+
+        std::thread connector{[port] {
+            try {
+                auto sock = morph::net::detail::TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{500});
+                static_cast<void>(sock);
+            } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch) — see below
+                // Refused because teardown won the race -- the expected outcome
+                // half the time, and not what this test is measuring.
+            }
+        }};
+
+        auto const started = std::chrono::steady_clock::now();
+        wsServer.close();
+        auto const elapsed = std::chrono::steady_clock::now() - started;
+        connector.join();
+        REQUIRE(elapsed < kBudget);
     }
 }

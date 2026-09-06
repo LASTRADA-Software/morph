@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -166,11 +167,17 @@ public:
 
     /// @brief Blocks until a client connects, returning the accepted connection.
     ///
-    /// A concurrent `shutdownBoth()` from another thread unblocks a pending
-    /// `accept()`, which then throws — the standard mechanism this reference
-    /// implementation uses to interrupt a blocked accept loop during shutdown.
+    /// **This call has no portable interruption mechanism.** `shutdown(2)` on a
+    /// *listening* socket unblocks a parked `accept()` on Linux, but that is a
+    /// Linux property rather than a POSIX one — on macOS/BSD the parked thread
+    /// stays parked (morph#437). Anything that has to be able to stop waiting
+    /// must therefore not park here at all: use `setNonBlocking()` plus
+    /// `::poll` on `nativeHandle()` alongside a self-pipe, and take the
+    /// connection with `tryAccept()`. `SocketServer::acceptLoop()` is the
+    /// in-tree example. This blocking overload remains for callers that wait
+    /// for exactly one known-imminent connection (the socket-level tests).
     /// @return The accepted `TcpSocket`.
-    /// @throws std::runtime_error if `::accept` fails (including the shutdown case above).
+    /// @throws std::runtime_error if `::accept` fails.
     TcpSocket accept() {
         for (;;) {
             int const clientFd = ::accept(_fd, nullptr, nullptr);
@@ -181,14 +188,82 @@ public:
             // `recvSome`/`sendAll` already retry it. Without the same retry
             // here, any signal the host happens to deliver (a profiler's timer,
             // SIGCHLD, SIGWINCH) tears down the accept loop and the server
-            // silently stops taking connections. ECONNABORTED is deliberately
-            // *not* retried: `shutdownBoth()` is the documented way to break
-            // out of this call, and swallowing an abort risks spinning forever
-            // on a listener that is being torn down.
+            // silently stops taking connections.
+            //
+            // Every other errno throws, and no other one is retried. This
+            // comment used to single out ECONNABORTED as "deliberately not
+            // retried, because shutdownBoth() is the documented way to break
+            // out of this call" -- which named the wrong errno for the
+            // mechanism it was guarding (morph#465): `shutdown(listenfd,
+            // SHUT_RDWR)` unblocks a parked `accept()` with EINVAL, not
+            // ECONNABORTED. Since morph#437 it is doubly stale, because
+            // shutting the listener down is no longer how anything breaks out
+            // of an accept loop -- `SocketServer` polls a self-pipe instead and
+            // never parks here at all.
+            //
+            // No ECONNABORTED retry is added in its place. A reset-race repro
+            // over six shapes (blocking and non-blocking + poll, with and
+            // without TCP_DEFER_ACCEPT, with and without data, 1- and 8-deep
+            // queues) produced zero ECONNABORTED across 8000 `accept()` calls
+            // on Linux: the kernel queues the reset connection, `accept`
+            // succeeds, and the abort surfaces on the next `recv` as
+            // ECONNRESET -- which `recvSome` already absorbs as an orderly
+            // close. A retry loop here would therefore be behaviour no test on
+            // this project's only CI platform could make fail.
             if (errno == EINTR) {
                 continue;
             }
             throw std::runtime_error(std::string{"TcpSocket::accept: "} + std::strerror(errno));
+        }
+    }
+
+    /// @brief Puts this socket into non-blocking mode (`O_NONBLOCK`).
+    ///
+    /// Applied by `SocketServer` to its listening socket: `poll()` reporting a
+    /// listener readable does not guarantee the following `accept()` will not
+    /// block (a peer that resets in between takes the pending connection away),
+    /// and a listener that parks again after the wakeup has been consumed would
+    /// never be woken a second time.
+    /// @return `true` if the flag was applied; `false` on an empty socket or an
+    ///         `fcntl` failure.
+    // Non-const for the same reason shutdownBoth() is: it mutates the open file
+    // description this object owns, and a const overload would advertise a call
+    // that changes nothing. ::fcntl is variadic by POSIX's design, as every
+    // other fcntl call in this file already is.
+    // NOLINTNEXTLINE(readability-make-member-function-const)
+    [[nodiscard]] bool setNonBlocking() noexcept {
+        if (_fd < 0) {
+            return false;
+        }
+        int const flags = ::fcntl(_fd, F_GETFL, 0);
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+        return flags >= 0 && ::fcntl(_fd, F_SETFL, flags | O_NONBLOCK) == 0;
+    }
+
+    /// @brief Non-blocking counterpart of `accept()`, for a listener that
+    ///        `setNonBlocking()` has been applied to.
+    /// @return The accepted `TcpSocket`, or `std::nullopt` when no connection
+    ///         was pending — a readiness report that went stale before the
+    ///         `accept`, which the caller answers by waiting again.
+    /// @throws std::runtime_error if `::accept` fails for any other reason.
+    // Non-const to match accept(): taking a connection consumes it from the
+    // listener's queue, which is state this object owns.
+    // NOLINTNEXTLINE(readability-make-member-function-const)
+    std::optional<TcpSocket> tryAccept() {
+        for (;;) {
+            int const clientFd = ::accept(_fd, nullptr, nullptr);
+            if (clientFd >= 0) {
+                return TcpSocket{clientFd};
+            }
+            int const err = errno;
+            if (err == EINTR) {  // retried for the same reason accept() retries it
+                continue;
+            }
+            if (wouldBlock(err)) {
+                return std::nullopt;
+            }
+            // NOLINTNEXTLINE(concurrency-mt-unsafe) — std::strerror, as at every other throw site here
+            throw std::runtime_error(std::string{"TcpSocket::tryAccept: "} + std::strerror(err));
         }
     }
 
@@ -234,7 +309,11 @@ public:
     }
 
     /// @brief Shuts down both directions of the socket, unblocking a concurrent
-    ///        `recvSome`/`accept` on another thread. Safe to call from any thread.
+    ///        `recvSome`/`sendAll` on another thread. Safe to call from any thread.
+    ///
+    /// Documented for *connected* sockets only, which is where `shutdown(2)`
+    /// waking a parked peer call is portable. It is not a way to interrupt
+    /// `accept()` on a listening socket — see `accept()` and morph#437.
     void shutdownBoth() noexcept {
         if (_fd >= 0) {
             ::shutdown(_fd, SHUT_RDWR);
@@ -250,6 +329,18 @@ public:
     [[nodiscard]] bool valid() const noexcept { return _fd >= 0; }
 
 private:
+    /// POSIX allows `EAGAIN` and `EWOULDBLOCK` to differ, and both name the
+    /// same "nothing to take right now" answer. Written as two statements
+    /// rather than `err == EAGAIN || err == EWOULDBLOCK` so GCC's
+    /// `-Wlogical-op` cannot read it as a disjunction of equal expressions on
+    /// the platforms (Linux, macOS) where the two macros expand to one value.
+    static bool wouldBlock(int err) noexcept {
+        if (err == EAGAIN) {
+            return true;
+        }
+        return err == EWOULDBLOCK;
+    }
+
     static void applyNoSigPipe(int fd) {
 #if defined(SO_NOSIGPIPE)
         int const one = 1;

@@ -130,6 +130,44 @@ API surface).
 
 ### Fixed
 
+- **`morph::net::SocketServer` teardown relied on Linux-only kernel behaviour
+  and hung forever on macOS/BSD.** The accept thread parked in a blocking
+  `accept(2)` and had no wakeup of its own: `close()` called
+  `shutdownBoth()` on the *listening* socket and then joined the thread,
+  which works only because Linux chooses to kick a parked `accept()` when its
+  listener is shut down. That is not a POSIX guarantee, and macOS/BSD do not
+  do it — the accept thread stayed parked, `join()` never returned, and
+  `~SocketServer()` hung with no timeout, so no `tests/net` suite could run to
+  completion on a Mac. The wakeup is now the server's own: `listen()` makes the
+  listening socket non-blocking and creates a self-pipe, `acceptLoop()` waits in
+  one `poll()` over the listener and that pipe and takes connections with the
+  new `TcpSocket::tryAccept()` (which yields `std::nullopt` instead of parking
+  on a stale readiness report), and `close()` writes one byte to the pipe before
+  `join()`. Unconditionally compiled — there is no `#ifdef` on platform
+  anywhere in the change — and it *replaces* the old mechanism rather than
+  supplementing it: `close()` no longer touches the listening socket's
+  `shutdown(2)` at all, so the pipe is the only thing that ends the loop on
+  every platform, and deleting the wakeup `write()` hangs the Linux build as
+  well. Two follow-on contract changes: `listen()` now returns `false` (and
+  spawns no thread) if the pipe cannot be created, and `close()` releases the
+  listening descriptor after the join, so `port()` reads `0` afterwards —
+  the same post-close observation `QtWebSocketServer` already makes.
+  `docs/spec/core/backend.md` records all of it. (morph#437)
+
+- **`TcpSocket::accept()`'s `ECONNABORTED` comment named the wrong errno for
+  the mechanism it was guarding.** It justified not retrying `ECONNABORTED` on
+  the grounds that `shutdownBoth()` was "the documented way to break out of
+  this call" — but `shutdown(listenfd, SHUT_RDWR)` unblocks a parked `accept()`
+  with `EINVAL` (measured: `rc=-1 errno=22` on Linux 7.1.11), not
+  `ECONNABORTED`, so the sentence was inaccurate from the day it was written
+  and morph#437 makes it doubly so. Corrected in place, and the doc comment
+  above it now states that `accept()` has no portable interruption mechanism at
+  all. No `ECONNABORTED` retry was added: a reset-race repro over six shapes
+  produced zero `ECONNABORTED` in 8,000 `accept()` calls on Linux (the kernel
+  queues the reset connection and the abort surfaces as `ECONNRESET` on the
+  next `recv`, which `recvSome` already absorbs), so a retry would be behaviour
+  no test on this project's only CI platform could make fail. (morph#465)
+
 - **A loaded machine could turn the `StrandExecutor` serialisation test into no
   serialisation check at all.** `tests/test_strand_race.cpp` drained 3200
   strand-serialised tasks against a fixed budget of 2000 x 1 ms sleeps, twenty
