@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
+#include <exception>
 #include <morph/net/detail/tcp_socket.hpp>
 #include <morph/net/detail/ws_handshake.hpp>
 #include <stdexcept>
@@ -72,4 +74,38 @@ TEST_CASE("performClientHandshake throws when the server closes before respondin
     ParsedWsUrl url{"127.0.0.1", port, "/"};
     serverThread.join();
     REQUIRE_THROWS_AS(morph::net::detail::performClientHandshake(clientSide, url), std::runtime_error);
+}
+
+// readHttpHeaderBlock, ws_handshake.hpp:282-284 — the 64 KiB header safety
+// cap. This needs a real socket (unlike ws_handshake.hpp's other 14
+// string-parsing findings): the cap is only checked between reads, so it
+// takes an actual peer sending header-shaped bytes that never complete the
+// "\r\n\r\n" terminator.
+TEST_CASE("readHttpHeaderBlock throws once the header exceeds the 64 KiB safety cap", "[net][handshake][socket]") {
+    auto listener = TcpSocket::listen(0);
+    std::uint16_t const port = listener.boundPort();
+
+    TcpSocket serverSide;
+    std::exception_ptr serverException;
+    std::thread serverThread{[&] {
+        serverSide = listener.accept();
+        try {
+            static_cast<void>(morph::net::detail::readHttpHeaderBlock(serverSide));
+        } catch (...) {
+            serverException = std::current_exception();
+        }
+    }};
+
+    auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
+    // Comfortably more than 64 KiB, and more than the worst-case amount
+    // readHttpHeaderBlock could have already consumed by the time its cap
+    // check trips (64 KiB rounded up to the next 4 KiB recv chunk) — so the
+    // cap fires from data the client has already fully queued, rather than
+    // the server blocking on recvSome() for bytes that will never arrive.
+    std::string oversized(96 * 1024, 'A');
+    clientSide.sendAll(oversized.data(), oversized.size());
+
+    serverThread.join();
+    REQUIRE(serverException != nullptr);
+    REQUIRE_THROWS_WITH(std::rethrow_exception(serverException), Catch::Matchers::ContainsSubstring("64 KiB"));
 }
