@@ -90,6 +90,16 @@
 # that fails against the mutant and passes without it, which is what proves this
 # loop closes rather than merely reports.
 #
+# Both of those runs -- and every number quoted above -- were taken with
+# `mutators: cxx_all`, which this script no longer uses. `cxx_all` includes
+# `cxx_remove_void_call`, which Mull 0.34.0 silently fails to apply at
+# member/operator call sites (morph#434, mechanism confirmed in morph#448), so
+# it reported 148 of those 352 survivors over code it never actually changed.
+# The mutator is excluded below. The scores above are therefore the last
+# *measured* ones and are kept as the historical record; they are not
+# comparable to a run of the reduced set, and no score for the reduced set has
+# been measured. Re-run before quoting a current number -- ~46 minutes.
+#
 # ── Cost, and the two knobs that decide it ───────────────────────────────────
 #
 # The suite is re-run once per mutant. morph_tests takes ~22s wall (it is mostly
@@ -178,8 +188,46 @@ mkdir -p "$build_dir"
 # is easy to get wrong" above. The frontend picks it up as ./mull.yml relative
 # to the compiler's working directory, which under Ninja is the build tree.
 {
+    # Deliberately NOT `cxx_all`. This is exactly Mull 0.34.0's documented
+    # expansion of `cxx_all` --
+    #
+    #   cxx_assignment, cxx_increment, cxx_decrement, cxx_arithmetic,
+    #   cxx_comparison, cxx_boundary, cxx_bitwise, cxx_calls
+    #
+    # (docs/generated/Mutators.rst at tag 0.34.0) -- with the two-member
+    # `cxx_calls` group spelled out as just its other half,
+    # `cxx_replace_scalar_call`, so that `cxx_remove_void_call` is dropped and
+    # nothing else changes.
+    #
+    # Why: `cxx_remove_void_call` is broken for member/operator call sites in
+    # this version (morph#434, mechanism confirmed in morph#448). Its IR pass
+    # silently does not remove the call it claims to -- the mutant's machine
+    # code disassembles byte-identical to its `_original` twin, proven in an
+    # isolated single-TU build where linker deduplication cannot be the
+    # explanation, and proven scoped rather than total by the same shape of
+    # free-function call mutating and being killed correctly. A mutant that is
+    # not a mutant is passed by the suite, and reported as a *survivor* over
+    # code that was never changed.
+    #
+    # It accounted for 148 of the 352 survivors in
+    # scripts/mutation_survivors.json's runs[1] -- ~42% of a list read as
+    # "places the suite would not notice being wrong". Keeping the mutator
+    # enabled does not merely waste run time; it manufactures findings.
+    #
+    # Do not re-add it without first re-checking the upstream defect (no
+    # matching report was found on mull-project/mull as of 2026-09-04, so a
+    # newer Mull will not have fixed it silently): compile one TU containing a
+    # void-returning member call, and disassemble the mutant against its
+    # `_original`. If they are byte-identical, the mutator is still broken.
     echo "mutators:"
-    echo "  - cxx_all"
+    echo "  - cxx_assignment"
+    echo "  - cxx_increment"
+    echo "  - cxx_decrement"
+    echo "  - cxx_arithmetic"
+    echo "  - cxx_comparison"
+    echo "  - cxx_boundary"
+    echo "  - cxx_bitwise"
+    echo "  - cxx_replace_scalar_call"
     echo "includePaths:"
     for _p in "${paths[@]}"; do echo "  - ${_p}"; done
     # _deps is fetched third-party code and tests/ is the suite doing the

@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based
 // get_name() needs these types to have external linkage (see
@@ -269,6 +270,76 @@ TEST_CASE("SocketBackend: a plain handler keeps its own instance over the wire",
     REQUIRE(lastPriv.load() == 1);
 }
 
+TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not consumed by a parked sync call",
+          "[net][socket_backend]") {
+    // Regression coverage for morph#454 -- morph#65 reintroduced in this
+    // transport. `deregisterModel` sends fire-and-forget, but the server still
+    // answers it with an `ok` (remote.hpp's deregister branch), and that reply
+    // carries whatever `callId` the request had. With `callId == 0` -- the
+    // sentinel `dispatchIncomingEnvelope` reads as "hand this payload to
+    // whichever sendSync() is parked" -- the deregister's own stray `ok` was
+    // handed to the *next* synchronous control call instead of that call's
+    // real reply.
+    //
+    // `attachModel`'s private-handoff branch is the shortest path to the
+    // collision: with an empty primary it deregisters `current` and then
+    // immediately registers a fresh instance over the same connection, so the
+    // register parks on `_syncCv` with the deregister's reply already in
+    // flight ahead of its own. An `ok` for a deregister carries `modelId ==
+    // 0`, so the register returned `ModelId{0}` -- while the server had in
+    // fact created the instance, which then leaked until the connection
+    // closed.
+    //
+    // The assertion has to be that the returned id is a *real, different* id:
+    // "attachModel did not throw" holds with the bug present, and so does "an
+    // id came back" if 0 is allowed to count as one.
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
+    morph::net::SocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    auto const mid1 = backend.registerModel("SbEchoModel", nullptr);
+    REQUIRE(mid1.v != 0U);
+
+    // Empty primary => the private-handoff branch: deregister(mid1) then
+    // register, back to back on one connection.
+    auto const mid2 = backend.attachModel("SbEchoModel", nullptr, {}, mid1);
+    REQUIRE(mid2.v != 0U);
+    REQUIRE(mid2.v != mid1.v);
+
+    // …and the id handed back has to be one the server actually holds, which
+    // is what proves the reply that woke the register was the register's own
+    // rather than some other message's that happened to carry an id.
+    // Hand-built ActionCall (rather than a BridgeHandler) so the backend's
+    // own attachModel result is the thing under test; the raw reply body is
+    // kept as a string so this test needs no JSON dependency of its own.
+    morph::backend::detail::ActionCall call{
+        .modelTypeId = "SbEchoModel",
+        .actionTypeId = "SbEchoAction",
+        .serializeAction = [] { return std::string{R"({"value":7})"}; },
+        .deserializeResult =
+            [](std::string_view body) { return std::static_pointer_cast<void>(std::make_shared<std::string>(body)); },
+        .localOp = nullptr,
+        .session = {},
+    };
+
+    morph::exec::ThreadPoolExecutor cbPool{1};
+    std::atomic<bool> settled{false};
+    std::string echoed;
+    backend.execute(mid2, std::move(call), &cbPool)
+        .then([&](const std::shared_ptr<void>& res) {
+            echoed = *std::static_pointer_cast<std::string>(res);
+            settled.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { settled.store(true); });
+    spinUntil([&] { return settled.load(); });
+    REQUIRE(echoed == "7");
+}
+
 TEST_CASE("SocketBackend: registerModel on a never-connected socket throws, does not hang",
           "[net][socket_backend][disconnect]") {
     // Port 1 is reserved (root-only) on Linux/macOS and never listening — the
@@ -403,15 +474,15 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
     // per-test TIMEOUT), exactly the failure mode a single well-aimed hit
     // would also produce.
     //
-    // Deliberately NOT a heavier stress shape (many threads x many calls):
-    // that reliably trips a separate, already-filed bug
-    // (RemoteServer::awaitExecuteTurn stranding an execute-ordering ticket
-    // when a connection with several executes in flight drops -- morph#449)
-    // whose own hang would masquerade as a failure of *this* fix instead of
-    // the ticket-ordering issue it actually is. The call volume here is low
-    // enough that morph#449 was not observed to reproduce across many local
-    // runs; revisit alongside that issue's fix rather than raising it again
-    // here.
+    // Deliberately NOT a heavier stress shape (many threads x many calls).
+    // That shape belongs to morph#449 -- a stranded execute-ordering ticket
+    // when a connection with several executes in flight drops -- whose own
+    // hang would masquerade as a failure of *this* fix instead of the
+    // ticket-ordering issue it actually is. morph#449 is fixed (see
+    // `releaseExecuteTicket` in remote.hpp), and its own stress-shaped
+    // regression test is "many concurrent executes racing a disconnect leave
+    // no stranded execute ticket" below; the two are kept separate so a
+    // regression in either one fails where it is diagnosed.
     for (int iter = 0; iter < 3; ++iter) {
         morph::exec::ThreadPoolExecutor serverPool{2};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -646,4 +717,98 @@ TEST_CASE("SocketBackend: a throwing reconnect handler leaves the transport usab
     spinUntil([&] { return handlerCalls.load() > 0; }, 500);
     CHECK(handlerCalls.load() > 0);
     CHECK(fixture.backend->registerModel("SbEchoModel", nullptr).v != 0U);
+}
+
+// The Catch2 assertion macros, not branching logic, are what push this over the
+// cognitive-complexity threshold -- as in the sibling disconnect cases above.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no stranded execute ticket",
+          "[net][socket_backend][disconnect]") {
+    // Regression coverage for morph#449 at the transport level; the mechanism
+    // itself is pinned deterministically by
+    // tests/test_remote_execute_ordering.cpp's "an execute rejected out of
+    // ticket order..." case. This is the shape that actually found it, kept
+    // because it is the one that exercises the real teardown ordering:
+    // dropping the connection reclaims that connection's models, so the
+    // executes still in flight for one model split into some that find the
+    // model and some that reject with "model not found" -- and a rejection
+    // releases its execute-ordering ticket immediately, without waiting for
+    // its turn. `releaseExecuteTicket` used to advance `nextToRun` past any
+    // earlier ticket when that happened, leaving that ticket's waiter parked
+    // in `awaitExecuteTurn` on a predicate that could never come true again.
+    //
+    // The visible failure is not this test's assertions: it is the teardown
+    // below it. A stranded ticket holds a `serverPool` worker forever, so
+    // `~ThreadPoolExecutor` hangs in join() at end of scope and the whole
+    // binary stops -- turned into a failure by ctest's per-test TIMEOUT.
+    //
+    // Honest about what this test is and is not. It is a *probabilistic*
+    // shape, and a shallow one: measured on Linux/clang 22 against the
+    // pre-fix code it hung 4 times in 145 runs at these thread and call
+    // counts (and 0 times in 20 at the lighter 3x15 shape the issue reports,
+    // which is why the counts here are higher than the issue's). It is
+    // therefore not the control for the fix -- the deterministic case named
+    // above is, and it fails 100% of runs without it. This one is kept
+    // because it is the only test that drives the real disconnect teardown
+    // that produces the out-of-order release in the first place, and because
+    // it costs ~0.2s.
+    //
+    // It is deliberately the "heavier stress shape" the sibling
+    // "execute() racing a disconnect never leaves a Completion unresolved"
+    // case above avoids: kept separate so a morph#449 regression fails here,
+    // where it is diagnosed, rather than masquerading as a failure of that
+    // test's own TOCTOU fix.
+    for (int iter = 0; iter < 3; ++iter) {
+        morph::exec::ThreadPoolExecutor serverPool{4};
+        auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+        auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
+        REQUIRE(wsServer->listen());
+
+        std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer->port()));
+        auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
+        REQUIRE(backendPtr->waitForConnected());
+
+        morph::exec::ThreadPoolExecutor cbPool{2};
+        morph::bridge::Bridge bridge{std::move(backendPtr)};
+        // One shared handler, so every call targets the *same* model id and
+        // therefore the same execute-ordering gate -- the gate is per-model,
+        // so calls spread across instances would not queue behind each other
+        // at all.
+        morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &cbPool};
+
+        constexpr int callsPerThread = 60;
+        constexpr int producerThreads = 8;
+        std::atomic<int> settled{0};
+        std::vector<std::thread> producers;
+        producers.reserve(producerThreads);
+        for (int producer = 0; producer < producerThreads; ++producer) {
+            producers.emplace_back([&] {
+                for (int i = 0; i < callsPerThread; ++i) {
+                    handler.execute(SbEchoAction{i})
+                        .then([&](int) { settled.fetch_add(1); })
+                        .onError([&](const std::exception_ptr&) { settled.fetch_add(1); });
+                }
+            });
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+        wsServer->close();
+        wsServer.reset();
+
+        for (auto& producer : producers) {
+            producer.join();
+        }
+
+        int const totalCalls = producerThreads * callsPerThread;
+        spinUntil([&] { return settled.load() == totalCalls; }, 300);
+        REQUIRE(settled.load() == totalCalls);
+
+        // The server must be able to drain: a stranded ticket also pins
+        // `_inFlightExecutes` above zero for good, so this is the same
+        // regression seen from the graceful-shutdown side.
+        REQUIRE(server->drainedWithin(std::chrono::milliseconds{5000}));
+
+        // Same port-reuse pause as the sibling disconnect tests.
+        std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    }
 }

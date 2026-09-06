@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 #include "test_support.hpp"
 
@@ -670,4 +671,236 @@ TEST_CASE(
     SECTION("authorize() throws") { runThrowingHookStrandsNothing(ThrowingHook::Authorize); }
     SECTION("authenticate() throws") { runThrowingHookStrandsNothing(ThrowingHook::Authenticate); }
     SECTION("authorizeInstance() throws") { runThrowingHookStrandsNothing(ThrowingHook::AuthorizeInstance); }
+}
+
+namespace {
+
+/// @brief Allow-all authorizer that refuses exactly the marker action type,
+///        with no sleeps anywhere.
+///
+/// The interleaving in the test below is forced by holding pool posts, not by
+/// timing, so nothing here needs to be slow -- this authorizer's only job is
+/// to make one of three same-model executes take `dispatchExecute`'s
+/// `rejectAndRelease` path (which releases its ticket immediately, without
+/// ever waiting for its turn) while the others take the normal path.
+class RejectMarkerAuthorizer : public morph::session::IAuthorizer {
+public:
+    /// @brief Refuses `kRejectMarker`, allows everything else.
+    /// @param actionType Action type id being authorized.
+    /// @return `false` for the marker action, `true` otherwise.
+    [[nodiscard]] bool authorize(const morph::session::Context& /*session*/, std::string_view /*modelType*/,
+                                 std::string_view actionType) const override {
+        return actionType != kRejectMarker;
+    }
+
+    /// @brief Action type id this authorizer refuses.
+    static constexpr std::string_view kRejectMarker = "ERO_RejectAction";
+};
+
+/// @brief Wraps a real executor and holds back the next `n` posts, handing
+///        each one on individually, by the order it was posted in.
+///
+/// The single-post `HoldOnePostExecutor` above is not enough for the scenario
+/// below, which needs *three* `handle()` calls to have taken their tickets --
+/// tickets are taken synchronously on the calling thread, but the work is
+/// posted -- before any of the three dispatch tasks runs. Holding only the
+/// first would let the second's dispatch (and its ticket release) race the
+/// third's `handle()` call, and the interleaving under test depends on the
+/// third ticket already existing.
+///
+/// Only the *arming window* is intercepted: once `n` posts have been captured
+/// every later post (notably `StrandExecutor`'s, which `RemoteServer` routes
+/// through this same executor) passes straight through.
+class HoldNextPostsExecutor : public morph::exec::IExecutor {
+public:
+    /// @brief Wraps @p inner, forwarding to it once the arming window closes.
+    /// @param inner Executor that actually runs the tasks.
+    explicit HoldNextPostsExecutor(morph::exec::IExecutor& inner) : _inner{inner} {}
+
+    /// @brief Captures @p task while posts remain armed, otherwise forwards it.
+    /// @param task Callable to execute.
+    void post(std::function<void()> task) override {
+        {
+            std::scoped_lock const lock{_mtx};
+            if (_remainingToHold > 0) {
+                --_remainingToHold;
+                _held.push_back(std::move(task));
+                return;
+            }
+        }
+        _inner.post(std::move(task));
+    }
+
+    /// @brief Arms interception of the next @p count posts.
+    /// @param count Number of posts to capture instead of forwarding.
+    void holdNextPosts(std::size_t count) {
+        std::scoped_lock const lock{_mtx};
+        _remainingToHold = count;
+    }
+
+    /// @brief Forwards the @p index-th captured post. No-op if already forwarded.
+    /// @param index Position in capture (i.e. post) order.
+    void forward(std::size_t index) {
+        std::function<void()> task;
+        {
+            std::scoped_lock const lock{_mtx};
+            if (index < _held.size()) {
+                task = std::move(_held.at(index));
+                _held.at(index) = nullptr;
+            }
+        }
+        if (task) {
+            _inner.post(std::move(task));
+        }
+    }
+
+    /// @brief Forwards every captured post not already forwarded.
+    void forwardRest() {
+        std::vector<std::function<void()>> pending;
+        {
+            std::scoped_lock const lock{_mtx};
+            pending.swap(_held);
+            _remainingToHold = 0;
+        }
+        for (auto& task : pending) {
+            if (task) {
+                _inner.post(std::move(task));
+            }
+        }
+    }
+
+private:
+    morph::exec::IExecutor& _inner;
+    std::mutex _mtx;
+    std::size_t _remainingToHold = 0;
+    std::vector<std::function<void()>> _held;
+};
+
+}  // namespace
+
+// The Catch2 assertion macros, not branching logic, are what push this over
+// the cognitive-complexity threshold -- as in the sibling TEST_CASEs above.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE(
+    "an execute rejected out of ticket order does not strand an earlier ticket "
+    "that has not reached awaitExecuteTurn yet",
+    "[remote][execute-ordering]") {
+    // Regression test for #449 -- the third occurrence of the stranded-ticket
+    // bug class #348 and #351 each closed by making the *release* structural.
+    // Making release unmissable was necessary and is not sufficient: the
+    // remaining hole is in `releaseExecuteTicket` itself.
+    //
+    // `releaseExecuteTicket(mid, ticket)` used to assign
+    //
+    //     gate.nextToRun = ticket + 1;
+    //
+    // which is only correct if tickets are released in ticket order. They are
+    // not, and by design: every early return in `dispatchExecute`
+    // (`rejectAndRelease` -- model not found, unauthorized, over limit) and
+    // `dispatchMessage`'s shutdown gate release *immediately*, deliberately
+    // never calling `awaitExecuteTurn`, so that a rejection cannot hold up the
+    // live executes queued behind it. So a later ticket routinely releases
+    // first -- and when it did, that assignment pushed `nextToRun` straight
+    // *past* an earlier ticket's number. `awaitExecuteTurn` waits on
+    // `nextToRun == ticket` with no deadline, so the earlier ticket's waiter
+    // could never be satisfied: a pool worker blocked for the rest of the
+    // process's life, `_inFlightExecutes` stuck above zero (so
+    // `drainedWithin()` can never succeed), and `~ThreadPoolExecutor` hanging
+    // forever in join(). That is exactly the reported symptom, and it explains
+    // why #449 reproduced under `morph::net` in particular: a dropped
+    // connection reclaims that connection's models, so the executes still in
+    // flight for one model split into some that find the model and some that
+    // reject with "model not found" -- manufacturing precisely this
+    // out-of-order release.
+    //
+    // The fix keeps the fast-reject path fast and instead makes `nextToRun`
+    // advance only over a *contiguous* run of released tickets, holding an
+    // early release aside as pending until every ticket before it has released
+    // too.
+    //
+    // Forced, not raced. Three same-model executes take tickets 0, 1 and 2
+    // synchronously in `handle()`, with all three dispatch tasks held, so the
+    // gate is fully populated before any of them runs:
+    //   A  ticket 0, ERO_AddAction    -- released second; must run first.
+    //   B  ticket 1, ERO_RejectAction -- released first; rejected in
+    //      authorize(), so it releases ticket 1 without ever waiting.
+    //   C  ticket 2, ERO_AddAction    -- not released until the end, purely so
+    //      `nextToRun` cannot reach `nextTicket` and erase the gate (that
+    //      erase is what makes the *two*-ticket version of this interleaving
+    //      harmless, and it is already covered by the "gate has already fully
+    //      drained" case above).
+    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(3);
+    auto gated = std::make_unique<HoldNextPostsExecutor>(*pool);
+    auto authorizer = std::make_shared<RejectMarkerAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(*gated, authorizer, eroDispatcher(), eroRegistry());
+
+    WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("ERO_CounterModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+    REQUIRE(regReply.env.kind == "ok");
+    const auto modelId = regReply.env.modelId;
+    REQUIRE(modelId != 0U);
+
+    morph::wire::Envelope reqA;
+    reqA.kind = "execute";
+    reqA.callId = 1;
+    reqA.modelId = modelId;
+    reqA.modelType = "ERO_CounterModel";
+    reqA.actionType = "ERO_AddAction";
+    reqA.body = R"({"by":5})";
+
+    morph::wire::Envelope reqB = reqA;
+    reqB.callId = 2;
+    reqB.actionType = std::string{RejectMarkerAuthorizer::kRejectMarker};
+
+    morph::wire::Envelope reqC = reqA;
+    reqC.callId = 3;
+    reqC.body = R"({"by":7})";
+
+    gated->holdNextPosts(3);
+    WaitReply replyA;
+    server->handle(morph::wire::encode(reqA), std::ref(replyA));
+    WaitReply replyB;
+    server->handle(morph::wire::encode(reqB), std::ref(replyB));
+    WaitReply replyC;
+    server->handle(morph::wire::encode(reqC), std::ref(replyC));
+    REQUIRE_FALSE(replyA.ready.load());
+    REQUIRE_FALSE(replyB.ready.load());
+    REQUIRE_FALSE(replyC.ready.load());
+
+    // B first: `rejectAndRelease` releases ticket 1 and only then writes the
+    // reply, so a settled replyB is a deterministic signal that ticket 1 is
+    // already released -- no sleep involved.
+    gated->forward(1);
+    REQUIRE(replyB.await());
+    CHECK(replyB.env.kind == "err");
+    CHECK(replyB.env.message == "unauthorized");
+
+    // Now A, whose ticket 0 that release skipped over.
+    gated->forward(0);
+    bool const aCompleted = replyA.await(std::chrono::milliseconds{5000});
+    if (!aCompleted) {
+        // A's pool thread is parked in a wait with no deadline and can never
+        // be joined; leak the fixture rather than hang the whole binary in
+        // ~ThreadPoolExecutor, exactly as the #348/#351 cases above do.
+        (void)server.get();
+        // NOLINTBEGIN(bugprone-unused-return-value) -- leaking is the point.
+        (void)gated.release();
+        (void)pool.release();
+        // NOLINTEND(bugprone-unused-return-value)
+    }
+    REQUIRE(aCompleted);
+    CHECK(replyA.env.kind == "ok");
+    CHECK(replyA.env.body == "5");
+
+    // And ordering still holds for the ticket behind the skipped one: C ran
+    // after A, so the counter reads 5 + 7 rather than 7.
+    gated->forwardRest();
+    REQUIRE(replyC.await());
+    CHECK(replyC.env.kind == "ok");
+    CHECK(replyC.env.body == "12");
+
+    // The stranded wait would also hold `_inFlightExecutes` above zero for
+    // good, so a regression breaks graceful shutdown as well as this caller.
+    CHECK(server->drainedWithin(std::chrono::milliseconds{2000}));
 }

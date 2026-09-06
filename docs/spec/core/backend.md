@@ -539,14 +539,39 @@ shutdown gate (issue #348) and by every exception unwinding out of
 `dispatchExecute` (issue #351, below). Both are pinned by regression tests, and
 neither could recur through a hand-written release being forgotten again.
 
-**Bookkeeping.** A gate is `{nextTicket, nextToRun, condition_variable}`, held
-in a map keyed by `ModelId` under a dedicated mutex. The entry is created on
-demand by the first ticket and **erased** once `nextToRun` catches up with
+**Bookkeeping.** A gate is
+`{nextTicket, nextToRun, releasedOutOfOrder, condition_variable}`, held in a
+map keyed by `ModelId` under a dedicated mutex. The entry is created on demand
+by the first ticket and **erased** once `nextToRun` catches up with
 `nextTicket` — a model with no in-flight `execute` leaves no trace, so the map
 does not grow across the server's lifetime. A waiter holds the gate by
 `shared_ptr` so a release that erases the entry mid-wait cannot pull it out
 from under it, and `awaitExecuteTurn` returns immediately if the entry is
 already gone.
+
+**Releases are not ordered, and `nextToRun` must survive that.** `nextToRun`
+means *the lowest ticket that has not released yet* — which is exactly what
+`awaitExecuteTurn`'s `nextToRun == ticket` predicate needs it to mean. It is
+not "one past the ticket that released last", and the difference is not
+cosmetic: the fast-reject paths above release *without ever waiting for their
+turn*, by design, so a later ticket routinely releases before an earlier one.
+`releaseExecuteTicket` therefore records an out-of-order release in
+`releasedOutOfOrder` and advances `nextToRun` only across a contiguous run of
+released tickets, consuming that set as it goes.
+
+Assigning `nextToRun = ticket + 1` unconditionally instead — which is what the
+gate did originally — pushed it straight *past* an earlier ticket's number
+whenever a rejection got there first. That earlier ticket's waiter then held a
+predicate that could never become true again, with the same three costs listed
+for the shutdown gate below: a caller that never receives a reply, a pool
+worker blocked for the process's remaining lifetime, and `drainedWithin()`
+unable to succeed. It is why the bug class closed by issues #348 and #351
+returned a third time as issue #449, reproducing under `morph::net` in
+particular — dropping a connection reclaims that connection's models, so the
+executes still in flight for one model split into some that find it and some
+that reject with `"model not found"`, which manufactures precisely this
+interleaving. Making the *release* unmissable (below) was necessary and not
+sufficient; the release also has to be order-tolerant.
 
 **What is not ordered.** Only same-model requests, and only relative to
 `handle()` call order:
@@ -611,7 +636,16 @@ way, holding back one request's pool task through a wrapping executor so the
 rather than raced; its throwing-hook case reuses that same wrapping executor
 and arms an authorizer only *after* the later request has parked in
 `awaitExecuteTurn`, so exactly one request — the held, earlier one — throws,
-from `authorize`, `authenticate` or `authorizeInstance` in turn.
+from `authorize`, `authenticate` or `authorizeInstance` in turn. Its
+out-of-order-release case (issue #449) extends the same wrapping executor to
+hold three posts at once, so all three tickets exist before any of them runs,
+and then releases the *middle* one first: a rejection skipping over ticket 0
+while ticket 2 is still outstanding, which is the interleaving the two-ticket
+version cannot produce because the gate is erased instead.
+`tests/net/test_socket_backend.cpp` carries the transport-level shape that
+found it (concurrent executes against one shared model, connection dropped
+mid-stream), whose failure mode is the teardown hanging rather than an
+assertion.
 
 ### Protocol-version negotiation
 
@@ -963,11 +997,15 @@ frame and routes it by `callId`:
   A `callId` matching **neither** map (e.g. a late reply for an
   already-cancelled call) is dropped silently.
 - A **`callId == 0`** frame is a synchronous control reply (`register` when
-  `asyncRegistrationEnabled` is `false`, or `attach`/`assign`/`instances`/
-  `deregister`); it is stored in `_pendingReply` and quits the parked nested
-  `QEventLoop`. A frame that fails to decode is also routed to the parked sync
-  waiter (as the raw string) so the blocked `sendSync` unblocks with an error
-  rather than hanging.
+  `asyncRegistrationEnabled` is `false`, or `attach`/`assign`/`instances`);
+  it is stored in `_pendingReply` and quits the parked nested `QEventLoop`.
+  A frame that fails to decode is also routed to the parked sync waiter (as
+  the raw string) so the blocked `sendSync` unblocks with an error rather
+  than hanging. `deregister` is deliberately **not** on that list — it is
+  fire-and-forget, nobody parks for its reply, and sending it with `callId ==
+  0` would let its stray `ok` resume an unrelated parked control call (issue
+  #65); it therefore takes a non-zero `callId` and its reply is recognised
+  and discarded via `_pendingDeregisters`.
 
 Because `execute` replies are matched on `callId`, concurrent in-flight execute
 calls are supported; `RemoteServer`/`QtWebSocketServer` echo the request `callId`
@@ -1429,7 +1467,11 @@ receives frames on its own per-connection thread, hands them to
 `RemoteServer::handle` (server pool / model strand, as above), and writes the
 reply back on whichever thread produces it (serialized per connection by a
 write mutex) — there is no separate marshalling step because there is no GUI
-thread to marshal onto.
+thread to marshal onto. `SocketServer::close()` is likewise callable from any
+thread, including concurrently with another `close()` on the same live server:
+it takes its own teardown mutex for the whole body so exactly one caller ever
+joins the accept thread. That mutex is deadlock-free precisely because nothing
+inside the class calls `close()` — no thread it joins can be waiting on it.
 
 ## API reference
 
@@ -1533,7 +1575,7 @@ thread to marshal onto.
 | `waitForConnected(timeoutMs = 5000)` | Pumps the Qt loop until connected or timeout; returns `_connected`. |
 | `negotiateProtocolVersion()` | Opt-in: sends `hello` synchronously (same nested-`QEventLoop` path as `registerModel`), classifies the reply via `wire::interpretHelloReply`. Throws on an explicit version rejection or a `sendSync` failure. |
 | `registerModel(typeId, factory)` | Synchronous via nested `QEventLoop`; `factory` ignored. Throws on `err` reply. |
-| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. |
+| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses, recorded in `_pendingDeregisters` so `onTextMessage` recognises the unwanted reply and drops it rather than handing it to a parked `sendSync` (issue #65). |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. |
 | `notifyBackendChanged()` | No-op. |
 | `cancelPending(exc)` | Drains `_pending` under `_pendingMtx`, delivers `exc` to each state. |
@@ -1586,7 +1628,7 @@ not a behavior change to the existing loopback-only default.
 | `explicit SocketBackend(serverUrl, cfg = Config{})` | Parses `serverUrl` (`ws://` only — throws immediately on `wss://`) and starts the I/O thread, which connects asynchronously. |
 | `waitForConnected(timeout = 5000ms)` | Blocks the calling thread on a condition variable until connected or the timeout elapses; returns the current connected state. |
 | `registerModel(typeId, factory)` | Synchronous via a parked condition variable; `factory` ignored. Throws on `err` reply or disconnect. Thread-safe, but only one such call may be in flight at a time. |
-| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. |
+| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses so its unawaited `ok` cannot be handed to a parked synchronous control call (issue #454; the `QtWebSocketBackend` precedent is issue #65). Needs no pending-id bookkeeping of its own: `dispatchIncomingEnvelope` already drops a non-zero `callId` that is absent from `_pending`. |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. Thread-safe; supports concurrent in-flight calls from multiple threads. |
 | `notifyBackendChanged()` | No-op. |
 | `cancelPending(exc)` | Drains the pending map, delivers `exc` to each state. |
@@ -1605,7 +1647,7 @@ not a behavior change to the existing loopback-only default.
 | `SocketServer(server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server`. Does not start listening. |
 | `listen()` | Binds `127.0.0.1:port` and spawns the accept thread; returns success. |
 | `port()` | Bound port (OS-assigned when constructed with `0`), or `0` before `listen()` succeeds. |
-| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. |
+| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete (morph#451: the previous `_closing.exchange` guard let a second caller reach `_acceptThread.join()` while the first was inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++). Racing `close()` against the *destructor* remains out of contract, as for any member call. |
 
 ## Design decisions
 
@@ -1625,7 +1667,7 @@ not a behavior change to the existing loopback-only default.
 | Opaque model ids | Monotonic counter run through a keyed 4-round Feistel permutation (`detail::OpaqueIdGenerator`), key drawn from `std::random_device` at construction | Guarantees uniqueness (Feistel networks are bijections for any round function) while making ids unguessable without the key; self-contained, no external crypto dependency — same posture as the reference HMAC-SHA256 in `session_auth.hpp`. |
 | WebSocket `deregisterModel` is fire-and-forget | Send-only, no nested event loop | A synchronous deregister would need a nested `QEventLoop`, which is typically driven from a destructor (`~BridgeHandler`) and can trip Qt asserts. A lost/undelivered deregister no longer leaks indefinitely: `QtWebSocketServer`'s connection scope reclaims the model at the next disconnect (see Limitations). |
 | Connection-scoped cleanup bypasses `IAuthorizer` | `closeConnection` never calls `authorize`/`authorizeInstance`/`authenticate` | It is server housekeeping triggered by the transport's own connection-close event, not a caller action; synthesising a `deregister` envelope would need a token to pass ownership checks and would require the transport to learn ids by parsing replies — recording the owning connection at register time is simpler and cannot desync. |
-| `callId`-multiplexed replies | `execute` replies carry a non-zero `callId`; control replies carry `0` | Lets `QtWebSocketBackend` run many concurrent async executes over one socket and match each reply to its `Completion`, while still supporting the parked-nested-loop synchronous `register` path (which uses `callId == 0`). |
+| `callId`-multiplexed replies | `execute` replies carry a non-zero `callId`; *awaited* control replies carry `0`. The one exception is the fire-and-forget `deregister`, which carries a non-zero `callId` from the same counter on both WebSocket transports | Lets `QtWebSocketBackend` run many concurrent async executes over one socket and match each reply to its `Completion`, while still supporting the parked-nested-loop synchronous `register` path (which uses `callId == 0`). The `deregister` exception exists because `0` means "give this payload to whoever is parked in `sendSync`", and `deregister` is the one control message nobody parks for: with `callId == 0` its own unwanted `ok` was handed to an unrelated `register`/`attach` that happened to be parked, which returned that reply's `modelId` of `0` (issue #65 for `QtWebSocketBackend`, issue #454 for `SocketBackend`). Every message whose reply *is* awaited synchronously still uses `0`. |
 | Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
 | No reconnect for never-connected sockets | `disconnected` schedules a retry only if `_everConnected` | A socket that never reached the server (bad URL / refused) fails fast via `waitForConnected` returning false, rather than backing off forever. |
 | Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
