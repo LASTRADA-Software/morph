@@ -1875,6 +1875,55 @@ TEST_CASE("db::setup points the default connection at a database and applies the
     CHECK(model.execute(pastebin::GetPaste{.id = id}).content == "after setup");
 }
 
+TEST_CASE("App teardown survives sweep dispatches still outstanding (the member-order guard)", "[pastebin][app]") {
+    // The guard for `App`'s member declaration order, which is the entire
+    // protection against a `post()` on a freed `QtExecutor`
+    // (`pastebin/app/app.hpp`'s comment above `_sweepExecutor`, and morph#127,
+    // which was a shipped bug of exactly that class). `_sweepExecutor` is
+    // declared *first*, so it is destroyed *last* — after `~_pool` has joined
+    // its worker threads. Move it to its natural reading position at the end
+    // of the member list and this case segfaults deterministically:
+    // `CompletionState<Ack>::setException` dereferences the freed executor at
+    // `include/morph/core/completion.hpp:135`.
+    //
+    // **The failure mode is a crash, not an assertion** — ctest reports
+    // SEGFAULT. That is the point, and it is why there is nothing to CHECK
+    // here: do not "fix" this case by wrapping it in one. There is no static
+    // alternative either; `offsetof` is not usable on these QObject-derived,
+    // non-standard-layout types.
+    //
+    // No sleep, no retry, no repeat loop, and none is needed: the dispatches
+    // are outstanding by construction (issued, never pumped), which is exactly
+    // the state `sweepInFlight()`'s "pump until false, then destroy" contract
+    // does *not* cover.
+    //
+    // The name deliberately does not begin with `~`: ctest hands a test's name
+    // to Catch2 verbatim, and a leading `~` there is a *negation* filter — a
+    // case called "~App ..." registers a ctest entry that runs everything
+    // except itself, and reports green while measuring nothing.
+    DbFixture fixture;
+    pastebin::PasteModel model;
+
+    for (int i = 0; i < 64; ++i) {
+        // 64, not one: enough that the pool is reliably still busy when
+        // `~App` runs on a fast machine.
+        auto create = makeCreate("to be swept " + std::to_string(i));
+        create.expiresAt = morph::ladder::now();
+        static_cast<void>(model.execute(create).id);
+    }
+    const morph::ladder::ScopedClockOverride later{nowPlus(std::chrono::hours{1})};
+
+    const auto logPath = std::filesystem::temp_directory_path() / "pastebin_teardown_inflight.jsonl";
+    std::filesystem::remove(logPath);
+    {
+        pastebin::app::App app{logPath, std::chrono::hours{1}};
+        app.sweepExpiredOnce();  // 64 dispatches issued into the pool
+        // Deliberately no pumping: the App is destroyed with completions
+        // outstanding.
+    }
+    std::filesystem::remove(logPath);
+}
+
 TEST_CASE("A sweep with nothing expired dispatches nothing at all", "[pastebin][app]") {
     DbFixture fixture;
     pastebin::PasteModel model;

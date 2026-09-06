@@ -450,3 +450,51 @@ TEST_CASE("App::stopBackgroundJobs is idempotent, and ~App still stops the timer
     CHECK_FALSE(pumpUntil([&fetcher] { return !fetcher->calls.empty(); }, std::chrono::milliseconds{200}));
     std::filesystem::remove(logPath);
 }
+
+TEST_CASE("App teardown survives fetch dispatches still outstanding (the member-order guard)", "[bookmarks][app]") {
+    // The guard for `App`'s member declaration order, which is the entire
+    // protection against a `post()` on a freed `QtExecutor`
+    // (`bookmarks/app/app.hpp`'s comment above `_fetchExecutor`, and morph#127,
+    // which was a shipped bug of exactly that class). `_fetchExecutor` is
+    // declared *first*, so it is destroyed *last* — after `~_pool` has joined
+    // its worker threads. Move it to its natural reading position at the end of
+    // the member list and this case segfaults deterministically:
+    // `CompletionState<Ack>::setException` dereferences the freed executor at
+    // `include/morph/core/completion.hpp:135`.
+    //
+    // **The failure mode is a crash, not an assertion** — ctest reports
+    // SEGFAULT. That is the point, and it is why there is nothing to CHECK
+    // here: do not "fix" this case by wrapping it in one. There is no static
+    // alternative either; `offsetof` is not usable on these QObject-derived,
+    // non-standard-layout types.
+    //
+    // No sleep, no retry, no repeat loop, and none is needed: the dispatches
+    // are outstanding by construction (issued, never pumped), which is exactly
+    // the state `fetchInFlight()`'s "pump until false, then destroy" contract
+    // does *not* cover.
+    //
+    // The name deliberately does not begin with `~`: ctest hands a test's name
+    // to Catch2 verbatim, and a leading `~` there is a *negation* filter — a
+    // case called "~App ..." registers a ctest entry that runs everything
+    // except itself, and reports green while measuring nothing.
+    DbFixture fixture;
+    bookmarks::BookmarkModel model;
+    {
+        const ScopedPrincipal alice{"alice"};
+        for (int i = 0; i < 64; ++i) {
+            // 64, not one: enough that the pool is reliably still busy when
+            // `~App` runs on a fast machine.
+            static_cast<void>(model.execute(makeCreate("https://x" + std::to_string(i) + ".example")).id);
+        }
+    }
+    auto fetcher = std::make_shared<StubFetcher>();
+
+    const auto logPath = freshLogPath("teardown_inflight");
+    {
+        bookmarks::app::App app{logPath, "test-secret", fetcher, kTimersOff, kTimersOff};
+        app.fetchMetadataOnce();  // 64 dispatches issued into the pool
+        // Deliberately no pumping: the App is destroyed with completions
+        // outstanding.
+    }
+    std::filesystem::remove(logPath);
+}
