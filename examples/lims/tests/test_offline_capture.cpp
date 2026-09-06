@@ -14,6 +14,7 @@
 // (see the MORPH_LADDER_HAVE_OFFLINE_SQLITE block at the bottom of this file);
 // it is off in a default configure, so the durable leg is opt-in.
 
+#include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/journal/action_log.hpp>
@@ -115,6 +116,26 @@ void reconnect(const std::shared_ptr<morph::offline::IOfflineQueue>& queue, cons
 /// @param model The handler to attach.
 /// @param sampleId The sample to attach to.
 void open(lims::SampleModel& model, lims::SampleId sampleId) { model.execute(lims::OpenSample{.sampleId = sampleId}); }
+
+/// @brief Makes every INSERT into @p table fail, leaving reads of it alone.
+///
+/// The seam replay actually has: `markDecided()` writes exactly one row, and
+/// this makes that write — and only that write — fail, *after* the capture
+/// above it has run. `alreadyDecided()`'s SELECT is untouched, so the replay
+/// reaches the apply the way it always does. Nothing here is mocked: the
+/// statement that fails is the one the model really issues.
+/// @param table The table whose inserts must fail.
+void failInsertsInto(const std::string& table) {
+    Lightweight::SqlStatement stmt;
+    (void)stmt.ExecuteDirect("CREATE TRIGGER morph_fail_insert BEFORE INSERT ON \"" + table +
+                             "\" BEGIN SELECT RAISE(ABORT, 'injected: the op-key record never landed'); END");
+}
+
+/// @brief Undoes `failInsertsInto`, so the recovery replay can be observed.
+void allowInserts() {
+    Lightweight::SqlStatement stmt;
+    (void)stmt.ExecuteDirect("DROP TRIGGER morph_fail_insert");
+}
 
 }  // namespace
 
@@ -422,6 +443,45 @@ TEST_CASE("Redelivering an operation is skipped, not applied twice", "[lims][off
 
     lims::SampleModel reader;
     open(reader, lab.sample.id);
+    CHECK(reader.execute(lims::ListResults{}).results.size() == 1);
+    CHECK(*reader.execute(lims::GetSample{}).version == *lab.sample.version + 1);
+    CHECK(reader.execute(lims::ListConflicts{}).conflicts.empty());
+}
+
+TEST_CASE("A capture whose op-key record is lost is rolled back, not left half-applied",
+          "[lims][offline][idempotency]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    Lab lab;
+
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    lims::offline::FieldOutbox fiona{queue, "fiona"};
+    fiona.observe(lab.sample);
+    const auto queued = fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
+
+    const ScopedPrincipal asFiona{"fiona"};
+    lims::SampleModel replaying;
+
+    // The crash the op-key ledger exists to survive: the capture commits, and
+    // the process (or the connection) dies before the key is recorded.
+    failInsertsInto("lims_replayed_ops");
+    CHECK_THROWS(replaying.execute(queued));
+    allowInserts();
+
+    lims::SampleModel reader;
+    open(reader, lab.sample.id);
+    // Either both writes landed or neither did. A reading that survived with
+    // no op-key behind it is a result this server can no longer recognise as
+    // its own — and in a regulated audit trail it is a concentration nobody
+    // can account for.
+    CHECK(reader.execute(lims::ListResults{}).results.empty());
+    CHECK(*reader.execute(lims::GetSample{}).version == *lab.sample.version);
+
+    // Redelivery: the queue retries what it never saw acknowledged. Exactly
+    // once, counted on the results and on the absence of a spurious conflict.
+    const auto again = replaying.execute(queued);
+    CHECK(again.outcome == lims::ReplayOutcome::Applied);
+
     CHECK(reader.execute(lims::ListResults{}).results.size() == 1);
     CHECK(*reader.execute(lims::GetSample{}).version == *lab.sample.version + 1);
     CHECK(reader.execute(lims::ListConflicts{}).conflicts.empty());
