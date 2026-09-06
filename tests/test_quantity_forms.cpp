@@ -941,6 +941,48 @@ TEST_CASE("Forms::FieldMeta::DescribeSugarDistinguishesSameTypedMembersByAddress
     CHECK(schema.contains(R"("second":{"$ref":"#/$defs/int64_t","x-order":1,"title":"Second"})"));
 }
 
+// Forms::FieldMeta::FluentBuildersComposeWithLiteralForm above only ever
+// chains withPlaceholder/withReadOnly/withHidden through a purely-local
+// `constexpr auto` feeding a `static_assert`, which the compiler evaluates
+// entirely at compile time -- per `llvm-cov show -show-instantiations=true`,
+// that leaves withPlaceholder/withHidden reported as unexecuted, exactly like
+// requiredWhen/exactlyOneOf/etc. above. withMinimum/withMaximum/withMultipleOf
+// have no call site anywhere in the tree at all (not even a folded one).
+//
+// QFDescribeSugar::fieldMetadata (above) is the proof this out-of-line,
+// namespace-scope `inline const` initializer genuinely runs at ordinary
+// runtime: describe<>() is deliberately not constexpr (glaze's get_member is
+// not itself constexpr), so the whole initializer requires dynamic
+// initialization, and withReadOnly() chained onto it there is the one sibling
+// builder that already shows real coverage. Chaining the other five onto the
+// same describe<>() call forces each of them to run for the same reason.
+struct QFFluentBuilderCoverageForm {
+    std::int64_t sampleId = 0;
+
+    static const std::array<morph::forms::FieldMeta, 1> fieldMetadata;
+};
+
+inline const std::array<morph::forms::FieldMeta, 1> QFFluentBuilderCoverageForm::fieldMetadata{
+    morph::forms::describe<&QFFluentBuilderCoverageForm::sampleId>("Sample")
+        .withPlaceholder("e.g. 1024")
+        .withHidden()
+        .withMinimum(Rational{0, DecimalPlaces{0}})
+        .withMaximum(Rational{1000, DecimalPlaces{0}})
+        .withMultipleOf(Rational{1, DecimalPlaces{0}}),
+};
+
+TEST_CASE("Forms::FieldMeta::FluentBuildersRunAtRuntimeViaNamespaceScopeInlineConst", "[forms][field_meta]") {
+    auto const& meta = QFFluentBuilderCoverageForm::fieldMetadata[0];
+    CHECK(meta.placeholder == "e.g. 1024");
+    CHECK(meta.hidden);
+    REQUIRE(meta.minimum.has_value());
+    CHECK(*meta.minimum == Rational{0, DecimalPlaces{0}});
+    REQUIRE(meta.maximum.has_value());
+    CHECK(*meta.maximum == Rational{1000, DecimalPlaces{0}});
+    REQUIRE(meta.multipleOf.has_value());
+    CHECK(*meta.multipleOf == Rational{1, DecimalPlaces{0}});
+}
+
 // ---------------------------------------------------------------------------
 // morph#159: `x-decimalPlaces` is an *enforced* contract, so
 // reconcileDeclaredPrecision has to re-round the stored value, not just move

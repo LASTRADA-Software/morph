@@ -182,6 +182,43 @@ TEST_CASE("allRequiredEngaged does not require a computed destination to already
     CHECK_FALSE(morph::forms::allRequiredEngaged(missingPrice));  // price is a real required field
 }
 
+// An action with two independent computed destinations, to exercise
+// isComputedDestinationMember's `found = found || isDestinationOf(...)` fold
+// short-circuit: every fixture above declares exactly one computedFields
+// entry, so there was never a second entry for an earlier match to skip.
+struct CFTwoComputedFields {
+    CFQ<CFLineUnit::qty> qty;
+    CFQ<CFLineUnit::price> price;
+    CFQ<CFLineUnit::total> total;
+    CFQ<CFLineUnit::qty> doubledQty;
+
+    static constexpr auto computedFields = morph::forms::computeList(
+        morph::forms::computed<&CFTwoComputedFields::total, &CFTwoComputedFields::qty, &CFTwoComputedFields::price>(
+            [](const auto& s) { return s.qty * s.price; }),
+        morph::forms::computed<&CFTwoComputedFields::doubledQty, &CFTwoComputedFields::qty>(
+            [](const auto& s) { return s.qty + s.qty; }));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
+};
+
+TEST_CASE("allRequiredEngaged short-circuits isDestinationOf once an earlier computed entry already matched",
+          "[forms][computed]") {
+    // Declaration order is total, then doubledQty. Checking `total`'s own
+    // address matches computedFields.fields' first entry (found becomes
+    // true), so the fold must skip calling isDestinationOf for the second
+    // entry (doubledQty) rather than needlessly re-checking it -- the
+    // observable result (total/doubledQty both excluded from "required")
+    // is unaffected either way; this is coverage-completeness for the
+    // fold's short-circuit, not a distinguishable behavior change.
+    CFTwoComputedFields item{};
+    item.qty = Rational{Numerator{3}, Denominator{1}, dp2};
+    item.price = Rational{Numerator{5}, Denominator{1}, dp2};
+    // qty/price are the only real required fields and both are engaged;
+    // total/doubledQty are both computed, so neither counts as "required but
+    // missing" regardless of the fold's short-circuit.
+    CHECK(morph::forms::allRequiredEngaged(item));
+}
+
 // ---------------------------------------------------------------------------
 // Schema emission: x-computed / x-readonly, and exclusion from `required`.
 // ---------------------------------------------------------------------------
