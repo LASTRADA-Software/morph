@@ -250,11 +250,21 @@ def floor_violations(surface: Surface) -> list[str]:
     return problems
 
 
-# Rungs that ship a `ladder_<rung>_server`, and so can be driven by a scenario.
-# `lims` and `crm` are deliberately absent: neither ships a server (crm ships no
-# client either -- see its README's "What is not built"), so no scenario can
-# reach them. lims's missing server is filed separately.
-SERVER_RUNGS = ("pastebin", "bookmarks", "polls", "kanban", "ledger")
+# Directories under `examples/` that ship a `ladder_<name>_server`, and so can
+# be driven by a scenario. `lims` and `crm` are deliberately absent: neither
+# ships a server (crm ships no client either -- see its README's "What is not
+# built"), so no scenario can reach them. lims's missing server is filed
+# separately.
+#
+# `bank` is here and is *not* a ladder rung: it is absent from
+# examples/rungs.txt and never calls morph_add_rung(), and morph#87 leaves the
+# question of its slot in the ladder to the maintainer. What this tuple has
+# always actually meant is "the set with a src/server/main.cpp" -- the property
+# that decides whether a scenario can reach the thing -- and bank has had a
+# model surface worth driving for far longer than it has lacked a server. Being
+# a rung and having scenarios were already independent in the other direction:
+# `lims` and `crm` are rungs with no scenarios.
+SERVER_RUNGS = ("pastebin", "bookmarks", "polls", "kanban", "ledger", "bank")
 
 # Plausibility floor for the whole action universe, measured at 72. Same
 # purpose as MIN_KINDS/MIN_MESSAGES: if the macro is renamed, this extractor
@@ -469,6 +479,15 @@ WORKFLOW_FLOORS = {
     # what it exists to keep from happening again.
     "ledger": 16,
     "kanban": 20,
+    # Bank registers 41 actions across eleven models -- nearly twice kanban's
+    # surface, and the largest in the tree -- so its floor is the highest here.
+    # Scaled the same way as the rest: not a quota, but the number of genuinely
+    # distinct journeys the domain supports, which for a retail bank is roughly
+    # one per money-moving shape (deposit/withdraw, transfer, bill, scheduled
+    # payment, standing order, loan, card) plus the cross-cutting ones
+    # (authorization between two customers, the anonymous session, the stateful
+    # account cache).
+    "bank": 22,
 }
 
 

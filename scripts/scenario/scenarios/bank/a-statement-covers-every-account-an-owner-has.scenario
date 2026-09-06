@@ -1,0 +1,106 @@
+# bank — the statement: one line per account the owner holds, including the
+# accounts nothing happened on.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/a-statement-covers-every-account-an-owner-has.scenario
+#
+# `GenerateStatement` is the only bank action that fans out across all of an
+# owner's accounts at once, and it has one property worth pinning that a
+# per-account report would not: an account with no entries in the window still
+# gets a line, carrying its balance and three zeroes. A statement that silently
+# omitted a dormant account would look identical to one that had never been
+# opened.
+#
+# The second property is a genuine oddity, asserted because it is real rather
+# than because it is right: `closingBalanceMinor` is the account's *current*
+# balance, not its balance as at `toMs`. Narrowing the window changes the
+# credits and debits and leaves the closing balance alone.
+
+model AuthModel
+client front
+do RegisterUser username=perlis password=perlis-pass displayName="A. Perlis"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=perlis password=perlis-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture busy=$.id
+do OpenAccount owner=$who kind=1 currency=0
+expect ok capture dormant=$.id
+expect ok field balanceMinor == 0
+
+# ── Activity on one of them only ────────────────────────────────────────────
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$busy amountMinor=400000 description="salary"
+expect ok field balanceAfterMinor == 400000
+do Deposit accountId=$busy amountMinor=50000 description="refund"
+expect ok field balanceAfterMinor == 450000
+do Withdraw accountId=$busy amountMinor=120000 description="rent"
+expect ok field balanceAfterMinor == 330000
+
+# ── The statement ───────────────────────────────────────────────────────────
+client paper model=StatementModel principal=$who
+
+# fromMs 0 and toMs 0 means "everything, with no upper bound".
+do GenerateStatement owner=$who fromMs=0 toMs=0
+expect ok field owner == "perlis"
+expect ok field fromMs == 0
+expect ok field toMs == 0
+
+# Both accounts appear.
+#
+# Matched by captured account id rather than by list position, and asserted
+# without the all-time totals, because a statement is the one bank result that
+# fans out over *every* account its owner has ever opened. This file opens two
+# more on each pass, so `lines[0]` and `totalCreditsMinor` mean something
+# different every run, while the line belonging to a given account does not.
+# `[^}]*` keeps each match inside one line object rather than letting it run on
+# into the next.
+#
+# StatementLine's field order is accountId, number, currency, creditsMinor,
+# debitsMinor, closingBalanceMinor, entryCount.
+expect ok field lines ~ "\"accountId\":$busy,[^}]*\"creditsMinor\":450000,\"debitsMinor\":120000,\"closingBalanceMinor\":330000,\"entryCount\":3"
+expect ok field lines ~ "\"accountId\":$busy,\"number\":\"DE[0-9]{20}\",\"currency\":0,"
+
+# The dormant one is present with a line of zeroes, not absent. This is the
+# assertion the file exists for: an account with no entries in the window is
+# still reported, rather than looking like an account that was never opened.
+expect ok field lines ~ "\"accountId\":$dormant,[^}]*\"creditsMinor\":0,\"debitsMinor\":0,\"closingBalanceMinor\":0,\"entryCount\":0"
+
+# ── A window that excludes everything ───────────────────────────────────────
+# Every entry above predates this instant, so the credits and debits fall to
+# zero — but the lines stay, and so does each account's live balance. That is
+# the `closingBalanceMinor` oddity, visible only when the window moves.
+# These totals *are* pass-invariant: no entry in this database is ever written
+# after this instant, whatever previous passes left behind.
+do GenerateStatement owner=$who fromMs=2000000000000 toMs=0
+expect ok field totalCreditsMinor == 0
+expect ok field totalDebitsMinor == 0
+expect ok field lines ~ "\"accountId\":$busy,[^}]*\"creditsMinor\":0,\"debitsMinor\":0,\"closingBalanceMinor\":330000,\"entryCount\":0"
+
+# An upper bound below every entry does the same thing, so both ends of the
+# window are genuinely applied.
+do GenerateStatement owner=$who fromMs=0 toMs=1
+expect ok field totalCreditsMinor == 0
+expect ok field totalDebitsMinor == 0
+expect ok field lines ~ "\"accountId\":$busy,[^}]*\"entryCount\":0"
+
+# ── An owner with no accounts at all ────────────────────────────────────────
+# A statement with no lines, rather than a refusal: the owner exists and simply
+# holds nothing.
+client other model=AuthModel
+do RegisterUser username=perlis-no-accounts password=none-pass displayName="No Accounts"
+expect ok field message ~ "^(registered|username already taken)$"
+
+use paper
+do GenerateStatement owner=perlis-no-accounts fromMs=0 toMs=0
+expect ok field owner == "perlis-no-accounts"
+expect ok field lines == []
+expect ok field totalCreditsMinor == 0
+
+# An owner who was never registered has no `users` row to resolve, and that is
+# reported as an authorization failure rather than as an empty statement.
+do GenerateStatement owner=nobody-ever fromMs=0 toMs=0
+expect err message == "unknown user: nobody-ever"

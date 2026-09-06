@@ -1,0 +1,79 @@
+# bank — accounts of different currencies exist side by side, and money does
+# not cross between them.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/cross-currency-transfers-are-refused.scenario
+#
+# Bank carries no exchange rate anywhere, so a transfer between two currencies
+# has no defined amount to credit. `TransactionModel` refuses it rather than
+# inventing a rate — and refuses it *after* loading and authorising both
+# accounts, which is why this is the model's own error and not a validation
+# one: `Transfer::validate()` cannot see a currency, only ids and an amount.
+#
+# The currency is also the one enum bank stores that has a non-uniform minor
+# unit: JPY has no fractional digits (`currencyDecimals`), so the same integer
+# means a different amount of money in a JPY account than in a USD one. That is
+# exactly why the two must not be added together.
+
+model AuthModel
+client front
+do RegisterUser username=nakamoto password=nakamoto-pass displayName="S. Nakamoto"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=nakamoto password=nakamoto-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+
+# currency 0 USD, 1 EUR, 4 JPY — the numeric values are the wire encoding and
+# bank's own header says to append to them, never to renumber.
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture usd=$.id
+expect ok field currency == 0
+
+do OpenAccount owner=$who kind=0 currency=1
+expect ok capture eur=$.id
+expect ok field currency == 1
+
+do OpenAccount owner=$who kind=0 currency=4
+expect ok capture jpy=$.id
+expect ok field currency == 4
+
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$usd amountMinor=500000 description="funding the dollar account"
+expect ok field balanceAfterMinor == 500000
+expect ok field currency == 0
+
+# ── The refusal ─────────────────────────────────────────────────────────────
+do Transfer fromAccountId=$usd toAccountId=$eur amountMinor=100000 description="dollars to euros"
+expect err message == "cross-currency transfers are not supported"
+
+do Transfer fromAccountId=$usd toAccountId=$jpy amountMinor=100000 description="dollars to yen"
+expect err message == "cross-currency transfers are not supported"
+
+# ── Nothing moved on either side ────────────────────────────────────────────
+client single model=AccountModel principal=$who
+do GetAccount id=$usd
+expect ok field balanceMinor == 500000
+do GetAccount id=$eur
+expect ok field balanceMinor == 0
+
+# The euro account has no ledger at all — the refused transfer wrote no entry
+# to the destination any more than it did to the source.
+use teller
+do History accountId=$eur limit=10 offset=0
+expect ok field entries == []
+
+# ── Within one currency it goes through ─────────────────────────────────────
+use vault
+do OpenAccount owner=$who kind=1 currency=0
+expect ok capture usd2=$.id
+
+use teller
+do Transfer fromAccountId=$usd toAccountId=$usd2 amountMinor=100000 description="dollars to dollars"
+expect ok field fromBalanceMinor == 400000
+expect ok field toBalanceMinor == 100000
+
+# And each currency keeps its own books: the yen account was never touched.
+do History accountId=$jpy limit=10 offset=0
+expect ok field entries == []

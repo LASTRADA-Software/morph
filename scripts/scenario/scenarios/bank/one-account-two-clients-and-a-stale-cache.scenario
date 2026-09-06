@@ -1,0 +1,139 @@
+# bank — the stateful model: two clients holding the same account in memory,
+# and a third writing to it behind both of their backs.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/one-account-two-clients-and-a-stale-cache.scenario
+#
+# `AccountModel` is the one model in this tree that is deliberately *stateful*:
+# it keeps the account row in memory for the life of the instance and serves
+# `GetAccount` from there, which is the reason morph runs each model on its own
+# strand at all (bank/include/bank/models/account_model.hpp).
+#
+# The hazard that creates is the point of this file. Money moves through
+# `TransactionModel`, `PaymentModel` and `LoanModel`, each on its own database
+# connection, so a balance change lands in SQLite without the cached row hearing
+# about it. Bank's answer is a process-wide version counter per account
+# (bank/db/row_versions.hpp): every writer bumps it, and `AccountModel::hydrate`
+# re-reads whenever the version it captured has moved.
+#
+# Only an out-of-process client can show this. An in-process test holds one
+# `AccountModel` instance and a `SimulatedRemoteBackend` in one process; here
+# there are two independent connections, each with its own registered instance,
+# each having already cached the row, and a third connection doing the writing.
+# If the version check were dropped, both readers below would keep answering
+# with the balance they first saw and every assertion after the first deposit
+# would fail.
+
+model AuthModel
+client front
+do RegisterUser username=cache-holder password=cache-pass displayName="Cache Holder"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=cache-holder password=cache-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+expect ok field balanceMinor == 0
+
+# ── Two readers, each caching the row ───────────────────────────────────────
+# Separate connections and separate registered instances. Both read the account
+# once here, which is what puts it in each instance's memory — a later read that
+# never re-hydrated would answer 0 forever.
+client reader-one model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 0
+expect ok field status == 0
+
+client reader-two model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 0
+
+# ── A third connection writes ───────────────────────────────────────────────
+client writer model=TransactionModel principal=$who
+do Deposit accountId=$acct amountMinor=300000 description="landing behind the cache"
+expect ok field balanceAfterMinor == 300000
+
+# ── Both readers notice ─────────────────────────────────────────────────────
+use reader-one
+do GetAccount id=$acct
+expect ok field balanceMinor == 300000
+
+use reader-two
+do GetAccount id=$acct
+expect ok field balanceMinor == 300000
+
+# ── A write through a different model again ─────────────────────────────────
+# `PayBill` debits on `PaymentModel`'s own connection, so this is a second
+# distinct writer, not the same one twice.
+client book model=PayeeModel principal=$who
+do AddPayee name="Cache Test Payee" iban=AT611904300234573201 bankName="Erste"
+expect ok capture payee=$.id
+
+client bills model=PaymentModel principal=$who
+do PayBill fromAccountId=$acct payeeId=$payee amountMinor=50000 description="through another connection"
+expect ok field status == 1
+
+use reader-one
+do GetAccount id=$acct
+expect ok field balanceMinor == 250000
+
+use reader-two
+do GetAccount id=$acct
+expect ok field balanceMinor == 250000
+
+# ── And a third writer: the loan desk ───────────────────────────────────────
+client desk model=LoanModel principal=$who
+do ApplyLoan accountId=$acct principalMinor=100000 rateBps=0 termMonths=12
+expect ok capture loan=$.id
+expect ok field outstandingMinor == 100000
+
+use reader-two
+do GetAccount id=$acct
+expect ok field balanceMinor == 350000
+
+use desk
+do RepayLoan loanId=$loan fromAccountId=$acct amountMinor=100000
+expect ok field outstandingMinor == 0
+expect ok field status == 1
+
+use reader-one
+do GetAccount id=$acct
+expect ok field balanceMinor == 250000
+
+# ── A status change propagates the same way ─────────────────────────────────
+# `CloseAccount` runs on reader-one's instance and bumps the version, so
+# reader-two — which has been holding this row as Open all along — has to
+# notice. Empty it first: closing is refused while a balance remains.
+use writer
+do Withdraw accountId=$acct amountMinor=250000 description="emptying to close"
+expect ok field balanceAfterMinor == 0
+
+use reader-one
+do CloseAccount id=$acct
+expect ok field ok == true
+expect ok field message == "account closed"
+
+# status 2 is AccountStatus::Closed, read from the *other* client's cache.
+use reader-two
+do GetAccount id=$acct
+expect ok field status == 2
+expect ok field balanceMinor == 0
+
+# And the writer agrees, through the shared "owned and open" guard.
+use writer
+do Deposit accountId=$acct amountMinor=100 description="after closing"
+expect err message == "account is not open"
+
+# ── Deregistering an instance does not lose the row ─────────────────────────
+# The cache is a cache: SQLite stayed authoritative throughout, so a brand-new
+# instance sees exactly what the two long-lived ones ended on.
+use reader-one
+deregister
+expect ok
+
+client reader-three model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field status == 2
+expect ok field balanceMinor == 0

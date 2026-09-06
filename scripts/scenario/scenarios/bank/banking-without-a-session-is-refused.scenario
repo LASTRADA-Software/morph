@@ -1,0 +1,166 @@
+# bank — what an anonymous connection can and cannot do.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/banking-without-a-session-is-refused.scenario
+#
+# A client may connect and register a model without any session at all — bank's
+# server installs no `authorizeRegister` override, so the instances get created
+# — and it can then execute exactly two things: `RegisterUser` and
+# `LoginRequest`, the pair that exist to get it a principal. Everything else is
+# refused for want of one.
+#
+# The mechanism is worth stating because it is not bank's. `RemoteServer`
+# consults the authorizer's `authenticate()` and, when it declines to vouch for
+# the caller, *clears* `session.principal` rather than passing the client's
+# claim through (`stampVerifiedPrincipal`, include/morph/core/remote.hpp).
+# Bank's server declines exactly when the claim is empty. So the model does not
+# see "no session" as a special case — it sees an empty principal, and every
+# owner-resolving action refuses on that.
+#
+# The refusals come in two shapes, and which one an action gives away is a
+# property of how it resolves its owner, not of how important it is:
+#
+#   * "no session principal" — the action checked for an empty owner itself.
+#   * "... belongs to a different owner" — the action did not check, and the
+#     empty string simply failed to match the row's real owner further down.
+#
+# `SchedulePayment` and `CreateStandingOrder` are the clearest case of the
+# second shape: unlike their sibling `PayBill` they have no empty-owner guard at
+# all, so an anonymous caller is turned away by the ownership comparison instead.
+
+model AuthModel
+
+# ── An anonymous client can get itself a principal, and nothing else ────────
+client nobody
+
+# Registering is open by necessity: it is how a principal comes to exist.
+do RegisterUser username=newcomer password=newcomer-pass displayName="Newcomer"
+expect ok field message ~ "^(registered|username already taken)$"
+
+# So is signing in.
+do LoginRequest username=newcomer password=newcomer-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+expect ok field principal == "newcomer"
+
+# But the reply is only a *claim* until the client installs it. This connection
+# has not, so it is still anonymous.
+do WhoAmI
+expect ok field authenticated == false
+expect ok field principal == ""
+
+# ── Set the scene with a real session, on a different connection ────────────
+client member model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+
+client member-teller model=TransactionModel principal=$who
+do Deposit accountId=$acct amountMinor=100000 description="funding"
+expect ok field balanceAfterMinor == 100000
+
+client member-book model=PayeeModel principal=$who
+do AddPayee name="Somebody" iban=BE68539007547034 bankName="KBC"
+expect ok capture payee=$.id
+
+# ── Anonymous: refused with "no session principal" ──────────────────────────
+client anon-vault model=CustomerModel
+do OpenAccount kind=0 currency=0
+expect err message == "no session principal to own the account"
+
+do ListAccounts
+expect err message == "no session principal to list accounts for"
+
+client anon-book model=PayeeModel
+do AddPayee name="Anonymous Payee" iban=BE68539007547034 bankName="KBC"
+expect err message == "no session principal"
+
+do ListPayees
+expect err message == "no session principal"
+
+client anon-wallet model=CardModel
+do IssueCard accountId=$acct kind=0 dailyLimitMinor=1000
+expect err message == "no session principal"
+
+do ListCards
+expect err message == "no session principal"
+
+client anon-desk model=LoanModel
+do ApplyLoan accountId=$acct principalMinor=1000 rateBps=0 termMonths=6
+expect err message == "no session principal"
+
+do ListLoans
+expect err message == "no session principal"
+
+client anon-plan model=BudgetModel
+do SetBudget category=anonymous monthlyLimitMinor=100 currency=0
+expect err message == "no session principal"
+
+do ListBudgets
+expect err message == "no session principal"
+
+client anon-alerts model=NotificationModel
+do Notify message="from nobody" severity=0
+expect err message == "no session principal"
+
+do ListNotifications unreadOnly=false
+expect err message == "no session principal"
+
+do MarkAllRead
+expect err message == "no session principal"
+
+client anon-paper model=StatementModel
+do GenerateStatement fromMs=0 toMs=0
+expect err message == "no session principal"
+
+client anon-bills model=PaymentModel
+do PayBill fromAccountId=$acct payeeId=$payee amountMinor=100 description="anonymously"
+expect err message == "no session principal"
+
+# ── Anonymous: refused by the ownership guard instead ───────────────────────
+# These actions never check for an empty owner, so the empty principal simply
+# fails to match the row's real one. Same outcome, different message — and the
+# difference is visible only from outside the process.
+client anon-teller model=TransactionModel
+do Deposit accountId=$acct amountMinor=100 description="anonymously"
+expect err message == "account belongs to a different owner"
+
+do Withdraw accountId=$acct amountMinor=100 description="anonymously"
+expect err message == "account belongs to a different owner"
+
+use anon-bills
+do SchedulePayment fromAccountId=$acct payeeId=$payee amountMinor=100 dueAtMs=2000000000000 description="anonymously"
+expect err message == "account belongs to a different owner"
+
+do CreateStandingOrder fromAccountId=$acct payeeId=$payee amountMinor=100 intervalDays=30 firstDueAtMs=2000000000000 description="anonymously"
+expect err message == "account belongs to a different owner"
+
+client anon-single model=AccountModel
+do GetAccount id=$acct
+expect err message == "account belongs to a different owner"
+
+do CloseAccount id=$acct
+expect err message == "account belongs to a different owner"
+
+# ── One action an anonymous client can still reach ──────────────────────────
+# `SpendingByKind` consults no owner and no session at all, so it answers
+# anybody. Asserted here for the same reason as in
+# an-owner-named-outright-is-not-checked-against-the-session.scenario: it is the
+# behaviour bank has, and a corpus that quietly omitted it would let the day it
+# changes pass unnoticed.
+use anon-plan
+do SpendingByKind accountId=$acct sinceMs=0
+expect ok field accountId == $acct
+expect ok field totalDebitsMinor == 0
+
+# ── Nothing anonymous left a mark ───────────────────────────────────────────
+client check model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 100000
+expect ok field status == 0
+
+# ── Installing the principal is the whole difference ────────────────────────
+# Same connection as the anonymous vault above, one `session` step later.
+use anon-vault
+session principal=$who
+do ListAccounts
+expect ok field accounts ~ "\"id\":$acct,"

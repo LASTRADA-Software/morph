@@ -174,6 +174,22 @@ RUNGS: dict[str, RungSpec] = {
         token_secret_var="KANBAN_TOKEN_SECRET",
         extra_zero_ports=("KANBAN_ATTACHMENT_PORT",),
     ),
+    # bank is not in examples/rungs.txt and does not call morph_add_rung(); its
+    # server is a local target in examples/bank/CMakeLists.txt. Being a rung and
+    # having scenarios were always independent -- `lims` and `crm` are rungs
+    # with no scenarios -- and this is the same independence from the other
+    # side: a scenario corpus over a server, with no claim to a rung number
+    # (morph#87 reserves that decision). Everything this table needs is a
+    # binary name and two environment variables, all three of which
+    # examples/bank/src/server/main.cpp defines.
+    #
+    # No `token_secret_var`: bank's AuthModel mints no bearer token. It verifies
+    # a password and returns the principal for the *client* to install, so a
+    # bank scenario signs in with `session principal=...` and no token, and the
+    # server vouches for that claim (see BankDemoAuthorizer in bank's server
+    # main.cpp). pastebin and polls take this same `None` for the simpler reason
+    # that they have no sign-in at all.
+    "bank": RungSpec(binary="ladder_bank_server", port_var="BANK_PORT", db_var="BANK_DB"),
     "ledger": RungSpec(
         binary="ladder_ledger_server",
         port_var="LEDGER_PORT",

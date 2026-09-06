@@ -158,6 +158,49 @@ registered with unixODBC (the connection string is `DRIVER=SQLite3;Database=…`
 ./build/examples/bank/bank_cli
 ```
 
+### Standalone server (`ladder_bank_server`)
+
+`src/server/main.cpp` builds a headless WebSocket server that hosts every bank
+model over `morph::wire`, so a real out-of-process client can drive them. It
+needs `-DMORPH_BUILD_QT=ON` (the transport is `morph::qt`'s `QtWebSocketServer`;
+no GUI is involved):
+
+```sh
+cmake -G Ninja -B build -S . -DMORPH_BUILD_BANK_EXAMPLE=ON -DMORPH_BUILD_QT=ON
+cmake --build build --target ladder_bank_server
+
+BANK_DB="DRIVER=SQLite3;Database=$PWD/bank.db;Timeout=5000" BANK_PORT=0 \
+    ./build/examples/bank/ladder_bank_server
+# bank-server: listening on ws://127.0.0.1:54321
+```
+
+`BANK_PORT=0` lets the OS pick a free port, which the server prints. It writes
+an audit trail to `bank_actions.jsonl` in its working directory, the same
+`morph::journal::FileActionLog` the CLI installs — the models' read-only actions
+carry `Loggable::No`, so what lands there is the mutating half of the surface.
+
+The scenario corpus in `scripts/scenario/scenarios/bank/` drives this binary;
+see [`scripts/scenario/README.md`](../../scripts/scenario/README.md).
+
+**The name is the scenario tooling's convention, not a rung claim.**
+`run_scenarios.py` derives a binary name of `ladder_<name>_server` from a
+directory name. Bank is *not* a ladder rung — it is absent from
+`examples/rungs.txt`, never calls `morph_add_rung()`, and this target is written
+out locally in `CMakeLists.txt` instead. Bank's slot in the ladder is
+[morph#87](https://github.com/LASTRADA-Software/morph/issues/87), which is still
+open and is the maintainer's decision.
+
+**Authentication is demo-grade, deliberately.** Bank's `AuthModel` mints no
+bearer token: `LoginRequest` verifies a password and returns the *principal* for
+the client to install (which is what `App::login()` does with it). The server
+therefore installs an authorizer that vouches for whatever non-empty principal a
+client asserts, because the alternative — morph's default `allowAllAuthorizer()`
+— does not authenticate, and `RemoteServer` *clears* an unvouched-for principal,
+leaving every action to fail with "no session principal". Per-row ownership is
+still enforced by the models (`db::loadOwned`), so one customer cannot reach
+another's account by id; what is not enforced is proof that the caller is who
+they say. A real deployment swaps in `morph::session::SigningAuthorizer`.
+
 ### Qt 6 QML GUI
 
 A **QML (Qt Quick)** desktop GUI (`gui/`) is built when `-DMORPH_BUILD_BANK_GUI=ON`

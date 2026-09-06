@@ -46,6 +46,26 @@ python3 scripts/scenario/run_scenarios.py --rung pastebin
 python3 scripts/scenario/run_scenarios.py --rung ledger --twice --mutate
 ```
 
+**bank is built separately**, because it is not a ladder rung: it is absent
+from `examples/rungs.txt`, never calls `morph_add_rung()`, and its server is a
+local target in `examples/bank/CMakeLists.txt`. It also pulls a heavy
+dependency tree (the Lightweight ORM over ODBC), which is why it sits behind
+its own option and off by default:
+
+```bash
+cmake --preset clang-release -B build/bank-srv -DMORPH_BUILD_BANK_EXAMPLE=ON \
+    -DMORPH_BUILD_NET=ON -DMORPH_BUILD_QT=ON -DMORPH_BUILD_TESTS=ON
+cmake --build build/bank-srv --target ladder_bank_server
+
+python3 scripts/scenario/run_scenarios.py --rung bank --build-dir build/bank-srv --twice
+```
+
+Note that `--build-dir` applies to *every* rung in the run, so it is for
+single-rung runs like the one above. A whole-corpus `run_scenarios.py` with no
+`--build-dir` still works across the two build directories: it globs
+`build/*/examples/<name>/`, and each server binary exists under exactly one of
+them.
+
 | Flag | Meaning |
 |---|---|
 | `--rung NAME` | Restrict to one rung; repeatable. Default: every rung with a directory. |
@@ -75,7 +95,10 @@ They are no longer a statement that a book cannot be created over the wire:
 it would pass against a database the driver never touched. Every other rung
 creates its own root entity over the wire and is seeded with nothing.
 
-`scenarios/` holds one directory per rung, and one file per workflow:
+`scenarios/` holds one directory per server, and one file per workflow. Five of
+the six are ladder rungs; `bank` is not one (see `SERVER_RUNGS` in
+`scenario_coverage.py`), which is why the column below says "server" rather
+than "rung":
 
 | Directory | Server | What it covers |
 |---|---|---|
@@ -84,6 +107,7 @@ creates its own root entity over the wire and is seeded with nothing.
 | `polls/` | `ladder_polls_server` | the shared-instance showcase: create/open/vote/finalize, two participants converging, principal-scoped undo, the event cursor and instance rebirth |
 | `kanban/` | `ladder_kanban_server` | projects and boards, moves and WIP limits, per-project RBAC across three roles, rules and their cascades, comments, attachments, both event streams |
 | `ledger/` | `ladder_ledger_server` | bootstrapping a book from nothing, per-currency zero-sum bookkeeping, categories and budgets, rules and version conflicts, CSV import, submit-then-poll reporting, two books |
+| `bank/` | `ladder_bank_server` | registration and password-only sign-in, accounts and the ledger behind them, overdraft boundaries, transfers, bills and scheduled/standing instructions, cards, loans and amortisation, budgets, notifications, statements; two customers, the anonymous session, and the stateful account cache |
 
 The rung a scenario belongs to is its parent directory name — that is how
 per-rung action coverage is attributed, so a file loose in `scenarios/` is
@@ -330,8 +354,8 @@ nothing asserts, an allowlist entry left behind after the thing it exempted
 became coverable, or a scenario edited until it no longer qualifies as a
 workflow.
 
-What CI does **not** do is *run* the corpus. `run_scenarios.py` needs the five
-`ladder_<rung>_server` binaries built, which no workflow has today; running it
+What CI does **not** do is *run* the corpus. `run_scenarios.py` needs the six
+`ladder_<name>_server` binaries built, which no workflow has today; running it
 is its own change. So a scenario can currently drift from a server's real
 behaviour without CI noticing — only from its *surface*.
 
