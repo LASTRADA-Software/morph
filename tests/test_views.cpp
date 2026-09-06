@@ -63,11 +63,15 @@ struct VtSharedMassRow {
     VtMass massB{};
 };
 
-/// @brief A row type with no reflected members at all, so
-///        `schemaJson<VtEmptyRow>()` never populates a top-level
-///        `"properties"` key (`mergeSchemaExtras` only ever writes into
-///        `dom["properties"]` from inside `forEachNamedMember`'s per-member
-///        visitor, which for zero members never runs).
+/// @brief A row type with no reflected members at all. `schemaJson<VtEmptyRow>()`
+///        still carries a top-level `"properties"` key -- glaze's schema
+///        writer emits `"properties":{}` unconditionally, even for a
+///        zero-member aggregate -- so `deriveColumns`'s
+///        `!rowDom.contains("properties")` early return is never taken here
+///        either; `deriveColumns<RowNoOverride, VtEmptyRow>()`'s `"[]"`
+///        result below comes from the ordinary fallthrough (an empty
+///        `properties` object iterates zero entries), not that early
+///        return. See views.hpp's `deriveColumns` for the full trace.
 struct VtEmptyRow {};
 
 struct VtRowList {
@@ -317,11 +321,13 @@ TEST_CASE("Views::DeriveColumns::SharedQuantityDefUsesRefIndirection", "[views]"
 }
 
 TEST_CASE("Views::DeriveColumns::EmptyRowSchemaYieldsNoColumns", "[views]") {
-    // vt::VtEmptyRow has no reflected members, so schemaJson<VtEmptyRow>()
-    // never gains a top-level "properties" key -- deriveColumns's
-    // `!rowDom.contains("properties")` early-return (docs/spec/forms/views.md
-    // does not special-case this; it falls out of forms.md's reflection
-    // walk simply never running for zero members).
+    // vt::VtEmptyRow has no reflected members. schemaJson<VtEmptyRow>() still
+    // carries "properties":{} (glaze's schema writer emits it unconditionally
+    // -- see VtEmptyRow's own doc comment above), so this "[]" comes from the
+    // ordinary fallthrough (an empty properties object iterates zero
+    // entries), not from deriveColumns's `!rowDom.contains("properties")`
+    // early return -- that guard is untestable dead code for any Row type
+    // (views.hpp's deriveColumns has the full trace).
     auto const columnsJson = morph::views::detail::deriveColumns<RowNoOverride, vt::VtEmptyRow>();
     CHECK(columnsJson == "[]");
 }

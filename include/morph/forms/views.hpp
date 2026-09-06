@@ -235,19 +235,26 @@ concept HasViewActions = requires {
 template <typename V, typename Row>
 [[nodiscard]] std::string deriveColumns() {
     glz::generic_u64 rowDom{};
-    // The `glz::read_json` half of this condition guards against
-    // `schemaJson<Row>()` returning text that isn't valid JSON at all. That
-    // can only happen when `glz::write_json_schema<Row>()` itself fails
-    // (forms.md, "Total schema failure yields an empty string") -- glaze's
-    // own schema writer failing for a real, compilable, default-constructible
-    // reflectable aggregate, not something reachable through any Row a
-    // caller can actually declare -- so this half is untestable dead code,
-    // kept only because it is cheaper to leave in than to prove absent at
-    // every call site. `!rowDom.contains("properties")` is the reachable
-    // half: it is what actually fires for a Row with no reflected members
-    // (see VtEmptyRow in test_views.cpp), since `mergeSchemaExtras` only
-    // ever writes `dom["properties"]` from inside the per-member visitor,
-    // which for zero members never runs.
+    // Both halves of this condition are untestable dead code, kept only as
+    // defense-in-depth (cheaper to leave in than to prove absent at every
+    // call site). The `glz::read_json` half guards against `schemaJson<Row>()`
+    // returning text that isn't valid JSON at all -- only possible if
+    // `glz::write_json_schema<Row>()` itself fails (forms.md, "Total schema
+    // failure yields an empty string"), which glaze's own schema writer does
+    // not do for a real, compilable, default-constructible reflectable
+    // aggregate. The `!rowDom.contains("properties")` half was once believed
+    // reachable for a Row with no reflected members (VtEmptyRow in
+    // test_views.cpp) -- direct measurement disproved that: glaze's schema
+    // writer emits a `"properties":{}` key unconditionally for every
+    // reflectable aggregate, including a zero-member one (confirmed via a
+    // standalone `glz::write_json_schema<T>()` probe: `{"type":"object",
+    // "properties":{},"additionalProperties":false,"title":"T"}`), so
+    // `rowDom` always has a `"properties"` entry regardless of Row's member
+    // count. `VtEmptyRow`'s `"[]"` result comes from the ordinary
+    // fallthrough below (an empty `properties` object iterates zero entries,
+    // producing an empty `columns` array), not from this early return --
+    // `llvm-cov` confirms 0 hits on this branch's body across all 10
+    // instantiations this suite exercises.
     if (glz::read_json(rowDom, ::morph::forms::schemaJson<Row>()) || !rowDom.contains("properties")) {
         return "[]";
     }
