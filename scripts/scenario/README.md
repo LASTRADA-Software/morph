@@ -125,20 +125,22 @@ scenarios. `--rung bank` and the `bank` column below are therefore spellings of
 | `bank/` | `ladder_bank_server` | registration and password-only sign-in, accounts and the ledger behind them, overdraft boundaries, transfers, bills and scheduled/standing instructions, cards, loans and amortisation, budgets, notifications, statements; two customers, the anonymous session, and the stateful account cache |
 
 Some of the bank files assert behaviour that is **wrong**, deliberately, and
-say so in their own header comments. The largest is
-[morph#471](https://github.com/LASTRADA-Software/morph/issues/471):
-`bank::resolveOwner()` prefers a caller-supplied owner name over the session
-principal, so ten actions serve a signed-in customer another customer's data
-and `MarkAllRead` writes to it —
-`bank/an-owner-named-outright-is-not-checked-against-the-session.scenario` is
-the inventory, its cross-owner steps all `expect ok`. `SpendingByKind`
-answering a caller
-with no session at all, and `GenerateStatement` reporting a live balance in a
-field named `closingBalanceMinor`, are pinned the same way. An `expect ok` over
-a defect records what the server does today so the day it changes is not a
-silent one; it is not an endorsement, and the fix is meant to turn those
-assertions red. That is the opposite arrangement from
-`broken-on-purpose.scenario`, which fails today by design.
+say so in their own header comments: `GenerateStatement` reporting a live
+balance in a field named `closingBalanceMinor` is one, and a DTO's `validate()`
+shadowing the model's own error message is another. An `expect ok` over a defect
+records what the server does today so the day it changes is not a silent one; it
+is not an endorsement, and the fix is meant to turn those assertions red. That
+is the opposite arrangement from `broken-on-purpose.scenario`, which fails today
+by design.
+
+`bank/an-owner-named-outright-is-checked-against-the-session.scenario` is what
+that arrangement looks like after the fix lands. It was
+[morph#471](https://github.com/LASTRADA-Software/morph/issues/471)'s inventory,
+written entirely `expect ok` because `bank::resolveOwner()` preferred a
+caller-supplied owner name over the session principal and ten actions therefore
+served a signed-in customer another customer's data. Flipping those assertions
+to `expect err` was that issue's regression test, and the file now pins the
+enforcement in the same shape it once pinned the defect.
 
 The rung a scenario belongs to is its parent directory name — that is how
 per-rung action coverage is attributed, so a file loose in `scenarios/` is

@@ -85,12 +85,21 @@ dto::BudgetList BudgetModel::execute(const dto::ListBudgets& action) {
 }
 
 dto::SpendingReport BudgetModel::execute(const dto::SpendingByKind& action) {
+    // This action is addressed by account id and carries no `owner` field, so
+    // `resolveOwner` never sees it and cannot be what scopes it. `db::loadOwned`
+    // is: it navigates the row to its owner and compares that with the session
+    // principal, the same guard every other id-addressed action uses. Without
+    // it the report consulted no owner at all and read any account in the
+    // database, including for a caller with no session.
+    const auto account = db::loadOwned<db::AccountRecord>(mapper(), action.accountId, sessionPrincipal(), "account");
+    const auto accountId = static_cast<std::int64_t>(account.id.Value());
+
     // Push the account/direction/time filters into the query so only the rows we
     // aggregate cross the wire; the by-kind rollup stays in code (no GROUP BY SQL).
     auto rows =
         mapper()
             .Query<db::TxnRecord>()
-            .Where(Lightweight::FieldNameOf<&db::TxnRecord::account>, "=", action.accountId)
+            .Where(Lightweight::FieldNameOf<&db::TxnRecord::account>, "=", accountId)
             .Where(Lightweight::FieldNameOf<&db::TxnRecord::direction>, "=", static_cast<int>(TxnDirection::Debit))
             .Where(Lightweight::FieldNameOf<&db::TxnRecord::createdAtMs>, ">=", action.sinceMs)
             .All();
@@ -107,7 +116,7 @@ dto::SpendingReport BudgetModel::execute(const dto::SpendingByKind& action) {
     }
 
     dto::SpendingReport report;
-    report.accountId = action.accountId;
+    report.accountId = accountId;
     report.totalDebitsMinor = totalDebits;
     report.byKind.reserve(byKind.size());
     for (const auto& [kind, spend] : byKind) {

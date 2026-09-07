@@ -17,15 +17,23 @@
 # see "no session" as a special case — it sees an empty principal, and every
 # owner-resolving action refuses on that.
 #
-# The refusals come in two shapes, and which one an action gives away is a
+# The refusals come in three shapes, and which one an action gives away is a
 # property of how it resolves its owner, not of how important it is:
 #
-#   * "no session principal" — the action checked for an empty owner itself.
-#   * "... belongs to a different owner" — the action did not check, and the
-#     empty string simply failed to match the row's real owner further down.
+#   * "no session principal" — the action carries an `owner` field, the caller
+#     left it empty, `bank::resolveOwner` returned the empty principal, and the
+#     action's own guard refused it.
+#   * "owner does not match the session principal" — the action carries an
+#     `owner` field and the caller *filled it in*. `resolveOwner` compares it
+#     with the session principal and refuses, and an empty principal matches
+#     nothing. This is the shape morph#471 added; before it, naming an owner
+#     was how an anonymous caller got served that owner's data.
+#   * "... belongs to a different owner" — the action is addressed by row id,
+#     so there is no `owner` field to check, and the empty principal simply
+#     failed to match the row's real owner further down.
 #
 # `SchedulePayment` and `CreateStandingOrder` are the clearest case of the
-# second shape: unlike their sibling `PayBill` they have no empty-owner guard at
+# third shape: unlike their sibling `PayBill` they have no empty-owner guard at
 # all, so an anonymous caller is turned away by the ownership comparison instead.
 
 model AuthModel
@@ -141,25 +149,51 @@ expect err message == "account belongs to a different owner"
 do CloseAccount id=$acct
 expect err message == "account belongs to a different owner"
 
-# ── One action an anonymous client can still reach ──────────────────────────
-# `SpendingByKind` consults no owner and no session at all, so it answers
-# anybody. Asserted here for the same reason as in
-# an-owner-named-outright-is-not-checked-against-the-session.scenario: it is the
-# behaviour bank has, and a corpus that quietly omitted it would let the day it
-# changes pass unnoticed. It is recorded under morph#471
-# (https://github.com/LASTRADA-Software/morph/issues/471) as an aggravating
-# detail beside that issue's ten owner-resolving actions, so this `expect ok`
-# is a record rather than an endorsement.
 use anon-plan
 do SpendingByKind accountId=$acct sinceMs=0
-expect ok field accountId == $acct
-expect ok field totalDebitsMinor == 0
+expect err message == "account belongs to a different owner"
+
+# ── Refused by the owner comparison instead ────────────────────────────────
+# The shape morph#471 added. Everything above left `owner` empty, which is the
+# only case the old `resolveOwner` consulted the session for; filling it in was
+# how an anonymous caller reached a real customer's data, because the field was
+# taken verbatim and compared with nothing. It is now compared with the session
+# principal, and an empty principal matches no name at all — so the anonymous
+# client is refused before any `users` row is looked up.
+use anon-vault
+do ListAccounts owner=$who
+expect err message == "owner does not match the session principal"
+
+do OpenAccount owner=$who kind=0 currency=0 overdraftMinor=876543
+expect err message == "owner does not match the session principal"
+
+use anon-book
+do ListPayees owner=$who
+expect err message == "owner does not match the session principal"
+
+use anon-alerts
+do ListNotifications owner=$who unreadOnly=false
+expect err message == "owner does not match the session principal"
+
+do MarkAllRead owner=$who
+expect err message == "owner does not match the session principal"
+
+use anon-paper
+do GenerateStatement owner=$who fromMs=0 toMs=0
+expect err message == "owner does not match the session principal"
 
 # ── Nothing anonymous left a mark ───────────────────────────────────────────
+# The balance is untouched, and the account the anonymous `OpenAccount` above
+# named the member as the owner of was never created: 876543 is a marker
+# overdraft no other scenario in this corpus opens an account with.
 client check model=AccountModel principal=$who
 do GetAccount id=$acct
 expect ok field balanceMinor == 100000
 expect ok field status == 0
+
+use member
+do ListAccounts
+expect ok field accounts !~ "\"overdraftMinor\":876543"
 
 # ── Installing the principal is the whole difference ────────────────────────
 # Same connection as the anonymous vault above, one `session` step later.

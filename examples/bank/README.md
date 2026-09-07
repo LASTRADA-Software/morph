@@ -238,36 +238,25 @@ unvouched-for, `RemoteServer` *clears* it, and every bank action then fails with
 whatever non-empty principal arrives, and anyone who can open a socket can claim
 to be any customer.
 
-What that does and does not leave standing: per-row ownership *is* enforced by
-the models (`db::loadOwned` navigates a row to its owner and compares that with
-the session principal), so cross-customer isolation is real and testable — it is
-what `another-customer-cannot-touch-your-account.scenario` pins. What is absent
-is credential *proof*. A server that needs it swaps in
+What that does and does not leave standing: ownership *is* enforced by the
+models, in both of the two spellings an action can be addressed by. A row id
+goes through `db::loadOwned`, which navigates the row to its owner and compares
+that with the session principal; an owner name goes through
+`bank::resolveOwner`, which compares the caller-supplied `owner` with the
+session principal and refuses on a mismatch. Cross-customer isolation is
+therefore real and testable —
+`another-customer-cannot-touch-your-account.scenario` pins the first spelling
+and `an-owner-named-outright-is-checked-against-the-session.scenario` the
+second. What is absent is credential *proof*. A server that needs it swaps in
 `morph::session::SigningAuthorizer` and issues a token to verify against; bank
 has none to issue.
 
 #### Defects the scenario corpus pins on purpose
 
-Three things the corpus asserts as current behaviour because they are true, not
-because they are right. A scenario passing over any of them is a record, not an
-endorsement; when one is fixed, the file that pins it is meant to fail.
+Two things the corpus asserts as current behaviour because they are true, not
+because they are right. A scenario passing over either of them is a record, not
+an endorsement; when one is fixed, the file that pins it is meant to fail.
 
-- **[morph#471](https://github.com/LASTRADA-Software/morph/issues/471) — a
-  caller-supplied owner beats the session principal.**
-  `bank::resolveOwner()` ([`include/bank/core/principal.hpp:24`](include/bank/core/principal.hpp))
-  returns `action.owner` whenever it is non-empty and only falls back to the
-  session principal when it is not; nothing compares the two. Ten actions across
-  eight models resolve their scope through it — `ListAccounts`, `ListCards`,
-  `ListPayees`, `ListPayments`, `ListLoans`, `ListBudgets`,
-  `ListNotifications`, `GenerateStatement`, `OpenAccount` and `MarkAllRead` —
-  so a signed-in customer who types another customer's username is served that
-  customer's data, and `MarkAllRead` *writes* to it. `SpendingByKind` consults
-  no owner at all and answers a caller with no session. Actions addressed by
-  row id are unaffected: they load the row and check its owner, which is the
-  pattern the ten should follow.
-  `an-owner-named-outright-is-not-checked-against-the-session.scenario` is the
-  inventory: every cross-owner read and the `MarkAllRead` write are `expect
-  ok` there, beside the id-addressed calls that are correctly refused.
 - **A DTO's `validate()` shadows the model's own `ValidationError`.** Fifteen
   bank actions carry a `validate()` predicate on the wire DTO *and* open their
   `execute()` with `if (!action.validate()) throw ValidationError{"…"}`. Over
