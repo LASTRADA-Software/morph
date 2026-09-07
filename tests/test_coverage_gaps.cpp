@@ -451,6 +451,64 @@ BRIDGE_REGISTER_VALIDATOR(SlowSubAction, [](const SlowSubAction& act) { return a
 BRIDGE_REGISTER_VALIDATOR(ThrowSubAction, [](const ThrowSubAction& act) { return act.trigger != 0; })
 BRIDGE_REGISTER_VALIDATOR(WeirdSubAction, [](const WeirdSubAction& act) { return act.trigger != 0; })
 
+// ── registry.hpp R5: BRIDGE_REGISTER_VALIDATOR's generated ready() body ──────
+//
+// SlowSubAction/ThrowSubAction/WeirdSubAction are registered above with both
+// BRIDGE_REGISTER_ACTION and BRIDGE_REGISTER_VALIDATOR, but nothing in this
+// file (or the rest of the tree) actually dispatches them -- so the
+// generated `static bool ready(const A& action) { return (FN)(action); }`
+// body has never run. This drives all three through
+// ActionDispatcher::dispatch directly, varying seq/trigger to hit both the
+// validator's accept and reject arms, and confirms the throw-propagation
+// behavior the two "misbehaving" actions look built to exercise.
+TEST_CASE("registry.hpp R5: BRIDGE_REGISTER_VALIDATOR's ready() rejects an action failing its predicate",
+          "[coverage][registry][validator]") {
+    auto holder = morph::model::detail::ModelFactory::create<SubModel>();
+    // trigger == 0 fails ThrowSubAction's validator before Model::execute ever
+    // runs, so the model's own throw is never reached.
+    REQUIRE_THROWS_AS(morph::model::detail::ActionDispatcher::instance().dispatch("Cov_SubModel", "Cov_ThrowSubAction",
+                                                                                  *holder, R"({"trigger":0})"),
+                      morph::model::ValidationError);
+}
+
+TEST_CASE("registry.hpp R5: BRIDGE_REGISTER_VALIDATOR's ready() accepts an action passing its predicate",
+          "[coverage][registry][validator]") {
+    auto holder = morph::model::detail::ModelFactory::create<SubModel>();
+    // seq != 0 passes SlowSubAction's validator; the action itself just
+    // sleeps and echoes seq back.
+    auto const resultJson = morph::model::detail::ActionDispatcher::instance().dispatch(
+        "Cov_SubModel", "Cov_SlowSubAction", *holder, R"({"seq":5})");
+    REQUIRE(morph::model::ActionTraits<SlowSubAction>::resultFromJson(resultJson) == 5);
+}
+
+TEST_CASE("registry.hpp R5: a validator-accepted action still propagates a std::exception from execute()",
+          "[coverage][registry][validator]") {
+    auto holder = morph::model::detail::ModelFactory::create<SubModel>();
+    // trigger != 0 passes the validator, so Model::execute(ThrowSubAction)
+    // runs and its std::runtime_error propagates out of dispatch().
+    bool threw = false;
+    try {
+        morph::model::detail::ActionDispatcher::instance().dispatch("Cov_SubModel", "Cov_ThrowSubAction", *holder,
+                                                                    R"({"trigger":1})");
+    } catch (const std::runtime_error& err) {
+        threw = true;
+        REQUIRE(std::string{err.what()} == "threw inside action");
+    }
+    REQUIRE(threw);
+}
+
+TEST_CASE("registry.hpp R5: a validator-accepted action still propagates a non-std::exception from execute()",
+          "[coverage][registry][validator]") {
+    auto holder = morph::model::detail::ModelFactory::create<SubModel>();
+    // trigger != 0 passes the validator; Model::execute(WeirdSubAction) then
+    // throws NotAStdException, which the dispatcher's own `catch (const
+    // std::exception&)` does not intercept (it only journals std::exception
+    // failures) -- it must still reach the caller unchanged.
+    REQUIRE_THROWS_AS(morph::model::detail::ActionDispatcher::instance().dispatch("Cov_SubModel", "Cov_WeirdSubAction",
+                                                                                  *holder, R"({"trigger":1})"),
+                      NotAStdException);
+}
+
 TEST_CASE("morph::bridge::BridgeHandler: unsubscribe with no entry is a no-op", "[coverage][bridge]") {
     morph::exec::ThreadPoolExecutor pool{1};
     SyncExecutor cbExec;

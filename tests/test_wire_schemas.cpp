@@ -27,7 +27,9 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/forms/forms.hpp>
 #include <morph/session/session.hpp>
+#include <morph/util/quantity.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -79,6 +81,49 @@ struct WireSchemasTransfer {
     std::int64_t amountCents = 0;
     std::string memo;
 };
+
+// A minimal engageable (has hasValue()) unit, mirroring
+// test_forms_rules.cpp's CFRMoney -- exactlyOneOf/mutuallyExclusive need an
+// EngageableField (EmptyCapableField or std::optional), and a plain
+// std::optional-typed field could not produce the contradiction below at
+// all (an optional field is never "required by default" -- see
+// test_forms_rules.cpp's comment above CFRUnsatisfiableExactlyOne).
+enum class WireSchemasUnit : std::uint8_t { count };
+
+template <>
+struct morph::units::UnitTraits<WireSchemasUnit> {
+    static constexpr morph::units::UnitMeta meta(WireSchemasUnit /*unit*/) noexcept {
+        return {.id = "count", .display = "", .defaultDecimals = 0};
+    }
+};
+
+using WireSchemasQty = morph::units::Quantity<WireSchemasUnit::count>;
+
+/// R4: `exactlyOneOf` over two fields that are both required by default --
+/// `required` demands both, the rule permits exactly one, so nothing can be
+/// submitted. `morph::forms::schemaJson<A>()` (and therefore
+/// `buildActionDescription<A>()`) throws `UnsatisfiableFormError` the first
+/// time this action's description is asked for.
+struct WireSchemasUnsatisfiable {
+    WireSchemasQty optionA;
+    WireSchemasQty optionB;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::exactlyOneOf(&WireSchemasUnsatisfiable::optionA, &WireSchemasUnsatisfiable::optionB));
+};
+
+struct WireSchemasUnsatisfiableResult {
+    std::int64_t chosen = 0;
+};
+
+struct WireSchemasBrokenModel {
+    WireSchemasUnsatisfiableResult execute(const WireSchemasUnsatisfiable& /*action*/) {
+        return WireSchemasUnsatisfiableResult{.chosen = 0};
+    }
+};
+
+BRIDGE_REGISTER_MODEL(WireSchemasBrokenModel, "WireSchemas_Broken")
+BRIDGE_REGISTER_ACTION(WireSchemasBrokenModel, WireSchemasUnsatisfiable, "WireSchemas_Unsatisfiable")
 
 struct WireSchemasLedgerModel {
     std::int64_t balanceCents = 0;
@@ -288,6 +333,31 @@ TEST_CASE("ActionDispatcher::requiredFieldsFor returns nullptr for an unregister
     // unregistered action never published a requirement.
     REQUIRE(morph::model::detail::ActionDispatcher::instance().requiredFieldsFor(
                 "WireSchemas_Ledger", "WireSchemas_NoSuchAction") == nullptr);
+}
+
+// ── R4: requiredFieldsFor's own catch around a self-contradicting formRules ──
+
+TEST_CASE("ActionDispatcher::requiredFieldsFor returns nullptr rather than propagating UnsatisfiableFormError",
+          "[registry][schemas][r4]") {
+    // buildActionDescription<WireSchemasUnsatisfiable>() throws the first time
+    // it runs (memoised into a function-local static; a throw during that
+    // static's initialisation leaves it uninitialised, so this is not a
+    // one-shot fluke -- see test_forms_rules.cpp's
+    // "ThrowIsNotCachedAwayBySchemaJson"). requiredFieldsFor's own try/catch
+    // must turn that into nullptr, not let it propagate to this caller.
+    REQUIRE(morph::model::detail::ActionDispatcher::instance().requiredFieldsFor(
+                "WireSchemas_Broken", "WireSchemas_Unsatisfiable") == nullptr);
+}
+
+TEST_CASE("ActionDispatcher::schemasJson has no such guard and propagates UnsatisfiableFormError",
+          "[registry][schemas][r4]") {
+    // schemasJson's own doc comment documents this (@throws
+    // UnsatisfiableFormError) -- unlike requiredFieldsFor, it has no
+    // try/catch around the same buildActionDescription<A>() call, so the
+    // model's broken action's schema-generation failure surfaces directly to
+    // the caller.
+    REQUIRE_THROWS_AS(morph::model::detail::ActionDispatcher::instance().schemasJson("WireSchemas_Broken"),
+                      morph::forms::UnsatisfiableFormError);
 }
 
 // ── PayloadCompleteness: enforcing the published action-evolution policy ─────
