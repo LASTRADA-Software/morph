@@ -89,18 +89,30 @@ expect ok field lines ~ "\"accountId\":$busy,[^}]*\"entryCount\":0"
 
 # ── An owner with no accounts at all ────────────────────────────────────────
 # A statement with no lines, rather than a refusal: the owner exists and simply
-# holds nothing.
+# holds nothing. Asserted from that owner's own session, because
+# `GenerateStatement` resolves its scope through `bank::resolveOwner`, which
+# refuses any `owner` that is not the session principal — see
+# an-owner-named-outright-is-checked-against-the-session.scenario.
 client other model=AuthModel
 do RegisterUser username=perlis-no-accounts password=none-pass displayName="No Accounts"
 expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=perlis-no-accounts password=none-pass
+expect ok capture nobody=$.principal
+expect ok field ok == true
 
-use paper
-do GenerateStatement owner=perlis-no-accounts fromMs=0 toMs=0
+client empty-paper model=StatementModel principal=$nobody
+do GenerateStatement owner=$nobody fromMs=0 toMs=0
 expect ok field owner == "perlis-no-accounts"
 expect ok field lines == []
 expect ok field totalCreditsMinor == 0
 
-# An owner who was never registered has no `users` row to resolve, and that is
-# reported as an authorization failure rather than as an empty statement.
+# Naming somebody else is refused, and refused *before* the `users` row is
+# looked up — so a name that exists and one that never did are answered
+# identically. That is the point: resolving first and reporting "unknown user:
+# …" told an unauthorized caller whether a username existed.
+use paper
+do GenerateStatement owner=perlis-no-accounts fromMs=0 toMs=0
+expect err message == "owner does not match the session principal"
+
 do GenerateStatement owner=nobody-ever fromMs=0 toMs=0
-expect err message == "unknown user: nobody-ever"
+expect err message == "owner does not match the session principal"
