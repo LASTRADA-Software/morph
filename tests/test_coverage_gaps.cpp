@@ -410,9 +410,11 @@ TEST_CASE("morph::offline::NetworkMonitor: stop() from inside probe detaches and
 // runs that grep next. Nothing verifies either half of such a citation, so when
 // a name and a number disagree, believe the name.
 //
-// The type that does exist is Bridge::InstanceSubscription (bridge.hpp:1848) —
-// a weak_ptr to a detail::HandlerBinding, the result type it wants, and where to
-// deliver it.
+// The type that does exist is SubscriptionRegistry::Entry
+// (core/detail/subscription_registry.hpp) — a weak_ptr to a
+// detail::HandlerBinding, the result type it wants, and where to deliver it.
+// (It used to be Bridge::InstanceSubscription, inline in bridge.hpp, before
+// Task 13b's extraction moved the subscription bookkeeping out of Bridge.)
 //
 // What the three cases below reach is the empty and non-matching arms: an
 // unsubscribe with no entry to erase, a publishResult with no subscription to

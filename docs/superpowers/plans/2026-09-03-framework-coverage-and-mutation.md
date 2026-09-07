@@ -2,6 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status as of 2026-09-07 (checkboxes below are left unchecked per this
+> repo's own convention — every other plan in this tree is the same — read
+> this note instead):** Phases 1–5 and 9 (the coverage half: quick wins,
+> net, forms, offline, core, and writing the final numbers back into
+> `codecov.yml`/`scripts/check_branch_coverage.py`) are complete and
+> reviewed. Framework-wide: 93.98%→98.10% lines, 91.19%→95.95% branches
+> (Codecov's own arithmetic, aggregated LCOV), every subsystem clear of its
+> floor. Phase 6 (the mutation false-positive investigation) turned out to
+> be pre-answered: this plan's own Task 17-equivalent work (`567168b2`)
+> and an upstream commit (`e5c7dec5`, fixing issue #434) both independently
+> confirmed and fixed the `cxx_remove_void_call` mutator bug before Phase 6
+> was ever dispatched. **Phases 7–8 (mutation-survivor triage, and
+> extending mutation to `net`) were not executed** — Mull ships only as a
+> Linux `amd64` `.deb` package and the machine this plan ran on is macOS,
+> making it not just unavailable but OS-incompatible; the user explicitly
+> chose to skip these phases and finish the rest rather than set up a
+> Linux environment. Whoever has Mull/Linux access can pick up Phase 7 at
+> Task 19 using the corrected mutator config `scripts/mutation.sh` already
+> has (the old 352-survivor list is not comparable — a fresh run is
+> Task 19's own first step regardless).
+
 **Goal:** Push `include/morph` (the framework, not the example apps) as close to 100% line/branch coverage as an honest ceiling allows, and turn today's mutation-testing survivor list into a small, individually-justified residual instead of an unaudited 352-entry pile.
 
 **Architecture:** This is an audit-then-close loop, not a spec-then-build one — the exact set of uncovered lines/branches/mutants is not knowable until measured, so each phase opens with a concrete audit task (exact commands, concrete artifact) and closes with a per-finding TDD loop (Catch2 case that fails on the gap, passes once it's covered, or a documented reason the gap is real and permanent). This mirrors the pattern already used successfully in this repo's own history (`b54854e8`, `086b54f2`, `d5c455f2`): measure, classify honestly, close what's real, write down what isn't.
@@ -272,6 +293,16 @@ net is 77.61% lines / 75.15% branches over 1,949 header lines across `socket_ser
 
 **Files:**
 - Create: `include/morph/net/detail/reply_router.hpp` — `morph::net::detail::PendingCallTable` (call-id allocation, insert-under-lock with the existing `_connected` re-check `execute()`'s own comment at `socket_backend.hpp:288–298` explains, take-and-erase, drain-all) and a free function `classifyExecuteReply(const wire::Envelope&) -> {Value|Timeout|Error}`.
+  **[Corrected at execution time, kept here as the original plan text for
+  the record: the file actually landed at `include/morph/core/detail/`, not
+  `net/detail/`, and the namespace is `morph::core::detail`, not
+  `morph::net::detail`. Reason: this component is also used by
+  `SimulatedRemoteBackend` in `core/remote.hpp`, which is part of core (the
+  always-built base target); placing it under `net/` (the optional
+  `morph_net` target) would have reproduced the morph#232 install-defect
+  pattern this same plan's `check_install_export.sh` strengthening (Task
+  13a/13b's review) exists to catch. See the actual header for the true
+  location.]**
 - Modify: `include/morph/net/socket_backend.hpp` (hold a `PendingCallTable` member, call the free classifier instead of inline triage), `include/morph/core/remote.hpp` (`SimulatedRemoteBackend` calls the same free classifier), `src/qt/qt_websocket_backend.cpp` (replace the hand-typed `"timeout"` literal at line 580 with a call to the same free classifier or, at minimum, `wire::kExecuteTimeoutMessage` — closing the drift found above; note in the commit message that this was found during the extraction, per the plan's "file what you find" constraint, and is being fixed inline here rather than filed separately because it's a one-line consequence of the same refactor, not a separate investigation).
 - Test: new `tests/net/test_reply_router.hpp`-style direct tests for `PendingCallTable`/`classifyExecuteReply` (no socket, no thread pool); `tests/net/test_socket_backend.cpp` keeps only the cases that genuinely need a real connection (the connect/reconnect state machine, the WS control-frame pump), with the ~6 pure-triage cases migrated to the new direct tests.
 

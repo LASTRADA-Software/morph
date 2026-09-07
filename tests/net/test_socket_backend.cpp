@@ -1179,10 +1179,12 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
     // when a connection with several executes in flight drops -- whose own
     // hang would masquerade as a failure of *this* fix instead of the
     // ticket-ordering issue it actually is. morph#449 is fixed (see
-    // `releaseExecuteTicket` in remote.hpp), and its own stress-shaped
-    // regression test is "many concurrent executes racing a disconnect leave
-    // no stranded execute ticket" below; the two are kept separate so a
-    // regression in either one fails where it is diagnosed.
+    // `ExecuteOrderGate::release` in core/detail/execute_order_gate.hpp,
+    // extracted out of remote.hpp's own `releaseExecuteTicket` after this
+    // fix landed), and its own stress-shaped regression test is "many
+    // concurrent executes racing a disconnect leave no stranded execute
+    // ticket" below; the two are kept separate so a regression in either one
+    // fails where it is diagnosed.
     for (int iter = 0; iter < 3; ++iter) {
         morph::exec::ThreadPoolExecutor serverPool{2};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -1514,9 +1516,12 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no 
     // executes still in flight for one model split into some that find the
     // model and some that reject with "model not found" -- and a rejection
     // releases its execute-ordering ticket immediately, without waiting for
-    // its turn. `releaseExecuteTicket` used to advance `nextToRun` past any
-    // earlier ticket when that happened, leaving that ticket's waiter parked
-    // in `awaitExecuteTurn` on a predicate that could never come true again.
+    // its turn. `ExecuteOrderGate::release` (formerly `RemoteServer`'s own
+    // `releaseExecuteTicket`, before it was extracted into
+    // core/detail/execute_order_gate.hpp) used to advance `nextToRun` past
+    // any earlier ticket when that happened, leaving that ticket's waiter
+    // parked in `awaitTurn` (formerly `awaitExecuteTurn`) on a predicate that
+    // could never come true again.
     //
     // The visible failure is not this test's assertions: it is the teardown
     // below it. A stranded ticket holds a `serverPool` worker forever, so

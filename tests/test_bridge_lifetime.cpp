@@ -400,9 +400,11 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
     // obtained via `mmap`, manually destroyed in place (not `delete` -- the
     // memory isn't heap-owned), and the page is then `mprotect`'d to
     // `PROT_NONE`. `hasSubscribers()` is a member function call that
-    // dereferences `this` to read `_subscriptionCount`; pre-fix, that
-    // dereference lands on a `PROT_NONE` page and faults immediately, before
-    // it can return any value at all.
+    // dereferences `this` to read its `SubscriptionRegistry` member's
+    // relaxed-atomic count (formerly `Bridge`'s own `_subscriptionCount`,
+    // before Task 13b's extraction); pre-fix, that dereference lands on a
+    // `PROT_NONE` page and faults immediately, before it can return any
+    // value at all.
     //
     // The fault is recovered in-process via `sigsetjmp`/`siglongjmp` (see
     // `guardPageFaultHandler` above) rather than relying on Catch2's built-in
