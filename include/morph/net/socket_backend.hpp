@@ -231,8 +231,8 @@ public:
 
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     ///
-    /// Carries a real, non-zero `callId` drawn from the same `_nextCallId`
-    /// counter `execute()` uses, exactly as `QtWebSocketBackend` does (see
+    /// Carries a real, non-zero `callId` drawn from the same shared counter
+    /// (`_pending.nextCallId()`) `execute()` uses, exactly as `QtWebSocketBackend` does (see
     /// issue #65, and #454 for this transport's own reoccurrence of it):
     /// `callId == 0` is `dispatchIncomingEnvelope`'s discriminator for "hand
     /// this payload to whichever `sendSync()` is parked", so a
@@ -250,7 +250,7 @@ public:
         if (_connected.load()) {
             try {
                 auto env = ::morph::wire::makeDeregister(mid.v);
-                env.callId = ++_nextCallId;
+                env.callId = _pending.nextCallId();
                 env.session = currentSession();
                 sendFrame(::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env));
             } catch (const std::exception&) {

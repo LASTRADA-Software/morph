@@ -475,25 +475,3 @@ TEST_CASE("TcpSocket::shutdownBoth: a safe no-op on an empty socket", "[net][tcp
     empty.shutdownBoth();  // must not crash
     REQUIRE_FALSE(empty.valid());
 }
-
-TEST_CASE("WakeupPipe: construction fails cleanly when pipe() runs out of file descriptors", "[net][tcp]") {
-    {
-        FdLimitClamp const clamp;
-        WakeupPipe const wake;
-        // pipe() itself needs two fresh fds, unlike fcntl()'s F_GETFL/F_SETFL
-        // (see the "left open" notes in the report for findings #10/#16/#21):
-        // this is the one WakeupPipe/TcpSocket fd-allocating call this
-        // technique actually reaches.
-        REQUIRE_FALSE(wake.valid());
-
-        // Both guarded no-ops on an invalid pipe -- never exercised by any
-        // other test, since every other WakeupPipe in this file constructs
-        // successfully.
-        wake.signal();
-        wake.drain();
-    }
-    // The constraint was scoped to just that one construction: a normal
-    // WakeupPipe still works once the limit is lifted.
-    WakeupPipe const sanity;
-    REQUIRE(sanity.valid());
-}

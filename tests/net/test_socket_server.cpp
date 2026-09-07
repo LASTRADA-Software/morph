@@ -650,7 +650,7 @@ TEST_CASE("SocketServer: acceptLoop's _closing checks observe a concurrent close
     // A single connect() racing a single close() essentially never lands
     // this: close()'s wakeup write is a handful of instructions, almost
     // always faster than a fresh connect() reaching the backlog, so
-    // waitForConnection() is woken by the wake fd (not the listener) on
+    // acceptLoop()'s poll() is woken by the wake fd (not the listener) on
     // nearly every iteration -- confirmed empirically (0/many across earlier
     // revisions of this test using one real OS thread per connect() attempt).
     // fireNonBlockingConnect() below skips both the thread-per-attempt
@@ -804,8 +804,8 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
     // on the pending connections on its own -- deliberately not calling
     // close() yet. close()'s _wakeup.signal() would otherwise race the
     // still-pending connections' own readiness for which one poll() reports
-    // first (waitForConnection() prioritizes the wake fd whenever both are
-    // ready -- see its own doc comment), and calling close() immediately
+    // first (acceptLoop() checks the wake fd's revents before the
+    // listener's, so it wins whenever both are ready), and calling close() immediately
     // after firing the connects lets it win essentially every time, returning
     // via the ordinary "close() signalled" path before tryAccept() is ever
     // attempted. There is no public signal to poll for "the accept thread
