@@ -277,6 +277,57 @@ TEST_CASE("morph::backend::RemoteServer::handleInline: malformed input falls thr
     REQUIRE(reply.kind == "err");
 }
 
+TEST_CASE(
+    "morph::backend::RemoteServer::handleInline: a malformed input over the log preview cap still falls through "
+    "to the decode-error reply",
+    "[remote][handleInline]") {
+    // RM7: dispatchMessage's undecodable-envelope log line appends "..." only
+    // when the raw message exceeds kLogPayloadPreviewBytes (256). Every prior
+    // "malformed input" test used a short message, so that arm never fired.
+    // Not independently observable from the reply itself (the ellipsis is a
+    // log-formatting detail only), so this pins the one behavior that *is*
+    // observable: the reply is still the ordinary decode-error `err`,
+    // unaffected by the message's length.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    const std::string overLongGarbage(300, 'x');  // not JSON at all, and > 256 bytes
+    auto reply = morph::wire::decode(server->handleInline(overLongGarbage));
+    REQUIRE(reply.kind == "err");
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer::handleImpl: a well-formed execute naming modelId 0 takes no ordering "
+    "ticket and still reports \"model not found\"",
+    "[remote][handleImpl]") {
+    // RM15: handleImpl's ticket-peek `peek.kind == "execute" && peek.modelId
+    // != 0` -- the `peek.modelId != 0` arm was always true in every existing
+    // test (every execute names a real, previously-registered instance).
+    // `ModelId{0}` is the documented "unbound" sentinel and nextOpaqueId()
+    // never hands it to a real instance, so the real lookup in
+    // dispatchExecute must still, correctly, report "model not found" --
+    // exactly as it would for any other unknown id -- whether or not this
+    // peek took an ordering ticket for it.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 1;
+    req.modelId = 0;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareAction";
+    req.body = R"({"x":3})";
+
+    WaitReply reply;
+    server->handle(morph::wire::encode(req), std::ref(reply));
+    REQUIRE(reply.await());
+    REQUIRE(reply.env.kind == "err");
+    REQUIRE(reply.env.message == "model not found");
+}
+
 // ── morph::backend::RemoteServer::dispatchExecute: authenticate() overrides principal ───────
 
 struct WhoAmI {};

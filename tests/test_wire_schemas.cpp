@@ -17,6 +17,7 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
 #include <memory>
@@ -117,6 +118,16 @@ struct WireSchemasDescribeGatingAuthorizer : morph::session::IAuthorizer {
             return std::nullopt;
         }
         return ctx.principal;
+    }
+};
+
+/// Throws with an *empty* exception message from `authorize` -- the only way
+/// to make `RemoteServer::dispatchMessage`'s outer catch produce an `err`
+/// reply whose `message` is itself empty (no server-side error path
+/// otherwise constructs one). See RM13.
+struct WireSchemasEmptyMessageAuthorizer : morph::session::IAuthorizer {
+    [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
+        throw std::runtime_error("");
     }
 };
 
@@ -497,4 +508,18 @@ TEST_CASE("SimulatedRemoteBackend::fetchActionSchemas throws when the server ref
     morph::backend::SimulatedRemoteBackend backend{*server};
 
     REQUIRE_THROWS_AS(backend.fetchActionSchemas("WireSchemas_Ledger"), std::runtime_error);
+}
+
+TEST_CASE("SimulatedRemoteBackend::fetchActionSchemas substitutes \"malformed reply\" for an empty server message",
+          "[remote][schemas][issue234]") {
+    // RM13: fetchActionSchemas's `reply.message.empty() ? "malformed reply" :
+    // reply.message` fallback. Every prior failure test's server-side err
+    // carried a real message (e.g. "unauthorized"); this one is empty.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto authz = std::make_shared<WireSchemasEmptyMessageAuthorizer>();
+    auto server = std::make_shared<RemoteServer>(pool, authz);
+    morph::backend::SimulatedRemoteBackend backend{*server};
+
+    REQUIRE_THROWS_MATCHES(backend.fetchActionSchemas("WireSchemas_Ledger"), std::runtime_error,
+                           Catch::Matchers::Message("schemas request failed: malformed reply"));
 }
