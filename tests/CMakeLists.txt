@@ -33,6 +33,7 @@ add_executable(morph_tests
     test_observability.cpp
     test_backend_extra.cpp
     test_registry_extra.cpp
+    test_registry_schema_forgery.cpp
     test_registration_qualified_types.cpp
     test_registration_same_line.cpp
     test_principal.cpp
