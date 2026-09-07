@@ -130,6 +130,34 @@ API surface).
 
 ### Fixed
 
+- **Sockets `morph::net::SocketServer` accepted were left non-blocking on
+  macOS/BSD, failing every WebSocket handshake.** A regression from the
+  accept-loop wakeup work below: since that change `listen()` puts the
+  *listening* socket into `O_NONBLOCK`, and macOS/BSD propagate a listener's
+  `O_NONBLOCK` onto the sockets `accept(2)` returns (POSIX permits this; Linux
+  does not do it). `TcpSocket::tryAccept()` did nothing to the descriptor it
+  handed back, so on those platforms every accepted connection was non-blocking
+  too — and `recvSome()` treats `EAGAIN` as a fatal error, having cases only for
+  `EINTR` and `ECONNRESET`. `SocketServer::clientLoop()`'s first act on a new
+  connection is `performServerHandshake()`, a read issued before the client's
+  `Upgrade` request has necessarily arrived, so it threw, `clientLoop()`
+  swallowed the exception and closed the connection, and *every* connection
+  failed its handshake. Linux-only CI could not see any of it. `TcpSocket`'s
+  fd-adopting constructor now clears `O_NONBLOCK` on every descriptor it takes
+  ownership of, which fixes `accept()` and `tryAccept()` by the same rule and
+  leaves one place where a socket's blocking mode is decided; `setNonBlocking()`
+  remains the explicit opt-out, applied after construction, as `listen()` does
+  to its listener. `recvSome()` is deliberately unchanged: with the accepted
+  socket blocking there is no correct answer for it to give on `EAGAIN` —
+  returning `0` would be indistinguishable from a peer close and would truncate
+  the handshake, looping would busy-wait — and swallowing it there would have
+  hidden this bug rather than surfaced it. Because Linux never propagates the
+  flag, an accept-side assertion cannot fail on CI's platform; the regression
+  test asserts the constructor's reset directly, on a descriptor it makes
+  non-blocking itself, and fails on Linux with the fix removed (verified both
+  ways). The macOS half of the diagnosis rests on the probe in morph#478, not on
+  a measurement made here. (morph#478)
+
 - **`morph::net::SocketServer` teardown relied on Linux-only kernel behaviour
   and hung forever on macOS/BSD.** The accept thread parked in a blocking
   `accept(2)` and had no wakeup of its own: `close()` called
