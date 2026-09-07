@@ -383,6 +383,21 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
 
       - name: Test
+        env:
+          # Known-false-positive suppressions, the same treatment
+          # cmake/valgrind.supp already gets on the Valgrind job below. The
+          # entries are libstdc++'s two refcounts for a shared exception --
+          # exception_ptr's, and the COW string holding the message -- both
+          # decremented inside an uninstrumented libstdc++.so.6, so TSan
+          # gets no happens-before edge between the last thread to read a
+          # shared exception's what() and the thread whose release frees it
+          # (morph#476). The file itself carries the measured evidence and
+          # says why each of the three frames it names still resolves
+          # against the runner's stripped libstdc++.
+          #
+          # Harmless on the clang-asan and clang-ubsan legs of this matrix:
+          # neither runtime reads TSAN_OPTIONS.
+          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp
         run: |
           # morph::testkit::OomInjector (tests/oom_injector.cpp) overrides
           # the process-wide operator new/delete to force std::bad_alloc on
