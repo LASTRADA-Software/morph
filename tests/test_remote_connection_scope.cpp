@@ -691,6 +691,40 @@ TEST_CASE("morph::backend::RemoteServer: instances lists live shared keys",
     REQUIRE(keys == std::vector<std::string>{"7", "9"});
 }
 
+TEST_CASE("morph::backend::RemoteServer: instances excludes keys belonging to a different model type",
+          "[remote][connection-scope][shared-instances]") {
+    // RM6: handleInstances's `if (dirKey.first == env.typeId)` filter had
+    // never seen a directory holding more than one *type* at once -- every
+    // prior "instances" test's directory contained keys of a single type
+    // only, so the filter's `false` (excluded) arm was never exercised.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    WaitReply square;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "sq-key")), std::ref(square),
+                   cid);
+    REQUIRE(square.await());
+    REQUIRE(square.env.kind == "ok");
+
+    WaitReply slow;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SlowModel", "slow-key")), std::ref(slow),
+                   cid);
+    REQUIRE(slow.await());
+    REQUIRE(slow.env.kind == "ok");
+
+    WaitReply listed;
+    server->handle(morph::wire::encode(morph::wire::makeInstances("CS_SquareModel")), std::ref(listed), cid);
+    REQUIRE(listed.await());
+    REQUIRE(listed.env.kind == "ok");
+    std::vector<std::string> keys;
+    REQUIRE_FALSE(glz::read_json(keys, listed.env.body));
+    // Only CS_SquareModel's own key -- CS_SlowModel's "slow-key" must not
+    // leak across the type boundary.
+    REQUIRE(keys == std::vector<std::string>{"sq-key"});
+}
+
 TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old instance",
           "[remote][connection-scope][shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
@@ -712,6 +746,69 @@ TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old i
     REQUIRE(moved.env.modelId != first.env.modelId);
     // Nobody else held key 1, so re-pointing destroyed it rather than leaking.
     REQUIRE(server->health().liveModels == 1U);
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer: one connection attached twice to the same shared instance survives its first "
+    "deregister",
+    "[remote][connection-scope][shared-instances]") {
+    // RM2: releaseScopedLocked's per-connection decrement
+    // (`refIter->second -= 1; if (refIter->second == 0) { ... erase ... }`)
+    // only ever saw a connection holding exactly one reference to a given
+    // `mid` -- the decrement always lands on zero. `noteScopeAttachLocked`
+    // increments unconditionally (`scopeIter->second[mid] += 1`) on every
+    // attach, with no guard against re-attaching a key the same connection
+    // already holds, so two `attach`/`register-shared` calls from the same
+    // connection to the same key genuinely produce a count of 2 -- this
+    // exercises the `refIter->second == 0` `false` arm (still > 0 after
+    // decrementing), never hit before this test.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    WaitReply first;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "double-attach")),
+                   std::ref(first), cid);
+    REQUIRE(first.await());
+    REQUIRE(first.env.kind == "ok");
+
+    // Same connection, same key, a second time: two references to one
+    // instance, held by the same connection scope.
+    WaitReply second;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_SquareModel", "double-attach")), std::ref(second),
+                   cid);
+    REQUIRE(second.await());
+    REQUIRE(second.env.kind == "ok");
+    REQUIRE(second.env.modelId == first.env.modelId);
+    REQUIRE(server->health().liveModels == 1U);
+
+    // First deregister drops one of the two references -- the instance must
+    // still be alive, since the connection's own scoped count is still 1.
+    WaitReply firstDereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(first.env.modelId)), std::ref(firstDereg), cid);
+    REQUIRE(firstDereg.await());
+    REQUIRE(firstDereg.env.kind == "ok");
+    REQUIRE(server->health().liveModels == 1U);
+
+    morph::wire::Envelope stillLiveExec;
+    stillLiveExec.kind = "execute";
+    stillLiveExec.modelId = first.env.modelId;
+    stillLiveExec.modelType = "CS_SquareModel";
+    stillLiveExec.actionType = "CS_SquareAction";
+    stillLiveExec.body = R"({"x":4})";
+    WaitReply stillLive;
+    server->handle(morph::wire::encode(stillLiveExec), std::ref(stillLive));
+    REQUIRE(stillLive.await());
+    REQUIRE(stillLive.env.kind == "ok");
+    REQUIRE(stillLive.env.body == "16");
+
+    // Second deregister drops the last reference -- now it's really gone.
+    WaitReply secondDereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(first.env.modelId)), std::ref(secondDereg), cid);
+    REQUIRE(secondDereg.await());
+    REQUIRE(secondDereg.env.kind == "ok");
+    REQUIRE(server->health().liveModels == 0U);
 }
 
 TEST_CASE(
