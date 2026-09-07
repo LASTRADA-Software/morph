@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <morph/net/detail/ws_frame.hpp>
 #include <stdexcept>
 #include <string>
@@ -235,8 +236,8 @@ TEST_CASE("WsFrameReader rejects a reassembled message whose cumulative size exc
     // *reassembled total* creeping past the cap -- otherwise a peer could
     // stream unlimited small continuations and grow the assembly buffer
     // without ever tripping a per-frame check.
-    constexpr std::size_t chunkSize = 3u * 1024u * 1024u;  // 3 MiB per fragment
-    std::string chunk(chunkSize, 'x');
+    constexpr std::size_t chunkSize = std::size_t{3} * 1024 * 1024;  // 3 MiB per fragment
+    std::string const chunk(chunkSize, 'x');
 
     WsFrameReader reader;
     reader.feed(fragmentFrame(WsOpcode::kBinary, chunk, /*fin=*/false));

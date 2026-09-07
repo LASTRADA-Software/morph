@@ -633,7 +633,7 @@ TEST_CASE("SocketBackend: attachModel's empty-primary path deregisters the insta
     bool released = false;
     for (int i = 0; i < 100 && !released; ++i) {
         auto keys = backend.listInstances("SbCounterModel");
-        released = std::find(keys.begin(), keys.end(), "handoff-key") == keys.end();
+        released = std::ranges::find(keys, "handoff-key") == keys.end();
         if (!released) {
             std::this_thread::sleep_for(std::chrono::milliseconds{10});
         }
@@ -781,7 +781,7 @@ TEST_CASE("SocketBackend: a second synchronous call while one is in flight throw
             (void)backend.registerModel("SbEchoModel", nullptr);
             succeeded.fetch_add(1);
         } catch (const std::exception& exc) {
-            if (std::string{exc.what()}.find("reentrant") != std::string::npos) {
+            if (std::string{exc.what()}.contains("reentrant")) {
                 reentrantErrors.fetch_add(1);
             }
         }
@@ -827,8 +827,8 @@ TEST_CASE("SocketBackend: server dropping while a synchronous call is genuinely 
     caller.join();
 
     REQUIRE(threw);
-    REQUIRE(what.find("register failed") != std::string::npos);
-    REQUIRE(what.find("disconnected") != std::string::npos);
+    REQUIRE(what.contains("register failed"));
+    REQUIRE(what.contains("disconnected"));
 }
 
 TEST_CASE("SocketBackend: an undecodable message from the server with no sync call in flight fails pending executes",
@@ -857,7 +857,7 @@ TEST_CASE("SocketBackend: an undecodable message from the server with no sync ca
         try {
             std::rethrow_exception(exc);
         } catch (const std::exception& e) {
-            if (std::string{e.what()}.find("protocol error") != std::string::npos) {
+            if (std::string{e.what()}.contains("protocol error")) {
                 gotProtocolError.store(true);
             }
         }
@@ -1272,6 +1272,7 @@ TEST_CASE("SocketBackend: sendFrame-triggering calls racing a hard disconnect ne
 
         std::atomic<bool> stop{false};
         std::vector<std::thread> hammer;
+        hammer.reserve(3);
         for (int t = 0; t < 3; ++t) {
             hammer.emplace_back([&] {
                 while (!stop.load(std::memory_order_relaxed)) {
@@ -1288,6 +1289,7 @@ TEST_CASE("SocketBackend: sendFrame-triggering calls racing a hard disconnect ne
                         // "reentrant" (racing a sibling for the single-flight
                         // sendSync slot), "disconnected", or success are all
                         // fine here -- only a hang or crash would be a failure.
+                        continue;
                     }
                 }
             });

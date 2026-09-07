@@ -87,8 +87,18 @@ struct FlowStepExplodesNonStdResult {
 // entirely, since it touches only FlowSession's own local state and never
 // goes through the backend).
 namespace {
-std::atomic<bool> gFlowSlowStarted{false};
-std::atomic<bool> gFlowSlowRelease{false};
+// Function-local statics rather than namespace-scope globals: the flag has to
+// be reachable from both FlowStepSlow::execute (below) and the test bodies,
+// and this is the shape morph::math::detail::wireClampCounter() already uses
+// for exactly that.
+std::atomic<bool>& flowSlowStarted() {
+    static std::atomic<bool> started{false};
+    return started;
+}
+std::atomic<bool>& flowSlowRelease() {
+    static std::atomic<bool> release{false};
+    return release;
+}
 }  // namespace
 
 struct FlowStepSlow {
@@ -127,8 +137,8 @@ struct FlowTestModel {
         throw 42;  // NOLINT(hicpp-exception-baseclass) — exercises logUnhandledError's catch(...) arm
     }
     static FlowStepSlowResult execute(const FlowStepSlow& /*action*/) {
-        gFlowSlowStarted.store(true, std::memory_order_relaxed);
-        while (!gFlowSlowRelease.load(std::memory_order_relaxed)) {
+        flowSlowStarted().store(true, std::memory_order_relaxed);
+        while (!flowSlowRelease().load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
         }
         throw std::runtime_error{"late boom"};
@@ -596,8 +606,8 @@ TEST_CASE("FlowSession: a late error for a step left behind via back() does not 
     // step's own dispatch is still genuinely in flight -- using a real
     // GS_SlowModel/PCSlowAction-style blocked execute() rather than relying
     // on timing.
-    gFlowSlowStarted.store(false);
-    gFlowSlowRelease.store(false);
+    flowSlowStarted().store(false);
+    flowSlowRelease().store(false);
 
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::DeterministicExecutor cbExec;
@@ -605,15 +615,16 @@ TEST_CASE("FlowSession: a late error for a step left behind via back() does not 
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     std::vector<std::string> errors;
-    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepSlow> flow{handler, [&](std::exception_ptr err) {
-                                                                                 try {
-                                                                                     std::rethrow_exception(err);
-                                                                                 } catch (const std::exception& exc) {
-                                                                                     errors.emplace_back(exc.what());
-                                                                                 } catch (...) {
-                                                                                     errors.emplace_back("unknown");
-                                                                                 }
-                                                                             }};
+    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepSlow> flow{
+        handler, [&](std::exception_ptr err) {
+            try {
+                std::rethrow_exception(std::move(err));
+            } catch (const std::exception& exc) {
+                errors.emplace_back(exc.what());
+            } catch (...) {
+                errors.emplace_back("unknown");
+            }
+        }};
 
     flow.set<&FlowStepOne::label>(std::string{"first step"});
     while (!flow.ready()) {
@@ -627,7 +638,7 @@ TEST_CASE("FlowSession: a late error for a step left behind via back() does not 
     // so its stepIndex (1, captured now while it is the current step) is
     // still pending when back() below runs.
     flow.set<&FlowStepSlow::label>(std::string{"slow"});
-    REQUIRE(morph::testing::waitUntil([&] { return gFlowSlowStarted.load(); }));
+    REQUIRE(morph::testing::waitUntil([&] { return flowSlowStarted().load(); }));
 
     // Move back to step one while step two's dispatch is still in flight.
     // back() unconditionally marks step one ready again ("it already
@@ -641,7 +652,7 @@ TEST_CASE("FlowSession: a late error for a step left behind via back() does not 
     // is now 0 -- exactly the "late failure from a step already left behind"
     // the guard's comment names. Without the guard, this would wrongly clear
     // _currentReady for step one, the step the flow actually has active now.
-    gFlowSlowRelease.store(true);
+    flowSlowRelease().store(true);
     REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
     while (cbExec.pending() > 0) {
         cbExec.step();

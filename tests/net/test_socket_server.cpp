@@ -93,7 +93,7 @@ public:
                 return std::move(*frame);
             }
             char buf[4096];
-            std::size_t got = _socket.recvSome(buf, sizeof(buf));
+            std::size_t const got = _socket.recvSome(buf, sizeof(buf));
             if (got == 0) {
                 throw std::runtime_error("RawWsClient::receiveFrame: peer closed");
             }
@@ -132,16 +132,29 @@ int createNonBlockingSocket() {
     return fd;
 }
 
+// A distinct type for the port, so that beginConnect()'s two integer
+// parameters cannot be transposed silently: with a plain std::uint16_t both
+// converted to each other and `beginConnect(port, fd)` compiled.
+struct LoopbackPort {
+    std::uint16_t value;
+};
+
 // Issues a non-blocking connect() on an already-open socket `fd` toward
 // 127.0.0.1:port. Returns immediately without waiting for it to complete.
-void beginConnect(int fd, std::uint16_t port) {
+void beginConnect(int fd, LoopbackPort port) {
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
+    addr.sin_port = htons(port.value);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     // Non-blocking connect(): either completes immediately (rare, loopback)
     // or returns -1/EINPROGRESS with the SYN already sent by the kernel in
     // the background -- either way the fd is left open for the caller.
+    // ::connect takes a `sockaddr*`, so punning the `sockaddr_in` is how POSIX
+    // specifies the call (the same cast tcp_socket.hpp's ::bind/::getsockname
+    // make); and the result is deliberately dropped because -1/EINPROGRESS is
+    // the expected outcome here -- static_cast<void> does not satisfy
+    // bugprone-unused-return-value, whose AllowCastToVoid defaults to false.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast,bugprone-unused-return-value)
     static_cast<void>(::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)));
 }
 
@@ -156,7 +169,7 @@ int fireNonBlockingConnect(std::uint16_t port) {
     if (fd < 0) {
         return -1;
     }
-    beginConnect(fd, port);
+    beginConnect(fd, LoopbackPort{port});
     return fd;
 }
 
@@ -491,15 +504,21 @@ TEST_CASE("SocketServer::listen() fails closed when the WakeupPipe can't be cons
     REQUIRE(highest >= 0);
 
     struct RlimitGuard {
-        rlimit saved;
-        std::vector<int> fillers;
+        explicit RlimitGuard(rlimit savedIn) : saved{savedIn} {}
+        RlimitGuard(const RlimitGuard&) = delete;
+        RlimitGuard& operator=(const RlimitGuard&) = delete;
+        RlimitGuard(RlimitGuard&&) = delete;
+        RlimitGuard& operator=(RlimitGuard&&) = delete;
         ~RlimitGuard() {
             ::setrlimit(RLIMIT_NOFILE, &saved);
             for (int const fd : fillers) {
                 ::close(fd);
             }
         }
-    } guard{original, {}};
+
+        rlimit saved;
+        std::vector<int> fillers;
+    } guard{original};
 
     // Densify the fd table below `highest` before capping the limit: a gap
     // left by some fd opened-then-closed earlier (sanitizer/valgrind
@@ -681,7 +700,7 @@ TEST_CASE("SocketServer: acceptLoop's _closing checks observe a concurrent close
                 fds.push_back(fireNonBlockingConnect(port));
             }
             wsServer->close();  // races the whole burst of connects at once
-            for (int fd : fds) {
+            for (int const fd : fds) {
                 if (fd >= 0) {
                     ::close(fd);
                 }
@@ -726,7 +745,7 @@ TEST_CASE("SocketServer: acceptLoop retries when a pending connection is aborted
         for (int i = 0; i < kBurstSize; ++i) {
             fds.push_back(fireNonBlockingConnectAndArmAbort(port));
         }
-        for (int fd : fds) {
+        for (int const fd : fds) {
             if (fd >= 0) {
                 ::close(fd);  // SO_LINGER{1,0} already armed: sends an abortive RST
             }
@@ -779,9 +798,15 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
     REQUIRE(highest >= 0);
 
     struct RlimitGuard {
-        rlimit saved;
+        explicit RlimitGuard(rlimit savedIn) : saved{savedIn} {}
+        RlimitGuard(const RlimitGuard&) = delete;
+        RlimitGuard& operator=(const RlimitGuard&) = delete;
+        RlimitGuard(RlimitGuard&&) = delete;
+        RlimitGuard& operator=(RlimitGuard&&) = delete;
         ~RlimitGuard() { ::setrlimit(RLIMIT_NOFILE, &saved); }
-    } guard{original};
+
+        rlimit saved;
+    } const guard{original};
 
     // Zero headroom for a *new* fd. Note the pre-created sockets above are
     // *not* connected yet, so nothing is in the backlog for the accept loop
@@ -796,8 +821,8 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
     constrained.rlim_cur = static_cast<rlim_t>(highest + 1);
     REQUIRE(::setrlimit(RLIMIT_NOFILE, &constrained) == 0);
 
-    for (int fd : clientFds) {
-        beginConnect(fd, port);
+    for (int const fd : clientFds) {
+        beginConnect(fd, LoopbackPort{port});
     }
 
     // Let the accept loop's *own* poll()/tryAccept() cycle discover and fail
@@ -828,7 +853,7 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
         morph::testing::waitUntil([closed] { return closed->load(); }, std::chrono::seconds{5});
 
     ::setrlimit(RLIMIT_NOFILE, &original);  // restore before any further fd use, including cleanup below
-    for (int fd : clientFds) {
+    for (int const fd : clientFds) {
         ::close(fd);
     }
 

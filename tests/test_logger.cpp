@@ -333,7 +333,7 @@ TEST_CASE("morph::log: a level-suppressed message is not a dropped record", "[lo
 
 TEST_CASE("morph::log::logFormat: a throwing formatter is caught and counted, distinct from a throwing sink",
           "[logger]") {
-    LogGuard guard;
+    LogGuard const guard;
     morph::log::setLogLevel(morph::log::LogLevel::debug);
     // A sink that must never be reached: std::format itself throws before
     // `log()` (and its own, separate try/catch around the sink call) is ever

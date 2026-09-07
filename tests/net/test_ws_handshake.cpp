@@ -169,7 +169,7 @@ TEST_CASE(
 // character (a header value that is entirely spaces).
 TEST_CASE("parseClientHandshakeRequest accepts header lines with an empty or all-space value",
           "[net][handshake][trim]") {
-    std::string headerBlock =
+    std::string const headerBlock =
         "GET / HTTP/1.1\r\nSec-WebSocket-Key: abc\r\nUpgrade: websocket\r\nX-Empty:\r\nX-Spaces:    ";
     auto parsed = morph::net::detail::parseClientHandshakeRequest(headerBlock);
     REQUIRE(parsed.key == "abc");
@@ -186,7 +186,7 @@ TEST_CASE("parseClientHandshakeRequest rejects an empty header block", "[net][ha
 
 // parseClientHandshakeRequest, ws_handshake.hpp:187-189 — non-GET method.
 TEST_CASE("parseClientHandshakeRequest rejects a non-GET method", "[net][handshake][roundtrip]") {
-    std::string headerBlock = "POST / HTTP/1.1\r\nSec-WebSocket-Key: abc\r\nUpgrade: websocket";
+    std::string const headerBlock = "POST / HTTP/1.1\r\nSec-WebSocket-Key: abc\r\nUpgrade: websocket";
     REQUIRE_THROWS_WITH(morph::net::detail::parseClientHandshakeRequest(headerBlock),
                         Catch::Matchers::ContainsSubstring("expected a GET request line"));
 }
@@ -202,7 +202,8 @@ TEST_CASE("parseClientHandshakeRequest rejects a request line with no path-termi
 // parseClientHandshakeRequest, ws_handshake.hpp:202-204 — a header line with
 // no colon is skipped (`continue`) rather than rejected.
 TEST_CASE("parseClientHandshakeRequest skips a header line with no colon", "[net][handshake][roundtrip]") {
-    std::string headerBlock = "GET / HTTP/1.1\r\nSec-WebSocket-Key: abc\r\nUpgrade: websocket\r\ngarbage-no-colon";
+    std::string const headerBlock =
+        "GET / HTTP/1.1\r\nSec-WebSocket-Key: abc\r\nUpgrade: websocket\r\ngarbage-no-colon";
     auto parsed = morph::net::detail::parseClientHandshakeRequest(headerBlock);
     REQUIRE(parsed.key == "abc");
     REQUIRE(parsed.path == "/");
@@ -212,7 +213,7 @@ TEST_CASE("parseClientHandshakeRequest skips a header line with no colon", "[net
 // present but Upgrade specifically absent (the existing no-key test's
 // fixture always includes Upgrade, so this combination was untested).
 TEST_CASE("parseClientHandshakeRequest rejects a request with no Upgrade header", "[net][handshake][roundtrip]") {
-    std::string headerBlock = "GET / HTTP/1.1\r\nSec-WebSocket-Key: abc";
+    std::string const headerBlock = "GET / HTTP/1.1\r\nSec-WebSocket-Key: abc";
     REQUIRE_THROWS_WITH(morph::net::detail::parseClientHandshakeRequest(headerBlock),
                         Catch::Matchers::ContainsSubstring("missing Upgrade header"));
 }
@@ -229,7 +230,7 @@ TEST_CASE("verifyServerHandshakeResponse rejects an empty response", "[net][hand
 // line (the existing mismatched-accept-key test still has a 101 status; only
 // the accept value differs there).
 TEST_CASE("verifyServerHandshakeResponse rejects a non-101 status line", "[net][handshake][roundtrip]") {
-    std::string headerBlock = "HTTP/1.1 400 Bad Request\r\nUpgrade: websocket";
+    std::string const headerBlock = "HTTP/1.1 400 Bad Request\r\nUpgrade: websocket";
     REQUIRE_THROWS_WITH(morph::net::detail::verifyServerHandshakeResponse(headerBlock, "any-key"),
                         Catch::Matchers::ContainsSubstring("did not return 101"));
 }
@@ -247,9 +248,9 @@ TEST_CASE(
     "(undocumented 16th gap: the audit's own 27-missed-line baseline "
     "includes this line pair, but no finding named it)",
     "[net][handshake][roundtrip]") {
-    std::string key = morph::net::detail::generateClientKey();
-    std::string accept = morph::net::detail::computeAcceptKey(key);
-    std::string headerBlock =
+    std::string const key = morph::net::detail::generateClientKey();
+    std::string const accept = morph::net::detail::computeAcceptKey(key);
+    std::string const headerBlock =
         "HTTP/1.1 101 Switching Protocols\r\ngarbage-no-colon\r\nSec-WebSocket-Accept: " + accept;
     // Must not throw: the colon-less line is skipped, and the accept key
     // still matches.

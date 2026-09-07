@@ -369,6 +369,7 @@ TEST_CASE(
 
     bool failed = false;
     bool wasClientTimeout = false;
+    bool wasOtherError = false;
     std::weak_ptr<void> stateWatch;
     {
         auto completion = handler.execute(DeadlineFail{});
@@ -380,12 +381,17 @@ TEST_CASE(
             } catch (const morph::backend::ClientTimeoutError&) {
                 wasClientTimeout = true;
             } catch (...) {
+                // Anything else is the real backend failure this test wants to
+                // see propagate; recorded rather than swallowed so the
+                // assertions below can tell "some other error" from "no error".
+                wasOtherError = true;
             }
         });
     }
     REQUIRE(pumpUntil(guiExec, [&] { return failed; }));
     // The real backend failure propagates, not a synthesized client timeout.
     CHECK_FALSE(wasClientTimeout);
+    CHECK(wasOtherError);
 
     guiExec.runFor(std::chrono::milliseconds{100});
     // Without the .onError() continuation's own cancel, the timer entry (and

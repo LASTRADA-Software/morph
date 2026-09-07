@@ -126,7 +126,11 @@ public:
     template <class AdmitFn>
     bool insertIf(std::uint64_t callId, PendingT pending, AdmitFn&& admit) {
         std::scoped_lock const lock{_mtx};
-        if (!admit()) {
+        // Forwarded, not called as a plain lvalue: `admit` is a forwarding
+        // reference and is invoked exactly once, so preserving the caller's
+        // value category is both safe and what lets an rvalue-qualified or
+        // move-only predicate be passed.
+        if (!std::forward<AdmitFn>(admit)()) {
             return false;
         }
         _map[callId] = std::move(pending);

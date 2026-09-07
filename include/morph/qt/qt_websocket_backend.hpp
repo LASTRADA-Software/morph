@@ -422,6 +422,39 @@ private:
     /// @brief Slot called by `QWebSocket` when a text frame arrives.
     void onTextMessage(const QString& message);
 
+    /// @brief Handles a frame that is not a decodable envelope.
+    ///
+    /// Hands @p msg to a parked `sendSync` waiter if there is one; otherwise
+    /// fails every in-flight call, because an undecodable frame means the
+    /// peer's framing can no longer be trusted.
+    /// @param msg Raw frame text, as received.
+    void onUndecodableMessage(std::string msg);
+
+    /// @brief Dispatches a reply carrying a non-zero `callId` to whichever
+    ///        pending-call map holds that id, if any.
+    /// @param env Decoded reply envelope.
+    void routeKeyedReply(const ::morph::wire::Envelope& env);
+
+    /// @brief Settles the execute filed under `env.callId`, if one is pending.
+    /// @param env Decoded reply envelope.
+    /// @return `true` if an execute was found and settled.
+    bool tryRouteExecuteReply(const ::morph::wire::Envelope& env);
+
+    /// @brief Completes the async model registration filed under `env.callId`.
+    /// @param env Decoded reply envelope.
+    /// @return `true` if a pending registration was found and completed.
+    bool tryRouteRegistrationReply(const ::morph::wire::Envelope& env);
+
+    /// @brief Completes the async primary-assignment filed under `env.callId`.
+    /// @param env Decoded reply envelope.
+    /// @return `true` if a pending assignment was found and completed.
+    bool tryRouteAssignReply(const ::morph::wire::Envelope& env);
+
+    /// @brief Drops the reply to a fire-and-forget deregister (issue #65).
+    /// @param env Decoded reply envelope.
+    /// @return `true` if the id belonged to a pending deregister.
+    bool tryRouteDeregisterReply(const ::morph::wire::Envelope& env);
+
     /// @brief Schedules a reconnect attempt with exponential backoff.
     void scheduleReconnect();
 

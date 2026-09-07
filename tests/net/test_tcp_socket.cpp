@@ -97,6 +97,8 @@ public:
     }
     FdLimitClamp(const FdLimitClamp&) = delete;
     FdLimitClamp& operator=(const FdLimitClamp&) = delete;
+    FdLimitClamp(FdLimitClamp&&) = delete;
+    FdLimitClamp& operator=(FdLimitClamp&&) = delete;
     ~FdLimitClamp() {
         for (int const fd : _dummyFds) {
             ::close(fd);

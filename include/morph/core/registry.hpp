@@ -1087,7 +1087,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
                otherwise arrive as a plausible 5/1 that no model-level validate() could                        \
                recognise as altered. Deciding that a silently-altered payload is a                             \
                protocol violation belongs here, where we know the bytes came off a wire. */                    \
-            ::morph::math::WireClampScope clampedRationals;                                                    \
+            ::morph::math::WireClampScope const clampedRationals;                                              \
             if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                     \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
             }                                                                                                  \

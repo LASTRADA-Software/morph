@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
+#include <cstddef>
 #include <exception>
 #include <morph/net/detail/tcp_socket.hpp>
 #include <morph/net/detail/ws_handshake.hpp>
@@ -102,7 +103,7 @@ TEST_CASE("readHttpHeaderBlock throws once the header exceeds the 64 KiB safety 
     // check trips (64 KiB rounded up to the next 4 KiB recv chunk) — so the
     // cap fires from data the client has already fully queued, rather than
     // the server blocking on recvSome() for bytes that will never arrive.
-    std::string oversized(96 * 1024, 'A');
+    std::string oversized(std::size_t{96} * 1024, 'A');
     clientSide.sendAll(oversized.data(), oversized.size());
 
     serverThread.join();

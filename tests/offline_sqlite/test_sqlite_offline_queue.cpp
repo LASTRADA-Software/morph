@@ -393,7 +393,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: maxDepth() reports the configured
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath, 5};
+        morph::offline::SqliteOfflineQueue const queue{dbPath, 5};
         REQUIRE(queue.maxDepth() == 5);
     }
     removeDbFiles(dbPath);
@@ -403,7 +403,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: maxDepth() reports nullopt when u
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue const queue{dbPath};
         REQUIRE_FALSE(queue.maxDepth().has_value());
     }
     removeDbFiles(dbPath);
@@ -481,7 +481,7 @@ TEST_CASE(
         (void)queue.drain();
     } catch (const morph::offline::SqliteOfflineQueueError& exc) {
         drainThrew = true;
-        CHECK(std::string{exc.what()}.find("drain failed part-way through") != std::string::npos);
+        CHECK(std::string{exc.what()}.contains("drain failed part-way through"));
     }
     REQUIRE(drainThrew);
 
@@ -493,7 +493,7 @@ TEST_CASE(
         (void)queue.enqueue("after-drop");
     } catch (const morph::offline::SqliteOfflineQueueError& exc) {
         enqueueThrew = true;
-        CHECK(std::string{exc.what()}.find("prepare failed") != std::string::npos);
+        CHECK(std::string{exc.what()}.contains("prepare failed"));
     }
     REQUIRE(enqueueThrew);
 

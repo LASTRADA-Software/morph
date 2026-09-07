@@ -224,7 +224,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend::notifyBackendChanged is a documented n
     morph::qt::QtWebSocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
 
-    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QUrl const url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
     morph::qt::QtWebSocketBackend backend{url};
     REQUIRE(backend.waitForConnected());
 

@@ -513,8 +513,8 @@ TEST_CASE("RequireDeclaredFields treats an unregistered action pair as nothing t
     server->handle(encode(unknownEnv), std::ref(reply));
     REQUIRE(reply.await());
     REQUIRE(reply.env.kind == "err");
-    REQUIRE(reply.env.message.find("payload missing required field") == std::string::npos);
-    REQUIRE(reply.env.message.find("unknown action") != std::string::npos);
+    REQUIRE_FALSE(reply.env.message.contains("payload missing required field"));
+    REQUIRE(reply.env.message.contains("unknown action"));
 }
 
 TEST_CASE("RequireDeclaredFields degrades safely on a genuinely malformed JSON body",
@@ -532,7 +532,7 @@ TEST_CASE("RequireDeclaredFields degrades safely on a genuinely malformed JSON b
 
     auto reply = runExecute(*server, modelId, R"({"amountCents":500,)");  // truncated -- not valid JSON
     REQUIRE(reply.kind == "err");
-    REQUIRE(reply.message.find("payload missing required field") == std::string::npos);
+    REQUIRE_FALSE(reply.message.contains("payload missing required field"));
 }
 
 TEST_CASE("RequireDeclaredFields comma-joins two or more missing fields in its diagnostic",

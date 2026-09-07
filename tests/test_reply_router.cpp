@@ -22,6 +22,7 @@
 // so registering these there would leave the classifier's only direct tests
 // unbuilt in a default checkout while the code under test still shipped.
 
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -231,10 +232,12 @@ TEST_CASE("PendingCallTable: take matches by call id, not by insertion order",
     // callId multiplexing: replies arrive out of order over a real socket, so
     // the table must key on the id rather than pop a queue.
     PendingCallTable<FakePending> table;
-    std::uint64_t ids[3] = {0, 0, 0};
-    for (int i = 0; i < 3; ++i) {
-        ids[i] = table.nextCallId();
-        REQUIRE(table.insertIf(ids[i], FakePending{.tag = i + 100, .shared = nullptr}, [] { return true; }));
+    std::array<std::uint64_t, 3> ids{};
+    int tag = 100;
+    for (auto& id : ids) {
+        id = table.nextCallId();
+        REQUIRE(table.insertIf(id, FakePending{.tag = tag, .shared = nullptr}, [] { return true; }));
+        ++tag;
     }
     auto middle = table.take(ids[1]);
     REQUIRE(middle.has_value());

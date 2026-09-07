@@ -85,7 +85,7 @@ public:
                 return;
             }
         }
-        _subscriptions.push_back({.binding = binding, .type = type, .sink = std::move(sink), .exec = exec});
+        _subscriptions.emplace_back(binding, type, std::move(sink), exec);
         _count.store(_subscriptions.size(), std::memory_order_relaxed);
     }
 
@@ -175,7 +175,15 @@ public:
     }
 
 private:
+    // Constructed rather than aggregate-initialised so that every field is
+    // named in one place: `type` is a std::type_index, which has no default
+    // constructor, so there is no default member initialiser to fall back on
+    // and every construction site must supply all four fields.
     struct Entry {
+        Entry(std::weak_ptr<Binding> bindingIn, std::type_index typeIn, std::function<void(const std::any&)> sinkIn,
+              ::morph::exec::IExecutor* execIn)
+            : binding{std::move(bindingIn)}, type{typeIn}, sink{std::move(sinkIn)}, exec{execIn} {}
+
         std::weak_ptr<Binding> binding;
         std::type_index type;
         std::function<void(const std::any&)> sink;

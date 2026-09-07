@@ -298,7 +298,7 @@ TEST_CASE("Forms::FieldBounds::AFieldMetaWithNoDeclaredBoundIsSkipped", "[forms]
 // ---------------------------------------------------------------------------
 
 struct FBOverflowAction {
-    Rational value{};
+    Rational value;
 
     static constexpr std::array<morph::forms::FieldMeta, 1> fieldMetadata{
         morph::forms::FieldMeta{

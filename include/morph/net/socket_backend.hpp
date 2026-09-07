@@ -310,8 +310,10 @@ public:
         // run strictly between the check and the insert -- this entry would land
         // in the table *after* the sweep already drained it, and nothing would
         // ever resolve its Completion. See PendingCallTable::insertIf's own docs.
-        if (!_pending.insertIf(callId, PendingExecute{compState, std::move(call.deserializeResult), cbExec},
-                               [this] { return _connected.load(); })) {
+        if (!_pending.insertIf(
+                callId,
+                PendingExecute{.state = compState, .deserialize = std::move(call.deserializeResult), .cbExec = cbExec},
+                [this] { return _connected.load(); })) {
             compState->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
             return comp;
         }

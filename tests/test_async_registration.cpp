@@ -575,6 +575,11 @@ class SelfFiringAssignPrimaryBackend : public morph::backend::LocalBackend {
 public:
     explicit SelfFiringAssignPrimaryBackend(morph::exec::IExecutor& pool) : LocalBackend{pool} {}
 
+    SelfFiringAssignPrimaryBackend(const SelfFiringAssignPrimaryBackend&) = delete;
+    SelfFiringAssignPrimaryBackend& operator=(const SelfFiringAssignPrimaryBackend&) = delete;
+    SelfFiringAssignPrimaryBackend(SelfFiringAssignPrimaryBackend&&) = delete;
+    SelfFiringAssignPrimaryBackend& operator=(SelfFiringAssignPrimaryBackend&&) = delete;
+
     ~SelfFiringAssignPrimaryBackend() override {
         if (_pending) {
             auto pending = std::move(*_pending);
@@ -586,7 +591,11 @@ public:
     bool assignPrimaryAsync(morph::exec::detail::ModelId mid, const std::string& typeId, std::string_view primary,
                             std::function<void(morph::exec::detail::ModelId)> onRegistered,
                             std::function<void(const std::string&)> onError) override {
-        _pending = Pending{mid, typeId, std::string{primary}, std::move(onRegistered), std::move(onError)};
+        _pending = Pending{.mid = mid,
+                           .typeId = typeId,
+                           .primary = std::string{primary},
+                           .onRegistered = std::move(onRegistered),
+                           .onError = std::move(onError)};
         return true;
     }
 
@@ -1869,7 +1878,7 @@ TEST_CASE(
     std::exception_ptr captured;
     bool done = false;
     bridge.ensureBoundAsync(binding, [&](std::exception_ptr err) {
-        captured = err;
+        captured = std::move(err);
         done = true;
     });
 
@@ -2017,7 +2026,7 @@ TEST_CASE(
     bool done = false;
     std::exception_ptr captured;
     bridge.template attachHandlerAsync<ARKeyedModel>(binding, "", [&](std::exception_ptr err) {
-        captured = err;
+        captured = std::move(err);
         done = true;
     });
 
