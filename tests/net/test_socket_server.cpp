@@ -106,7 +106,7 @@ public:
     // simulate "the peer reset the connection" scenarios (socket_server.hpp
     // findings #8 and #10) that a graceful close cannot reproduce reliably.
     void armAbortiveClose() {
-        struct linger l{};
+        linger l{};
         l.l_onoff = 1;
         l.l_linger = 0;
         ::setsockopt(_socket.nativeHandle(), SOL_SOCKET, SO_LINGER, &l, sizeof(l));
@@ -166,7 +166,7 @@ int fireNonBlockingConnect(std::uint16_t port) {
 int fireNonBlockingConnectAndArmAbort(std::uint16_t port) {
     int const fd = fireNonBlockingConnect(port);
     if (fd >= 0) {
-        struct linger l{};
+        linger l{};
         l.l_onoff = 1;
         l.l_linger = 0;
         ::setsockopt(fd, SOL_SOCKET, SO_LINGER, &l, sizeof(l));
@@ -483,7 +483,7 @@ TEST_CASE("SocketServer::listen() fails closed when the WakeupPipe can't be cons
     morph::exec::ThreadPoolExecutor pool{1};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
-    struct rlimit original{};
+    rlimit original{};
     REQUIRE(::getrlimit(RLIMIT_NOFILE, &original) == 0);
     rlim_t const scanLimit =
         original.rlim_cur < static_cast<rlim_t>(65536) ? original.rlim_cur : static_cast<rlim_t>(65536);
@@ -771,7 +771,7 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
         clientFds.push_back(fd);
     }
 
-    struct rlimit original{};
+    rlimit original{};
     REQUIRE(::getrlimit(RLIMIT_NOFILE, &original) == 0);
     rlim_t const scanLimit =
         original.rlim_cur < static_cast<rlim_t>(65536) ? original.rlim_cur : static_cast<rlim_t>(65536);

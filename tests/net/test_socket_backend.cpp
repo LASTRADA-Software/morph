@@ -191,7 +191,7 @@ public:
     // of a normal FIN -- for tests aiming at a socket-error window rather than
     // a clean peer-closed one.
     void closeAbruptly() {
-        struct linger l{};
+        linger l{};
         l.l_onoff = 1;
         l.l_linger = 0;
         ::setsockopt(_socket.nativeHandle(), SOL_SOCKET, SO_LINGER, &l, sizeof(l));
