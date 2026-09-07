@@ -1850,16 +1850,68 @@ jobs:
           fi
           echo "Base SHA: $BASE_SHA"
           echo "Script: $CLANG_TIDY_DIFF"
-          git diff -U0 "$BASE_SHA" | \
+
+          # `set -o pipefail` from here down, rather than for the whole step: a
+          # `run:` with no `shell:` key runs under `bash -e {0}` -- `-e` but NOT
+          # `-o pipefail` -- so a pipeline exits with its *last* command's
+          # status. Ending in `tee`, which always succeeds, discarded
+          # clang-tidy-diff.py's exit code and left this gate unable to fail on
+          # anything it found (morph#479). `tee` stays: the Upload step below
+          # publishes the file it writes. Set here and not at the top, and not
+          # via `shell: bash` (which is `bash --noprofile --norc -eo pipefail
+          # {0}`), because the `find ... | head -1` above would then fail the
+          # step whenever `find` exits non-zero -- one of its two search roots
+          # being absent, or a SIGPIPE from `head` closing the pipe early.
+          set -o pipefail
+
+          # The Configure step above leaves MORPH_BUILD_LADDER and
+          # MORPH_BUILD_BANK_EXAMPLE at their OFF defaults, so no rung, no
+          # examples/common and no examples/bank source is in
+          # compile_commands.json -- clang-tidy falls back to a default command
+          # for them and reports `'ledger/core/errors.hpp' file not found` as a
+          # clang-diagnostic-error, which is not a lint finding. Excluded here
+          # rather than analysed-and-ignored, until morph#481 gives this job the
+          # ladder configure the four other Linux ladder jobs already carry;
+          # deleting this regex is that issue's last step. Deliberately NOT
+          # clang-tidy-diff.py's own -only-check-in-db, which filters on literal
+          # membership of compile_commands.json: no header is ever a compilation
+          # unit, so it would silently drop all of include/morph/** -- morph#479's
+          # own defect one directory over. The rung names come from
+          # examples/rungs.txt (via the reader every other consumer uses) so this
+          # cannot fall behind the list the way morph#179's filter did; `bank` and
+          # `common` are spelled out because neither is a rung -- rungs.txt says
+          # so for bank, and common is the shared testkit the rungs link.
+          SKIP_DIRS="$( { echo bank; echo common; bash scripts/ladder_rungs.sh list; } \
+            | grep -v '^$' | paste -sd'|' - )"
+          echo "Not analysed (no compile command in this job's database, morph#481): examples/{${SKIP_DIRS}}"
+
+          # -extra-arg is appended to the *compiler* command line, so the
+          # -extra-arg=-warnings-as-errors=* that used to sit here reached clang
+          # as an unknown argument and made every translation unit fail with
+          # `error: unknown argument` -- i.e. clang-tidy-diff.py exited 1 on
+          # every non-empty diff, clean or not. Dropped rather than corrected:
+          # .clang-tidy already carries `WarningsAsErrors: "*"`.
+          #
+          # -Wno-missing-include-dirs: this job configures but never builds (see
+          # the Configure step's comment), and Qt AUTOMOC's
+          # <target>_autogen/include directories are created by the build. 202 of
+          # the 261 stored commands name one, and -Weverything +
+          # WarningsAsErrors:"*" turns each into a clang-diagnostic error that
+          # says nothing about the changed lines.
+          if ! git diff -U0 "$BASE_SHA" | \
             python3 "$CLANG_TIDY_DIFF" \
               -path build/clang-debug \
               -clang-tidy-binary clang-tidy-${{ env.CLANG_VERSION }} \
               -p1 \
               -j "$(nproc)" \
+              -regex "(?!examples/(${SKIP_DIRS})/).*\.(cpp|cc|c\+\+|cxx|c|cl|h|hpp|m|mm|inc)" \
               -extra-arg=-std=c++23 \
-              -extra-arg=-warnings-as-errors=* \
+              -extra-arg=-Wno-missing-include-dirs \
               -quiet \
-              2>&1 | tee clang-tidy-report.txt
+              2>&1 | tee clang-tidy-report.txt; then
+            echo "::error::clang-tidy reported findings on changed lines -- see the log above and the clang-tidy-report artifact"
+            exit 1
+          fi
 
       - name: Upload clang-tidy report
         if: always()
