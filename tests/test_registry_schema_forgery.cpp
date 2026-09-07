@@ -29,6 +29,12 @@
 // serializer over data this code produces itself -- not something
 // `schemaJson<A>()`'s return text can reach into. No trigger for this arm
 // was found; see the shared task report for the full reasoning.
+//
+// Two more forged types below close the remaining R1 sub-conditions that
+// the two above don't reach: line 378's `dom["required"].is_array()` false
+// arm (a `"required"` key present but holding something other than an
+// array) and line 380's `name.is_string()` false arm (a non-string element
+// inside an otherwise-valid `"required"` array).
 
 #include <catch2/catch_test_macros.hpp>
 #include <glaze/glaze.hpp>
@@ -54,9 +60,29 @@ struct RegSchemaForgeArrayResult {
     int value = 0;
 };
 
+struct RegSchemaForgeRequiredNotArrayAction {
+    int value = 0;
+};
+struct RegSchemaForgeRequiredNotArrayResult {
+    int value = 0;
+};
+
+struct RegSchemaForgeRequiredNonStringAction {
+    int value = 0;
+};
+struct RegSchemaForgeRequiredNonStringResult {
+    int value = 0;
+};
+
 struct RegSchemaForgeModel {
     RegSchemaForgeEmptyResult execute(const RegSchemaForgeEmptyAction& action) { return {.value = action.value}; }
     RegSchemaForgeArrayResult execute(const RegSchemaForgeArrayAction& action) { return {.value = action.value}; }
+    RegSchemaForgeRequiredNotArrayResult execute(const RegSchemaForgeRequiredNotArrayAction& action) {
+        return {.value = action.value};
+    }
+    RegSchemaForgeRequiredNonStringResult execute(const RegSchemaForgeRequiredNonStringAction& action) {
+        return {.value = action.value};
+    }
 };
 
 // Forged BEFORE the BRIDGE_REGISTER_ACTION lines below, so
@@ -81,11 +107,31 @@ inline std::string schemaJson<RegSchemaForgeArrayAction>() {
     return "[1,2,3]";
 }
 
+/// R1's third sub-condition (registry.hpp:378): a `"required"` key that is
+/// present but not a JSON array -- `dom.contains("required")` is true while
+/// `dom["required"].is_array()` is false, so the `required`-collection loop
+/// is skipped entirely and `desc.required` stays empty.
+template <>
+inline std::string schemaJson<RegSchemaForgeRequiredNotArrayAction>() {
+    return R"({"required":"nope"})";
+}
+
+/// R1's fourth sub-condition (registry.hpp:380): a `"required"` array that
+/// parses fine but holds a non-string element alongside a string one --
+/// `name.is_string()` is false for the number, so it's skipped, while the
+/// string element after it is still collected.
+template <>
+inline std::string schemaJson<RegSchemaForgeRequiredNonStringAction>() {
+    return R"({"required":[1,"a"]})";
+}
+
 }  // namespace morph::forms
 
 BRIDGE_REGISTER_MODEL(RegSchemaForgeModel, "RegSchemaForge_Model")
 BRIDGE_REGISTER_ACTION(RegSchemaForgeModel, RegSchemaForgeEmptyAction, "RegSchemaForge_Empty")
 BRIDGE_REGISTER_ACTION(RegSchemaForgeModel, RegSchemaForgeArrayAction, "RegSchemaForge_Array")
+BRIDGE_REGISTER_ACTION(RegSchemaForgeModel, RegSchemaForgeRequiredNotArrayAction, "RegSchemaForge_RequiredNotArray")
+BRIDGE_REGISTER_ACTION(RegSchemaForgeModel, RegSchemaForgeRequiredNonStringAction, "RegSchemaForge_RequiredNonString")
 
 TEST_CASE("registry.hpp R1/R3: an unparseable forged schema degrades to an empty, non-null required list",
           "[registry][schemas][r1][r3]") {
@@ -134,4 +180,49 @@ TEST_CASE("registry.hpp R1: a forged non-object schema degrades, and schemasJson
     REQUIRE(dom.contains("RegSchemaForge_Array"));
     REQUIRE(dom["RegSchemaForge_Array"].is_array());
     REQUIRE(dom["RegSchemaForge_Array"].get_array().size() == 3);
+}
+
+TEST_CASE("registry.hpp R1: a \"required\" key that isn't an array is ignored, not iterated",
+          "[registry][schemas][r1]") {
+    using morph::model::detail::ActionDispatcher;
+
+    // buildActionDescription's `dom["required"].is_array()` false arm
+    // (registry.hpp:378): the DOM parses fine and is an object, so the
+    // read-failure/non-object arms above don't fire, but "required" holds a
+    // string rather than an array, so the collection loop is skipped and
+    // `required` stays empty rather than throwing or misreading the string
+    // as a single-element list.
+    const auto* required =
+        ActionDispatcher::instance().requiredFieldsFor("RegSchemaForge_Model", "RegSchemaForge_RequiredNotArray");
+    REQUIRE(required != nullptr);
+    REQUIRE(required->empty());
+
+    // The merge past line 378 still runs (this arm doesn't return early),
+    // so schemasJson's entry carries the forged "required" string plus the
+    // two x-payload* annotations, and is served as an object.
+    auto const document = ActionDispatcher::instance().schemasJson("RegSchemaForge_Model");
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, document));
+    REQUIRE(dom.contains("RegSchemaForge_RequiredNotArray"));
+    const auto& entry = dom["RegSchemaForge_RequiredNotArray"];
+    REQUIRE(entry.is_object());
+    REQUIRE(entry.contains("required"));
+    REQUIRE(entry["required"].is_string());
+    REQUIRE(entry["required"].get_string() == "nope");
+}
+
+TEST_CASE("registry.hpp R1: a non-string element inside \"required\" is skipped, its string sibling kept",
+          "[registry][schemas][r1]") {
+    using morph::model::detail::ActionDispatcher;
+
+    // buildActionDescription's `name.is_string()` false arm (registry.hpp:380):
+    // the array itself is valid, so the loop runs, but its first element (a
+    // number) is silently skipped while the second (a string) is collected --
+    // proving the per-element guard, not just the outer is_array() check,
+    // does real filtering.
+    const auto* required =
+        ActionDispatcher::instance().requiredFieldsFor("RegSchemaForge_Model", "RegSchemaForge_RequiredNonString");
+    REQUIRE(required != nullptr);
+    REQUIRE(required->size() == 1);
+    REQUIRE(required->at(0) == "a");
 }
