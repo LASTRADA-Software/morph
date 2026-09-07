@@ -677,6 +677,31 @@ TEST_CASE("assignPrimary promotes an anonymous instance and ignores unusable inp
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
 }
 
+// backend.hpp BK1: listInstances's `dirKey.first == typeId` filter had never
+// been driven with two distinct registered types sharing `_directory` --
+// every prior listInstances call in this suite only ever populated the
+// directory with one type, so the walk never had to actually discriminate.
+TEST_CASE("listInstances filters by type when the directory holds more than one",
+          "[shared-instances][coverage][backend]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    auto counterMid = backend.registerModelShared(
+        "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        {.contextKey = {}, .primary = "counter-1"});
+    auto awareMid = backend.registerModelShared(
+        "SHI_AwareModel", [] { return morph::model::detail::ModelFactory::create<ShiAwareModel>(); },
+        {.contextKey = {}, .primary = "aware-1"});
+    (void)counterMid;
+    (void)awareMid;
+
+    // Both types now occupy `_directory`. The walk must step past the
+    // other type's entry (the `false` arm of `dirKey.first == typeId`)
+    // before -- or without -- matching its own.
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"counter-1"});
+    REQUIRE(backend.listInstances("SHI_AwareModel") == std::vector<std::string>{"aware-1"});
+}
+
 TEST_CASE("a shared handler survives switchBackend", "[shared-instances]") {
     morph::testing::InlineExecutor exec;
     morph::exec::ThreadPoolExecutor poolA{2};
