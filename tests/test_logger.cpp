@@ -12,6 +12,24 @@
 
 using LogGuard = morph::log::ScopedLoggerOverride;
 
+namespace {
+/// A formattable-by-contract type whose `formatter::format` always throws --
+/// used to exercise `detail::logFormat`'s own try/catch (guarding
+/// `std::format` itself, distinct from `detail::log`'s try/catch, which only
+/// guards the sink invocation). Every existing call in this file formats
+/// plain ints/strings, which cannot throw.
+struct ExplodesOnFormat {};
+}  // namespace
+
+template <>
+struct std::formatter<ExplodesOnFormat> {
+    static constexpr auto parse(std::format_parse_context& ctx) { return ctx.begin(); }
+    [[noreturn]] static auto format(const ExplodesOnFormat& /*value*/, std::format_context& /*ctx*/)
+        -> std::format_context::iterator {
+        throw std::runtime_error{"formatter exploded"};
+    }
+};
+
 // ── morph::log::detail::levelName ─────────────────────────────────────────────────────────────────
 
 TEST_CASE("morph::log::detail::levelName returns correct label for every level", "[logger]") {
@@ -311,4 +329,21 @@ TEST_CASE("morph::log: a level-suppressed message is not a dropped record", "[lo
     morph::log::logDebug("suppressed");
     morph::log::logInfo("suppressed {}", 1);
     REQUIRE(morph::log::droppedLogRecords() == before);
+}
+
+TEST_CASE("morph::log::logFormat: a throwing formatter is caught and counted, distinct from a throwing sink",
+          "[logger]") {
+    LogGuard guard;
+    morph::log::setLogLevel(morph::log::LogLevel::debug);
+    // A sink that must never be reached: std::format itself throws before
+    // `log()` (and its own, separate try/catch around the sink call) is ever
+    // invoked.
+    int sinkCalls = 0;
+    morph::log::setLogger([&](morph::log::LogLevel, std::string_view) { ++sinkCalls; });
+
+    const auto before = morph::log::droppedLogRecords();
+    REQUIRE_NOTHROW(morph::log::logWarn("boom: {}", ExplodesOnFormat{}));
+
+    REQUIRE(morph::log::droppedLogRecords() == before + 1);
+    REQUIRE(sinkCalls == 0);
 }
