@@ -62,6 +62,23 @@ struct WireSchemasWithdraw {
     std::int64_t amountCents = 0;
 };
 
+/// A field-less action: `requiredFieldsFor` publishes an *empty* (non-null)
+/// list for it, distinct from the `nullptr` an unregistered pair reports.
+/// RM3's "nothing to check because nothing is declared required" arm.
+struct WireSchemasPing {};
+
+struct WireSchemasPong {
+    bool ok = true;
+};
+
+/// Two required fields, neither declared optional -- RM5 needs a
+/// simultaneous miss of two-or-more required fields, which
+/// WireSchemasDeposit (one required, one declared-optional) cannot produce.
+struct WireSchemasTransfer {
+    std::int64_t amountCents = 0;
+    std::string memo;
+};
+
 struct WireSchemasLedgerModel {
     std::int64_t balanceCents = 0;
 
@@ -73,10 +90,17 @@ struct WireSchemasLedgerModel {
         balanceCents -= action.amountCents;
         return WireSchemasDepositResult{.balanceCents = balanceCents};
     }
+    WireSchemasPong execute(const WireSchemasPing&) { return WireSchemasPong{}; }
+    WireSchemasDepositResult execute(const WireSchemasTransfer& action) {
+        balanceCents += action.amountCents;
+        return WireSchemasDepositResult{.balanceCents = balanceCents};
+    }
 };
 
 BRIDGE_REGISTER_MODEL(WireSchemasLedgerModel, "WireSchemas_Ledger")
 BRIDGE_REGISTER_ACTION(WireSchemasLedgerModel, WireSchemasDeposit, "WireSchemas_Deposit")
+BRIDGE_REGISTER_ACTION(WireSchemasLedgerModel, WireSchemasPing, "WireSchemas_Ping")
+BRIDGE_REGISTER_ACTION(WireSchemasLedgerModel, WireSchemasTransfer, "WireSchemas_Transfer")
 BRIDGE_REGISTER_ACTION(WireSchemasLedgerModel, WireSchemasWithdraw, "WireSchemas_Withdraw")
 
 namespace {
@@ -357,6 +381,103 @@ TEST_CASE("RequireDeclaredFields leaves a non-object body to the action codec", 
     auto reply = runExecute(*server, modelId, "\"not-an-object\"");
     REQUIRE(reply.kind == "err");
     REQUIRE(reply.message.find("payload missing required field") == std::string::npos);
+}
+
+TEST_CASE("RequireDeclaredFields treats an action with no declared required fields as nothing to check",
+          "[remote][completeness][issue207]") {
+    // RM3(a): missingRequiredFields's `required->empty()` arm -- a
+    // *registered* action whose schema declares zero required fields (as
+    // opposed to `required == nullptr`, an unregistered pair). Every prior
+    // test's action had at least one required field, so this arm was never
+    // taken; the gate must not manufacture a false-positive rejection for an
+    // action that has nothing to check.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<RemoteServer>(pool);
+    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    const auto modelId = registerLedger(*server);
+
+    Envelope pingEnv;
+    pingEnv.kind = "execute";
+    pingEnv.callId = 1;
+    pingEnv.modelId = modelId;
+    pingEnv.modelType = "WireSchemas_Ledger";
+    pingEnv.actionType = "WireSchemas_Ping";
+    pingEnv.body = "{}";
+    WaitReply reply;
+    server->handle(encode(pingEnv), std::ref(reply));
+    REQUIRE(reply.await());
+    REQUIRE(reply.env.kind == "ok");
+}
+
+TEST_CASE("RequireDeclaredFields treats an unregistered action pair as nothing to check",
+          "[remote][completeness][issue207]") {
+    // RM3(b): missingRequiredFields's `required == nullptr` arm -- an
+    // actionType the dispatcher never registered for this modelType at all.
+    // The gate must let it through as "nothing to check" (not a false-
+    // positive "missing field" rejection), leaving the dispatcher's own
+    // "unknown action" diagnostic as the actual, more specific failure.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<RemoteServer>(pool);
+    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    const auto modelId = registerLedger(*server);
+
+    Envelope unknownEnv;
+    unknownEnv.kind = "execute";
+    unknownEnv.callId = 1;
+    unknownEnv.modelId = modelId;
+    unknownEnv.modelType = "WireSchemas_Ledger";
+    unknownEnv.actionType = "WireSchemas_NoSuchAction";
+    unknownEnv.body = "{}";
+    WaitReply reply;
+    server->handle(encode(unknownEnv), std::ref(reply));
+    REQUIRE(reply.await());
+    REQUIRE(reply.env.kind == "err");
+    REQUIRE(reply.env.message.find("payload missing required field") == std::string::npos);
+    REQUIRE(reply.env.message.find("unknown action") != std::string::npos);
+}
+
+TEST_CASE("RequireDeclaredFields degrades safely on a genuinely malformed JSON body",
+          "[remote][completeness][issue207]") {
+    // RM4: missingRequiredFields's `glz::read_json(dom, body)` truthy (parse
+    // failure) arm. Every prior "non-object body" test used well-formed JSON
+    // that merely isn't an *object* (e.g. a bare string); this one is not
+    // valid JSON at all -- adversarial input, not a framework-codec break.
+    // The gate must degrade to "nothing missing" here too, leaving the
+    // action's own fromJson to raise the actual, more specific parse error.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<RemoteServer>(pool);
+    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    const auto modelId = registerLedger(*server);
+
+    auto reply = runExecute(*server, modelId, R"({"amountCents":500,)");  // truncated -- not valid JSON
+    REQUIRE(reply.kind == "err");
+    REQUIRE(reply.message.find("payload missing required field") == std::string::npos);
+}
+
+TEST_CASE("RequireDeclaredFields comma-joins two or more missing fields in its diagnostic",
+          "[remote][completeness][issue207]") {
+    // RM5: the missing-fields message's `if (!missing.empty()) { missing +=
+    // ", "; }` separator. Every prior "missing field" test was missing at
+    // most one field at a time, so the separator never fired.
+    // WireSchemas_Transfer declares two required fields (neither optional),
+    // so omitting both trips it.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<RemoteServer>(pool);
+    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    const auto modelId = registerLedger(*server);
+
+    Envelope transferEnv;
+    transferEnv.kind = "execute";
+    transferEnv.callId = 1;
+    transferEnv.modelId = modelId;
+    transferEnv.modelType = "WireSchemas_Ledger";
+    transferEnv.actionType = "WireSchemas_Transfer";
+    transferEnv.body = "{}";
+    WaitReply reply;
+    server->handle(encode(transferEnv), std::ref(reply));
+    REQUIRE(reply.await());
+    REQUIRE(reply.env.kind == "err");
+    REQUIRE(reply.env.message == "payload missing required field(s): amountCents, memo");
 }
 
 // ── SimulatedRemoteBackend: the client-side accessor ─────────────────────────
