@@ -385,6 +385,28 @@ template <typename A>
     dom["x-payloadFingerprint"] = payloadFingerprint<A>();
     dom["x-payloadShape"] = payloadShapeString<A>();
     std::string merged;
+    // COVERAGE GAP, documented not closed: glz::write_json never fails on
+    // this always-well-formed `dom` (every field just came from a
+    // successful glz::read_json a few lines above, plus two plain string
+    // insertions) -- closing this branch would need forging a failure
+    // inside glaze's own serializer over data this function produces
+    // itself, not something reachable through schemaJson<A>()'s return
+    // text the way the two branches above this one are. No trigger found.
+    //
+    // WARNING for whoever next measures this file's coverage: this line
+    // can read as "covered" in a merged/aggregated coverage report even
+    // though the branch above is genuinely never taken by any real test.
+    // tests/test_registry_schema_forgery.cpp's WireSchemasUnsatisfiable
+    // fixture (a different, deliberately-closed finding) throws partway
+    // through this function, after llvm-cov's per-function body-region
+    // counter has already incremented for that instantiation -- llvm-cov
+    // then synthesizes phantom nonzero branch counts for every top-level
+    // `if` in that one instantiation, including this one, and
+    // aggregate_lcov_branches.py sums arm counts across instantiations, so
+    // the phantom contribution folds into this line's aggregate. Verify via
+    // `llvm-cov show -show-instantiations=true` scoped to a real,
+    // non-throwing instantiation before trusting a "this line is covered"
+    // reading here.
     if (!glz::write_json(dom, merged)) {
         desc.schema = std::move(merged);
     }
