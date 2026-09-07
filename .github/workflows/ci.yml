@@ -1791,8 +1791,20 @@ jobs:
       - name: Install Clang ${{ env.CLANG_VERSION }}, clang-tidy, and the non-Qt deps
         run: |
           sudo apt-get update -q
+          # unixodbc-dev + libsqliteodbc, libyaml-cpp-dev + libzip-dev: the
+          # Configure step below turns MORPH_BUILD_LADDER on, which pulls in the
+          # Lightweight ORM -- whose CMake does `pkg_check_modules(ODBC REQUIRED
+          # odbc)` and `find_package(yaml-cpp)`/`find_package(libzip)` as system
+          # CONFIG packages, not through CPM. Without these four the configure
+          # fails outright. Same set, for the same reason, as every other Linux
+          # job that configures the ladder (see the "Install ODBC + SQLite
+          # driver" step above). This job never builds or runs anything, so the
+          # SQLite ODBC *driver* is not strictly exercised here; it is installed
+          # alongside unixodbc-dev to keep the four-package set identical to the
+          # jobs that do, rather than subtly divergent.
           sudo apt-get install -y ninja-build catch2 \
             libsqlite3-dev libsodium-dev libssl-dev \
+            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev \
             libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
             libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
@@ -1808,10 +1820,36 @@ jobs:
 
       # Every optional feature is ON here purely so its sources land in
       # compile_commands.json. clang-tidy only ever analyses *changed lines*, so
-      # this costs a wider build, not a wider lint. Configured narrowly before,
-      # the whole opt-in surface — morph::net, the Qt transport, the QML forms
-      # renderer, the SQLite queue, the fuzz harnesses — was invisible to the
-      # one gate in this workflow that reads code rather than running it.
+      # this costs a wider configure, not a wider lint. Configured narrowly
+      # before, the whole opt-in surface — morph::net, the Qt transport, the QML
+      # forms renderer, the SQLite queue, the fuzz harnesses — was invisible to
+      # the one gate in this workflow that reads code rather than running it.
+      #
+      # MORPH_BUILD_LADDER + MORPH_BUILD_BANK_EXAMPLE are the two that make that
+      # claim true rather than aspirational (morph#481). Both default OFF and
+      # gate `add_subdirectory(examples)` / `add_subdirectory(examples/bank)`,
+      # so until they were passed here the database held 261 entries of which
+      # 16 were under examples/ — four directories, none of them a ladder rung.
+      # examples/ is 69% of the repository's C/C++ files (524 of 793 were
+      # outside the database, against 60 under include/morph), and clang-tidy
+      # does not skip a file it has no compile command for: clang tooling
+      # interpolates one from a neighbouring entry, morph's own -I survive, the
+      # rung's do not, and the translation unit dies at include #2 with
+      # `'ledger/models/ledger_model.hpp' file not found`. That is a
+      # clang-diagnostic-error, not a lint finding, and it means no check ever
+      # reached a line of a rung's own code. Measured, same flags, clang 22:
+      # 261 -> 690 entries, examples/ 16 -> 276, spanning all thirteen example
+      # directories. Configure goes 61s -> 107s locally for it.
+      #
+      # MORPH_LADDER_RUNGS is deliberately NOT passed: it already defaults to
+      # "all" (CMakeLists.txt), and passing `-DMORPH_LADDER_RUNGS=all`
+      # explicitly was measured to produce a byte-identical 690-entry database.
+      # A flag that changes nothing is a flag that misleads the next reader
+      # about what this step depends on.
+      #
+      # The prerequisites examples/common/CMakeLists.txt enforces with a
+      # FATAL_ERROR are already met above: MORPH_BUILD_QT=ON is passed, and
+      # MORPH_BUILD_TESTS defaults ON.
       # No Build step: clang-tidy-diff.py reads compile_commands.json (a
       # configure-time artifact, CMAKE_EXPORT_COMPILE_COMMANDS=ON in the base
       # preset) and runs clang-tidy itself per translation unit -- it neither
@@ -1832,6 +1870,8 @@ jobs:
             -DMORPH_BUILD_LOAD_TESTS=ON \
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
             -DMORPH_BUILD_FUZZERS=ON \
+            -DMORPH_BUILD_LADDER=ON \
+            -DMORPH_BUILD_BANK_EXAMPLE=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
 
@@ -1864,27 +1904,22 @@ jobs:
           # being absent, or a SIGPIPE from `head` closing the pipe early.
           set -o pipefail
 
-          # The Configure step above leaves MORPH_BUILD_LADDER and
-          # MORPH_BUILD_BANK_EXAMPLE at their OFF defaults, so no rung, no
-          # examples/common and no examples/bank source is in
-          # compile_commands.json -- clang-tidy falls back to a default command
-          # for them and reports `'ledger/core/errors.hpp' file not found` as a
-          # clang-diagnostic-error, which is not a lint finding. Excluded here
-          # rather than analysed-and-ignored, until morph#481 gives this job the
-          # ladder configure the four other Linux ladder jobs already carry;
-          # deleting this regex is that issue's last step. Deliberately NOT
-          # clang-tidy-diff.py's own -only-check-in-db, which filters on literal
-          # membership of compile_commands.json: no header is ever a compilation
-          # unit, so it would silently drop all of include/morph/** -- morph#479's
-          # own defect one directory over. The rung names come from
-          # examples/rungs.txt (via the reader every other consumer uses) so this
-          # cannot fall behind the list the way morph#179's filter did; `bank` and
-          # `common` are spelled out because neither is a rung -- rungs.txt says
-          # so for bank, and common is the shared testkit the rungs link.
-          SKIP_DIRS="$( { echo bank; echo common; bash scripts/ladder_rungs.sh list; } \
-            | grep -v '^$' | paste -sd'|' - )"
-          echo "Not analysed (no compile command in this job's database, morph#481): examples/{${SKIP_DIRS}}"
-
+          # No -regex narrowing here, deliberately: every changed C/C++ file in
+          # the diff is analysed. The `-regex` that used to exclude
+          # examples/{bank,common,<every rung>} existed only because the
+          # Configure step left MORPH_BUILD_LADDER and MORPH_BUILD_BANK_EXAMPLE
+          # at their OFF defaults, so those files had no compile command and
+          # could only ever produce `'ledger/core/errors.hpp' file not found`.
+          # The Configure step now passes both, so they do (morph#481) --
+          # deleting that regex is what turns the ladder configure from pure
+          # cost into coverage. Restoring any exclusion here silently undoes 276
+          # of the database's 690 entries.
+          #
+          # Deliberately NOT clang-tidy-diff.py's own -only-check-in-db either,
+          # which filters on literal membership of compile_commands.json: no
+          # header is ever a compilation unit, so it would silently drop all of
+          # include/morph/** -- morph#479's own defect one directory over.
+          #
           # -extra-arg is appended to the *compiler* command line, so the
           # -extra-arg=-warnings-as-errors=* that used to sit here reached clang
           # as an unknown argument and made every translation unit fail with
@@ -1894,17 +1929,23 @@ jobs:
           #
           # -Wno-missing-include-dirs: this job configures but never builds (see
           # the Configure step's comment), and Qt AUTOMOC's
-          # <target>_autogen/include directories are created by the build. 202 of
-          # the 261 stored commands name one, and -Weverything +
-          # WarningsAsErrors:"*" turns each into a clang-diagnostic error that
-          # says nothing about the changed lines.
+          # <target>_autogen/include directories are created by the build. With
+          # the ladder configured, 632 of the 690 stored commands name one (90
+          # distinct directories, none of which exists after a configure-only
+          # run), up from 203 of 261 -- and -Weverything + WarningsAsErrors:"*"
+          # turns each into a clang-diagnostic error that says nothing about the
+          # changed lines. Suppressing it is sufficient, not merely convenient:
+          # over the last ten commits' changed lines against the ladder database
+          # this run reports 48 findings and *zero* clang-diagnostic-error, and
+          # no source under examples/, include/ or src/ includes a generated
+          # moc_/ui_ header (the "Application ladder" job's own "Check no
+          # generated moc include ascends" step is the standing guard on that).
           if ! git diff -U0 "$BASE_SHA" | \
             python3 "$CLANG_TIDY_DIFF" \
               -path build/clang-debug \
               -clang-tidy-binary clang-tidy-${{ env.CLANG_VERSION }} \
               -p1 \
               -j "$(nproc)" \
-              -regex "(?!examples/(${SKIP_DIRS})/).*\.(cpp|cc|c\+\+|cxx|c|cl|h|hpp|m|mm|inc)" \
               -extra-arg=-std=c++23 \
               -extra-arg=-Wno-missing-include-dirs \
               -quiet \
