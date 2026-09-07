@@ -856,6 +856,81 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # ── Every scenario corpus must be one this job actually runs ──────
+      # The step at the end of this job runs scripts/scenario/run_scenarios.py
+      # over the corpus. A corpus can drop out of that run in two ways, and
+      # neither announces itself:
+      #
+      #   * a scenarios/<name>/ directory with no RungSpec in run_scenarios.py.
+      #     The driver's default set is the intersection of the two, so an
+      #     unknown directory is simply not in it -- and passing --rung <name>
+      #     for it is an argparse error, not a run.
+      #   * a rung this job builds no server for. The driver exits 2 in that
+      #     case (find_server), which is correct and deliberately not softened
+      #     into a skip -- but it only says so after a full Qt + ladder build.
+      #
+      # Both are morph#462's own failure one level down: a gate that quietly
+      # runs five corpora out of six reports green exactly as loudly as one
+      # that ran them all. So they are checked here instead, on a bare
+      # checkout, in seconds, before anything is installed or compiled.
+      #
+      # This is what will fire when a corpus arrives for something that is not
+      # a ladder rung. examples/bank is the live case (morph#470): its server
+      # comes from a local add_executable() rather than morph_add_rung(), and
+      # bank is deliberately absent from examples/rungs.txt, so this job
+      # configures nothing for it. The job then goes red naming bank, and the
+      # fix is to make this job build that server and add it below -- not to
+      # let the corpus run four of six directories in silence.
+      - name: Check every scenario corpus has a server this job builds
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          corpora="$(find scripts/scenario/scenarios -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)"
+          if [ -z "$corpora" ]; then
+            echo "::error::scripts/scenario/scenarios/ holds no corpus directories -- the scenario step at the end of this job would report success having run nothing"
+            exit 1
+          fi
+
+          # The rungs run_scenarios.py knows how to start a server for. Read
+          # out of the module rather than restated here: a second copy of this
+          # list is a second thing that can fall behind.
+          known="$(python3 - <<'PY'
+          import importlib.util
+          import sys
+
+          spec = importlib.util.spec_from_file_location(
+              "run_scenarios", "scripts/scenario/run_scenarios.py")
+          module = importlib.util.module_from_spec(spec)
+          # Registered before exec_module: @dataclasses.dataclass looks its
+          # class's own module up in sys.modules while decorating, and raises
+          # if it is not there yet.
+          sys.modules[spec.name] = module
+          spec.loader.exec_module(module)
+          print("\n".join(sorted(module.RUNGS)))
+          PY
+          )"
+
+          # The rungs this job configures: -DMORPH_LADDER_RUNGS=all below
+          # reaches exactly the names in examples/rungs.txt.
+          configured="$(bash scripts/ladder_rungs.sh list | sort)"
+
+          status=0
+          for rung in $corpora; do
+            if ! printf '%s\n' "$known" | grep -qxF "$rung"; then
+              echo "::error::scripts/scenario/scenarios/${rung}/ has no RungSpec in scripts/scenario/run_scenarios.py, so nothing can start a server for it and the driver would leave it out of its default set"
+              status=1
+            elif ! printf '%s\n' "$configured" | grep -qxF "$rung"; then
+              echo "::error::scripts/scenario/scenarios/${rung}/ is a corpus for '${rung}', which is not listed in examples/rungs.txt -- this job configures no ladder_${rung}_server for it. Either list it there, or build its server in this job and extend this check to expect it."
+              status=1
+            elif [ ! -d "examples/${rung}/src/server" ]; then
+              echo "::error::examples/${rung}/src/server/ does not exist, so cmake/morph_add_rung.cmake declares no ladder_${rung}_server to run scripts/scenario/scenarios/${rung}/ against"
+              status=1
+            else
+              echo "ok: ${rung} -- corpus, RungSpec and ladder_${rung}_server all accounted for"
+            fi
+          done
+          exit "$status"
+
       - name: Cache apt packages
         if: steps.filter.outputs.run == 'true'
         uses: actions/cache@v4
@@ -973,6 +1048,45 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset gcc-debug -L ladder -LE stress --output-on-failure
+
+      # ── The scenario corpus, against the servers just built ────────────
+      # Nothing in CI ran scripts/scenario/run_scenarios.py until this step
+      # (morph#462). The corpus could therefore be refused wholesale by a real
+      # server with every workflow still green -- and was: sixteen of sixteen
+      # ledger scenarios refused for five days and through a merge (morph#460),
+      # while drift-guard.yml's scenario-coverage job reported "ledger actions
+      # 18/18 dispatched, workflows 16/16" throughout. That job parses the
+      # corpus; only running it can see a refusal.
+      #
+      # Here rather than in drift-guard.yml, for the reason drift-guard.yml's
+      # own comment gives for deferring it: running the corpus needs the
+      # ladder_<rung>_server binaries, which that workflow deliberately has no
+      # build to produce. This job already builds every one of them
+      # unconditionally (cmake/morph_add_rung.cmake), so the build this step
+      # needs is already paid for above.
+      #
+      # --rung is passed once per corpus directory found on disk rather than
+      # left to the driver's default: the set that runs is then demonstrably
+      # the set that exists, and the check near the top of this job has already
+      # refused any corpus this job could not have run. --build-dir names the
+      # build, so a stale binary in some other build tree cannot be picked up.
+      #
+      # A missing binary is not tolerated. run_scenarios.py exits 2 when a
+      # server is absent and that is the right answer; softening it into a skip
+      # would rebuild the blindness this step exists to end.
+      - name: Run the scenario corpus against the built servers
+        if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -euo pipefail
+          rungs=()
+          for dir in scripts/scenario/scenarios/*/; do
+            rungs+=(--rung "$(basename "$dir")")
+          done
+          echo "corpus rungs: ${rungs[*]}"
+          python3 scripts/scenario/run_scenarios.py \
+            --build-dir build/gcc-debug "${rungs[@]}"
 
   # ── Linux: every rung's tests under AddressSanitizer + UBSan ──────────
   # Before this job, no rung test ran under any sanitizer: ladder-tests above
