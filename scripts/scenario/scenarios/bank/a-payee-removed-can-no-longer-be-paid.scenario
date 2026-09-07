@@ -1,0 +1,98 @@
+# bank — removing a beneficiary: they leave the address book, the bills already
+# paid to them stay, and nothing new can be sent.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/a-payee-removed-can-no-longer-be-paid.scenario
+#
+# The interesting half of a delete is what it does *not* take with it. A payee
+# row is referenced by every payment made to it and by the counterparty on each
+# of those ledger entries, so removing one is a chance to break history. This
+# file pays a bill, removes the payee, and then reads the history back to show
+# the record survived the beneficiary.
+
+model AuthModel
+client front
+do RegisterUser username=ritchie password=ritchie-pass displayName="D. Ritchie"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=ritchie password=ritchie-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$acct amountMinor=90000 description="funding"
+expect ok field balanceAfterMinor == 90000
+
+# ── Two beneficiaries, so removing one is visibly not removing both ─────────
+client book model=PayeeModel principal=$who
+do AddPayee name="Water Board" iban=FR1420041010050500013M02606 bankName="Banque Postale"
+expect ok capture doomed=$.id
+expect ok field name == "Water Board"
+
+do AddPayee name="Broadband Co" iban=IE29AIBK93115212345678 bankName="AIB"
+expect ok capture keeper=$.id
+
+do ListPayees owner=$who
+expect ok field payees ~ "\"id\":$doomed,"
+expect ok field payees ~ "\"id\":$keeper,"
+
+# ── Pay one of them, so there is history to preserve ────────────────────────
+client bills model=PaymentModel principal=$who
+do PayBill fromAccountId=$acct payeeId=$doomed amountMinor=12000 description="Q1 water"
+expect ok capture payment=$.id
+expect ok field status == 1
+
+use teller
+do History accountId=$acct limit=1 offset=0
+expect ok field entries[0].counterpartyId == $doomed
+expect ok field entries[0].kind == 4
+
+# ── Remove them ─────────────────────────────────────────────────────────────
+use book
+do RemovePayee id=$doomed
+expect ok field ok == true
+expect ok field message == "payee removed"
+
+# Gone from the address book; the other one is not.
+do ListPayees owner=$who
+expect ok field payees !~ "\"id\":$doomed,"
+expect ok field payees ~ "\"id\":$keeper,"
+
+# Removing them twice is a lookup failure the second time.
+do RemovePayee id=$doomed
+expect err message == "payee not found"
+
+# ── Nothing new can be sent to them ─────────────────────────────────────────
+use bills
+do PayBill fromAccountId=$acct payeeId=$doomed amountMinor=1000 description="one more"
+expect err message == "payee not found"
+
+do SchedulePayment fromAccountId=$acct payeeId=$doomed amountMinor=1000 dueAtMs=2000000000000 description="one more, later"
+expect err message == "payee not found"
+
+# ── But what was already sent is still on the record ────────────────────────
+# The ledger row still names the removed payee as its counterparty, and the
+# payment row is still listed. A delete that had cascaded would have taken the
+# customer's own history with it.
+use teller
+do History accountId=$acct limit=1 offset=0
+expect ok field entries[0].counterpartyId == $doomed
+expect ok field entries[0].amountMinor == 12000
+
+use bills
+do ListPayments owner=$who
+expect ok field payments ~ "\"id\":$payment,"
+
+# And the money is still where the payment left it.
+client single model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 78000
+
+# The surviving payee still works.
+use bills
+do PayBill fromAccountId=$acct payeeId=$keeper amountMinor=3000 description="broadband"
+expect ok field status == 1
+expect ok field payeeId == $keeper

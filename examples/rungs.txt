@@ -34,6 +34,21 @@
 # forget. Omitting a rung here while examples/<rung>/CMakeLists.txt calls
 # morph_add_rung() is a hard configure error, by design: this list is the one
 # whose staleness must fail loudly, because everything else derives from it.
+#
+# Not listed here, deliberately: examples/bank. Bank predates the ladder --
+# examples/LADDER.md's intro cites it as prior art and its effort accounting
+# measures rungs in "bank-equivalents" -- and it carries no rung number; that
+# is the ladder-slot question morph#87 raises, answered by leaving bank
+# outside the sequence, and examples/LADDER.md records the answer next to the
+# numbered table. Bank still ships a server (examples/bank/src/server/main.cpp,
+# built by a plain add_executable() in examples/bank/CMakeLists.txt) and a
+# scenario corpus (scripts/scenario/scenarios/bank/), because neither needs
+# this file. What needs this file is morph_add_rung(), which bank does not
+# call, so the hard error above never fires for it. Adding the name here would
+# not describe bank; it would enrol bank in every consumer above -- ci.yml's
+# ladder-tests and ladder-sanitizers, wasm-ladder.yml's build loop,
+# coverage.sh and codecov.yml's per-rung components -- which is a scope
+# decision rather than a naming one.
 
 pastebin
 bookmarks

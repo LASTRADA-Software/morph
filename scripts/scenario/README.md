@@ -46,6 +46,26 @@ python3 scripts/scenario/run_scenarios.py --rung pastebin
 python3 scripts/scenario/run_scenarios.py --rung ledger --twice --mutate
 ```
 
+**bank is built separately**, because it is not a ladder rung: it is absent
+from `examples/rungs.txt`, never calls `morph_add_rung()`, and its server is a
+local target in `examples/bank/CMakeLists.txt`. It also pulls a heavy
+dependency tree (the Lightweight ORM over ODBC), which is why it sits behind
+its own option and off by default:
+
+```bash
+cmake --preset clang-release -B build/bank-srv -DMORPH_BUILD_BANK_EXAMPLE=ON \
+    -DMORPH_BUILD_NET=ON -DMORPH_BUILD_QT=ON -DMORPH_BUILD_TESTS=ON
+cmake --build build/bank-srv --target ladder_bank_server
+
+python3 scripts/scenario/run_scenarios.py --rung bank --build-dir build/bank-srv --twice
+```
+
+Note that `--build-dir` applies to *every* rung in the run, so it is for
+single-rung runs like the one above. A whole-corpus `run_scenarios.py` with no
+`--build-dir` still works across the two build directories: it globs
+`build/*/examples/<name>/`, and each server binary exists under exactly one of
+them.
+
 | Flag | Meaning |
 |---|---|
 | `--rung NAME` | Restrict to one rung; repeatable. Default: every rung with a directory. |
@@ -75,7 +95,25 @@ They are no longer a statement that a book cannot be created over the wire:
 it would pass against a database the driver never touched. Every other rung
 creates its own root entity over the wire and is seeded with nothing.
 
-`scenarios/` holds one directory per rung, and one file per workflow:
+`scenarios/` holds one directory per server, and one file per workflow. Five of
+the six are ladder rungs; `bank` is not one, which is why the column below says
+"server" rather than "rung".
+
+That asymmetry is deliberate and is not drift to be tidied away. `bank` appears
+in `run_scenarios.py`'s `RUNGS` and in `scenario_coverage.py`'s `SERVER_RUNGS`,
+and is absent from [`examples/rungs.txt`](../../examples/rungs.txt) — the
+ladder's authoritative rung list — because those lists answer different
+questions. `rungs.txt` decides what the ladder *builds and gates on*: every
+entry is pulled into `ci.yml`'s `ladder-tests` and `ladder-sanitizers`,
+`wasm-ladder.yml`'s build loop, `coverage.sh` and `codecov.yml`'s per-rung
+components. The two tuples here decide only
+what a scenario can *reach*, and have always selected on "ships a
+`src/server/main.cpp`". Bank ships one — built by a local `add_executable`, not
+by `morph_add_rung()` — and is unnumbered prior art that predates the ladder
+(`examples/LADDER.md` records that status next to its numbered table). The
+independence already ran the other way too: `lims` and `crm` are rungs with no
+scenarios. `--rung bank` and the `bank` column below are therefore spellings of
+"the `bank` directory", not a rung claim.
 
 | Directory | Server | What it covers |
 |---|---|---|
@@ -84,6 +122,23 @@ creates its own root entity over the wire and is seeded with nothing.
 | `polls/` | `ladder_polls_server` | the shared-instance showcase: create/open/vote/finalize, two participants converging, principal-scoped undo, the event cursor and instance rebirth |
 | `kanban/` | `ladder_kanban_server` | projects and boards, moves and WIP limits, per-project RBAC across three roles, rules and their cascades, comments, attachments, both event streams |
 | `ledger/` | `ladder_ledger_server` | bootstrapping a book from nothing, per-currency zero-sum bookkeeping, categories and budgets, rules and version conflicts, CSV import, submit-then-poll reporting, two books |
+| `bank/` | `ladder_bank_server` | registration and password-only sign-in, accounts and the ledger behind them, overdraft boundaries, transfers, bills and scheduled/standing instructions, cards, loans and amortisation, budgets, notifications, statements; two customers, the anonymous session, and the stateful account cache |
+
+Some of the bank files assert behaviour that is **wrong**, deliberately, and
+say so in their own header comments. The largest is
+[morph#471](https://github.com/LASTRADA-Software/morph/issues/471):
+`bank::resolveOwner()` prefers a caller-supplied owner name over the session
+principal, so ten actions serve a signed-in customer another customer's data
+and `MarkAllRead` writes to it —
+`bank/an-owner-named-outright-is-not-checked-against-the-session.scenario` is
+the inventory, its cross-owner steps all `expect ok`. `SpendingByKind`
+answering a caller
+with no session at all, and `GenerateStatement` reporting a live balance in a
+field named `closingBalanceMinor`, are pinned the same way. An `expect ok` over
+a defect records what the server does today so the day it changes is not a
+silent one; it is not an endorsement, and the fix is meant to turn those
+assertions red. That is the opposite arrangement from
+`broken-on-purpose.scenario`, which fails today by design.
 
 The rung a scenario belongs to is its parent directory name — that is how
 per-rung action coverage is attributed, so a file loose in `scenarios/` is
@@ -293,9 +348,11 @@ Two conditions must hold per rung, from `scenarios/<rung>/`:
 - every registered action is dispatched (appears in some scenario's `do`
   step) by some file in that rung's directory;
 - the rung has at least as many qualifying workflow files as its floor in
-  `WORKFLOW_FLOORS` (`pastebin` 8, `polls` 10, `bookmarks` 12, `ledger` 15,
-  `kanban` 20) — floors scaled to how finite that rung's space of meaningful
-  journeys is, not quotas: a rung may carry more.
+  `WORKFLOW_FLOORS` (`pastebin` 8, `polls` 10, `bookmarks` 12, `ledger` 16,
+  `kanban` 20, `bank` 22) — floors scaled to how finite that directory's space
+  of meaningful journeys is, not quotas: it may carry more. `bank`'s is the
+  highest because its 41 registered actions across eleven models are the
+  largest surface measured here.
 
 An action that genuinely cannot be driven by any WebSocket client — because
 the server refuses every principal but its own internal caller, or because no
@@ -330,8 +387,8 @@ nothing asserts, an allowlist entry left behind after the thing it exempted
 became coverable, or a scenario edited until it no longer qualifies as a
 workflow.
 
-What CI does **not** do is *run* the corpus. `run_scenarios.py` needs the five
-`ladder_<rung>_server` binaries built, which no workflow has today; running it
+What CI does **not** do is *run* the corpus. `run_scenarios.py` needs the six
+`ladder_<name>_server` binaries built, which no workflow has today; running it
 is its own change. So a scenario can currently drift from a server's real
 behaviour without CI noticing — only from its *surface*.
 

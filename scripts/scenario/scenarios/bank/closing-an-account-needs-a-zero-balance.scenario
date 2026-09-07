@@ -1,0 +1,86 @@
+# bank — an account is emptied before it is closed, and a closed account stops
+# accepting money.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/closing-an-account-needs-a-zero-balance.scenario
+#
+# `CloseAccount` is the one bank action that reports a refusal as an ordinary
+# result rather than by throwing: a non-zero balance comes back as
+# `CommandResult{ok:false}` on an `ok` envelope, not as an `err`. A client that
+# only checked the envelope would read "closed" from a refusal, which is
+# precisely the confusion this file pins down.
+#
+# It also exercises the seam `AccountModel` exists for. That model is *stateful*
+# and keyed by account id: it holds the row in memory and re-reads it only when
+# the row version it captured has moved (bank/db/row_versions.hpp). Closing
+# writes through and bumps that version, so the `GetAccount` afterwards is
+# reading a cache that had to notice it was stale.
+
+model AuthModel
+client front
+do RegisterUser username=lovelace password=lovelace-pass displayName="A. Lovelace"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=lovelace password=lovelace-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+expect ok field status == 0
+
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$acct amountMinor=7500 description="something to clear"
+expect ok field balanceAfterMinor == 7500
+
+# ── A funded account will not close ─────────────────────────────────────────
+client single model=AccountModel principal=$who
+
+# Note the envelope: this is `ok`, and the refusal is in the body.
+do CloseAccount id=$acct
+expect ok field ok == false
+expect ok field message == "account balance must be zero before closing"
+
+# Still open, and still holding the money.
+do GetAccount id=$acct
+expect ok field status == 0
+expect ok field balanceMinor == 7500
+
+# ── Empty it, then close it ─────────────────────────────────────────────────
+use teller
+do Withdraw accountId=$acct amountMinor=7500 description="closing balance out"
+expect ok field balanceAfterMinor == 0
+
+use single
+do CloseAccount id=$acct
+expect ok field ok == true
+expect ok field message == "account closed"
+
+# status 2 is AccountStatus::Closed. This read goes through the cached row that
+# `CloseAccount` just wrote and re-versioned.
+do GetAccount id=$acct
+expect ok field status == 2
+expect ok field balanceMinor == 0
+
+# ── A closed account is out of service ──────────────────────────────────────
+# Every money-movement path shares one "owned and open" guard, so all of them
+# refuse with the same message once the account is closed.
+use teller
+do Deposit accountId=$acct amountMinor=100 description="after closing"
+expect err message == "account is not open"
+
+do Withdraw accountId=$acct amountMinor=100 description="after closing"
+expect err message == "account is not open"
+
+# ── But its history survives ────────────────────────────────────────────────
+# Closing an account is not deleting it: the ledger is still readable, which is
+# what a customer asking for last year's statement depends on.
+do History accountId=$acct limit=10 offset=0
+expect ok field entries[0].kind == 1
+expect ok field entries[0].amountMinor == 7500
+expect ok field entries[1].kind == 0
+
+# Closing an account that does not exist names no other row.
+use single
+do CloseAccount id=999999
+expect err message == "account not found"

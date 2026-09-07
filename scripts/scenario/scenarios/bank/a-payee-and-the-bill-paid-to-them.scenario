@@ -1,0 +1,108 @@
+# bank — saving a beneficiary and paying them: one instruction that settles
+# immediately and shows up in three places at once.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/a-payee-and-the-bill-paid-to-them.scenario
+#
+# `PayBill` is the only one of bank's three payment actions that *moves money*.
+# It debits the account and creates the payment row inside a single
+# `SqlTransaction`, comes back already `Completed`, and posts a ledger entry
+# whose counterparty is the payee. The other two (`SchedulePayment`,
+# `CreateStandingOrder`) only write an instruction — see
+# a-scheduled-payment-waits-and-can-be-cancelled.scenario for the contrast.
+
+model AuthModel
+client front
+do RegisterUser username=babbage password=babbage-pass displayName="C. Babbage"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=babbage password=babbage-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$acct amountMinor=200000 description="funding"
+expect ok field balanceAfterMinor == 200000
+
+# ── The beneficiary ─────────────────────────────────────────────────────────
+client book model=PayeeModel principal=$who
+
+# `AddPayee::validate()` wants a name and something IBAN-shaped: two letters,
+# then alphanumerics, 15..34 characters. It is a shape check, not a mod-97
+# checksum, and this file asserts only what that check actually promises.
+do AddPayee name="City Power" iban=DE89370400440532013000 bankName="Stadtbank"
+expect ok capture payee=$.id
+expect ok field name == "City Power"
+expect ok field iban == "DE89370400440532013000"
+expect ok field bankName == "Stadtbank"
+expect ok field owner == "babbage"
+
+# Too short to be an IBAN, so morph refuses it before `PayeeModel` runs.
+do AddPayee name="Dodgy Ltd" iban=DE89 bankName="Nowhere"
+expect err message == "action failed validation: PayeeModel/AddPayee"
+
+# A name is required too — a plausible IBAN alone is not a beneficiary.
+do AddPayee name="" iban=DE89370400440532013000 bankName="Stadtbank"
+expect err message == "action failed validation: PayeeModel/AddPayee"
+
+do ListPayees owner=$who
+expect ok field payees ~ "\"id\":$payee,"
+expect ok field payees ~ "City Power"
+
+# ── Paying them ─────────────────────────────────────────────────────────────
+client bills model=PaymentModel principal=$who
+
+# schedule 0 is PaymentSchedule::OneOff and status 1 is
+# PaymentStatus::Completed: this settled during the call, not afterwards.
+do PayBill fromAccountId=$acct payeeId=$payee amountMinor=45000 description="March electricity"
+expect ok capture payment=$.id
+expect ok field fromAccountId == $acct
+expect ok field payeeId == $payee
+expect ok field amountMinor == 45000
+expect ok field schedule == 0
+expect ok field status == 1
+expect ok field owner == "babbage"
+expect ok field intervalDays == 0
+
+# ── It moved real money ─────────────────────────────────────────────────────
+client single model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 155000
+
+# kind 4 is TxnKind::Payment, direction 1 is Debit, and the counterparty on the
+# ledger row is the payee — not the destination account, of which there is none.
+use teller
+do History accountId=$acct limit=1 offset=0
+expect ok field entries[0].kind == 4
+expect ok field entries[0].direction == 1
+expect ok field entries[0].amountMinor == 45000
+expect ok field entries[0].balanceAfterMinor == 155000
+expect ok field entries[0].counterpartyId == $payee
+expect ok field entries[0].description == "March electricity"
+
+# ── And it is on the payment list ───────────────────────────────────────────
+use bills
+do ListPayments owner=$who
+expect ok field payments ~ "\"id\":$payment,"
+
+# ── What a bill payment will not do ─────────────────────────────────────────
+# More than the account holds, with no overdraft: refused by the same guard
+# every other debit goes through.
+do PayBill fromAccountId=$acct payeeId=$payee amountMinor=99999999 description="too much"
+expect err message == "amount exceeds available balance plus overdraft"
+
+# A beneficiary that does not exist.
+do PayBill fromAccountId=$acct payeeId=999999 amountMinor=100 description="to nobody"
+expect err message == "payee not found"
+
+# A completed payment is terminal: there is nothing left to cancel.
+do CancelPayment id=$payment
+expect err message == "only pending payments can be cancelled"
+
+# The refusals moved nothing.
+use single
+do GetAccount id=$acct
+expect ok field balanceMinor == 155000

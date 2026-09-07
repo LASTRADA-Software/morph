@@ -1,0 +1,113 @@
+# bank — the first thing a customer ever does: register, sign in, open an
+# account, and see it in their own list.
+#
+#   BANK_DB=... BANK_PORT=0 ladder_bank_server
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/register-sign-in-and-open-an-account.scenario
+#
+# Bank signs in differently from every other rung that has a sign-in, and this
+# file is where that difference is written down. `bookmarks`, `kanban` and
+# `ledger` mint a bearer token and the server verifies its signature; bank's
+# `AuthModel` mints nothing. `LoginRequest` verifies a password and hands back
+# the *principal* for the client to install, which is exactly what
+# `bank::app::App::login()` does with it in the shipped GUI and CLI. So a bank
+# scenario signs in by capturing that principal and putting it on the session,
+# with no token anywhere.
+
+model AuthModel
+client front
+
+# Registration is the only way a `users` row comes into being over the wire,
+# and every owned record in this schema keys off one.
+#
+# The corpus must be re-runnable against a database it has already run on, and
+# registration is the one bank action that is inherently once-only: the second
+# pass finds the row and answers "username already taken". So this step asserts
+# the pair of outcomes that are *both* correct — and the `LoginRequest` below,
+# which behaves identically on either pass, is what actually proves the account
+# exists with these credentials.
+do RegisterUser username=ada password=ada-secret displayName="Ada Lovelace"
+expect ok field message ~ "^(registered|username already taken)$"
+
+# A registration that cannot produce a usable login is refused outright — and
+# it is refused by *morph*, not by bank. `RegisterUser` declares a `validate()`
+# predicate, and the framework evaluates it before the action ever reaches
+# `AuthModel::execute`, so what a client sees is the generic
+# "action failed validation: <Model>/<Action>" and never the model's own
+# "username required and password must be at least 4 characters". That message
+# is real code on a branch the wire cannot reach: every bank DTO carrying a
+# `validate()` shadows its model's matching throw the same way. Asserted here
+# because it is the refusal a client actually has to handle.
+do RegisterUser username=ada-too-short password=abc
+expect err message == "action failed validation: AuthModel/RegisterUser"
+
+# The wrong password is a failed sign-in, not an error: `AuthResult.ok` is
+# false and nothing is handed back to install.
+do LoginRequest username=ada password=not-the-password
+expect ok field ok == false
+expect ok field message == "invalid credentials"
+expect ok field principal == ""
+
+# ── The principal is what the client installs ───────────────────────────────
+do LoginRequest username=ada password=ada-secret
+expect ok capture who=$.principal
+expect ok field ok == true
+expect ok field principal == "ada"
+expect ok field displayName == "Ada Lovelace"
+expect ok field message == "welcome"
+
+# Until it is installed, the session is anonymous. `RemoteServer` clears a
+# principal its authorizer will not vouch for, and an empty claim is one bank's
+# server refuses (`BankDemoAuthorizer::authenticate`), so this is the state a
+# client is in before it signs in.
+do WhoAmI
+expect ok field authenticated == false
+expect ok field principal == ""
+
+session principal=$who
+do WhoAmI
+expect ok field authenticated == true
+expect ok field principal == "ada"
+
+# ── Opening the account ─────────────────────────────────────────────────────
+client vault model=CustomerModel principal=$who
+
+# kind 0 is AccountKind::Checking and currency 0 is Currency::USD. Bank carries
+# both as plain `int` on the wire — its DTOs declare no enum-class members at
+# all, naming the enum only in a doc comment (bank/dto/account_dto.hpp) — so a
+# bare integer here is the encoding, not a shortcut around one.
+do OpenAccount owner=$who kind=0 currency=0 overdraftMinor=25000
+expect ok capture acct=$.id
+expect ok field owner == "ada"
+expect ok field kind == 0
+expect ok field currency == 0
+expect ok field balanceMinor == 0
+expect ok field overdraftMinor == 25000
+expect ok field status == 0
+# Savings earn 150bps and everything else earns nothing, so a checking account
+# is opened at zero.
+expect ok field interestBps == 0
+# A generated IBAN-ish number, not an id echoed back under another name.
+expect ok field number ~ "^DE[0-9]{20}$"
+
+# A currency outside the enum's range never reaches the database — refused by
+# `OpenAccount::validate()`'s `currency >= 0 && currency <= 4` bound, and so
+# again by morph rather than by `CustomerModel`.
+do OpenAccount owner=$who kind=0 currency=99
+expect err message == "action failed validation: CustomerModel/OpenAccount"
+
+# ── Reading it back ─────────────────────────────────────────────────────────
+# A different model, a different connection, and the account is there.
+client single model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field id == $acct
+expect ok field owner == "ada"
+expect ok field overdraftMinor == 25000
+expect ok field status == 0
+
+use vault
+# Pinned to the captured id rather than to a count: this file has opened one
+# more account every time it has ever run against this database.
+do ListAccounts owner=$who
+expect ok field accounts ~ "\"id\":$acct,"
+expect ok field accounts[0].owner == "ada"

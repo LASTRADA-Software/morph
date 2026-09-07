@@ -1,0 +1,157 @@
+# bank — two customers on one server: everything addressed by id is checked
+# against the principal that asked for it.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/another-customer-cannot-touch-your-account.scenario
+#
+# Two clients, two sessions, one database. This is the case an in-process rig
+# assumes away — it arrives holding one session and never has a second one to
+# confuse it with — and it is the case that matters most in a bank.
+#
+# Every ownership refusal below comes from the same place: `db::loadOwned` and
+# `db::loadOwnedOpenAccount` in bank/db/ledger_ops.hpp navigate the row's
+# `BelongsTo` relation to its user and compare that username with the caller's
+# principal. One guard, reused by accounts, payees, payments, cards, loans,
+# budgets and notifications, which is why the messages below differ only in the
+# noun.
+#
+# Note what the guard checks *first*: `loadOwnedOpenAccount` looks up the row,
+# then ownership, then whether it is open. So a stranger asking about somebody's
+# closed account is told it belongs to another owner, and never learns that it
+# is closed.
+
+model AuthModel
+
+# ── Two customers ───────────────────────────────────────────────────────────
+client mallory-auth
+do RegisterUser username=mallory password=mallory-pass displayName="Mallory"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=mallory password=mallory-pass
+expect ok capture mal=$.principal
+expect ok field ok == true
+
+client victim-auth
+do RegisterUser username=victoria password=victoria-pass displayName="Victoria"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=victoria password=victoria-pass
+expect ok capture vic=$.principal
+expect ok field ok == true
+expect ok field principal == "victoria"
+
+# ── Victoria banks ──────────────────────────────────────────────────────────
+client vic-vault model=CustomerModel principal=$vic
+do OpenAccount owner=$vic kind=0 currency=0
+expect ok capture vicAcct=$.id
+expect ok field owner == "victoria"
+
+client vic-teller model=TransactionModel principal=$vic
+do Deposit accountId=$vicAcct amountMinor=250000 description="victoria's money"
+expect ok field balanceAfterMinor == 250000
+
+client vic-book model=PayeeModel principal=$vic
+do AddPayee name="Victoria's Landlord" iban=GB33BUKB20201555555555 bankName="Barclays"
+expect ok capture vicPayee=$.id
+
+client vic-wallet model=CardModel principal=$vic
+do IssueCard accountId=$vicAcct kind=0 dailyLimitMinor=10000
+expect ok capture vicCard=$.id
+
+client vic-desk model=LoanModel principal=$vic
+do ApplyLoan accountId=$vicAcct principalMinor=100000 rateBps=0 termMonths=6
+expect ok capture vicLoan=$.id
+
+client vic-alerts model=NotificationModel principal=$vic
+do Notify message="Victoria's private alert" severity=1
+expect ok capture vicNote=$.id
+
+client vic-plan model=BudgetModel principal=$vic
+do SetBudget category=victoria-only monthlyLimitMinor=10000 currency=0
+expect ok capture vicBudget=$.id
+
+# ── Mallory cannot read the account ─────────────────────────────────────────
+client mal-single model=AccountModel principal=$mal
+do GetAccount id=$vicAcct
+expect err message == "account belongs to a different owner"
+
+do CloseAccount id=$vicAcct
+expect err message == "account belongs to a different owner"
+
+# ── Nor move money in or out of it ──────────────────────────────────────────
+client mal-teller model=TransactionModel principal=$mal
+do Withdraw accountId=$vicAcct amountMinor=1000 description="helping myself"
+expect err message == "account belongs to a different owner"
+
+# Not even a *deposit*: the guard is on the account, not on the direction.
+do Deposit accountId=$vicAcct amountMinor=1000 description="a gift, allegedly"
+expect err message == "account belongs to a different owner"
+
+# Mallory's own account exists, so this transfer is refused for the source
+# rather than for want of a destination.
+client mal-vault model=CustomerModel principal=$mal
+do OpenAccount owner=$mal kind=0 currency=0
+expect ok capture malAcct=$.id
+
+use mal-teller
+do Transfer fromAccountId=$vicAcct toAccountId=$malAcct amountMinor=1000 description="draining"
+expect err message == "account belongs to a different owner"
+
+# And the other way round: Mallory owns the source but not the destination.
+do Transfer fromAccountId=$malAcct toAccountId=$vicAcct amountMinor=1000 description="pushing"
+expect err message == "account belongs to a different owner"
+
+# ── Nor reach anything else of Victoria's ───────────────────────────────────
+client mal-book model=PayeeModel principal=$mal
+do RemovePayee id=$vicPayee
+expect err message == "payee belongs to a different owner"
+
+client mal-wallet model=CardModel principal=$mal
+do FreezeCard id=$vicCard
+expect err message == "card belongs to a different owner"
+
+do ChangePin id=$vicCard newPin="0000"
+expect err message == "card belongs to a different owner"
+
+client mal-desk model=LoanModel principal=$mal
+do GetLoan id=$vicLoan
+expect err message == "loan belongs to a different owner"
+
+do LoanScheduleRequest loanId=$vicLoan
+expect err message == "loan belongs to a different owner"
+
+client mal-alerts model=NotificationModel principal=$mal
+do MarkRead id=$vicNote
+expect err message == "notification belongs to a different owner"
+
+client mal-plan model=BudgetModel principal=$mal
+do DeleteBudget id=$vicBudget
+expect err message == "budget belongs to a different owner"
+
+# ── Paying a bill needs to own both ends ────────────────────────────────────
+client mal-bills model=PaymentModel principal=$mal
+do PayBill fromAccountId=$malAcct payeeId=$vicPayee amountMinor=100 description="to her landlord"
+expect err message == "payee belongs to a different owner"
+
+# ── Nothing Mallory tried left a mark ───────────────────────────────────────
+client vic-single model=AccountModel principal=$vic
+do GetAccount id=$vicAcct
+expect ok field balanceMinor == 350000
+expect ok field status == 0
+
+use vic-alerts
+do ListNotifications owner=$vic unreadOnly=true
+expect ok field notifications ~ "\"id\":$vicNote,"
+
+# ── And Victoria still has what is hers ─────────────────────────────────────
+use vic-teller
+do History accountId=$vicAcct limit=1 offset=0
+expect ok field entries[0].kind == 7
+expect ok field entries[0].amountMinor == 100000
+
+# Left as found.
+use vic-alerts
+do MarkAllRead owner=$vic
+expect ok field ok == true
+
+use vic-plan
+do DeleteBudget id=$vicBudget
+expect ok field ok == true

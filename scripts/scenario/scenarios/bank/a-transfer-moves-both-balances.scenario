@@ -1,0 +1,82 @@
+# bank — a transfer between two of one customer's accounts: one action, two
+# balances, two ledger rows, and a counterparty on each.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/a-transfer-moves-both-balances.scenario
+#
+# `Transfer` is the smallest action in bank that has to be atomic: it debits one
+# account and credits another inside a single `SqlTransaction`, and posts a
+# `TransferOut` entry on one side and a `TransferIn` on the other, each naming
+# the other account as its counterparty. Driving it from outside the process is
+# the only way to see that as one call rather than as two the caller sequenced.
+
+model AuthModel
+client front
+do RegisterUser username=hopper password=hopper-pass displayName="Hopper"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=hopper password=hopper-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+# kind 0 Checking, kind 1 Savings — both in USD, because bank refuses to move
+# money between currencies (see cross-currency-transfers-are-refused.scenario).
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture current=$.id
+do OpenAccount owner=$who kind=1 currency=0
+expect ok capture savings=$.id
+# Savings accounts are opened at 150bps; the checking account above earns
+# nothing. The rate is a property of the kind, not of the request.
+expect ok field interestBps == 150
+
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$current amountMinor=300000 description="salary"
+expect ok field balanceAfterMinor == 300000
+
+# ── The transfer ────────────────────────────────────────────────────────────
+# One call, and the result is both resulting balances — not an id to go and
+# read twice.
+do Transfer fromAccountId=$current toAccountId=$savings amountMinor=120000 description="to savings"
+expect ok field fromBalanceMinor == 180000
+expect ok field toBalanceMinor == 120000
+
+# ── Both sides really moved ─────────────────────────────────────────────────
+client single model=AccountModel principal=$who
+do GetAccount id=$current
+expect ok field balanceMinor == 180000
+do GetAccount id=$savings
+expect ok field balanceMinor == 120000
+
+# ── And both sides were journalled, each naming the other ───────────────────
+use teller
+
+# kind 3 is TxnKind::TransferOut, direction 1 is Debit.
+do History accountId=$current limit=1 offset=0
+expect ok field entries[0].kind == 3
+expect ok field entries[0].direction == 1
+expect ok field entries[0].amountMinor == 120000
+expect ok field entries[0].balanceAfterMinor == 180000
+expect ok field entries[0].counterpartyId == $savings
+expect ok field entries[0].description == "to savings"
+
+# kind 2 is TxnKind::TransferIn, direction 0 is Credit.
+do History accountId=$savings limit=1 offset=0
+expect ok field entries[0].kind == 2
+expect ok field entries[0].direction == 0
+expect ok field entries[0].amountMinor == 120000
+expect ok field entries[0].balanceAfterMinor == 120000
+expect ok field entries[0].counterpartyId == $current
+
+# ── What a transfer will not do ─────────────────────────────────────────────
+# An account cannot pay itself. `Transfer::validate()` demands the two differ,
+# so morph refuses this before the model runs.
+do Transfer fromAccountId=$current toAccountId=$current amountMinor=100 description="to myself"
+expect err message == "action failed validation: TransactionModel/Transfer"
+
+# More than the source holds, with no overdraft agreed on it.
+do Transfer fromAccountId=$current toAccountId=$savings amountMinor=99999999 description="everything"
+expect err message == "amount exceeds available balance plus overdraft"
+
+# And the failed transfer moved nothing on either side.
+do History accountId=$current limit=1 offset=0
+expect ok field entries[0].amountMinor == 120000

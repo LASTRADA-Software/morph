@@ -1,0 +1,113 @@
+# bank — the spending report: debits only, grouped by what kind of debit they
+# were, and a budget to read them against.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/what-was-spent-and-on-what.scenario
+#
+# `SpendingByKind` answers "where did the money go", and the two things it is
+# easy to get wrong are both asserted here: it counts *debits only*, so a
+# deposit of the same size must not cancel a withdrawal out; and it groups by
+# `TxnKind`, so a withdrawal, a card payment and a loan repayment out of one
+# account are three lines and not one total.
+#
+# The account is opened fresh each pass, which is what makes these exact
+# figures rather than "at least": a report over an account a previous run had
+# also spent from could only ever be asserted loosely.
+
+model AuthModel
+client front
+do RegisterUser username=goldberg password=goldberg-pass displayName="A. Goldberg"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=goldberg password=goldberg-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$acct amountMinor=500000 description="salary"
+expect ok field balanceAfterMinor == 500000
+
+# A second credit, so a report that summed everything instead of only debits
+# would be visibly wrong rather than coincidentally right.
+do Deposit accountId=$acct amountMinor=100000 description="refund"
+expect ok field balanceAfterMinor == 600000
+
+# ── Three different kinds of spending ───────────────────────────────────────
+# kind 1, TxnKind::Withdrawal — twice, so one line has a count above one.
+do Withdraw accountId=$acct amountMinor=30000 description="cash"
+expect ok field balanceAfterMinor == 570000
+do Withdraw accountId=$acct amountMinor=20000 description="more cash"
+expect ok field balanceAfterMinor == 550000
+
+# kind 4, TxnKind::Payment.
+client book model=PayeeModel principal=$who
+do AddPayee name="Bookshop" iban=ES9121000418450200051332 bankName="Santander"
+expect ok capture payee=$.id
+
+client bills model=PaymentModel principal=$who
+do PayBill fromAccountId=$acct payeeId=$payee amountMinor=15000 description="books"
+expect ok field status == 1
+
+# kind 8, TxnKind::LoanRepayment. The disbursement that precedes it is a
+# *credit*, so it must not appear in the report at all.
+client desk model=LoanModel principal=$who
+do ApplyLoan accountId=$acct principalMinor=200000 rateBps=0 termMonths=6
+expect ok capture loan=$.id
+expect ok field outstandingMinor == 200000
+
+do RepayLoan loanId=$loan fromAccountId=$acct amountMinor=50000
+expect ok field outstandingMinor == 150000
+
+# ── The budget the report is read against ───────────────────────────────────
+client plan model=BudgetModel principal=$who
+do SetBudget category=everything monthlyLimitMinor=100000 currency=0
+expect ok capture budget=$.id
+expect ok field monthlyLimitMinor == 100000
+
+# ── The report ──────────────────────────────────────────────────────────────
+# sinceMs 0 means all time. Total debits: 30000 + 20000 + 15000 + 50000.
+do SpendingByKind accountId=$acct sinceMs=0
+expect ok field accountId == $acct
+expect ok field totalDebitsMinor == 115000
+
+# Grouped by kind, ordered by the kind's numeric value: 1 Withdrawal,
+# 4 Payment, 8 LoanRepayment.
+expect ok field byKind[0].kind == 1
+expect ok field byKind[0].totalMinor == 50000
+expect ok field byKind[0].count == 2
+expect ok field byKind[1].kind == 4
+expect ok field byKind[1].totalMinor == 15000
+expect ok field byKind[1].count == 1
+expect ok field byKind[2].kind == 8
+expect ok field byKind[2].totalMinor == 50000
+expect ok field byKind[2].count == 1
+
+# Neither credit is anywhere in the report: no kind 0 (Deposit) and no kind 7
+# (LoanDisbursement) line, and the 600000 that came in is not in the total.
+expect ok field byKind !~ "\"kind\":0"
+expect ok field byKind !~ "\"kind\":7"
+
+# ── A window that excludes everything ───────────────────────────────────────
+# Every entry above was written before this far-future instant, so the report
+# is empty rather than absent — the shape is the same and only the figures move.
+do SpendingByKind accountId=$acct sinceMs=2000000000000
+expect ok field accountId == $acct
+expect ok field totalDebitsMinor == 0
+expect ok field byKind == []
+
+# ── An account with nothing spent from it ───────────────────────────────────
+use vault
+do OpenAccount owner=$who kind=1 currency=0
+expect ok capture untouched=$.id
+
+use plan
+do SpendingByKind accountId=$untouched sinceMs=0
+expect ok field totalDebitsMinor == 0
+expect ok field byKind == []
+
+# Left as found.
+do DeleteBudget id=$budget
+expect ok field ok == true

@@ -997,9 +997,18 @@ class ActionExtractionTest(unittest.TestCase):
         # Undo control the rung's GUI ships -- could only be handed a guess.
         self.assertEqual(actions["ledger"], frozenset({"CreateBudget", "CreateCategory", "CreateLedger", "CreateRule", "GetBudgetReport", "GetLedger", "GetReportStatus", "ImportLedgerChunk", "LinkAccountToCategory", "ListTransactions", "Login", "OpenAccount", "RunReportJob", "SetBudgetLimit", "SetCategory", "StoreTransaction", "SubmitReport", "UndoTransaction", "UpdateRule"}))
         self.assertEqual(actions["kanban"], frozenset({"AddAttachment", "AddComment", "ApplyTagMutation", "CreateColumn", "CreateProject", "CreateRule", "CreateSwimlane", "CreateTask", "DeleteRule", "GetActivity", "GetAttachments", "GetBoardState", "GetEventsSince", "GetMyProjects", "GetProjectRoles", "GetRules", "Login", "MoveTaskPosition", "OpenBoard", "RemoveAttachment", "RemoveMember", "SetMemberRole"}))
+        # bank is not a ladder rung and takes no rung number (absent from
+        # examples/rungs.txt, never calls morph_add_rung) but ships a
+        # src/server/main.cpp, which is what SERVER_RUNGS has always actually
+        # selected on. Its 41 registrations are
+        # the largest surface in the tree. Note the wasm client under
+        # examples/bank/gui_wasm/ re-registers a subset of these same wire
+        # names, and `extract_actions` returns a set, so the duplicates collapse
+        # rather than inflating the count.
+        self.assertEqual(actions["bank"], frozenset({"AddPayee", "ApplyLoan", "CancelCard", "CancelPayment", "ChangePassword", "ChangePin", "CloseAccount", "CreateStandingOrder", "DeleteBudget", "Deposit", "FreezeCard", "GenerateStatement", "GetAccount", "GetLoan", "History", "IssueCard", "ListAccounts", "ListBudgets", "ListCards", "ListLoans", "ListNotifications", "ListPayees", "ListPayments", "LoanScheduleRequest", "LoginRequest", "MarkAllRead", "MarkRead", "Notify", "OpenAccount", "PayBill", "RegisterUser", "RemovePayee", "RepayLoan", "SchedulePayment", "SetBudget", "SetCardLimit", "SpendingByKind", "Transfer", "UnfreezeCard", "WhoAmI", "Withdraw"}))
         # Total count provides a quick sanity check tied to MIN_ACTIONS.
         total = sum(len(names) for names in actions.values())
-        self.assertEqual(total, 73)
+        self.assertEqual(total, 114)
 
 
 _FLAT_LIST = '''

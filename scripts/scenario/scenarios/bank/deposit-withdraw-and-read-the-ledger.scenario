@@ -1,0 +1,101 @@
+# bank — money in, money out, and the ledger that records both.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/deposit-withdraw-and-read-the-ledger.scenario
+#
+# Every amount in bank is an integer in minor units — cents for USD — and every
+# ledger row carries the balance the account held *after* that entry. Those two
+# facts together are what make a history readable without re-deriving anything,
+# and this file pins them.
+#
+# The account is opened fresh on every pass rather than reused, which is what
+# makes the balances below exact numbers instead of ranges: a file that banked
+# into an account a previous run had left money in could only ever assert
+# "more than before".
+
+model AuthModel
+client front
+do RegisterUser username=knuth password=knuth-pass displayName="Don Knuth"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=knuth password=knuth-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+expect ok field balanceMinor == 0
+
+# ── Money in ────────────────────────────────────────────────────────────────
+client teller model=TransactionModel principal=$who
+
+# The returned entry is the ledger row itself, not an acknowledgement: it
+# carries the amount, the kind, and the balance the account was left at.
+do Deposit accountId=$acct amountMinor=125000 description="opening deposit"
+expect ok capture firstEntry=$.id
+expect ok field accountId == $acct
+expect ok field amountMinor == 125000
+expect ok field balanceAfterMinor == 125000
+# direction 0 is TxnDirection::Credit, kind 0 is TxnKind::Deposit.
+expect ok field direction == 0
+expect ok field kind == 0
+expect ok field currency == 0
+expect ok field description == "opening deposit"
+# A deposit has no counterparty, and the nullable relation surfaces as 0.
+expect ok field counterpartyId == 0
+
+# ── Money out ───────────────────────────────────────────────────────────────
+# direction 1 is TxnDirection::Debit, kind 1 is TxnKind::Withdrawal.
+do Withdraw accountId=$acct amountMinor=45000 description="rent"
+expect ok field amountMinor == 45000
+expect ok field balanceAfterMinor == 80000
+expect ok field direction == 1
+expect ok field kind == 1
+
+# A zero-amount movement is not a movement. `Deposit::validate()` demands a
+# positive amount, so morph refuses it before `TransactionModel` sees it.
+do Deposit accountId=$acct amountMinor=0 description="nothing at all"
+expect err message == "action failed validation: TransactionModel/Deposit"
+
+do Withdraw accountId=$acct amountMinor=-500 description="negative"
+expect err message == "action failed validation: TransactionModel/Withdraw"
+
+# An account that does not exist is a lookup failure, and the refusal names the
+# account rather than leaking whether some other row has that id.
+do Deposit accountId=999999 amountMinor=100 description="into the void"
+expect err message == "account not found"
+
+# ── What the account says now ───────────────────────────────────────────────
+client single model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 80000
+expect ok field status == 0
+
+# ── What the ledger says ────────────────────────────────────────────────────
+use teller
+
+# Newest first: the withdrawal is entry 0 and the deposit is entry 1.
+do History accountId=$acct limit=10 offset=0
+expect ok field accountId == $acct
+expect ok field entries[0].kind == 1
+expect ok field entries[0].amountMinor == 45000
+expect ok field entries[0].balanceAfterMinor == 80000
+expect ok field entries[1].id == $firstEntry
+expect ok field entries[1].kind == 0
+expect ok field entries[1].balanceAfterMinor == 125000
+
+# Paging is done in the database, not by trimming a full read in memory, and
+# the offset skips the newest entry rather than the oldest.
+do History accountId=$acct limit=1 offset=1
+expect ok field entries[0].id == $firstEntry
+# Exactly one entry came back: the compact JSON of a multi-element array of
+# objects necessarily contains `},{`, and this one does not. Written as a
+# pattern rather than as `entries[1] == null` because an absent path fails
+# every operator in this runner, `==` included, so that spelling would assert
+# nothing about the length.
+expect ok field entries !~ "[}],[{]"
+
+# A page of zero entries is a page, not an error.
+do History accountId=$acct limit=0 offset=0
+expect ok field accountId == $acct
+expect ok field entries == []

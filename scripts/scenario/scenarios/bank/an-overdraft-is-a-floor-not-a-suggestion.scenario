@@ -1,0 +1,67 @@
+# bank — how far an account may go negative, and what happens at exactly the
+# limit.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/an-overdraft-is-a-floor-not-a-suggestion.scenario
+#
+# Every debit in bank goes through one guard (`db::applyDebit` in
+# bank/db/ledger_ops.hpp): it refuses when the balance the debit *would* leave
+# is below `-overdraftMinor`. That makes the limit inclusive — a withdrawal
+# landing exactly on the floor is allowed and the next penny is not — and an
+# off-by-one there is invisible to any test that only tries obviously-too-much.
+# This file walks up to the boundary and steps over it.
+
+model AuthModel
+client front
+do RegisterUser username=turing password=turing-pass displayName="Alan Turing"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=turing password=turing-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+# A 50.00 overdraft, in minor units.
+do OpenAccount owner=$who kind=0 currency=0 overdraftMinor=5000
+expect ok capture acct=$.id
+expect ok field overdraftMinor == 5000
+expect ok field balanceMinor == 0
+
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$acct amountMinor=10000 description="float"
+expect ok field balanceAfterMinor == 10000
+
+# ── Down to zero: ordinary ──────────────────────────────────────────────────
+do Withdraw accountId=$acct amountMinor=10000 description="down to zero"
+expect ok field balanceAfterMinor == 0
+
+# ── Into the overdraft, but not through it ──────────────────────────────────
+do Withdraw accountId=$acct amountMinor=3000 description="into the overdraft"
+expect ok field balanceAfterMinor == -3000
+
+# Exactly onto the floor. `projected < -overdraftMinor` is the refusal test, so
+# `projected == -overdraftMinor` is permitted — this is the boundary case.
+do Withdraw accountId=$acct amountMinor=2000 description="exactly to the limit"
+expect ok field balanceAfterMinor == -5000
+
+# One minor unit past it is refused.
+do Withdraw accountId=$acct amountMinor=1 description="one past the limit"
+expect err message == "amount exceeds available balance plus overdraft"
+
+# ── The refusal changed nothing ─────────────────────────────────────────────
+client single model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == -5000
+
+# And no ledger row was written for the refused debit: the newest entry is
+# still the one that took the account to the floor.
+use teller
+do History accountId=$acct limit=1 offset=0
+expect ok field entries[0].amountMinor == 2000
+expect ok field entries[0].balanceAfterMinor == -5000
+expect ok field entries[0].description == "exactly to the limit"
+
+# ── Back to zero, so the account is left as it was found ────────────────────
+# Not tidiness: the account is opened fresh each pass, but leaving it overdrawn
+# would make every balance above depend on this file never having crashed.
+do Deposit accountId=$acct amountMinor=5000 description="clearing the overdraft"
+expect ok field balanceAfterMinor == 0

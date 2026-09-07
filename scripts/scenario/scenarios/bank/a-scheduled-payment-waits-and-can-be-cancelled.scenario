@@ -1,0 +1,100 @@
+# bank — a future-dated payment is written down and nothing moves; cancelling
+# it is the only thing that can still happen to it.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/a-scheduled-payment-waits-and-can-be-cancelled.scenario
+#
+# The contrast with `PayBill` is the whole point. `PayBill` debits inside a
+# transaction and comes back `Completed`; `SchedulePayment` writes one row and
+# touches no balance and no ledger, coming back `Pending`. Bank ships no runner
+# that later settles it — there is no background job in this rung — so
+# `Pending` is where a scheduled payment stays until somebody cancels it. This
+# file asserts that standstill rather than pretending a due date makes something
+# happen, because a scenario that waited for one would be asserting on a clock.
+
+model AuthModel
+client front
+do RegisterUser username=wilkes password=wilkes-pass displayName="M. Wilkes"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=wilkes password=wilkes-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+
+client teller model=TransactionModel principal=$who
+do Deposit accountId=$acct amountMinor=80000 description="funding"
+expect ok field balanceAfterMinor == 80000
+
+client book model=PayeeModel principal=$who
+do AddPayee name="Landlord" iban=GB29NWBK60161331926819 bankName="NatWest"
+expect ok capture payee=$.id
+expect ok field name == "Landlord"
+
+# ── Scheduling ──────────────────────────────────────────────────────────────
+client bills model=PaymentModel principal=$who
+
+# A fixed epoch-ms far in the future (2033-05-18T03:33:20Z). A literal rather
+# than "now plus something": nothing in this runner reads a clock, and a due
+# date that drifted with the wall clock would make the file's meaning depend on
+# when it ran.
+do SchedulePayment fromAccountId=$acct payeeId=$payee amountMinor=30000 dueAtMs=2000000000000 description="June rent"
+expect ok capture scheduled=$.id
+expect ok field amountMinor == 30000
+expect ok field dueAtMs == 2000000000000
+# schedule 1 is PaymentSchedule::Scheduled, status 0 is PaymentStatus::Pending.
+expect ok field schedule == 1
+expect ok field status == 0
+expect ok field intervalDays == 0
+
+# A due date is required: `SchedulePayment::validate()` demands `dueAtMs > 0`,
+# which is what separates it from a `PayBill`.
+do SchedulePayment fromAccountId=$acct payeeId=$payee amountMinor=30000 dueAtMs=0 description="no date"
+expect err message == "action failed validation: PaymentModel/SchedulePayment"
+
+# ── Nothing moved ───────────────────────────────────────────────────────────
+client single model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 80000
+
+# No ledger entry either: the only row on this account is the funding deposit.
+use teller
+do History accountId=$acct limit=10 offset=0
+expect ok field entries[0].kind == 0
+expect ok field entries[0].amountMinor == 80000
+expect ok field entries !~ "[}],[{]"
+
+# Scheduling more than the account holds is *not* refused, because nothing is
+# debited yet — the funds check belongs to settlement, which bank has no runner
+# for. Asserted because it is surprising, not because it is desirable.
+use bills
+do SchedulePayment fromAccountId=$acct payeeId=$payee amountMinor=99999999 dueAtMs=2000000000000 description="more than exists"
+expect ok capture overdrawn=$.id
+expect ok field status == 0
+
+use single
+do GetAccount id=$acct
+expect ok field balanceMinor == 80000
+
+# ── Cancelling ──────────────────────────────────────────────────────────────
+use bills
+do CancelPayment id=$scheduled
+expect ok field ok == true
+expect ok field message == "payment cancelled"
+
+# status 2 is PaymentStatus::Cancelled, and cancelling is once-only.
+do CancelPayment id=$scheduled
+expect err message == "only pending payments can be cancelled"
+
+do CancelPayment id=$overdrawn
+expect ok field ok == true
+
+# A payment that does not exist, and one that never belonged to this owner,
+# are refused by the same ownership guard every id-addressed action shares.
+do CancelPayment id=999999
+expect err message == "payment not found"
+
+do ListPayments owner=$who
+expect ok field payments ~ "\"id\":$scheduled,"

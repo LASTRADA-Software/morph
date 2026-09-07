@@ -100,6 +100,59 @@ target_link_libraries(bank_cli PRIVATE bank_lib)
 target_compile_features(bank_cli PRIVATE cxx_std_23)
 apply_bigobj(bank_cli)
 
+# ── ladder_bank_server: standalone server binary ─────────────────────────────
+# Named `ladder_bank_server` because that is the name the scenario tooling
+# derives from a rung name (`run_scenarios.py`'s `RungSpec.binary`,
+# `find_server()`); the prefix is that tool's convention, not a claim to a rung
+# number. Bank takes no rung number -- see examples/rungs.txt and
+# examples/LADDER.md.
+#
+# Written out here rather than obtained by calling morph_add_rung(). That macro
+# emits this exact block (cmake/morph_add_rung.cmake, "ladder_<rung>_server"),
+# but it links `morph::ladder_<rung>_lib` -- a target only the macro itself
+# creates -- and bank's library is `bank_lib`, built above against a different
+# dependency set (Lightweight/ODBC, and deliberately without apply_warnings()).
+# More decisively, calling the macro is not available to us: examples/rungs.txt
+# documents that "omitting a rung here while examples/<rung>/CMakeLists.txt
+# calls morph_add_rung() is a hard configure error, by design", so the call
+# would force bank into that file -- and with it into ladder CI, the sanitizer
+# and WASM matrices, codecov components and coverage.sh. Bank is deliberately
+# outside all of that, so this stays a local target: it gives bank a server
+# without making it a rung. Everything else here mirrors the macro's block line
+# for line.
+#
+# Gated on Qt because the transport is morph::qt's QtWebSocketServer, exactly
+# as the macro's version is; MORPH_BUILD_BANK_GUI is *not* the gate, since this
+# is a headless server that needs Qt6::Core and no GUI.
+#
+# The gate is the *option*, not `TARGET morph::qt`: the root CMakeLists adds
+# examples/bank (line ~523) well before it creates morph::qt (line ~596), so a
+# TARGET check here is false even when Qt is on. Naming the target in
+# target_link_libraries is fine regardless -- CMake resolves link names at
+# generate time, by which point the alias exists. bank/gui/CMakeLists.txt
+# depends on the same ordering.
+if(MORPH_BUILD_QT)
+    # Qt's imported targets are directory-scoped, so naming Qt6::Core below
+    # needs a find_package in *this* directory even though the root already ran
+    # one -- the same call bank_gui_qml_tests makes further down for the same
+    # reason. WebSockets comes along because morph::qt's INTERFACE link
+    # requirements name it.
+    find_package(Qt6 REQUIRED COMPONENTS Core WebSockets)
+    add_executable(ladder_bank_server src/server/main.cpp)
+    target_link_libraries(ladder_bank_server PRIVATE bank_lib morph::qt morph_qt_impl Qt6::Core)
+    target_compile_features(ladder_bank_server PRIVATE cxx_std_23)
+    apply_bigobj(ladder_bank_server)
+    # No apply_warnings(), for the same reason bank_lib skips it: this target
+    # links bank_lib and pulls the ORM's headers in through its model headers,
+    # which are not -Werror clean.
+    if(AF_COVERAGE)
+        apply_coverage(ladder_bank_server)
+    endif()
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(ladder_bank_server ${AF_SANITIZER})
+    endif()
+endif()
+
 # ── Qt 6 GUI (opt-in) ────────────────────────────────────────────────────────
 if(MORPH_BUILD_BANK_GUI)
     add_subdirectory(gui)

@@ -1,0 +1,120 @@
+# bank — borrowing money: the loan is credited into an account, repaid out of
+# one, and closes itself the moment nothing is left owing.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bank/a-loan-disbursed-and-repaid.scenario
+#
+# `ApplyLoan` is the clearest case in bank of an action whose result is only
+# half the story: it returns the loan, but its real effect is a *credit* on the
+# account, journalled as `LoanDisbursement`. Reading the loan alone would miss
+# it entirely, so this file checks both sides of every step.
+#
+# `RepayLoan` clamps rather than refuses: paying more than is outstanding debits
+# only what was owed. That is the kind of behaviour an in-process test tends to
+# assert with the number it just computed; here it is checked against the
+# account balance, which is the only place the clamp is observable.
+
+model AuthModel
+client front
+do RegisterUser username=liskov password=liskov-pass displayName="B. Liskov"
+expect ok field message ~ "^(registered|username already taken)$"
+do LoginRequest username=liskov password=liskov-pass
+expect ok capture who=$.principal
+expect ok field ok == true
+
+client vault model=CustomerModel principal=$who
+do OpenAccount owner=$who kind=0 currency=0
+expect ok capture acct=$.id
+expect ok field balanceMinor == 0
+
+# ── Applying ────────────────────────────────────────────────────────────────
+client desk model=LoanModel principal=$who
+
+# status 0 is LoanStatus::Active. Outstanding starts equal to the principal:
+# no interest is capitalised at disbursement.
+do ApplyLoan accountId=$acct principalMinor=1000000 rateBps=500 termMonths=12
+expect ok capture loan=$.id
+expect ok field accountId == $acct
+expect ok field principalMinor == 1000000
+expect ok field outstandingMinor == 1000000
+expect ok field rateBps == 500
+expect ok field termMonths == 12
+expect ok field status == 0
+expect ok field owner == "liskov"
+expect ok field currency == 0
+
+# A term is required: `ApplyLoan::validate()` demands `termMonths > 0`.
+do ApplyLoan accountId=$acct principalMinor=1000 rateBps=0 termMonths=0
+expect err message == "action failed validation: LoanModel/ApplyLoan"
+
+# ── The money actually arrived ──────────────────────────────────────────────
+client single model=AccountModel principal=$who
+do GetAccount id=$acct
+expect ok field balanceMinor == 1000000
+
+# kind 7 is TxnKind::LoanDisbursement, direction 0 is Credit.
+client teller model=TransactionModel principal=$who
+do History accountId=$acct limit=1 offset=0
+expect ok field entries[0].kind == 7
+expect ok field entries[0].direction == 0
+expect ok field entries[0].amountMinor == 1000000
+expect ok field entries[0].description == "loan disbursement"
+
+# ── Reading it back ─────────────────────────────────────────────────────────
+use desk
+do GetLoan id=$loan
+expect ok field id == $loan
+expect ok field outstandingMinor == 1000000
+expect ok field status == 0
+
+do ListLoans owner=$who
+expect ok field loans ~ "\"id\":$loan,"
+
+# ── A partial repayment ─────────────────────────────────────────────────────
+do RepayLoan loanId=$loan fromAccountId=$acct amountMinor=400000
+expect ok field outstandingMinor == 600000
+expect ok field status == 0
+
+use single
+do GetAccount id=$acct
+expect ok field balanceMinor == 600000
+
+# kind 8 is TxnKind::LoanRepayment, direction 1 is Debit.
+use teller
+do History accountId=$acct limit=1 offset=0
+expect ok field entries[0].kind == 8
+expect ok field entries[0].direction == 1
+expect ok field entries[0].amountMinor == 400000
+
+# ── Overpaying is clamped, not refused ──────────────────────────────────────
+# 600000 is outstanding and 999999 is offered; only 600000 is taken, which is
+# visible in the account balance and nowhere else.
+use desk
+do RepayLoan loanId=$loan fromAccountId=$acct amountMinor=999999
+expect ok field outstandingMinor == 0
+# status 1 is LoanStatus::PaidOff — reached by the repayment, not by a separate
+# close action.
+expect ok field status == 1
+
+use single
+do GetAccount id=$acct
+expect ok field balanceMinor == 0
+
+use teller
+do History accountId=$acct limit=1 offset=0
+expect ok field entries[0].kind == 8
+expect ok field entries[0].amountMinor == 600000
+
+# ── A settled loan is settled ───────────────────────────────────────────────
+use desk
+do RepayLoan loanId=$loan fromAccountId=$acct amountMinor=1000
+expect err message == "loan is not active"
+
+do GetLoan id=$loan
+expect ok field status == 1
+expect ok field outstandingMinor == 0
+
+# A loan that does not exist, and one belonging to somebody else, are refused
+# by the same guard.
+do GetLoan id=999999
+expect err message == "loan not found"
