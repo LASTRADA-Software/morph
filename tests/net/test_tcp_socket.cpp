@@ -448,7 +448,7 @@ TEST_CASE("TcpSocket::sendAll: throws when the peer resets the connection", "[ne
     {
         auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
         acceptThread.join();
-        struct linger l{};
+        linger l{};
         l.l_onoff = 1;
         l.l_linger = 0;
         ::setsockopt(clientSide.nativeHandle(), SOL_SOCKET, SO_LINGER, &l, sizeof(l));

@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -491,8 +492,29 @@ TEST_CASE("SocketServer::listen() fails closed when the WakeupPipe can't be cons
 
     struct RlimitGuard {
         rlimit saved;
-        ~RlimitGuard() { ::setrlimit(RLIMIT_NOFILE, &saved); }
-    } guard{original};
+        std::vector<int> fillers;
+        ~RlimitGuard() {
+            ::setrlimit(RLIMIT_NOFILE, &saved);
+            for (int const fd : fillers) {
+                ::close(fd);
+            }
+        }
+    } guard{original, {}};
+
+    // Densify the fd table below `highest` before capping the limit: a gap
+    // left by some fd opened-then-closed earlier (sanitizer/valgrind
+    // instrumentation is especially prone to this) would otherwise let
+    // socket()/pipe() below silently reuse that gap instead of hitting the
+    // cap, defeating "zero headroom" -- confirmed to happen in practice
+    // (this test flaked exactly this way under both ASan and Valgrind CI,
+    // never locally, which is consistent with sanitizer-only transient fds).
+    for (int fd = 0; fd < highest; ++fd) {
+        if (::fcntl(fd, F_GETFD) == -1) {
+            int const filler = ::open("/dev/null", O_RDONLY);
+            REQUIRE(filler >= 0);
+            guard.fillers.push_back(filler);
+        }
+    }
 
     rlimit constrained = original;
     constrained.rlim_cur = static_cast<rlim_t>(highest + 1);  // no headroom for a new fd
