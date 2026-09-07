@@ -529,8 +529,9 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
 // own doc comment: "there is nothing yet to stamp a session onto"), and
 // setDefaultSession's `if (backend) { backend->setSession(...); }` guard
 // exists precisely so a later call on such a bridge does not dereference a
-// null backend pointer. No existing test ever constructs `Bridge{nullptr}`,
-// so this guard's `false` arm (no active backend yet) was never exercised.
+// null backend pointer. A couple of existing tests construct `Bridge{nullptr}`
+// for other reasons (test_coverage_push95.cpp), but none of them go on to
+// call setDefaultSession, so this guard's `false` arm was never exercised.
 TEST_CASE("Bridge::setDefaultSession is a safe no-op on a Bridge with no active backend",
           "[bridge][lifetime][null-backend]") {
     morph::bridge::Bridge bridge{nullptr};
