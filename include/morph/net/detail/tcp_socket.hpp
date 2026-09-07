@@ -38,8 +38,32 @@ public:
     TcpSocket() = default;
 
     /// @brief Wraps an already-open file descriptor (e.g. from `::accept`).
-    /// @param fd Native socket file descriptor; takes ownership.
-    explicit TcpSocket(int fd) : _fd{fd} { applyNoSigPipe(fd); }
+    ///
+    /// Normalises the two fd properties this class's API depends on: SIGPIPE
+    /// suppression, and **blocking mode**. A `TcpSocket` is blocking unless its
+    /// owner asks otherwise with `setNonBlocking()`, because `recvSome()` and
+    /// `sendAll()` are written for blocking descriptors — neither treats
+    /// `EAGAIN` as anything but a fatal error.
+    ///
+    /// The blocking reset is not hypothetical bookkeeping (morph#478).
+    /// macOS/BSD propagate a listening socket's `O_NONBLOCK` onto the sockets
+    /// `accept(2)` returns; POSIX permits that and Linux documents that it does
+    /// not do it. Since morph#437 `SocketServer::listen()` makes its listener
+    /// non-blocking, so without this every connection `tryAccept()` handed back
+    /// on macOS/BSD was non-blocking too, and `clientLoop()`'s first read —
+    /// `performServerHandshake()` — threw on `EAGAIN` before the client's
+    /// Upgrade request had arrived. Every connection failed, and Linux-only CI
+    /// could not see it. Clearing it here rather than in `tryAccept()` covers
+    /// `accept()`, `connect()` and `listen()` by the same rule, and leaves one
+    /// place where the mode is decided.
+    ///
+    /// Best effort, like `applyNoSigPipe`: an fd whose flags cannot be read or
+    /// written fails its first read anyway, which every caller already handles.
+    /// @param rawFd Native socket file descriptor; takes ownership.
+    explicit TcpSocket(int rawFd) : _fd{rawFd} {
+        applyNoSigPipe(rawFd);
+        clearNonBlocking(rawFd);
+    }
 
     TcpSocket(const TcpSocket&) = delete;
     TcpSocket& operator=(const TcpSocket&) = delete;
@@ -242,6 +266,12 @@ public:
 
     /// @brief Non-blocking counterpart of `accept()`, for a listener that
     ///        `setNonBlocking()` has been applied to.
+    ///
+    /// The connection it yields is **blocking**, whatever mode this listener is
+    /// in: the fd-adopting constructor clears `O_NONBLOCK`, which is what stops
+    /// macOS/BSD's inheritance of the listener's flag reaching `recvSome()`
+    /// (morph#478). Any rewrite of this function has to keep going through that
+    /// constructor, or restore the reset itself.
     /// @return The accepted `TcpSocket`, or `std::nullopt` when no connection
     ///         was pending — a readiness report that went stale before the
     ///         `accept`, which the caller answers by waiting again.
@@ -339,6 +369,18 @@ private:
             return true;
         }
         return err == EWOULDBLOCK;
+    }
+
+    /// Takes `rawFd` out of non-blocking mode, if it was in it. See the
+    /// fd-adopting constructor for why every adopted descriptor gets this.
+    static void clearNonBlocking(int rawFd) noexcept {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg) — ::fcntl is variadic by POSIX's design
+        int const flags = ::fcntl(rawFd, F_GETFL, 0);
+        if (flags < 0 || (flags & O_NONBLOCK) == 0) {
+            return;
+        }
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+        static_cast<void>(::fcntl(rawFd, F_SETFL, flags & ~O_NONBLOCK));
     }
 
     static void applyNoSigPipe(int fd) {

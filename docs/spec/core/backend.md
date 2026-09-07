@@ -1343,6 +1343,22 @@ ready connection with `TcpSocket::tryAccept()`, which answers `std::nullopt`
 rather than parking when a readiness report has gone stale. `close()` writes one
 byte to the pipe before `join()`, which is what ends the loop.
 
+**The listener's non-blocking mode stops at the listener** (morph#478).
+`TcpSocket`'s fd-adopting constructor clears `O_NONBLOCK` on every descriptor it
+takes ownership of, so a connection from `accept()` or `tryAccept()` is always
+blocking, whatever mode the listener it came from is in. That is a correctness
+requirement rather than tidiness: `recvSome()` and `sendAll()` are written for
+blocking descriptors and treat `EAGAIN` as a fatal error, and `clientLoop()`'s
+first act on a new connection is `performServerHandshake()` — a read issued
+before the client's `Upgrade` request has necessarily arrived. macOS/BSD
+propagate a listening socket's `O_NONBLOCK` onto the sockets `accept(2)`
+returns (POSIX permits this; Linux does not do it), so without the reset every
+connection failed its handshake on those platforms while Linux-only CI stayed
+green. Because Linux never propagates the flag, the regression test for this
+asserts the constructor's reset on a descriptor it makes non-blocking itself,
+rather than on an accepted one — an accept-side assertion cannot fail on CI's
+platform.
+
 That replaces, rather than supplements, the previous mechanism: `close()` no
 longer calls `shutdownBoth()` on the *listening* socket at all. It used to, and
 relied on `shutdown(2)` kicking a parked `accept()` — true on Linux, not a POSIX
