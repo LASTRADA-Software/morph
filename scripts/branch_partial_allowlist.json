@@ -71,6 +71,132 @@
       "line": 1404,
       "source": "if (!detail::addOverflows(whole, step)) {",
       "reason": "The false arm (the overflow-would-occur case, declining to step) is unreachable, contrary to Task 2's initial classification of this line as testable -- verified both mathematically and empirically (a standalone probe sweeping denominators/precisions found 476 cases where the scale-up saturated to whole == INT64_MAX, and every one had a fractional remainder of exactly 0, never >= 0.5) before writing this entry. A Rational's magnitude can never exceed INT64_MAX: its value is numerator/denominator with denominator >= 1 and numerator in [-INT64_MAX, INT64_MAX] (canonicalise() clamps INT64_MIN away), so |value| <= |numerator| <= INT64_MAX always. `whole` is trunc(scaled), so whole == INT64_MAX forces scaled == INT64_MAX/1 exactly -- there is no room for scaled to be in (INT64_MAX, INT64_MAX + 1) the way an unbounded rational could land. With scaled == whole exactly, `fraction` (scaled minus whole) is always 0, so `roundAway` (set from comparing fraction against 1/2) is always false when whole == INT64_MAX, and stepping never happens on that side. On the other side, step == -1 would need whole == INT64_MIN to overflow, but whole's range is [-INT64_MAX, INT64_MAX] (INT64_MIN is never a valid Rational magnitude), so that direction cannot overflow either. The guard is defensive: reachable only if a future change let a Rational's magnitude exceed INT64_MAX, which the type's invariants currently forbid everywhere else in this file."
+    },
+    {
+      "file": "include/morph/core/observability.hpp",
+      "line": 205,
+      "source": "if (!sink || !sink->endSpan) {",
+      "reason": "A real (if narrow) TOCTOU race, accepted as documented rather than closed with a flaky thread-race test (core audit finding O1; `beginSpan`'s identical line 177 was dropped from this file after a real coverage run showed its own `!sink` arm getting hit -- see below). `endSpan` reads `state.traceOn` with a relaxed, unlocked load a few lines above this one, then only afterward takes `state.traceMtx` to copy `state.traceSink`. `setTraceSink` (this file) only ever stores `traceOn = true` when both `TraceSink::beginSpan` and `::endSpan` are set, and does so under the same `traceMtx` that guards `traceSink` -- so whenever `traceOn` reads true under the lock, the paired sink is complete by construction. But the unlocked read here happens before the lock is taken: if a concurrent `setTraceSink(TraceSink{})` (disabling) lands in that window, this thread can still observe the old `traceOn == true` while the `sink` it then copies is already the new, empty one, reaching this line with `!sink` genuinely true. This is not hypothetical: a full-suite coverage run (2026-09-07, 1670 ctest cases) recorded `beginSpan`'s structurally identical `!sink` arm (line 177) taken exactly once out of ~1.07k calls, most likely this exact race firing during the full suite's concurrent execute/tracing tests -- confirming the race is real, just too narrow and run-dependent to assert a test against deterministically. `endSpan`'s own `!sink` arm remained untaken in that same run (`Branch (205:9): [True: 0, False: 6]`); if a future measurement shows it taken too, delete this entry rather than re-add it speculatively."
+    },
+    {
+      "file": "include/morph/core/strand.hpp",
+      "line": 190,
+      "source": "if (iter != _strands.end() && iter->second == strand) {",
+      "reason": "Unreachable by construction given this class's lock discipline (core audit finding ST1, resolved to (b) by a concurrency-focused review pass after an initial (a)/(b)-undecided pass). `_strands` has exactly two mutation sites: `post()`'s insert-if-absent (this file, `if (!slot) { slot = make_shared<Strand>(); }`) and this exact block's own erase a few lines below, both under `_mapMtx`. At most one lambda per `Strand` runs at a time (`post()` only schedules when `!strand->running`, and re-arming happens only through this same lambda's own `more` branch), so dispatch for one `Strand` is strictly serial; and only a strand's own currently-running lambda can erase its map entry (the erase fires only in the `!more` branch for the entry this frame just found under `_mapMtx`, and a concurrent `post(key)` while this lambda runs can only push onto the existing `Strand`, never replace it). Together these force `_strands.find(key)` to yield this exact strand whenever this line runs, so `iter->second == strand` cannot be false. No stress test needed: one was considered, but given the strength of the lock-discipline argument it would spend CI time re-confirming an already-proven invariant rather than searching for an unknown one."
+    },
+    {
+      "file": "include/morph/core/payload_schema.hpp",
+      "line": 186,
+      "source": "return (std::is_signed_v<U> ? std::string{\"i\"} : std::string{\"u\"}) + std::to_string(sizeof(U));",
+      "reason": "Compile-time-constant condition; llvm-cov's branch counters are a measurement artifact here, not a real runtime decision (core audit finding PS1). `std::is_signed_v<U>` is a `constexpr bool`, fully known at compile time for every instantiation of this function template, so the compiler resolves the ternary to a single string construction per instantiation with no residual two-way branch surviving in the generated code for any one `U`. `llvm-cov show --show-branches=count` itself reports this correctly as `[Folded - Ignored]`; the both-arms-zero BRDA record this repo's `aggregate_lcov_branches.py` emits is synthesized from the underlying JSON, not something llvm-cov reports directly. Same `[Folded - Ignored]` class this plan's `forms`/`net` audits already established (`forms.hpp`'s folded branches, `net`'s `htons`/`ntohs` findings below). No test can make an `if constexpr`-equivalent compile-time-constant condition show as \"taken\" in the branch sense."
+    },
+    {
+      "file": "include/morph/core/callback_scope.hpp",
+      "line": 225,
+      "source": "if (_state != nullptr) {",
+      "reason": "`_state` (a `std::shared_ptr<detail::CallbackScopeState>`) is unreachable-null by construction (core audit finding CS1). It is constructed non-null in `CallbackScope()`'s member-initializer (`_state{std::make_shared<...>()}`) and the only other write site is `reset()`, which always reassigns it to another fresh `make_shared` result, never to `nullptr`. `grep -n \"_state\" callback_scope.hpp` confirms these are the only two write sites in the file. Copy and move are both explicitly `= delete`d (\"Identity, not a value\"), so there is no moved-from state to null it either. Raw branch data confirms it empirically: the `!= nullptr` check's false arm shows exactly 0 hits across every recorded hit on this line. No test would close this -- it is a defensive belt-and-suspenders check against a state the class's own constructors and deleted copy/move already make impossible."
+    },
+    {
+      "file": "include/morph/core/callback_scope.hpp",
+      "line": 246,
+      "source": "return _state != nullptr && _state->stopped.load(std::memory_order_acquire);",
+      "reason": "Same unreachable-null `_state` invariant as line 225 above (core audit finding CS1) applied to this line's leading sub-condition. Only the `_state != nullptr` conjunct is structurally dead; the line's other sub-condition, the actual `stopped` flag, is already exercised both ways by `stopRequested()`'s ordinary tests (both a not-yet-stopped and a stopped read are recorded), so this entry is scoped to the null-check conjunct specifically, not a claim that `stopRequested()`'s real logic is untested."
+    },
+    {
+      "file": "include/morph/core/backend.hpp",
+      "line": 741,
+      "source": "if (iter != _models.end()) {",
+      "reason": "Unreachable by construction given the `_changeAware`/`_models` invariant (core audit finding BK2). Every model id is inserted into `_changeAware` (when change-aware) in the same `_regMtx`-held critical section that inserts it into `_models` (`createAndTrack`, this file: `if (holder->isBackendChangeAware()) { _changeAware.insert(mid); } _models[mid] = std::move(holder);`), and both are erased together at the single erasure site (`deregisterModel`: `_models.erase(mid); _changeAware.erase(mid);`, also under `_regMtx`). `notifyBackendChanged()` (this function) holds the same `_regMtx` while iterating `_changeAware` and looking each id up in `_models` at this line, so every id it walks is guaranteed still present in `_models` -- the \"not found\" arm cannot occur without a code change that breaks this lockstep bookkeeping."
+    },
+    {
+      "file": "include/morph/core/detail/subscription_registry.hpp",
+      "line": 147,
+      "source": "if (owner && entry.type == type && owner->currentId.load() == mid.v && entry.sink) {",
+      "reason": "Scoped to the `owner` sub-condition only (core audit finding S3's `owner` arm) -- the `entry.sink` sub-condition on this same line was closed with a real test (see `tests/test_subscription.cpp`'s silent/loud-subscriber test, commit 0c7691a6). `publishResult` prunes any entry whose `binding.expired()` a few lines above this one, under the same `_mtx` lock this loop runs under, before the delivery loop here ever starts in the same locked call -- so `owner` (`entry.binding.lock()`) can only be null at this line if a binding expires in the narrow window between that prune and this specific entry's own `.lock()` call, both inside one uninterrupted critical section. That is a genuine TOCTOU race requiring true concurrent destruction under the lock's protection, the same class of issue as `observability.hpp`'s O1 above. Verified empirically (commit 0c7691a6's own message): `llvm-cov` still shows this sub-condition's false arm at 0 hits even after adding the doc-recommended \"destroy the binding, then call publishResult\" test, because that recipe's destruction happens strictly before the call, not concurrently with it. Accepted as documented rather than forced with a flaky thread-race test."
+    },
+    {
+      "file": "include/morph/core/remote.hpp",
+      "line": 1415,
+      "source": "if (_inFlightExecutes.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {",
+      "reason": "Real but requires genuine thread contention to trigger -- accepted as documented rather than closed with a flaky test (core audit finding RM11). The false arm (the CAS lost the race and must retry) needs two threads to genuinely collide on the same atomic increment at the same instant; it is a real, reachable hazard the retry loop correctly handles, not dead code, but inherently non-deterministic to trigger from a test without exact thread-timing control. Same disposition class as `strand.hpp`'s ST1 and `observability.hpp`'s O1 above: a stress test with many concurrent `execute()` calls against a tight `maxInFlightExecutes` limit would probably eventually hit it, but flakily."
+    },
+    {
+      "file": "include/morph/core/bridge.hpp",
+      "line": 1359,
+      "source": "if (_executeDeadline.count() > 0 && _timeoutScheduler) {",
+      "reason": "Unreachable by construction (core audit finding B6). `setExecuteDeadline` (this file) is the only writer of both `_executeDeadline` and `_timeoutScheduler`, and always creates `_timeoutScheduler` in the same call that sets `_executeDeadline` positive (`_executeDeadline = deadline; if (_executeDeadline.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_shared<...>(); }`, both under `_executeDeadlineMtx`); nothing anywhere resets `_timeoutScheduler` back to null -- the class's own doc comment on `setExecuteDeadline` says so explicitly (\"setting the deadline back to 0 stops new calls from arming it but does not tear the thread down\"). So `_executeDeadline > 0 && !_timeoutScheduler` cannot happen at this line once any positive deadline has ever been set."
+    },
+    {
+      "file": "include/morph/core/bridge.hpp",
+      "line": 1477,
+      "source": "if (deadlineHandle && schedulerRef) {",
+      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1359 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible."
+    },
+    {
+      "file": "include/morph/core/remote.hpp",
+      "line": 1456,
+      "source": "if (_timeoutScheduler) {",
+      "reason": "Unreachable by construction, mirrors `bridge.hpp`'s B6 (core audit finding RM10). `setLimitPolicy` (this file) is the only writer of both `_limits.executeTimeout` and `_timeoutScheduler`: `_limits = policy; if (_limits.executeTimeout.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_unique<...>(); }`, both under `_limitsMtx` -- the same lock this line's enclosing block holds. Nothing anywhere nulls `_timeoutScheduler` afterward, so `dispatchExecute`'s `limits.executeTimeout.count() > 0` guard (this line's enclosing `if`, a few lines above) already guarantees `_timeoutScheduler` is non-null whenever this line runs."
+    },
+    {
+      "file": "include/morph/core/remote.hpp",
+      "line": 1341,
+      "source": "if (auto ownerIter = _owners.find(mid); ownerIter != _owners.end()) {",
+      "reason": "Unreachable by construction given the `_owners`/`_models` invariant (core audit finding RM16). `grep -n \"_owners\\[\" remote.hpp` shows `_owners` is created in lockstep with `_models` at both of its insertion sites (the shared path, `_owners[fresh] = std::string{}`, and the private-registration path, `_owners[mid] = std::move(env.session.principal)`) and erased together with `_models` at the single erasure site (`releaseInstanceLocked`: `_models.erase(mid); _owners.erase(mid);`). This line is reached only after `iter != _models.end()` (`mid` found in `_models`, a few lines above, same locked block) -- unlike RM1's `_attachCount`/`_sharedKeyOf` pair, which has a documented exception at a poisoned-eviction site, no such exception exists for `_owners`/`_models`: every write site keeps them lockstep, so `mid` being present in `_models` guarantees it is present in `_owners` too."
+    },
+    {
+      "file": "include/morph/net/socket_server.hpp",
+      "line": 166,
+      "source": "if (t.joinable()) {",
+      "reason": "Unreachable by construction (net audit, `socket_server.hpp` finding #6, re-verified against the current `close()` after the morph#451 fix serialized its whole body under `_closeMtx`). `_clientThreads` has exactly one push site (`acceptLoop()`, always a freshly-constructed, running `std::thread`) and this loop is the only place any entry is ever joined or detached. With `close()`'s entire body now serialized by `_closeMtx`, only one caller's `close()` can ever reach this loop: a second, later call observes `wasAlreadyClosing == true` and `!_acceptThread.joinable()` (already joined by the winner) and takes the early return above, before ever reaching the client-thread swap-and-join section this line is in. So every `std::thread` this loop iterates over is a fresh entry pushed by `acceptLoop()` that nothing has touched yet -- `joinable()` cannot be false here."
+    },
+    {
+      "file": "include/morph/net/socket_server.hpp",
+      "line": 185,
+      "source": "if (closed.load() || !socket.valid()) {",
+      "reason": "The `!socket.valid()` disjunct is unreachable by construction (net audit, `socket_server.hpp` finding #7). `ClientConnection::socket` is set once at construction and never moved from or reassigned anywhere in this file (`grep -n \"conn->socket\\|->socket\\.\"` finds only method calls on it, never an assignment or `std::move`). `sendText()` is only ever called while a `shared_ptr<ClientConnection>` keeps the connection alive, and the only place `TcpSocket::valid()` can become false is that socket's own destructor, which cannot run while such a `shared_ptr` is held. `closed.store(true)` (this same class's `close()` handling, `clientLoop`'s catches) is what every code path that could plausibly invalidate the socket sets first, so the `closed.load()` disjunct alone already accounts for every real teardown path this connection can take."
+    },
+    {
+      "file": "include/morph/net/socket_server.hpp",
+      "line": 212,
+      "source": "if (!clientSocket) {",
+      "reason": "Real, reachable race (`tryAccept()` returning nullopt because the pending connection went away before it was taken), but accepted as documented rather than forced with a flaky test after extensive attempts (net audit, `socket_server.hpp` finding #10). Three different techniques were tried: a single real `TcpSocket::connect()` immediately followed by an abortive (`SO_LINGER{1,0}`) close (0/150 hits); a burst of many such attempts to build backlog depth (still 0 hits); and a burst of bare non-blocking `::connect()`+abort attempts skipping `TcpSocket::connect()`'s `getaddrinfo()`/poll overhead (960 attempts across 15 bursts, still 0 hits, with most connections resetting before the TCP handshake progressed far enough to make the listener readable at all, rather than after). No way was found, from outside the process, to reliably land in the specific narrow window this branch requires on this machine. Reported as attempted-and-left-open rather than forcing something flakier."
+    },
+    {
+      "file": "include/morph/net/socket_backend.hpp",
+      "line": 96,
+      "source": "if (_ioThread.joinable()) {",
+      "reason": "Unreachable by construction (net audit, `socket_backend.hpp` extra finding #5). `_ioThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else in the file resets, joins, or detaches it, so at destructor time it is always joinable."
+    },
+    {
+      "file": "include/morph/net/socket_backend.hpp",
+      "line": 108,
+      "source": "if (_handlerThread.joinable()) {",
+      "reason": "Unreachable by construction, same shape as `_ioThread`'s line 96 above (net audit, `socket_backend.hpp` extra finding #6). `_handlerThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else resets, joins, or detaches it, so at destructor time it is always joinable."
+    },
+    {
+      "file": "include/morph/net/socket_backend.hpp",
+      "line": 539,
+      "source": "default:",
+      "reason": "Unreachable except via the adjacent `Error` case it deliberately shares a body with (net audit, `socket_backend.hpp` extra finding #7). `detail::ExecuteReplyKind` is a closed 3-value enum (`Value`/`Timeout`/`Error`), all three handled explicitly above this label; `default:` exists only to satisfy this project's `-Wswitch-default`, per the source's own inline comment directly below this line. Reaching it via any value other than through the `Error` case falling through would require an out-of-range `static_cast` producing a value outside the enum's domain -- undefined behavior, not a legitimate test target."
+    },
+    {
+      "file": "include/morph/net/socket_backend.hpp",
+      "line": 119,
+      "source": "_connectCv.wait_for(lock, timeout, [this] { return _connected.load() || _shuttingDown.load(); });",
+      "reason": "Scoped to the `_shuttingDown.load()` disjunct only -- `_connected.load()` is exercised both ways by this class's ordinary connect/fail tests. Real, reachable, but accepted as documented after an attempted-and-reverted investigation found no non-contrived, reliably-reproducible path (net audit, `socket_backend.hpp` finding, `waitForConnected()`'s `_shuttingDown` disjunct). Reaching the `_shuttingDown`-specifically-woke-it case needs a thread genuinely parked in this `wait_for` (i.e. `_connected == false`) at the exact moment `onConnected()`/`onDisconnected()` notifies `_connectCv` after `_shuttingDown` is already true -- the only two notifiers of that condition variable. The destructor itself never notifies `_connectCv` directly (only `_reconnectCv`/`_handlerCv`), so a backend that has already finished its one connection attempt leaves no one to wake a parked waiter this way at all; the only path that does notify `_connectCv` after `_shuttingDown` is set requires the io thread to already be past its first successful connection (so a retry loop is active) and then genuinely slow to fail its retry -- which needs redirecting the retry at a black-holed address (not possible for a backend fixed to one URL at construction) or relying on outbound network behavior not guaranteed in every sandboxed/CI configuration. Reported as attempted-and-left-open rather than forced via network timing or object-lifetime misuse."
+    },
+    {
+      "file": "include/morph/net/detail/tcp_socket.hpp",
+      "line": 170,
+      "source": "addr.sin_port = htons(port);",
+      "reason": "This platform/compiler's `htons` macro expansion bakes in a branch (an endianness check inside the intrinsic, not morph's own control flow) that only gets folded away for a compile-time-constant argument -- the structurally identical `htonl(INADDR_LOOPBACK)` one line below is marked `[Folded - Ignored]` by llvm-cov because its argument is a compile-time constant, while `htons(port)`'s runtime argument keeps the branch live in the instrumentation. No test input can flip this branch because the condition does not depend on the argument's runtime value at all -- same `[Folded - Ignored]`-adjacent class as `payload_schema.hpp`'s PS1 entry above."
+    },
+    {
+      "file": "include/morph/net/detail/tcp_socket.hpp",
+      "line": 194,
+      "source": "return ntohs(addr.sin_port);",
+      "reason": "Same byte-swap-intrinsic artifact as `htons(port)` at line 170 above, for the same reason: `ntohs`'s macro expansion on this platform/compiler bakes in a branch that does not depend on the argument's runtime value, so no test can flip it."
     }
   ]
 }
