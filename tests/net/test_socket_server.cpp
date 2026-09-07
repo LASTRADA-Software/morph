@@ -680,12 +680,44 @@ TEST_CASE("SocketServer: acceptLoop's _closing checks observe a concurrent close
     // widening the window during which a concurrent close() can land
     // mid-drain. Repeated, statistical -- matching this file's existing
     // "destruction completes promptly" precedent for #437-class races.
+    //
+    // A hang is the loop *stopping*, not the loop being slow -- and only the
+    // first of those is a bug in SocketServer. What one iteration costs is set
+    // by how many of its 16 connects acceptLoop() manages to take before
+    // close() lands: each one it takes spawns a client thread that has to be
+    // shut down and joined. Under Valgrind, where every one of those thread
+    // switches goes through Valgrind's own serialising scheduler, the whole
+    // 200-iteration loop measured 0.35 s to 1.76 s on a developer box and
+    // ~44 s for the structurally identical burst test just below on a
+    // GitHub-hosted runner. A wall-clock budget on the *total* therefore
+    // measures the runner, not liveness, which is what made a 30 s one fire on
+    // a run where nothing was stuck (morph#476).
+    //
+    // So: watch progress instead of the total. `progress` ticks once per
+    // completed iteration; the loop is only declared hung when it stops
+    // ticking, which no amount of slowness can imitate. A runner too slow to
+    // finish all 200 just finishes fewer -- the race this test samples is
+    // sampled on every iteration, so a short run is a weaker sample, not a
+    // failure. `stop` retires the worker at the overall budget so it is always
+    // joinable: detaching it left a thread constructing `RemoteServer`s after
+    // `exit()` had already destroyed `allowAllAuthorizer()`'s function-local
+    // static, which memcheck reports as a use-after-free -- a real error
+    // manufactured by the timeout path itself.
     constexpr int kIterations = 200;
     constexpr int kBacklogDepth = 16;
-    auto done = std::make_shared<std::atomic<bool>>(false);
+    // No progress for this long == stuck. Generous: one iteration's honest
+    // worst case measured 0.36 s under Valgrind, and ~1.4 s extrapolated to a
+    // contended runner.
+    constexpr std::chrono::seconds kStallBudget{20};
+    // Stop sampling here, however many iterations that bought.
+    constexpr std::chrono::seconds kTotalBudget{60};
 
-    std::thread worker([done] {
-        for (int i = 0; i < kIterations; ++i) {
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    auto progress = std::make_shared<std::atomic<int>>(0);
+    auto stop = std::make_shared<std::atomic<bool>>(false);
+
+    std::thread worker([done, progress, stop] {
+        for (int i = 0; i < kIterations && !stop->load(); ++i) {
             morph::exec::ThreadPoolExecutor pool{2};
             auto server = std::make_shared<morph::backend::RemoteServer>(pool);
             auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
@@ -705,15 +737,41 @@ TEST_CASE("SocketServer: acceptLoop's _closing checks observe a concurrent close
                     ::close(fd);
                 }
             }
+            progress->fetch_add(1, std::memory_order_relaxed);
         }
         done->store(true);
     });
 
-    if (!morph::testing::waitUntil([done] { return done->load(); }, std::chrono::seconds{30})) {
-        worker.detach();
-        FAIL("acceptLoop/close() race did not complete within 30s -- possible hang");
+    using Clock = std::chrono::steady_clock;
+    auto const giveUpAt = Clock::now() + kTotalBudget;
+    int lastSeen = 0;
+    auto lastTick = Clock::now();
+    bool stalled = false;
+    while (!done->load()) {
+        int const seen = progress->load(std::memory_order_relaxed);
+        if (seen != lastSeen) {
+            lastSeen = seen;
+            lastTick = Clock::now();
+        }
+        if (Clock::now() - lastTick > kStallBudget) {
+            stalled = true;
+            break;
+        }
+        if (Clock::now() > giveUpAt) {
+            break;  // slow, not stuck -- retire the worker and report the sample size
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
     }
+    // Set before joining either way: one more iteration is bounded work, so the
+    // worker always reaches its next `stop` check and exits.
+    stop->store(true);
     worker.join();
+    INFO("Completed " << progress->load() << " of " << kIterations << " close()-races-connect-burst iterations");
+    if (stalled) {
+        FAIL("acceptLoop/close() race stopped making progress for " << kStallBudget.count() << "s after " << lastSeen
+                                                                    << " iterations -- hang");
+    }
+    REQUIRE(progress->load() > 0);
 }
 
 TEST_CASE("SocketServer: acceptLoop retries when a pending connection is aborted before accept() runs",
