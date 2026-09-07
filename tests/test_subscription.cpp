@@ -326,6 +326,100 @@ TEST_CASE("SubscriptionRegistry prunes a subscription whose handler was destroye
     REQUIRE(registry.size() == 0);
 }
 
+TEST_CASE("addSubscription scans past an expired entry and a different binding without disturbing them",
+          "[bridge][subscription][subscription-registry]") {
+    // addSubscription's dedup loop (`owner && owner.get() == binding.get() &&
+    // entry.type == type`) has three sub-conditions; only `entry.type ==
+    // type` was exercised both ways before this test. This drives the other
+    // two: `owner` false (an expired binding still sitting in the vector --
+    // addSubscription itself never prunes, only publishResult does) and
+    // `owner.get() == binding.get()` false (a different, still-alive
+    // binding occupying a slot the loop must scan past).
+    morph::bridge::detail::SubscriptionRegistry<morph::bridge::detail::HandlerBinding> registry;
+    auto const typeA = std::type_index{typeid(SubCounterState)};
+
+    {
+        auto expired = std::make_shared<morph::bridge::detail::HandlerBinding>();
+        registry.addSubscription(expired, typeA, [](const std::any&) {}, nullptr);
+        // `expired` dies here, without removeSubscription -- its slot stays
+        // in the vector (addSubscription never prunes) but its weak_ptr is
+        // now expired, so the next addSubscription's scan must step over it
+        // via the `owner` false arm.
+    }
+    REQUIRE(registry.size() == 1);
+
+    auto bindingA = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    registry.addSubscription(bindingA, typeA, [](const std::any&) {}, nullptr);
+    REQUIRE(registry.size() == 2);  // scanned past the expired slot, appended a new one
+
+    // A second, live binding subscribing to the *same* type: the scan must
+    // step over bindingA's live-but-different entry via the
+    // `owner.get() == binding.get()` false arm before appending its own.
+    auto bindingB = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    registry.addSubscription(bindingB, typeA, [](const std::any&) {}, nullptr);
+    REQUIRE(registry.size() == 3);
+
+    // Neither existing entry was mismatched or clobbered: re-subscribing
+    // bindingA replaces its own entry only, still leaving 3.
+    registry.addSubscription(bindingA, typeA, [](const std::any&) {}, nullptr);
+    REQUIRE(registry.size() == 3);
+}
+
+TEST_CASE("removeSubscription leaves entries for a different binding or type untouched",
+          "[bridge][subscription][subscription-registry]") {
+    // removeSubscription's erase_if predicate (`!owner || (owner.get() ==
+    // binding.get() && entry.type == type)`) had never observed its "keep
+    // this one" arm: every prior call's vector held only entries that
+    // matched. This registers three entries -- two for the same binding
+    // under different types, one for a different binding under the removed
+    // type -- so removing one specific (binding, type) pair must survive
+    // both the type-mismatch and the binding-mismatch arm.
+    morph::bridge::detail::SubscriptionRegistry<morph::bridge::detail::HandlerBinding> registry;
+    auto const typeX = std::type_index{typeid(SubCounterState)};
+    auto const typeY = std::type_index{typeid(SubLabelState)};
+
+    auto bindingA = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    auto bindingB = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    registry.addSubscription(bindingA, typeX, [](const std::any&) {}, nullptr);
+    registry.addSubscription(bindingA, typeY, [](const std::any&) {}, nullptr);
+    registry.addSubscription(bindingB, typeX, [](const std::any&) {}, nullptr);
+    REQUIRE(registry.size() == 3);
+
+    registry.removeSubscription(bindingA, typeX);
+    // (bindingA, typeY) survives via the type-mismatch arm; (bindingB,
+    // typeX) survives via the binding-mismatch arm. Only (bindingA, typeX)
+    // is gone.
+    REQUIRE(registry.size() == 2);
+}
+
+TEST_CASE("publishResult skips an entry with no sink without disturbing other subscribers",
+          "[bridge][subscription][subscription-registry]") {
+    // publishResult's delivery guard (`owner && entry.type == type &&
+    // owner->currentId.load() == mid.v && entry.sink`) had never observed
+    // `entry.sink` false: nothing in the public API path constructs an
+    // entry with an empty sink except calling addSubscription directly with
+    // a default-constructed std::function, which is exactly what this does.
+    morph::bridge::detail::SubscriptionRegistry<morph::bridge::detail::HandlerBinding> registry;
+    auto const type = std::type_index{typeid(SubCounterState)};
+
+    auto silent = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    silent->currentId.store(200);
+    registry.addSubscription(silent, type, std::function<void(const std::any&)>{}, nullptr);
+
+    auto loud = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    loud->currentId.store(200);
+    int fires = 0;
+    registry.addSubscription(loud, type, [&](const std::any&) { ++fires; }, nullptr);
+
+    // Neither entry is pruned (both bindings are alive) and both match on
+    // type/instance; only `loud`'s non-empty sink actually fires. If the
+    // `entry.sink` guard were absent, the empty std::function would be
+    // invoked and throw std::bad_function_call.
+    REQUIRE_NOTHROW(registry.publishResult(morph::exec::detail::ModelId{200}, type, std::any{}));
+    REQUIRE(fires == 1);
+    REQUIRE(registry.size() == 2);
+}
+
 TEST_CASE("instance subscriptions work under SimulatedRemoteBackend", "[bridge][subscription][remote]") {
     morph::testing::InlineExecutor exec;
     morph::exec::ThreadPoolExecutor pool{2};
