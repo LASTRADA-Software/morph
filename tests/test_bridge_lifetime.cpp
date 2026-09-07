@@ -522,3 +522,25 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
     REQUIRE(munmap(region, pageSize) == 0);
 }
 #endif  // !defined(_WIN32)
+
+// ── Coverage: setDefaultSession on a Bridge constructed with a null backend ──
+//
+// Bridge's constructor explicitly tolerates a null initial backend (see its
+// own doc comment: "there is nothing yet to stamp a session onto"), and
+// setDefaultSession's `if (backend) { backend->setSession(...); }` guard
+// exists precisely so a later call on such a bridge does not dereference a
+// null backend pointer. No existing test ever constructs `Bridge{nullptr}`,
+// so this guard's `false` arm (no active backend yet) was never exercised.
+TEST_CASE("Bridge::setDefaultSession is a safe no-op on a Bridge with no active backend",
+          "[bridge][lifetime][null-backend]") {
+    morph::bridge::Bridge bridge{nullptr};
+
+    ::morph::session::Context ctx;
+    ctx.principal = "no-backend-yet";
+    REQUIRE_NOTHROW(bridge.setDefaultSession(ctx));
+
+    // The session is still recorded for whenever a real backend arrives later
+    // (e.g. via switchBackend()) -- setDefaultSession's own doc comment says
+    // this default applies to "all subsequent calls".
+    CHECK(bridge.defaultSession().principal == "no-backend-yet");
+}
