@@ -345,6 +345,13 @@ namespace {
 ///        the base default's non-atomicity.
 struct SelfRetiringQueue : morph::offline::FileOfflineQueue {
     using FileOfflineQueue::FileOfflineQueue;
+    // Unhide the inherited 2-arg enqueue(payload, idempotencyKey) override --
+    // without this, overriding only the 1-arg enqueue() below hides the
+    // 2-arg one from lookup on this type, which GCC's -Woverloaded-virtual
+    // (Werror in the gcc-debug CI job) rejects even though the test below
+    // only ever reaches the 2-arg overload via an explicit
+    // IOfflineQueue::enqueue(...) qualified call.
+    using FileOfflineQueue::enqueue;
     uint64_t enqueue(std::string payload) override {
         auto const id = FileOfflineQueue::enqueue(std::move(payload));
         markDone(id);
