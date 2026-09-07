@@ -874,13 +874,14 @@ jobs:
       # that ran them all. So they are checked here instead, on a bare
       # checkout, in seconds, before anything is installed or compiled.
       #
-      # This is what will fire when a corpus arrives for something that is not
-      # a ladder rung. examples/bank is the live case (morph#470): its server
-      # comes from a local add_executable() rather than morph_add_rung(), and
-      # bank is deliberately absent from examples/rungs.txt, so this job
-      # configures nothing for it. The job then goes red naming bank, and the
-      # fix is to make this job build that server and add it below -- not to
-      # let the corpus run four of six directories in silence.
+      # A corpus can also arrive for something that is not a ladder rung at
+      # all. examples/bank is the live case (morph#87/#470): its server comes
+      # from a local add_executable() rather than morph_add_rung(), and bank is
+      # deliberately absent from examples/rungs.txt. So the check has a third
+      # arm for a corpus whose server is declared that way, and this job
+      # configures -DMORPH_BUILD_BANK_EXAMPLE=ON and builds ladder_bank_server
+      # by name below -- rather than letting the corpus run five of six
+      # directories in silence, or dropping bank into rungs.txt to buy silence.
       - name: Check every scenario corpus has a server this job builds
         if: steps.filter.outputs.run == 'true'
         run: |
@@ -914,19 +915,52 @@ jobs:
           # reaches exactly the names in examples/rungs.txt.
           configured="$(bash scripts/ladder_rungs.sh list | sort)"
 
+          # The third way a corpus can have a server this job builds: a plain
+          # add_executable(ladder_<rung>_server) in examples/<rung>/CMakeLists.txt,
+          # with no line in examples/rungs.txt at all. bank is that case
+          # (morph#87/#470) -- it predates the ladder, carries no rung number,
+          # and listing it in rungs.txt would enrol it in every consumer that
+          # derives from that file rather than describe it, which rungs.txt's
+          # own comment settles at length. So the `configured` arm below cannot
+          # see bank and never will.
+          #
+          # What stands in for a rungs.txt line is the target's own declaration.
+          # Keyed on that rather than on the name "bank": a hardcoded name would
+          # keep passing after someone deleted the add_executable(), which is
+          # precisely the state -- a corpus with no server -- this whole step
+          # exists to refuse. Delete it and this grep stops matching, the
+          # rungs.txt arm fires again, and the job says so on a bare checkout
+          # instead of after a full Qt build. Written over ${1} so the next
+          # corpus that arrives this way needs no edit here, only the configure
+          # flag and the named build further down.
+          #
+          # This is an extra arm, not a relaxation: a corpus that is neither a
+          # listed rung nor a local target still falls through to the error.
+          declares_local_server() {
+            grep -qE "^[[:space:]]*add_executable\([[:space:]]*ladder_${1}_server([[:space:]]|\)|$)" \
+              "examples/${1}/CMakeLists.txt" 2>/dev/null
+          }
+
           status=0
           for rung in $corpora; do
             if ! printf '%s\n' "$known" | grep -qxF "$rung"; then
               echo "::error::scripts/scenario/scenarios/${rung}/ has no RungSpec in scripts/scenario/run_scenarios.py, so nothing can start a server for it and the driver would leave it out of its default set"
               status=1
-            elif ! printf '%s\n' "$configured" | grep -qxF "$rung"; then
-              echo "::error::scripts/scenario/scenarios/${rung}/ is a corpus for '${rung}', which is not listed in examples/rungs.txt -- this job configures no ladder_${rung}_server for it. Either list it there, or build its server in this job and extend this check to expect it."
-              status=1
-            elif [ ! -d "examples/${rung}/src/server" ]; then
-              echo "::error::examples/${rung}/src/server/ does not exist, so cmake/morph_add_rung.cmake declares no ladder_${rung}_server to run scripts/scenario/scenarios/${rung}/ against"
-              status=1
+            elif printf '%s\n' "$configured" | grep -qxF "$rung"; then
+              # A listed rung: its server is morph_add_rung()'s implicit target,
+              # and that macro derives the sources from src/server/. No such
+              # directory means no such target, however green rungs.txt looks.
+              if [ ! -d "examples/${rung}/src/server" ]; then
+                echo "::error::examples/${rung}/src/server/ does not exist, so cmake/morph_add_rung.cmake declares no ladder_${rung}_server to run scripts/scenario/scenarios/${rung}/ against"
+                status=1
+              else
+                echo "ok: ${rung} -- corpus, RungSpec and ladder_${rung}_server all accounted for"
+              fi
+            elif declares_local_server "$rung"; then
+              echo "ok: ${rung} -- corpus, RungSpec and a local ladder_${rung}_server in examples/${rung}/CMakeLists.txt all accounted for"
             else
-              echo "ok: ${rung} -- corpus, RungSpec and ladder_${rung}_server all accounted for"
+              echo "::error::scripts/scenario/scenarios/${rung}/ is a corpus for '${rung}', which is neither listed in examples/rungs.txt nor served by an add_executable(ladder_${rung}_server) in examples/${rung}/CMakeLists.txt -- this job configures no ladder_${rung}_server for it. Either list it there, or declare that target and make this job configure and build it (see bank's -DMORPH_BUILD_BANK_EXAMPLE=ON below)."
+              status=1
             fi
           done
           exit "$status"
@@ -1009,13 +1043,26 @@ jobs:
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
       # Configure steps for why leaving it unset is what lets fastcache-cc
       # be selected.
-      - name: Configure (gcc-debug, ladder + Qt on)
+      # -DMORPH_BUILD_BANK_EXAMPLE=ON is what puts ladder_bank_server in this
+      # build tree. bank is not a rung, so -DMORPH_LADDER_RUNGS=all does not
+      # reach it: the root CMakeLists.txt guards add_subdirectory(examples/bank)
+      # on that option alone (OFF by default -- bank pulls the Lightweight ORM
+      # in), and examples/bank/CMakeLists.txt then declares the server inside
+      # its own if(MORPH_BUILD_QT), which this job already sets. Nothing new has
+      # to be installed for it: the apt step above already names Lightweight's
+      # libsqlite3-dev/libyaml-cpp-dev/libzip-dev/unixodbc-dev/libsqliteodbc
+      # (MORPH_BUILD_LADDER=ON fetches the same pinned ORM through
+      # examples/common) and libgl1-mesa-dev, and the server itself links only
+      # Qt6::Core and Qt6::WebSockets -- the aqtinstall step already asks for
+      # qtwebsockets.
+      - name: Configure (gcc-debug, ladder + Qt + bank on)
         if: steps.filter.outputs.run == 'true'
         run: |
           cmake --preset gcc-debug \
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_LADDER_RUNGS=all \
+            -DMORPH_BUILD_BANK_EXAMPLE=ON \
             $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
@@ -1031,7 +1078,18 @@ jobs:
         if: steps.filter.outputs.run == 'true'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: cmake --build --preset gcc-debug
+        run: |
+          cmake --build --preset gcc-debug
+          # ladder_bank_server is already in the all-target above whenever the
+          # configure got -DMORPH_BUILD_BANK_EXAMPLE=ON, so this second
+          # invocation is a no-op then. It is here for when it is not: drop that
+          # flag and the all-target build stays green while bank is simply not
+          # in the tree, and the next thing to notice would be the scenario step
+          # exiting 2 a Qt build later. Naming the target turns that into "no
+          # rule to make target" here instead. The pre-flight near the top of
+          # this job cannot cover this half -- it reads the source tree, not the
+          # configure.
+          cmake --build --preset gcc-debug --target ladder_bank_server
 
       # ── moc output that climbs out of the build tree (issue #372) ────
       # Same gate as linux-qt above, and for the same reason -- see its
@@ -1062,8 +1120,10 @@ jobs:
       # own comment gives for deferring it: running the corpus needs the
       # ladder_<rung>_server binaries, which that workflow deliberately has no
       # build to produce. This job already builds every one of them
-      # unconditionally (cmake/morph_add_rung.cmake), so the build this step
-      # needs is already paid for above.
+      # unconditionally -- each rung's from cmake/morph_add_rung.cmake, and
+      # bank's from examples/bank/CMakeLists.txt under the
+      # -DMORPH_BUILD_BANK_EXAMPLE=ON the Configure step above passes -- so the
+      # build this step needs is already paid for above.
       #
       # --rung is passed once per corpus directory found on disk rather than
       # left to the driver's default: the set that runs is then demonstrably

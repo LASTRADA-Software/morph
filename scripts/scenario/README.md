@@ -387,10 +387,30 @@ nothing asserts, an allowlist entry left behind after the thing it exempted
 became coverable, or a scenario edited until it no longer qualifies as a
 workflow.
 
-What CI does **not** do is *run* the corpus. `run_scenarios.py` needs the six
-`ladder_<name>_server` binaries built, which no workflow has today; running it
-is its own change. So a scenario can currently drift from a server's real
-behaviour without CI noticing — only from its *surface*.
+Behaviour is gated separately, by `.github/workflows/ci.yml`'s `ladder-tests`
+job, which runs the whole corpus against real servers. It builds them anyway
+for its own ladder tests, so the build the corpus needs is already paid for:
+`-DMORPH_LADDER_RUNGS=all` gives it every rung's `ladder_<rung>_server`, and
+`-DMORPH_BUILD_BANK_EXAMPLE=ON` gives it `ladder_bank_server`, which is a local
+`add_executable()` in `examples/bank/CMakeLists.txt` rather than a rung target
+(bank is deliberately not in `examples/rungs.txt` — see that file). The final
+step then passes `--rung` once per directory under `scenarios/`, so the set
+that runs is the set that exists, and `--build-dir` so no stale binary from
+another build tree can be picked up. A missing binary is not softened into a
+skip: `run_scenarios.py` exits `2` and the job fails.
+
+Ahead of that build, on a bare checkout, the same job refuses any corpus it
+could not have run: every `scenarios/<name>/` directory must have a `RungSpec`
+in `run_scenarios.py`, and must be either a rung listed in `examples/rungs.txt`
+with an `examples/<name>/src/server/` for `morph_add_rung()` to build, or a
+name whose `examples/<name>/CMakeLists.txt` declares
+`add_executable(ladder_<name>_server)` itself. A corpus that is neither fails
+the job in seconds, naming itself, rather than after a full Qt build — or,
+worse, by being quietly left out of a run that then reports green.
+
+`scripts/scenario/` is one of the paths in the job's change filter
+(`scripts/ladder_rungs.sh ci-path-regex`), so a pull request touching only the
+corpus still reaches the job that runs it.
 
 `scenario_coverage.py --floors` is a **testing-only** override for this tool's
 own fixtures (it lets them satisfy a floor without authoring dozens of
