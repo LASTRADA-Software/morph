@@ -117,20 +117,55 @@ component_management:
     # cannot be reconciled by adjusting anything. The measurement has to be
     # retaken, not corrected -- which is what morph#403 said would happen.
     #
-    # informational: true, like every other component here, and for the same
-    # reason: the decision to make any of these blocking is recorded below as
-    # the repo owner's, taken once the ladder is finished. This component
-    # changes what the file *says* about the framework, not what it enforces.
+    # Re-measured after the 2026-09 framework-coverage-and-mutation plan
+    # (docs/superpowers/plans/2026-09-03-framework-coverage-and-mutation.md)
+    # closed the gap the paragraphs above describe. Same methodology as
+    # before -- the LCOV this repository actually uploads
+    # (build/clang-coverage/coverage.lcov, post-aggregate_lcov_branches.py),
+    # by Codecov's own arithmetic (a DA line with zero hits is a miss, a hit
+    # line with an untaken BRDA branch is a partial, coverage is
+    # hits / (hits + misses + partials)) -- now against a full net + forms +
+    # core + offline audit-close-remeasure pass, not just the net addition
+    # that made the 93% figure provisional. 8,502 hits of 8,667 lines =
+    # 98.10%, 80 misses, 85 partials:
+    #
+    #     net       94.69%   1,262 lines    39 misses,  28 partials
+    #     forms     98.43%   1,590 lines    10 misses,  15 partials
+    #     offline   96.56%     639 lines    11 misses,  11 partials
+    #     core      98.88%   3,292 lines    16 misses,  21 partials
+    #     util      98.91%   1,007 lines     2 misses,   9 partials
+    #     session   98.80%     249 lines     2 misses,   1 partial
+    #     qt       100.00%      39 lines
+    #     journal  100.00%     357 lines
+    #     detail   100.00%     155 lines
+    #     render   100.00%      77 lines
+    #
+    # net -- the subsystem that carried the whole gap above -- is no longer
+    # an outlier: every subsystem now sits at or above 94.69%, and the four
+    # this plan actually touched (net, forms, offline, core) each moved by
+    # double digits or, for core (already high), by the largest remaining
+    # absolute miss count. The branch-coverage view
+    # (scripts/check_branch_coverage.py, the stricter of the two measures
+    # since a hit line with one untaken arm still counts against it) moved
+    # from 91.19% to 95.95% over the same work, with every subsystem clear
+    # of its own floor in scripts/check_branch_coverage.py's FLOORS table.
+    #
+    # 97%, a margin below the 98.10% measured ceiling on the same terms
+    # every other target in this file leaves (roughly a point, not sitting
+    # on the number). informational: true is unchanged, for the same reason
+    # as before: the decision to make this blocking is the repo owner's,
+    # recorded once the ladder is finished, and this component changes what
+    # the file *says* about the framework, not what it enforces.
     - component_id: framework
       name: "morph framework (include/morph)"
       paths:
         - include/morph/**
       statuses:
         - type: project
-          target: 93%
+          target: 97%
           informational: true
         - type: patch
-          target: 93%
+          target: 97%
           informational: true
 
     - component_id: ladder
