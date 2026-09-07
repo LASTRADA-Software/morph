@@ -119,15 +119,26 @@ component_management:
     #
     # Re-measured after the 2026-09 framework-coverage-and-mutation plan
     # (docs/superpowers/plans/2026-09-03-framework-coverage-and-mutation.md)
-    # closed the gap the paragraphs above describe. Same methodology as
-    # before -- the LCOV this repository actually uploads
-    # (build/clang-coverage/coverage.lcov, post-aggregate_lcov_branches.py),
-    # by Codecov's own arithmetic (a DA line with zero hits is a miss, a hit
-    # line with an untaken BRDA branch is a partial, coverage is
-    # hits / (hits + misses + partials)) -- now against a full net + forms +
-    # core + offline audit-close-remeasure pass, not just the net addition
-    # that made the 93% figure provisional. 8,502 hits of 8,667 lines =
-    # 98.10%, 80 misses, 85 partials:
+    # closed the gap the paragraphs above describe. Same file this
+    # repository actually uploads (build/clang-coverage/coverage.lcov,
+    # post-aggregate_lcov_branches.py) and the same Codecov-style arithmetic
+    # (a DA line with zero hits is a miss, a hit line with an untaken BRDA
+    # branch is a partial, coverage is hits / (hits + misses + partials)) --
+    # but NOT the same configure as the 93.98% figure above or as CI's
+    # coverage leg: this run used MORPH_BUILD_NET/OFFLINE_SQLITE/QT=ON
+    # without MORPH_BUILD_LADDER=ON (Mull/mutation infrastructure being
+    # unavailable on this machine made the full CI-matching build worth
+    # skipping rather than fighting for a bookkeeping-only re-measurement).
+    # LADDER cannot change which include/morph files appear in the
+    # denominator (it only builds examples/'s own testkit/GUI
+    # infrastructure and rungs), but its test binaries do exercise
+    # include/morph and would add hits CI's own report will have that this
+    # number doesn't -- so 98.10% below is a lower bound on what CI's own
+    # coverage leg will show for this same tree, not an exact reproduction
+    # of it. Against a full net + forms + core + offline audit-close-
+    # remeasure pass, not just the net addition that made the 93% figure
+    # provisional: 8,502 hits of 8,667 lines = 98.10%, 80 misses, 85
+    # partials:
     #
     #     net       94.69%   1,262 lines    39 misses,  28 partials
     #     forms     98.43%   1,590 lines    10 misses,  15 partials

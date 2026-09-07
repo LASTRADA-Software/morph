@@ -76,12 +76,21 @@ import tempfile
 # closed net/forms/offline/core's gaps directly, over
 # build/clang-coverage/coverage.lcov, Apple clang 17 (this workstation's
 # toolchain, same clang-vs-clang-20 margin story as the previous
-# measurement below), configure MORPH_BUILD_NET/OFFLINE_SQLITE/QT=ON.
+# measurement below), configure MORPH_BUILD_NET/OFFLINE_SQLITE/QT=ON, with
+# all 1670 ctest cases in this configure's test binaries passing.
 # MORPH_BUILD_LADDER was deliberately left off -- it only gates
 # examples/'s shared testkit/GUI infrastructure and enabled rungs
-# (CMakeLists.txt's own option() text), never anything under
-# include/morph, so it cannot change this file's denominator either way --
-# with all 1592 ctest cases in this configure's test binaries passing.
+# (CMakeLists.txt's own option() text), so it cannot change which
+# include/morph *files* land in the denominator. It is NOT true that this
+# makes LADDER=ON/OFF interchangeable for this file's numbers: CI's own
+# coverage leg builds with LADDER=all, and scripts/coverage.sh adds every
+# built ladder_*_tests binary to the merged profile, so those tests DO
+# contribute additional *hits* to include/morph's numerator that this
+# narrower local run does not exercise. The direction is safe for the
+# floors below (a wider CI run can only show equal-or-higher coverage, so
+# it cannot manufacture a floor breach this measurement missed), but the
+# absolute numbers here are a lower bound on CI's, not an exact
+# reproduction of CI's own configure.
 #
 # Previously measured on 2026-09-02, over the CI coverage leg's full
 # configure (MORPH_BUILD_NET/OFFLINE_SQLITE/QT/LADDER=ON,
