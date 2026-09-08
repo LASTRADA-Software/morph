@@ -170,15 +170,9 @@
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 541,
+      "line": 547,
       "source": "default:",
       "reason": "Unreachable except via the adjacent `Error` case it deliberately shares a body with (net audit, `socket_backend.hpp` extra finding #7). `detail::ExecuteReplyKind` is a closed 3-value enum (`Value`/`Timeout`/`Error`), all three handled explicitly above this label; `default:` exists only to satisfy this project's `-Wswitch-default`, per the source's own inline comment directly below this line. Reaching it via any value other than through the `Error` case falling through would require an out-of-range `static_cast` producing a value outside the enum's domain -- undefined behavior, not a legitimate test target."
-    },
-    {
-      "file": "include/morph/net/socket_backend.hpp",
-      "line": 119,
-      "source": "_connectCv.wait_for(lock, timeout, [this] { return _connected.load() || _shuttingDown.load(); });",
-      "reason": "Scoped to the `_shuttingDown.load()` disjunct only -- `_connected.load()` is exercised both ways by this class's ordinary connect/fail tests. Real, reachable, but accepted as documented after an attempted-and-reverted investigation found no non-contrived, reliably-reproducible path (net audit, `socket_backend.hpp` finding, `waitForConnected()`'s `_shuttingDown` disjunct). Reaching the `_shuttingDown`-specifically-woke-it case needs a thread genuinely parked in this `wait_for` (i.e. `_connected == false`) at the exact moment `onConnected()`/`onDisconnected()` notifies `_connectCv` after `_shuttingDown` is already true -- the only two notifiers of that condition variable. The destructor itself never notifies `_connectCv` directly (only `_reconnectCv`/`_handlerCv`), so a backend that has already finished its one connection attempt leaves no one to wake a parked waiter this way at all; the only path that does notify `_connectCv` after `_shuttingDown` is set requires the io thread to already be past its first successful connection (so a retry loop is active) and then genuinely slow to fail its retry -- which needs redirecting the retry at a black-holed address (not possible for a backend fixed to one URL at construction) or relying on outbound network behavior not guaranteed in every sandboxed/CI configuration. Reported as attempted-and-left-open rather than forced via network timing or object-lifetime misuse."
     }
   ]
 }

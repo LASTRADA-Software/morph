@@ -1116,6 +1116,29 @@ jobs:
         if: steps.filter.outputs.run == 'true'
         run: bash scripts/check_automoc_includes.sh build/gcc-debug
 
+      # ── Two ctest entries under one name (morph#464) ──────────────────
+      # A ctest name is global to the build tree, not scoped to the target it
+      # was discovered from, and rung test binaries share TEST_CASE names
+      # freely. Every by-name operation then addresses both entries at once:
+      # `set_tests_properties(<name> PROPERTIES LABELS ...)` reaches both and
+      # CTest *appends*, so one entry accumulated the other rung's label and
+      # `ctest -L ladder-<rung>` ran another rung's binary alongside its own
+      # (crm reported on 180 cases while owning 168); a failure line named a
+      # test that existed twice. cmake/morph_add_rung.cmake's TEST_PREFIX makes
+      # those names unique by construction -- this is what keeps them that way
+      # the next time a rung is template-copied or a suite is registered by
+      # hand.
+      #
+      # Here, and only here: this is the job that configures every rung at once
+      # (-DMORPH_LADDER_RUNGS=all), which is the only configuration in which a
+      # cross-rung collision can exist to be found. It runs before the Test step
+      # below rather than after, so a build whose test selection is ambiguous
+      # says so before the suite is spent on it. The gate's own self-test is in
+      # drift-guard.yml, which needs no build.
+      - name: Check no two ctest tests share a name
+        if: steps.filter.outputs.run == 'true'
+        run: bash scripts/check_ctest_name_collisions.sh build/gcc-debug
+
       - name: Test (offscreen Qt platform, ladder tests only, stress excluded)
         if: steps.filter.outputs.run == 'true'
         env:
