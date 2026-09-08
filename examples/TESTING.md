@@ -593,12 +593,15 @@ root `CMakeLists.txt` — don't repeat that eight times):
     expression and cannot diverge from each other or from the list.
     `scripts/coverage.sh` and `wasm-ladder.yml`'s named-target build loop
     read it too.
-  - Two consumers cannot read it, and are checked against it from outside by
+  - Three consumers cannot read it, and are checked against it from outside by
     `scripts/check_rung_filters.sh`, run unconditionally by
     `.github/workflows/drift-guard.yml`: `wasm-ladder.yml`'s
     `on.push.paths`/`on.pull_request.paths` (GitHub evaluates these to decide
-    whether to start the workflow, before any step exists to generate them)
-    and `codecov.yml`'s per-rung components (read by Codecov, not by us).
+    whether to start the workflow, before any step exists to generate them),
+    `codecov.yml`'s per-rung components (read by Codecov, not by us), and
+    `examples/<rung>/tests/.clang-tidy` (clang-tidy resolves configuration by
+    walking up from the file it is analysing, so a per-directory setting can
+    only live in that directory).
     The checks are behavioural where the semantics can be reproduced — a
     rung passes only if a real path under its directory actually matches the
     filter — because a grep for the rung's name would pass on a filter that
@@ -606,9 +609,22 @@ root `CMakeLists.txt` — don't repeat that eight times):
     reintroduces each drift into a scratch copy of the tree, one at a time,
     and asserts the gate catches it for the stated reason.
 
-  Adding a rung is therefore: add the name to `examples/rungs.txt`, and add
-  two lines to `wasm-ladder.yml` plus a component to `codecov.yml` — the two
+  Adding a rung is therefore: add the name to `examples/rungs.txt`, add two
+  lines to `wasm-ladder.yml` plus a component to `codecov.yml`, and copy an
+  existing `examples/*/tests/.clang-tidy` next to the new suite — the three
   the guard will name explicitly on the same PR if you forget.
+
+- **Every rung's `tests/` carries a `.clang-tidy`.** It subtracts exactly one
+  check, `bugprone-chained-comparison`, and keeps every other one through
+  `InheritParentConfig: true`. Catch2's `REQUIRE(a == b)` expands to
+  `Catch::Decomposer() <= a == b`, which that check reads as the chained
+  comparison `v0 <= v1 == v2`; the framework's own `tests/.clang-tidy` has
+  subtracted it since it existed, and rung tests need the same file for the
+  same reason. `examples/bank/tests/` and `examples/common/testkit/` carry it
+  too. There is deliberately **no** `examples/.clang-tidy`: one file there
+  would cover every rung's `src/`, `include/` and `gui_lib/` as well, where a
+  hand-written `a < b < c` is a real defect — `check_rung_filters.sh` fails if
+  one appears.
 - `examples/common/` declares exactly three consumable targets:
   `morph_ladder_testkit` (morph + Catch2 + Qt), `morph_ladder_gui` (STATIC,
   `Qt6::Core` only, **no Catch2**, **no `Qt6::WebSockets`** — presenter rule

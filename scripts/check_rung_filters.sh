@@ -12,8 +12,12 @@
 #       any step of it exists to run a script.
 #   codecov.yml
 #       Read by Codecov's own service, not by anything in this repository.
+#   examples/<rung>/tests/.clang-tidy
+#       clang-tidy resolves configuration by walking up from the file it is
+#       analysing, so a per-directory setting can only live in that directory.
+#       No file anywhere could name the rungs on its behalf.
 #
-# Both are therefore checked from the outside, here.
+# All three are therefore checked from the outside, here.
 #
 # Why this gate exists at all (morph#179): ci.yml's ladder path filter was a
 # hand-copied rung alternation that stopped at kanban, so a change confined to
@@ -231,6 +235,91 @@ for cmakelists in "${examples_dir}"/*/CMakeLists.txt; do
     fi
 done
 shopt -u nullglob
+
+# ── 5. Every ladder test directory must carry the Catch2 clang-tidy config ───
+# clang-tidy belongs in this gate for the same reason wasm-ladder.yml's path
+# lists do: it cannot read examples/rungs.txt. It resolves configuration by
+# walking up from the file it is analysing, so a per-directory suppression can
+# only live in that directory -- there is no file anywhere that could name the
+# rungs on clang-tidy's behalf.
+#
+# What is suppressed, and why every rung needs it (morph#487): Catch2's
+# `REQUIRE(a == b)` expands to `Catch::Decomposer() <= a == b`, which
+# bugprone-chained-comparison reads as the chained comparison `v0 <= v1 == v2`.
+# tests/.clang-tidy has subtracted that check for the framework's own suite
+# since it existed. No rung's tests/ had the same file, and it never showed:
+# examples/ contributed no compile commands, so clang-tidy-diff analysed no
+# rung source at all until morph#481 gave that job the ladder. The first rung
+# test file written afterwards failed the gate on 14 findings, every one of
+# them a REQUIRE.
+#
+# Two conditions, not one, and the second is the load-bearing one. The file
+# must subtract the check -- and it must carry `InheritParentConfig: true`,
+# because without that key clang-tidy *replaces* the parent configuration
+# instead of extending it: a directory holding `Checks:
+# '-bugprone-chained-comparison'` alone runs with no checks enabled whatsoever
+# and reports green while linting nothing. A suppression that silences more
+# than the false positive is worse than the finding it hides, so it is checked
+# here rather than left to review.
+readonly tidy_false_positive="bugprone-chained-comparison"
+
+check_test_dir_tidy_config() {
+    local dir="$1" why="$2"
+    local file="${repo_root}/${dir}/.clang-tidy" body
+    # A rung that has not grown a tests/ yet configures nothing, exactly as
+    # morph_add_rung() creates no test target for it.
+    [ -d "${repo_root}/${dir}" ] || return 0
+    checks=$((checks + 1))
+    if [ ! -f "$file" ]; then
+        fail "${dir}/ holds Catch2 tests (${why}) but has no .clang-tidy -- every REQUIRE(a == b) in it is a ${tidy_false_positive} finding in the clang-tidy-diff job; copy one of the existing examples/*/tests/.clang-tidy files"
+        return
+    fi
+    # Comments stripped first: the reason paragraph in these files names the
+    # check, and a grep that matched it there would pass a file whose Checks:
+    # had been emptied.
+    body="$(grep -v '^[[:space:]]*#' "$file")"
+    if ! printf '%s\n' "$body" | grep -qF -- "-${tidy_false_positive}"; then
+        fail "${dir}/.clang-tidy does not subtract ${tidy_false_positive}, so Catch2's REQUIRE expansion still fails the clang-tidy-diff job there"
+        return
+    fi
+    if ! printf '%s\n' "$body" | grep -qE '^[[:space:]]*InheritParentConfig:[[:space:]]*true[[:space:]]*$'; then
+        fail "${dir}/.clang-tidy has no 'InheritParentConfig: true', so it REPLACES the repository-root check list rather than subtracting one entry from it -- that directory would be linted by nothing at all"
+        return
+    fi
+    note "${dir}/.clang-tidy subtracts ${tidy_false_positive} and inherits every other check"
+}
+
+while IFS= read -r rung; do
+    [ -n "$rung" ] || continue
+    check_test_dir_tidy_config "examples/${rung}/tests" "rung ${rung}'s suite"
+done <<< "$rungs"
+
+# Two directories on the same terms that examples/rungs.txt deliberately does
+# not name. bank predates the ladder and carries no rung number (see that
+# file's own closing note), but the clang-tidy job configures it with
+# -DMORPH_BUILD_BANK_EXAMPLE=ON, so its tests are in the same compile database
+# as every rung's. examples/common/testkit is the shared testkit every rung
+# links, and holds Catch2 test files beside its reusable headers.
+#
+# examples/concepts and examples/vetted_hmac are deliberately absent: their
+# Catch2 files share a directory with demo programs and adapter headers, and a
+# .clang-tidy there would take the check off production-shaped code to spare
+# test code. If the finding ever reaches one of them, the answer is a tests/
+# subdirectory, not a wider suppression.
+check_test_dir_tidy_config "examples/bank/tests" "bank's suite, built by -DMORPH_BUILD_BANK_EXAMPLE=ON"
+check_test_dir_tidy_config "examples/common/testkit" "the shared testkit's own suite"
+
+# The narrow-by-construction half. A single examples/.clang-tidy would satisfy
+# every check above with one file and no maintenance -- and would take
+# bugprone-chained-comparison off every rung's src/, include/ and gui_lib/ too,
+# where a hand-written `a < b < c` is a real defect this repository wants
+# reported. The suppression belongs at the test directories or nowhere.
+checks=$((checks + 1))
+if [ -e "${examples_dir}/.clang-tidy" ]; then
+    fail "examples/.clang-tidy exists -- a .clang-tidy there applies to every rung's src/, include/ and gui_lib/, not only to its tests. Put the suppression in each examples/*/tests/ instead."
+else
+    note "no examples/.clang-tidy -- the Catch2 suppression is scoped to test directories"
+fi
 
 # ── Verdict ─────────────────────────────────────────────────────────────────
 if [ "$checks" -eq 0 ]; then

@@ -37,11 +37,21 @@ make_tree() {
     cp "${repo_root}/.github/workflows/ci.yml" "$dest/.github/workflows/"
     cp "${repo_root}/.github/workflows/wasm-ladder.yml" "$dest/.github/workflows/"
     cp "${repo_root}/codecov.yml" "$dest/"
-    local cmakelists rung
+    local cmakelists rung tidy tidy_dir
     for cmakelists in "${repo_root}"/examples/*/CMakeLists.txt; do
         rung="$(basename "$(dirname "$cmakelists")")"
         mkdir -p "$dest/examples/$rung"
         cp "$cmakelists" "$dest/examples/$rung/"
+    done
+    # Check 5's subject: the per-test-directory clang-tidy configs. Copied by
+    # the same "whatever the checker reads" rule as everything above -- the
+    # directory has to exist for the check to fire at all, since a rung with no
+    # tests/ yet is deliberately skipped.
+    for tidy in "${repo_root}"/examples/*/tests/.clang-tidy "${repo_root}"/examples/common/testkit/.clang-tidy; do
+        [ -f "$tidy" ] || continue
+        tidy_dir="$(dirname "${tidy#"${repo_root}/"}")"
+        mkdir -p "$dest/$tidy_dir"
+        cp "$tidy" "$dest/$tidy_dir/"
     done
 }
 
@@ -144,6 +154,48 @@ expect_caught "wasm-ladder.yml's path lists becoming unreadable to the parser" \
 expect_caught "examples/rungs.txt listing no rungs at all" \
     "edit examples/rungs.txt -e '/^[a-z]/d'" \
     "named no rungs"
+
+# ── Check 5: the per-test-directory clang-tidy configs ───────────────────────
+# The shape a new rung arrives in: a tests/ directory and no .clang-tidy beside
+# it. Every REQUIRE(a == b) in it is then a bugprone-chained-comparison finding
+# in the clang-tidy-diff job (morph#487).
+expect_caught "a rung's tests/ with no .clang-tidy" \
+    "rm -f examples/lims/tests/.clang-tidy" \
+    "examples/lims/tests/ holds Catch2 tests"
+
+expect_caught "bank's tests/ with no .clang-tidy" \
+    "rm -f examples/bank/tests/.clang-tidy" \
+    "examples/bank/tests/ holds Catch2 tests"
+
+expect_caught "the shared testkit's tests with no .clang-tidy" \
+    "rm -f examples/common/testkit/.clang-tidy" \
+    "examples/common/testkit/ holds Catch2 tests"
+
+# A file that is present but no longer subtracts the check: the gate must read
+# what the file says, not merely that it exists.
+expect_caught "a tests/.clang-tidy that no longer subtracts the check" \
+    "edit examples/lims/tests/.clang-tidy -e 's/^Checks:.*/Checks: \x27\x27/'" \
+    "does not subtract bugprone-chained-comparison"
+
+# The reason paragraph names the check, so a gate that grepped the whole file
+# would accept the mutation above. Proof that comments are stripped first:
+# here only the comment survives.
+expect_caught "a tests/.clang-tidy naming the check only in its comments" \
+    "printf '# bugprone-chained-comparison\\nChecks: \x27\x27\\nInheritParentConfig: true\\n' > examples/lims/tests/.clang-tidy" \
+    "does not subtract bugprone-chained-comparison"
+
+# The trap this half of check 5 exists for. Without InheritParentConfig,
+# clang-tidy replaces the root configuration instead of extending it, and the
+# directory is linted by nothing at all -- silently, and greenly.
+expect_caught "a tests/.clang-tidy that replaces the root config instead of extending it" \
+    "edit examples/lims/tests/.clang-tidy -e '/^InheritParentConfig:/d'" \
+    "has no 'InheritParentConfig: true'"
+
+# The one-file shortcut that would satisfy every check above while taking the
+# check off every rung's src/, include/ and gui_lib/ as well.
+expect_caught "a single examples/.clang-tidy standing in for the per-directory ones" \
+    "printf 'Checks: \x27-bugprone-chained-comparison\x27\\nInheritParentConfig: true\\n' > examples/.clang-tidy" \
+    "examples/.clang-tidy exists"
 
 # ── Verdict ─────────────────────────────────────────────────────────────────
 if [ "$failures" -ne 0 ]; then

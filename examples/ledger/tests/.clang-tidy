@@ -1,0 +1,34 @@
+# Checks suppressed inside this test directory only, on the same terms as the
+# framework's own tests/.clang-tidy: an entry here is a check whose finding is
+# *test idiom* -- a property of Catch2 -- rather than a defect. One entry, with
+# the reason it cannot fire on anything worth fixing.
+
+# bugprone-chained-comparison: `REQUIRE(a == b)` expands to
+# `catchAssertionHandler.handleExpr(Catch::Decomposer() <= a == b)`, so the
+# check sees `v0 <= v1 == v2` and reports a chained comparison. Nothing in the
+# test source compares three things: the `<=` it objects to is Catch2's own
+# capture hook, and both fixes it suggests -- parenthesise, or split with a
+# logical operator -- would defeat the expression decomposition that makes a
+# failing assertion print its two operands. Catch2 says so itself; the macro
+# definition carries `/* NOLINT(bugprone-chained-comparison) */` on that very
+# line in 3.15.3. The clang-tidy-diff job installs ubuntu-24.04's catch2,
+# 3.4.0, which predates that comment -- which is why the finding reaches CI
+# here and not on a workstation with a current Catch2.
+#
+# Directory-scoped, and no wider. clang-tidy resolves configuration by walking
+# up from the file it is analysing and offers no finer granularity than a
+# directory -- there is no way to say "inside a Catch2 macro expansion" -- so
+# this file sits in the test directory rather than at `examples/`, where it
+# would also cover every example's src/, include/ and gui_lib/. A hand-written
+# `a < b < c` in the code under test is still reported, and InheritParentConfig
+# keeps every other check the repository-root .clang-tidy enables: exactly one
+# entry is subtracted, and only here.
+#
+# One copy per test directory rather than one shared file, because no directory
+# contains every example's tests and nothing else. scripts/check_rung_filters.sh
+# fails if a test directory on the application ladder has no such file, so a new
+# rung cannot arrive without one.
+
+Checks: '-bugprone-chained-comparison'
+
+InheritParentConfig: true
