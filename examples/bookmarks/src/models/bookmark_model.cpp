@@ -20,10 +20,10 @@
 #include "bookmarks/auth/bookmarks_authorizer.hpp"
 #include "bookmarks/db/bookmark_entity.hpp"
 #include "bookmarks/db/bookmark_tag_entity.hpp"
-#include "bookmarks/db/imported_op_entity.hpp"
 #include "bookmarks/db/outbox_entity.hpp"
 #include "bookmarks/db/tag_entity.hpp"
 #include "bookmarks/import/netscape_bookmarks.hpp"
+#include "bookmarks/offline/replay_ledger.hpp"
 #include "clock.hpp"
 
 namespace bookmarks {
@@ -650,11 +650,8 @@ ImportBookmarksResult BookmarkModel::execute(const ImportBookmarks& action) {
     const auto& opIdStr = *action.opId;
 
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    auto existingOp = mapper->Query<db::ImportedOpRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::ownerPrincipal>, "=", owner)
-                          .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::opId>, "=", opIdStr)
-                          .All();
-    if (!existingOp.empty()) {
+    ::bookmarks::offline::BookmarksReplayLedger ledger{mapper.Get(), nowMs()};
+    if (ledger.lookup(owner, opIdStr).has_value()) {
         // Already applied -- a retried chunk after a dropped connection is
         // a safe no-op, per this task's idempotency requirement. Reports
         // zero: the caller's own first, successful attempt already learned
@@ -692,11 +689,7 @@ ImportBookmarksResult BookmarkModel::execute(const ImportBookmarks& action) {
         mapper->Create(rec);
         ++imported;
     }
-    db::ImportedOpRecord op;
-    op.ownerPrincipal = owner;
-    op.opId = opIdStr;
-    op.appliedAtMs = nowMs();
-    mapper->Create(op);
+    ledger.record(owner, opIdStr, "");
     transaction.Commit();
 
     return ImportBookmarksResult{.imported = Count::fromDouble(static_cast<double>(imported)),

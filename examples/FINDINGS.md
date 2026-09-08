@@ -72,6 +72,14 @@ decides; the ladder never self-triages):
   `docs/spec/` file is updated to say so; the test asserts the *documented*
   behavior and turns green.
 - **wontfix** — recorded with rationale.
+- **promoted** — [`IMPLEMENTATION.md`](IMPLEMENTATION.md)'s promotion rule
+  fired (a third rung independently built the same app-layer answer to a
+  framework gap): the answer moved into `include/morph`, with its full docs
+  tax, and every consuming rung may re-express itself over the promoted
+  interface. The rule's other exit is **documented-limitation** under the
+  name "app-layer by design" — see [morph#197](https://github.com/LASTRADA-Software/morph/issues/197)'s
+  disposition (`docs/spec/offline/offline.md`, "Disposition: app-layer by
+  design") for that branch. See "Promoted findings" below for the record.
 
 ## Fix budget
 
@@ -101,6 +109,25 @@ current output. Back-filling them as issues — failing tests where
 expressible — is **the first task of rung 0**, before any app
 code. The four LADDER prerequisites and the forms-gap ledger entries are
 findings 001–0NN.
+
+## Promoted findings
+
+The record the **promoted** disposition above points to — the promotion rule
+has fired once so far:
+
+- **Op-id/exactly-once replay ledger.** Seven hand-written, near-identical
+  copies of the same idempotency-check-then-set table had accumulated across
+  five rungs (`bookmarks`, `crm`, `kanban`, `ledger`, `lims`) with no
+  `FINDINGS.md` entry recording it, three rungs past the promotion rule's own
+  trigger point ([morph#226](https://github.com/LASTRADA-Software/morph/issues/226)).
+  Promoted as `morph::offline::IReplayLedger`
+  (`include/morph/offline/replay_ledger.hpp`) plus a conformance suite
+  (`tests/replay_ledger_conformance.hpp`); storage stays app-side, per rung,
+  because `include/morph` has no dependency on any SQL library and the
+  check-then-set must commit in the same transaction as the write it guards
+  (see the interface's own doc comment). `bookmarks` is migrated onto it
+  (`examples/bookmarks/include/bookmarks/offline/replay_ledger.hpp`); the
+  other four rungs are follow-up work, not required by this promotion.
 
 ## Demotion policy (the ladder must never tax the framework)
 

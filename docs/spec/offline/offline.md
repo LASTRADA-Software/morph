@@ -184,9 +184,65 @@ it, and a host must pick one:
 2. **Shared idempotency key** — if both paths can replay the same ops, every
    enqueued item and its corresponding journal entry must carry the *same*
    `idempotencyKey`, and the replay consumer must dedup on it (apply a key once,
-   skip repeats). The framework provides the *field*; wiring the check into the
-   replay/flush path is the host's responsibility (that logic lives in
+   skip repeats). The framework provides the *field*, and (below)
+   `IReplayLedger` for the *mechanism*; wiring either into a specific
+   replay/flush path is still the host's responsibility (that logic lives in
    `sync_worker.hpp` and the app's journal-replay code, not in the queue).
+
+### `IReplayLedger`: the promoted replay-consumer half
+
+The two paragraphs above define the *contract* — dedup on a shared key — but
+for five rungs and seven call sites, morph supplied no *mechanism*: each host
+hand-wrote its own op-id-keyed table answering "has this already been
+applied?" ([morph#226](https://github.com/LASTRADA-Software/morph/issues/226),
+`examples/IMPLEMENTATION.md`'s promotion rule fired three rungs past its own
+trigger point). `morph::offline::IReplayLedger`
+(`include/morph/offline/replay_ledger.hpp`) is the promoted answer:
+
+```cpp
+struct IReplayLedger {
+    std::optional<std::string> lookup(std::string_view scope, std::string_view opId) const;
+    void record(std::string_view scope, std::string_view opId, std::string payload);
+};
+```
+
+`lookup()` engaged means "already decided"; the string is whatever `record()`
+stored, empty for a skip-only caller that only cares about the hit. Both an
+empty `scope` (the bare-key shape) and an empty `payload` (skip-only) are
+valid, ordinary values, not special cases — only an empty `opId` is refused:
+it is never reported as decided, in every conforming implementation, because
+an empty id is not an identity.
+
+**Why `include/morph` supplies the interface but never the table.**
+`grep -rl Lightweight include/morph/` returns nothing — the framework has no
+SQL dependency to open a connection with. Every existing occurrence stores its
+ledger row in the *same database and the same transaction* as the write it
+guards, so the check-then-set commits atomically with the operation's effect;
+a morph-owned store opening its own connection would break exactly that
+atomicity (morph#458 was this defect, shipped in two rungs, before this
+interface existed). So the table, the connection, and the transaction stay
+app-side, per rung — a concrete `IReplayLedger` is constructed over the
+model's *already-open* mapper/transaction (see
+`examples/bookmarks/include/bookmarks/offline/replay_ledger.hpp` for the
+reference shape) — and only the contract, plus
+`tests/replay_ledger_conformance.hpp` to check an implementation against it,
+is promoted.
+
+**No base class for consumers.** A model holds or is handed an
+`IReplayLedger&`; it never derives from one — every occurrence found before
+promotion was a free function or a plain member, and a base-class design would
+have been un-adoptable by all of them.
+
+**One mechanism, two response families.** The two shapes the seven occurrences
+split into — response-replay (kanban's/ledger's `StoreTransaction`, which
+returns the original stored result on a hit) and skip-only (lims's/
+bookmarks's/ledger's import path, which returns only "already applied,
+nothing to replay") — are not a fork in the interface. They are the same
+`lookup()` read by two different callers: what a hit *means* is the model's
+decision, not the ledger's. `morph::journal::IActionLog` already ships this
+exact contract for its own idempotency-key dedup (opaque key, non-empty keys
+only, a repeat is a silent no-op) — this is that decision made once, not
+re-litigated per rung.
 
 ### `IOfflineQueue`
 
