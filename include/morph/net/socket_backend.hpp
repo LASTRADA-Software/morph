@@ -112,11 +112,17 @@ public:
     }
 
     /// @brief Blocks the calling thread until connected or @p timeout elapses.
+    ///
+    /// @warning The backend must outlive this call. Destroying a
+    /// `SocketBackend` while a thread is parked here is undefined — the
+    /// destructor does not release parked waiters, and destroying
+    /// `_connectCv` underneath one is a data race. See
+    /// `docs/spec/core/backend.md`'s "Lifetime & ownership" section.
     /// @param timeout Maximum time to wait.
     /// @return `true` if connected before the timeout, `false` otherwise.
     bool waitForConnected(std::chrono::milliseconds timeout = std::chrono::milliseconds{5000}) {
         std::unique_lock lock{_connectMtx};
-        _connectCv.wait_for(lock, timeout, [this] { return _connected.load() || _shuttingDown.load(); });
+        _connectCv.wait_for(lock, timeout, [this] { return _connected.load(); });
         return _connected.load();
     }
 

@@ -1434,6 +1434,23 @@ are:
   alive via `shared_from_this()`. `closeConnection` erases the same map entries
   as an explicit `deregister`, so the same guarantee covers it: it never races a
   running `execute` into use-after-free, only prevents *new* lookups.
+- **A backend must outlive every call into it — destroying one while a thread
+  is parked inside it is undefined.** This is the same rule the destruction
+  ordering table in
+  [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#destruction-ordering--who-must-outlive-whom)
+  states for a call on a handler whose `Bridge` is gone; no backend is exempt
+  from it. It is worth spelling out for `morph::net::SocketBackend`, because
+  that is the one shipped backend whose blocking calls are safe to make from a
+  thread *other* than the one that owns it: `waitForConnected()` parks on a
+  condition variable, and `~SocketBackend` neither notifies nor waits for a
+  parked waiter, so destroying the backend from another thread destroys
+  `_connectCv` and the object's storage underneath one — a data race, whatever
+  the waiter's remaining timeout. A caller that wants to abandon a wait must
+  bound it with the `timeout` argument and let it return before destruction
+  begins; there is no cancel. (The `_shuttingDown` disjunct that used to sit in
+  `waitForConnected`'s predicate looked like an escape hatch for exactly this
+  and was not one — the destructor never notifies `_connectCv`, so it could not
+  reliably release anybody — and was removed as part of morph#455.)
 
 ## Failure modes
 
@@ -1685,7 +1702,7 @@ not a behavior change to the existing loopback-only default.
 | Method | Notes |
 |---|---|
 | `explicit SocketBackend(serverUrl, cfg = Config{})` | Parses `serverUrl` (`ws://` only — throws immediately on `wss://`) and starts the I/O thread, which connects asynchronously. |
-| `waitForConnected(timeout = 5000ms)` | Blocks the calling thread on a condition variable until connected or the timeout elapses; returns the current connected state. |
+| `waitForConnected(timeout = 5000ms)` | Blocks the calling thread on a condition variable until connected or the timeout elapses; returns the current connected state. The backend must outlive the call — destroying it while a thread is parked here is undefined, and there is no cancel (see Lifetime & ownership). |
 | `registerModel(typeId, factory)` | Synchronous via a parked condition variable; `factory` ignored. Throws on `err` reply or disconnect. Thread-safe, but only one such call may be in flight at a time. |
 | `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses so its unawaited `ok` cannot be handed to a parked synchronous control call (issue #454; the `QtWebSocketBackend` precedent is issue #65). Needs no pending-id bookkeeping of its own: `dispatchIncomingEnvelope` already drops a non-zero `callId` that is absent from `_pending`. |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. Thread-safe; supports concurrent in-flight calls from multiple threads. |
