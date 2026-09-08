@@ -1,5 +1,6 @@
 var dir_dc1b88453201f4f0afd0f2d336e9acaa =
 [
+    [ "detail", "dir_6c27b99953c4043724e909925b5929d0.html", "dir_6c27b99953c4043724e909925b5929d0" ],
     [ "backend.hpp", "d6/d5e/backend_8hpp_source.html", null ],
     [ "bridge.hpp", "d6/d1e/bridge_8hpp_source.html", null ],
     [ "callback_scope.hpp", "de/d2a/callback__scope_8hpp_source.html", null ],

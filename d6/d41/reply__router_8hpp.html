@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::bridge::NoSharing Struct Reference</title>
+<title>morph: morph/core/detail/reply_router.hpp File Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d38/structmorph_1_1bridge_1_1NoSharing.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d41/reply__router_8hpp.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,23 +117,35 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d38/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::bridge::NoSharing Struct Reference</div></div>
+  <div class="headertitle"><div class="title">reply_router.hpp File Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p><span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a></span> sharing policy: private, one instance per handler.  
- <a href="#details">More...</a></p>
-
-<p><code>#include &lt;<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>&gt;</code></p>
+<p>The callId-multiplexed <span class="tt">execute</span> reply router, shared by every backend that talks to a <span class="tt">RemoteServer</span> over a real (or simulated) connection.  
+<a href="#details">More...</a></p>
+<div class="textblock"><code>#include &lt;atomic&gt;</code><br />
+<code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;cstdint&gt;</code><br />
+<code>#include &lt;mutex&gt;</code><br />
+<code>#include &lt;optional&gt;</code><br />
+<code>#include &lt;unordered_map&gt;</code><br />
+<code>#include &lt;utility&gt;</code><br />
+<code>#include &quot;../wire.hpp&quot;</code><br />
+</div>
+<p><a href="../../d6/d41/reply__router_8hpp_source.html">Go to the source code of this file.</a></p>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p><span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a></span> sharing policy: private, one instance per handler. </p>
-<p>The default, and what every pre-existing call site gets. Such a handler registers its own instance at construction and never enters the shared directory, so two <span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a>&lt;M&gt;</span> objects are two independent models — byte-for-byte the behaviour morph has always had. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01830">1830</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
-</div><hr/>The documentation for this struct was generated from the following file:<ul>
-<li>morph/core/<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></li>
+<div class="textblock"><p>The callId-multiplexed <span class="tt">execute</span> reply router, shared by every backend that talks to a <span class="tt">RemoteServer</span> over a real (or simulated) connection. </p>
+<p>Two pieces live here, both extracted out of <span class="tt">net::SocketBackend</span> because they are a pure function of a decoded <span class="tt">wire::Envelope</span> and an in-memory map — no socket, no thread, no server — and so are worth testing directly rather than through a bound TCP port:</p>
+<ul>
+<li><span class="tt">classifyExecuteReply</span> — the ok/timeout/err triage. It had been open-coded three times (<span class="tt"><a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">net/socket_backend.hpp</a></span>, <span class="tt"><a class="el" href="../../d0/dfc/remote_8hpp_source.html">core/remote.hpp</a></span>'s <span class="tt">SimulatedRemoteBackend</span>, <span class="tt">src/qt/
+    qt_websocket_backend.cpp</span>) and the Qt copy had already drifted to a hand-typed <span class="tt">"timeout"</span> literal, which is exactly the drift <span class="tt">wire::kExecuteTimeoutMessage</span> exists to prevent.</li>
+<li><span class="tt">PendingCallTable</span> — call-id allocation plus the pending-completion map, with the admit-under-lock insert that closes the insert/disconnect-sweep race.</li>
 </ul>
-</div><!-- contents -->
+<dl class="section user"><dt>Why <span class="tt">core/detail/</span> and not <span class="tt">net/detail/</span></dt><dd><span class="tt"><a class="el" href="../../d0/dfc/remote_8hpp_source.html">core/remote.hpp</a></span> is one of the consumers and ships in the base <span class="tt">morph</span> target's installed header set, whereas everything under <span class="tt">include/morph/
+net/</span> belongs to the optional <span class="tt">morph_net</span> target (<span class="tt">MORPH_BUILD_NET</span>, default <span class="tt">OFF</span>). A <span class="tt">core/</span> header including a <span class="tt">net/</span> one would therefore install a <span class="tt"><a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a></span> that cannot find its own include whenever net is off — the same breakage morph#232 fixed for <span class="tt"><a class="el" href="../../d9/db8/quantity_8hpp.html" title="Unit-tagged, optionally-empty exact values with a derivation trail.">quantity.hpp</a></span>. Living under <span class="tt">core/detail/</span> keeps the dependency pointing the one direction it already points (<span class="tt">net</span> → <span class="tt">core</span>). </dd></dl>
+
+<p class="definition">Definition in file <a class="el" href="../../d6/d41/reply__router_8hpp_source.html">reply_router.hpp</a>.</p>
+</div></div><!-- contents -->
 </div><!-- doc-content -->
 <div id="page-nav" class="page-nav-panel">
 <div id="page-nav-resize-handle"></div>
@@ -146,7 +158,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d38/structm
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>bridge</b></li><li class="navelem"><a href="../../d8/d38/structmorph_1_1bridge_1_1NoSharing.html">NoSharing</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>core</b></li><li class="navelem"><b>detail</b></li><li class="navelem"><a href="../../d6/d41/reply__router_8hpp.html">reply_router.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

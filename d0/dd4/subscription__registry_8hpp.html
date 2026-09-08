@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::bridge::NoSharing Struct Reference</title>
+<title>morph: morph/core/detail/subscription_registry.hpp File Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d38/structmorph_1_1bridge_1_1NoSharing.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/dd4/subscription__registry_8hpp.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,23 +117,32 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d38/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::bridge::NoSharing Struct Reference</div></div>
+  <div class="headertitle"><div class="title">subscription_registry.hpp File Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p><span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a></span> sharing policy: private, one instance per handler.  
- <a href="#details">More...</a></p>
-
-<p><code>#include &lt;<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>&gt;</code></p>
+<p>Per-<span class="tt">Bridge</span> instance-subscription bookkeeping, extracted out of <span class="tt">Bridge</span>.  
+<a href="#details">More...</a></p>
+<div class="textblock"><code>#include &lt;any&gt;</code><br />
+<code>#include &lt;atomic&gt;</code><br />
+<code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;functional&gt;</code><br />
+<code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;mutex&gt;</code><br />
+<code>#include &lt;typeindex&gt;</code><br />
+<code>#include &lt;utility&gt;</code><br />
+<code>#include &lt;vector&gt;</code><br />
+<code>#include &quot;../executor.hpp&quot;</code><br />
+<code>#include &quot;../strand.hpp&quot;</code><br />
+</div>
+<p><a href="../../d0/dd4/subscription__registry_8hpp_source.html">Go to the source code of this file.</a></p>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p><span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a></span> sharing policy: private, one instance per handler. </p>
-<p>The default, and what every pre-existing call site gets. Such a handler registers its own instance at construction and never enters the shared directory, so two <span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a>&lt;M&gt;</span> objects are two independent models — byte-for-byte the behaviour morph has always had. </p>
+<div class="textblock"><p>Per-<span class="tt">Bridge</span> instance-subscription bookkeeping, extracted out of <span class="tt">Bridge</span>. </p>
+<p><span class="tt">Bridge</span>'s subscription set (<span class="tt">InstanceSubscription</span> before this extraction, <span class="tt">_subMtx</span>/<span class="tt">_subscriptions</span>/<span class="tt">_subscriptionCount</span>, and <span class="tt">addSubscription</span>/<span class="tt">removeSubscription</span>/<span class="tt">hasSubscribers</span>/<span class="tt">publishResult</span> &ndash; all <span class="tt">private</span>) is a standalone match-and-prune data structure that was trapped inside <span class="tt">Bridge</span> alongside five other, unrelated mutex-guarded concerns. Its contract &ndash; register at most one callback per (binding, result type); match at publish time on the binding's <em>current</em> instance, not a fixed one, so a re-pointed handler's subscriptions follow it; prune entries whose binding has been destroyed without an explicit unsubscribe &ndash; touches no backend, no session, no handler registry, and is expressible without <span class="tt">Bridge</span> at all.</p>
+<p>This is a faithful, behavior-preserving port of the logic that used to live directly on <span class="tt">Bridge</span>: same locking, same fields, same semantics. Nothing here is new logic. The one structural change from a plain extraction is that this class is templated on the binding type (<span class="tt">Bridge</span> instantiates it with <span class="tt">morph::bridge::detail::HandlerBinding</span>, which is itself defined inside <span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></span>) rather than naming <span class="tt">HandlerBinding</span> directly &ndash; unlike <span class="tt">ExecuteOrderGate</span>'s <span class="tt">ModelId</span>, which already lived in its own header, <span class="tt">HandlerBinding</span> is defined inline in <span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></span> with no header of its own, and a non-template class here would have to either forward-declare it (making this header silently depend on include order to compile) or pull in a <span class="tt">HandlerBinding</span> header that does not exist. Templating avoids both: the class body only touches <span class="tt">Binding</span>'s members (<span class="tt">currentId</span>) inside function templates, so nothing about <span class="tt">Binding</span>'s shape needs to be known until <span class="tt">Bridge</span> instantiates this with the real <span class="tt">HandlerBinding</span>, by which point it is a complete type. It also means this header can be unit-tested against a lightweight stand-in binding with no dependency on <span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></span> at all, though the test suite happens to use the real <span class="tt">HandlerBinding</span> since it is already available wherever <span class="tt">Bridge</span> is being tested. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01830">1830</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
-</div><hr/>The documentation for this struct was generated from the following file:<ul>
-<li>morph/core/<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></li>
-</ul>
-</div><!-- contents -->
+<p class="definition">Definition in file <a class="el" href="../../d0/dd4/subscription__registry_8hpp_source.html">subscription_registry.hpp</a>.</p>
+</div></div><!-- contents -->
 </div><!-- doc-content -->
 <div id="page-nav" class="page-nav-panel">
 <div id="page-nav-resize-handle"></div>
@@ -146,7 +155,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d38/structm
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>bridge</b></li><li class="navelem"><a href="../../d8/d38/structmorph_1_1bridge_1_1NoSharing.html">NoSharing</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>core</b></li><li class="navelem"><b>detail</b></li><li class="navelem"><a href="../../d0/dd4/subscription__registry_8hpp.html">subscription_registry.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

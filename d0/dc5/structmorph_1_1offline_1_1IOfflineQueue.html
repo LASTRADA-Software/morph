@@ -240,7 +240,9 @@ Protected Member Functions</h2></td></tr>
 </ul>
 </dd></dl>
 <p>These guarantees are pinned for every shipped implementation by <span class="tt">tests/offline_queue_conformance.hpp</span>, which is told which policy each implementation has and asserts it.</p>
-<p>The default implementation delegates to <span class="tt">enqueue(std::move(payload))</span> and then stamps the key via <span class="tt"><a class="el" href="#ab3e24454f2625fcd447f76d9ed0fd820" title="Stamps an idempotency key onto an already-enqueued item.">setIdempotencyKey</a></span>, so existing <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span> implementations keep working without overriding it. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>The default implementation delegates to <span class="tt">enqueue(std::move(payload))</span> and then stamps the key via <span class="tt"><a class="el" href="#ab3e24454f2625fcd447f76d9ed0fd820" title="Stamps an idempotency key onto an already-enqueued item.">setIdempotencyKey</a></span>, so existing <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span> implementations keep working without overriding it.</p>
+<dl class="section user"><dt>Non-atomicity of this default (implementors, read this)</dt><dd>This default makes <b>two separate virtual calls</b> (<span class="tt">enqueue(payload)</span>, then <span class="tt">setIdempotencyKey(itemId, key)</span>), each independently locking and unlocking whatever internal mutex the concrete class uses — nothing is held across both calls. A concurrent <span class="tt">markDone(itemId)</span> racing in the window between them could erase the item before the key is stamped (silently dropping the key rather than throwing), and a concurrent <span class="tt"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> in that same window can observe the item with an <em>empty</em> idempotency key. A subclass that stores keys and cares about atomicity <b>must override the two-argument <span class="tt"><a class="el" href="#a580ca19c41a025fd3a6f45f2f7fb9490" title="Appends payload to the queue with no idempotency key.">enqueue</a></span></b> and stamp the key under the same lock acquisition that inserts the item, exactly as every implementation morph ships already does (<span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span>, <span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="Thread-safe in-memory implementation of IOfflineQueue.">InMemoryOfflineQueue</a></span>, <span class="tt"><a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html" title="Reference SQLite-backed IOfflineQueue: persists payload, idempotencyKey, and attempts across process ...">SqliteOfflineQueue</a></span> all override it inline) — this base default exists only so a subclass that has not been updated yet keeps compiling and working for the non-concurrent case, not as an atomicity guarantee. </dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">payload</td><td>Serialised action to persist. </td></tr>
     <tr><td class="paramname">idempotencyKey</td><td>Stable dedup token for the logical op; may be empty. </td></tr>
@@ -251,7 +253,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#afa95d94e2a430047b9252c0f52d65fce">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a09bb85941338ca833b3815a9e77f2380">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa3342ce935ef2cae8b2c7390c00d9175">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00175">175</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -348,7 +350,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af96a2cf6553f3a44390fe07629b2d4a2">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a60f482c2c96bcedf88298b9f4357d9f0">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00185">185</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -380,7 +382,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a1fdfff80a8b535fb2c19621d6cf13d4e">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#af3f1c800c9e4e8030dc28ffc0fc3cdf3">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00192">192</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -422,7 +424,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#ae9a56e0f6a28daa3e4047ae8ecc052f5">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a5c7f807ec5cddac608f8da633188b40d">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00206">206</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -464,7 +466,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af6a72b2805560d317866b924d4cb8039">morph::offline::FileOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
