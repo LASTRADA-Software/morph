@@ -25,10 +25,25 @@
 /// (`examples/lims/include/lims/core/self_journal.hpp`) — one place crm's
 /// five models share it, rather than each hand-rolling a sixth copy.
 ///
-/// It also records **failures**: crm's field-level audit history (README
-/// build order §6) needs to show a rejected attempt, not just successful
-/// mutations, so a rejected action appends an entry with `Outcome::Failed`
-/// and the exception text rather than vanishing.
+/// **crm's audit trail records successful mutations.** The lims copy this
+/// header is modelled on also records rejected *actions*, because a 21 CFR
+/// Part 11-style trail has to show the attempt; crm has no such requirement
+/// — README build order §6 asks for field-level history and undo, and says
+/// nothing about retaining refused attempts — and crm's two consumers of the
+/// trail are outcome-blind: `GetAccountHistory` does not test `outcome`, and
+/// `UndoLastAccountChange` extracts field values falling back to
+/// `entry.payload`, which on a `Failed` entry holds the values that were
+/// refused. So no crm model wraps an action in a catch-and-`recordFailure`;
+/// `recordFailure()` below is part of the shared shape, unused today, and
+/// adding call sites for it means giving those two consumers an outcome
+/// first. `tests/test_convert_lead.cpp`'s "Crash-between-legs" case asserts
+/// this from the outside: a refused conversion leaves the log unchanged,
+/// not even a `Failed` entry.
+///
+/// The one failure crm does record is the offline replay path (README build
+/// order §8): a queued item whose payload cannot be decoded back into an
+/// action is journaled via `recordRejectedPayload()` and dropped, rather
+/// than being left to block the queue.
 
 namespace crm {
 
