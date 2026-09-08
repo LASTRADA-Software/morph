@@ -126,7 +126,7 @@ has fired once so far:
   because `include/morph` has no dependency on any SQL library and the
   check-then-set must commit in the same transaction as the write it guards
   (see the interface's own doc comment). `bookmarks` is migrated onto it
-  (`examples/bookmarks/include/bookmarks/offline/replay_ledger.hpp`); the
+  (`BookmarksReplayLedger` in `examples/bookmarks/src/models/bookmark_model.cpp`); the
   other four rungs are follow-up work, not required by this promotion.
 
 ## Demotion policy (the ladder must never tax the framework)

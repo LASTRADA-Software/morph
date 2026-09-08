@@ -1368,6 +1368,10 @@ public:
     ///         (including `ValidationError` on `LocalBackend` when the action
     ///         fails its validator).
     template <typename Model, typename Action>
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity) -- dispatch function with a carefully
+    // reasoned safety argument threaded through its branches (see the .then/.onError comments below);
+    // extracting helpers would separate that reasoning from the code it justifies more than it would
+    // simplify either half. Same treatment as remote.hpp's comparably-shaped dispatch functions.
     ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> executeVia(
         const std::shared_ptr<detail::HandlerBinding>& binding, Action action, ::morph::exec::IExecutor* cbExec,
         std::function<void(const typename ::morph::model::ActionTraits<Action>::Result&)> onResult = {}) {
@@ -1534,7 +1538,7 @@ public:
                 if (deadlineHandle && schedulerRef) {
                     try {
                         schedulerRef->cancel(*deadlineHandle);
-                    } catch (...) {
+                    } catch (...) {  // NOLINT(bugprone-empty-catch)
                         // Best-effort: a failed cancel leaves the deadline's own
                         // entry to fire later and find nothing (setValue/
                         // setException below are idempotent), which is exactly
@@ -1623,7 +1627,7 @@ public:
                 if (deadlineHandle && schedulerRef) {
                     try {
                         schedulerRef->cancel(*deadlineHandle);
-                    } catch (...) {
+                    } catch (...) {  // NOLINT(bugprone-empty-catch)
                         // Best-effort: a failed cancel leaves the deadline's own
                         // entry to fire later and find nothing (setValue/
                         // setException below are idempotent), which is exactly

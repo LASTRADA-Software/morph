@@ -126,14 +126,20 @@ struct IReplayLedger {
     }
 
 protected:
-    /// @brief Storage hook for `lookup()`. @p opId is never empty here — the
-    ///        public wrapper already handled that case.
+    /// @brief Storage hook for `lookup()`.
+    /// @param scope Caller-chosen partition, forwarded verbatim from `lookup()`.
+    /// @param opId  The operation id to look up; never empty here -- the
+    ///              public wrapper already handled that case.
+    /// @return The payload recorded with @p opId, or `std::nullopt` if none.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
     [[nodiscard]] virtual std::optional<std::string> doLookup(std::string_view scope, std::string_view opId) const = 0;
 
-    /// @brief Storage hook for `record()`. @p opId is never empty here — the
-    ///        public wrapper already handled that case. Must be a no-op if
-    ///        @p scope/@p opId is already recorded (first-write-wins).
+    /// @brief Storage hook for `record()`. Must be a no-op if @p scope/@p opId
+    ///        is already recorded (first-write-wins).
+    /// @param scope   Caller-chosen partition, forwarded verbatim from `record()`.
+    /// @param opId    The operation id being recorded; never empty here -- the
+    ///                public wrapper already handled that case.
+    /// @param payload Opaque payload to associate with @p opId.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
     virtual void doRecord(std::string_view scope, std::string_view opId, std::string payload) = 0;
 };
@@ -151,16 +157,25 @@ protected:
 /// write it guards.
 class InMemoryReplayLedger : public IReplayLedger {
 protected:
+    /// @brief Looks up @p opId within @p scope in the in-memory map.
+    /// @param scope Caller-chosen partition.
+    /// @param opId  The operation id to look up; never empty here.
+    /// @return The payload recorded with @p opId, or `std::nullopt` if none.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
     [[nodiscard]] std::optional<std::string> doLookup(std::string_view scope, std::string_view opId) const override {
         std::scoped_lock const lock{_mtx};
-        auto iter = _entries.find(Key{std::string{scope}, std::string{opId}});
+        auto const iter = _entries.find(Key{std::string{scope}, std::string{opId}});
         if (iter == _entries.end()) {
             return std::nullopt;
         }
         return iter->second;
     }
 
+    /// @brief Records @p opId within @p scope in the in-memory map, unless
+    ///        already present (first-write-wins).
+    /// @param scope   Caller-chosen partition.
+    /// @param opId    The operation id being recorded; never empty here.
+    /// @param payload Opaque payload to associate with @p opId.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
     void doRecord(std::string_view scope, std::string_view opId, std::string payload) override {
         std::scoped_lock const lock{_mtx};

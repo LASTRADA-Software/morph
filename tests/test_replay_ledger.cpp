@@ -47,7 +47,7 @@ TEST_CASE("morph::test::checkReplayLedgerContract rejects a no-op ledger", "[rep
 
 TEST_CASE("InMemoryReplayLedger: two independent instances do not share state", "[replay_ledger]") {
     morph::offline::InMemoryReplayLedger first;
-    morph::offline::InMemoryReplayLedger second;
+    const morph::offline::InMemoryReplayLedger second;
     first.record("scope", "k", "payload");
     CHECK(first.lookup("scope", "k").has_value());
     CHECK_FALSE(second.lookup("scope", "k").has_value());

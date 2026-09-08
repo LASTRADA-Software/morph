@@ -157,11 +157,13 @@ struct EBOnePastNegativeLimitAction {
 // onto the property node (test_forms_field_bounds.cpp's
 // HugePositiveMinimumGetsAnExactTextCompanion confirms the same node), so
 // that is the node to check.
-[[nodiscard]] static const glz::generic& readingProperty(const glz::generic& root) {
+namespace {
+[[nodiscard]] const glz::generic& readingProperty(const glz::generic& root) {
     // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
     return root["properties"]["reading"];
     // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 }
+}  // namespace
 
 TEST_CASE("schemaJson omits the exact companion for a minimum exactly at the positive limit", "[forms][bounds]") {
     auto const schema = morph::forms::schemaJson<EBAtPositiveLimitAction>();

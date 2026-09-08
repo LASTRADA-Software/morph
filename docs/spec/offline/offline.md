@@ -222,9 +222,12 @@ a morph-owned store opening its own connection would break exactly that
 atomicity (morph#458 was this defect, shipped in two rungs, before this
 interface existed). So the table, the connection, and the transaction stay
 app-side, per rung — a concrete `IReplayLedger` is constructed over the
-model's *already-open* mapper/transaction (see
-`examples/bookmarks/include/bookmarks/offline/replay_ledger.hpp` for the
-reference shape) — and only the contract, plus
+model's *already-open* mapper/transaction (see `BookmarksReplayLedger` in
+`examples/bookmarks/src/models/bookmark_model.cpp` for the reference shape —
+a file-local class, not its own header: it has exactly one consumer, and a
+header with no translation unit of its own has no `compile_commands.json`
+entry, which cost the first version of this exactly the tooling problem it
+now avoids) — and only the contract, plus
 `tests/replay_ledger_conformance.hpp` to check an implementation against it,
 is promoted.
 
