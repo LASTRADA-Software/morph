@@ -622,7 +622,13 @@ root `CMakeLists.txt` — don't repeat that eight times):
   gui_wasm,tests,headless}` with `catch_discover_tests` + ctest labels
   (`ladder`, `ladder-<rung>` — Catch2's own tags like `[stress]`/`[tsan]`
   are not translated into ctest labels anywhere in this repo; select on
-  them with `ctest -R` against the test name instead), warnings and
+  them with `ctest -R` against the test name instead), a `TEST_PREFIX` of
+  `<rung>.` on every discovered ctest name (a ctest name is global to the
+  build tree, so two rungs sharing a `TEST_CASE` name used to give
+  `ctest -L ladder-<rung>` another rung's cases as well as its own —
+  morph#464; `scripts/check_ctest_name_collisions.sh` is the gate that keeps
+  the names distinct, and note the prefix reaches the *ctest* entry only, so
+  `ctest -R` still matches the bare test name), warnings and
   sanitizers **applied to all app code** (bank skips both repo-wide because
   its ORM headers aren't `-Werror`-clean — the ladder scopes any such
   relaxation to the `db/` entity targets only, since persistence goes

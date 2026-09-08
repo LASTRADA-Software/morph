@@ -152,6 +152,32 @@ jobs:
       - name: Self-test the AUTOMOC-include checker
         run: bash scripts/test_check_automoc_includes.sh
 
+  # ── The duplicate-ctest-name gate's own self-test ──────────────────────
+  # The gate itself (scripts/check_ctest_name_collisions.sh) runs after the
+  # build in ci.yml's ladder-tests job, because it asks ctest what it would
+  # run and so needs a configured, test-registered tree. Its self-test needs
+  # none of that -- it feeds the checker hand-written
+  # `ctest --show-only=json-v1` documents, plus one throwaway two-directory
+  # CMake project -- so it runs here, in seconds, and still reports when that
+  # build fails.
+  #
+  # Same reasoning as every other gate in this file: the defect is a silence.
+  # A ctest name is global to the build tree, so two rung test binaries
+  # sharing a TEST_CASE name produce two entries that every by-name operation
+  # addresses at once -- and `set_tests_properties` APPENDS labels, so one
+  # entry accumulated the other rung's label and `ctest -L ladder-<rung>` ran
+  # another rung's binary alongside its own (morph#464: crm reported on 180
+  # cases while owning 168). A label filter that selects the wrong set reports
+  # green exactly as loudly as one that selects the right one.
+  ctest-name-collision-lint:
+    name: Duplicate-ctest-name checker self-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the duplicate-ctest-name checker
+        run: bash scripts/test_check_ctest_name_collisions.sh
+
   # ── The coverage-object gate's own self-test ───────────────────────────
   # The gate itself (scripts/check_coverage_objects.sh) runs inside
   # scripts/coverage.sh, in ci.yml's linux-coverage job, because it compares the

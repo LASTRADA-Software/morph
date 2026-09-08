@@ -19,13 +19,30 @@
 #   tests/*.cpp                                     -> ladder_<rung>_tests    EXE    (Catch2; skipped under Emscripten)
 #   src/headless/*.cpp                              -> ladder_<rung>_headless EXE    (QProcess test-client binary, rung 4+)
 #
-# Every ctest case discovered from ladder_<rung>_tests gets the single label
-# "ladder-<rung>", applied by catch_discover_tests itself. CI selects with
-# `ctest -L ladder` (.github/workflows/ci.yml, job ladder-tests), which still
-# matches: ctest's -L takes a regex, not an exact label. End-to-end journeys
-# additionally get "journey" from a small generated post-pass. See the
-# catch_discover_tests call below for why the label cannot be a two-value
-# LABELS, and why the rung label is not applied by the post-pass (morph#173).
+# Every ctest case discovered from ladder_<rung>_tests is registered under the
+# name "<rung>.<TEST_CASE name>" and gets the single label "ladder-<rung>",
+# both applied by catch_discover_tests itself (TEST_PREFIX and PROPERTIES on
+# the call below). CI selects with `ctest -L ladder`
+# (.github/workflows/ci.yml, job ladder-tests), which still matches: ctest's
+# -L takes a regex, not an exact label. End-to-end journeys additionally get
+# "journey" from a small generated post-pass. See the catch_discover_tests
+# call below for why the label cannot be a two-value LABELS, and why the rung
+# label is not applied by the post-pass (morph#173).
+#
+# The name prefix is what makes each case's ctest entry unique. A ctest name
+# is global to the build tree -- not scoped to the target or the directory it
+# was discovered from -- and rungs share TEST_CASE names freely, mostly
+# through the App/auth/forms scaffolding they all exercise. Two entries under
+# one name are both reached by every by-name operation, and
+# `set_tests_properties(<name> PROPERTIES LABELS ...)` is one of them: CTest
+# *appends* labels, so the first-registered entry accumulated later rungs'
+# labels too and `ctest -L ladder-<rung>` over-selected -- running another
+# rung's binary alongside its own, with nothing to say so (morph#464: crm
+# selected 180 cases while owning 168). A failure line, `--output-junit` and
+# CDash also identify a test by name alone, so a duplicate could not say which
+# binary failed. scripts/check_ctest_name_collisions.sh is the gate that keeps
+# this property true; ci.yml's ladder-tests job runs it on the all-rungs
+# build, which is the only place a cross-rung collision can exist.
 #
 # RESOURCE_LOCK is the literal string "morph_ladder_test_db" for every rung's
 # tests, matching examples/common's own ladder_common_tests — deliberately
@@ -513,6 +530,18 @@ function(morph_add_rung)
             cmake_path(GET _qt_core_dll PARENT_PATH _qt_bin_dir)
             catch_discover_tests(ladder_${_rung}_tests
                 DISCOVERY_MODE POST_BUILD
+                # "<rung>." on every discovered ctest name, so no two rungs'
+                # entries can share one (morph#464 -- see the header comment
+                # for what a shared name did to `ctest -L ladder-<rung>`).
+                # One word, no space and no `;`: TEST_PREFIX rides the same
+                # `-D VAR=...` channel as PROPERTIES below, whose flattening
+                # the comment there documents. Catch2 prefixes the *ctest*
+                # name only -- the filter argument it passes back to the
+                # binary stays the unprefixed test name
+                # (CatchAddTests.cmake's `escaped_name`), so this changes
+                # nothing about which case each entry runs, and it is not a
+                # fix for the `~`-prefix hazard morph#466 covers.
+                TEST_PREFIX "${_rung}."
                 DL_PATHS "${_qt_bin_dir}"
                 # One label, not two, and the *rung* one. catch_discover_tests
                 # forwards PROPERTIES as a flat CMake list through a
@@ -548,8 +577,14 @@ function(morph_add_rung)
             # that go quiet the way morph#173 did, it is rejected at configure
             # time by the guard below.
             #
-            # set_tests_properties *replaces* LABELS rather than appending, so
-            # the journey branch restates the rung label alongside `journey`.
+            # set_tests_properties *appends* to LABELS rather than replacing
+            # them -- the same append that let two same-named ctest entries
+            # accumulate each other's rung labels (morph#464). The journey
+            # branch restates the rung label alongside `journey` anyway: the
+            # resulting repeat of `ladder-<rung>` is inert (`-L` asks whether
+            # a label is present, not how often), and restating it keeps the
+            # branch correct without depending on which of the two behaviours
+            # CTest has.
             foreach(_journey_src IN LISTS _test_sources)
                 file(STRINGS "${_journey_src}" _bad_journey_names
                      REGEX "TEST_CASE\\(\"Journey: [^\"]*;")
