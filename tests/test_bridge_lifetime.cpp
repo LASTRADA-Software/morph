@@ -400,9 +400,11 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
     // obtained via `mmap`, manually destroyed in place (not `delete` -- the
     // memory isn't heap-owned), and the page is then `mprotect`'d to
     // `PROT_NONE`. `hasSubscribers()` is a member function call that
-    // dereferences `this` to read `_subscriptionCount`; pre-fix, that
-    // dereference lands on a `PROT_NONE` page and faults immediately, before
-    // it can return any value at all.
+    // dereferences `this` to read its `SubscriptionRegistry` member's
+    // relaxed-atomic count (formerly `Bridge`'s own `_subscriptionCount`,
+    // before Task 13b's extraction); pre-fix, that dereference lands on a
+    // `PROT_NONE` page and faults immediately, before it can return any
+    // value at all.
     //
     // The fault is recovered in-process via `sigsetjmp`/`siglongjmp` (see
     // `guardPageFaultHandler` above) rather than relying on Catch2's built-in
@@ -522,3 +524,26 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
     REQUIRE(munmap(region, pageSize) == 0);
 }
 #endif  // !defined(_WIN32)
+
+// ── Coverage: setDefaultSession on a Bridge constructed with a null backend ──
+//
+// Bridge's constructor explicitly tolerates a null initial backend (see its
+// own doc comment: "there is nothing yet to stamp a session onto"), and
+// setDefaultSession's `if (backend) { backend->setSession(...); }` guard
+// exists precisely so a later call on such a bridge does not dereference a
+// null backend pointer. A couple of existing tests construct `Bridge{nullptr}`
+// for other reasons (test_coverage_push95.cpp), but none of them go on to
+// call setDefaultSession, so this guard's `false` arm was never exercised.
+TEST_CASE("Bridge::setDefaultSession is a safe no-op on a Bridge with no active backend",
+          "[bridge][lifetime][null-backend]") {
+    morph::bridge::Bridge bridge{nullptr};
+
+    ::morph::session::Context ctx;
+    ctx.principal = "no-backend-yet";
+    REQUIRE_NOTHROW(bridge.setDefaultSession(ctx));
+
+    // The session is still recorded for whenever a real backend arrives later
+    // (e.g. via switchBackend()) -- setDefaultSession's own doc comment says
+    // this default applies to "all subsequent calls".
+    CHECK(bridge.defaultSession().principal == "no-backend-yet");
+}

@@ -1,5 +1,88 @@
-# Suppress bugprone-chained-comparison inside the tests/ directory.
+# Checks suppressed inside tests/ only. Every entry below is a check whose
+# finding is *test idiom* — a property of Catch2 or of a raw-syscall harness —
+# rather than a defect. Checks whose findings turned out to be real problems
+# were fixed in the test sources instead of being listed here; in particular
+# misc-const-correctness, readability-container-contains,
+# cppcoreguidelines-special-member-functions, performance-unnecessary-value-param
+# and bugprone-empty-catch are deliberately still enabled here.
+#
+# One entry per check, with the reason it cannot fire on anything worth fixing.
+
 # Catch2's REQUIRE(a == b) macro expansion is parsed by clang-tidy as a
 # chained comparison. This is a false positive — not a real code issue.
-Checks: '-bugprone-chained-comparison'
+
+# bugprone-unchecked-optional-access: clang-tidy's dataflow model cannot see
+# through Catch2's REQUIRE. Verified directly: in a file where
+# `if (!opt.has_value()) { return; }` followed by `opt->x` produces no finding,
+# `REQUIRE(opt.has_value());` followed by the same `opt->x` is flagged exactly
+# as an unguarded access is — and so are `*opt`, `opt.value()` and a reference
+# bound from `opt.value()`. Every hit in tests/ is an access on the line after
+# a REQUIRE(...has_value()), so the check has no signal left here to keep.
+
+# cppcoreguidelines-pro-bounds-avoid-unchecked-container-access: same blind
+# spot one level up — these are `dom["key"]` on the line after
+# REQUIRE(dom.contains("key")), and `wire[1]` after a REQUIRE on the frame's
+# length. The bound is established by the assertion the check cannot read.
+
+# readability-identifier-length: the POSIX socket tests are written in the
+# vocabulary of the API they drive — `fd`, `l` (listener), `tv` (timeval),
+# `t0`/`t1`/`t2` for ordering timestamps, `go` for a start latch. Spelling
+# those out makes the syscall sequence harder, not easier, to follow.
+
+# misc-use-internal-linkage: every hit is a Catch2 fixture — a model, action,
+# result or form struct used only by the TEST_CASEs beside it — and the fix-it
+# it proposes does not compile. BRIDGE_REGISTER_MODEL/ACTION expand to
+# `template <> struct morph::model::ModelTraits<M> {...}`, and an explicit
+# specialisation written with a qualified name must appear in a namespace
+# enclosing `morph::model`; from inside an anonymous namespace clang rejects it
+# with "class template specialization of 'ModelTraits' not in a namespace
+# enclosing 'model'". glaze's reflection-based get_name() likewise needs these
+# types to have external linkage — see the comment at the top of
+# tests/net/test_socket_server.cpp. Cross-file collision is handled instead by
+# the per-file name prefixes (WireSchemas*, RegSchemaForge*, FB*, QF*, ...).
+
+# readability-named-parameter: the unnamed parameters are all in stub overrides
+# whose bodies ignore them — the signature exists to satisfy an interface, and
+# leaving the name off is how a reader is told the argument is unused.
+
+# readability-function-cognitive-complexity: measures a whole TEST_CASE body
+# (clang-tidy reports these as Catch2's own `dummyFunctionNN`). A test that
+# sets up a server, drives a protocol sequence and asserts along the way scores
+# high by construction; splitting it to satisfy the metric would scatter one
+# scenario across helpers. The check stays on for src/ and include/.
+
+# readability-convert-member-functions-to-static: fires on the `execute` methods
+# of fixture models. A stub action handler ignores its own state, which is
+# exactly what a production model never does — the non-static signature is the
+# interface morph's registry dispatches through, not an oversight.
+
+# cppcoreguidelines-pro-type-vararg: `::fcntl`, `::setsockopt` and friends are
+# variadic by POSIX's design. include/morph/net carries a per-site NOLINT for
+# the two or three places it makes such a call; tests/net exists to drive the
+# raw API and makes them everywhere.
+
+# cppcoreguidelines-avoid-c-arrays / modernize-avoid-c-arrays and
+# cppcoreguidelines-pro-bounds-array-to-pointer-decay: `char buf[4096]` handed
+# to `recvSome(buf, sizeof(buf))` is the shape the read syscall wrapper takes.
+
+# bugprone-misplaced-widening-cast: `static_cast<rlim_t>(n + 1)` when filling in
+# an `rlimit` for setrlimit(). The widening is the point — rlim_t is the field's
+# type — and the arithmetic is on values small enough that the check's "loss of
+# precision before the conversion" cannot occur.
+
+Checks: >
+  -bugprone-chained-comparison,
+  -bugprone-unchecked-optional-access,
+  -bugprone-misplaced-widening-cast,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+  -cppcoreguidelines-pro-type-vararg,
+  -misc-use-internal-linkage,
+  -modernize-avoid-c-arrays,
+  -readability-convert-member-functions-to-static,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-named-parameter
+
 InheritParentConfig: true

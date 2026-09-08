@@ -179,3 +179,64 @@ TEST_CASE("morph::async::Completion::makeSettleable: reject(nullptr) settles the
     completion.onError([&](const std::exception_ptr& exc) { secondCount += (exc != nullptr) ? 1 : 0; });
     CHECK(secondCount == 1);
 }
+
+// ── CP1/CP2: resolve()/reject() on a moved-from Promise are safe no-ops ─────
+//
+// `Promise<T>` is move-only (mirroring `Completion<T>`). The default-generated
+// move constructor leaves the moved-from object's `_state` null, and both
+// `resolve()`/`reject()` document this as a no-op -- but no existing test
+// actually moves a `Promise` and then calls a method on the object left
+// behind.
+
+TEST_CASE("morph::async::Completion::makeSettleable: resolve() on a moved-from Promise is a no-op",
+          "[completion][promise]") {
+    SyncExec exec;
+    auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&exec);
+
+    auto movedTo = std::move(promise);  // `promise`'s _state is now null
+
+    int received = -1;
+    int fires = 0;
+    completion.then([&](int val) {
+        received = val;
+        ++fires;
+    });
+
+    // NOLINTNEXTLINE(bugprone-use-after-move,hicpp-invalid-access-moved) -- exactly what CP1 tests.
+    REQUIRE_NOTHROW(promise.resolve(-1));  // moved-from: must not touch the shared state
+    CHECK(fires == 0);
+
+    movedTo.resolve(42);  // the real settle, through the promise that still owns the state
+    CHECK(fires == 1);
+    CHECK(received == 42);
+
+    // The moved-from Promise staying inert also means it cannot double-settle
+    // what the moved-to one already resolved.
+    // NOLINTNEXTLINE(bugprone-use-after-move,hicpp-invalid-access-moved)
+    REQUIRE_NOTHROW(promise.resolve(-2));
+    CHECK(fires == 1);
+    CHECK(received == 42);
+}
+
+TEST_CASE("morph::async::Completion::makeSettleable: reject() on a moved-from Promise is a no-op",
+          "[completion][promise]") {
+    SyncExec exec;
+    auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&exec);
+
+    auto movedTo = std::move(promise);  // `promise`'s _state is now null
+
+    int errorCount = 0;
+    completion.onError([&](const std::exception_ptr&) { ++errorCount; });
+
+    // NOLINTNEXTLINE(bugprone-use-after-move,hicpp-invalid-access-moved) -- exactly what CP2 tests.
+    REQUIRE_NOTHROW(promise.reject(std::make_exception_ptr(std::runtime_error{"moved-from, must be ignored"})));
+    CHECK(errorCount == 0);
+
+    movedTo.reject(std::make_exception_ptr(std::runtime_error{"real rejection"}));
+    CHECK(errorCount == 1);
+
+    // Still inert afterwards: does not double-settle the already-rejected completion.
+    // NOLINTNEXTLINE(bugprone-use-after-move,hicpp-invalid-access-moved)
+    REQUIRE_NOTHROW(promise.reject(std::make_exception_ptr(std::runtime_error{"still ignored"})));
+    CHECK(errorCount == 1);
+}

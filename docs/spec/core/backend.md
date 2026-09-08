@@ -476,9 +476,12 @@ opposite order from the one they were sent in. That is a correctness problem
 for any model whose actions are not commutative, and it is invisible in a quiet
 run: it needs two workers genuinely concurrent to appear at all.
 
-`RemoteServer` closes it with a per-model ticket gate (`_executeGates`,
-`takeExecuteTicket`, `awaitExecuteTurn`, `releaseExecuteTicket` — all private
-to `remote.hpp`). The guarantee is:
+`RemoteServer` closes it with a per-model ticket gate
+(`morph::backend::detail::ExecuteOrderGate`'s `take`/`awaitTurn`/`release`,
+`include/morph/core/detail/execute_order_gate.hpp` — extracted from `remote.hpp`
+so the gate's own logic has direct unit coverage independent of the server;
+`RemoteServer` holds one as a private `_executeGate` member). The guarantee
+is:
 
 > For one `modelId`, the order in which `_strand.post` is called equals the
 > order in which `handle()` was called for those requests.
@@ -517,11 +520,13 @@ That is also why the release discipline matters: **every path that took a
 ticket must release it**, including the ones that never reach the strand (model
 not found, unauthorized, over limit, a validation throw). A ticket taken and
 never released would stall every later ticket for that model permanently,
-because `awaitExecuteTurn` waits with no deadline.
+because `awaitTurn` waits with no deadline.
 
 **The rule is structural, not a convention.** A ticket is owned by an
-`ExecuteTicketGuard` (private to `remote.hpp`) from the moment
-`takeExecuteTicket` returns: `handleImpl` holds one across the pool post, and
+`ExecuteTicketGuard` (`morph::backend::detail`, alongside `ExecuteOrderGate` in
+`execute_order_gate.hpp`; `remote.hpp` keeps a `using` alias so call sites read
+unqualified) from the moment `take` returns: `handleImpl` holds one across the
+pool post, and
 `dispatchMessage` adopts the ticket into another for the whole of its own frame,
 `dispatchExecute` included. The guard releases on destruction, so *every* exit
 path is covered — each explicit `return`, every exception, and any branch a
@@ -546,16 +551,16 @@ by the first ticket and **erased** once `nextToRun` catches up with
 `nextTicket` — a model with no in-flight `execute` leaves no trace, so the map
 does not grow across the server's lifetime. A waiter holds the gate by
 `shared_ptr` so a release that erases the entry mid-wait cannot pull it out
-from under it, and `awaitExecuteTurn` returns immediately if the entry is
+from under it, and `awaitTurn` returns immediately if the entry is
 already gone.
 
 **Releases are not ordered, and `nextToRun` must survive that.** `nextToRun`
 means *the lowest ticket that has not released yet* — which is exactly what
-`awaitExecuteTurn`'s `nextToRun == ticket` predicate needs it to mean. It is
+`awaitTurn`'s `nextToRun == ticket` predicate needs it to mean. It is
 not "one past the ticket that released last", and the difference is not
 cosmetic: the fast-reject paths above release *without ever waiting for their
 turn*, by design, so a later ticket routinely releases before an earlier one.
-`releaseExecuteTicket` therefore records an out-of-order release in
+`ExecuteOrderGate::release` therefore records an out-of-order release in
 `releasedOutOfOrder` and advances `nextToRun` only across a contiguous run of
 released tickets, consuming that set as it goes.
 
@@ -593,12 +598,12 @@ branch therefore releases the ticket itself, on the way out.
 
 This was previously read as a benign exception to the rule — the argument being
 that `beginShutdown()` is irreversible, so every later `execute` is refused at
-the same gate and none of them ever reaches `awaitExecuteTurn`. The argument is
+the same gate and none of them ever reaches `awaitTurn`. The argument is
 wrong, and the difference is a permanently stranded caller rather than a leaked
 map entry. Tickets are taken in send order *on the transport thread*, but the
 pool is free to run the two posted tasks in either order. So a later ticket can
 pass the gate while the earlier one is still upstream of it, and be parked in
-`awaitExecuteTurn` — a `cv.wait` with no deadline — by the time the earlier one
+`awaitTurn` — a `cv.wait` with no deadline — by the time the earlier one
 is refused. Dropping the earlier ticket then costs three things at once:
 
 - the later caller never receives a reply at all (with no `executeTimeout`
@@ -627,15 +632,23 @@ unable to succeed — and it is why the release is now owned by
 The release rule stated above therefore holds without exception, which is what
 makes the rest of this section true.
 
-`tests/test_remote_execute_ordering.cpp` pins the guarantee, forcing the
-interleaving deterministically (a two-thread pool plus an authorizer that
-sleeps for one call only) rather than waiting for a loaded machine to produce
-it by chance. Its shutdown-gate case forces the interleaving above the same
+`tests/test_execute_order_gate.cpp` pins `ExecuteOrderGate`'s own logic
+directly and synchronously — normal take/await/release ordering, the
+already-drained defensive branches, and the out-of-order-release mechanism
+below, including a threadless case that fails immediately if the gate reverts
+to the pre-#449 `nextToRun = ticket + 1` — with no `RemoteServer`, executor, or
+transport involved. `tests/test_remote_execute_ordering.cpp` pins the
+guarantee at the `RemoteServer` level: that the real dispatch path (`handleImpl`/
+`dispatchMessage`/`dispatchExecute`) actually calls the gate at the right two
+points and in the right order, which no unit test of the gate alone can prove.
+It forces the interleaving deterministically (a two-thread pool plus an
+authorizer that sleeps for one call only) rather than waiting for a loaded
+machine to produce it by chance. Its shutdown-gate case forces the interleaving above the same
 way, holding back one request's pool task through a wrapping executor so the
 "later ticket passed the gate, earlier ticket did not" ordering is decided
 rather than raced; its throwing-hook case reuses that same wrapping executor
 and arms an authorizer only *after* the later request has parked in
-`awaitExecuteTurn`, so exactly one request — the held, earlier one — throws,
+`awaitTurn`, so exactly one request — the held, earlier one — throws,
 from `authorize`, `authenticate` or `authorizeInstance` in turn. Its
 out-of-order-release case (issue #449) extends the same wrapping executor to
 hold three posts at once, so all three tickets exist before any of them runs,

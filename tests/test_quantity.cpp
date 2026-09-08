@@ -372,6 +372,12 @@ TEST_CASE("formatRationalDecimal - exact decimal rendering (no double path)", "[
 
     // Rounding can carry into a larger integer part.
     CHECK(formatRationalDecimal(Rational{Numerator{9999}, Denominator{10000}, DecimalPlaces{3}}) == "1");
+
+    // Coverage: quantity.hpp:174. A negative magnitude that rounds to zero at
+    // the requested precision must print "0", not "-0" -- exactly the case
+    // that line's own comment says it exists to handle. -1/1000 at 0 decimal
+    // places truncates (and does not round up: 2*1 < 1000) to integer 0.
+    CHECK(formatRationalDecimal(Rational{Numerator{-1}, Denominator{1000}, DecimalPlaces{0}}) == "0");
 }
 
 TEST_CASE("toDecimalString - the exact decimal without the unit", "[quantity][format]") {

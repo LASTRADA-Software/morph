@@ -220,6 +220,50 @@ TEST_CASE("LimitPolicy: executeTimeout replies err \"timeout\" and the late stra
     }
 }
 
+TEST_CASE("LimitPolicy: setLimitPolicy called twice with a positive executeTimeout reuses the scheduler",
+          "[limits][limit-policy]") {
+    // RM9 (remote.hpp, same shape as bridge.hpp B7): setLimitPolicy's
+    // `_limits.executeTimeout.count() > 0 && !_timeoutScheduler` guard had
+    // only ever seen the scheduler being created for the first time --
+    // every existing test calls setLimitPolicy once per server. A second
+    // call with another positive executeTimeout must not replace (or
+    // double-construct) the scheduler; this exercises the `!_timeoutScheduler`
+    // idempotent-skip arm. `snapshotLimits()`/`_timeoutScheduler` are private,
+    // so this is observed behaviorally: the second call's (much longer)
+    // executeTimeout must actually take effect on the reused scheduler --
+    // if the second setLimitPolicy call somehow left the *first* policy's
+    // short deadline armed, this would time out and fail.
+    gLPSlowStarted.store(0, std::memory_order_relaxed);
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    morph::backend::LimitPolicy first;
+    first.executeTimeout = 50ms;
+    server->setLimitPolicy(first);
+
+    morph::backend::LimitPolicy second;
+    second.executeTimeout = 5000ms;  // reused scheduler must honor *this* deadline, not the first
+    server->setLimitPolicy(second);
+
+    morph::testing::WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("LP_SlowModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+    auto mid = regReply.env.modelId;
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 1;
+    req.modelId = mid;
+    req.modelType = "LP_SlowModel";
+    req.actionType = "LP_SlowAction";
+    req.body = R"({"ms":300})";  // well past the *first* policy's 50ms, well under the second's 5000ms
+
+    morph::testing::WaitReply execReply;
+    server->handle(morph::wire::encode(req), std::ref(execReply));
+    REQUIRE(execReply.await());
+    REQUIRE(execReply.env.kind == "ok");
+}
+
 TEST_CASE("LimitPolicy: default executeTimeout (0) never times out a slow action (regression)",
           "[limits][limit-policy]") {
     gLPSlowStarted.store(0, std::memory_order_relaxed);

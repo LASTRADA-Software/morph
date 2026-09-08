@@ -165,6 +165,35 @@ struct morph::model::ModelTraits<CsRaceModel> {
     static constexpr std::string_view typeId() { return "CS_RaceModel"; }
 };
 
+// A model whose registered factory, on its *first* invocation, synchronously
+// re-enters the server (via handleInline, on the calling thread, before
+// returning) with a plain attach for this exact same key. This reproduces
+// acquireSharedInstance's "concurrent attach won the insert race while our
+// own holder was still under construction outside _regMtx" interleaving --
+// the one CsRaceModel above forces with real thread scheduling and a sleep
+// -- deterministically, on a single thread: the reentrant attach's own
+// _registry.create() call reaches this factory a second time (exchange
+// already claimed, so no further reentry), constructs and inserts normally,
+// and returns before the *outer* call's factory invocation does -- so the
+// outer call's second attachExistingLocked check (remote.hpp:816) is
+// guaranteed to find the key already present, taking the `releaseCurrent`
+// branch at lines 817-819 every time, not just probabilistically.
+//
+// `server` is set by each test that uses this model, right after
+// constructing its own RemoteServer and before issuing any request --
+// mirroring CsRaceModel::slowFactoryTaken's per-test reset idiom.
+struct CsReentrantAttachModel {
+    static inline std::atomic<bool> reentered{false};
+    static inline morph::backend::RemoteServer* server = nullptr;
+
+    int execute(const CsSquareAction& act) { return act.x * act.x; }
+};
+
+template <>
+struct morph::model::ModelTraits<CsReentrantAttachModel> {
+    static constexpr std::string_view typeId() { return "CS_ReentrantAttachModel"; }
+};
+
 static CsEnv& csEnv() {
     static CsEnv env = [] {
         CsEnv env2;
@@ -181,6 +210,16 @@ static CsEnv& csEnv() {
                 return std::make_unique<morph::model::detail::ModelHolder<CsRaceModel>>();
             });
         env2.dispatcher.registerAction<CsRaceModel, CsSquareAction>("CS_RaceModel", "CS_SquareAction");
+        env2.registry.registerModel<CsReentrantAttachModel>(
+            "CS_ReentrantAttachModel", []() -> std::unique_ptr<::morph::model::detail::IModelHolder> {
+                if (!CsReentrantAttachModel::reentered.exchange(true)) {
+                    CsReentrantAttachModel::server->handleInline(
+                        ::morph::wire::encode(::morph::wire::makeAttach("CS_ReentrantAttachModel", "reentrant-key")));
+                }
+                return std::make_unique<morph::model::detail::ModelHolder<CsReentrantAttachModel>>();
+            });
+        env2.dispatcher.registerAction<CsReentrantAttachModel, CsSquareAction>("CS_ReentrantAttachModel",
+                                                                               "CS_SquareAction");
         return env2;
     }();
     return env;
@@ -691,6 +730,40 @@ TEST_CASE("morph::backend::RemoteServer: instances lists live shared keys",
     REQUIRE(keys == std::vector<std::string>{"7", "9"});
 }
 
+TEST_CASE("morph::backend::RemoteServer: instances excludes keys belonging to a different model type",
+          "[remote][connection-scope][shared-instances]") {
+    // RM6: handleInstances's `if (dirKey.first == env.typeId)` filter had
+    // never seen a directory holding more than one *type* at once -- every
+    // prior "instances" test's directory contained keys of a single type
+    // only, so the filter's `false` (excluded) arm was never exercised.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    WaitReply square;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "sq-key")), std::ref(square),
+                   cid);
+    REQUIRE(square.await());
+    REQUIRE(square.env.kind == "ok");
+
+    WaitReply slow;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SlowModel", "slow-key")), std::ref(slow),
+                   cid);
+    REQUIRE(slow.await());
+    REQUIRE(slow.env.kind == "ok");
+
+    WaitReply listed;
+    server->handle(morph::wire::encode(morph::wire::makeInstances("CS_SquareModel")), std::ref(listed), cid);
+    REQUIRE(listed.await());
+    REQUIRE(listed.env.kind == "ok");
+    std::vector<std::string> keys;
+    REQUIRE_FALSE(glz::read_json(keys, listed.env.body));
+    // Only CS_SquareModel's own key -- CS_SlowModel's "slow-key" must not
+    // leak across the type boundary.
+    REQUIRE(keys == std::vector<std::string>{"sq-key"});
+}
+
 TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old instance",
           "[remote][connection-scope][shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
@@ -712,6 +785,69 @@ TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old i
     REQUIRE(moved.env.modelId != first.env.modelId);
     // Nobody else held key 1, so re-pointing destroyed it rather than leaking.
     REQUIRE(server->health().liveModels == 1U);
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer: one connection attached twice to the same shared instance survives its first "
+    "deregister",
+    "[remote][connection-scope][shared-instances]") {
+    // RM2: releaseScopedLocked's per-connection decrement
+    // (`refIter->second -= 1; if (refIter->second == 0) { ... erase ... }`)
+    // only ever saw a connection holding exactly one reference to a given
+    // `mid` -- the decrement always lands on zero. `noteScopeAttachLocked`
+    // increments unconditionally (`scopeIter->second[mid] += 1`) on every
+    // attach, with no guard against re-attaching a key the same connection
+    // already holds, so two `attach`/`register-shared` calls from the same
+    // connection to the same key genuinely produce a count of 2 -- this
+    // exercises the `refIter->second == 0` `false` arm (still > 0 after
+    // decrementing), never hit before this test.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    WaitReply first;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "double-attach")),
+                   std::ref(first), cid);
+    REQUIRE(first.await());
+    REQUIRE(first.env.kind == "ok");
+
+    // Same connection, same key, a second time: two references to one
+    // instance, held by the same connection scope.
+    WaitReply second;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_SquareModel", "double-attach")), std::ref(second),
+                   cid);
+    REQUIRE(second.await());
+    REQUIRE(second.env.kind == "ok");
+    REQUIRE(second.env.modelId == first.env.modelId);
+    REQUIRE(server->health().liveModels == 1U);
+
+    // First deregister drops one of the two references -- the instance must
+    // still be alive, since the connection's own scoped count is still 1.
+    WaitReply firstDereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(first.env.modelId)), std::ref(firstDereg), cid);
+    REQUIRE(firstDereg.await());
+    REQUIRE(firstDereg.env.kind == "ok");
+    REQUIRE(server->health().liveModels == 1U);
+
+    morph::wire::Envelope stillLiveExec;
+    stillLiveExec.kind = "execute";
+    stillLiveExec.modelId = first.env.modelId;
+    stillLiveExec.modelType = "CS_SquareModel";
+    stillLiveExec.actionType = "CS_SquareAction";
+    stillLiveExec.body = R"({"x":4})";
+    WaitReply stillLive;
+    server->handle(morph::wire::encode(stillLiveExec), std::ref(stillLive));
+    REQUIRE(stillLive.await());
+    REQUIRE(stillLive.env.kind == "ok");
+    REQUIRE(stillLive.env.body == "16");
+
+    // Second deregister drops the last reference -- now it's really gone.
+    WaitReply secondDereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(first.env.modelId)), std::ref(secondDereg), cid);
+    REQUIRE(secondDereg.await());
+    REQUIRE(secondDereg.env.kind == "ok");
+    REQUIRE(server->health().liveModels == 0U);
 }
 
 TEST_CASE(
@@ -1420,4 +1556,83 @@ TEST_CASE(
     REQUIRE(oldExecReply.await());
     REQUIRE(oldExecReply.env.kind == "err");
     REQUIRE(oldExecReply.env.message == "model not found");
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer: an attach that loses the create race releases the caller's old instance on "
+    "the race re-check's hit, deterministically, via a reentrant factory",
+    "[remote][connection-scope][shared-instances]") {
+    // Same target as the "an attach that loses the create race..." test
+    // right above -- acquireSharedInstance's *second* attachExistingLocked
+    // hit releasing `releaseCurrent` (remote.hpp:817-819) -- but forced
+    // deterministically instead of relying on real thread scheduling.
+    //
+    // CsReentrantAttachModel's factory is the mechanism: on its first
+    // invocation it synchronously calls back into the server (via
+    // `handleInline`, safe here because `_registry.create()` runs outside
+    // `_regMtx`) with a plain attach for the exact same `(typeId, primary)`
+    // key this outer call is also targeting. That reentrant attach's own
+    // `_registry.create()` reaches the factory a second time (the
+    // exchange-guard is already claimed, so it does not recurse again),
+    // builds a holder normally, and inserts it into the directory -- all
+    // before the *outer* call's factory invocation returns. So by the time
+    // the outer call re-locks `_regMtx` and runs its own second
+    // `attachExistingLocked` check, the key is unconditionally already
+    // present: this is the same interleaving a genuine concurrent
+    // register/attach race produces, reproduced on one thread, with no
+    // sleeps and no dependence on scheduling.
+    CsReentrantAttachModel::reentered.store(false);
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    CsReentrantAttachModel::server = server.get();
+
+    WaitReply oldReg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(oldReg));
+    REQUIRE(oldReg.await());
+    REQUIRE(oldReg.env.kind == "ok");
+    auto const oldMid = oldReg.env.modelId;
+    REQUIRE(server->health().liveModels == 1U);
+
+    // Re-points from `oldMid` to a brand-new key on CS_ReentrantAttachModel.
+    // The reentrant factory guarantees this call's own second
+    // attachExistingLocked check is the one that finds the hit, taking the
+    // `releaseCurrent` branch at remote.hpp:817-819.
+    WaitReply attach;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_ReentrantAttachModel", "reentrant-key", oldMid)),
+                   std::ref(attach));
+    REQUIRE(attach.await());
+    REQUIRE(attach.env.kind == "ok");
+
+    // The load-bearing assertion: the old CS_SquareModel instance must be
+    // gone -- released via the second attachExistingLocked hit's
+    // releaseCurrent branch. Only the new CsReentrantAttachModel instance
+    // (inserted by the reentrant attach) remains live.
+    REQUIRE(server->health().liveModels == 1U);
+
+    morph::wire::Envelope oldExec;
+    oldExec.kind = "execute";
+    oldExec.modelId = oldMid;
+    oldExec.modelType = "CS_SquareModel";
+    oldExec.actionType = "CS_SquareAction";
+    oldExec.body = R"({"x":2})";
+    WaitReply oldExecReply;
+    server->handle(morph::wire::encode(oldExec), std::ref(oldExecReply));
+    REQUIRE(oldExecReply.await());
+    REQUIRE(oldExecReply.env.kind == "err");
+    REQUIRE(oldExecReply.env.message == "model not found");
+
+    // The surviving instance is the reentrant attach's, reachable and
+    // functional under the id both attaches converged on.
+    morph::wire::Envelope newExec;
+    newExec.kind = "execute";
+    newExec.modelId = attach.env.modelId;
+    newExec.modelType = "CS_ReentrantAttachModel";
+    newExec.actionType = "CS_SquareAction";
+    newExec.body = R"({"x":3})";
+    WaitReply newExecReply;
+    server->handle(morph::wire::encode(newExec), std::ref(newExecReply));
+    REQUIRE(newExecReply.await());
+    REQUIRE(newExecReply.env.kind == "ok");
+    REQUIRE(newExecReply.env.body == "9");
 }

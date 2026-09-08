@@ -677,6 +677,31 @@ TEST_CASE("assignPrimary promotes an anonymous instance and ignores unusable inp
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
 }
 
+// backend.hpp BK1: listInstances's `dirKey.first == typeId` filter had never
+// been driven with two distinct registered types sharing `_directory` --
+// every prior listInstances call in this suite only ever populated the
+// directory with one type, so the walk never had to actually discriminate.
+TEST_CASE("listInstances filters by type when the directory holds more than one",
+          "[shared-instances][coverage][backend]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    auto counterMid = backend.registerModelShared(
+        "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        {.contextKey = {}, .primary = "counter-1"});
+    auto awareMid = backend.registerModelShared(
+        "SHI_AwareModel", [] { return morph::model::detail::ModelFactory::create<ShiAwareModel>(); },
+        {.contextKey = {}, .primary = "aware-1"});
+    (void)counterMid;
+    (void)awareMid;
+
+    // Both types now occupy `_directory`. The walk must step past the
+    // other type's entry (the `false` arm of `dirKey.first == typeId`)
+    // before -- or without -- matching its own.
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"counter-1"});
+    REQUIRE(backend.listInstances("SHI_AwareModel") == std::vector<std::string>{"aware-1"});
+}
+
 TEST_CASE("a shared handler survives switchBackend", "[shared-instances]") {
     morph::testing::InlineExecutor exec;
     morph::exec::ThreadPoolExecutor poolA{2};
@@ -1231,4 +1256,79 @@ TEST_CASE("the server releases a freshly created shared instance whose first act
         server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
     REQUIRE(second.kind == "ok");
     REQUIRE(second.modelId != reg.modelId);
+}
+
+TEST_CASE("deregistering a poisoned instance evicted from the directory tears it down cleanly", "[shared-instances]") {
+    // `attachExistingLocked`'s poisoned-instance eviction (remote.hpp,
+    // `_directory.erase(found); _sharedKeyOf.erase(mid);`) removes `mid`'s
+    // `_sharedKeyOf` entry without touching its `_attachCount` entry, which is
+    // still 1 from the instance's original creation. Nothing has released the
+    // original attachment yet at that point, so the poisoned instance is left
+    // alive but no longer discoverable via the directory. A later release of
+    // that same instance must therefore find it in `_attachCount` but *not*
+    // in `_sharedKeyOf` -- `releaseInstanceLocked`'s
+    // `if (auto keyIter = _sharedKeyOf.find(mid); keyIter != _sharedKeyOf.end())`
+    // `false` arm, confirmed via fresh `llvm-cov show --show-branches=count`
+    // output to be a genuine, permanently-zero-hit gap ([True: 54, False: 0]
+    // across the whole suite) before this test existed.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto reg = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
+    REQUIRE(reg.kind == "ok");
+
+    morph::wire::Envelope failExec;
+    failExec.kind = "execute";
+    failExec.modelId = reg.modelId;
+    failExec.modelType = "SHI_HydrateModel";
+    failExec.actionType = "SHI_HydrateFail";
+    failExec.body = R"({"id":1})";
+    morph::testing::WaitReply failWaiter;
+    server->handle(morph::wire::encode(failExec), std::ref(failWaiter));
+    REQUIRE(failWaiter.await());
+    REQUIRE(failWaiter.env.kind == "err");
+
+    // Evicts `reg.modelId` from `_directory`/`_sharedKeyOf` (it is poisoned)
+    // and lands on a fresh instance under the same key. `reg.modelId` is
+    // still alive -- and still attached (`_attachCount[reg.modelId] == 1`) --
+    // it is simply no longer reachable through the directory.
+    auto second = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
+    REQUIRE(second.kind == "ok");
+    REQUIRE(second.modelId != reg.modelId);
+
+    // Deregistering the original, now directory-evicted instance must still
+    // complete cleanly: no crash, no double-erase, correct answer.
+    auto deregistered =
+        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeDeregister(reg.modelId))));
+    REQUIRE(deregistered.kind == "ok");
+
+    // Confirmed torn down: a further execute against the deregistered id
+    // reports "model not found", exactly as for any other destroyed instance.
+    morph::wire::Envelope postExec;
+    postExec.kind = "execute";
+    postExec.modelId = reg.modelId;
+    postExec.modelType = "SHI_HydrateModel";
+    postExec.actionType = "SHI_HydrateOk";
+    postExec.body = R"({"id":1})";
+    morph::testing::WaitReply postWaiter;
+    server->handle(morph::wire::encode(postExec), std::ref(postWaiter));
+    REQUIRE(postWaiter.await());
+    REQUIRE(postWaiter.env.kind == "err");
+    REQUIRE(postWaiter.env.message == "model not found");
+
+    // The fresh, second instance under the same key is unaffected -- no
+    // leak, no shared bookkeeping corruption from the orphaned release -- and
+    // still answers normally.
+    morph::wire::Envelope okExec;
+    okExec.kind = "execute";
+    okExec.modelId = second.modelId;
+    okExec.modelType = "SHI_HydrateModel";
+    okExec.actionType = "SHI_HydrateOk";
+    okExec.body = R"({"id":1})";
+    morph::testing::WaitReply okWaiter;
+    server->handle(morph::wire::encode(okExec), std::ref(okWaiter));
+    REQUIRE(okWaiter.await());
+    REQUIRE(okWaiter.env.kind == "ok");
 }

@@ -26,6 +26,7 @@
 #include "backend.hpp"
 #include "callback_scope.hpp"
 #include "completion.hpp"
+#include "detail/subscription_registry.hpp"
 #include "model_key.hpp"
 #include "registry.hpp"
 #include "timeout_scheduler.hpp"
@@ -950,35 +951,24 @@ public:
     /// with it, which is what makes "tell me about the account I am looking at"
     /// keep working when the user switches accounts.
     ///
+    /// Forwards to `_subscriptions` (`detail::SubscriptionRegistry`); see that
+    /// class for the implementation.
     /// @param binding Handler binding that owns the subscription.
     /// @param type    Result type being subscribed to.
     /// @param sink    Type-erased delivery callback; receives the boxed result.
     /// @param exec    Executor the callback is delivered on.
     void addSubscription(const std::shared_ptr<detail::HandlerBinding>& binding, std::type_index type,
                          std::function<void(const std::any&)> sink, ::morph::exec::IExecutor* exec) {
-        std::scoped_lock const lock{_subMtx};
-        for (auto& entry : _subscriptions) {
-            auto owner = entry.binding.lock();
-            if (owner && owner.get() == binding.get() && entry.type == type) {
-                entry.sink = std::move(sink);  // one callback per (handler, result type)
-                entry.exec = exec;
-                return;
-            }
-        }
-        _subscriptions.push_back({.binding = binding, .type = type, .sink = std::move(sink), .exec = exec});
-        _subscriptionCount.store(_subscriptions.size(), std::memory_order_relaxed);
+        _subscriptions.addSubscription(binding, type, std::move(sink), exec);
     }
 
     /// @brief Removes @p binding's subscription for @p type, if any.
+    ///
+    /// Forwards to `_subscriptions` (`detail::SubscriptionRegistry`).
     /// @param binding Handler binding that owns the subscription.
     /// @param type    Result type to stop hearing about.
     void removeSubscription(const std::shared_ptr<detail::HandlerBinding>& binding, std::type_index type) {
-        std::scoped_lock const lock{_subMtx};
-        std::erase_if(_subscriptions, [&](const InstanceSubscription& entry) {
-            auto owner = entry.binding.lock();
-            return !owner || (owner.get() == binding.get() && entry.type == type);
-        });
-        _subscriptionCount.store(_subscriptions.size(), std::memory_order_relaxed);
+        _subscriptions.removeSubscription(binding, type);
     }
 
     /// @brief Whether any subscription is currently registered on this bridge.
@@ -986,14 +976,14 @@ public:
     /// A single relaxed atomic load, so the overwhelmingly common case — a
     /// process with no subscribers at all — pays nothing per result. Without
     /// this, every successful action would build a `std::type_index`, copy its
-    /// result into a `std::any`, take `_subMtx` and walk the (empty)
-    /// subscription list before its `Completion` could resolve: a throughput
-    /// regression for every existing caller, on the hot path, to serve a feature
-    /// they are not using.
+    /// result into a `std::any`, take a lock and walk the (empty) subscription
+    /// list before its `Completion` could resolve: a throughput regression for
+    /// every existing caller, on the hot path, to serve a feature they are not
+    /// using.
+    ///
+    /// Forwards to `_subscriptions` (`detail::SubscriptionRegistry`).
     /// @return `true` if at least one subscription exists.
-    [[nodiscard]] bool hasSubscribers() const noexcept {
-        return _subscriptionCount.load(std::memory_order_relaxed) != 0U;
-    }
+    [[nodiscard]] bool hasSubscribers() const noexcept { return _subscriptions.hasSubscribers(); }
 
     /// @brief Delivers @p value to every subscriber attached to instance @p mid.
     ///
@@ -1006,37 +996,15 @@ public:
     /// every subscriber to special-case "was this mine", which is exactly the
     /// bookkeeping the feature exists to remove.
     ///
-    /// Sinks are snapshotted under the lock and invoked outside it, so a
-    /// subscriber that re-enters the bridge cannot deadlock.
+    /// Forwards to `_subscriptions` (`detail::SubscriptionRegistry`), which
+    /// snapshots matching sinks under its lock and invokes them outside it, so
+    /// a subscriber that re-enters the bridge cannot deadlock.
     ///
     /// @param mid   Instance the result was produced on.
     /// @param type  Result type produced.
     /// @param value Boxed result.
     void publishResult(::morph::exec::detail::ModelId mid, std::type_index type, const std::any& value) {
-        std::vector<std::pair<std::function<void(const std::any&)>, ::morph::exec::IExecutor*>> targets;
-        {
-            std::scoped_lock const lock{_subMtx};
-            // Prune while we are already holding the lock and walking the list:
-            // a handler that is destroyed without unsubscribing would otherwise
-            // leave its entry behind until some *other* handler happened to call
-            // add/removeSubscription, which in a long-lived app with many
-            // transient handlers is never.
-            std::erase_if(_subscriptions, [](const InstanceSubscription& entry) { return entry.binding.expired(); });
-            _subscriptionCount.store(_subscriptions.size(), std::memory_order_relaxed);
-            for (const auto& entry : _subscriptions) {
-                auto owner = entry.binding.lock();
-                if (owner && entry.type == type && owner->currentId.load() == mid.v && entry.sink) {
-                    targets.emplace_back(entry.sink, entry.exec);
-                }
-            }
-        }
-        for (auto& [sink, exec] : targets) {
-            if (exec != nullptr) {
-                exec->post([sink, value] { sink(value); });
-            } else {
-                sink(value);
-            }
-        }
+        _subscriptions.publishResult(mid, type, value);
     }
 
     /// @brief Installs a default session context that `executeVia` stamps onto the
@@ -1840,19 +1808,9 @@ private:
     std::shared_ptr<::morph::async::detail::TimeoutScheduler> _timeoutScheduler;
     // Instance subscriptions. Held against the binding rather than a fixed
     // instance id so a re-pointed handler keeps its subscriptions; matched at
-    // publish time by comparing the binding's current instance.
-    struct InstanceSubscription {
-        std::weak_ptr<detail::HandlerBinding> binding;
-        std::type_index type;
-        std::function<void(const std::any&)> sink;
-        ::morph::exec::IExecutor* exec = nullptr;
-    };
-    std::mutex _subMtx;
-    std::vector<InstanceSubscription> _subscriptions;
-    // Mirrors _subscriptions.size() for the lock-free hasSubscribers() probe.
-    // Maintained under _subMtx; read relaxed off it. A stale-by-one read is
-    // harmless: publishResult re-checks under the lock and finds nothing.
-    std::atomic<std::size_t> _subscriptionCount{0};
+    // publish time by comparing the binding's current instance. See
+    // `detail::SubscriptionRegistry` for the locking/pruning implementation.
+    detail::SubscriptionRegistry<detail::HandlerBinding> _subscriptions;
     // Count of executeVia() dispatches not yet resolved -- see pendingCalls().
     // Incremented once per call right before backend dispatch; decremented
     // exactly once by whichever of the two mutually-exclusive resolution

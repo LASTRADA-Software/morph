@@ -75,6 +75,40 @@ struct FlowStepExplodesNonStdResult {
     std::int64_t id = 0;
 };
 
+// A step whose execute() blocks until released, mirroring
+// test_bridge_pending_calls.cpp's PCSlowAction pattern -- gives a test full
+// control over exactly when this step's dispatch resolves, independent of
+// how fast the backend would otherwise run it. Used to drive a stale reply
+// for a step FlowSession has since navigated away from via back() (as
+// opposed to advance(): both FlowStepOne and FlowStepSlow share one model
+// instance, hence one StrandExecutor key -- see strand.hpp -- so a second,
+// later-queued step's dispatch cannot even *start* until an earlier one
+// queued ahead of it on the same model returns; back() sidesteps that
+// entirely, since it touches only FlowSession's own local state and never
+// goes through the backend).
+namespace {
+// Function-local statics rather than namespace-scope globals: the flag has to
+// be reachable from both FlowStepSlow::execute (below) and the test bodies,
+// and this is the shape morph::math::detail::wireClampCounter() already uses
+// for exactly that.
+std::atomic<bool>& flowSlowStarted() {
+    static std::atomic<bool> started{false};
+    return started;
+}
+std::atomic<bool>& flowSlowRelease() {
+    static std::atomic<bool> release{false};
+    return release;
+}
+}  // namespace
+
+struct FlowStepSlow {
+    std::string label;
+    [[nodiscard]] bool validate() const { return !label.empty(); }
+};
+struct FlowStepSlowResult {
+    std::int64_t id = 0;
+};
+
 struct FlowTestModel {
     std::int64_t nextId = 1;
 
@@ -102,6 +136,13 @@ struct FlowTestModel {
     static FlowStepExplodesNonStdResult execute(const FlowStepExplodesNonStd& /*action*/) {
         throw 42;  // NOLINT(hicpp-exception-baseclass) — exercises logUnhandledError's catch(...) arm
     }
+    static FlowStepSlowResult execute(const FlowStepSlow& /*action*/) {
+        flowSlowStarted().store(true, std::memory_order_relaxed);
+        while (!flowSlowRelease().load(std::memory_order_relaxed)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+        throw std::runtime_error{"late boom"};
+    }
 };
 
 BRIDGE_REGISTER_MODEL(FlowTestModel, "FlowsTest_FlowTestModel")
@@ -109,6 +150,7 @@ BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepOne, "FlowsTest_FlowStepOne")
 BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepTwo, "FlowsTest_FlowStepTwo")
 BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepExplodes, "FlowsTest_FlowStepExplodes")
 BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepExplodesNonStd, "FlowsTest_FlowStepExplodesNonStd")
+BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepSlow, "FlowsTest_FlowStepSlow")
 
 using DemoWizard = morph::flows::Wizard<
     "Demo flow", morph::flows::WizardStep<FlowStepOne, "Step one">,
@@ -542,6 +584,88 @@ TEST_CASE("FlowSession: a late error for a step already left behind does not un-
     CHECK(flow.ready());  // step two's own readiness must survive the stale error
 }
 
+TEST_CASE("FlowSession: a late error for a step left behind via back() does not un-ready the step returned to",
+          "[flows]") {
+    // The test above ("a late error for a step already left behind...")
+    // reads as though it exercises fireStep's `stepIndex == _activeStep`
+    // guard's False arm (line 464's condition), but it does not: FlowStepOne
+    // and FlowStepTwo share one model instance, hence one StrandExecutor key
+    // (strand.hpp), so every dispatch against that model -- including a
+    // second, independent fire of the *same* step -- runs strictly in
+    // enqueue order, one at a time. The stale "explode" fire there always
+    // finishes (and is queued onto cbExec) before the later "succeeds" fire
+    // even starts, so it is always drained while step one is still current --
+    // never while a later step is current. Confirmed empirically: before this
+    // test existed, `llvm-cov show --show-branches=count` reported
+    // `Branch (464:25)` as `[True: N, False: 0]` for every instantiation, no
+    // matter how the suite was filtered.
+    //
+    // advance() cannot be raced this way at all (it requires the current
+    // step's own dispatch to have already resolved successfully), but back()
+    // can: it needs no backend round trip, so it can run while an earlier
+    // step's own dispatch is still genuinely in flight -- using a real
+    // GS_SlowModel/PCSlowAction-style blocked execute() rather than relying
+    // on timing.
+    flowSlowStarted().store(false);
+    flowSlowRelease().store(false);
+
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::DeterministicExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    std::vector<std::string> errors;
+    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepSlow> flow{
+        handler, [&](std::exception_ptr err) {
+            try {
+                std::rethrow_exception(std::move(err));
+            } catch (const std::exception& exc) {
+                errors.emplace_back(exc.what());
+            } catch (...) {
+                errors.emplace_back("unknown");
+            }
+        }};
+
+    flow.set<&FlowStepOne::label>(std::string{"first step"});
+    while (!flow.ready()) {
+        REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+        cbExec.step();
+    }
+    REQUIRE(flow.advance());
+    CHECK(flow.currentIndex() == 1);
+
+    // Fire step two's slow action: it blocks inside execute() until released,
+    // so its stepIndex (1, captured now while it is the current step) is
+    // still pending when back() below runs.
+    flow.set<&FlowStepSlow::label>(std::string{"slow"});
+    REQUIRE(morph::testing::waitUntil([&] { return flowSlowStarted().load(); }));
+
+    // Move back to step one while step two's dispatch is still in flight.
+    // back() unconditionally marks step one ready again ("it already
+    // produced a result once") and never touches the backend, so it is not
+    // blocked behind the still-running slow dispatch on the same strand.
+    REQUIRE(flow.back());
+    CHECK(flow.currentIndex() == 0);
+    CHECK(flow.ready());
+
+    // Release the slow dispatch: it fails with stepIndex 1, but _activeStep
+    // is now 0 -- exactly the "late failure from a step already left behind"
+    // the guard's comment names. Without the guard, this would wrongly clear
+    // _currentReady for step one, the step the flow actually has active now.
+    flowSlowRelease().store(true);
+    REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+    while (cbExec.pending() > 0) {
+        cbExec.step();
+    }
+    REQUIRE(morph::testing::waitUntil([&] { return !errors.empty(); }));
+
+    // The error is still reported either way (fireStep's own doc comment)...
+    CHECK(std::ranges::any_of(errors, [](const std::string& msg) { return msg.contains("late boom"); }));
+    // ...but step one's own readiness, set by back(), must survive it.
+    CHECK(flow.currentIndex() == 0);
+    CHECK(flow.ready());
+}
+
 TEST_CASE("FlowSession: a completion arriving after the flow is destroyed is a no-op", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::DeterministicExecutor cbExec;
@@ -607,6 +731,15 @@ using DemoApp = morph::app::App<"Demo app", std::tuple<morph::app::MenuEntry<"Fl
                                 std::tuple<morph::app::WizardScreen<"flow", DemoWizard>>>;
 
 BRIDGE_REGISTER_APP(DemoApp, "FlowsTest_DemoApp")
+
+TEST_CASE("App::AppTraits::typeId returns the registered string type-id", "[app]") {
+    // BRIDGE_REGISTER_APP(DemoApp, ...)'s specialization runs at compile time
+    // regardless of whether anything reads it back; nothing else in this
+    // codebase calls AppTraits<A>::typeId() (grep confirms it, unlike
+    // ActionTraits<T>::typeId(), which is called throughout the suite) so
+    // this call site is otherwise never actually executed.
+    CHECK(morph::app::AppTraits<DemoApp>::typeId() == "FlowsTest_DemoApp");
+}
 
 TEST_CASE("App::AppSchemaJson emits title, menu, and screens", "[app]") {
     auto const schema = morph::app::appSchemaJson<DemoApp>();

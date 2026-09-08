@@ -25,10 +25,15 @@
 // connection, could reach the model's own strand out of send order the moment
 // more than one pool worker was free to race the pre-strand work
 // (decode/authorize/authenticate/registry-lookup) ahead of the other. The
-// per-model execute-ordering gate that closes it (`_executeGates`,
-// `awaitExecuteTurn`, `releaseExecuteTicket`) lives in
+// per-model execute-ordering gate that closes it
+// (`morph::backend::detail::ExecuteOrderGate::take`/`awaitTurn`/`release`,
+// `include/morph/core/detail/execute_order_gate.hpp`) is wired into
 // `include/morph/core/remote.hpp`, whose comments carry its full design
-// history — including the reverted first attempt.
+// history — including the reverted first attempt. The gate's own internal
+// state machine (including the out-of-order-release mechanism, issue #449)
+// has direct, threadless unit coverage in
+// `tests/test_execute_order_gate.cpp`; what remains here is what only
+// `RemoteServer`'s real dispatch path can prove.
 //
 // examples/common/testkit/test_fault_proxy.cpp's `FaultProxy::dropReply` test
 // caught this incidentally (it happens to send two calls close together) but
@@ -83,42 +88,6 @@ public:
         }
         return true;
     }
-
-private:
-    mutable std::atomic<bool> _slowCallTaken{false};
-};
-
-/// @brief Allow-all authorizer whose `authorize()` sleeps once, for the
-///        first call it sees carrying `EroAddAction::by == kSlowByValue` --
-///        every call carrying `EroAddAction::by == kRejectByValue` returns
-///        `false` immediately, every run, with no sleep at all.
-///
-/// Drives `dispatchExecute`'s per-model execute-ordering gate (remote.hpp's
-/// `_executeGates`) past full drain while an earlier-numbered ticket for the
-/// same model is still outstanding: the slow call takes ticket 0 and is held
-/// up in `authorize()`; two `kRejectByValue` calls for the *same* model, sent
-/// after it, take tickets 1 and 2 and are rejected in `dispatchExecute`
-/// before ever reaching `awaitExecuteTurn` (the "unauthorized" branch
-/// releases its ticket immediately, without waiting). Both reject calls
-/// therefore release and drain the gate (`releaseExecuteTicket`'s
-/// `nextToRun == nextTicket` check erases the map entry once ticket 2
-/// releases) while ticket 0 has not yet even called `awaitExecuteTurn` --
-/// exactly the interleaving `awaitExecuteTurn`'s and `releaseExecuteTicket`'s
-/// own "gate already gone" branches exist for.
-class SlowFirstThenRejectAuthorizer : public morph::session::IAuthorizer {
-public:
-    [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view,
-                                 std::string_view actionType) const override {
-        if (actionType == kRejectMarker) {
-            return false;
-        }
-        if (!_slowCallTaken.exchange(true)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds{200});
-        }
-        return true;
-    }
-
-    static constexpr std::string_view kRejectMarker = "ERO_RejectAction";
 
 private:
     mutable std::atomic<bool> _slowCallTaken{false};
@@ -252,78 +221,33 @@ TEST_CASE(
     CHECK(replyB.env.body == "110");
 }
 
-TEST_CASE(
-    "RemoteServer::dispatchExecute: awaitExecuteTurn and releaseExecuteTicket both cope when their "
-    "model's execute gate has already fully drained and been erased",
-    "[remote][execute-ordering]") {
-    // Three same-model executes, same send order every run:
-    //   A (ticket 0, EroAddAction by=kSlowByValue) -- held up in authorize()
-    //     for 200ms by SlowFirstThenRejectAuthorizer, so it is reliably still
-    //     there when B and C's own pre-strand work runs.
-    //   B (ticket 1, ERO_RejectAction) -- authorize() returns false
-    //     immediately; dispatchExecute's rejectAndRelease releases ticket 1
-    //     right away, never calling awaitExecuteTurn at all.
-    //   C (ticket 2, ERO_RejectAction) -- same as B, ticket 2.
-    // releaseExecuteTicket unconditionally sets nextToRun = ticket + 1, so
-    // C's release (nextToRun 2 -> 3) meets nextTicket (3, since all three
-    // tickets were already taken by the time C releases) and erases the
-    // gate's map entry -- while A (ticket 0) has not yet reached
-    // awaitExecuteTurn at all. When A's authorize() finally returns:
-    //   - awaitExecuteTurn(mid, 0) finds no map entry -- "gate already gone"
-    //     (line ~1467) -- and returns immediately instead of waiting.
-    //   - dispatchExecute posts to the strand, runs, and then calls
-    //     releaseExecuteTicket(mid, 0), which *also* finds no map entry --
-    //     the defensive "should not happen" branch (line ~1489) -- since C's
-    //     release already erased it.
-    // Both branches are exercised by this one interleaving, in one test.
-    morph::exec::ThreadPoolExecutor pool{3};
-    auto authorizer = std::make_shared<SlowFirstThenRejectAuthorizer>();
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, eroDispatcher(), eroRegistry());
-
-    WaitReply regReply;
-    server->handle(morph::wire::encode(morph::wire::makeRegister("ERO_CounterModel")), std::ref(regReply));
-    REQUIRE(regReply.await());
-    REQUIRE(regReply.env.kind == "ok");
-    const auto modelId = regReply.env.modelId;
-    REQUIRE(modelId != 0U);
-
-    morph::wire::Envelope reqA;
-    reqA.kind = "execute";
-    reqA.callId = 1;
-    reqA.modelId = modelId;
-    reqA.modelType = "ERO_CounterModel";
-    reqA.actionType = "ERO_AddAction";
-    reqA.body = R"({"by":5})";
-    WaitReply replyA;
-    server->handle(morph::wire::encode(reqA), std::ref(replyA));
-
-    morph::wire::Envelope reqB = reqA;
-    reqB.callId = 2;
-    reqB.actionType = std::string{SlowFirstThenRejectAuthorizer::kRejectMarker};
-    WaitReply replyB;
-    server->handle(morph::wire::encode(reqB), std::ref(replyB));
-
-    morph::wire::Envelope reqC = reqB;
-    reqC.callId = 3;
-    WaitReply replyC;
-    server->handle(morph::wire::encode(reqC), std::ref(replyC));
-
-    // B and C settle fast (rejected in authorize(), no wait); A settles after
-    // its 200ms sleep. If awaitExecuteTurn/releaseExecuteTicket's "gate
-    // already gone" branches did not handle a missing map entry gracefully
-    // (e.g. by dereferencing iter->second unconditionally), this would crash
-    // or hang instead of completing within the budget below.
-    REQUIRE(replyB.await(std::chrono::milliseconds{2000}));
-    REQUIRE(replyC.await(std::chrono::milliseconds{2000}));
-    REQUIRE(replyA.await(std::chrono::milliseconds{5000}));
-
-    REQUIRE(replyB.env.kind == "err");
-    REQUIRE(replyB.env.message == "unauthorized");
-    REQUIRE(replyC.env.kind == "err");
-    REQUIRE(replyC.env.message == "unauthorized");
-    REQUIRE(replyA.env.kind == "ok");
-    CHECK(replyA.env.body == "5");
-}
+// A prior version of this file had a test here --
+// "RemoteServer::dispatchExecute: awaitExecuteTurn and releaseExecuteTicket
+// both cope when their model's execute gate has already fully drained and
+// been erased" -- built the same way as its siblings below (a
+// ThreadPoolExecutor, a bespoke IAuthorizer, a full register round-trip) to
+// force three same-model executes into an interleaving meant to reach the
+// gate's "already gone" defensive branches.
+//
+// It no longer can. That interleaving was reachable before issue #449's fix:
+// the gate used to erase a model's map entry the moment the *last* ticket
+// released, even with an earlier ticket still outstanding, which is exactly
+// what let a third, later-arriving ticket find the entry gone. Since #449's
+// fix (a released-out-of-order ticket is now recorded rather than applied,
+// and the entry is erased only once every ticket up to it has released in
+// order), that specific interleaving can no longer surface a missing entry --
+// confirmed directly: instrumenting both defensive branches and re-running
+// this test's pre-removal body showed neither one firing. So this test had
+// already stopped covering what its name claimed *before* this extraction;
+// removing it here isn't a migration of live coverage so much as retiring a
+// test whose target moved out from under it. The branches it meant to reach
+// are covered directly and deterministically instead by
+// `tests/test_execute_order_gate.cpp`'s "awaitTurn and release both cope once
+// a gate has fully drained mid-sequence" (a synchronous, threadless case that
+// reaches the erased-map-entry state without needing any thread interleaving
+// at all, since `ExecuteOrderGate` exposes it directly). Removed here rather
+// than duplicated -- tracked in the assertion-count accounting in this task's
+// report.
 
 namespace {
 
@@ -393,13 +317,13 @@ TEST_CASE(
     // released. Because the pool may run the two posted tasks in either order,
     // the later ticket can pass the gate while the earlier one is still
     // upstream of it -- and if the earlier one is then refused and drops its
-    // ticket, the later one waits in `awaitExecuteTurn` on a `cv.wait` with no
+    // ticket, the later one waits in `ExecuteOrderGate::awaitTurn` on a `cv.wait` with no
     // deadline, forever.
     //
     // The interleaving, forced rather than raced:
     //   A  handle() -> ticket 0; its pool task is intercepted before it runs.
     //   B  handle() -> ticket 1; runs, passes the gate, blocks in
-    //      awaitExecuteTurn(mid, 1) waiting for ticket 0.
+    //      ExecuteOrderGate::awaitTurn(mid, 1) waiting for ticket 0.
     //   .. beginShutdown()
     //   A  released; reaches the gate, now closed, and is refused.
     // A must release ticket 0 on that path or B never completes.
@@ -438,7 +362,7 @@ TEST_CASE(
     WaitReply replyA;
     server->handle(morph::wire::encode(reqA), std::ref(replyA));
 
-    // B takes ticket 1 and runs all the way to awaitExecuteTurn(mid, 1), where
+    // B takes ticket 1 and runs all the way to ExecuteOrderGate::awaitTurn(mid, 1), where
     // it waits for ticket 0. `_inFlightExecutes` is incremented immediately
     // before that wait, so `health().inFlight == 1` is a deterministic signal
     // that B is parked there rather than a sleep hoping that it is.
@@ -485,7 +409,7 @@ namespace {
 /// stamping), then -- after the registry lookup -- `authorizeInstance` (the
 /// row-level gate). All three are non-`noexcept` virtuals on the public
 /// `morph::session::IAuthorizer` extension point, and each sits *between*
-/// `handleImpl`'s `takeExecuteTicket` and the `releaseExecuteTicket` that
+/// `handleImpl`'s `ExecuteOrderGate::take` and the `ExecuteOrderGate::release` that
 /// follows `_strand.post`, so a throw from any of them unwinds across the
 /// ticketed region.
 enum class ThrowingHook : std::uint8_t { Authorize, Authenticate, AuthorizeInstance };
@@ -496,7 +420,7 @@ enum class ThrowingHook : std::uint8_t { Authorize, Authenticate, AuthorizeInsta
 /// Arming is what keeps the interleaving decided rather than raced: the
 /// `register` envelope and request B both run through this authorizer while
 /// it is still a plain allow-all, and only the *held* request A -- released
-/// after B is parked in `awaitExecuteTurn` -- ever sees the throw.
+/// after B is parked in `ExecuteOrderGate::awaitTurn` -- ever sees the throw.
 class ArmedThrowingAuthorizer : public morph::session::IAuthorizer {
 public:
     /// @brief Constructs an authorizer that will throw from @p hook once armed.
@@ -595,7 +519,7 @@ void runThrowingHookStrandsNothing(ThrowingHook hook) {
     server->handle(morph::wire::encode(reqA), std::ref(replyA));
 
     // B takes ticket 1 and runs, unimpeded (the authorizer is not armed yet),
-    // all the way to awaitExecuteTurn(mid, 1). `_inFlightExecutes` is
+    // all the way to ExecuteOrderGate::awaitTurn(mid, 1). `_inFlightExecutes` is
     // incremented immediately before that wait, so `health().inFlight == 1` is
     // a deterministic signal that B is parked there -- no sleep involved.
     WaitReply replyB;
@@ -645,14 +569,14 @@ TEST_CASE(
     // helper only covers the *explicit* early returns; an exception unwinds
     // past all of them into `dispatchMessage`'s outer catch, which replies but
     // released nothing. The fix is structural -- the ticket is owned by an
-    // RAII holder for the whole span between `takeExecuteTicket` and the
+    // RAII holder for the whole span between `ExecuteOrderGate::take` and the
     // release that follows `_strand.post`, so every exit path releases it,
     // including ones nobody has thought of yet.
     //
     // The interleaving, forced rather than raced (identical to #348's case):
     //   A  handle() -> ticket 0; its pool task is intercepted before it runs.
     //   B  handle() -> ticket 1; runs, passes every gate, parks in
-    //      awaitExecuteTurn(mid, 1) waiting for ticket 0.
+    //      ExecuteOrderGate::awaitTurn(mid, 1) waiting for ticket 0.
     //   .. the authorizer is armed (so only A can see the throw)
     //   A  released; its hook throws.
     //
@@ -783,14 +707,14 @@ private:
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE(
     "an execute rejected out of ticket order does not strand an earlier ticket "
-    "that has not reached awaitExecuteTurn yet",
+    "that has not reached ExecuteOrderGate::awaitTurn yet",
     "[remote][execute-ordering]") {
     // Regression test for #449 -- the third occurrence of the stranded-ticket
     // bug class #348 and #351 each closed by making the *release* structural.
     // Making release unmissable was necessary and is not sufficient: the
-    // remaining hole is in `releaseExecuteTicket` itself.
+    // remaining hole is in `ExecuteOrderGate::release` itself.
     //
-    // `releaseExecuteTicket(mid, ticket)` used to assign
+    // `ExecuteOrderGate::release(mid, ticket)` used to assign
     //
     //     gate.nextToRun = ticket + 1;
     //
@@ -798,10 +722,10 @@ TEST_CASE(
     // not, and by design: every early return in `dispatchExecute`
     // (`rejectAndRelease` -- model not found, unauthorized, over limit) and
     // `dispatchMessage`'s shutdown gate release *immediately*, deliberately
-    // never calling `awaitExecuteTurn`, so that a rejection cannot hold up the
+    // never calling `ExecuteOrderGate::awaitTurn`, so that a rejection cannot hold up the
     // live executes queued behind it. So a later ticket routinely releases
     // first -- and when it did, that assignment pushed `nextToRun` straight
-    // *past* an earlier ticket's number. `awaitExecuteTurn` waits on
+    // *past* an earlier ticket's number. `ExecuteOrderGate::awaitTurn` waits on
     // `nextToRun == ticket` with no deadline, so the earlier ticket's waiter
     // could never be satisfied: a pool worker blocked for the rest of the
     // process's life, `_inFlightExecutes` stuck above zero (so

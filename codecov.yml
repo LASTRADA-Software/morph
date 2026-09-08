@@ -117,20 +117,152 @@ component_management:
     # cannot be reconciled by adjusting anything. The measurement has to be
     # retaken, not corrected -- which is what morph#403 said would happen.
     #
-    # informational: true, like every other component here, and for the same
-    # reason: the decision to make any of these blocking is recorded below as
-    # the repo owner's, taken once the ladder is finished. This component
-    # changes what the file *says* about the framework, not what it enforces.
+    # Re-measured after the 2026-09 framework-coverage-and-mutation plan
+    # (docs/superpowers/plans/2026-09-03-framework-coverage-and-mutation.md)
+    # closed the gap the paragraphs above describe. Same file this
+    # repository actually uploads (build/clang-coverage/coverage.lcov,
+    # post-aggregate_lcov_branches.py) and the same Codecov-style arithmetic
+    # (a DA line with zero hits is a miss, a hit line with an untaken BRDA
+    # branch is a partial, coverage is hits / (hits + misses + partials)) --
+    # but NOT the same configure as the 93.98% figure above or as CI's
+    # coverage leg: this run used MORPH_BUILD_NET/OFFLINE_SQLITE/QT=ON
+    # without MORPH_BUILD_LADDER=ON (Mull/mutation infrastructure being
+    # unavailable on this machine made the full CI-matching build worth
+    # skipping rather than fighting for a bookkeeping-only re-measurement).
+    # LADDER cannot change which include/morph files appear in the
+    # denominator (it only builds examples/'s own testkit/GUI
+    # infrastructure and rungs), but its test binaries do exercise
+    # include/morph and would add hits CI's own report will have that this
+    # number doesn't -- so 98.10% below is a lower bound on what CI's own
+    # coverage leg will show for this same tree, not an exact reproduction
+    # of it. Against a full net + forms + core + offline audit-close-
+    # remeasure pass, not just the net addition that made the 93% figure
+    # provisional: 8,502 hits of 8,667 lines = 98.10%, 80 misses, 85
+    # partials:
+    #
+    #     net       94.69%   1,262 lines    39 misses,  28 partials
+    #     forms     98.43%   1,590 lines    10 misses,  15 partials
+    #     offline   96.56%     639 lines    11 misses,  11 partials
+    #     core      98.88%   3,292 lines    16 misses,  21 partials
+    #     util      98.91%   1,007 lines     2 misses,   9 partials
+    #     session   98.80%     249 lines     2 misses,   1 partial
+    #     qt       100.00%      39 lines
+    #     journal  100.00%     357 lines
+    #     detail   100.00%     155 lines
+    #     render   100.00%      77 lines
+    #
+    # net -- the subsystem that carried the whole gap above -- is no longer
+    # an outlier: every subsystem now sits at or above 94.69%, and the four
+    # this plan actually touched (net, forms, offline, core) each moved by
+    # double digits or, for core (already high), by the largest remaining
+    # absolute miss count. The branch-coverage view
+    # (scripts/check_branch_coverage.py, the stricter of the two measures
+    # since a hit line with one untaken arm still counts against it) moved
+    # from 91.19% to 95.95% over the same work, with every subsystem clear
+    # of its own floor in scripts/check_branch_coverage.py's FLOORS table.
+    #
+    # 97%, a margin below the 98.10% measured ceiling on the same terms
+    # every other target in this file leaves (roughly a point, not sitting
+    # on the number). informational: true is unchanged, for the same reason
+    # as before: the decision to make this blocking is the repo owner's,
+    # recorded once the ladder is finished, and this component changes what
+    # the file *says* about the framework, not what it enforces.
     - component_id: framework
       name: "morph framework (include/morph)"
       paths:
         - include/morph/**
       statuses:
         - type: project
-          target: 93%
+          target: 97%
           informational: true
         - type: patch
-          target: 93%
+          target: 97%
+          informational: true
+
+    # include/morph/offline and include/morph/forms, each split out of
+    # `framework` above so the subsystem can produce a status of its own
+    # (morph#453 item D).
+    #
+    # Neither had a `component_id` until now, and the consequence was that
+    # neither could ever go red. `framework` scores all of include/morph as
+    # one number, and include/morph/offline is 639 of its 8,667 lines --
+    # offline sliding from 96% to 60% moves the whole-library figure by
+    # about two and a half points and names no subsystem while doing it.
+    # This is the same hole this file already records one level down for the
+    # rungs ("scripts/check_rung_filters.sh checks that each rung has a
+    # `component_id`, not that it has these, so the omission was
+    # unguarded"), and the fix is the same: a component per thing you want
+    # to be able to see move.
+    #
+    # The paths deliberately overlap `framework`'s `include/morph/**`.
+    # Codecov scores each component independently, so these files are still
+    # counted there too; this adds a narrower second view rather than
+    # carving the first one up. `framework`'s own 97% target is unchanged
+    # and still measured over the whole library.
+    #
+    # Both targets come from the same audit-close-remeasure run recorded in
+    # the `framework` comment above -- same uploaded file
+    # (build/clang-coverage/coverage.lcov, post-aggregate_lcov_branches.py),
+    # same Codecov-style arithmetic, and so the same caveat: that run
+    # configured NET/OFFLINE_SQLITE/QT without LADDER, whose test binaries
+    # would add hits to include/morph, so each figure is a lower bound on
+    # what CI's own coverage leg reports for this tree.
+    #
+    #     offline    96.56%     639 lines    11 misses,  11 partials
+    #     forms      98.43%   1,590 lines    10 misses,  15 partials
+    #
+    # Both were re-derived from an independent local run of CI's own
+    # clang-coverage configure (NET/OFFLINE_SQLITE/QT/LADDER all ON, rungs
+    # `all`, 2,706 tests, all passing), which lands on offline 96.56% /
+    # 639 lines / 11 misses / 11 partials -- the same figures to the digit --
+    # and forms 98.60% / 1,577 lines / 10 misses / 12 partials, a shade above
+    # the LADDER-less 98.43% for exactly the reason named above. Both targets
+    # keep their margin under either measurement.
+    #
+    # `offline` also answers morph#453 item C, which asked for the before
+    # *and* the after for the one header the 85.20% subsystem figure was
+    # hiding. On the same Codecov arithmetic:
+    #
+    #     include/morph/offline/sqlite_offline_queue.hpp
+    #         before (morph#409)   57.04%    52 misses,  12 partials
+    #         after                91.53%   189 lines,   8 misses, 8 partials
+    #
+    # Most of that move is reporting, not tests: morph#403 is why the header
+    # had a denominator at all (`morph_offline_sqlite_tests` was never handed
+    # to llvm-cov, so its hits were dropped). Not all of it, though, which is
+    # why this branch still closed six genuine gaps in that header and
+    # documented the two it could not reach -- and why the honest answer to
+    # #409's "if it barely moves, the suite is thin" is that the suite was
+    # not thin, only invisible.
+    #
+    # Targets sit roughly a point below each measured ceiling, the same
+    # margin convention every other target in this file uses, so an ordinary
+    # refactor does not trip them while a real regression does.
+    # `informational: true` on both, matching `framework` and every ladder
+    # component: this changes what the file can *see*, not what it enforces.
+    # Making any of it blocking is the repo owner's decision (morph#133).
+    - component_id: offline
+      name: "morph offline queue (include/morph/offline)"
+      paths:
+        - include/morph/offline/**
+      statuses:
+        - type: project
+          target: 95%
+          informational: true
+        - type: patch
+          target: 95%
+          informational: true
+
+    - component_id: forms
+      name: "morph forms (include/morph/forms)"
+      paths:
+        - include/morph/forms/**
+      statuses:
+        - type: project
+          target: 97%
+          informational: true
+        - type: patch
+          target: 97%
           informational: true
 
     - component_id: ladder

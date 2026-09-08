@@ -150,6 +150,23 @@ struct IOfflineQueue {
     /// The default implementation delegates to `enqueue(std::move(payload))`
     /// and then stamps the key via `setIdempotencyKey`, so existing
     /// `IOfflineQueue` implementations keep working without overriding it.
+    ///
+    /// @par Non-atomicity of this default (implementors, read this)
+    /// This default makes **two separate virtual calls**
+    /// (`enqueue(payload)`, then `setIdempotencyKey(itemId, key)`), each
+    /// independently locking and unlocking whatever internal mutex the
+    /// concrete class uses — nothing is held across both calls. A concurrent
+    /// `markDone(itemId)` racing in the window between them could erase the
+    /// item before the key is stamped (silently dropping the key rather than
+    /// throwing), and a concurrent `drain()` in that same window can observe
+    /// the item with an *empty* idempotency key. A subclass that stores keys
+    /// and cares about atomicity **must override the two-argument `enqueue`**
+    /// and stamp the key under the same lock acquisition that inserts the
+    /// item, exactly as every implementation morph ships already does
+    /// (`FileOfflineQueue`, `InMemoryOfflineQueue`, `SqliteOfflineQueue` all
+    /// override it inline) — this base default exists only so a subclass
+    /// that has not been updated yet keeps compiling and working for the
+    /// non-concurrent case, not as an atomicity guarantee.
     /// @param payload        Serialised action to persist.
     /// @param idempotencyKey Stable dedup token for the logical op; may be empty.
     /// @return A stable id that can be passed to `markDone()`.

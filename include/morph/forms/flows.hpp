@@ -314,6 +314,32 @@ public:
     ///        a successful result (a not-ready step does not advance).
     /// @return `true` if the flow advanced, `false` if the current step is not
     ///         ready or the flow is already `finished()`.
+    ///
+    /// @par Why `finished()` can never be the reason this returns `false`
+    /// `ready` is read under its own `scoped_lock`, released before
+    /// `finished()` is even evaluated -- a two-phase read that looks, on its
+    /// face, like it could observe `_currentReady == true` for a flow that
+    /// has *already* advanced past its last step. It cannot: `_currentReady`
+    /// and `_activeStep` are set together, under the one `scoped_lock` below,
+    /// every time `_activeStep` becomes `sizeof...(Steps)` (the "finished"
+    /// sentinel) -- so the instant `_activeStep` reaches it, `_currentReady`
+    /// is atomically forced to `false` in the same critical section, with no
+    /// writer able to interleave between the two stores. No other writer of
+    /// `_currentReady = true` can ever land while `_activeStep` holds that
+    /// sentinel: `captureResult`'s guard requires `stepIndex == _activeStep`,
+    /// and `stepIndex` is always a step position in `[0, sizeof...(Steps))`
+    /// (captured from `_activeStep` in `set<>()` at fire time, which only
+    /// ever fires the current, not-yet-finished step); `back()` decrements
+    /// `_index` below the sentinel and re-pairs `_activeStep` with that
+    /// smaller value in the same lock scope it sets `_currentReady = true`
+    /// in. So `_activeStep == sizeof...(Steps)` implies `_currentReady ==
+    /// false` for as long as the flow stays finished -- which means whenever
+    /// `finished()` would be `true` here, `!ready` was already `true`, and
+    /// the `||`'s right operand never contributes a case of its own.
+    /// Confirmed empirically: `llvm-cov` reports `finished()`'s branch here
+    /// as never observed `true` across the whole suite, matching the proof
+    /// rather than contradicting it -- this is a documented-unreachable
+    /// defensive check, not an undertested live TOCTOU.
     bool advance() {
         bool ready = false;
         {

@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <algorithm>
 #include <cctype>
+#include <morph/core/detail/reply_router.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <stdexcept>
@@ -524,31 +525,145 @@ void QtWebSocketBackend::attemptReconnect() {
     // schedules the next attempt with the updated backoff.
 }
 
+void QtWebSocketBackend::onUndecodableMessage(std::string msg) {
+    // Malformed reply — route as a sync error if a waiter is parked. The raw
+    // text is handed over rather than discarded so the parked caller can
+    // report something better than "disconnected".
+    _pendingReply = std::move(msg);
+    if (_syncLoop != nullptr) {
+        _syncLoop->quit();
+        return;
+    }
+    // No sync waiter: with the callId unreadable, this reply cannot be
+    // matched to the execute it belongs to. Dropping it silently — the
+    // previous behavior — left that execute's Completion unsettled forever,
+    // firing neither .then() nor .onError(); a caller awaiting it simply
+    // hangs. Since every message on this socket is required to be one
+    // envelope, an undecodable one means the peer's framing can no longer be
+    // trusted, so fail the pending calls rather than wait on a stream that
+    // may never produce a matching reply. A spurious error is recoverable by
+    // the caller; a permanent hang is not.
+    cancelPending(std::make_exception_ptr(
+        std::runtime_error("protocol error: server sent a message that is not a valid envelope")));
+}
+
+bool QtWebSocketBackend::tryRouteExecuteReply(const ::morph::wire::Envelope& env) {
+    PendingExecute execPending;
+    {
+        std::scoped_lock const lock{_pendingMtx};
+        auto iter = _pending.find(env.callId);
+        if (iter == _pending.end()) {
+            return false;
+        }
+        execPending = std::move(iter->second);
+        _pending.erase(iter);
+    }
+
+    // Triage shared with net::SocketBackend and SimulatedRemoteBackend
+    // (core/detail/reply_router.hpp). This site used to match a
+    // hand-typed "timeout" literal instead of
+    // wire::kExecuteTimeoutMessage -- the exact typo-drift that
+    // constant exists to prevent, found while extracting the router.
+    switch (::morph::backend::detail::classifyExecuteReply(env)) {
+        case ::morph::backend::detail::ExecuteReplyKind::Value:
+            try {
+                execPending.state->setValue(execPending.deserialize(env.body));
+            } catch (...) {
+                execPending.state->setException(std::current_exception());
+            }
+            break;
+        case ::morph::backend::detail::ExecuteReplyKind::Timeout:
+            execPending.state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
+            break;
+        case ::morph::backend::detail::ExecuteReplyKind::Error:
+        default:
+            // `default:` only because the project builds with
+            // -Wswitch-default; every enumerator of the closed
+            // ExecuteReplyKind is handled explicitly above.
+            execPending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
+            break;
+    }
+    return true;
+}
+
+bool QtWebSocketBackend::tryRouteRegistrationReply(const ::morph::wire::Envelope& env) {
+    PendingRegistration regPending;
+    {
+        std::scoped_lock const lock{_pendingMtx};
+        auto iter = _pendingRegistrations.find(env.callId);
+        if (iter == _pendingRegistrations.end()) {
+            return false;
+        }
+        regPending = std::move(iter->second);
+        _pendingRegistrations.erase(iter);
+    }
+
+    if (env.kind == "ok") {
+        regPending.onRegistered(::morph::exec::detail::ModelId{env.modelId});
+    } else {
+        regPending.onError(env.message);
+    }
+    return true;
+}
+
+bool QtWebSocketBackend::tryRouteAssignReply(const ::morph::wire::Envelope& env) {
+    PendingAssign assignPending;
+    {
+        std::scoped_lock const lock{_pendingMtx};
+        auto iter = _pendingAssigns.find(env.callId);
+        if (iter == _pendingAssigns.end()) {
+            return false;
+        }
+        assignPending = std::move(iter->second);
+        _pendingAssigns.erase(iter);
+    }
+
+    if (env.kind == "ok") {
+        assignPending.onRegistered(::morph::exec::detail::ModelId{env.modelId});
+    } else {
+        assignPending.onError(env.message);
+    }
+    return true;
+}
+
+bool QtWebSocketBackend::tryRouteDeregisterReply(const ::morph::wire::Envelope& env) {
+    // A fire-and-forget deregister's reply (see issue #65): assigned a
+    // real callId purely so it lands here instead of falling through
+    // to the callId==0 branch in onTextMessage and being handed to whichever
+    // sendSync waiter happens to be parked. Nobody observes the
+    // reply either way -- ok or err, drop it.
+    std::scoped_lock const lock{_pendingMtx};
+    auto iter = _pendingDeregisters.find(env.callId);
+    if (iter == _pendingDeregisters.end()) {
+        return false;
+    }
+    _pendingDeregisters.erase(iter);
+    return true;
+}
+
+void QtWebSocketBackend::routeKeyedReply(const ::morph::wire::Envelope& env) {
+    if (tryRouteExecuteReply(env)) {
+        return;
+    }
+    if (tryRouteRegistrationReply(env)) {
+        return;
+    }
+    if (tryRouteAssignReply(env)) {
+        return;
+    }
+    // No map matched (the deregister drop included): an already-resolved or
+    // already-cancelled callId's late reply, dropped silently -- same as
+    // before this feature for an execute reply.
+    static_cast<void>(tryRouteDeregisterReply(env));
+}
+
 void QtWebSocketBackend::onTextMessage(const QString& message) {
     std::string msg = message.toStdString();
     ::morph::wire::Envelope env;
     try {
         env = ::morph::wire::decode(msg);
     } catch (const std::exception&) {
-        // Malformed reply — route as a sync error if a waiter is parked. The raw
-        // text is handed over rather than discarded so the parked caller can
-        // report something better than "disconnected".
-        _pendingReply = msg;
-        if (_syncLoop) {
-            _syncLoop->quit();
-            return;
-        }
-        // No sync waiter: with the callId unreadable, this reply cannot be
-        // matched to the execute it belongs to. Dropping it silently — the
-        // previous behavior — left that execute's Completion unsettled forever,
-        // firing neither .then() nor .onError(); a caller awaiting it simply
-        // hangs. Since every message on this socket is required to be one
-        // envelope, an undecodable one means the peer's framing can no longer be
-        // trusted, so fail the pending calls rather than wait on a stream that
-        // may never produce a matching reply. A spurious error is recoverable by
-        // the caller; a permanent hang is not.
-        cancelPending(std::make_exception_ptr(
-            std::runtime_error("protocol error: server sent a message that is not a valid envelope")));
+        onUndecodableMessage(std::move(msg));
         return;
     }
 
@@ -558,88 +673,7 @@ void QtWebSocketBackend::onTextMessage(const QString& message) {
     // (registerModel/deregister/etc's sendSync calls) carry callId == 0 and
     // resume the parked nested event loop.
     if (env.callId != 0U) {
-        PendingExecute execPending;
-        bool foundExecute = false;
-        {
-            std::scoped_lock lock{_pendingMtx};
-            auto iter = _pending.find(env.callId);
-            if (iter != _pending.end()) {
-                execPending = std::move(iter->second);
-                _pending.erase(iter);
-                foundExecute = true;
-            }
-        }
-        if (foundExecute) {
-            if (env.kind == "ok") {
-                try {
-                    execPending.state->setValue(execPending.deserialize(env.body));
-                } catch (...) {
-                    execPending.state->setException(std::current_exception());
-                }
-            } else if (env.message == "timeout") {
-                execPending.state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
-            } else {
-                execPending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
-            }
-            return;
-        }
-
-        PendingRegistration regPending;
-        bool foundRegistration = false;
-        {
-            std::scoped_lock lock{_pendingMtx};
-            auto iter = _pendingRegistrations.find(env.callId);
-            if (iter != _pendingRegistrations.end()) {
-                regPending = std::move(iter->second);
-                _pendingRegistrations.erase(iter);
-                foundRegistration = true;
-            }
-        }
-        if (foundRegistration) {
-            if (env.kind == "ok") {
-                regPending.onRegistered(::morph::exec::detail::ModelId{env.modelId});
-            } else {
-                regPending.onError(env.message);
-            }
-            return;
-        }
-
-        PendingAssign assignPending;
-        bool foundAssign = false;
-        {
-            std::scoped_lock lock{_pendingMtx};
-            auto iter = _pendingAssigns.find(env.callId);
-            if (iter != _pendingAssigns.end()) {
-                assignPending = std::move(iter->second);
-                _pendingAssigns.erase(iter);
-                foundAssign = true;
-            }
-        }
-        if (foundAssign) {
-            if (env.kind == "ok") {
-                assignPending.onRegistered(::morph::exec::detail::ModelId{env.modelId});
-            } else {
-                assignPending.onError(env.message);
-            }
-            return;
-        }
-
-        {
-            // A fire-and-forget deregister's reply (see issue #65): assigned a
-            // real callId purely so it lands here instead of falling through
-            // to the callId==0 branch below and being handed to whichever
-            // sendSync waiter happens to be parked. Nobody observes the
-            // reply either way -- ok or err, drop it.
-            std::scoped_lock lock{_pendingMtx};
-            auto iter = _pendingDeregisters.find(env.callId);
-            if (iter != _pendingDeregisters.end()) {
-                _pendingDeregisters.erase(iter);
-                return;
-            }
-        }
-        // No map matched: an already-resolved or already-cancelled callId's
-        // late reply, dropped silently -- same as before this feature for an
-        // execute reply.
+        routeKeyedReply(env);
         return;
     }
 

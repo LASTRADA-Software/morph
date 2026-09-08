@@ -23,6 +23,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <limits>
 #include <morph/forms/forms.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
@@ -243,4 +244,135 @@ TEST_CASE("Forms::FieldBounds::ActionWithoutFieldMetadataIsTriviallySatisfied", 
     CHECK(morph::forms::allFieldBoundsSatisfied(action));
     action.budget = Rational{-99, DecimalPlaces{1}};
     CHECK(morph::forms::allFieldBoundsSatisfied(action));
+}
+
+// ---------------------------------------------------------------------------
+// detail::declaresAnyBound / detail::hasUsableMultipleOf, directly.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Forms::FieldBounds::DeclaresAnyBoundIsTrueForMaximumAlone", "[forms][bounds]") {
+    // declaresAnyBound's `maximum.has_value()` disjunct is only evaluated
+    // once `minimum` is disengaged; every FieldMeta declared above sets
+    // minimum (alone, or alongside maximum/multipleOf), so that disjunct's
+    // true arm was never observed.
+    morph::forms::FieldMeta const meta{.field = "x", .maximum = Rational{5, DecimalPlaces{0}}};
+    CHECK(morph::forms::detail::declaresAnyBound(meta));
+}
+
+TEST_CASE("Forms::FieldBounds::HasUsableMultipleOfRejectsZeroAndNegative", "[forms][bounds]") {
+    // JSON Schema requires multipleOf to be strictly positive; the doc
+    // comment says a zero or negative declaration is ignored, but neither
+    // case was ever exercised.
+    morph::forms::FieldMeta const zero{.field = "x", .multipleOf = Rational{0, DecimalPlaces{0}}};
+    CHECK_FALSE(morph::forms::detail::hasUsableMultipleOf(zero));
+
+    morph::forms::FieldMeta const negative{.field = "x", .multipleOf = Rational{-1, DecimalPlaces{0}}};
+    CHECK_FALSE(morph::forms::detail::hasUsableMultipleOf(negative));
+}
+
+// ---------------------------------------------------------------------------
+// allFieldBoundsSatisfied: a FieldMeta that declares no bound at all.
+// ---------------------------------------------------------------------------
+
+struct FBCosmeticOnlyAction {
+    FBReads reading;
+
+    static constexpr std::array<morph::forms::FieldMeta, 1> fieldMetadata{
+        morph::forms::FieldMeta{.field = "reading", .label = "Reading", .help = "No numeric bound declared"},
+    };
+};
+
+TEST_CASE("Forms::FieldBounds::AFieldMetaWithNoDeclaredBoundIsSkipped", "[forms][bounds]") {
+    // meta != nullptr but declaresAnyBound(*meta) is false was never
+    // exercised: every FieldMeta declared above sets at least one of
+    // minimum/maximum/multipleOf. A FieldMeta that only carries cosmetic
+    // properties (label/help) must never gate the value, regardless of it.
+    FBCosmeticOnlyAction action{};
+    CHECK(morph::forms::allFieldBoundsSatisfied(action));
+    action.reading = Rational{-999, DecimalPlaces{1}};
+    CHECK(morph::forms::allFieldBoundsSatisfied(action));  // cosmetic-only metadata never gates
+}
+
+// ---------------------------------------------------------------------------
+// satisfiesDeclaredBounds's checkedDiv failure mode (Overflow).
+// ---------------------------------------------------------------------------
+
+struct FBOverflowAction {
+    Rational value;
+
+    static constexpr std::array<morph::forms::FieldMeta, 1> fieldMetadata{
+        morph::forms::FieldMeta{
+            .field = "value",
+            .multipleOf =
+                Rational{Numerator{1}, Denominator{std::numeric_limits<std::int64_t>::max()}, DecimalPlaces{0}}},
+    };
+
+    [[nodiscard]] bool validate() const noexcept { return morph::forms::allFieldBoundsSatisfied(*this); }
+};
+
+TEST_CASE("Forms::FieldBounds::CheckedDivOverflowIsTreatedAsAViolation", "[forms][bounds]") {
+    // satisfiesDeclaredBounds's checkedDiv never actually failed in any
+    // exercised call before this: hasUsableMultipleOf's own guard already
+    // excludes DivisionByZero at this call site (multipleOf can't be zero),
+    // leaving Overflow as the one reachable failure mode. checkedDiv is
+    // checkedMul(lhs, rhs.reciprocal()); reciprocal() of a multipleOf with a
+    // near-INT64_MAX denominator has a near-INT64_MAX numerator, and
+    // multiplying that by anything beyond 1 overflows the internal 64-bit
+    // cross-multiply. Nail the exact pair directly first, per the audit's
+    // own recipe.
+    Rational const multipleOf{Numerator{1}, Denominator{std::numeric_limits<std::int64_t>::max()}, DecimalPlaces{0}};
+    REQUIRE_FALSE(morph::math::checkedDiv(Rational{2, DecimalPlaces{0}}, multipleOf).has_value());
+
+    FBOverflowAction const action{.value = Rational{2, DecimalPlaces{0}}};
+    // An unrepresentable quotient is treated as a bound violation, not a
+    // pass -- satisfiesDeclaredBounds refuses to vouch for a multiple it
+    // cannot exactly represent.
+    CHECK_FALSE(action.validate());
+}
+
+TEST_CASE("Forms::FieldBounds::BareRationalSatisfyingItsDeclaredBoundPasses", "[forms][bounds]") {
+    // allFieldBoundsSatisfied's `std::same_as<Member, Rational>` arm
+    // (satisfiesDeclaredBounds's result *not* gating `satisfied`) was only
+    // ever exercised via the overflow-as-violation case above -- every
+    // FBOverflowAction this suite constructed had a nonzero `value`, which
+    // multiplied by that field's near-INT64_MAX-reciprocal multipleOf always
+    // overflows checkedDiv. Zero is a multiple of everything and 0 *
+    // INT64_MAX is exactly representable, so checkedDiv succeeds with an
+    // integral quotient and the bound is genuinely satisfied here, not
+    // merely un-violated by construction.
+    FBOverflowAction const action{.value = Rational{0, DecimalPlaces{0}}};
+    CHECK(action.validate());
+}
+
+// ---------------------------------------------------------------------------
+// annotateExactBound's std::cmp_greater(...) arm for a user-declared bound.
+//
+// Correction to this file's own audit (task-9-forms-findings.md finding #4):
+// fresh `llvm-cov show --show-branches=count` measurement shows the POSITIVE
+// arm, not the negative one, was the untested half at this call site.
+// emitDeclaredBound always writes `property[key] = bound.numerator` -- a
+// `std::int64_t`-typed assignment that glaze's generic_u64 always routes to
+// its *signed* overload regardless of the runtime value's sign -- so a
+// user-declared FieldMeta bound always lands on annotateExactBound's
+// `int64_t` branch, unlike glaze's own $defs/int64_t type-range "maximum"
+// (test_forms_exact_bounds.cpp), which happens to be written through the
+// uint64_t overload instead. Every FieldMeta bound in this suite is a small
+// positive integer well under kExactDoubleLimit, so cmp_greater's true arm
+// was never observed -- only cmp_less's, via that other file's int64_t
+// $defs minimum (INT64_MIN).
+// ---------------------------------------------------------------------------
+
+struct FBHugePositiveBoundAction {
+    std::int64_t reading = 0;
+
+    static constexpr std::array<morph::forms::FieldMeta, 1> fieldMetadata{
+        morph::forms::FieldMeta{.field = "reading",
+                                .minimum = Rational{Numerator{std::numeric_limits<std::int64_t>::max()},
+                                                    Denominator{1}, DecimalPlaces{0}}},
+    };
+};
+
+TEST_CASE("Forms::FieldBounds::HugePositiveMinimumGetsAnExactTextCompanion", "[forms][bounds]") {
+    auto const schema = morph::forms::schemaJson<FBHugePositiveBoundAction>();
+    CHECK(schema.contains(R"("x-exactMinimum":"9223372036854775807")"));
 }

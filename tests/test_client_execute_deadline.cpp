@@ -146,6 +146,32 @@ struct morph::model::ModelTraits<DeadlineModel> {
     static constexpr std::string_view typeId() { return "Deadline_Model"; }
 };
 
+namespace {
+// An action whose model handler throws for a real (non-timeout) reason --
+// used to distinguish "a genuine backend failure" from "the client-side
+// deadline fired" in the .onError() continuation below.
+struct DeadlineFail {};
+
+struct DeadlineFailModel {
+    // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+    int execute(const DeadlineFail&) { throw std::runtime_error("genuine backend failure, not a timeout"); }
+};
+}  // namespace
+
+template <>
+struct morph::model::ActionTraits<DeadlineFail> {
+    using Result = int;
+    static constexpr std::string_view typeId() { return "Deadline_Fail"; }
+    static std::string toJson(const DeadlineFail&) { return "{}"; }
+    static DeadlineFail fromJson(std::string_view) { return {}; }
+    static std::string resultToJson(const int& r) { return std::to_string(r); }
+    static int resultFromJson(std::string_view s) { return std::stoi(std::string{s}); }
+};
+template <>
+struct morph::model::ModelTraits<DeadlineFailModel> {
+    static constexpr std::string_view typeId() { return "Deadline_FailModel"; }
+};
+
 TEST_CASE(
     "Bridge::setExecuteDeadline(0) (the default) never fires -- a call that never replies "
     "stays pending, matching pre-existing behavior",
@@ -296,4 +322,80 @@ TEST_CASE("A real reply that arrives after the deadline already fired is silentl
     exec.runFor(std::chrono::milliseconds{200});
     CHECK(settleCount == 1);
     CHECK(value == -1);
+}
+
+TEST_CASE("Bridge::setExecuteDeadline: calling it again with a second positive value does not recreate the scheduler",
+          "[core][bridge][client-deadline]") {
+    // setExecuteDeadline's `_executeDeadline.count() > 0 && !_timeoutScheduler`
+    // guard only ever ran with a fresh (null) scheduler in every other test in
+    // this file -- each calls it exactly once. There is no public handle onto
+    // scheduler identity, so this is a "doesn't misbehave" check: a second
+    // positive deadline must not crash, and a call dispatched afterward must
+    // still resolve normally through whatever scheduler ends up installed.
+    morph::exec::ThreadPoolExecutor workerPool{2};
+    morph::exec::MainThreadExecutor guiExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    bridge.setExecuteDeadline(std::chrono::milliseconds{2000});
+    REQUIRE_NOTHROW(bridge.setExecuteDeadline(std::chrono::milliseconds{3000}));
+    CHECK(bridge.executeDeadline() == std::chrono::milliseconds{3000});
+
+    morph::bridge::BridgeHandler<DeadlineModel> handler{bridge, &guiExec};
+    int result = -1;
+    bool failed = false;
+    handler.execute(DeadlineCount{.x = 5})
+        .then([&result](int r) { result = r; })
+        .onError([&failed](const std::exception_ptr&) { failed = true; });
+    REQUIRE(pumpUntil(guiExec, [&] { return result != -1 || failed; }));
+    CHECK(result == 5);
+    CHECK_FALSE(failed);
+}
+
+TEST_CASE(
+    "A genuine backend failure with an armed deadline propagates the real error (not ClientTimeoutError) and "
+    "releases the deadline's scheduler entry",
+    "[core][bridge][client-deadline]") {
+    // The .onError() continuation's own deadline-cancel block (mirroring the
+    // .then() continuation's, already covered by "An on-time reply releases
+    // the deadline's scheduler entry" above) is reached only when a real
+    // backend failure -- not a timeout -- settles the completion while a
+    // deadline is armed. Every other test in this file that reaches
+    // .onError() either never arms a deadline, or never gets a real reply at
+    // all before the client-side deadline itself fires.
+    morph::exec::ThreadPoolExecutor workerPool{2};
+    morph::exec::MainThreadExecutor guiExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    bridge.setExecuteDeadline(std::chrono::milliseconds{5000});  // generous; must not fire itself
+    morph::bridge::BridgeHandler<DeadlineFailModel> handler{bridge, &guiExec};
+
+    bool failed = false;
+    bool wasClientTimeout = false;
+    bool wasOtherError = false;
+    std::weak_ptr<void> stateWatch;
+    {
+        auto completion = handler.execute(DeadlineFail{});
+        stateWatch = completion.state();
+        completion.onError([&](const std::exception_ptr& err) {
+            failed = true;
+            try {
+                std::rethrow_exception(err);
+            } catch (const morph::backend::ClientTimeoutError&) {
+                wasClientTimeout = true;
+            } catch (...) {
+                // Anything else is the real backend failure this test wants to
+                // see propagate; recorded rather than swallowed so the
+                // assertions below can tell "some other error" from "no error".
+                wasOtherError = true;
+            }
+        });
+    }
+    REQUIRE(pumpUntil(guiExec, [&] { return failed; }));
+    // The real backend failure propagates, not a synthesized client timeout.
+    CHECK_FALSE(wasClientTimeout);
+    CHECK(wasOtherError);
+
+    guiExec.runFor(std::chrono::milliseconds{100});
+    // Without the .onError() continuation's own cancel, the timer entry (and
+    // the state it pins) would still be alive for the remainder of the 5s
+    // deadline.
+    CHECK(stateWatch.expired());
 }

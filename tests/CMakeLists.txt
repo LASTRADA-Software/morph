@@ -33,6 +33,7 @@ add_executable(morph_tests
     test_observability.cpp
     test_backend_extra.cpp
     test_registry_extra.cpp
+    test_registry_schema_forgery.cpp
     test_registration_qualified_types.cpp
     test_registration_same_line.cpp
     test_principal.cpp
@@ -45,6 +46,7 @@ add_executable(morph_tests
     test_remote_connection_scope.cpp
     test_remote_step_interleaving.cpp
     test_remote_execute_ordering.cpp
+    test_execute_order_gate.cpp
     test_action_validation.cpp
     test_action_wire_rejection.cpp
     test_security_fixes.cpp
@@ -78,6 +80,7 @@ add_executable(morph_tests
     test_wire_encode_fault.cpp
     test_wire_hardening.cpp
     test_remote_reply_envelopes.cpp
+    test_reply_router.cpp
     test_wire_schemas.cpp
     test_protocol_version.cpp
     test_limit_policy.cpp

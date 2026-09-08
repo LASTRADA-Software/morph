@@ -1,0 +1,74 @@
+# ThreadSanitizer suppressions for known false positives.
+#
+# Companion to cmake/valgrind.supp, and wired in the same way: the
+# `clang-tsan` leg of the sanitizers job in .github/workflows/ci.yml points
+# TSAN_OPTIONS=suppressions= at this file.
+#
+# ── libstdc++'s refcounted exception teardown (morph#476) ──────────────────
+#
+# A `std::exception_ptr` is a refcounted handle to one heap-allocated
+# exception object, and the `std::runtime_error` inside it holds its message
+# in libstdc++'s refcounted COW `std::string`.
+# `SocketBackend::onDisconnected()` builds a single `DisconnectedError` and
+# `cancelPending()` hands that one `exception_ptr` to every drained pending
+# completion, so N `CompletionState`s share it; each destructor rethrows it,
+# reads `what()` for the orphan log, and then drops its reference, on
+# whatever thread happened to drop the last `Completion` handle.
+#
+# The last reference to go frees the exception object and its message
+# buffer. TSan reports the `what()` read on one thread and that free on
+# another as a data race. It is not one: the ordering edges are those two
+# refcounts, decremented with `__exchange_and_add_dispatch(..., -1)` under
+# `__ATOMIC_ACQ_REL`. A thread reading `what()` provably still holds a
+# reference, so the free provably cannot precede the read. TSan cannot see
+# either edge because both live inside an **uninstrumented**
+# `libstdc++.so.6`: the tool sees an opaque library decrement something and
+# then call `free()`, with no happens-before to order the two accesses.
+#
+# Established with a 33-line standalone control -- several threads sharing
+# one `exception_ptr`, each rethrowing it and reading `what()` while the
+# parent drops its reference -- in which a use-after-free is impossible by
+# refcounting and which reproduces the identical `operator delete` and
+# `free` summaries 20 runs out of 20, with no morph code linked at all. Its
+# write stacks carry both shapes seen in the wild: one through
+# `exception_ptr::_M_release`, one through the COW string's
+# `_M_dispose`/`_M_destroy` under `~runtime_error`.
+#
+# The behaviour is on `origin/master` too; this branch's new `SocketBackend`
+# disconnect test is simply the first thing in the tree that exercises the
+# path hard enough to trip it.
+#
+# ── Why these three frames, and why not more ──────────────────────────────
+#
+# Each names a frame TSan resolves *by symbol* rather than by debug info,
+# which is what makes them survive the runner's stripped `libstdc++.so.6`.
+# All three are confirmed resolvable there: the first two appear by name in
+# the CI report this file was written against
+# (`std::__exception_ptr::exception_ptr::_M_release() <null>
+# (libstdc++.so.6+0xc2f8c)` -- a resolved name with an unresolved file,
+# exactly what an exported `.dynsym` symbol looks like after `strip`), and
+# `__dest_thunk<T>` is a template instantiated into *our* binary, so it
+# carries morph's own debug info.
+#
+# The third line is needed because TSan sometimes cannot unwind past
+# libstdc++'s tail calls and prints a write stack that goes straight from
+# `~runtime_error` to the morph frame, with no `_M_release` in between.
+# Measured: with only the first two lines this test still reported 1 run in
+# 700, and that one run was exactly this shape.
+# `std::runtime_error::~runtime_error` is likewise exported and likewise
+# appears resolved by name in CI's own report.
+#
+# Deliberately *not* suppressed, though an earlier draft had them:
+# `__cxa_free_exception` (in no measured report against this tree) and
+# `std::string::_Rep::_M_dispose` (an inlined libstdc++ internal that would
+# not symbolize on the runner, so it would be a line that silently matched
+# nothing). Also rejected: `race:morph::async::detail::CompletionState`,
+# which is symbolization-proof but would hide any future genuine race
+# involving that type.
+#
+# These are narrow on purpose. A genuine race elsewhere in morph does not
+# destroy a `std::runtime_error` or touch `exception_ptr`'s refcount, and a
+# planted control race was confirmed still reported with this file active.
+race:std::__exception_ptr::exception_ptr::_M_release
+race:std::__exception_ptr::__dest_thunk
+race:std::runtime_error::~runtime_error

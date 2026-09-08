@@ -17,6 +17,7 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
 #include <memory>
@@ -26,7 +27,9 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/forms/forms.hpp>
 #include <morph/session/session.hpp>
+#include <morph/util/quantity.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -62,6 +65,66 @@ struct WireSchemasWithdraw {
     std::int64_t amountCents = 0;
 };
 
+/// A field-less action: `requiredFieldsFor` publishes an *empty* (non-null)
+/// list for it, distinct from the `nullptr` an unregistered pair reports.
+/// RM3's "nothing to check because nothing is declared required" arm.
+struct WireSchemasPing {};
+
+struct WireSchemasPong {
+    bool ok = true;
+};
+
+/// Two required fields, neither declared optional -- RM5 needs a
+/// simultaneous miss of two-or-more required fields, which
+/// WireSchemasDeposit (one required, one declared-optional) cannot produce.
+struct WireSchemasTransfer {
+    std::int64_t amountCents = 0;
+    std::string memo;
+};
+
+// A minimal engageable (has hasValue()) unit, mirroring
+// test_forms_rules.cpp's CFRMoney -- exactlyOneOf/mutuallyExclusive need an
+// EngageableField (EmptyCapableField or std::optional), and a plain
+// std::optional-typed field could not produce the contradiction below at
+// all (an optional field is never "required by default" -- see
+// test_forms_rules.cpp's comment above CFRUnsatisfiableExactlyOne).
+enum class WireSchemasUnit : std::uint8_t { count };
+
+template <>
+struct morph::units::UnitTraits<WireSchemasUnit> {
+    static constexpr morph::units::UnitMeta meta(WireSchemasUnit /*unit*/) noexcept {
+        return {.id = "count", .display = "", .defaultDecimals = 0};
+    }
+};
+
+using WireSchemasQty = morph::units::Quantity<WireSchemasUnit::count>;
+
+/// R4: `exactlyOneOf` over two fields that are both required by default --
+/// `required` demands both, the rule permits exactly one, so nothing can be
+/// submitted. `morph::forms::schemaJson<A>()` (and therefore
+/// `buildActionDescription<A>()`) throws `UnsatisfiableFormError` the first
+/// time this action's description is asked for.
+struct WireSchemasUnsatisfiable {
+    WireSchemasQty optionA;
+    WireSchemasQty optionB;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::exactlyOneOf(&WireSchemasUnsatisfiable::optionA, &WireSchemasUnsatisfiable::optionB));
+};
+
+struct WireSchemasUnsatisfiableResult {
+    std::int64_t chosen = 0;
+};
+
+struct WireSchemasBrokenModel {
+    WireSchemasUnsatisfiableResult execute(const WireSchemasUnsatisfiable& /*action*/) {
+        return WireSchemasUnsatisfiableResult{.chosen = 0};
+    }
+};
+
+BRIDGE_REGISTER_MODEL(WireSchemasBrokenModel, "WireSchemas_Broken")
+BRIDGE_REGISTER_ACTION(WireSchemasBrokenModel, WireSchemasUnsatisfiable, "WireSchemas_Unsatisfiable")
+
 struct WireSchemasLedgerModel {
     std::int64_t balanceCents = 0;
 
@@ -73,10 +136,17 @@ struct WireSchemasLedgerModel {
         balanceCents -= action.amountCents;
         return WireSchemasDepositResult{.balanceCents = balanceCents};
     }
+    WireSchemasPong execute(const WireSchemasPing&) { return WireSchemasPong{}; }
+    WireSchemasDepositResult execute(const WireSchemasTransfer& action) {
+        balanceCents += action.amountCents;
+        return WireSchemasDepositResult{.balanceCents = balanceCents};
+    }
 };
 
 BRIDGE_REGISTER_MODEL(WireSchemasLedgerModel, "WireSchemas_Ledger")
 BRIDGE_REGISTER_ACTION(WireSchemasLedgerModel, WireSchemasDeposit, "WireSchemas_Deposit")
+BRIDGE_REGISTER_ACTION(WireSchemasLedgerModel, WireSchemasPing, "WireSchemas_Ping")
+BRIDGE_REGISTER_ACTION(WireSchemasLedgerModel, WireSchemasTransfer, "WireSchemas_Transfer")
 BRIDGE_REGISTER_ACTION(WireSchemasLedgerModel, WireSchemasWithdraw, "WireSchemas_Withdraw")
 
 namespace {
@@ -93,6 +163,16 @@ struct WireSchemasDescribeGatingAuthorizer : morph::session::IAuthorizer {
             return std::nullopt;
         }
         return ctx.principal;
+    }
+};
+
+/// Throws with an *empty* exception message from `authorize` -- the only way
+/// to make `RemoteServer::dispatchMessage`'s outer catch produce an `err`
+/// reply whose `message` is itself empty (no server-side error path
+/// otherwise constructs one). See RM13.
+struct WireSchemasEmptyMessageAuthorizer : morph::session::IAuthorizer {
+    [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
+        throw std::runtime_error("");
     }
 };
 
@@ -255,6 +335,31 @@ TEST_CASE("ActionDispatcher::requiredFieldsFor returns nullptr for an unregister
                 "WireSchemas_Ledger", "WireSchemas_NoSuchAction") == nullptr);
 }
 
+// ── R4: requiredFieldsFor's own catch around a self-contradicting formRules ──
+
+TEST_CASE("ActionDispatcher::requiredFieldsFor returns nullptr rather than propagating UnsatisfiableFormError",
+          "[registry][schemas][r4]") {
+    // buildActionDescription<WireSchemasUnsatisfiable>() throws the first time
+    // it runs (memoised into a function-local static; a throw during that
+    // static's initialisation leaves it uninitialised, so this is not a
+    // one-shot fluke -- see test_forms_rules.cpp's
+    // "ThrowIsNotCachedAwayBySchemaJson"). requiredFieldsFor's own try/catch
+    // must turn that into nullptr, not let it propagate to this caller.
+    REQUIRE(morph::model::detail::ActionDispatcher::instance().requiredFieldsFor(
+                "WireSchemas_Broken", "WireSchemas_Unsatisfiable") == nullptr);
+}
+
+TEST_CASE("ActionDispatcher::schemasJson has no such guard and propagates UnsatisfiableFormError",
+          "[registry][schemas][r4]") {
+    // schemasJson's own doc comment documents this (@throws
+    // UnsatisfiableFormError) -- unlike requiredFieldsFor, it has no
+    // try/catch around the same buildActionDescription<A>() call, so the
+    // model's broken action's schema-generation failure surfaces directly to
+    // the caller.
+    REQUIRE_THROWS_AS(morph::model::detail::ActionDispatcher::instance().schemasJson("WireSchemas_Broken"),
+                      morph::forms::UnsatisfiableFormError);
+}
+
 // ── PayloadCompleteness: enforcing the published action-evolution policy ─────
 
 TEST_CASE("RemoteServer defaults to PayloadCompleteness::Lenient", "[remote][completeness][issue207]") {
@@ -359,6 +464,103 @@ TEST_CASE("RequireDeclaredFields leaves a non-object body to the action codec", 
     REQUIRE(reply.message.find("payload missing required field") == std::string::npos);
 }
 
+TEST_CASE("RequireDeclaredFields treats an action with no declared required fields as nothing to check",
+          "[remote][completeness][issue207]") {
+    // RM3(a): missingRequiredFields's `required->empty()` arm -- a
+    // *registered* action whose schema declares zero required fields (as
+    // opposed to `required == nullptr`, an unregistered pair). Every prior
+    // test's action had at least one required field, so this arm was never
+    // taken; the gate must not manufacture a false-positive rejection for an
+    // action that has nothing to check.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<RemoteServer>(pool);
+    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    const auto modelId = registerLedger(*server);
+
+    Envelope pingEnv;
+    pingEnv.kind = "execute";
+    pingEnv.callId = 1;
+    pingEnv.modelId = modelId;
+    pingEnv.modelType = "WireSchemas_Ledger";
+    pingEnv.actionType = "WireSchemas_Ping";
+    pingEnv.body = "{}";
+    WaitReply reply;
+    server->handle(encode(pingEnv), std::ref(reply));
+    REQUIRE(reply.await());
+    REQUIRE(reply.env.kind == "ok");
+}
+
+TEST_CASE("RequireDeclaredFields treats an unregistered action pair as nothing to check",
+          "[remote][completeness][issue207]") {
+    // RM3(b): missingRequiredFields's `required == nullptr` arm -- an
+    // actionType the dispatcher never registered for this modelType at all.
+    // The gate must let it through as "nothing to check" (not a false-
+    // positive "missing field" rejection), leaving the dispatcher's own
+    // "unknown action" diagnostic as the actual, more specific failure.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<RemoteServer>(pool);
+    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    const auto modelId = registerLedger(*server);
+
+    Envelope unknownEnv;
+    unknownEnv.kind = "execute";
+    unknownEnv.callId = 1;
+    unknownEnv.modelId = modelId;
+    unknownEnv.modelType = "WireSchemas_Ledger";
+    unknownEnv.actionType = "WireSchemas_NoSuchAction";
+    unknownEnv.body = "{}";
+    WaitReply reply;
+    server->handle(encode(unknownEnv), std::ref(reply));
+    REQUIRE(reply.await());
+    REQUIRE(reply.env.kind == "err");
+    REQUIRE_FALSE(reply.env.message.contains("payload missing required field"));
+    REQUIRE(reply.env.message.contains("unknown action"));
+}
+
+TEST_CASE("RequireDeclaredFields degrades safely on a genuinely malformed JSON body",
+          "[remote][completeness][issue207]") {
+    // RM4: missingRequiredFields's `glz::read_json(dom, body)` truthy (parse
+    // failure) arm. Every prior "non-object body" test used well-formed JSON
+    // that merely isn't an *object* (e.g. a bare string); this one is not
+    // valid JSON at all -- adversarial input, not a framework-codec break.
+    // The gate must degrade to "nothing missing" here too, leaving the
+    // action's own fromJson to raise the actual, more specific parse error.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<RemoteServer>(pool);
+    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    const auto modelId = registerLedger(*server);
+
+    auto reply = runExecute(*server, modelId, R"({"amountCents":500,)");  // truncated -- not valid JSON
+    REQUIRE(reply.kind == "err");
+    REQUIRE_FALSE(reply.message.contains("payload missing required field"));
+}
+
+TEST_CASE("RequireDeclaredFields comma-joins two or more missing fields in its diagnostic",
+          "[remote][completeness][issue207]") {
+    // RM5: the missing-fields message's `if (!missing.empty()) { missing +=
+    // ", "; }` separator. Every prior "missing field" test was missing at
+    // most one field at a time, so the separator never fired.
+    // WireSchemas_Transfer declares two required fields (neither optional),
+    // so omitting both trips it.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<RemoteServer>(pool);
+    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    const auto modelId = registerLedger(*server);
+
+    Envelope transferEnv;
+    transferEnv.kind = "execute";
+    transferEnv.callId = 1;
+    transferEnv.modelId = modelId;
+    transferEnv.modelType = "WireSchemas_Ledger";
+    transferEnv.actionType = "WireSchemas_Transfer";
+    transferEnv.body = "{}";
+    WaitReply reply;
+    server->handle(encode(transferEnv), std::ref(reply));
+    REQUIRE(reply.await());
+    REQUIRE(reply.env.kind == "err");
+    REQUIRE(reply.env.message == "payload missing required field(s): amountCents, memo");
+}
+
 // ── SimulatedRemoteBackend: the client-side accessor ─────────────────────────
 
 TEST_CASE("SimulatedRemoteBackend::fetchActionSchemas returns the server's document", "[remote][schemas][issue234]") {
@@ -376,4 +578,18 @@ TEST_CASE("SimulatedRemoteBackend::fetchActionSchemas throws when the server ref
     morph::backend::SimulatedRemoteBackend backend{*server};
 
     REQUIRE_THROWS_AS(backend.fetchActionSchemas("WireSchemas_Ledger"), std::runtime_error);
+}
+
+TEST_CASE("SimulatedRemoteBackend::fetchActionSchemas substitutes \"malformed reply\" for an empty server message",
+          "[remote][schemas][issue234]") {
+    // RM13: fetchActionSchemas's `reply.message.empty() ? "malformed reply" :
+    // reply.message` fallback. Every prior failure test's server-side err
+    // carried a real message (e.g. "unauthorized"); this one is empty.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto authz = std::make_shared<WireSchemasEmptyMessageAuthorizer>();
+    auto server = std::make_shared<RemoteServer>(pool, authz);
+    morph::backend::SimulatedRemoteBackend backend{*server};
+
+    REQUIRE_THROWS_MATCHES(backend.fetchActionSchemas("WireSchemas_Ledger"), std::runtime_error,
+                           Catch::Matchers::Message("schemas request failed: malformed reply"));
 }

@@ -55,6 +55,15 @@ struct CFRNoRulesAction {
     std::int64_t note = 0;
 };
 
+// File-scope (not local to a TEST_CASE): Equals::emitNode() calls
+// detail::resolveFieldName(), which needs glaze's own pure reflection over
+// this type -- a local class inside a function has no such reflectable
+// linkage. Used only by the large-negative-literal exactMinimum/exactMaximum
+// companion test below.
+struct CFRNegativeLiteralAction {
+    std::optional<std::int64_t> id;
+};
+
 static_assert(morph::forms::HasFormRules<CFRDiscountForm>);
 static_assert(!morph::forms::HasFormRules<CFRNoRulesAction>);
 
@@ -134,6 +143,20 @@ TEST_CASE("Forms::Rules::Greater::VacuousWhileEitherOperandUnengaged", "[forms][
 
     range.checkIn = morph::time::Timestamp::now();
     CHECK(morph::forms::allRulesSatisfied(range));  // checkOut still empty -> vacuously satisfied
+}
+
+TEST_CASE("Forms::Rules::Greater::LhsEngagedRhsUnengagedIsAlsoVacuous", "[forms][rules]") {
+    // Forms::Rules::Greater::VacuousWhileEitherOperandUnengaged only ever
+    // disengages Greater's own lhs (CFRDateRange's checkOut): both cases
+    // there leave `!lv.hasValue()` true, short-circuiting before `!rv.hasValue()`
+    // is ever evaluated. The sibling comparisons' own
+    // "VacuousWhileEitherOperandUnengaged" test below assumed this half was
+    // already covered for Greater too -- it wasn't: `!rv.hasValue()` was
+    // never observed true for greater() itself.
+    CFRDiscountForm form{};
+    form.discount = Rational{5, DecimalPlaces{2}};  // lhs engaged
+    // promo (rhs) still unengaged -> vacuously true via the OTHER half of the ||.
+    CHECK(morph::forms::greater(&CFRDiscountForm::discount, &CFRDiscountForm::promo).test(form));
 }
 
 TEST_CASE("Forms::Rules::Greater::FiresOnceBothEngaged", "[forms][rules]") {
@@ -294,6 +317,97 @@ TEST_CASE("Forms::Rules::EmitNode::KindStringsNeverExercisedViaSchemaJson", "[fo
     CHECK(morph::forms::mutuallyExclusive(&CFRContactForm::email, &CFRContactForm::phone)
               .emitNode()["kind"]
               .get<std::string>() == "mutuallyExclusive");
+}
+
+// ---------------------------------------------------------------------------
+// Coverage-only: requiredWhen / exactlyOneOf / visibleWhen / readonlyWhen /
+// orOf / notOf / ruleList.
+//
+// Every one of these seven factories is constexpr, and per
+// `llvm-cov show -show-instantiations=true`, every OTHER call site in this
+// suite pairs the exact same (V, A, Cond) template-argument combination with
+// a sibling `static constexpr formRules` member that fully evaluates that
+// specialization at compile time. Template instantiation is keyed on TYPES
+// only (which specific member pointers are passed is a runtime argument, not
+// part of the mangled name), so once any one caller folds a given
+// specialization into a compile-time constant, the compiler's single
+// generated instantiation is reported unexecuted -- even at call sites that
+// look like ordinary runtime code (e.g. VisibleWhen::NeverGatesTheCheck's own
+// `auto const visibility = ...` above).
+//
+// atLeastOneOf/mutuallyExclusive (this file's other two rule factories,
+// structurally identical) are the direct counter-example: CFRContactForm
+// pairs those two with itself ONLY in this file's own runtime TEST_CASEs
+// above (its `formRules` uses `exactlyOneOf`, never `atLeastOneOf`/
+// `mutuallyExclusive`), so their <CFRContactForm, ...> specializations are
+// exercised nowhere else and show up genuinely executed.
+//
+// CFRFactoryCoverageForm mirrors that: it is declared with no `formRules`
+// member at all, so every factory instantiation keyed on its type is unique
+// to this TEST_CASE and can only ever run at runtime.
+// ---------------------------------------------------------------------------
+
+struct CFRFactoryCoverageForm {
+    CFRMoney alpha;
+    CFRMoney beta;
+    CFRMoney gamma;
+};
+
+TEST_CASE("Forms::Rules::Factories::ProduceGenuinelyExecutedInstantiations", "[forms][rules]") {
+    CFRFactoryCoverageForm form{};
+
+    // requiredWhen: alpha disengaged -> vacuously true; then engaged -> required and missing.
+    CHECK(morph::forms::requiredWhen(&CFRFactoryCoverageForm::beta,
+                                     morph::forms::engaged(&CFRFactoryCoverageForm::alpha))
+              .test(form));
+    form.alpha = Rational{1, DecimalPlaces{2}};
+    CHECK_FALSE(morph::forms::requiredWhen(&CFRFactoryCoverageForm::beta,
+                                           morph::forms::engaged(&CFRFactoryCoverageForm::alpha))
+                    .test(form));
+
+    // exactlyOneOf: alpha alone engaged -> true; alpha+gamma -> false.
+    CHECK(morph::forms::exactlyOneOf(&CFRFactoryCoverageForm::alpha, &CFRFactoryCoverageForm::beta,
+                                     &CFRFactoryCoverageForm::gamma)
+              .test(form));
+    form.gamma = Rational{1, DecimalPlaces{2}};
+    CHECK_FALSE(morph::forms::exactlyOneOf(&CFRFactoryCoverageForm::alpha, &CFRFactoryCoverageForm::beta,
+                                           &CFRFactoryCoverageForm::gamma)
+                    .test(form));
+
+    // visibleWhen / readonlyWhen: presentation rules, never gate -- the
+    // factory call itself is what this test needs to exercise. A direct
+    // chained call inside CHECK() (no intermediate `auto const` binding), to
+    // match the one recipe this cluster's own audit confirmed produces a
+    // genuinely executed instantiation.
+    CHECK(
+        morph::forms::visibleWhen(&CFRFactoryCoverageForm::beta, morph::forms::engaged(&CFRFactoryCoverageForm::alpha))
+            .test(form));
+    CHECK(
+        morph::forms::visibleWhen(&CFRFactoryCoverageForm::beta, morph::forms::engaged(&CFRFactoryCoverageForm::alpha))
+            .isPresentation);
+    CHECK(
+        morph::forms::visibleWhen(&CFRFactoryCoverageForm::beta, morph::forms::engaged(&CFRFactoryCoverageForm::alpha))
+            .when.test(form));  // alpha is engaged right now
+
+    CHECK(morph::forms::readonlyWhen(&CFRFactoryCoverageForm::gamma,
+                                     morph::forms::engaged(&CFRFactoryCoverageForm::alpha))
+              .test(form));
+    CHECK(morph::forms::readonlyWhen(&CFRFactoryCoverageForm::gamma,
+                                     morph::forms::engaged(&CFRFactoryCoverageForm::alpha))
+              .isPresentation);
+
+    // orOf / notOf: fresh Cond types (Engaged<CFRMoney, CFRFactoryCoverageForm>).
+    CHECK(morph::forms::orOf(morph::forms::engaged(&CFRFactoryCoverageForm::beta),
+                             morph::forms::engaged(&CFRFactoryCoverageForm::gamma))
+              .test(form));  // gamma is engaged
+    CHECK(morph::forms::notOf(morph::forms::engaged(&CFRFactoryCoverageForm::beta))
+              .test(form));  // beta still disengaged
+
+    // ruleList: a fresh RuleList<...> composed at runtime, never assigned to
+    // a static/constexpr member anywhere for this action type.
+    auto const rules = morph::forms::ruleList(morph::forms::requiredWhen(
+        &CFRFactoryCoverageForm::beta, morph::forms::engaged(&CFRFactoryCoverageForm::alpha)));
+    CHECK_FALSE(std::get<0>(rules.rules).test(form));  // alpha engaged, beta still missing
 }
 
 // ---------------------------------------------------------------------------
@@ -466,6 +580,21 @@ TEST_CASE("Forms::Rules::Equals::PlainScalarField", "[forms][rules]") {
     CHECK_FALSE(cond.test(action));
     action.status = 2;
     CHECK(cond.test(action));
+}
+
+TEST_CASE("Forms::Rules::Equals::EmitNodeCarriesExactDigitsForLargeNegativeLiteral", "[forms][rules]") {
+    // morph#213's class of bug, the unexplored negative side: the existing
+    // "an int64 literal beyond 2^53" coverage (test_forms_rule_agreement.cpp's
+    // RuleAgreementAction, 9007199254740993) only ever exercises the
+    // std::cmp_greater(...) arm of Equals::emitNode()'s
+    // `std::cmp_greater(literal, kExactDoubleLimit) ||
+    // std::cmp_less(literal, -kExactDoubleLimitSigned)` condition -- the
+    // symmetric large-NEGATIVE std::cmp_less(...) arm was never reached
+    // (short-circuited away every time, since cmp_greater was already true
+    // for every literal ever tested here).
+    auto const cond = morph::forms::equals(&CFRNegativeLiteralAction::id, std::int64_t{-9007199254740993});
+    auto const node = cond.emitNode();
+    CHECK(node["valueText"].get<std::string>() == "-9007199254740993");
 }
 
 TEST_CASE("Forms::Rules::Equals::StringLiteralOverload", "[forms][rules]") {

@@ -115,6 +115,30 @@ struct morph::model::ActionTraits<SwitchCountAction> {
     static int resultFromJson(std::string_view str) { return std::stoi(std::string{str}); }
 };
 
+// A LocalBackend that counts cancelPending() calls and tracks whether a
+// reconnect handler is currently installed (non-null) -- used to observe
+// switchBackend()'s "previous && previous != newShared" guards from the
+// outside (Task 15a finding B9): a self-switch (switchBackend() called again
+// with the SAME backend instance already active) must trip neither guard,
+// since `previous == newShared` in that case.
+class SwitchSelfObserverBackend : public morph::backend::LocalBackend {
+public:
+    explicit SwitchSelfObserverBackend(morph::exec::IExecutor& pool) : LocalBackend{pool} {}
+
+    void setReconnectHandler(const std::function<void()>& handler) override { _handler = handler; }
+    void cancelPending(const std::exception_ptr& exc) override {
+        ++_cancelCount;
+        LocalBackend::cancelPending(exc);
+    }
+
+    [[nodiscard]] bool hasHandler() const { return static_cast<bool>(_handler); }
+    [[nodiscard]] int cancelCount() const { return _cancelCount; }
+
+private:
+    std::function<void()> _handler;
+    int _cancelCount = 0;
+};
+
 using SyncExec = morph::testing::InlineExecutor;
 
 // ── switchBackend tests ───────────────────────────────────────────────────────
@@ -207,6 +231,44 @@ TEST_CASE("morph::bridge::Bridge::switchBackend(shared_ptr)  -  caller-owned ins
 }
 
 TEST_CASE(
+    "morph::bridge::Bridge::switchBackend(shared_ptr)  -  switching to the same backend instance twice is a "
+    "true no-op (Task 15a finding B9)",
+    "[bridge][switch][shared_ptr]") {
+    // switchBackend()'s tail runs `if (previous && previous != newShared) {
+    // previous->setReconnectHandler(nullptr); }` and the identical guard
+    // around cancelPending(). A self-switch (the same backend instance
+    // installed twice in a row) makes `previous == newShared`, so neither
+    // call may fire -- clearing the reconnect handler installReconnectHandler
+    // just (re)installed on that same backend a moment earlier, or cancelling
+    // that backend's own still-live pending calls, would both be genuine bugs
+    // a caller re-installing an already-active backend would hit for no
+    // reason.
+    morph::exec::ThreadPoolExecutor poolInit{2};
+    morph::exec::ThreadPoolExecutor poolObs{2};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInit)};
+
+    auto observer = std::make_shared<SwitchSelfObserverBackend>(poolObs);
+    bridge.switchBackend(observer);
+    REQUIRE(observer->hasHandler());
+    REQUIRE(observer->cancelCount() == 0);
+
+    // Self-switch: `previous` (observer) and `newShared` (observer) are the
+    // same instance.
+    bridge.switchBackend(observer);
+    CHECK(observer->hasHandler());
+    CHECK(observer->cancelCount() == 0);
+
+    // The backend is still fully usable afterward -- a genuine end-to-end
+    // sanity check, not just an internal-state probe.
+    SyncExec cbExec;
+    morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
+    std::atomic<int> res{-1};
+    handler.execute(CountAction{4}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
+    REQUIRE(morph::testing::waitUntil([&] { return res.load() != -1; }));
+    REQUIRE(res.load() == 4);
+}
+
+TEST_CASE(
     "morph::bridge::Bridge::switchBackend(unique_ptr) still transfers ownership (delegates to shared_ptr "
     "overload)",
     "[bridge][switch][shared_ptr]") {
@@ -268,6 +330,165 @@ TEST_CASE(
         .onError([](const std::exception_ptr&) {});
     REQUIRE(morph::testing::waitUntil([&] { return count.load() != -1; }));
     REQUIRE(count.load() == 1);
+}
+
+// ── Reconnect handler coverage (Task 15a findings B14/B15, and B5's ─────────
+// ── reconnect-path variant) ──────────────────────────────────────────────────
+//
+// installReconnectHandler() installs a callback (invoked on the backend's
+// transport thread on a real reconnect) that re-registers every live
+// HandlerBinding. LocalBackend never fires it itself (no transport to
+// reconnect), so these tests use a small LocalBackend subclass that records
+// the installed handler and lets the test fire it directly, plus which of
+// registerModelShared/registerModelWithContext the re-registration loop used.
+namespace {
+class ReconnectableLocalBackend : public morph::backend::LocalBackend {
+public:
+    explicit ReconnectableLocalBackend(morph::exec::IExecutor& pool) : LocalBackend{pool} {}
+
+    void setReconnectHandler(const std::function<void()>& handler) override { _handler = handler; }
+    void fireReconnect() const {
+        if (_handler) {
+            _handler();
+        }
+    }
+    // Copies out the currently-installed handler so a test can invoke it
+    // AFTER something else (e.g. switchBackend() retiring this backend)
+    // clears `_handler` via setReconnectHandler(nullptr) -- the snapshot
+    // still runs the original closure with its original captures, exactly
+    // like test_bridge_lifetime.cpp's identical FakeReconnectBackend::
+    // snapshotHandler() pattern.
+    [[nodiscard]] std::function<void()> snapshotHandler() const { return _handler; }
+
+    morph::exec::detail::ModelId registerModelShared(
+        const std::string& typeId, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+        morph::backend::detail::InstanceIdentity identity) override {
+        ++_sharedCallCount;
+        _lastSharedContextKey = std::string{identity.contextKey};
+        _lastSharedPrimary = std::string{identity.primary};
+        return LocalBackend::registerModelShared(typeId, std::move(factory), identity);
+    }
+    morph::exec::detail::ModelId registerModelWithContext(
+        const std::string& typeId, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+        std::string_view contextKey) override {
+        ++_withContextCallCount;
+        return LocalBackend::registerModelWithContext(typeId, std::move(factory), contextKey);
+    }
+
+    [[nodiscard]] int sharedCallCount() const { return _sharedCallCount; }
+    [[nodiscard]] int withContextCallCount() const { return _withContextCallCount; }
+    [[nodiscard]] const std::string& lastSharedPrimary() const { return _lastSharedPrimary; }
+    [[nodiscard]] const std::string& lastSharedContextKey() const { return _lastSharedContextKey; }
+
+private:
+    std::function<void()> _handler;
+    int _sharedCallCount = 0;
+    int _withContextCallCount = 0;
+    std::string _lastSharedContextKey;
+    std::string _lastSharedPrimary;
+};
+}  // namespace
+
+TEST_CASE("Bridge: reconnect handler skips a shared binding that never attached (Task 15a finding B14)",
+          "[bridge][switch][reconnect]") {
+    // The reconnect loop's `if (binding->shared && binding->primary.empty())
+    // { continue; }` guard -- a shared binding registered via
+    // registerSharedHandler() but never attached has no instance to
+    // re-create, per the guard's own adjacent comment.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto backend = std::make_unique<ReconnectableLocalBackend>(pool);
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    auto binding = bridge.registerSharedHandler<CountModel>();
+    REQUIRE(binding->currentId.load() == 0U);
+    REQUIRE(binding->primary.empty());
+
+    REQUIRE_NOTHROW(rawBackend->fireReconnect());
+
+    CHECK(binding->currentId.load() == 0U);
+    CHECK(rawBackend->sharedCallCount() == 0);
+    CHECK(rawBackend->withContextCallCount() == 0);
+}
+
+TEST_CASE(
+    "Bridge: reconnect handler re-registers an attached shared binding via registerModelShared, with the "
+    "correct key (Task 15a finding B15)",
+    "[bridge][switch][reconnect]") {
+    // Complement of B14: an attached shared binding (shared=true, primary
+    // non-empty) must come back through registerModelShared, carrying its
+    // real contextKey/primary -- not registerModelWithContext, which would
+    // silently drop the sharing.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto backend = std::make_unique<ReconnectableLocalBackend>(pool);
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    auto binding = bridge.registerSharedHandler<CountModel>();
+    bridge.attachHandler<CountModel>(binding, "42");
+    REQUIRE(binding->currentId.load() != 0U);
+    REQUIRE(binding->primary == "42");
+
+    int const sharedCallsBefore = rawBackend->sharedCallCount();
+    int const withContextCallsBefore = rawBackend->withContextCallCount();
+
+    rawBackend->fireReconnect();
+
+    CHECK(rawBackend->sharedCallCount() == sharedCallsBefore + 1);
+    CHECK(rawBackend->withContextCallCount() == withContextCallsBefore);
+    CHECK(rawBackend->lastSharedPrimary() == "42");
+    CHECK(rawBackend->lastSharedContextKey() == "42");
+    CHECK(binding->currentId.load() != 0U);
+}
+
+TEST_CASE(
+    "Bridge: a stale reconnect fired by a backend that is still alive but no longer current is ignored "
+    "(Task 15a finding B5, reconnect variant)",
+    "[bridge][switch][reconnect]") {
+    // The reconnect handler's own guard (`!pinned || pinned != loadBackend()`)
+    // has the identical shape as attachHandlerAsync/ensureBoundAsync/
+    // assignHandlerPrimary's stale-reply guards. switchBackend() itself
+    // correctly clears the OUTGOING backend's reconnect handler
+    // (`previous->setReconnectHandler(nullptr)`) the moment it retires it, so
+    // firing backendA's *current* handler after the switch would just be a
+    // no-op (empty std::function) -- it would never reach this guard at all.
+    // Snapshotting the handler *before* the switch (mirroring
+    // test_bridge_lifetime.cpp's identical FakeReconnectBackend::
+    // snapshotHandler() pattern) and firing that snapshot afterward models a
+    // reconnect already latched on the transport thread at the moment the
+    // switch lands: weakBackend.lock() still succeeds (the test's own
+    // shared_ptr keeps backendA alive), but loadBackend() now returns
+    // backendB.
+    morph::exec::ThreadPoolExecutor poolInit{2};
+    morph::exec::ThreadPoolExecutor poolA{2};
+    morph::exec::ThreadPoolExecutor poolB{2};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInit)};
+
+    auto backendA = std::make_shared<ReconnectableLocalBackend>(poolA);
+    bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(backendA));
+
+    auto binding = bridge.registerSharedHandler<CountModel>();
+    bridge.attachHandler<CountModel>(binding, "7");
+    REQUIRE(binding->currentId.load() != 0U);
+
+    auto staleHandler = backendA->snapshotHandler();
+    REQUIRE(staleHandler);
+
+    // Switch away to a different backend -- backendA stays alive via the
+    // test's own shared_ptr, but is no longer current.
+    auto backendB = std::make_shared<ReconnectableLocalBackend>(poolB);
+    bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(backendB));
+    auto const idOnB = binding->currentId.load();
+    REQUIRE(idOnB != 0U);
+    int const bCallsBefore = backendB->sharedCallCount();
+
+    // Fire the snapshotted (now-stale) reconnect handler directly.
+    REQUIRE_NOTHROW(staleHandler());
+
+    // Must be a no-op: no re-registration on either backend, and the
+    // binding's id (now on backendB) is untouched.
+    CHECK(binding->currentId.load() == idOnB);
+    CHECK(backendB->sharedCallCount() == bCallsBefore);
 }
 
 // ── Remote backend no-op ──────────────────────────────────────────────────────

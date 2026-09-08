@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <morph/net/detail/ws_frame.hpp>
 #include <stdexcept>
 #include <string>
@@ -42,6 +43,47 @@ TEST_CASE("encodeWsFrame/WsFrameReader round-trip a payload requiring the 16-bit
     auto frame = reader.tryExtractFrame();
     REQUIRE(frame.has_value());
     REQUIRE(frame->payload.size() == payload.size());
+    REQUIRE(frame->payload == payload);
+}
+
+TEST_CASE("WsFrameReader withholds a frame whose 16-bit extended length header is incomplete", "[net][frame]") {
+    // len-marker 126 (16-bit extended length) with only the 2-byte base
+    // header buffered so far: tryExtractRawFrame must return nullopt rather
+    // than read _buf[2]/_buf[3] before they have arrived. This payload size
+    // (>125, <=65535) also exercises encodeWsFrame's own 126-marker branch,
+    // which no other test in this file reaches -- the existing "requiring
+    // the 16-bit extended length" test above uses a 70000-byte payload,
+    // which is actually too large for the 126 marker and silently falls
+    // through to the 64-bit (127) marker instead.
+    std::string payload(200, 'y');
+    std::string wire = encodeWsFrame(WsOpcode::kText, payload, /*mask=*/false);
+    REQUIRE(static_cast<std::uint8_t>(wire[1]) == 126);  // sanity: confirms the 126 marker was used
+
+    WsFrameReader reader;
+    reader.feed(wire.substr(0, 2));  // FIN/opcode byte + length-marker byte only
+    REQUIRE_FALSE(reader.tryExtractFrame().has_value());
+
+    reader.feed(wire.substr(2));  // the two length bytes, plus payload
+    auto frame = reader.tryExtractFrame();
+    REQUIRE(frame.has_value());
+    REQUIRE(frame->payload == payload);
+}
+
+TEST_CASE("WsFrameReader withholds a frame whose 64-bit extended length header is incomplete", "[net][frame]") {
+    // len-marker 127 (64-bit extended length) with only the 2-byte base
+    // header buffered so far: tryExtractRawFrame must return nullopt rather
+    // than read the 8 length bytes at _buf[2..9] before they have arrived.
+    std::string payload(70000, 'z');  // > 65535, requires the 127 marker
+    std::string wire = encodeWsFrame(WsOpcode::kText, payload, /*mask=*/false);
+    REQUIRE(static_cast<std::uint8_t>(wire[1]) == 127);  // sanity: confirms the 127 marker was used
+
+    WsFrameReader reader;
+    reader.feed(wire.substr(0, 2));
+    REQUIRE_FALSE(reader.tryExtractFrame().has_value());
+
+    reader.feed(wire.substr(2));
+    auto frame = reader.tryExtractFrame();
+    REQUIRE(frame.has_value());
     REQUIRE(frame->payload == payload);
 }
 
@@ -183,6 +225,29 @@ TEST_CASE("WsFrameReader rejects a frame whose declared length exceeds kMaxEnvel
     }
     WsFrameReader reader;
     reader.feed(header);
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a reassembled message whose cumulative size exceeds kMaxEnvelopeBytes",
+          "[net][frame]") {
+    // Distinct from the per-frame cap above: each individual fragment here
+    // stays comfortably under kMaxEnvelopeBytes (so tryExtractRawFrame's own
+    // check never fires), but appendFragment must still catch the
+    // *reassembled total* creeping past the cap -- otherwise a peer could
+    // stream unlimited small continuations and grow the assembly buffer
+    // without ever tripping a per-frame check.
+    constexpr std::size_t chunkSize = std::size_t{3} * 1024 * 1024;  // 3 MiB per fragment
+    std::string const chunk(chunkSize, 'x');
+
+    WsFrameReader reader;
+    reader.feed(fragmentFrame(WsOpcode::kBinary, chunk, /*fin=*/false));
+    REQUIRE_FALSE(reader.tryExtractFrame().has_value());  // 3 MiB so far
+
+    reader.feed(fragmentFrame(WsOpcode::kContinuation, chunk, /*fin=*/false));
+    REQUIRE_FALSE(reader.tryExtractFrame().has_value());  // 6 MiB so far, still under the 8 MiB cap
+
+    // Third fragment pushes the cumulative total to 9 MiB, past kMaxEnvelopeBytes (8 MiB).
+    reader.feed(fragmentFrame(WsOpcode::kContinuation, chunk, /*fin=*/true));
     REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
 }
 

@@ -333,23 +333,62 @@ TEST_CASE(
     std::filesystem::remove(path);
 }
 
+namespace {
+
+/// @brief Test-only subclass that retires each item the instant it is
+///        enqueued, so the base `IOfflineQueue::enqueue(payload, key)`
+///        default's *second* virtual call (`setIdempotencyKey`) is
+///        deterministically driven against an id that is already gone —
+///        exercising its "not found" branch with no race and no timing
+///        dependency. See task-11 audit finding #3
+///        (file_offline_queue.hpp) and offline_queue.hpp's contract note on
+///        the base default's non-atomicity.
+struct SelfRetiringQueue : morph::offline::FileOfflineQueue {
+    using FileOfflineQueue::FileOfflineQueue;
+    // Unhide the inherited 2-arg enqueue(payload, idempotencyKey) override --
+    // without this, overriding only the 1-arg enqueue() below hides the
+    // 2-arg one from lookup on this type, which GCC's -Woverloaded-virtual
+    // (Werror in the gcc-debug CI job) rejects even though the test below
+    // only ever reaches the 2-arg overload via an explicit
+    // IOfflineQueue::enqueue(...) qualified call.
+    using FileOfflineQueue::enqueue;
+    uint64_t enqueue(std::string payload) override {
+        auto const id = FileOfflineQueue::enqueue(std::move(payload));
+        markDone(id);
+        return id;
+    }
+};
+
+}  // namespace
+
 TEST_CASE("morph::offline::FileOfflineQueue: setIdempotencyKey via the base default is a no-op on an unknown id",
           "[file_queue]") {
+    // NOTE (Task 12, finding #3): the previous version of this test called
+    // base.IOfflineQueue::enqueue("other-payload", "orphan-key") directly --
+    // but that default itself calls the single-arg enqueue() *first*, which
+    // inserts a brand-new item and returns its own fresh id, and only *then*
+    // calls setIdempotencyKey with that same, just-inserted id. The id was
+    // therefore always found; this test never exercised the "not found"
+    // branch it was named for. SelfRetiringQueue overrides the single-arg
+    // enqueue to markDone() the id before returning it, so the id handed to
+    // setIdempotencyKey is guaranteed already-erased -- deterministic, no
+    // race, single-threaded.
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
-        auto id1 = queue.enqueue("payload");
+        SelfRetiringQueue queue{path};
+        auto id1 = queue.enqueue("payload");  // retired immediately by the override above
+        REQUIRE(queue.drain().empty());
 
-        // Stamp a key onto an id that was never enqueued -- setIdempotencyKey's
-        // find() misses, so this must not throw or touch any existing item.
         morph::offline::IOfflineQueue& base = queue;
+        // enqueue(payload) inserts+immediately retires a *second* item (id1's
+        // successor), then setIdempotencyKey is called against that
+        // already-retired id -- guaranteed not found.
         REQUIRE_NOTHROW(base.IOfflineQueue::enqueue("other-payload", "orphan-key"));
 
         auto items = queue.drain();
-        REQUIRE(items.size() == 2);
-        CHECK(items[0].id == id1);
-        CHECK(items[0].idempotencyKey.empty());
+        REQUIRE(items.empty());
+        (void)id1;
     }
     std::filesystem::remove(path);
 }
@@ -424,10 +463,21 @@ TEST_CASE("morph::offline::FileOfflineQueue: construction throws if the compacti
 
 TEST_CASE("morph::offline::FileOfflineQueue: the constructor's own append-mode fopen() failing throws",
           "[file_queue][fault-injection]") {
+    // NOTE (Task 12, finding #1): an earlier version of this test made
+    // ioOps.fopen unconditionally return nullptr, but compact() (called
+    // *before* the append-mode fopen() this test claims to cover) makes its
+    // own, earlier fopen(tmp, "w") call for its temp file -- that one fails
+    // first with the same unconditional-null lambda, so the constructor
+    // threw from compact()'s failure, never reaching the append-mode open at
+    // all. Gating on mode == "a" lets compact()'s "w"-mode open succeed for
+    // real and only fails the genuine append-mode open this test is named
+    // for.
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     morph::core::FileIoOps ioOps;
-    ioOps.fopen = [](const std::string&, const char*) -> std::FILE* { return nullptr; };
+    ioOps.fopen = [](const std::string& p, const char* mode) -> std::FILE* {
+        return std::string{mode} == "a" ? nullptr : std::fopen(p.c_str(), mode);
+    };
     REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
     std::filesystem::remove(path);
 }

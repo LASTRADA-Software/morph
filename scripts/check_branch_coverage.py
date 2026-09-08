@@ -71,29 +71,51 @@ import tempfile
 
 # subsystem -> (floor %, measured % at the time the floor was set)
 #
-# Measured on 2026-09-02 over build/clang-coverage/coverage.lcov, clang 22.1.8,
-# the CI coverage leg's configure (MORPH_BUILD_NET/OFFLINE_SQLITE/QT/LADDER=ON,
-# MORPH_LADDER_RUNGS=all), with all 2435 ctest cases passing -- and, critically,
-# after morph#403: include/morph/net contributed zero files to every report
-# before that, so its 338 branches and 66 partial lines are new to the
-# denominator rather than new to the code.
+# Re-measured 2026-09-07, after the framework-coverage-and-mutation plan
+# (docs/superpowers/plans/2026-09-03-framework-coverage-and-mutation.md)
+# closed net/forms/offline/core's gaps directly, over
+# build/clang-coverage/coverage.lcov, Apple clang 17 (this workstation's
+# toolchain, same clang-vs-clang-20 margin story as the previous
+# measurement below), configure MORPH_BUILD_NET/OFFLINE_SQLITE/QT=ON, with
+# all 1670 ctest cases in this configure's test binaries passing.
+# MORPH_BUILD_LADDER was deliberately left off -- it only gates
+# examples/'s shared testkit/GUI infrastructure and enabled rungs
+# (CMakeLists.txt's own option() text), so it cannot change which
+# include/morph *files* land in the denominator. It is NOT true that this
+# makes LADDER=ON/OFF interchangeable for this file's numbers: CI's own
+# coverage leg builds with LADDER=all, and scripts/coverage.sh adds every
+# built ladder_*_tests binary to the merged profile, so those tests DO
+# contribute additional *hits* to include/morph's numerator that this
+# narrower local run does not exercise. The direction is safe for the
+# floors below (a wider CI run can only show equal-or-higher coverage, so
+# it cannot manufacture a floor breach this measurement missed), but the
+# absolute numbers here are a lower bound on CI's, not an exact
+# reproduction of CI's own configure.
+#
+# Previously measured on 2026-09-02, over the CI coverage leg's full
+# configure (MORPH_BUILD_NET/OFFLINE_SQLITE/QT/LADDER=ON,
+# MORPH_LADDER_RUNGS=all) with all 2435 ctest cases passing -- and,
+# critically, after morph#403: include/morph/net contributed zero files to
+# every report before that, so its 338 branches and 66 partial lines were
+# new to the denominator rather than new to the code. Kept here as the
+# prior data point; the floors below are all from the 2026-09-07 run.
 FLOORS = {
-    "include/morph/core": (90.0, 93.22),
+    "include/morph/core": (94.0, 97.37),
     "include/morph/detail": (97.0, 100.00),
-    "include/morph/forms": (89.0, 92.36),
-    "include/morph/journal": (96.0, 99.23),
-    "include/morph/net": (72.0, 75.15),
-    "include/morph/offline": (83.0, 86.25),
+    "include/morph/forms": (91.0, 94.78),
+    "include/morph/journal": (97.0, 100.00),
+    "include/morph/net": (88.0, 91.87),
+    "include/morph/offline": (88.0, 91.88),
     "include/morph/qt": (97.0, 100.00),
     "include/morph/render": (97.0, 100.00),
-    "include/morph/session": (92.0, 95.83),
-    "include/morph/util": (91.0, 93.99),
+    "include/morph/session": (95.0, 98.61),
+    "include/morph/util": (93.0, 96.39),
 }
 
 # The library as a whole, which is what morph#404 asks to be "reported as its own
 # number and carry a target".
-TOTAL_FLOOR = 88.0
-TOTAL_MEASURED = 91.19
+TOTAL_FLOOR = 92.0
+TOTAL_MEASURED = 95.95
 
 # Subsystems that only reach the report when an off-by-default CMake option is
 # on, and the test binary whose presence in coverage_objects.txt proves it was.
@@ -708,7 +730,7 @@ def self_test():
 
     code, output = run(_every_subsystem(low_core),
                        profiled=["morph_tests", "morph_net_tests", "morph_qt_tests"])
-    if code != 0 and "below its 90% floor" in output:
+    if code != 0 and "below its 94% floor" in output:
         note("ok: a floor breach on a full build still fails")
     else:
         fail("a floor breach was accepted on a full build", output)
