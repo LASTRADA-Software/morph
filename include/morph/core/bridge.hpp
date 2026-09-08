@@ -1016,7 +1016,7 @@ public:
     /// @param exec    Executor the callback is delivered on.
     void addSubscription(const std::shared_ptr<detail::HandlerBinding>& binding, std::type_index type,
                          std::function<void(const std::any&)> sink, ::morph::exec::IExecutor* exec) {
-        _subscriptions.addSubscription(binding, type, std::move(sink), exec);
+        _subscriptions->addSubscription(binding, type, std::move(sink), exec);
     }
 
     /// @brief Removes @p binding's subscription for @p type, if any.
@@ -1025,7 +1025,7 @@ public:
     /// @param binding Handler binding that owns the subscription.
     /// @param type    Result type to stop hearing about.
     void removeSubscription(const std::shared_ptr<detail::HandlerBinding>& binding, std::type_index type) {
-        _subscriptions.removeSubscription(binding, type);
+        _subscriptions->removeSubscription(binding, type);
     }
 
     /// @brief Whether any subscription is currently registered on this bridge.
@@ -1040,7 +1040,7 @@ public:
     ///
     /// Forwards to `_subscriptions` (`detail::SubscriptionRegistry`).
     /// @return `true` if at least one subscription exists.
-    [[nodiscard]] bool hasSubscribers() const noexcept { return _subscriptions.hasSubscribers(); }
+    [[nodiscard]] bool hasSubscribers() const noexcept { return _subscriptions->hasSubscribers(); }
 
     /// @brief Delivers @p value to every subscriber attached to instance @p mid.
     ///
@@ -1061,7 +1061,7 @@ public:
     /// @param type  Result type produced.
     /// @param value Boxed result.
     void publishResult(::morph::exec::detail::ModelId mid, std::type_index type, const std::any& value) {
-        _subscriptions.publishResult(mid, type, value);
+        _subscriptions->publishResult(mid, type, value);
     }
 
     /// @brief Installs a default session context that `executeVia` stamps onto the
@@ -1184,7 +1184,7 @@ public:
     /// every frame of a UI loading spinner.
     ///
     /// @return Count of actions dispatched but not yet resolved.
-    [[nodiscard]] std::size_t pendingCalls() const noexcept { return _pendingCalls.load(std::memory_order_relaxed); }
+    [[nodiscard]] std::size_t pendingCalls() const noexcept { return _pendingCalls->load(std::memory_order_relaxed); }
 
     /// @brief Atomically replaces the active backend with @p newBackend.
     ///
@@ -1389,7 +1389,7 @@ public:
         // resolution continuations attached to anyCompletion further down,
         // each of which decrements exactly once (setValue/setException are
         // first-result-wins, so only one of the two ever actually fires).
-        _pendingCalls.fetch_add(1, std::memory_order_relaxed);
+        _pendingCalls->fetch_add(1, std::memory_order_relaxed);
         // Arm the client-side deadline (setExecuteDeadline) only for real
         // dispatches -- the fast-failed "handler not bound" completion above is
         // already resolved and needs no timer. Reading the deadline and arming
@@ -1514,8 +1514,9 @@ public:
         }
         auto anyCompletion = backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
         anyCompletion
-            .then([typedState, onResult = std::move(onResult), this, raw, deadlineHandle, schedulerRef,
-                   alive = liveness()](const std::shared_ptr<void>& vAny) {
+            .then([typedState, onResult = std::move(onResult), raw, deadlineHandle, schedulerRef,
+                   pendingCalls = _pendingCalls, subscriptions = _subscriptions,
+                   lifetime = _lifetime](const std::shared_ptr<void>& vAny) {
                 // Disarm the client-side deadline first, before any of the
                 // forwarding work below: a slow onResult/publishResult callback
                 // must not give the timer a window to fire concurrently and
@@ -1523,14 +1524,13 @@ public:
                 // result is already in hand. Uses the `schedulerRef` copy
                 // captured above, not `this->_timeoutScheduler` -- see that
                 // capture's own comment for why: this callback can in principle
-                // run after ~Bridge(), and `schedulerRef` (not `alive`) is what
-                // makes `cancel()` safe in that case, by keeping the scheduler
-                // alive for exactly as long as this callback needs it, not by
-                // racing a liveness check against ~Bridge()'s teardown. Leaving
-                // the entry armed if it were never cancelled would be harmless
-                // (~TimeoutScheduler drops pending entries without firing them),
-                // but a thrown cancel() must not prevent the real result from
-                // resolving the completion below either.
+                // run after ~Bridge(), and `schedulerRef` (not a liveness check)
+                // is what makes `cancel()` safe in that case, by keeping the
+                // scheduler alive for exactly as long as this callback needs it.
+                // Leaving the entry armed if it were never cancelled would be
+                // harmless (~TimeoutScheduler drops pending entries without
+                // firing them), but a thrown cancel() must not prevent the real
+                // result from resolving the completion below either.
                 if (deadlineHandle && schedulerRef) {
                     try {
                         schedulerRef->cancel(*deadlineHandle);
@@ -1541,6 +1541,19 @@ public:
                         // what an uncancelled entry already does.
                     }
                 }
+                // A backend completion can in principle resolve after the
+                // Bridge is gone (see liveness()'s doc comment): the backend
+                // may be co-owned and outlive this Bridge, or this callback
+                // may already be running when ~Bridge() runs concurrently on
+                // another thread. This dispatch is resolving either way, so
+                // `pendingCalls` -- pinned above, independent of the Bridge --
+                // is decremented unconditionally (morph#489, site 1): one of
+                // the two mutually-exclusive resolution continuations for this
+                // dispatched call (the other is the .onError below), so exactly
+                // one of them decrements per call, whether the value-forwarding
+                // below then succeeds or itself throws and routes to
+                // setException.
+                pendingCalls->fetch_sub(1, std::memory_order_relaxed);
                 // Guard the value-forwarding: if R's move/copy throws (or the cast
                 // is somehow wrong), route the exception to the typed completion's
                 // error sink instead of letting it escape the callback executor —
@@ -1548,45 +1561,53 @@ public:
                 // then hang forever) and QtExecutor lets it reach the event loop
                 // and std::terminate. Mirrors the forwarding guard in remote.hpp's
                 // SimulatedRemoteBackend::execute. See docs/spec/core/bridge.md.
-                //
-                // A backend completion can in principle resolve after the
-                // Bridge is gone (see liveness()'s doc comment): the backend
-                // may be co-owned and outlive this Bridge, or this callback
-                // may already be running when ~Bridge() runs concurrently on
-                // another thread. Check liveness FIRST, before touching
-                // anything that reaches into the bridge -- `onResult` (which,
-                // for a result-keyed action, calls back into this bridge via a
-                // captured raw pointer to assign the binding's primary),
-                // hasSubscribers() (which reads `this`), and the pendingCalls()
-                // decrement below (also a `this`-touching write) must never run
-                // once the bridge might be gone. The typed result is still
-                // delivered to the caller's own Completion either way -- only
-                // the bridge-touching side effects are skipped.
-                bool const bridgeAlive = alive.active();
-                if (bridgeAlive) {
-                    // One of the two mutually-exclusive resolution continuations
-                    // for this dispatched call (the other is the .onError
-                    // below), so exactly one of them decrements per call --
-                    // whether the value-forwarding below then succeeds or
-                    // itself throws and routes to setException.
-                    this->_pendingCalls.fetch_sub(1, std::memory_order_relaxed);
-                }
                 try {
                     auto* const typedResult = static_cast<R*>(vAny.get());
-                    // Runs before the value is moved out and before the caller's
-                    // own .then, so a result-sourced primary key is adopted by
-                    // the binding before any user code observes the result.
-                    if (onResult && bridgeAlive) {
-                        onResult(*typedResult);
+                    // `bridgeAlive` is read once, fresh, under `lifetime`'s own
+                    // gate -- the same `detail::BridgeLifetime` `~BridgeHandler`
+                    // uses (see its doc comment for why a `CallbackToken` cannot
+                    // carry this weight) -- and reused below to decide whether
+                    // to publish, so both decisions come from one consistent
+                    // snapshot, matching this function's behaviour before this
+                    // fix. Only `onResult` actually runs inside the gate: it is
+                    // the one piece of this continuation that is not pinned
+                    // above and genuinely needs the *current* bridge/backend
+                    // (for a result-keyed action, it calls
+                    // `assignHandlerPrimary`, which touches `_attachMtx` and
+                    // `loadBackend()`) -- runs before the value is moved out and
+                    // before the caller's own .then, so a result-sourced
+                    // primary key is adopted before any user code observes the
+                    // result. `assignHandlerPrimary`'s own synchronous path is
+                    // non-blocking by construction (its doc comment: it prefers
+                    // the backend's async registration precisely to avoid a
+                    // nested-event-loop block), so holding the gate across it
+                    // does not expose `~Bridge` to the unbounded-block hazard
+                    // morph#489 names for the sites this fix does not
+                    // mechanically apply to (installReconnectHandler, site 4).
+                    bool bridgeAlive = false;
+                    {
+                        std::shared_lock const gate{lifetime->mtx};
+                        bridgeAlive = lifetime->alive;
+                        if (bridgeAlive && onResult) {
+                            onResult(*typedResult);
+                        }
                     }
                     // Fan the result out to everything attached to this
-                    // instance before the value is moved away. Guarded on the
-                    // bridge's liveness token: a completion can in principle
-                    // resolve after the Bridge is gone.
+                    // instance before the value is moved away. `subscriptions`
+                    // is pinned above, so this call itself is safe regardless
+                    // of the Bridge's lifetime (`SubscriptionRegistry` snapshots
+                    // its own sinks under its own lock and invokes them outside
+                    // it -- see that class -- so it cannot deadlock against a
+                    // subscriber that re-enters, which is exactly the hazard
+                    // that rules out gating this call the way `onResult` above
+                    // is gated). Still conditioned on `bridgeAlive`, unchanged
+                    // from before this fix: a Bridge already torn down should
+                    // not go on fanning results out to its instance
+                    // subscribers.
                     if constexpr (std::is_copy_constructible_v<R>) {
-                        if (bridgeAlive && hasSubscribers()) {
-                            publishResult(::morph::exec::detail::ModelId{raw}, std::type_index{typeid(R)},
-                                          std::any{*typedResult});
+                        if (bridgeAlive && subscriptions->hasSubscribers()) {
+                            subscriptions->publishResult(::morph::exec::detail::ModelId{raw},
+                                                         std::type_index{typeid(R)}, std::any{*typedResult});
                         }
                     }
                     typedState->setValue(std::move(*typedResult));
@@ -1594,30 +1615,28 @@ public:
                     typedState->setException(std::current_exception());
                 }
             })
-            .onError(
-                [typedState, this, deadlineHandle, schedulerRef, alive = liveness()](const std::exception_ptr& err) {
-                    // Same disarm-first reasoning (and the same schedulerRef-based
-                    // safety, not a liveness-then-use race) as the success branch
-                    // above: a real error reply settles the completion, so the
-                    // deadline must not also fire.
-                    if (deadlineHandle && schedulerRef) {
-                        try {
-                            schedulerRef->cancel(*deadlineHandle);
-                        } catch (...) {
-                            // Best-effort: a failed cancel leaves the deadline's own
-                            // entry to fire later and find nothing (setValue/
-                            // setException below are idempotent), which is exactly
-                            // what an uncancelled entry already does.
-                        }
+            .onError([typedState, deadlineHandle, schedulerRef,
+                      pendingCalls = _pendingCalls](const std::exception_ptr& err) {
+                // Same disarm-first reasoning (and the same schedulerRef-based
+                // safety) as the success branch above: a real error reply
+                // settles the completion, so the deadline must not also fire.
+                if (deadlineHandle && schedulerRef) {
+                    try {
+                        schedulerRef->cancel(*deadlineHandle);
+                    } catch (...) {
+                        // Best-effort: a failed cancel leaves the deadline's own
+                        // entry to fire later and find nothing (setValue/
+                        // setException below are idempotent), which is exactly
+                        // what an uncancelled entry already does.
                     }
-                    // The other of the two mutually-exclusive resolution paths --
-                    // see the .then continuation above. Same liveness guard: this
-                    // touches `this` and must not run once the Bridge might be gone.
-                    if (alive.active()) {
-                        this->_pendingCalls.fetch_sub(1, std::memory_order_relaxed);
-                    }
-                    typedState->setException(err);
-                });
+                }
+                // The other of the two mutually-exclusive resolution paths --
+                // see the .then continuation above. `pendingCalls` is pinned
+                // there too, so this needs no liveness check at all (morph#489,
+                // site 2) -- nothing else in this branch touches the Bridge.
+                pendingCalls->fetch_sub(1, std::memory_order_relaxed);
+                typedState->setException(err);
+            });
         return typed;
     }
 
@@ -1699,26 +1718,36 @@ private:
         }
 
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
-        auto const weakLiveness = _callbacks.token();
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         bool const started = backend->registerModelAsync(
             binding->typeId, binding->modelFactory, binding->contextKey,
-            [this, weakBackend, weakLiveness, weakBinding](::morph::exec::detail::ModelId newId) {
+            [this, weakBackend, weakBinding, lifetime = _lifetime](::morph::exec::detail::ModelId newId) {
                 auto strongBinding = weakBinding.lock();
-                bool const bridgeAlive = weakLiveness.active();
                 bool applied = false;
-                if (bridgeAlive && strongBinding) {
-                    std::scoped_lock const lock{_mtx};
-                    auto pinned = weakBackend.lock();
-                    if (pinned && pinned == loadBackend()) {
-                        // A switchBackend() already moved past this registration
-                        // (see this backend's own doc comment on the class) and
-                        // its own re-registration loop already gave `binding` a
-                        // fresh id on the *new* backend -- applying this stale
-                        // one now would overwrite that with a dangling id from a
-                        // backend nothing uses any more.
-                        strongBinding->currentId.store(newId.v);
-                        applied = true;
+                if (strongBinding) {
+                    // `lifetime`'s gate held across the whole touch of `this`
+                    // below (`_mtx`, `loadBackend()`), not just at entry --
+                    // `CallbackToken::active()` is advisory and cannot carry
+                    // this weight (see `detail::BridgeLifetime`'s own doc
+                    // comment). Safe to hold across this span, unlike
+                    // `installReconnectHandler`'s reconnect callback
+                    // (morph#489, site 4): nothing inside is a call into
+                    // unbounded/consumer-supplied code, only a mutex and a
+                    // backend-pointer comparison.
+                    std::shared_lock const gate{lifetime->mtx};
+                    if (lifetime->alive) {
+                        std::scoped_lock const lock{_mtx};
+                        auto pinned = weakBackend.lock();
+                        if (pinned && pinned == loadBackend()) {
+                            // A switchBackend() already moved past this registration
+                            // (see this backend's own doc comment on the class) and
+                            // its own re-registration loop already gave `binding` a
+                            // fresh id on the *new* backend -- applying this stale
+                            // one now would overwrite that with a dangling id from a
+                            // backend nothing uses any more.
+                            strongBinding->currentId.store(newId.v);
+                            applied = true;
+                        }
                     }
                 }
                 // Resolve whenBound() waiters regardless of whether the id was
@@ -1887,12 +1916,30 @@ private:
     // instance id so a re-pointed handler keeps its subscriptions; matched at
     // publish time by comparing the binding's current instance. See
     // `detail::SubscriptionRegistry` for the locking/pruning implementation.
-    detail::SubscriptionRegistry<detail::HandlerBinding> _subscriptions;
+    //
+    // Heap-allocated and shared, like `_lifetime` below: `executeVia()`'s
+    // `.then` continuation needs to call `hasSubscribers()`/`publishResult()`
+    // from a possibly-post-~Bridge() context (morph#489, sites 1/2), and
+    // `SubscriptionRegistry` already snapshots its sinks under its own lock
+    // and invokes them outside it (see that class), so pinning the registry
+    // itself with a captured `shared_ptr` -- rather than gating a touch of
+    // `this` -- makes the call safe with no risk of blocking `~Bridge` behind
+    // a subscriber's own callback (the deadlock class morph#489 names for the
+    // sites this fix does *not* mechanically apply to). Never null.
+    std::shared_ptr<detail::SubscriptionRegistry<detail::HandlerBinding>> _subscriptions{
+        std::make_shared<detail::SubscriptionRegistry<detail::HandlerBinding>>()};
     // Count of executeVia() dispatches not yet resolved -- see pendingCalls().
     // Incremented once per call right before backend dispatch; decremented
     // exactly once by whichever of the two mutually-exclusive resolution
     // continuations (success or error) actually fires.
-    std::atomic<std::size_t> _pendingCalls{0};
+    //
+    // Heap-allocated and shared for the same reason as `_subscriptions`
+    // above: both resolution continuations decrement this from a context
+    // that may outlive the Bridge, and a plain `std::atomic` member cannot be
+    // touched safely once the Bridge is gone. A pinned counter needs no
+    // liveness check at all to decrement safely -- see the continuations'
+    // own comments. Never null.
+    std::shared_ptr<std::atomic<std::size_t>> _pendingCalls{std::make_shared<std::atomic<std::size_t>>(0)};
     // Destroyed with the Bridge; the bridge's own in-flight continuations hold
     // weak `CallbackToken`s issued from it (see liveness()). Handlers do not:
     // gating a *call into the bridge* needs `_lifetime` below, not a token.
