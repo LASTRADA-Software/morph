@@ -105,9 +105,11 @@ jobs:
 
   # ── Ladder rung list <-> the CI filters that are supposed to track it ──
   # examples/rungs.txt is the ladder's single authoritative rung list, and
-  # almost every consumer now derives from it at run time. Two cannot --
+  # almost every consumer now derives from it at run time. Three cannot --
   # wasm-ladder.yml's `on.*.paths` (GitHub reads them before any step exists to
-  # generate them) and codecov.yml (read by Codecov, not by us) -- so they are
+  # generate them), codecov.yml (read by Codecov, not by us), and each rung's
+  # tests/.clang-tidy (clang-tidy walks up from the file it analyses, so a
+  # per-directory setting can only live in that directory) -- so they are
   # checked against it here.
   #
   # This job has no path filter, deliberately. The bug it guards against

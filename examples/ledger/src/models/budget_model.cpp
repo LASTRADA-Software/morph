@@ -121,13 +121,17 @@ AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
         // Both sides, because this action names two rows and nothing else
         // constrains them to the same book. What this refuses is a link across
         // an *ownership* boundary -- someone else's account under your
-        // category, or yours under someone else's (morph#382). Two books the
-        // same principal owns, or two unowned ones, can still be cross-linked;
-        // that is a separate integrity gap this gate does not claim to close.
+        // category, or yours under someone else's (morph#382).
         db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), ctx->principal,
                                    "LinkAccountToCategory");
         db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), ctx->principal,
                                    "LinkAccountToCategory");
+        // And then *which* book, which ownership alone never answered: two
+        // books one principal owns, and two unowned ones, could be
+        // cross-linked until morph#373 closed it. Last of the three refusals,
+        // so the not-found and ownership ones keep their wording and ordering.
+        db::requireCategoryInBook(categoryRows.front().ledger.Value(), accountRows.front().ledger.Value(),
+                                  "LinkAccountToCategory");
         accountRows.front().category = categoryRows.front();
         mapper.Update(accountRows.front());
         auto result = AccountId{static_cast<std::int64_t>(accountRows.front().id.Value())};
@@ -166,6 +170,13 @@ BudgetId BudgetModel::execute(const CreateBudget& action) {
             throw Forbidden{"CreateBudget: this book belongs to another principal"};
         }
         db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), ctx->principal, "CreateBudget");
+        // ...and the category's book must *be* the named book, not merely be
+        // owned by the same principal (morph#373). This is the site that
+        // decides which `categoryId` `execute(GetBudgetReport)` below fans its
+        // account lookup out over, so a budget filed under book one naming a
+        // book-two category is the one cross-book row with report
+        // consequences.
+        db::requireCategoryInBook(categoryRows.front().ledger.Value(), ledgerRows.front().id.Value(), "CreateBudget");
         db::BudgetRecord budgetRow;
         budgetRow.ledger = ledgerRows.front();
         budgetRow.name = action.name;
@@ -264,8 +275,15 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     //   3. legs whose account is in (1) AND whose journal is in (2).
     const auto categoryId = budgetRows.front().category.Value();
     const auto ledgerId = budgetRows.front().ledger.Value();
+    // Scoped to the budget's own ledger as well as its category, because
+    // morph#373's guard is write-side only: a row written before it existed
+    // may still hold a cross-book link, and this is what makes such a row
+    // provably inert rather than inert-by-argument. Without it, step 1
+    // collects the foreign account and the whole exclusion rests on step 2's
+    // journal filter -- an invariant no future report kind is bound by.
     auto categoryAccountRows = mapper.Query<db::AccountRecord>()
                                    .Where(::Lightweight::FieldNameOf<&db::AccountRecord::category>, "=", categoryId)
+                                   .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", ledgerId)
                                    .All();
     std::vector<std::uint64_t> accountIds;
     accountIds.reserve(categoryAccountRows.size());

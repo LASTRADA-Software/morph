@@ -74,12 +74,49 @@ expect ok capture category=$
 do LinkAccountToCategory accountId=$firstSpend categoryId=$category
 expect ok
 
-# The *second* book's account, linked to the *first* book's category. The
-# link itself is accepted -- categories and accounts are joined by id, not by
-# book -- but the report below must still not count it, because the report
-# filters journals by the budget's own ledger.
+# ── A category and an account are one book's, or the link is refused ───
+#
+# The *second* book's account under the *first* book's category. Both rows
+# exist and both ids are well-formed -- category and account ids are
+# table-wide autoincrements, so a lookup by id alone finds the foreign row --
+# and until morph#373 the link was written. The report still did not count it,
+# because it filters journals by the budget's own ledger; but that made the
+# whole isolation rest on an invariant nothing stated and nothing bound a
+# future report kind to. Refused at the write instead.
+#
+# These books are unowned (the driver seeds them by raw `INSERT`), which is
+# exactly the case morph#382's ownership gate admits: every principal passes
+# the owner check on both, so this refusal is the only one left.
 do LinkAccountToCategory accountId=$secondSpend categoryId=$category
+expect err message == "LinkAccountToCategory: category does not belong to this ledger"
+
+# Distinct from the not-found refusal, deliberately: "that category is in your
+# other book" and "that id names nothing at all" are two different answers,
+# the same distinction the leg-scoping section below turns on.
+do LinkAccountToCategory accountId=$secondSpend categoryId=999999
+expect err message == "LinkAccountToCategory: no such account or category"
+
+# `SetCategory` is the same join through `LedgerModel`, and refuses the same
+# way.
+use books
+do SetCategory accountId=$secondSpend categoryId=$category
+expect err message == "SetCategory: category does not belong to this ledger"
+use budgets
+
+# The second book's own category is accepted on the second book's account,
+# which is what shows the refusals above are about the *book* and not about
+# every link.
+do CreateCategory ledgerId=2 name="Other book category"
+expect ok capture otherCategory=$
+
+do LinkAccountToCategory accountId=$secondSpend categoryId=$otherCategory
 expect ok
+
+# A budget names a ledger and a category independently, so it is the third
+# site of the same join -- and the one that decides which category the report
+# below runs on.
+do CreateBudget ledgerId=2 name="Cross-book budget" categoryId=$category
+expect err message == "CreateBudget: category does not belong to this ledger"
 
 do CreateBudget ledgerId=1 name="Isolated budget" categoryId=$category
 expect ok capture budget=$
