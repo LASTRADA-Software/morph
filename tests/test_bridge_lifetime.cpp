@@ -37,9 +37,11 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <new>
+#include <semaphore>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #if !defined(_WIN32)
 #include <sys/mman.h>
@@ -192,6 +194,64 @@ public:
     // Left un-resolved by execute(); the test resolves it directly once it
     // wants the completion to fire.
     std::shared_ptr<morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
+};
+
+// ── morph#486 fixtures ───────────────────────────────────────────────────────
+
+// Shared bookkeeping for the teardown-race case below. It lives outside the
+// backend on purpose: pre-fix, `~Bridge` destroys the backend while a parked
+// `deregisterModel` call is still on another thread's stack, so the parked
+// frame must not touch `this` after it wakes.
+struct TeardownRaceState {
+    // Released by deregisterModel once it is provably inside the window
+    // ~BridgeHandler's gate is supposed to hold shut.
+    std::binary_semaphore entered{0};
+    // Released by the test to let that call finish.
+    std::binary_semaphore proceed{0};
+    // True for exactly as long as a deregistration is in flight.
+    std::atomic<bool> inDeregister{false};
+    // Set if ~Bridge ran its body while the flag above was true -- i.e. the
+    // bridge tore itself down underneath a handler it had already told it was
+    // safe to call in. Post-fix this must never happen.
+    std::atomic<bool> overlapped{false};
+};
+
+// A backend that parks inside deregisterModel, so the test can hold a
+// ~BridgeHandler exactly halfway through Bridge::deregisterHandler, and that
+// notices when ~Bridge's body runs during that window (cancelPending is
+// reached only from ~Bridge).
+class TeardownRaceBackend : public morph::backend::detail::IBackend {
+public:
+    explicit TeardownRaceBackend(std::shared_ptr<TeardownRaceState> state) : _state{std::move(state)} {}
+
+    morph::exec::detail::ModelId registerModel(
+        const std::string&, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()>) override {
+        return morph::exec::detail::ModelId{1};
+    }
+    void deregisterModel(morph::exec::detail::ModelId) override {
+        // A local strong reference, taken before parking: pre-fix this very
+        // object is destroyed with the Bridge while we are parked, so neither
+        // `this` nor `_state` may be read once `proceed.acquire()` returns.
+        auto const state = _state;
+        state->inDeregister.store(true);
+        state->entered.release();
+        state->proceed.acquire();
+        state->inDeregister.store(false);
+    }
+    morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId,
+                                                            morph::backend::detail::ActionCall,
+                                                            morph::exec::IExecutor*) override {
+        return {};
+    }
+    void notifyBackendChanged() override {}
+    void cancelPending(const std::exception_ptr&) override {
+        if (_state->inDeregister.load()) {
+            _state->overlapped.store(true);
+        }
+    }
+
+private:
+    std::shared_ptr<TeardownRaceState> _state;
 };
 
 #if !defined(_WIN32)
@@ -524,6 +584,70 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
     REQUIRE(munmap(region, pageSize) == 0);
 }
 #endif  // !defined(_WIN32)
+
+// ── morph#486: ~BridgeHandler racing ~Bridge across threads ──────────────────
+//
+// `docs/spec/core/bridge.md` promises that bridge-vs-handler teardown order
+// does not matter, and `~BridgeHandler` implemented that promise with a bare
+// `CallbackToken::active()` check. Across threads that check is advisory by
+// construction (`docs/spec/core/callback_scope.md`, "Boundary of the
+// guarantee"): it answers for an instant that has already passed by the time
+// `Bridge::deregisterHandler` reads `_handlers`. morph#486 is that window,
+// observed as a use-after-free — a metadata-fetch pass kept its
+// `shared_ptr<BridgeHandler>` alive inside the completions it dispatched, a
+// worker-pool thread dropped the last reference while the owning thread was
+// inside `~App`, and `deregisterHandler` then walked a `_handlers` vector whose
+// `Bridge` had already been destroyed.
+//
+// This case holds a `~BridgeHandler` *inside* that window on purpose — the
+// backend parks in `deregisterModel`, which `deregisterHandler` calls after the
+// liveness question has been answered — and destroys the `Bridge` on another
+// thread while it is parked. Nothing about the assertion is timing-dependent:
+// `cancelPending` is reached only from `~Bridge`'s body, so observing it while
+// a deregistration is in flight *is* the violation. Post-fix the lifetime gate
+// makes it unreachable; pre-fix `~Bridge` runs straight through and the parked
+// handler goes on to read a destroyed `Bridge`.
+//
+// Measured on the ordinary Debug build: 25/25 runs failed before the fix (8 of
+// them by SIGSEGV, the rest on the assertion below), 0/25 after. **This case
+// earns its keep on the plain leg, not the sanitizer ones.** ASan's
+// instrumentation slows `~Bridge` enough that the parked handler wins every
+// round — 0/25 pre-fix failures and no `heap-use-after-free`, which is also why
+// ASan never reproduced morph#486 itself (0/200 runs of the bookmarks case it
+// was reported from, against 26/200 unsanitized).
+TEST_CASE("Bridge teardown does not overlap a handler destructor on another thread",
+          "[bridge][lifetime][teardown][issue486]") {
+    constexpr int kRounds = 64;
+    morph::exec::MainThreadExecutor exec;
+
+    int overlaps = 0;
+    for (int round = 0; round < kRounds; ++round) {
+        auto state = std::make_shared<TeardownRaceState>();
+        auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<TeardownRaceBackend>(state));
+        auto handler = std::make_shared<morph::bridge::BridgeHandler<DeferredModel>>(*bridge, &exec);
+
+        // Drops the last reference to the handler, exactly as a completion
+        // resolving on a worker thread does. Parks inside deregisterModel.
+        std::thread releaser{[&handler] { handler.reset(); }};
+        state->entered.acquire();
+
+        // The owner tears the bridge down while that deregistration is in
+        // flight. Post-fix this blocks on the lifetime gate until the releaser
+        // is out; pre-fix it runs to completion underneath it.
+        std::thread destroyer{[&bridge] { bridge.reset(); }};
+        state->proceed.release();
+
+        destroyer.join();
+        releaser.join();
+
+        if (state->overlapped.load()) {
+            ++overlaps;
+        }
+    }
+
+    INFO("rounds: " << kRounds);
+    CHECK(overlaps == 0);
+}
 
 // ── Coverage: setDefaultSession on a Bridge constructed with a null backend ──
 //

@@ -366,17 +366,21 @@ RAII handle. Registers a `HandlerBinding` on construction, deregisters on
 destruction. Non-copyable.
 
 **Construction** takes a `Bridge&` and a GUI executor. Optionally accepts a
-pre-built `HandlerBinding` (for dependency injection). It captures the bridge's
-`liveness()` weak token into `_bridgeAlive`, holds a strong `Bridge&`, and
-and carries the sharing policy as its second template argument (see
+pre-built `HandlerBinding` (for dependency injection). It copies the bridge's
+`lifetimeGate()` `shared_ptr` into `_bridgeGate`, holds a strong `Bridge&`, and
+carries the sharing policy as its second template argument (see
 `BridgeHandler<Model, Sharing>` below).
 
-**Destruction** deregisters the binding via `Bridge::deregisterHandler` — but
-only if `_bridgeAlive.active()` still reports `true`. If the `Bridge` was
-already destroyed the token is inactive, so the destructor skips deregistration
-instead of dereferencing a dangling `Bridge&`. Destroying the bridge before
-its handlers is still discouraged (see [Lifetime & ownership](#lifetime--ownership)),
-but it is now defined behaviour, not a use-after-free.
+**Destruction** takes `_bridgeGate` **shared, and holds it across the whole
+call**, then deregisters the binding via `Bridge::deregisterHandler` — but only
+if the gate still reports `alive`. If the `Bridge` was already destroyed the
+flag is clear, so the destructor skips deregistration instead of dereferencing a
+dangling `Bridge&`; and if it was not, `~Bridge` cannot start while this call is
+in progress. Holding the lock rather than merely reading a flag is the point:
+a bare check answers for an instant that has already passed, which is what made
+issue #486 a use-after-free. Destroying the bridge before its handlers is still
+discouraged (see [Lifetime & ownership](#lifetime--ownership)), but it is
+defined behaviour on any thread, not a use-after-free.
 
 **`execute<Action>(action)`** delegates to `Bridge::executeVia` with the
 handler's binding and GUI executor. Default session is attached
@@ -783,18 +787,50 @@ exactly as long as its handler. The bridge can enumerate live bindings (for
 `switchBackend` and reconnect re-registration) and skip dead ones via
 `weak.lock()`, but it never keeps a handler alive.
 
-**Bridge-vs-handler teardown order.** The bridge holds a
-`morph::async::CallbackScope _callbacks`; every handler captures a matching
-`morph::async::CallbackToken` (`_bridgeAlive`) at construction. This makes
-*teardown* order-independent:
+**Bridge-vs-handler teardown order.** The bridge owns a
+`shared_ptr<detail::BridgeLifetime>` — a `shared_mutex` plus an `alive` flag —
+and every handler copies that `shared_ptr` (`_bridgeGate`) at construction. This
+makes *teardown* order-independent, **on any thread**:
 
-- Handler destroyed first (the normal case): its destructor deregisters the
-  binding from the still-live bridge.
-- Bridge destroyed first: the handler's `_bridgeAlive` token is no longer
-  active, so its destructor skips deregistration — a safe no-op instead of a
-  use-after-free.
+- Handler destroyed first (the normal case): its destructor takes the gate
+  shared, sees `alive`, and deregisters the binding from the still-live bridge.
+- Bridge destroyed first: `~Bridge`'s **first** statement takes the gate
+  exclusively and clears `alive`, so the handler's destructor skips
+  deregistration — a safe no-op instead of a use-after-free.
+- The two racing on different threads: the `shared_mutex` orders them. Either
+  the handler is inside the gate and `~Bridge` waits for it to leave before
+  running a single statement of its own body, or `~Bridge` got there first and
+  the handler sees `alive == false`. There is no in-between.
 
-**The lifetime rule.** The liveness token makes only *destruction* safe in
+The gate is heap-allocated and outlives the `Bridge`, because a handler that
+outlives its bridge must still be able to *ask* the question.
+
+**Why the liveness token is not enough here.** `Bridge::liveness()` (the
+`CallbackScope _callbacks` half) still gates *delivery* of the bridge's own
+callbacks, and that is the job it is right for: a suppressed callback simply
+does not run, so a check that has gone stale costs nothing. It cannot gate a
+*member call on the `Bridge`*, because `CallbackToken::active()` is explicitly
+advisory across threads ([callback_scope.md](callback_scope.md), "Boundary of
+the guarantee") — the bridge can be destroyed between the check and the call.
+`~BridgeHandler` used a bare `active()` check until issue #486, where a
+`shared_ptr<BridgeHandler>` kept alive by its own completions was released on a
+worker-pool thread while the owning thread ran `~App`: the check passed, the
+`Bridge` finished being destroyed, and `deregisterHandler` then walked the freed
+`_handlers`. The gate replaces the check with something that holds.
+
+**Blocking, and why it is safe.** `~Bridge` waits for an in-flight
+deregistration, so `~Bridge` can block. The wait is bounded and cannot cycle:
+the only guarded region is `deregisterHandler`, whose sole outward call is
+`IBackend::deregisterModel`, which never blocks on another thread on any shipped
+backend — `LocalBackend` erases map entries under its own mutex,
+`SimulatedRemoteBackend` runs the envelope inline (`RemoteServer::handleInline`),
+and `QtWebSocketBackend`/`SocketBackend` are documented fire-and-forget sends
+precisely so destruction never spins a nested event loop. A destructor blocking
+on a bounded predicate is the framework's existing idiom for this hazard —
+`~StrandExecutor` blocks until `_inFlight == 0`
+([concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md)).
+
+**The lifetime rule.** The gate makes only *destruction* safe in
 either order. It does **not** make a `Bridge` optional for live handlers: any
 `execute()`, `executeJson()`, or `FlowSession::set<>`-triggered fire dereferences the
 `Bridge&` and must run while the bridge is alive. In other words, the bridge
@@ -871,8 +907,8 @@ make teardown order-independent.)
 
 | Decision | Choice | Why |
 |---|---|---|
-| Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. (Handler *teardown* after the bridge is made safe separately, by the `_callbacks` scope's tokens — not by this weak storage.) |
-| Teardown order | **`morph::async::CallbackScope _callbacks` + per-handler `CallbackToken`** | Makes bridge-vs-handler destruction order-independent: a handler outliving its bridge skips deregistration instead of dereferencing a dangling `Bridge&`. Normal `execute`/`subscribe` still require the bridge to outlive its handlers. Was a hand-rolled `shared_ptr<const void>`/`weak_ptr<const void>` pair; it is now the shared primitive ([callback_scope.md](callback_scope.md)) so the framework does not reimplement what it asks callers to use. |
+| Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. (Handler *teardown* after the bridge is made safe separately, by the `detail::BridgeLifetime` gate — not by this weak storage.) |
+| Teardown order | **`shared_ptr<detail::BridgeLifetime>` — a `shared_mutex` + `alive` flag, shared with every handler** | Makes bridge-vs-handler destruction order-independent on any thread: `~BridgeHandler` holds the gate shared across its whole deregistration, `~Bridge`'s first statement takes it exclusively and clears `alive`, so the two can never overlap. Normal `execute`/`subscribe` still require the bridge to outlive its handlers. This replaced a per-handler `CallbackToken` from `_callbacks`, whose `active()` is advisory across threads — check-then-call, which issue #486 hit as a use-after-free. The `CallbackScope` stays for what it is right for: gating *delivery* of the bridge's own callbacks ([callback_scope.md](callback_scope.md)). |
 | Backend pointer | **Short snapshot under the dedicated `_backendMtx`** | `executeVia()` reads the backend through a `loadBackend()` helper that copies the `shared_ptr` under `_backendMtx` (never `_mtx`), so it never blocks on `switchBackend()`'s `_mtx`. |
 | Session storage | **Separate `_sessionMtx` from `_mtx`** | Session access is a hot path (every `executeVia` reads it). A separate mutex avoids contention with handler registration/switchBackend. |
 | Attach-path locking | **Separate `_attachMtx` from `_mtx`** | `attachHandler`/`ensureBound`/`assignHandlerPrimary` can block on a full network round-trip for a remote backend. A dedicated mutex means that round-trip never blocks unrelated `registerHandler`/`deregisterHandler`/`switchBackend` calls on the same `Bridge`, closing a deadlock hazard if the thread expected to deliver the pending reply itself needs `_mtx`. `HandlerBinding::primary`/`contextKey` are mutated only under `_attachMtx`; `switchBackend()` and the reconnect handler, which also touch them, take both mutexes together. |

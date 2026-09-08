@@ -110,15 +110,15 @@
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1359,
+      "line": 1416,
       "source": "if (_executeDeadline.count() > 0 && _timeoutScheduler) {",
       "reason": "Unreachable by construction (core audit finding B6). `setExecuteDeadline` (this file) is the only writer of both `_executeDeadline` and `_timeoutScheduler`, and always creates `_timeoutScheduler` in the same call that sets `_executeDeadline` positive (`_executeDeadline = deadline; if (_executeDeadline.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_shared<...>(); }`, both under `_executeDeadlineMtx`); nothing anywhere resets `_timeoutScheduler` back to null -- the class's own doc comment on `setExecuteDeadline` says so explicitly (\"setting the deadline back to 0 stops new calls from arming it but does not tear the thread down\"). So `_executeDeadline > 0 && !_timeoutScheduler` cannot happen at this line once any positive deadline has ever been set."
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1477,
+      "line": 1534,
       "source": "if (deadlineHandle && schedulerRef) {",
-      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1359 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible."
+      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1416 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible."
     },
     {
       "file": "include/morph/core/remote.hpp",
