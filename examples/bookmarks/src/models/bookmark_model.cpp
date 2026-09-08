@@ -135,6 +135,9 @@ protected:
     }
 
 private:
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members) -- borrowed, never reseated; must
+    // outlive this short-lived instance, per the constructor's own doc comment. Same shape as
+    // bridge.hpp's BridgeHandler::_bridge.
     ::Lightweight::DataMapper& _mapper;
     std::int64_t _appliedAtMs;
 };
