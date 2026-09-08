@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -312,6 +313,52 @@ inline std::optional<ParkedOutcome> claimHandoff(AsyncDispatchHandoff& handoff) 
     return ParkedOutcome{.succeeded = handoff.succeeded, .modelId = handoff.modelId, .failure = handoff.failure};
 }
 
+/// @brief The gate that makes "the `Bridge` is still there" and "call into it"
+///        a single, indivisible step.
+///
+/// `morph::async::CallbackToken` answers only *"was the scope active at the
+/// moment of the check"* — advisory across threads by design
+/// (docs/spec/core/callback_scope.md, "Boundary of the guarantee"). That is
+/// enough to gate **delivery** of a callback, because a suppressed callback is
+/// simply not run and the check being stale costs nothing. It is *not* enough
+/// to gate a **member call on the `Bridge`**: the bridge can be destroyed in
+/// the instructions between the check and the call, and the call then runs on
+/// destroyed memory. That is issue #486 — a `~BridgeHandler` running on a
+/// worker thread saw an active token, and `Bridge::deregisterHandler` then
+/// iterated a `_handlers` vector whose `Bridge` the owning thread had already
+/// finished destroying.
+///
+/// This type closes that window structurally rather than per call site: the
+/// answer is only ever read while `mtx` is held, and `~Bridge` flips it while
+/// holding the same mutex exclusively. A caller that observes `alive == true`
+/// therefore *keeps* the bridge alive for as long as it stays inside the
+/// shared lock, because `~Bridge` cannot get past its own first statement
+/// until that lock is released.
+///
+/// Owned through a `shared_ptr`, so it outlives the `Bridge` for exactly as
+/// long as some handler still holds a reference to it and can ask the
+/// question.
+///
+/// @par Why a blocking gate is acceptable here
+/// `~Bridge` waits only for work that is provably non-blocking and bounded:
+/// the sole guarded region is `~BridgeHandler`'s `deregisterHandler` call, and
+/// `IBackend::deregisterModel` never blocks on another thread on any shipped
+/// backend — `LocalBackend` erases map entries under its own mutex,
+/// `SimulatedRemoteBackend` runs the envelope inline via
+/// `RemoteServer::handleInline`, and `QtWebSocketBackend`/`SocketBackend` are
+/// documented fire-and-forget sends precisely so that destruction never spins
+/// a nested event loop. A destructor that blocks on a bounded predicate is
+/// also the framework's existing idiom for exactly this class of hazard —
+/// `~StrandExecutor` blocks until `_inFlight == 0`
+/// (docs/spec/concurrency_and_lifetimes.md, "Destruction ordering").
+struct BridgeLifetime {
+    /// Held shared by a caller for the whole of its call into the `Bridge`,
+    /// and exclusively by `~Bridge` while it retires the bridge.
+    std::shared_mutex mtx;
+    /// `true` until `~Bridge` begins. Read and written only under `mtx`.
+    bool alive = true;
+};
+
 }  // namespace detail
 
 /// @brief Central dispatcher that routes typed actions to an `IBackend`.
@@ -355,7 +402,17 @@ public:
     /// a callback and never re-enters the bridge) closes the common case; the
     /// handler additionally guards on `_callbacks` so a reconnect already in flight
     /// on the transport thread becomes a no-op too. See docs/spec/concurrency_and_lifetimes.md.
+    ///
+    /// The **first** statement retires the lifetime gate (`detail::BridgeLifetime`),
+    /// and it has to stay first: everything below it — clearing the reconnect
+    /// handler, cancelling pending completions, and then the implicit destruction
+    /// of every member — is state a concurrently-destroyed `BridgeHandler` would
+    /// otherwise still be walking. `closeLifetime()` both publishes "this bridge is
+    /// retired" and **waits out** any deregistration already inside the gate, so
+    /// this destructor never overlaps one. That wait is bounded and cannot
+    /// deadlock: see `detail::BridgeLifetime`. Issue #486.
     ~Bridge() {
+        closeLifetime();
         if (auto active = loadBackend()) {
             active->setReconnectHandler(nullptr);
             active->cancelPending(std::make_exception_ptr(::morph::backend::BridgeDestroyedError{}));
@@ -1582,6 +1639,26 @@ private:
     /// inactive exactly when the `Bridge` is destroyed.
     [[nodiscard]] ::morph::async::CallbackToken liveness() const { return _callbacks.token(); }
 
+    /// @brief The lifetime gate every handler holds, so its destructor can call
+    ///        back into this bridge without racing `~Bridge`.
+    ///
+    /// Unlike `liveness()`, the answer this carries is not advisory: see
+    /// `detail::BridgeLifetime` for what it guarantees and why the bridge needs
+    /// both (delivery gating stays on the token; a *call into the bridge* needs
+    /// the gate).
+    /// @return The shared gate; never null, and outlives the `Bridge`.
+    [[nodiscard]] std::shared_ptr<detail::BridgeLifetime> lifetimeGate() const { return _lifetime; }
+
+    /// @brief Retires the lifetime gate, waiting out any deregistration inside it.
+    ///
+    /// Called as `~Bridge`'s first statement and nowhere else. After it returns,
+    /// no `~BridgeHandler` will enter `deregisterHandler` on this bridge, and none
+    /// is still inside one.
+    void closeLifetime() noexcept {
+        std::unique_lock const lock{_lifetime->mtx};
+        _lifetime->alive = false;
+    }
+
     std::shared_ptr<::morph::backend::detail::IBackend> loadBackend() const {
         std::scoped_lock const lock{_backendMtx};
         return _backend;
@@ -1816,9 +1893,16 @@ private:
     // exactly once by whichever of the two mutually-exclusive resolution
     // continuations (success or error) actually fires.
     std::atomic<std::size_t> _pendingCalls{0};
-    // Destroyed with the Bridge; handlers and in-flight continuations hold weak
-    // `CallbackToken`s issued from it (see liveness()).
+    // Destroyed with the Bridge; the bridge's own in-flight continuations hold
+    // weak `CallbackToken`s issued from it (see liveness()). Handlers do not:
+    // gating a *call into the bridge* needs `_lifetime` below, not a token.
     ::morph::async::CallbackScope _callbacks;
+    // Heap-allocated on purpose: a handler outliving this Bridge must still be
+    // able to *ask* whether the bridge is there, so the answer cannot live in
+    // the Bridge's own storage. Declaration position is irrelevant for the same
+    // reason -- `~Bridge`'s first statement retires it explicitly, long before
+    // any member is destroyed. See detail::BridgeLifetime and issue #486.
+    std::shared_ptr<detail::BridgeLifetime> _lifetime{std::make_shared<detail::BridgeLifetime>()};
 };
 
 /// @brief `BridgeHandler` sharing policy: private, one instance per handler.
@@ -1868,14 +1952,14 @@ public:
     ///
     /// @param bridge   The bridge to register on. Borrowed, not owned: it must
     ///                 outlive every *call* made on this handler. Destruction
-    ///                 order itself is unconstrained — `~BridgeHandler` detects
-    ///                 an already-destroyed bridge through its `CallbackToken`
-    ///                 and deregisters nothing (see "Lifetime & ownership" in
-    ///                 `docs/spec/core/bridge.md`).
+    ///                 order itself is unconstrained, on any thread —
+    ///                 `~BridgeHandler` takes the bridge's `detail::BridgeLifetime`
+    ///                 gate and deregisters nothing if the bridge is already gone
+    ///                 (see "Lifetime & ownership" in `docs/spec/core/bridge.md`).
     /// @param guiExec  Executor used to deliver `Completion` callbacks (e.g. the
     ///                 GUI thread). Borrowed: it must outlive this handler.
     BridgeHandler(Bridge& bridge MORPH_LIFETIMEBOUND, ::morph::exec::IExecutor* guiExec MORPH_LIFETIMEBOUND)
-        : _bridge{bridge}, _bridgeAlive{bridge.liveness()}, _guiExec{guiExec}, _binding{makeBinding(bridge)} {
+        : _bridge{bridge}, _bridgeGate{bridge.lifetimeGate()}, _guiExec{guiExec}, _binding{makeBinding(bridge)} {
         static_assert(!kShared || ::morph::model::KeyedModel<Model>,
                       "BridgeHandler<Model, AllowShared> requires Model to declare a PrimaryKey alias");
     }
@@ -1889,19 +1973,33 @@ public:
     /// @param binding  Pre-built binding whose factory captures injected dependencies.
     BridgeHandler(Bridge& bridge MORPH_LIFETIMEBOUND, ::morph::exec::IExecutor* guiExec MORPH_LIFETIMEBOUND,
                   std::shared_ptr<detail::HandlerBinding> binding)
-        : _bridge{bridge}, _bridgeAlive{bridge.liveness()}, _guiExec{guiExec}, _binding{std::move(binding)} {
+        : _bridge{bridge}, _bridgeGate{bridge.lifetimeGate()}, _guiExec{guiExec}, _binding{std::move(binding)} {
         _bridge.registerHandler(_binding);
     }
 
     /// @brief Deregisters the binding from the bridge.
     ///
-    /// If the `Bridge` has already been destroyed (its `CallbackToken` is no
-    /// longer active), this is a no-op: there is nothing to deregister from and
-    /// dereferencing the dangling `Bridge&` would be undefined behaviour.
-    /// Destroying the bridge before its handlers is still discouraged, but is
-    /// now safe rather than a use-after-free.
+    /// If the `Bridge` has already been destroyed, this is a no-op: there is
+    /// nothing to deregister from and dereferencing the dangling `Bridge&` would
+    /// be undefined behaviour. Destroying the bridge before its handlers is still
+    /// discouraged, but it is safe — in either order, and **from any thread**.
+    ///
+    /// The gate is held across the whole call, not merely across the question.
+    /// A handler is routinely released on a thread that is not the bridge's
+    /// owner: the framework's own idiom for a fire-and-forget pass keeps the
+    /// `shared_ptr<BridgeHandler>` alive inside the completions it dispatched,
+    /// so the last reference is dropped wherever those completions are destroyed
+    /// — a worker-pool thread for `LocalBackend`/`SimulatedRemoteBackend`, the
+    /// transport thread for `SocketBackend`. A bare "is the bridge alive?" check
+    /// answers for an instant that has already passed by the time the call is
+    /// made, which is how issue #486 turned an ordinary `~App` into a
+    /// use-after-free on `Bridge::deregisterHandler`'s `_handlers`. Holding the
+    /// shared lock across the call makes the check and the call one step:
+    /// `~Bridge` cannot start until this returns, and a `~Bridge` that started
+    /// first is already visible here as "not alive".
     ~BridgeHandler() {
-        if (_bridgeAlive.active()) {
+        std::shared_lock const gate{_bridgeGate->mtx};
+        if (_bridgeGate->alive) {
             _bridge.deregisterHandler(_binding);
         }
     }
@@ -2229,7 +2327,10 @@ public:
 
 private:
     Bridge& _bridge;
-    ::morph::async::CallbackToken _bridgeAlive;  // goes inactive when _bridge is destroyed
+    // Shared gate that answers "is `_bridge` still there?" *and* keeps that
+    // answer true for as long as the destructor below holds it -- see
+    // detail::BridgeLifetime. Never null.
+    std::shared_ptr<detail::BridgeLifetime> _bridgeGate;
     ::morph::exec::IExecutor* _guiExec;
     std::shared_ptr<detail::HandlerBinding> _binding;
 };

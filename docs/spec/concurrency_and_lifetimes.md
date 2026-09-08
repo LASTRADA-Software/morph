@@ -202,22 +202,55 @@ handlers  →  Bridge  →  backend (LocalBackend / SimulatedRemoteBackend)
 
 Declared as members, list the pool **first** so it is destroyed **last**.
 
-### `Bridge` vs. `BridgeHandler` — teardown is now order-independent
+### `Bridge` vs. `BridgeHandler` — teardown is order-independent, on any thread
 
 Normal operation still requires the `Bridge` to outlive its handlers: every
-`execute` / `set` call dereferences `_bridge`. But **teardown order no longer
-matters** (recent fix). Each `BridgeHandler` captures a
-`morph::async::CallbackToken` from the `Bridge` (`Bridge::liveness()`, issued by
-the bridge's `CallbackScope _callbacks`). In `~BridgeHandler`, it checks the
-token first:
+`execute` / `set` call dereferences `_bridge`. But **teardown order does not
+matter**, and neither does which thread each side runs on.
 
-- token active → the `Bridge` is alive → deregister normally.
-- token inactive → the `Bridge` is already gone → **no-op**, skipping the
+The `Bridge` owns a `shared_ptr<bridge::detail::BridgeLifetime>` — a
+`std::shared_mutex` plus an `alive` flag — and hands a copy to every
+`BridgeHandler` at construction. `~BridgeHandler` takes that gate **shared, and
+holds it across the whole deregistration**:
+
+- `alive` → the `Bridge` is alive, and *stays* alive for the duration of the
+  call, because `~Bridge` cannot take the gate exclusively until this releases
+  it → deregister normally.
+- not `alive` → the `Bridge` is already gone → **no-op**, skipping the
   deregistration that would otherwise dereference a dangling `Bridge&`.
 
-Previously, destroying the `Bridge` before its handlers was a use-after-free.
-It is now defined behaviour (a silent no-op deregistration). Destroying the
-bridge first is still discouraged, but it is no longer unsafe.
+`~Bridge`'s **first** statement is `closeLifetime()`, which takes the gate
+exclusively and clears `alive`. Being first is load-bearing: everything after it
+— clearing the reconnect handler, `cancelPending`, and then every member's
+destructor — is state a concurrently-running `~BridgeHandler` would otherwise
+still be walking.
+
+**A liveness token cannot do this job.** `CallbackToken::active()` is advisory
+across threads by construction (see the next section): it reports an instant that
+has already passed. That is fine for gating *delivery* of a callback — a
+suppressed callback simply does not run — and the bridge still uses `liveness()`
+for exactly that. It is not fine for gating a *member call on the `Bridge`*.
+`~BridgeHandler` used a bare `active()` check until issue #486, where a
+`shared_ptr<BridgeHandler>` kept alive by its own dispatched completions was
+released on a worker-pool thread while the owning thread ran `~App`: the check
+passed, the `Bridge` finished being destroyed, and `Bridge::deregisterHandler`
+then iterated the freed `_handlers`. The gate turns check-then-call into one
+indivisible step.
+
+**`~Bridge` therefore blocks**, like `~StrandExecutor` above and for the same
+reason. The wait is bounded and cannot cycle: the only guarded region is
+`deregisterHandler`, whose sole outward call is `IBackend::deregisterModel`, and
+no shipped backend blocks on another thread there — `LocalBackend` erases map
+entries under its own mutex, `SimulatedRemoteBackend` runs the envelope inline
+via `RemoteServer::handleInline`, and `QtWebSocketBackend`/`SocketBackend` are
+fire-and-forget sends, documented as such precisely so that destruction never
+spins a nested event loop.
+
+The one rule this imposes: **a `~BridgeHandler` must not be reachable from the
+thread that is already inside `~Bridge`** — destroying a handler from within
+`~Bridge`, or from a callback `~Bridge`'s own body runs synchronously, is
+self-deadlock on the gate, exactly as re-entering any exclusively-held mutex is.
+No framework path does this; a caller that arranges it is outside the contract.
 
 ### `RemoteServer` must be `make_shared` and outlive its transports
 
@@ -583,7 +616,7 @@ attribute is coarser than morph's actual contracts:
 Destroy in this order (or declare members so the reverse holds):
 
 ```
-BridgeHandler(s)          ← first to go (or any order vs. Bridge, thanks to the liveness token)
+BridgeHandler(s)          ← first to go (or any order vs. Bridge, on any thread, thanks to the lifetime gate)
   Bridge
     backend               ← LocalBackend / SimulatedRemoteBackend
       RemoteServer         ← only in remote mode; keep its shared_ptr alive this long
@@ -620,7 +653,8 @@ One-liners to remember:
   `CallbackToken`: gating a callback on its receiver's liveness *and* on an
   explicit stop, and the exact boundary of that guarantee.
 - [`bridge.md`](core/bridge.md) — `Bridge`, `BridgeHandler`, `switchBackend`,
-  `executeVia`, the liveness token.
+  `executeVia`, the liveness token, and `detail::BridgeLifetime` — the gate that
+  makes handler teardown safe in either order and on any thread.
 - [`backend.md`](core/backend.md) — `LocalBackend`, `RemoteServer`,
   `SimulatedRemoteBackend`, `cancelPending`, the `make_shared` requirement.
 - [`offline.md`](offline/offline.md) — `NetworkMonitor`, `ReconnectCoordinator`,

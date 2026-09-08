@@ -205,6 +205,16 @@ cannot. It is normative.
   `weak_ptr` idiom this type replaces — locking the token pins the *token*,
   never the receiver — and it carries over unchanged: external synchronisation
   there remains the caller's job.
+
+  This is what makes a token the wrong tool for gating a **call into an object
+  whose destruction it observes**, as opposed to gating *delivery of a callback*.
+  A refused callback costs nothing when the check is stale; a member call made a
+  few instructions after a stale `Active` runs on destroyed memory. Issue #486
+  was exactly that, in `~BridgeHandler`. Where a call has to be gated, the caller
+  needs something that *holds* the answer for the duration of the call — see
+  `bridge::detail::BridgeLifetime` in [bridge.md](bridge.md), which pairs a
+  `shared_mutex` with the flag so check-then-call is one step and the destructor
+  waits the caller out.
 - **The gate is monotone within a generation.** Once a token has been observed
   non-`Active`, it never returns to `Active`. Only `reset()` (which issues a
   *different* generation's tokens) produces a live token again.
