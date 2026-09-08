@@ -1569,6 +1569,17 @@ void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCate
     const auto principal = db::currentPrincipal();
     db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), principal, "SetCategory");
     db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), principal, "SetCategory");
+    // Then *which* book (morph#373): owning both is not the same as their
+    // being one book, and until this check existed a caller could file its own
+    // account in book two under its own category in book one.
+    //
+    // Unreachable from the rule cascade, which is the other caller: that path
+    // looks its category up with a `Where` on the triggering action's own
+    // `ledgerId`, and its account is a leg account, which `accountInLedger`
+    // has already constrained to that same ledger (morph#380). The two are
+    // therefore always one book there, and this refusal is a live gate only
+    // for the client-facing `execute(SetCategory)` above.
+    db::requireCategoryInBook(categoryRows.front().ledger.Value(), accountRows.front().ledger.Value(), "SetCategory");
     accountRows.front().category = categoryRows.front();
     mapper.Update(accountRows.front());
 }

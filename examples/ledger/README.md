@@ -87,6 +87,39 @@ already has on a report job. Nothing writes a new one — `CreateLedger` always
 stamps its caller — but the scenario corpus's fixture books are seeded by raw
 `INSERT` and are unowned for this reason. Added by morph#382.
 
+**Which book it is.** Owning both books is not the same as their being one
+book. An account and a category are joined only when they belong to the *same*
+book, and a budget names a category in its own book — `SetCategory`,
+`LinkAccountToCategory` and `CreateBudget` each refuse the cross-book pair
+with `<Action>: category does not belong to this ledger`, kept distinct from
+`<Action>: no such account or category` for the reason the leg-scoping refusal
+above is: a client that cannot tell them apart cannot tell a dead id from a
+mis-scoped one. Neither `SetCategory` nor `LinkAccountToCategory` carries a
+`ledgerId`, so the check compares the two loaded rows' own `ledger` values
+rather than filtering on a scope argument; the guard is
+`ledger::db::requireCategoryInBook` and it lives beside the ownership one in
+`ledger/db/book_access.hpp`.
+
+Until morph#373 this was accepted, and what made it survivable was an
+invariant stated nowhere: `GetBudgetReport` filters legs by the budget's own
+ledger's journals, so a foreign account's legs never reached the sum. A
+guarantee resting on every future report kind keeping a filter nobody wrote
+down is the shape morph#384 rejected, so the link is refused at the write
+instead.
+
+**The guard is write-side only.** A row written before morph#373 may still
+hold a cross-book link, and nothing rewrites or refuses it: no migration
+touches the `accounts` or `budgets` rows, and every read still answers. Two
+reasons. A cleanup would have to *choose* which side to break — null the
+account's `category_id`, or move the row into the other book — and both
+destroy data a client created under the contract this rung then documented,
+with no way to get it back. And refusing on *read* would turn
+`GetBudgetReport` into a permanent error for a book whose only fault is a row
+predating the rule, which no registered action can repair. Instead
+`GetBudgetReport`'s account lookup is scoped to the budget's own ledger as
+well as its category, so a stale link is inert by construction rather than by
+the journal-filter argument above.
+
 **There are no roles.** Ownership here is one principal per book, not a
 membership table: there is no way to share a book with a second principal, and
 no `kanban`-style `project_roles` to promote anyone through. A book is its

@@ -12,7 +12,9 @@
 #include "ledger/db/ledger_entity.hpp"
 
 /// @file
-/// The single home for this rung's "whose book is this?" rule (morph#382).
+/// The single home for this rung's "whose book is this?" rule (morph#382), and
+/// for the "*which* book is this?" rule that sits beside it
+/// (`requireCategoryInBook`, morph#373).
 ///
 /// **Where the rule lives, and why not at the authorizer.**
 /// `examples/IMPLEMENTATION.md` rule 4 puts ownership authorization *through
@@ -131,6 +133,58 @@ inline void requireOwnedParentBook(Lightweight::DataMapper& mapper, std::uint64_
                     .All();
     if (!rows.empty() && !bookIsReachableBy(rows.front(), principal)) {
         throw Forbidden{std::string{action} + ": this book belongs to another principal"};
+    }
+}
+
+/// @brief Refuses a category that belongs to a book other than @p bookLedgerId
+///        -- *which* book, where everything above answers *whose* (morph#373).
+///
+/// Three actions join a category to something else by id alone:
+/// `SetCategory` and `LinkAccountToCategory` join it to an account,
+/// `CreateBudget` joins it to a book. Category and account ids are table-wide
+/// autoincrements, so another book's id is a perfectly well-formed number
+/// naming a real row: a lookup by id alone finds it and accepts it, and the
+/// cross-book link is written. `requireOwnedParentBook` above refuses that
+/// only when the two books have *different owners*; two books the same
+/// principal owns, and two unowned ones, passed straight through.
+///
+/// `examples/IMPLEMENTATION.md` rule 1 is what makes that a defect rather than
+/// a documented liberty: a model re-checks its own preconditions, and "an
+/// account and a category are the same book's" is a precondition this rung
+/// documented and did not check. What made the mis-scoped row survivable was
+/// an invariant nothing states -- `GetBudgetReport` filters legs by the
+/// budget's own ledger's journals, so a foreign account's legs never reach the
+/// sum -- and a guarantee that rests on every future report keeping a filter
+/// nobody wrote down is the half-a-scheme shape morph#384 rejected.
+///
+/// Neither `SetCategory` nor `LinkAccountToCategory` carries a `ledgerId`, so
+/// this cannot be a `Where` folded into the lookup the way morph#380's
+/// `accountInLedger` scopes a leg's account against the ledger its action
+/// names. It is a comparison of the two loaded rows' own `ledger` values
+/// instead -- which is also why the refusal is raised after the not-found and
+/// ownership ones, leaving their wording and ordering untouched.
+///
+/// `NotFound`, and a message of its own: `accountInLedger`'s exact idiom for
+/// the identical question about an account, for the reason morph#380 gave --
+/// a client that cannot tell "that id names nothing" from "that id is in your
+/// other book" cannot tell a dead id from a mis-scoped one. Not
+/// `ValidationError`: the request is well-formed, and every other "wrong book"
+/// answer in this rung (`UndoTransaction`'s journal, `RunReportJob`'s job,
+/// `accountInLedger`'s account) is a `NotFound`.
+///
+/// **Write-side only.** A row already holding a cross-book link stays as it
+/// is; no migration rewrites one, and no read refuses one. See
+/// `examples/ledger/README.md`'s "Which book it is" for why.
+/// @param categoryLedgerId The category row's `ledger.Value()`.
+/// @param bookLedgerId     The book the action is scoped to -- the account's
+///                         own ledger for a link, the named `ledgerId` for a
+///                         budget.
+/// @param action           The calling action's name, prefixed onto the refusal.
+/// @throws NotFound if the category belongs to a different book.
+inline void requireCategoryInBook(std::uint64_t categoryLedgerId, std::uint64_t bookLedgerId,
+                                  std::string_view action) {
+    if (categoryLedgerId != bookLedgerId) {
+        throw NotFound{std::string{action} + ": category does not belong to this ledger"};
     }
 }
 
