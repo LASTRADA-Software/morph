@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Machine-owned baseline for the scheduled mutation gate",
+    "(.github/workflows/mutation.yml, morph#408). scripts/check_mutation_regression.py",
+    "reads and updates this file automatically on every scheduled run; it is not",
+    "hand-curated the way scripts/mutation_survivors.json's triage narrative is, except",
+    "when a human overrides a regression after triaging it (see that script's own",
+    "header comment: 'update scripts/mutation_baseline.json by hand with a reason",
+    "recorded there').",
+    "",
+    "Empty on purpose: no campaign has been run yet under the reduced mutator set",
+    "scripts/mutation.sh now uses (cxx_remove_void_call excluded, morph#434). The",
+    "352-survivor figure in scripts/mutation_survivors.json predates that exclusion",
+    "and is measured over a different, larger mutant population -- it is not a valid",
+    "starting baseline for this gate. The first scheduled run records its own baseline",
+    "instead of comparing against a stale number; see",
+    "scripts/check_mutation_regression.py's 'no recorded baseline' case."
+  ],
+  "baselines": {}
+}

@@ -129,18 +129,21 @@ hand later.
   path in this subsystem is exercised only by whatever a real socket can be
   made to do in a test (closing the peer end, binding a taken port), not by
   injecting a specific `errno` on demand.
-- **Mutation testing is local-only — on cost and tooling, not on a compiler
-  mismatch.** `scripts/mutation.sh` requires Mull, which is on no runner
-  image, whose IR frontend has to be version-matched to the compiler by hand,
-  and whose campaign takes 46+ minutes over `core` and `forms` alone. What
-  does *not* keep it out is a toolchain difference: CI pins clang 22
+- **Mutation testing runs in CI now, but scheduled, not per-PR, and only over
+  `core-forms` (morph#408).** `.github/workflows/mutation.yml` installs Mull
+  on a dedicated `ubuntu-26.04` runner (the only OS version Mull 0.34.0
+  ships an LLVM-22 package for) and runs `scripts/mutation.sh core-forms`
+  weekly. `net`, `offline`, `journal`, `util`, and `session` are not covered
+  by that scheduled run and have never had a score taken; a local
+  `scripts/mutation.sh net` invocation is the only way to measure them today.
+  What is *not* a mismatch: CI pins clang 22
   (`.github/workflows/ci.yml`, enforced by `scripts/check_ci_clang_pin.sh`)
-  and the 64.06% figure (`scripts/mutation_survivors.json`, morph#429) was
-  measured on that same major — clang 22.1.8 — so the mutant set Mull derives
-  from LLVM IR is the one the compiler CI itself uses would emit. That figure
-  covers `include/morph/core` and `include/morph/forms` only; it has not been
-  extended to `net`, `offline`, `journal`, `util`, or `session`, and is not
-  re-taken automatically when either subsystem changes.
+  and Mull's own LLVM-22 package is what the scheduled job installs, so the
+  mutant set Mull derives from LLVM IR is the one the compiler CI itself uses
+  would emit — the 64.06% figure (`scripts/mutation_survivors.json`,
+  morph#429) was measured on that same major, clang 22.1.8, though under the
+  larger mutator set that included the now-excluded `cxx_remove_void_call`
+  (morph#434) and is not comparable to a current run.
 - **Error-path coverage (morph#406) measures execution, not assertion
   quality.** `scripts/check_error_path_coverage.py` answers "did a test drive
   this specific `throw` statement or enter this specific `catch` arm", cross-
@@ -155,9 +158,18 @@ hand later.
 
 Named honestly rather than folded into the table above as if a check existed:
 
-- **Mutation score has no floor.** `scripts/mutation.sh` reports a number;
-  nothing fails a build if it drops. A regression would have to be noticed by
-  someone re-running the campaign and comparing by hand.
+- **Mutation score now has a floor, on a schedule rather than per-PR
+  (morph#408).** `.github/workflows/mutation.yml` runs `scripts/mutation.sh`
+  weekly (plus `workflow_dispatch` on demand) and fails --  opening an issue
+  if it does -- when `scripts/check_mutation_regression.py` finds more
+  survivors than `scripts/mutation_baseline.json`'s recorded baseline for
+  that scope. A per-PR gate was considered and rejected: the tool is
+  known-defective for one mutator family (morph#434), the per-PR economics
+  are bad (a ~30-minute instrumented build plus 46+ minutes of runner time
+  against a ~24-minute existing critical path), and a gate nobody can afford
+  to run is not a gate. What this still does not do: attribute a regression
+  to the PR that caused it (a scheduled job reports on a window of commits,
+  not one), and PRs stay ungated in the interim between runs.
 - **Error-path coverage (morph#406) has no build-blocking gate yet.**
   `scripts/check_error_path_coverage.py --self-test` runs in `drift-guard.yml`
   (proving the *instrument* still detects what it is meant to), but the
