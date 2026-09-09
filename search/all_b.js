@@ -25,5 +25,6 @@ var searchData=
   ['log_20—_20ordered_20coalescing_20identity_20aware_20execution_20history_22',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
   ['logentry_23',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]],
   ['logger_24',['Logger',['../index.html#logger',1,'']]],
-  ['logprovider_25',['LogProvider',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a7a5bff8cb318d46f4347cc5211b92e81',1,'morph::backend::RemoteServer']]]
+  ['logprovider_25',['LogProvider',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a7a5bff8cb318d46f4347cc5211b92e81',1,'morph::backend::RemoteServer']]],
+  ['lookup_26',['lookup',['../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html#a91612627509fdc050129b853af9b8f3a',1,'morph::offline::IReplayLedger']]]
 ];

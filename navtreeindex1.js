@@ -1,5 +1,6 @@
 var NAVTREEINDEX1 =
 {
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a53075c01e7c657d63f9b2e50973d3a07":[2,0,0,16,2,11],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a5b0bba2d347ea69930d4166c541528fd":[2,0,0,16,2,7],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a68b32a73162878f79091c4ebbd808084":[2,0,0,16,2,15],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a72f35dfcfcfb007b05d14185d8ed2f2f":[2,0,0,16,2,5],
@@ -108,7 +109,7 @@ var NAVTREEINDEX1 =
 "d5/d23/structmorph_1_1units_1_1UnitAlternative.html#a26c9d2102cd4c458fffdb95bee645234":[2,0,0,19,2,2],
 "d5/d23/structmorph_1_1units_1_1UnitAlternative.html#a359f98d03a24ee27e54edb19eb586f54":[2,0,0,19,2,1],
 "d5/d23/structmorph_1_1units_1_1UnitAlternative.html#ac3cde474578b6470296685e2a3381062":[2,0,0,19,2,0],
-"d5/d2b/sync__worker_8hpp_source.html":[3,0,0,5,5],
+"d5/d2b/sync__worker_8hpp_source.html":[3,0,0,5,6],
 "d5/d32/conceptmorph_1_1forms_1_1HasFormRules.html":[1,0,0,3],
 "d5/d44/structmorph_1_1time_1_1DateTime.html":[2,0,0,18,0],
 "d5/d44/structmorph_1_1time_1_1DateTime.html#a164c9d962bbc2a7be3422add57da1134":[2,0,0,18,0,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX1 =
 "d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html":[2,0,0,1,2,0],
 "d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#a27d430854b8213e721931451949f99b0":[2,0,0,1,2,0,1],
 "d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#a57b2616ec889b0e9e39a4882f048705d":[2,0,0,1,2,0,3],
-"d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ab4bacd758d6d1b79b345260a76f4dd8b":[2,0,0,1,2,0,0],
-"d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ae001b18cfa29c76490d13960af9ae513":[2,0,0,1,2,0,2]
+"d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ab4bacd758d6d1b79b345260a76f4dd8b":[2,0,0,1,2,0,0]
 };

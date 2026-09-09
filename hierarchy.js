@@ -105,6 +105,9 @@ var hierarchy =
       [ "morph::offline::InMemoryOfflineQueue", "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html", null ],
       [ "morph::offline::SqliteOfflineQueue", "df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html", null ]
     ] ],
+    [ "morph::offline::IReplayLedger", "d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html", [
+      [ "morph::offline::InMemoryReplayLedger", "db/da3/classmorph_1_1offline_1_1InMemoryReplayLedger.html", null ]
+    ] ],
     [ "morph::offline::NetworkMonitor", "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html", null ],
     [ "morph::offline::NetworkMonitorConfig", "d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html", null ],
     [ "morph::offline::QueueItem", "d0/df8/structmorph_1_1offline_1_1QueueItem.html", null ],
