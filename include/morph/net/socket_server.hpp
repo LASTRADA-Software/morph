@@ -285,19 +285,21 @@ private:
     void reapFinishedClients() {
         std::vector<std::thread> doneThreads;
         {
-            std::scoped_lock lock{_clientsMtx};
+            std::scoped_lock const lock{_clientsMtx};
             for (std::size_t i = _clients.size(); i-- > 0;) {
-                if (!_clients[i]->finished.load(std::memory_order_acquire)) {
+                auto const clientIt = _clients.begin() + static_cast<std::ptrdiff_t>(i);
+                auto const threadIt = _clientThreads.begin() + static_cast<std::ptrdiff_t>(i);
+                if (!(*clientIt)->finished.load(std::memory_order_acquire)) {
                     continue;
                 }
-                doneThreads.push_back(std::move(_clientThreads[i]));
-                _clientThreads.erase(_clientThreads.begin() + static_cast<std::ptrdiff_t>(i));
-                _clients.erase(_clients.begin() + static_cast<std::ptrdiff_t>(i));
+                doneThreads.push_back(std::move(*threadIt));
+                _clientThreads.erase(threadIt);
+                _clients.erase(clientIt);
             }
         }
-        for (auto& t : doneThreads) {
-            if (t.joinable()) {
-                t.join();
+        for (auto& done : doneThreads) {
+            if (done.joinable()) {
+                done.join();
             }
         }
     }
@@ -309,7 +311,7 @@ private:
         // it is destroyed last: the flag must not go up until the connection's
         // models have actually been reclaimed. morph#498.
         struct FinishedFlag {
-            explicit FinishedFlag(std::atomic<bool>& f MORPH_LIFETIMEBOUND) : flag{f} {}
+            explicit FinishedFlag(std::atomic<bool>& target MORPH_LIFETIMEBOUND) : flag{target} {}
             ~FinishedFlag() { flag.store(true, std::memory_order_release); }
             FinishedFlag(const FinishedFlag&) = delete;
             FinishedFlag& operator=(const FinishedFlag&) = delete;

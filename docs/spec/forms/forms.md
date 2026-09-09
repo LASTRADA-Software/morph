@@ -22,7 +22,10 @@ development" with "flexible when the generated form isn't enough":
 2. **Declare to override.** When inference is ambiguous or insufficient (a
    label, a layout group, a widget choice, a cross-field rule), the user adds a
    *typed, compile-time* declaration — a `static constexpr` member or a small
-   registration macro on the action. Never mandatory; absence falls back to a
+   registration macro on the action (these macros are hand-aligned behind
+   `// clang-format off`; the rationale lives once in `CONTRIBUTING.md` under
+   *Formatting/linting*, and each site carries a pointer rather than a copy).
+   Never mandatory; absence falls back to a
    sensible convention.
 3. **Escape hatch always available.** The schema below is a documented, stable
    contract (see "Renderer contract"). Anything the generated GUI cannot

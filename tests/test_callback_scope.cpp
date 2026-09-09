@@ -574,18 +574,21 @@ TEST_CASE("CallbackScope: destroying the scope under a concurrent dispatch loop 
     }
 }
 
-// ── morph#499: reset() races every other member ──
+// ── morph#499: what CallbackScope's concurrency contract actually covers ──
 //
-// `_state` was a plain shared_ptr written by reset() and read by token(),
-// guard(), requestStop() and stopRequested(). Concurrent read/write of the same
-// shared_ptr object is a data race -- the control block's atomic refcount
-// protects the pointee, not the handle. The class documents *every* member as
-// concurrently safe, and reset()'s own doc turns on a token holder "that pinned
-// it while racing this call", so the guarantee is deliberate. Now atomic.
+// The class used to document *every* member as concurrently safe. It is not:
+// `reset()` replaces the `_state` handle, and reading a shared_ptr while another
+// thread assigns it races on the handle itself (the control block's refcount is
+// atomic; the pointer object is not). Making `_state` a
+// `std::atomic<std::shared_ptr<...>>` fixes it on libstdc++ and does not
+// compile on libc++/emscripten, which this project targets -- so the contract
+// was narrowed instead: `reset()` must be externally synchronised, everything
+// else stays concurrent.
 //
-// This case exists to be run under ThreadSanitizer; it is deliberately
-// assertion-light, because what it proves is the absence of a report.
-TEST_CASE("CallbackScope: reset() concurrent with token()/stopRequested() is race-free",
+// This case pins the half that *is* promised, and is meant to be run under
+// ThreadSanitizer -- deliberately assertion-light, because what it proves is the
+// absence of a report.
+TEST_CASE("CallbackScope: token()/requestStop()/stopRequested() are concurrent among themselves",
           "[callback_scope][thread][morph499]") {
     morph::async::CallbackScope scope;
     std::atomic<bool> stop{false};
@@ -599,13 +602,20 @@ TEST_CASE("CallbackScope: reset() concurrent with token()/stopRequested() is rac
             observed.fetch_add(1, std::memory_order_relaxed);
         }
     }};
+    // requestStop() from this thread while the reader reads: both act on the
+    // *current* generation, which is what the narrowed contract still covers.
     for (int i = 0; i < 2000; ++i) {
-        scope.reset();
+        scope.requestStop();
     }
     stop.store(true, std::memory_order_release);
     reader.join();
 
     REQUIRE(observed.load() > 0);
-    // A fresh generation is live after the last reset().
+    REQUIRE(scope.stopRequested());
+
+    // reset() is the externally-synchronised member: called here with no reader
+    // running, which is the documented usage (the owner thread's supersede verb).
+    scope.reset();
     REQUIRE(scope.token().active());
+    REQUIRE_FALSE(scope.stopRequested());
 }

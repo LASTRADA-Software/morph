@@ -2358,7 +2358,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: the async control envelopes carry the 
     morph::qt::QtWebSocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
 
-    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QUrl const url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
     morph::qt::QtWebSocketBackend backend{url, morph::model::detail::defaultDispatcher(),
                                           morph::model::detail::defaultRegistry(), std::nullopt,
                                           morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};

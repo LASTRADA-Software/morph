@@ -23,7 +23,7 @@
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/file_action_log.hpp>
 #include <morph/journal/journal.hpp>
-#if !defined(_WIN32)
+#ifndef _WIN32
 #include <unistd.h>  // geteuid, for the permission-based fault-injection cases below
 #endif
 #include <string>
@@ -855,7 +855,7 @@ TEST_CASE("FileActionLog: a torn trailing record whose resize_file() fails is lo
 // probe/open window, and Windows has no portable equivalent (std::filesystem
 // maps permissions onto the read-only attribute alone). Skipped for a root
 // euid, which ignores the permission bits entirely.
-#if !defined(_WIN32)
+#ifndef _WIN32
 TEST_CASE("FileActionLog: an unreadable journal is left intact, not truncated as a torn record",
           "[action_log][phase2][file][fault-injection]") {
     if (::geteuid() == 0) {
@@ -892,4 +892,4 @@ TEST_CASE("FileActionLog: an unreadable journal is left intact, not truncated as
     FileActionLog reopened{tmp.path};
     REQUIRE(reopened.entries().size() == 3);
 }
-#endif  // !defined(_WIN32)
+#endif  // _WIN32

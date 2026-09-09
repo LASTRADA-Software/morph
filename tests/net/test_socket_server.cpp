@@ -1351,7 +1351,7 @@ TEST_CASE("SocketServer: teardown racing a connecting client still finishes prom
 // test samples the fd count *while the server is still running*: a test that
 // opened N connections and then destroyed the server would have passed before
 // the fix and proved nothing (invariant 7).
-#if !defined(_WIN32)
+#ifndef _WIN32
 namespace {
 std::size_t openFdCount() {
     std::size_t count = 0;
@@ -1407,6 +1407,6 @@ TEST_CASE("SocketServer: a finished connection's fd and thread are reclaimed bef
     INFO("baseline=" << baseline << " after=" << after << " rounds=" << kRounds);
     // Allow generous slack for the two still-unreaped connections and any
     // transient fds; what must NOT happen is growth proportional to kRounds.
-    CHECK(after < baseline + static_cast<std::size_t>(kRounds) / 2);
+    CHECK(after < baseline + (static_cast<std::size_t>(kRounds) / 2));
 }
-#endif  // !defined(_WIN32)
+#endif  // _WIN32

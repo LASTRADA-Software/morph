@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#if !defined(_WIN32)
+#ifndef _WIN32
 #include <unistd.h>  // geteuid, for the permission-based fault-injection case below
 #endif
 #include "offline_queue_conformance.hpp"
@@ -706,7 +706,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: the idempotency-key contract surviv
 // no fault injection at all -- load() bypasses the FileIoOps seam entirely.
 //
 // POSIX-only and non-root, for the same reasons as the FileActionLog case.
-#if !defined(_WIN32)
+#ifndef _WIN32
 TEST_CASE("FileOfflineQueue: an unreadable queue file is not silently compacted away",
           "[offline][file][fault-injection]") {
     if (::geteuid() == 0) {
@@ -736,4 +736,4 @@ TEST_CASE("FileOfflineQueue: an unreadable queue file is not silently compacted 
     REQUIRE(reopened.drain().size() == 3);
     std::filesystem::remove(path);
 }
-#endif  // !defined(_WIN32)
+#endif  // _WIN32

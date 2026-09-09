@@ -370,7 +370,20 @@ id on the second restart — enqueue 1 and 2, `markDone(2)`, restart (compacts t
 just id 1), restart again, and the next `enqueue()` reissued id 2, the id of a
 completed and acknowledged item. Mutations also raise rather than swallow I/O
 failures: a short write or a failed `fflush`/`fsync` throws, since every
-mutation is documented as a committed transaction by the time the call returns. A
+mutation is documented as a committed transaction by the time the call returns.
+They are also ordered **durable-first**: `markDone()` appends the tombstone
+before erasing from `_items`, and `setAttempts()` writes before updating memory.
+The reverse order meant a throwing append left the item gone from memory with no
+tombstone on disk, so this process never replayed it and a restart resurrected
+and re-applied it; durable-first fails the other way, replaying once too often at
+worst, which `idempotencyKey` exists to absorb (morph#494).
+
+An **unreadable** queue file is not an empty queue. `load()` reads with its own
+`ifstream`, and the constructor calls `compact()` immediately after — which
+rewrites the file from whatever `load()` produced. A failed open or a mid-file
+read error therefore committed an empty set over the real backlog, with the
+constructor returning normally and the queue reporting no pending work. Both now
+throw, so `compact()` cannot run on a load that did not succeed (morph#494). A
 keyed `enqueue`'s dedup is a linear scan over pending items — fine at modest
 queue depths; `SqliteOfflineQueue` is the index-backed alternative for
 high-volume keyed enqueues. Not safe for multiple processes to open the same

@@ -188,6 +188,13 @@ site when that exact value reaches it:
   straight into the canonicalising constructor.
 - **`reciprocal`** — negates the numerator in the `numerator < 0` branch;
   `INT64_MIN` there overflows.
+- **Rendering** (`morph::units::detail::formatRationalDecimal`) — *was* one of
+  these and no longer is. It negated the numerator in `int64_t` under a comment
+  claiming it widened first; UBSan confirmed the report. It now goes through
+  `detail::absU64`, which negates in unsigned arithmetic. This mattered because
+  the whole-integer `Rational{value, DecimalPlaces{n}}` constructor does not
+  canonicalise, so the clamp never ran on that path and `numerator` is public
+  (morph#496).
 - **`canonicalise`** — **no longer one of these.** It clamps an `INT64_MIN`
   numerator to `-INT64_MAX` (with an `error`-level log, `reportClamp`) *before*
   any sign flip, and computes the gcd through `detail::absU64`, which negates in
