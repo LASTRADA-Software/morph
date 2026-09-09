@@ -161,3 +161,41 @@ TEST_CASE("Bridge: pendingCalls() does not increment for a synchronously-failed 
     REQUIRE(errorFired);
     REQUIRE(bridge.pendingCalls() == 0);
 }
+
+// ── morph#502: a throwing backend->execute() must not leak the slot ──
+//
+// executeVia() incremented `_pendingCalls` and armed the client deadline before
+// calling `backend->execute(...)`, which was not wrapped in a try. That call is
+// genuinely throwing code -- for QtWebSocketBackend it runs `serializeAction()`
+// (user `toJson` and glaze) and `wire::encode(env)`. A throw escaped
+// BridgeHandler::execute() with the counter permanently inflated, which breaks
+// the quiescence gate this whole file exists to cover: pendingCalls() could
+// never return to 0 again for that bridge.
+namespace {
+/// Wraps LocalBackend and throws from execute(), the way an encode failure does.
+struct ThrowingExecuteBackend : morph::backend::LocalBackend {
+    using morph::backend::LocalBackend::LocalBackend;
+
+    morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId,
+                                                            morph::backend::detail::ActionCall,
+                                                            morph::exec::IExecutor*) override {
+        throw std::runtime_error("serialize/encode failed");
+    }
+};
+}  // namespace
+
+TEST_CASE("Bridge: a throwing backend execute() leaves pendingCalls() at zero", "[bridge][pending-calls][morph502]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<ThrowingExecuteBackend>(pool)};
+    morph::bridge::BridgeHandler<PCModel> handler{bridge, &cbExec};
+
+    REQUIRE(bridge.pendingCalls() == 0);
+    REQUIRE_THROWS_AS(handler.execute(PCFastAction{.value = 21}), std::runtime_error);
+    // Before the fix this was 1, permanently, for the life of the bridge.
+    CHECK(bridge.pendingCalls() == 0);
+
+    // And the bridge is still usable as a quiescence gate afterwards.
+    REQUIRE_THROWS_AS(handler.execute(PCFastAction{.value = 1}), std::runtime_error);
+    CHECK(bridge.pendingCalls() == 0);
+}
