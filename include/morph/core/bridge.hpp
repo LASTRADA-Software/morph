@@ -206,12 +206,13 @@ struct HandlerBinding {
 
     /// @brief Registration-settled seam (see `Bridge::whenBound`).
     ///
-    /// `registrationInFlight` is `true` from the moment `registerHandlerImpl`
-    /// hands this binding's initial registration to
-    /// `IBackend::registerModelAsync` (and that call returns `true`) until its
-    /// `onRegistered`/`onError` callback resolves — the synchronous fallback
-    /// path never sets it, since that call has already returned bound (or
-    /// thrown) by the time anyone could observe it in flight. `whenBound()`
+    /// `registrationInFlight` is `true` from just *before* `registerHandlerImpl`
+    /// calls `IBackend::registerModelAsync` until that call's
+    /// `onRegistered`/`onError` callback resolves. It is set unconditionally on
+    /// every path, the synchronous fallback included — see the comment at the
+    /// assignment for why it must be set before the backend call rather than
+    /// after. The fallback does not *leave* it set: it resolves the waiters
+    /// (and clears the flag) before returning. `whenBound()`
     /// checks it to distinguish "an async reply is coming, queue a waiter"
     /// from "nothing is in flight, resolve false now". `registrationWaiters`
     /// holds callbacks queued by `whenBound()` while `registrationInFlight` is
@@ -340,8 +341,11 @@ inline std::optional<ParkedOutcome> claimHandoff(AsyncDispatchHandoff& handoff) 
 /// question.
 ///
 /// @par Why a blocking gate is acceptable here
-/// `~Bridge` waits only for work that is provably non-blocking and bounded:
-/// the sole guarded region is `~BridgeHandler`'s `deregisterHandler` call, and
+/// `~Bridge` waits only for work that is provably non-blocking and bounded.
+/// There are three guarded regions: `~BridgeHandler`'s `deregisterHandler`
+/// call, `executeVia`'s `.then` continuation around `onResult`, and
+/// `registerHandlerImpl`'s async `onRegistered` callback. The argument below is
+/// about the first; each of the other two carries its own at its call site.
 /// `IBackend::deregisterModel` never blocks on another thread on any shipped
 /// backend — `LocalBackend` erases map entries under its own mutex,
 /// `SimulatedRemoteBackend` runs the envelope inline via
@@ -368,8 +372,9 @@ struct BridgeLifetime {
 /// `switchBackend()` is called, enabling seamless local ↔ remote transitions.
 ///
 /// @par Thread safety
-/// All public methods are thread-safe. `executeVia()` uses a lock-free snapshot
-/// of the backend pointer so it does not block `switchBackend()`.
+/// All public methods are thread-safe. `executeVia()` takes a short snapshot of
+/// the backend `shared_ptr` under the dedicated `_backendMtx` (never `_mtx`), so
+/// it does not block `switchBackend()`.
 class Bridge {
 public:
     /// @brief Constructs a bridge that dispatches through @p backend.
@@ -607,10 +612,12 @@ public:
                     }
                     std::exception_ptr failure;
                     {
-                        // contextKey/primary are plain std::strings that five
-                        // other sites read under `_attachMtx`; publishing them
-                        // without it would be a data race, not just a stale
-                        // read.
+                        // contextKey/primary are plain std::strings that the
+                        // other attach/assign sites read under `_attachMtx`;
+                        // publishing them without it would be a data race, not
+                        // just a stale read. (`registerHandlerImpl`'s two reads
+                        // are the exception and hold neither lock -- see
+                        // morph#505.)
                         std::scoped_lock const guard{_attachMtx};
                         auto pinned = weakBackend.lock();
                         if (!pinned || pinned != loadBackend()) {
@@ -1363,8 +1370,9 @@ public:
 
     /// @brief Dispatches @p action against the model identified by @p binding.
     ///
-    /// Uses a lock-free snapshot of the backend and model id so the call does
-    /// not block `switchBackend()`. If a backend switch happens concurrently,
+    /// Snapshots the backend `shared_ptr` under `_backendMtx` and reads the
+    /// binding's `currentId` lock-free, so the call does not block
+    /// `switchBackend()`. If a backend switch happens concurrently,
     /// the old backend still exists (its `shared_ptr` refcount is > 0) and the
     /// call either succeeds or fails with "model not found" — both are safe.
     ///
@@ -1675,11 +1683,13 @@ private:
 
     /// @brief Weak observer of this bridge's lifetime, handed to each handler.
     ///
-    /// A `BridgeHandler` checks this in its destructor: if the token is no longer
-    /// active the `Bridge` is already gone, so it skips deregistration instead of
-    /// dereferencing a dangling `Bridge&`. The bridge must still outlive its
-    /// handlers for normal `execute`/`set` calls; this only makes the *teardown*
-    /// order-independent so a mis-ordered destruction is defined behaviour.
+    /// Note `~BridgeHandler` does **not** use this: gating a *call into* the
+    /// bridge needs `lifetimeGate()`'s `detail::BridgeLifetime`, because a token
+    /// answers only advisorily and a member call made a few instructions after a
+    /// stale "active" runs on destroyed memory (morph#486). A token is the right
+    /// tool for *declining work*, not for keeping an object alive across a call.
+    /// The bridge must still outlive its handlers for normal `execute`/`set`
+    /// calls; the gate only makes *teardown* order-independent.
     ///
     /// The bridge is the framework's own first consumer of the primitive every
     /// caller now gets (docs/spec/core/callback_scope.md). It uses only the
@@ -2000,7 +2010,7 @@ struct NoSharing {};
 /// A shared handler that only ever runs *keyless* actions never attaches, and
 /// its `execute` fails fast with "handler not bound": there is no instance to
 /// run against and inventing a private one would silently defeat the sharing
-/// the caller asked for. Attach first — see docs/planned/shared_model_instances.md.
+/// the caller asked for. Attach first — see docs/spec/core/shared_instances.md.
 struct AllowShared {};
 
 /// @brief RAII wrapper that binds a single model type to a `Bridge`.

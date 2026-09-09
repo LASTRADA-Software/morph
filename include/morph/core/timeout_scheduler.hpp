@@ -303,7 +303,8 @@ private:
 
     /// @brief Held by `shared_ptr` so a browser timer that outlives this
     ///        object detects that fact instead of writing to freed storage —
-    ///        the same weak-token pattern as `morph::bridge::Bridge::_liveness`.
+    ///        the same weak-token pattern as `morph::bridge::Bridge`'s
+    ///        `_callbacks` `CallbackScope` (exposed as `Bridge::liveness()`).
     std::shared_ptr<State> _state{std::make_shared<State>()};
 };
 

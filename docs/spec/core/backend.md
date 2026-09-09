@@ -846,8 +846,8 @@ nothing for a caller that never uses it.
 
 ### Graceful shutdown (`beginShutdown()` / `drainedWithin()`)
 
-`beginShutdown()` enters shutdown: every subsequent `register` and `execute`
-envelope is rejected with `err "server shutting down"` (checked once, at the
+`beginShutdown()` enters shutdown: every subsequent `register`, `attach` and
+`execute` envelope is rejected with `err "server shutting down"` (checked once, at the
 top of `dispatchMessage`, before any other validation — including the
 shutdown check happening before authorization or registry lookups run);
 `deregister` (and any other envelope kind) is still served so clients can
@@ -1661,7 +1661,7 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `setSupportedVersionRange(min, max)` | Sets the inclusive protocol-version range advertised on `hello`. Defaults to `{kProtocolVersion, kProtocolVersion}`. Throws `std::invalid_argument` if `min > max`. Thread-safe. |
 | `health()` | `[[nodiscard]] HealthStatus health() const` — snapshot of readiness/liveModels/inFlight. Cheap; safe from any thread. See [observability.md](observability.md). |
 | `setHealthHandler(handler)` | `void setHealthHandler(std::function<void(const HealthStatus&)>)` — fires immediately with the current status, and again whenever readiness changes (currently only `beginShutdown()` triggers a change); `nullptr` clears without firing. |
-| `beginShutdown()` | Enters shutdown: subsequent `register`/`execute` envelopes get `err "server shutting down"`; `deregister` still served. Idempotent, irreversible. Flips `health().ready` to `false` and re-invokes any installed health handler. |
+| `beginShutdown()` | Enters shutdown: subsequent `register`/`attach`/`execute` envelopes get `err "server shutting down"`; `deregister` still served. A client therefore cannot re-attach to a shared instance during the drain window. Idempotent, irreversible. Flips `health().ready` to `false` and re-invokes any installed health handler. |
 | `drainedWithin(deadline)` | `[[nodiscard]] bool drainedWithin(std::chrono::milliseconds deadline)` — blocks (condition-variable wait, not a poll) until every in-flight `execute` has replied or `deadline` elapses. Returns `true`/`false` accordingly. |
 
 ### `SimulatedRemoteBackend`

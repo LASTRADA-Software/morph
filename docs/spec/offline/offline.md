@@ -124,8 +124,8 @@ The payload format is the caller's choice — JSON, binary-hex, plain text, etc.
 
 #### `idempotencyKey`: deduping against the journal
 
-`QueueItem::id` is **queue-local** — a durable queue re-presents the same logical
-op with a fresh `id` after a restart, and the journal's `seq` is journal-local,
+`QueueItem::id` is **queue-local** — both shipped durable queues re-present the
+*stored* `id` after a restart, and the journal's `seq` is journal-local,
 so the two subsystems share no identity. That is exactly the seam where an op can
 be **double-applied**: the offline queue and the journal can each replay the same
 logical operation with nothing to recognise it as already-applied.
@@ -559,7 +559,7 @@ and calls a caller-supplied `ReplayFunction` for each item.
 | ctor | `SyncWorker(IOfflineQueue&, ReplayFunction, DeadLetterSink = nullptr)` | References the queue and the replay callable; the sink is an optional third argument. |
 | ctor | `SyncWorker(IOfflineQueue&, DetailedReplayFunction, DeadLetterSink = nullptr)` | Same, taking the three-outcome callable. The two overloads are unambiguous — `ReplayOutcome` is a scoped enum, so neither return type implicitly converts to the other. The boolean overload adapts into this one, so `run()` implements a single contract. |
 | `run()` | `SyncResult run()` | Drains the queue and replays each item. Concurrent calls are serialised by an internal mutex. Returns immediately if `stop()` was called before acquiring the lock. Emits the `queueDepth` metric once, with the drained item count, before replaying (see [observability.md](../core/observability.md)). |
-| `stop()` | `void stop()` | Signals an in-progress `run()` to stop after the current item. One-shot — the flag resets at the start of the next `run()`. |
+| `stop()` | `void stop()` | Signals an in-progress `run()` to stop after the current item. `run()` clears the flag at its start — but a `stop()` landing *during* a run leaves it set on return, so the next `run()` takes its early-out and drains nothing; work resumes on the run after that. |
 
 **Retry & dead-letter (hard-coded cap, durable count):**
 
@@ -744,7 +744,7 @@ calling thread.
 
 | Enumerator | Meaning |
 |---|---|
-| `Reconnected` | Backend reopened, made active, context bound, queue replay invoked. |
+| `Reconnected` | Backend reopened, made active, context bound. Replay is invoked only if `shouldContinue()` still holds at that point — `Reconnected` can be returned without replaying. |
 | `GaveUp` | Exhausted `maxAttempts` without a successful reconnect; stayed offline. |
 | `Aborted` | `shouldContinue()` returned false before any reconnect attempt. |
 

@@ -221,7 +221,7 @@ output of `glz::write_json_schema<A>()` to add seven annotation groups:
 
 | Annotation | Scope | Contents |
 |---|---|---|
-| `required` | Top-level, and every nested-aggregate object schema (see [Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded)) | Array of field names that are **not** `std::optional<...>` and not listed in `A::optionalFields`. |
+| `required` | Top-level, and every nested-aggregate object schema (see [Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded)) | Array of field names that are **not** `std::optional<...>` and not listed in `A::optionalFields`. Always written, overwriting whatever glaze produced: glaze never derives `required` from member types — it emits one only where a type declares `meta<V>::required` (and for a tagged variant's discriminator) — so morph does not rely on its absence. |
 | `x-order` | Every property | The member's declaration index (0‑based), so a renderer lays fields out in declaration order regardless of JSON key ordering. |
 | `x-decimalPlaces` | `Quantity` properties | The field's declared precision (`Quantity<U, Dec>::declaredDecimals`). |
 | `x-unitAlternatives` | `Quantity` properties | Convertible display/entry units derived from `UnitTraits::relations`, each with `{id, display, decimals, num, den}` — `id`/`display`/`decimals` come from the alternative unit's `UnitMeta`, and `num`/`den` are the exact alternative-to-canonical ratio. Omitted entirely when the field's unit declares no convertible units. |

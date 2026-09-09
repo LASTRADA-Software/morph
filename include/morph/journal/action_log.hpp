@@ -34,8 +34,10 @@ enum class Outcome : std::uint8_t { Succeeded, Failed };
 
 /// @brief One recorded execution of an action against a model instance.
 ///
-/// Produced automatically by `morph::model::detail::IModelHolder::recordIfAttached`
-/// — application and model code never construct or append these directly.
+/// Normally produced automatically by
+/// `morph::model::detail::IModelHolder::recordIfAttached`. Application code may
+/// also construct and append one directly — that is what an outbox row is, and
+/// what `causalParentId` is set by; see `morph::journal::OutboxRelay`.
 struct LogEntry {
     /// @brief Monotonic order assigned by the sink on `append()`. Callers pass `0`.
     uint64_t seq = 0;

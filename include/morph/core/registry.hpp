@@ -396,7 +396,7 @@ template <typename A>
     // WARNING for whoever next measures this file's coverage: this line
     // can read as "covered" in a merged/aggregated coverage report even
     // though the branch above is genuinely never taken by any real test.
-    // tests/test_registry_schema_forgery.cpp's WireSchemasUnsatisfiable
+    // tests/test_wire_schemas.cpp's WireSchemasUnsatisfiable
     // fixture (a different, deliberately-closed finding) throws partway
     // through this function, after llvm-cov's per-function body-region
     // counter has already incremented for that instantiation -- llvm-cov

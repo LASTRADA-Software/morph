@@ -227,7 +227,10 @@ public:
     /// @param contextKey   Stable identity of the new instance; travels in the wire envelope.
     /// @param onRegistered Invoked with the server-assigned `ModelId` on success.
     /// @param onError      Invoked with a diagnostic message on failure or disconnect.
-    /// @return `true` always — this backend has an async path (`false` is never returned).
+    /// @return `true` when `Config::asyncRegistrationEnabled` is set (the
+    ///         backend then owns the reply); `false` when it is not — which is
+    ///         the default, so the caller falls back to the synchronous path
+    ///         unless the embedder opted in.
     bool registerModelAsync(const std::string& typeId,
                             std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
                             std::string_view contextKey,

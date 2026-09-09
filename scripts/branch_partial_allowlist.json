@@ -32,7 +32,7 @@
     },
     {
       "file": "include/morph/util/rational.hpp",
-      "line": 731,
+      "line": 732,
       "source": "if (!std::is_constant_evaluated()) {",
       "reason": "reportClamp's copy of the same shape as line 698 above, and uncoverable for the same reason: the untaken arm is constant evaluation, which increments no counters."
     },
@@ -44,37 +44,37 @@
     },
     {
       "file": "include/morph/util/rational.hpp",
-      "line": 757,
+      "line": 758,
       "source": "return std::is_gt(ordering) ? 1 : 0;",
-      "reason": "The false arm (a tie, returning 0) is unreachable. compareForSaturation has exactly two call sites, both from the saturating branch of operator+=/operator-=, and both are guarded by addWouldOverflow/subWouldOverflow having just returned true. A tie in compareForSaturation (*this == -rhs for +=, or *this == rhs for -=) requires -- since operator== compares canonical numerator/denominator pairs directly -- identical denominators. With equal denominators, addWouldOverflow/subWouldOverflow's own scaling factors collapse to rightScaled == leftScaled == 1 (gcd(D, D) == D), so the cross-multiplication checks reduce to numerator +/- rhs.numerator directly on already-canonical (so already in-range) int64_t values whose sum/difference is provably 0 -- never an overflow (and canonicalise() already forbids either component from being INT64_MIN, so negating one to check the other is always representable). So whenever the two operands could produce a tie, the overflow predicate that gates the call to compareForSaturation is always false, and the saturating path -- hence compareForSaturation's tie return -- is never reached with a tied pair. Shares this root cause with saturateToward's sign == 0 arm at line 775 below."
+      "reason": "The false arm (a tie, returning 0) is unreachable. compareForSaturation has exactly two call sites, both from the saturating branch of operator+=/operator-=, and both are guarded by addWouldOverflow/subWouldOverflow having just returned true. A tie in compareForSaturation (*this == -rhs for +=, or *this == rhs for -=) requires -- since operator== compares canonical numerator/denominator pairs directly -- identical denominators. With equal denominators, addWouldOverflow/subWouldOverflow's own scaling factors collapse to rightScaled == leftScaled == 1 (gcd(D, D) == D), so the cross-multiplication checks reduce to numerator +/- rhs.numerator directly on already-canonical (so already in-range) int64_t values whose sum/difference is provably 0 -- never an overflow (and canonicalise() already forbids either component from being INT64_MIN, so negating one to check the other is always representable). So whenever the two operands could produce a tie, the overflow predicate that gates the call to compareForSaturation is always false, and the saturating path -- hence compareForSaturation's tie return -- is never reached with a tied pair. Shares this root cause with saturateToward's sign == 0 arm at line 776 below."
     },
     {
       "file": "include/morph/util/rational.hpp",
-      "line": 775,
+      "line": 776,
       "source": "numerator = sign == 0 ? 0 : (sign < 0 ? -maxValue : maxValue);",
-      "reason": "The sign == 0 arm is unreachable, for the same root cause as compareForSaturation's tie return at line 757 above: saturateToward is only ever called with the sign compareForSaturation returned, and compareForSaturation can only return 0 (a tie) for a pair whose overflow predicate is provably false -- so the saturating path that calls saturateToward is never entered with a tied pair, and sign is never 0 when this line runs."
+      "reason": "The sign == 0 arm is unreachable, for the same root cause as compareForSaturation's tie return at line 758 above: saturateToward is only ever called with the sign compareForSaturation returned, and compareForSaturation can only return 0 (a tie) for a pair whose overflow predicate is provably false -- so the saturating path that calls saturateToward is never entered with a tied pair, and sign is never 0 when this line runs."
     },
     {
       "file": "include/morph/util/rational.hpp",
-      "line": 899,
+      "line": 901,
       "source": "if (crossDivisorOne == 0 || crossDivisorTwo == 0) {",
       "reason": "Both disjuncts are unreachable, and the body they guard (the zero-numerator short-circuit `return false;` right below) is correspondingly dead. crossDivisorOne = gcd(|numerator|, rhs.denominator), crossDivisorTwo = gcd(|rhs.numerator|, denominator). std::gcd(a, b) == 0 iff both a == 0 and b == 0. denominator/rhs.denominator can never be 0: every constructor path (Rational(Numerator, Denominator, DecimalPlaces)) calls canonicalise(), which clamps a 0 denominator to 1 before returning, and every mutating operation either recomputes the denominator as a product of positive denominators or calls canonicalise() again. So denominator > 0 (and rhs.denominator > 0) is a whole-class invariant, making crossDivisorOne/crossDivisorTwo == 0 impossible regardless of numerator/rhs.numerator."
     },
     {
       "file": "include/morph/util/rational.hpp",
-      "line": 1495,
+      "line": 1499,
       "source": "if (ctx.begin() == ctx.end() || *ctx.begin() == '}') {",
       "reason": "The ctx.begin() == ctx.end() true arm is unreachable. This is the textbook cppreference-style custom-formatter parse() idiom. Empirically verified on this toolchain (libc++, via a standalone probe compiled with clang++ -std=c++23 -stdlib=libc++): for both std::format(\"{}\", x) and std::format(\"{:}\", x), ctx.end() always points past the terminating '}', so ctx.begin() == ctx.end() is false and the terminator is always reachable via *ctx.begin() == '}' -- matching the observed 0/14 split exactly. std::format's top-level parser (and std::vformat's, which performs the same replacement-field validation before dispatching to a type's parse()) rejects an unterminated '{...' before ever calling into formatter<Rational>::parse, so this function is never invoked with an already-exhausted range. The first disjunct is defensive boilerplate that this standard library's implementation (and the standard's own guarantee about validated replacement fields) makes structurally unreachable."
     },
     {
       "file": "include/morph/util/rational.hpp",
-      "line": 1404,
+      "line": 1408,
       "source": "if (!detail::addOverflows(whole, step)) {",
       "reason": "The false arm (the overflow-would-occur case, declining to step) is unreachable, contrary to Task 2's initial classification of this line as testable -- verified both mathematically and empirically (a standalone probe sweeping denominators/precisions found 476 cases where the scale-up saturated to whole == INT64_MAX, and every one had a fractional remainder of exactly 0, never >= 0.5) before writing this entry. A Rational's magnitude can never exceed INT64_MAX: its value is numerator/denominator with denominator >= 1 and numerator in [-INT64_MAX, INT64_MAX] (canonicalise() clamps INT64_MIN away), so |value| <= |numerator| <= INT64_MAX always. `whole` is trunc(scaled), so whole == INT64_MAX forces scaled == INT64_MAX/1 exactly -- there is no room for scaled to be in (INT64_MAX, INT64_MAX + 1) the way an unbounded rational could land. With scaled == whole exactly, `fraction` (scaled minus whole) is always 0, so `roundAway` (set from comparing fraction against 1/2) is always false when whole == INT64_MAX, and stepping never happens on that side. On the other side, step == -1 would need whole == INT64_MIN to overflow, but whole's range is [-INT64_MAX, INT64_MAX] (INT64_MIN is never a valid Rational magnitude), so that direction cannot overflow either. The guard is defensive: reachable only if a future change let a Rational's magnitude exceed INT64_MAX, which the type's invariants currently forbid everywhere else in this file."
     },
     {
       "file": "include/morph/core/strand.hpp",
-      "line": 190,
+      "line": 192,
       "source": "if (iter != _strands.end() && iter->second == strand) {",
       "reason": "Unreachable by construction given this class's lock discipline (core audit finding ST1, resolved to (b) by a concurrency-focused review pass after an initial (a)/(b)-undecided pass). `_strands` has exactly two mutation sites: `post()`'s insert-if-absent (this file, `if (!slot) { slot = make_shared<Strand>(); }`) and this exact block's own erase a few lines below, both under `_mapMtx`. At most one lambda per `Strand` runs at a time (`post()` only schedules when `!strand->running`, and re-arming happens only through this same lambda's own `more` branch), so dispatch for one `Strand` is strictly serial; and only a strand's own currently-running lambda can erase its map entry (the erase fires only in the `!more` branch for the entry this frame just found under `_mapMtx`, and a concurrent `post(key)` while this lambda runs can only push onto the existing `Strand`, never replace it). Together these force `_strands.find(key)` to yield this exact strand whenever this line runs, so `iter->second == strand` cannot be false. No stress test needed: one was considered, but given the strength of the lock-discipline argument it would spend CI time re-confirming an already-proven invariant rather than searching for an unknown one."
     },
@@ -104,31 +104,31 @@
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1415,
+      "line": 1426,
       "source": "if (_inFlightExecutes.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {",
       "reason": "Real but requires genuine thread contention to trigger -- accepted as documented rather than closed with a flaky test (core audit finding RM11). The false arm (the CAS lost the race and must retry) needs two threads to genuinely collide on the same atomic increment at the same instant; it is a real, reachable hazard the retry loop correctly handles, not dead code, but inherently non-deterministic to trigger from a test without exact thread-timing control. Same disposition class as `strand.hpp`'s ST1 above, and as core audit finding O1 (`observability.hpp`'s `endSpan`), whose entry left this file once a coverage run showed its arm taken: a stress test with many concurrent `execute()` calls against a tight `maxInFlightExecutes` limit would probably eventually hit it, but flakily."
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1445,
+      "line": 1453,
       "source": "if (_executeDeadline.count() > 0 && _timeoutScheduler) {",
       "reason": "Unreachable by construction (core audit finding B6). `setExecuteDeadline` (this file) is the only writer of both `_executeDeadline` and `_timeoutScheduler`, and always creates `_timeoutScheduler` in the same call that sets `_executeDeadline` positive (`_executeDeadline = deadline; if (_executeDeadline.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_shared<...>(); }`, both under `_executeDeadlineMtx`); nothing anywhere resets `_timeoutScheduler` back to null -- the class's own doc comment on `setExecuteDeadline` says so explicitly (\"setting the deadline back to 0 stops new calls from arming it but does not tear the thread down\"). So `_executeDeadline > 0 && !_timeoutScheduler` cannot happen at this line once any positive deadline has ever been set."
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1563,
+      "line": 1571,
       "source": "if (deadlineHandle && schedulerRef) {",
-      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1421 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible."
+      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1453 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible."
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1456,
+      "line": 1467,
       "source": "if (_timeoutScheduler) {",
       "reason": "Unreachable by construction, mirrors `bridge.hpp`'s B6 (core audit finding RM10). `setLimitPolicy` (this file) is the only writer of both `_limits.executeTimeout` and `_timeoutScheduler`: `_limits = policy; if (_limits.executeTimeout.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_unique<...>(); }`, both under `_limitsMtx` -- the same lock this line's enclosing block holds. Nothing anywhere nulls `_timeoutScheduler` afterward, so `dispatchExecute`'s `limits.executeTimeout.count() > 0` guard (this line's enclosing `if`, a few lines above) already guarantees `_timeoutScheduler` is non-null whenever this line runs."
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1341,
+      "line": 1352,
       "source": "if (auto ownerIter = _owners.find(mid); ownerIter != _owners.end()) {",
       "reason": "Unreachable by construction given the `_owners`/`_models` invariant (core audit finding RM16). `grep -n \"_owners\\[\" remote.hpp` shows `_owners` is created in lockstep with `_models` at both of its insertion sites (the shared path, `_owners[fresh] = std::string{}`, and the private-registration path, `_owners[mid] = std::move(env.session.principal)`) and erased together with `_models` at the single erasure site (`releaseInstanceLocked`: `_models.erase(mid); _owners.erase(mid);`). This line is reached only after `iter != _models.end()` (`mid` found in `_models`, a few lines above, same locked block) -- unlike RM1's `_attachCount`/`_sharedKeyOf` pair, which has a documented exception at a poisoned-eviction site, no such exception exists for `_owners`/`_models`: every write site keeps them lockstep, so `mid` being present in `_models` guarantees it is present in `_owners` too."
     },

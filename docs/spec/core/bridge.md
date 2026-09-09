@@ -85,10 +85,11 @@ the `ModelId` value the active backend assigned; 0 = unbound.
 
 The last three fields are the state behind
 [`isBound()` / `whenBound()`](#registration-readiness--isbound--whenbound).
-`registrationInFlight` is `true` from the moment `registerHandlerImpl` hands
-the binding's initial registration to `IBackend::registerModelAsync` (and that
-call returns `true`) until the resulting `onRegistered`/`onError` callback
-resolves; `registrationWaiters` holds the callbacks queued while it is.
+`registrationInFlight` is `true` from just *before* `registerHandlerImpl` calls
+`IBackend::registerModelAsync` until the resulting `onRegistered`/`onError`
+callback resolves. It is set unconditionally on every path, the synchronous
+fallback included — that fallback does not *leave* it set, because it resolves
+the waiters and clears the flag before returning; `registrationWaiters` holds the callbacks queued while it is.
 Both are guarded by `registrationMtx` — deliberately a mutex of the binding's
 own, not `Bridge::_mtx` or `_attachMtx`, because a waiter may be queued or
 resolved from either the registering thread or the backend's reply-delivering

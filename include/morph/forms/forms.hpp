@@ -11,15 +11,24 @@
 /// auto-generated GUI. It builds on glaze's `write_json_schema` (which
 /// already contributes types, `$defs`, per-field metadata declared via
 /// `glz::json_schema<A>`, and the `ExtUnits` stamped by
-/// `morph::units::Quantity`) and closes the two gaps glaze leaves open:
+/// `morph::units::Quantity`) and closes the gaps glaze leaves open. The list
+/// below is the main surface, not an exhaustive enumeration of every key
+/// emitted:
 ///
-/// - **`required`** — glaze's schema writer emits no `required` array at
-///   all. `schemaJson<A>()` derives one: a member is *required* unless it is
-///   a `std::optional<...>` or its name is listed in the action's opt-out
-///   list (see below).
-/// - **`x-decimalPlaces`** — for `Quantity` members, the unit's default
-///   decimal count from `UnitTraits`, so a client knows the input step
-///   without hardcoding unit knowledge.
+/// - **`required`** — under the options `schemaJson<A>()` uses, glaze derives no
+///   `required` entries from member types: `glz::requires_key` only returns
+///   `true` for a member when `meta<T>::requires_key` says so or when
+///   `Opts.error_on_missing_keys` is set, and morph sets neither. (A type
+///   declaring `meta<V>::required`, and a tagged variant's discriminator, do
+///   still get one.)
+///   `schemaJson<A>()` always writes its own, overwriting whatever the schema
+///   writer did or did not produce: a member is *required* unless it is a
+///   `std::optional<...>` or its name is listed in the action's opt-out list
+///   (see below).
+/// - **`x-decimalPlaces`** — for `Quantity` members, the field's *declared*
+///   precision (`Quantity<U, Dec>::declaredDecimals`, which defaults to the
+///   unit's `UnitTraits` default but is overridable per member), so a client
+///   knows the input step without hardcoding unit knowledge.
 /// - **`x-order`** — the member's declaration index on every property, so a
 ///   renderer can lay fields out in declaration order (JSON object key order
 ///   is not reliable once schemas pass through DOMs/maps).
@@ -666,7 +675,7 @@ template <typename V, typename A>
 }
 
 /// @brief Constraint for the comparison rule/condition kinds (`greater`,
-/// `greaterOrEqual`, `less`, `lessOrEqual`, added in a later task): an
+/// `greaterOrEqual`, `less`, `lessOrEqual`): an
 /// `EmptyCapableField` whose engaged value (`operator*()`) is three-way
 /// comparable to itself — satisfied by `Quantity` (dereferences to
 /// `math::Rational`) and `morph::time::Timestamp` (dereferences to
@@ -720,8 +729,9 @@ inline constexpr bool isLiteralString<LiteralString<N>> = true;
 /// `has_value()`, not `hasValue()` (see forms.md's `allRequiredEngaged`
 /// "two exclusions" note). The cross-field rule vocabulary's engagement
 /// checks (`engaged`, `notEngaged`, `requiredWhen`, and the membership rules
-/// added in a later task) accept either kind of field, since the planned
-/// spec's own worked example ranges an `exactlyOneOf` over two plain
+/// `exactlyOneOf`/`atLeastOneOf`/`mutuallyExclusive`) accept either kind of
+/// field, since docs/spec/forms/forms.md's worked example ranges an
+/// `exactlyOneOf` over two plain
 /// `std::optional<std::string>` fields.
 template <typename T>
 concept EngageableField = EmptyCapableField<T> || detail::isStdOptional<T>;
@@ -1040,10 +1050,14 @@ template <typename T>
 concept RuleLiteral = std::same_as<T, std::int64_t> || std::same_as<T, bool> || std::same_as<T, std::string> ||
                       std::same_as<T, ::morph::math::Rational> || detail::isLiteralString<T>;
 
-/// @brief Largest magnitude an IEEE-754 double holds exactly: 2^53.
+/// @brief The largest N such that *every* integer in `[0, N]` is exactly
+///        representable as an IEEE-754 double: 2^53.
 ///
-/// A JSON number beyond this cannot survive `JSON.parse` intact, so a bound
-/// above it needs an exact companion the renderer can read instead.
+/// Not "the largest value a double holds exactly" — 2^60 is exact too. What
+/// stops at 2^53 is the *contiguous* range: past it, consecutive integers start
+/// sharing a representation, so an integer bound above it cannot be relied on to
+/// survive `JSON.parse` intact and needs an exact companion the renderer can
+/// read instead.
 inline constexpr std::uint64_t kExactDoubleLimit = 9007199254740992ULL;
 
 /// @brief Signed spelling of `kExactDoubleLimit`, for the negative bound.
@@ -1203,8 +1217,8 @@ struct RequiredWhen {
 /// @tparam A    Action type (deduced).
 /// @tparam Cond Condition node type (deduced).
 /// @param field Pointer to the member that becomes conditionally required.
-/// @param when  The condition node (`engaged(...)`, `notEngaged(...)`, or —
-///              starting a later task — a comparison or `equals(...)`).
+/// @param when  The condition node (`engaged(...)`, `notEngaged(...)`, a
+///              comparison, or `equals(...)`).
 /// @return The rule node.
 template <typename V, typename A, typename Cond>
     requires EngageableField<V>
@@ -1655,7 +1669,7 @@ concept HasExplicitSubmit = requires {
 namespace detail {
 
 /// @brief Evaluates @p rule against @p action, skipping presentation rules
-/// (`VisibleWhen` / `ReadonlyWhen`, added in a later task) by construction —
+/// (`VisibleWhen` / `ReadonlyWhen`) by construction —
 /// they never gate.
 template <typename Rule, typename A>
 [[nodiscard]] constexpr bool evaluateGatingRule(const Rule& rule, const A& action) noexcept {
@@ -2732,8 +2746,9 @@ constexpr void recomputeAll(A& action) {
 /// probe instance of its *own* containing type, a `fieldMetadata` array built
 /// from `describe<>()` cannot be a single in-class `static constexpr`
 /// initializer (the type is still incomplete at that point, and glaze's
-/// reflection for it is not `constexpr` either — see this feature's plan for
-/// the two compile errors this produces). Declare the member in the class
+/// reflection for it is not `constexpr` either — see
+/// docs/spec/forms/forms.md, "deriving the field name from the member", for the
+/// two compile errors this produces). Declare the member in the class
 /// and define it just after the closing brace instead:
 /// @code{.cpp}
 /// struct RecordMeasurement {
@@ -2980,7 +2995,8 @@ template <typename A>
 ///
 /// glaze's `write_json_schema<A>()` output, post-processed with:
 ///   - a top-level `required` array (see file docs for the rule),
-///   - `x-decimalPlaces` on every `Quantity` property (the unit's default),
+///   - `x-decimalPlaces` on every `Quantity` property (the field's declared
+///     precision — see `reconcileDeclaredPrecision`),
 ///   - `x-order` (declaration index) on every property.
 ///
 /// The result is fixed per type, so it is computed once and cached. On any
