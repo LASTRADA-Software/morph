@@ -202,6 +202,14 @@ public:
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
         std::scoped_lock const lock{_mtx};
         std::ifstream in{_path};
+        if (!in && std::filesystem::exists(_path)) {
+            // Distinguish "no journal yet" (absent: legitimately empty, and the
+            // constructor's dedup rebuild depends on that) from "journal present
+            // but unreadable". Returning {} for the second silently empties the
+            // idempotencyKey dedup set OutboxRelay relies on, turning
+            // at-least-once-plus-dedup into duplicates with no diagnostic.
+            throw std::runtime_error("FileActionLog: cannot read " + _path.string());
+        }
         std::vector<std::string> lines;
         std::string line;
         while (std::getline(in, line)) {
@@ -341,6 +349,17 @@ private:
             return;
         }
         std::ifstream input{_path, std::ios::binary};
+        if (!input) {
+            // The probe above said readable and this open still failed (a
+            // permission change or fd exhaustion landing in between). Falling
+            // through would scan nothing, leave `intactEnd` at 0, and truncate
+            // the whole journal as if it were one torn record -- so bail
+            // instead. The safety argument below holds only for bytes this
+            // function actually read.
+            ::morph::log::logWarn("FileActionLog: could not read " + _path.string() +
+                                  " to check for a torn trailing record; leaving it untouched");
+            return;
+        }
         std::uintmax_t intactEnd = 0;
         std::uintmax_t offset = 0;
         std::string line;
@@ -351,6 +370,14 @@ private:
             }
             ++offset;  // the '\n' getline consumed
             intactEnd = offset;
+        }
+        if (input.bad()) {
+            // Terminated by an I/O error rather than by end-of-file, so
+            // everything past `intactEnd` is unread rather than established to
+            // be torn. Truncating here would discard complete, fsynced records.
+            ::morph::log::logWarn("FileActionLog: read error while checking " + _path.string() +
+                                  " for a torn trailing record; leaving it untouched");
+            return;
         }
         if (intactEnd == size) {
             return;

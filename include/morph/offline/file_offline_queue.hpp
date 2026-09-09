@@ -240,10 +240,19 @@ public:
     /// @param itemId Id returned by the corresponding `enqueue()` call.
     void markDone(uint64_t itemId) override {
         std::scoped_lock const lock{_mtx};
-        if (_items.erase(itemId) == 0) {
+        auto iter = _items.find(itemId);
+        if (iter == _items.end()) {
             return;
         }
+        // Durable first, then in-memory -- the same order `enqueue()` uses, and
+        // for the mirror-image reason. `appendDone` throws on a short write, a
+        // failed fflush or a failed fsync; erasing before it means this process
+        // would never replay the item again while no tombstone reached disk, so
+        // a restart resurrects it and applies it a second time. Erasing after
+        // means a failure leaves the item live in both places, which replays
+        // once too often at worst -- and `idempotencyKey` exists to absorb that.
         appendDone(itemId);
+        _items.erase(iter);
     }
 
     /// @brief Persists an updated attempt count for @p itemId. No-op if not found.
@@ -255,8 +264,14 @@ public:
         if (iter == _items.end()) {
             return;
         }
+        // Durable first, for the same reason as `markDone` above: a throwing
+        // `appendPut` must not leave memory claiming a count that never reached
+        // disk. Write from a copy so `_items` is only updated once the record is
+        // durable.
+        auto updated = iter->second;
+        updated.attempts = attempts;
+        appendPut(updated);
         iter->second.attempts = attempts;
-        appendPut(iter->second);
     }
 
 protected:
@@ -321,6 +336,15 @@ private:
             return;
         }
         std::ifstream in{_path};
+        if (!in) {
+            // The file exists (checked above) but cannot be read. Returning an
+            // empty `_items` here is not "an empty queue": the constructor calls
+            // compact() straight after load(), which would rewrite `_path` from
+            // that empty set and destroy every pending item. Throw so the caller
+            // learns the queue could not be opened, instead of being handed one
+            // that silently reports no work.
+            throw std::runtime_error("FileOfflineQueue: cannot read " + _path.string());
+        }
         std::vector<std::string> lines;
         std::string line;
         while (std::getline(in, line)) {
@@ -329,6 +353,11 @@ private:
             }
         }
         uint64_t highestId = 0;
+        if (in.bad()) {
+            // A read error mid-file, not end-of-file: `lines` is a prefix of the
+            // queue, and compact() would commit that prefix over the whole file.
+            throw std::runtime_error("FileOfflineQueue: read error on " + _path.string());
+        }
         for (std::size_t i = 0; i < lines.size(); ++i) {
             detail::FileQueueRecord record;
             try {

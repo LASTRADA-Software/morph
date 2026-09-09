@@ -13,6 +13,9 @@
 #include <string>
 #include <vector>
 
+#if !defined(_WIN32)
+#include <unistd.h>  // geteuid, for the permission-based fault-injection case below
+#endif
 #include "offline_queue_conformance.hpp"
 
 namespace {
@@ -692,3 +695,45 @@ TEST_CASE("morph::offline::FileOfflineQueue: the idempotency-key contract surviv
         [&path] { return std::make_unique<morph::offline::FileOfflineQueue>(path); });
     std::filesystem::remove(path);
 }
+
+// ── An unreadable queue file must not be committed away (morph#494) ──
+//
+// load() read with an unchecked ifstream and the constructor calls compact()
+// straight after, so a failed read produced an empty `_items` that compact()
+// then wrote over the real file. Measured before the fix: 3 pending items (306
+// bytes) went to 0, with the constructor returning normally and the queue
+// reporting an empty backlog. Unlike FileActionLog's sibling defect this needed
+// no fault injection at all -- load() bypasses the FileIoOps seam entirely.
+//
+// POSIX-only and non-root, for the same reasons as the FileActionLog case.
+#if !defined(_WIN32)
+TEST_CASE("FileOfflineQueue: an unreadable queue file is not silently compacted away",
+          "[offline][file][fault-injection]") {
+    if (::geteuid() == 0) {
+        SUCCEED("running as root: permission bits are not enforced");
+        return;
+    }
+    const auto path = std::filesystem::temp_directory_path() / "morph_test_offline_unreadable.ndjson";
+    std::filesystem::remove(path);
+    std::uintmax_t sizeBefore = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        (void)queue.enqueue(R"({"op":"transfer","amount":100})");
+        (void)queue.enqueue(R"({"op":"transfer","amount":250})");
+        (void)queue.enqueue(R"({"op":"transfer","amount":375})");
+        REQUIRE(queue.drain().size() == 3);
+        sizeBefore = std::filesystem::file_size(path);
+        REQUIRE(sizeBefore > 0);
+    }
+
+    std::filesystem::permissions(path, std::filesystem::perms::owner_write);
+    // Must throw rather than hand back a queue that reports no pending work.
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue{path}, std::runtime_error);
+
+    std::filesystem::permissions(path, std::filesystem::perms::owner_all);
+    REQUIRE(std::filesystem::file_size(path) == sizeBefore);
+    morph::offline::FileOfflineQueue reopened{path};
+    REQUIRE(reopened.drain().size() == 3);
+    std::filesystem::remove(path);
+}
+#endif  // !defined(_WIN32)
