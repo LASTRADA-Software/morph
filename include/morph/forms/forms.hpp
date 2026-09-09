@@ -675,7 +675,7 @@ template <typename V, typename A>
 }
 
 /// @brief Constraint for the comparison rule/condition kinds (`greater`,
-/// `greaterOrEqual`, `less`, `lessOrEqual`, added in a later task): an
+/// `greaterOrEqual`, `less`, `lessOrEqual`): an
 /// `EmptyCapableField` whose engaged value (`operator*()`) is three-way
 /// comparable to itself — satisfied by `Quantity` (dereferences to
 /// `math::Rational`) and `morph::time::Timestamp` (dereferences to
@@ -729,8 +729,9 @@ inline constexpr bool isLiteralString<LiteralString<N>> = true;
 /// `has_value()`, not `hasValue()` (see forms.md's `allRequiredEngaged`
 /// "two exclusions" note). The cross-field rule vocabulary's engagement
 /// checks (`engaged`, `notEngaged`, `requiredWhen`, and the membership rules
-/// added in a later task) accept either kind of field, since the planned
-/// spec's own worked example ranges an `exactlyOneOf` over two plain
+/// `exactlyOneOf`/`atLeastOneOf`/`mutuallyExclusive`) accept either kind of
+/// field, since docs/spec/forms/forms.md's worked example ranges an
+/// `exactlyOneOf` over two plain
 /// `std::optional<std::string>` fields.
 template <typename T>
 concept EngageableField = EmptyCapableField<T> || detail::isStdOptional<T>;
@@ -1216,8 +1217,8 @@ struct RequiredWhen {
 /// @tparam A    Action type (deduced).
 /// @tparam Cond Condition node type (deduced).
 /// @param field Pointer to the member that becomes conditionally required.
-/// @param when  The condition node (`engaged(...)`, `notEngaged(...)`, or —
-///              starting a later task — a comparison or `equals(...)`).
+/// @param when  The condition node (`engaged(...)`, `notEngaged(...)`, a
+///              comparison, or `equals(...)`).
 /// @return The rule node.
 template <typename V, typename A, typename Cond>
     requires EngageableField<V>
@@ -1668,7 +1669,7 @@ concept HasExplicitSubmit = requires {
 namespace detail {
 
 /// @brief Evaluates @p rule against @p action, skipping presentation rules
-/// (`VisibleWhen` / `ReadonlyWhen`, added in a later task) by construction —
+/// (`VisibleWhen` / `ReadonlyWhen`) by construction —
 /// they never gate.
 template <typename Rule, typename A>
 [[nodiscard]] constexpr bool evaluateGatingRule(const Rule& rule, const A& action) noexcept {
