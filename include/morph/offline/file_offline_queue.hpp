@@ -32,7 +32,7 @@ namespace morph::offline {
 /// @brief Thrown by `FileOfflineQueue` when a non-trailing line of its on-disk
 ///        NDJSON is malformed (via `detail::throwOnGlazeError`). Note the
 ///        "cannot be opened" paths throw plain `std::runtime_error`, not this
-///        type — see the constructor's own `@throws`.
+///        type — see the constructor's own exception documentation.
 struct FileOfflineQueueError : std::runtime_error {
     using std::runtime_error::runtime_error;
 };

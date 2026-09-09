@@ -15,8 +15,9 @@
 /// below is the main surface, not an exhaustive enumeration of every key
 /// emitted:
 ///
-/// - **`required`** — glaze emits a `required` array only for a type that
-///   declares `meta<V>::required`; it derives nothing from member types.
+/// - **`required`** — glaze never *derives* `required` from member types; it
+///   emits one only where a type declares `meta<V>::required` (and for a tagged
+///   variant's discriminator).
 ///   `schemaJson<A>()` always writes its own, overwriting whatever the schema
 ///   writer did or did not produce: a member is *required* unless it is a
 ///   `std::optional<...>` or its name is listed in the action's opt-out list

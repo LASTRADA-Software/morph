@@ -612,10 +612,12 @@ public:
                     }
                     std::exception_ptr failure;
                     {
-                        // contextKey/primary are plain std::strings that every
-                        // other site reads under `_attachMtx`; publishing them
-                        // without it would be a data race, not just a stale
-                        // read.
+                        // contextKey/primary are plain std::strings that the
+                        // other attach/assign sites read under `_attachMtx`;
+                        // publishing them without it would be a data race, not
+                        // just a stale read. (`registerHandlerImpl`'s two reads
+                        // are the exception and hold neither lock -- see
+                        // morph#505.)
                         std::scoped_lock const guard{_attachMtx};
                         auto pinned = weakBackend.lock();
                         if (!pinned || pinned != loadBackend()) {
