@@ -234,6 +234,63 @@
         "cxx_gt_to_ge": 8,
         "other": 37
       }
+    },
+    {
+      "label": "first scheduled-gate run, cxx_remove_void_call excluded",
+      "date": "2026-09-09",
+      "scope": "core-forms",
+      "driven_by": ".github/workflows/mutation.yml (workflow_dispatch, run 34349442137)",
+      "tool": "Mull 0.34.0 / LLVM 22",
+      "compiler": "clang-22 (ubuntu-26.04 runner)",
+      "mutators": "scripts/mutation.sh's list, with cxx_remove_void_call excluded (morph#434)",
+      "mutants": 773,
+      "killed": 574,
+      "survived": 199,
+      "mutation_score_percent": 74.26,
+      "wall_time": "116m4s campaign, 2h25m job",
+      "movement_against_baseline": "first run under this mutator set; not comparable to the 352-survivor figure above, which was measured over a larger population",
+      "survivors_by_file": {
+        "include/morph/core/remote.hpp": 82,
+        "include/morph/core/bridge.hpp": 33,
+        "include/morph/forms/forms.hpp": 13,
+        "include/morph/core/registry.hpp": 12,
+        "include/morph/core/payload_schema.hpp": 8,
+        "include/morph/core/wire.hpp": 8,
+        "include/morph/core/backend.hpp": 7,
+        "include/morph/forms/flows.hpp": 7,
+        "include/morph/forms/views.hpp": 6,
+        "include/morph/core/strand.hpp": 4,
+        "include/morph/core/completion.hpp": 3,
+        "include/morph/core/logger.hpp": 2,
+        "include/morph/core/model.hpp": 2,
+        "include/morph/core/model_key.hpp": 2,
+        "include/morph/core/observability.hpp": 2,
+        "include/morph/core/timeout_scheduler.hpp": 2,
+        "include/morph/forms/instance_constraints.hpp": 2,
+        "include/morph/core/detail/execute_order_gate.hpp": 1,
+        "include/morph/core/detail/subscription_registry.hpp": 1,
+        "include/morph/core/executor.hpp": 1
+      },
+      "survivors_by_mutator": {
+        "cxx_replace_scalar_call": 91,
+        "cxx_init_const": 27,
+        "cxx_assign_const": 25,
+        "cxx_add_to_sub": 13,
+        "cxx_gt_to_ge": 8,
+        "cxx_rshift_to_lshift": 6,
+        "cxx_eq_to_ne": 4,
+        "cxx_ne_to_eq": 4,
+        "cxx_xor_assign_to_or_assign": 4,
+        "cxx_xor_to_or": 3,
+        "cxx_lshift_to_rshift": 3,
+        "cxx_add_assign_to_sub_assign": 2,
+        "cxx_ge_to_gt": 2,
+        "cxx_lt_to_le": 2,
+        "cxx_sub_assign_to_add_assign": 1,
+        "cxx_gt_to_le": 1,
+        "cxx_pre_inc_to_pre_dec": 1,
+        "cxx_post_inc_to_post_dec": 1
+      }
     }
   ],
   "false_positive_finding": {
@@ -369,5 +426,47 @@
       "wholesale (or the whole mutator, pending an upstream fix) rather than needing a",
       "per-site allowlist for it."
     ]
+  },
+  "classification_2026_09_09": {
+    "_comment": [
+      "Partial classification of run[2]'s 199 survivors (morph#453 item A).",
+      "Recorded so the next pass starts from evidence rather than from zero.",
+      "UNCLASSIFIED IS THE MAJORITY: 183 of 199 have not been assessed."
+    ],
+    "method": "Clustered by (mutator, source shape), then assessed cluster by cluster against what the code actually promises -- not by writing an assertion per mutant, which the issue's own constraint rules out.",
+    "equivalent": {
+      "count": 13,
+      "sites": [
+        "core/remote.hpp:157,158,160,162 -- OpaqueIdGenerator::mix, the Feistel round function",
+        "core/bridge.hpp:121 -- HandlerKey hash-combine",
+        "core/registry.hpp:54 -- PairKeyHash hash-combine",
+        "core/payload_schema.hpp:218 -- fingerprint hash accumulation"
+      ],
+      "reason": [
+        "The Feistel construction (L,R) -> (R, L ^ F(R)) is invertible for ANY round function F, which permute()'s own doc comment states ('this regardless of the round function'). Mutating inside mix() therefore preserves the only property the code claims -- that distinct counters yield distinct ids -- so no honest test can kill these.",
+        "The hash-combine sites are the same shape: nothing in the contract fixes a hash VALUE, only determinism and adequate distribution. A test that killed these would assert a specific hash constant, pinning an implementation detail -- exactly the 'test with no reason to exist' the issue warns against."
+      ]
+    },
+    "real_gap_closed": {
+      "count": 3,
+      "sites": [
+        "core/remote.hpp:142 -- static_cast<uint32_t>(counter >> 32)",
+        "core/remote.hpp:145 -- lo = hi ^ mix(lo, roundKey)",
+        "core/remote.hpp:148 -- (static_cast<uint64_t>(hi) << 32) | lo"
+      ],
+      "finding": "The existing bijection test drives counters 1..20000, all of which have a ZERO high half. It therefore passes whether or not permute() uses the top 32 bits at all -- it cannot distinguish a 64-bit permutation from one that ignores half its input.",
+      "measured": "Simulated against the real round function over 20000 counters that do exercise the high half: '>>' -> '<<' collapses 20000 ids to 1; the Feistel '^' -> '|' collapses them to 1256. Both are catastrophic collisions in opaque model ids, and both are invisible to the existing sample.",
+      "closed_by": "tests/test_opaque_model_ids.cpp, 'OpaqueIdGenerator is a bijection over counters that exercise the high half'. Kills the :142 and :145 mutants. The :148 mutant still survives -- 'hi >> 32' yields 0 so the id degenerates to its low half, which stays distinct for these inputs; killing it needs a probe on the id's high bits, not a distinctness count."
+    },
+    "unclassified": {
+      "count": 183,
+      "largest_clusters": [
+        "cxx_replace_scalar_call x92 -- replaces a scalar-returning call with 42; concentrated on .empty()/.size() guards",
+        "cxx_init_const x27 and cxx_assign_const x25",
+        "cxx_add_to_sub x13",
+        "cxx_gt_to_ge x8 -- the boundary family morph#434 confirmed mutates and kills correctly, so these should be read as real"
+      ],
+      "note": "remote.hpp (82) and bridge.hpp (33) hold 58% of all survivors. Neither has been assessed."
+    }
   }
 }
