@@ -2010,7 +2010,7 @@ struct NoSharing {};
 /// A shared handler that only ever runs *keyless* actions never attaches, and
 /// its `execute` fails fast with "handler not bound": there is no instance to
 /// run against and inventing a private one would silently defeat the sharing
-/// the caller asked for. Attach first — see docs/planned/shared_model_instances.md.
+/// the caller asked for. Attach first — see docs/spec/core/shared_instances.md.
 struct AllowShared {};
 
 /// @brief RAII wrapper that binds a single model type to a `Bridge`.

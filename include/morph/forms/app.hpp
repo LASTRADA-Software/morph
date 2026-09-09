@@ -76,8 +76,9 @@ struct WizardScreen {
     }
 };
 
-// A ViewScreen<Id, View> counterpart (kind: "view") belongs here once
-// docs/planned/gui_collections_views.md's ViewTraits<V> exists. appSchemaJson
+// A ViewScreen<Id, View> counterpart (kind: "view") could be added here:
+// `morph::views::ViewTraits<V>` (forms/views.hpp) now exists, so nothing
+// blocks it. appSchemaJson
 // below only requires each screen type to expose id()/kind()/ref(), so adding
 // it later needs no change to appSchemaJson itself — this reference demo
 // therefore only exercises "form" and "wizard" screens (see
