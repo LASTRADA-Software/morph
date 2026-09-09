@@ -92,7 +92,7 @@
     },
     {
       "file": "include/morph/core/backend.hpp",
-      "line": 741,
+      "line": 777,
       "source": "if (iter != _models.end()) {",
       "reason": "Unreachable by construction given the `_changeAware`/`_models` invariant (core audit finding BK2). Every model id is inserted into `_changeAware` (when change-aware) in the same `_regMtx`-held critical section that inserts it into `_models` (`createAndTrack`, this file: `if (holder->isBackendChangeAware()) { _changeAware.insert(mid); } _models[mid] = std::move(holder);`), and both are erased together at the single erasure site (`deregisterModel`: `_models.erase(mid); _changeAware.erase(mid);`, also under `_regMtx`). `notifyBackendChanged()` (this function) holds the same `_regMtx` while iterating `_changeAware` and looking each id up in `_models` at this line, so every id it walks is guaranteed still present in `_models` -- the \"not found\" arm cannot occur without a code change that breaks this lockstep bookkeeping."
     },
@@ -110,13 +110,13 @@
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1421,
+      "line": 1445,
       "source": "if (_executeDeadline.count() > 0 && _timeoutScheduler) {",
       "reason": "Unreachable by construction (core audit finding B6). `setExecuteDeadline` (this file) is the only writer of both `_executeDeadline` and `_timeoutScheduler`, and always creates `_timeoutScheduler` in the same call that sets `_executeDeadline` positive (`_executeDeadline = deadline; if (_executeDeadline.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_shared<...>(); }`, both under `_executeDeadlineMtx`); nothing anywhere resets `_timeoutScheduler` back to null -- the class's own doc comment on `setExecuteDeadline` says so explicitly (\"setting the deadline back to 0 stops new calls from arming it but does not tear the thread down\"). So `_executeDeadline > 0 && !_timeoutScheduler` cannot happen at this line once any positive deadline has ever been set."
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1539,
+      "line": 1563,
       "source": "if (deadlineHandle && schedulerRef) {",
       "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1421 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible."
     },

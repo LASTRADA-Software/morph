@@ -590,6 +590,14 @@ public:
                     if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
                         return;  // Completed inline: the dispatching frame will finish this.
                     }
+                    // This check and the `this` touch below it are two steps -- the
+                    // morph#486 shape. Closed not by a gate but by
+                    // `IBackend::registerModelAsync`'s threading contract (see its
+                    // doc comment): an overriding backend must deliver `*Async`
+                    // replies on a thread that cannot run `~Bridge` concurrently.
+                    // Gating instead would block `~Bridge` behind `_attachMtx`,
+                    // which `attachHandler` holds across a full `attachModel` round
+                    // trip. See morph#489.
                     if (!weakLiveness.active()) {
                         return;  // The Bridge is gone; publishing this id would be pointless.
                     }
@@ -739,6 +747,14 @@ public:
                     if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
                         return;  // Completed inline: the dispatching frame will finish this.
                     }
+                    // This check and the `this` touch below it are two steps -- the
+                    // morph#486 shape. Closed not by a gate but by
+                    // `IBackend::registerModelAsync`'s threading contract (see its
+                    // doc comment): an overriding backend must deliver `*Async`
+                    // replies on a thread that cannot run `~Bridge` concurrently.
+                    // Gating instead would block `~Bridge` behind `_attachMtx`,
+                    // which `attachHandler` holds across a full `attachModel` round
+                    // trip. See morph#489.
                     if (!weakLiveness.active()) {
                         return;  // The Bridge is gone; publishing this id would be pointless.
                     }
@@ -875,6 +891,14 @@ public:
         bool const started = backend->assignPrimaryAsync(
             ::morph::exec::detail::ModelId{raw}, binding->typeId, primary,
             [this, weakLiveness, weakBackend, weakBinding, primary](::morph::exec::detail::ModelId) {
+                // This check and the `this` touch below it are two steps -- the
+                // morph#486 shape. Closed not by a gate but by
+                // `IBackend::registerModelAsync`'s threading contract (see its
+                // doc comment): an overriding backend must deliver `*Async`
+                // replies on a thread that cannot run `~Bridge` concurrently.
+                // Gating instead would block `~Bridge` behind `_attachMtx`,
+                // which `attachHandler` holds across a full `attachModel` round
+                // trip. See morph#489.
                 if (!weakLiveness.active()) {
                     return;  // The Bridge is gone; do not touch `this`.
                 }

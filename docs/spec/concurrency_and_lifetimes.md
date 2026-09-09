@@ -255,12 +255,13 @@ No framework path does this; a caller that arranges it is outside the contract.
 ### The same check-then-call shape, elsewhere in `Bridge` — issue #489
 
 `~BridgeHandler` was one check-then-call site of this shape; issue #489 named
-four more inside `Bridge` itself, each gating a callback on `liveness()` (or an
-equivalent snapshot) and then touching `this`. Not all of them can take
-`BridgeLifetime`'s gate the way `~BridgeHandler` does — the gate makes `~Bridge`
-block for as long as the gated span takes, and a span that can call into
-consumer-supplied code or a backend's blocking registration path turns that
-bounded wait into an unbounded one. Three dispositions, by site:
+four more inside `Bridge` itself, and a follow-up audit of that issue found three
+further ones on the `IBackend` `*Async` reply path — each gating a callback on
+`liveness()` (or an equivalent snapshot) and then touching `this`. Not all of
+them can take `BridgeLifetime`'s gate the way `~BridgeHandler` does — the gate
+makes `~Bridge` block for as long as the gated span takes, and a span that can
+call into consumer-supplied code or a backend's blocking registration path turns
+that bounded wait into an unbounded one. Four dispositions, by site:
 
 - **`executeVia()`'s `.then`/`.onError` continuations.** `_pendingCalls` and
   `_subscriptions` are now heap-allocated (`shared_ptr`, like `BridgeLifetime`
@@ -290,6 +291,33 @@ bounded wait into an unbounded one. Three dispositions, by site:
   loop pumps the very deferred-delete event that could run the destructor —
   that is a self-deadlock, not a slow teardown. No safe mechanical fix is known
   for this site; it remains open, tracked as the residual scope of issue #489.
+- **The `*Async` reply callbacks** — `attachHandlerAsync`, `ensureBoundAsync`
+  and `assignHandlerPrimary`, three of the four `IBackend` async hooks. (The
+  fourth, `registerHandlerImpl`, is covered by the `BridgeLifetime` bullet
+  above and is not one of these.) Each of the three keeps a
+  `CallbackToken::active()` check and then takes `_attachMtx` and calls
+  `loadBackend()`, so the two-step shape is present in the source. What closes
+  the window is not a gate but a contract on the backend:
+  `IBackend::registerModelAsync`'s doc comment now states that a backend
+  overriding any `*Async` hook must deliver its callbacks on a thread from
+  which `~Bridge` cannot run concurrently. `QtWebSocketBackend` — the only
+  backend in the tree that overrides them — satisfies this by construction
+  rather than by care: it must itself be used from the Qt event loop thread,
+  and fires all four callbacks from `onTextMessage` on that same thread, so the
+  check and the use cannot straddle a destructor. Gating these instead would
+  make `~Bridge` block behind `_attachMtx`, which the synchronous
+  `attachHandler` holds across a full `attachModel` round trip — the same shape
+  of objection that rules a gate out for the reconnect handler. **The safety
+  here is therefore conditional on a documented contract, not on `Bridge`
+  alone**: a future backend delivering these replies on its own transport
+  thread would reopen morph#486's use-after-free, and that is a contract break
+  rather than a latent race to be rediscovered.
+
+`switchBackend()` and `whenBound()` were audited for the same shape and do not
+have it. Both are ordinary synchronous member functions called by the bridge's
+owner, not liveness-gated callbacks: neither takes a `CallbackToken`, and
+`whenBound()`'s queued waiters capture only the `CompletionState` they resolve,
+never `this`.
 
 ### `RemoteServer` must be `make_shared` and outlive its transports
 
