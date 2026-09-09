@@ -252,6 +252,45 @@ thread that is already inside `~Bridge`** — destroying a handler from within
 self-deadlock on the gate, exactly as re-entering any exclusively-held mutex is.
 No framework path does this; a caller that arranges it is outside the contract.
 
+### The same check-then-call shape, elsewhere in `Bridge` — issue #489
+
+`~BridgeHandler` was one check-then-call site of this shape; issue #489 named
+four more inside `Bridge` itself, each gating a callback on `liveness()` (or an
+equivalent snapshot) and then touching `this`. Not all of them can take
+`BridgeLifetime`'s gate the way `~BridgeHandler` does — the gate makes `~Bridge`
+block for as long as the gated span takes, and a span that can call into
+consumer-supplied code or a backend's blocking registration path turns that
+bounded wait into an unbounded one. Three dispositions, by site:
+
+- **`executeVia()`'s `.then`/`.onError` continuations.** `_pendingCalls` and
+  `_subscriptions` are now heap-allocated (`shared_ptr`, like `BridgeLifetime`
+  itself) and captured by value into the continuations, rather than reached
+  through `this`. Once pinned that way, touching them needs no liveness check
+  at all: `_pendingCalls` is decremented unconditionally, and
+  `SubscriptionRegistry::publishResult` already snapshots its sinks under its
+  own lock and invokes them outside it (`core/detail/subscription_registry.hpp`),
+  so calling it from a pinned copy cannot deadlock against a re-entering
+  subscriber either way. The one piece that is *not* pinned — `onResult`,
+  which for a result-keyed action calls `assignHandlerPrimary` and genuinely
+  needs the *current* bridge/backend — is gated on `BridgeLifetime` for just
+  that call, which is safe because `assignHandlerPrimary`'s synchronous path is
+  non-blocking by construction (it prefers the backend's async registration
+  precisely to avoid a nested-event-loop block).
+- **`registerHandlerImpl`'s `onRegistered` callback.** Gated on
+  `BridgeLifetime` across its whole touch of `this` (`_mtx`, `loadBackend()`).
+  Safe to hold the gate here: nothing in that span calls into consumer code or
+  a blocking backend path, only a mutex and a pointer comparison.
+- **`installReconnectHandler`'s reconnect callback.** Left as a `liveness()`
+  check, deliberately not moved to `BridgeLifetime` — this is the case the
+  first paragraph above warns about. The handler runs on the backend's
+  transport thread and calls `registerModelWithContext`/`registerModelShared`,
+  which blocks on a nested `QEventLoop` for `QtWebSocketBackend`. Gating that
+  span would let `~Bridge` block for the same round trip, and if the reconnect
+  and `~Bridge` ever land on the same thread — plausible for Qt, whose nested
+  loop pumps the very deferred-delete event that could run the destructor —
+  that is a self-deadlock, not a slow teardown. No safe mechanical fix is known
+  for this site; it remains open, tracked as the residual scope of issue #489.
+
 ### `RemoteServer` must be `make_shared` and outlive its transports
 
 `RemoteServer` derives from `enable_shared_from_this` and **must** be created via

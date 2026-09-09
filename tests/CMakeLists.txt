@@ -62,6 +62,7 @@ add_executable(morph_tests
     test_forms_exact_bounds.cpp
     test_offline_queue.cpp
     test_file_offline_queue.cpp
+    test_replay_ledger.cpp
     test_sync_worker.cpp
     test_reconnect_coordinator.cpp
     test_offline_integration.cpp

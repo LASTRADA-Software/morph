@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <morph/core/registry.hpp>
+#include <morph/offline/replay_ledger.hpp>
 #include <morph/session/session.hpp>
 #include <optional>
 #include <string>
@@ -58,6 +59,88 @@ namespace {
 [[nodiscard]] std::int64_t nowMs() noexcept {
     return (*::morph::ladder::now().value).value.time_since_epoch().count();
 }
+
+/// @brief `morph::offline::IReplayLedger` over `db::ImportedOpRecord`
+///        (morph#226) -- the first rung migrated onto the promoted interface.
+///
+/// A file-local class rather than its own header: it has exactly one
+/// consumer (`ImportBookmarks::execute`, below), and every one of its
+/// members touches only types this translation unit already includes. Not
+/// left in its own header (`bookmarks/offline/replay_ledger.hpp`, the first
+/// version of this) on purpose: a header with no translation unit of its own
+/// has no entry in `compile_commands.json`, so tooling that needs one
+/// (clang-tidy's per-file analysis, in particular) has to interpolate flags
+/// from an unrelated file -- for that header specifically, CI's clang-tidy
+/// picked the identically-named `include/morph/offline/replay_ledger.hpp`'s
+/// own compile command, a header with no `Lightweight` dependency at all, and
+/// every finding cascaded from the resulting `Lightweight/DataMapper/
+/// DataMapper.hpp` "file not found". Defining the class in a real TU with its
+/// own correct flags removes the guesswork entirely, rather than trying to
+/// out-guess clang-tidy's interpolation heuristic (e.g. by renaming to break
+/// the name collision, which was tried locally and only traded one
+/// interpolated-flags failure for a different one).
+///
+/// Skip-only: `record()` is always called with an empty payload here, and
+/// `ImportBookmarks::execute` only ever asks `lookup()` "was this opId
+/// already applied", never reads the (always-empty) string back. This
+/// mirrors `db::ImportedOpRecord`'s own shape from before this migration --
+/// it never stored a result -- so the on-disk table and its query pattern
+/// are unchanged; only the seam `ImportBookmarks::execute` reaches them
+/// through moved onto the framework's interface.
+///
+/// @par Atomicity
+/// Constructed fresh, per call, over the model's *already-open* `DataMapper&`
+/// (see `IReplayLedger::record()`'s own doc comment on why this matters) --
+/// never opens a connection or transaction of its own. `record()`'s
+/// `mapper.Create(op)` therefore commits inside whichever `SqlTransaction`
+/// the caller already has open around it, exactly as the hand-written
+/// check-then-insert this replaces did.
+class BookmarksReplayLedger : public ::morph::offline::IReplayLedger {
+public:
+    /// @param mapper      The caller's already-acquired data mapper. Borrowed:
+    ///        must outlive this ledger, which is expected to be a short-lived
+    ///        local constructed around one `execute()` call.
+    /// @param appliedAtMs Timestamp stamped on a row this instance records.
+    ///        Taken from the caller rather than read here so this class does
+    ///        not need its own opinion of "now" (`ImportBookmarks::execute`
+    ///        already reads one, via `morph::ladder::now()`, for its own use).
+    BookmarksReplayLedger(::Lightweight::DataMapper& mapper, std::int64_t appliedAtMs)
+        : _mapper{mapper}, _appliedAtMs{appliedAtMs} {}
+
+protected:
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    [[nodiscard]] std::optional<std::string> doLookup(std::string_view scope, std::string_view opId) const override {
+        auto const existing =
+            _mapper.Query<db::ImportedOpRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::ownerPrincipal>, "=", std::string{scope})
+                .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::opId>, "=", std::string{opId})
+                .All();
+        if (existing.empty()) {
+            return std::nullopt;
+        }
+        // Skip-only: nothing was ever stored beyond the fact of the row's
+        // existence (db::ImportedOpRecord carries no result column), so the
+        // payload is always empty on a hit -- see this class's own doc
+        // comment.
+        return std::string{};
+    }
+
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    void doRecord(std::string_view scope, std::string_view opId, std::string /*payload*/) override {
+        db::ImportedOpRecord op;
+        op.ownerPrincipal = std::string{scope};
+        op.opId = std::string{opId};
+        op.appliedAtMs = _appliedAtMs;
+        _mapper.Create(op);
+    }
+
+private:
+    // Borrowed, never reseated; must outlive this short-lived instance, per the constructor's own doc
+    // comment. Same shape as bridge.hpp's BridgeHandler::_bridge.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
+    ::Lightweight::DataMapper& _mapper;
+    std::int64_t _appliedAtMs;
+};
 
 /// @brief Process-wide monotonic counter, used only to disambiguate
 ///        `BulkEdit`'s server-generated idempotency key (see its call site)
@@ -650,11 +733,8 @@ ImportBookmarksResult BookmarkModel::execute(const ImportBookmarks& action) {
     const auto& opIdStr = *action.opId;
 
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    auto existingOp = mapper->Query<db::ImportedOpRecord>()
-                          .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::ownerPrincipal>, "=", owner)
-                          .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::opId>, "=", opIdStr)
-                          .All();
-    if (!existingOp.empty()) {
+    BookmarksReplayLedger ledger{mapper.Get(), nowMs()};
+    if (ledger.lookup(owner, opIdStr).has_value()) {
         // Already applied -- a retried chunk after a dropped connection is
         // a safe no-op, per this task's idempotency requirement. Reports
         // zero: the caller's own first, successful attempt already learned
@@ -692,11 +772,7 @@ ImportBookmarksResult BookmarkModel::execute(const ImportBookmarks& action) {
         mapper->Create(rec);
         ++imported;
     }
-    db::ImportedOpRecord op;
-    op.ownerPrincipal = owner;
-    op.opId = opIdStr;
-    op.appliedAtMs = nowMs();
-    mapper->Create(op);
+    ledger.record(owner, opIdStr, "");
     transaction.Commit();
 
     return ImportBookmarksResult{.imported = Count::fromDouble(static_cast<double>(imported)),

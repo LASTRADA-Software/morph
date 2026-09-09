@@ -24,6 +24,21 @@
 //           `sigsetjmp`/`siglongjmp`-based handler converts into a normal,
 //           reported Catch2 test failure; post-fix, the liveness check gates
 //           the call out before the page is ever touched.
+//
+//           morph#489 changed *how* both call sites are made safe, without
+//           changing what either test observes (both still pass unmodified):
+//           `_pendingCalls` and `_subscriptions` are now heap-allocated and
+//           captured by value into the `.then`/`.onError` continuations, so
+//           `hasSubscribers()` in particular no longer dereferences `this` at
+//           all once pinned -- the guard-page test's fault, if the fix ever
+//           regressed, would now have to come from a stale `bridgeAlive` read
+//           gating a call the pinned copy would otherwise make safe, not from
+//           `this` itself. `onResult` is still a genuine touch of `this` (it
+//           calls `assignHandlerPrimary`, which needs the *current*
+//           bridge/backend) and is still gated, now on `detail::BridgeLifetime`
+//           instead of the advisory `CallbackToken` -- see
+//           docs/spec/concurrency_and_lifetimes.md, "The same check-then-call
+//           shape, elsewhere in `Bridge`".
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>

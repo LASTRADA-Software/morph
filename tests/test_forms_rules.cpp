@@ -597,6 +597,23 @@ TEST_CASE("Forms::Rules::Equals::EmitNodeCarriesExactDigitsForLargeNegativeLiter
     CHECK(node["valueText"].get<std::string>() == "-9007199254740993");
 }
 
+TEST_CASE("Forms::Rules::Equals::EmitNodeOmitsValueTextAtExactlyTheLimit", "[forms][rules]") {
+    // The boundary the two tests above are named for and do not reach: both
+    // use a literal one past kExactDoubleLimit (9007199254740993 /
+    // -9007199254740993), so emitNode()'s
+    // `std::cmp_greater(literal, kExactDoubleLimit) ||
+    // std::cmp_less(literal, -kExactDoubleLimitSigned)` was never evaluated at
+    // the value where changing either strict comparison to its `_equal`
+    // sibling flips the answer. At exactly the limit (9007199254740992, 2^53)
+    // a double still holds the value exactly, so no `valueText` companion is
+    // needed -- pinned on both signs.
+    auto const positive = morph::forms::equals(&CFRNegativeLiteralAction::id, std::int64_t{9007199254740992});
+    CHECK_FALSE(positive.emitNode().contains("valueText"));
+
+    auto const negative = morph::forms::equals(&CFRNegativeLiteralAction::id, std::int64_t{-9007199254740992});
+    CHECK_FALSE(negative.emitNode().contains("valueText"));
+}
+
 TEST_CASE("Forms::Rules::Equals::StringLiteralOverload", "[forms][rules]") {
     struct CFRCodeAction {
         std::optional<std::string> code;

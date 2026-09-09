@@ -1,0 +1,169 @@
+name: Mutation campaign
+
+# Runs the framework mutation campaign (scripts/mutation.sh) on a schedule
+# rather than per-PR, and fails the run when survivors regress against the
+# last recorded baseline (scripts/check_mutation_regression.py,
+# scripts/mutation_baseline.json). See morph#408's decision comment for why
+# this is scheduled instead of a per-PR gate:
+#
+#   1. The tool is known-defective for one mutator family (morph#434:
+#      cxx_remove_void_call silently no-ops on member/operator call sites).
+#      scripts/mutation.sh already excludes it from the mutator set this
+#      workflow runs.
+#   2. The economics are bad at the per-PR margin: ~30 min instrumented build
+#      plus 46+ min of runner time on a 12-core workstation, against hosted
+#      runners' 4 vCPUs and a ~24-minute existing per-PR critical path.
+#   3. A gate nobody can afford to run is not a gate -- it would be disabled
+#      under time pressure and look like coverage while providing none.
+#
+# There is no `schedule:` trigger anywhere else in this repository; this is
+# the first. `workflow_dispatch` lets a maintainer run it on demand (e.g. to
+# seed the first baseline, or to re-check after a triage) without waiting for
+# the weekly tick.
+
+on:
+  schedule:
+    # Weekly, Monday 06:00 UTC -- a starting cadence, not a measured optimum
+    # (see #408: no hosted-runner wall-clock figure for this campaign has
+    # been measured yet). Adjust once a real run's duration is known.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Mutation scope (core-forms|core|forms|net)"
+        required: false
+        default: "core-forms"
+
+permissions:
+  # write, not read: a successful run commits an updated
+  # scripts/mutation_baseline.json straight to the branch this workflow
+  # checked out (master, for the schedule trigger) -- see the "Commit an
+  # updated baseline" step. No PR review sees that commit; it is a narrow,
+  # single-file, bot-authored update in the same spirit as a lockfile bump.
+  contents: write
+  issues: write
+
+env:
+  CLANG_VERSION: "22"
+  MULL_VERSION: "0.34.0"
+  MULL_LLVM_MAJOR: "22"
+
+jobs:
+  mutation:
+    name: Scheduled mutation campaign
+    # NOT ubuntu-24.04, deliberately, and verified rather than assumed: Mull
+    # 0.34.0 publishes no LLVM-22 package for ubuntu-24.04 at all -- checked
+    # against the release's own asset list
+    # (https://github.com/mull-project/mull/releases/tag/0.34.0), which carries
+    # Mull-22-0.34.0-LLVM-22.1.2-ubuntu-amd64-26.04.deb and nothing for 24.04.
+    # This answers #408's own Step 0 item 1 ("does Mull-22 load against CI's
+    # apt clang-22 on ubuntu-24.04?") with "there is no ubuntu-24.04 package to
+    # try" rather than an ABI failure -- ubuntu-26.04 is GitHub-hosted, if still
+    # `preview` per actions/runner-images, so that is the target instead. The
+    # package's own control file depends on libclang-cpp22/libllvm22, which the
+    # apt.llvm.org clang-22 install step below provides.
+    runs-on: ubuntu-26.04
+    # Generous margin over the ~76-minute figure measured on a 12-core
+    # workstation (scripts/mutation.sh's own header): hosted runners are
+    # 4 vCPU, a third of that, and this job's actual hosted wall time has not
+    # been measured (#408, Step 0 item 2). A scheduled job overrunning costs
+    # nothing but runner-minutes; a per-PR gate is what could not afford this.
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang ${{ env.CLANG_VERSION }}, ninja, catch2
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build catch2
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+
+      # Not automated inside scripts/mutation.sh itself on purpose (that
+      # script's own header: "a script that downloads a toolchain behind your
+      # back is worse than one line of documentation") -- this workflow is
+      # the CI wiring around it, so it owns the install step that script
+      # deliberately leaves to the caller.
+      #
+      # Filename verified against the release's own asset list (see the
+      # runs-on comment above) -- it is Mull-<N>-<version>-LLVM-<full>-<os>-
+      # <arch>-<os-version>.deb, not the mull-<n>_<v>_amd64.deb shape
+      # scripts/mutation.sh's header comment shows for the manual/local
+      # install (that comment is about the *command*, illustrative rather
+      # than pinned; this step is what actually has to resolve to a real
+      # asset). Internal layout confirmed by extracting the archive locally:
+      # usr/bin/mull-runner-22 and usr/lib/mull-ir-frontend-22, exactly where
+      # scripts/mutation.sh's MULL_PREFIX-relative paths expect them.
+      - name: Install Mull ${{ env.MULL_VERSION }} for LLVM ${{ env.MULL_LLVM_MAJOR }}
+        run: |
+          asset="Mull-${MULL_LLVM_MAJOR}-${MULL_VERSION}-LLVM-22.1.2-ubuntu-amd64-26.04.deb"
+          curl -sSLO "https://github.com/mull-project/mull/releases/download/${MULL_VERSION}/${asset}"
+          mkdir -p "${PWD}/mull-${MULL_LLVM_MAJOR}"
+          dpkg-deb -x "${asset}" "${PWD}/mull-${MULL_LLVM_MAJOR}"
+          echo "MULL_PREFIX=${PWD}/mull-${MULL_LLVM_MAJOR}/usr" >> "$GITHUB_ENV"
+
+      - name: Run the mutation campaign
+        env:
+          CXX: clang++-${{ env.CLANG_VERSION }}
+        run: |
+          bash scripts/mutation.sh "${{ inputs.scope || 'core-forms' }}" \
+            | tee "mutation-${{ inputs.scope || 'core-forms' }}.log"
+
+      - name: Check for a regression against the recorded baseline
+        id: regression
+        run: |
+          scope="${{ inputs.scope || 'core-forms' }}"
+          python3 scripts/check_mutation_regression.py \
+            "build/mutation-${scope}/mutation-${scope}.txt" "$scope"
+
+      # scripts/check_mutation_regression.py updates scripts/mutation_baseline.json
+      # in place on a first run or an improvement (never on a regression --
+      # see that script's own "ratchets down, never up"). Committing that
+      # here is what makes the next scheduled run compare against this one
+      # instead of silently re-recording the same baseline every week.
+      - name: Commit an updated baseline
+        if: success()
+        run: |
+          if git diff --quiet -- scripts/mutation_baseline.json; then
+            echo "baseline unchanged; nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scripts/mutation_baseline.json
+          git commit -m "mutation: update baseline for scope ${{ inputs.scope || 'core-forms' }} (run ${{ github.run_id }})"
+          git push
+
+      # Failure here means either the campaign itself errored (a broken
+      # build, Mull crashing, no .mull_mutants section -- scripts/mutation.sh
+      # exits non-zero for all of these) or check_mutation_regression.py
+      # found a real regression. Either way this is the "regression would
+      # have to be noticed by someone comparing by hand" gap
+      # docs/spec/testing_charter.md names, closed: something now notices and
+      # files it, instead of the campaign's own log being the only record.
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          scope="${{ inputs.scope || 'core-forms' }}"
+          title="Mutation campaign failed or regressed (scope: ${scope})"
+          existing="$(gh issue list --state open --search "in:title \"${title}\"" --json number --jq 'length')"
+          if [ "$existing" != "0" ]; then
+            echo "An open issue already names this failure; not filing a duplicate."
+            exit 0
+          fi
+          body="The scheduled mutation campaign (.github/workflows/mutation.yml) failed or found a regression for scope \`${scope}\`."
+          body="${body}\n\nRun: ${RUN_URL}"
+          body="${body}\n\nSee \`scripts/check_mutation_regression.py\`'s own doc comment for what this compares, \`scripts/mutation_baseline.json\` for the recorded baseline, and \`scripts/mutation_survivors.json\` for the triage process for a genuine new survivor."
+          gh issue create --title "$title" --label "area: ci" --body "$(printf '%b' "$body")"
+
+      - name: Upload the mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-${{ inputs.scope || 'core-forms' }}
+          path: |
+            mutation-*.log
+            build/mutation-*/mutation-*.txt
+          retention-days: 30

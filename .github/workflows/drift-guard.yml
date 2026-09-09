@@ -180,6 +180,33 @@ jobs:
       - name: Self-test the duplicate-ctest-name checker
         run: bash scripts/test_check_ctest_name_collisions.sh
 
+  # ── The scheduled mutation gate's own self-test (morph#408) ──────────────
+  #
+  # scripts/check_mutation_regression.py is the gate .github/workflows/mutation.yml
+  # runs after scripts/mutation.sh, on a schedule rather than per-PR (that
+  # decision, and why a per-PR gate was rejected, is recorded on the issue).
+  # It needs neither a build nor Mull itself -- both its inputs are files (an
+  # IDE-format Mull report and a JSON baseline), so its self-test runs here in
+  # seconds with hand-written fixtures, exactly like every other checker in
+  # this file.
+  #
+  # docs/spec/testing_charter.md names the defect this closes in its own
+  # words: "Mutation score has no floor... A regression would have to be
+  # noticed by someone re-running the campaign and comparing by hand." A gate
+  # that had silently stopped detecting a regression -- reading "more
+  # survivors than the baseline" as clean, or reading zero mutants (a
+  # scope-mismatch bug scripts/mutation.sh's own header warns about) as a
+  # successful run -- would be indistinguishable from a healthy one without
+  # this self-test.
+  mutation-regression-lint:
+    name: Mutation-regression checker self-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the mutation-regression checker
+        run: python3 scripts/check_mutation_regression.py --self-test
+
   # ── The coverage-object gate's own self-test ───────────────────────────
   # The gate itself (scripts/check_coverage_objects.sh) runs inside
   # scripts/coverage.sh, in ci.yml's linux-coverage job, because it compares the

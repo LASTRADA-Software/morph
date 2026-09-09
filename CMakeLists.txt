@@ -208,6 +208,7 @@ target_sources(morph
         include/morph/offline/offline_queue.hpp
         include/morph/offline/sync_worker.hpp
         include/morph/offline/file_offline_queue.hpp
+        include/morph/offline/replay_ledger.hpp
         include/morph/session/session.hpp
         include/morph/forms/forms.hpp
         include/morph/forms/choice.hpp

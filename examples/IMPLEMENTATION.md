@@ -18,7 +18,13 @@ it must either be **promoted into `include/morph`** (with its full docs
 tax, drawn from the fix budget) or **explicitly dispositioned in the spec
 as app-layer by design**. Without this rule the ladder ends with a shadow
 framework living in `examples/common` — which would be the program's
-biggest finding, permanently unfiled.
+biggest finding, permanently unfiled. The op-id ledger example is no longer
+hypothetical: it fired three rungs past its own trigger point and was
+promoted as `morph::offline::IReplayLedger`
+([morph#226](https://github.com/LASTRADA-Software/morph/issues/226); see
+[`FINDINGS.md`](FINDINGS.md), "Promoted findings", and
+[`docs/spec/offline/offline.md`](../docs/spec/offline/offline.md)'s
+`IReplayLedger` section for the disposition).
 
 ## 1. Models are the application
 

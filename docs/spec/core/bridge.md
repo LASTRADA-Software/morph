@@ -316,26 +316,35 @@ regardless of what `currentPrincipal()` says.
 `executeVia()` (and so, transitively, `BridgeHandler::execute()`) that have
 not yet resolved — a client-side quiescence signal for building a "still
 loading" indicator or gating a feature on "has everything settled" without
-hand-rolling a counter around every call site. Backed by a single
-`std::atomic<std::size_t> _pendingCalls`, incremented once per call right
-before the backend dispatch inside `executeVia()` and decremented exactly
-once by whichever of the two mutually-exclusive resolution continuations
-(the `.then`/`.onError` `executeVia()` attaches to the backend's own
-completion) actually fires — success, error, or a client-visible failure
-delivered through either path (e.g. a cancelled/backend-changed/disconnected
-completion, all of which resolve through `.onError`). The synchronous
-"handler not bound" early return in `executeVia()` never increments the
-counter in the first place (it resolves before any dispatch), so it needs no
-matching decrement. Both continuations are additionally guarded by the same
-`liveness()` token every other bridge-touching side effect in `executeVia()`
-uses: a completion resolving after `~Bridge()` skips the decrement (touching
-`this` on a dangling `Bridge` would be a use-after-free) rather than running
-it. A single relaxed atomic load/increment/decrement — cheap enough to poll
-every UI frame. See [Design decisions](#design-decisions) for why the counter
-lives at the `Bridge` layer rather than per-`HandlerBinding` or per-backend.
+hand-rolling a counter around every call site. Backed by a
+`std::shared_ptr<std::atomic<std::size_t>>` (`_pendingCalls`), incremented
+once per call right before the backend dispatch inside `executeVia()` and
+decremented exactly once by whichever of the two mutually-exclusive
+resolution continuations (the `.then`/`.onError` `executeVia()` attaches to
+the backend's own completion) actually fires — success, error, or a
+client-visible failure delivered through either path (e.g. a
+cancelled/backend-changed/disconnected completion, all of which resolve
+through `.onError`). The synchronous "handler not bound" early return in
+`executeVia()` never increments the counter in the first place (it resolves
+before any dispatch), so it needs no matching decrement. Heap-allocated and
+captured by value into both continuations (morph#489) rather than reached
+through `this`: a completion can resolve after `~Bridge()` runs on another
+thread, and touching `this` on a dangling `Bridge` would be a use-after-free,
+so the counter is pinned independently of the `Bridge` and decremented
+unconditionally — no liveness check needed for this piece, unlike the
+subscription-fan-out and result-adoption side effects the same continuations
+guard on `detail::BridgeLifetime` (see "Destructor" below and
+[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md)). A single
+relaxed atomic load/increment/decrement — cheap enough to poll every UI
+frame. See [Design decisions](#design-decisions) for why the counter lives at
+the `Bridge` layer rather than per-`HandlerBinding` or per-backend.
 
-**Destructor** first **clears the active backend's reconnect handler**
-(`setReconnectHandler(nullptr)`), then cancels every pending completion on that
+**Destructor** first **retires the lifetime gate** (`closeLifetime()`, see
+`detail::BridgeLifetime` and "Lifetime & ownership" below) — this is the
+destructor's first statement and it waits out any `~BridgeHandler`
+deregistration already inside the gate before anything else runs. Only then
+does it **clear the active backend's reconnect handler**
+(`setReconnectHandler(nullptr)`) and cancel every pending completion on that
 backend with `BridgeDestroyedError`. In-flight replies that arrive after
 destruction are no-ops (`CompletionState::setValue`/`setException` is
 idempotent). Clearing the reconnect handler matters because the installed
@@ -345,7 +354,14 @@ The clear happens outside `_mtx` — `setReconnectHandler` only stores a callbac
 and never re-enters the bridge, so there is no lock-ordering hazard. This closes
 the common case; the handler additionally guards on a `_callbacks` token (see
 below) so a reconnect already latched on the transport thread when the `Bridge`
-is destroyed is also a safe no-op.
+is destroyed is also a safe no-op. That token, not the lifetime gate, is the
+guard for this one call site deliberately: unlike `~BridgeHandler`'s
+deregistration, a reconnect can call into a backend's synchronous
+`registerModelWithContext`/`registerModelShared`, which blocks on a nested
+event loop for `QtWebSocketBackend` — holding the lifetime gate across that
+would let `~Bridge` block for the same round trip, and if the reconnect and the
+destructor ever land on the same thread, deadlock rather than a slow teardown
+(morph#489, tracked as still open for this one call site).
 
 **`liveness()`** (private, exposed only to `BridgeHandler` via friendship)
 returns a `morph::async::CallbackToken` issued from the bridge's `_callbacks`
@@ -764,19 +780,29 @@ backend's transport thread without either blocking on the bridge's own locks —
 see [Registration readiness](#registration-readiness--isbound--whenbound).
 
 `subscribe`/`unsubscribe` mutate `_subscriptions`, a
-`morph::bridge::detail::SubscriptionRegistry<HandlerBinding>` (its own header,
-`core/detail/subscription_registry.hpp`, extracted out of `Bridge` the way
-`morph::backend::detail::ExecuteOrderGate` was extracted out of `RemoteServer`
-— see [backend.md](backend.md)'s "Per-model execute ordering" section for the
-sibling extraction), under that registry's own internal mutex. Callbacks never
-run under that mutex: `publishResult` snapshots the matching sinks under the
-lock and invokes them outside it, marshalled to the `guiExec` executor passed
-at construction, so a subscriber that re-enters the bridge cannot deadlock. A
-subscription holds a `weak_ptr` to its binding, so one belonging to a
-destroyed handler is skipped and pruned — on the next `publishResult` call,
-not the moment the handler dies — rather than dangling. The intended usage
-remains **single-GUI-thread affinity**: a handler and its subscriptions belong
-to one GUI thread.
+`std::shared_ptr<morph::bridge::detail::SubscriptionRegistry<HandlerBinding>>`
+(the registry's own header, `core/detail/subscription_registry.hpp`, extracted
+out of `Bridge` the way `morph::backend::detail::ExecuteOrderGate` was
+extracted out of `RemoteServer` — see [backend.md](backend.md)'s "Per-model
+execute ordering" section for the sibling extraction), under that registry's
+own internal mutex. Callbacks never run under that mutex: `publishResult`
+snapshots the matching sinks under the lock and invokes them outside it,
+marshalled to the `guiExec` executor passed at construction, so a subscriber
+that re-enters the bridge cannot deadlock. A subscription holds a `weak_ptr` to
+its binding, so one belonging to a destroyed handler is skipped and pruned —
+on the next `publishResult` call, not the moment the handler dies — rather
+than dangling. The intended usage remains **single-GUI-thread affinity**: a
+handler and its subscriptions belong to one GUI thread.
+
+Heap-allocated behind a `shared_ptr` (morph#489) rather than a plain member for
+the same reason `_pendingCalls` is: `executeVia()`'s `.then` continuation calls
+`hasSubscribers()`/`publishResult()` from a context that can run after
+`~Bridge()`, and the registry's own "snapshot under lock, invoke outside it"
+discipline (above) means pinning the whole registry with a captured
+`shared_ptr` makes that call safe with no gate at all — unlike
+`onResult`'s call into `assignHandlerPrimary` in the same continuation, which
+genuinely needs the *current* bridge/backend and is gated on
+`detail::BridgeLifetime` instead (see "Destructor" above).
 
 ## Lifetime & ownership
 

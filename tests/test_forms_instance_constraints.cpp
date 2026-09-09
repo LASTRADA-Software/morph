@@ -272,6 +272,36 @@ TEST_CASE("One value can break more than one declared key at once", "[forms][ins
     CHECK(violations[1].kind == ConstraintViolationKind::PrecisionExceeded);
 }
 
+// checkValue's minimum/maximum comparisons at the declared bound itself.
+//
+// Every value checked against version(1, 10)'s [0,10] range above sits
+// comfortably inside (8) or outside (-5, 40, 80) it; none lands on 0 or 10
+// themselves, which is where `<=>`'s `less`/`greater` arms actually change
+// answer -- the same "name claims a boundary, body tests the middle" shape
+// morph#484 named in test_forms_exact_bounds.cpp and
+// tests/test_wire_hardening.cpp. minimum/maximum are documented inclusive
+// (checkValue's own doc comment), so a value equal to either bound must pass,
+// and the smallest possible step past it must not.
+TEST_CASE("checkValue accepts a value exactly at the declared minimum", "[forms][instance-constraints]") {
+    CHECK(version(1, 10).checkValue("value", exact(0, 1, 1)).empty());
+}
+
+TEST_CASE("checkValue rejects the smallest step below the declared minimum", "[forms][instance-constraints]") {
+    const auto violations = version(1, 10).checkValue("value", exact(-1, 10, 1));  // -0.1
+    REQUIRE(violations.size() == 1);
+    CHECK(violations.front().kind == ConstraintViolationKind::BelowMinimum);
+}
+
+TEST_CASE("checkValue accepts a value exactly at the declared maximum", "[forms][instance-constraints]") {
+    CHECK(version(1, 10).checkValue("value", exact(10, 1, 1)).empty());
+}
+
+TEST_CASE("checkValue rejects the smallest step above the declared maximum", "[forms][instance-constraints]") {
+    const auto violations = version(1, 10).checkValue("value", exact(101, 10, 1));  // 10.1
+    REQUIRE(violations.size() == 1);
+    CHECK(violations.front().kind == ConstraintViolationKind::AboveMaximum);
+}
+
 TEST_CASE("A derived value is checked by the same declaration", "[forms][instance-constraints]") {
     // The model's stored value is often not a member of the action at all (a
     // reading multiplied by a dilution factor). `checkValue` is how that value
