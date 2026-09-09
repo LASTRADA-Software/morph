@@ -95,11 +95,12 @@ namespace detail {
     // Work on magnitudes; the sign is reattached at the end. The canonical
     // invariant guarantees denominator > 0, so only the numerator carries sign.
     bool const negative = value.numerator < 0;
-    // Negating INT64_MIN would overflow int64; widen before taking the absolute
-    // value so the magnitude is always representable.
-    auto const num =
-        negative ? static_cast<std::uint64_t>(-static_cast<std::int64_t>(static_cast<std::uint64_t>(value.numerator)))
-                 : static_cast<std::uint64_t>(value.numerator);
+    // Negate in unsigned arithmetic: `-INT64_MIN` is undefined as a signed
+    // operation, and INT64_MIN reaches here through the whole-integer
+    // `Rational{value, DecimalPlaces{n}}` constructor, which does not
+    // canonicalise (and `numerator` is public). `absU64` is the shared helper
+    // that gets this right -- see morph#496.
+    auto const num = ::morph::math::detail::absU64(value.numerator);
     auto const den = static_cast<std::uint64_t>(value.denominator);
     auto const places = static_cast<std::uint32_t>(value.decimalPlaces.value);
 

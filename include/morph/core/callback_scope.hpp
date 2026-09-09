@@ -221,10 +221,14 @@ public:
     /// Idempotent and safe from any thread. The owner remains alive, so tokens
     /// report `CallbackStatus::Stopped` rather than `Expired`. Undone only by
     /// `reset()`, which starts a new generation.
-    void requestStop() noexcept {
-        if (_state != nullptr) {
-            _state->stopped.store(true, std::memory_order_release);
-        }
+    void requestStop() const noexcept {
+        // One load, then act on that generation: re-reading `_state` between
+        // the null test and the store would be a second, possibly different
+        // generation. It is never null (the sole constructor make_shared's it,
+        // the class is non-copyable and non-movable, and `reset()` always
+        // assigns a fresh value), so the former `!= nullptr` guard was an
+        // unreachable branch and is gone -- morph#499.
+        _state.load(std::memory_order_acquire)->stopped.store(true, std::memory_order_release);
     }
 
     /// @brief Retires every token issued so far and starts a fresh, live generation.
@@ -237,18 +241,20 @@ public:
     void reset() {
         auto fresh = std::make_shared<detail::CallbackScopeState>();
         requestStop();
-        _state = std::move(fresh);
+        _state.store(std::move(fresh), std::memory_order_release);
     }
 
     /// @brief Whether this generation has been stopped.
     /// @return `true` after `requestStop()`, until the next `reset()`.
     [[nodiscard]] bool stopRequested() const noexcept {
-        return _state != nullptr && _state->stopped.load(std::memory_order_acquire);
+        return _state.load(std::memory_order_acquire)->stopped.load(std::memory_order_acquire);
     }
 
     /// @brief Issues a weak token for the current generation.
     /// @return A `CallbackToken` observing this scope; keeps nothing alive.
-    [[nodiscard]] CallbackToken token() const noexcept { return CallbackToken{_state}; }
+    [[nodiscard]] CallbackToken token() const noexcept {
+        return CallbackToken{_state.load(std::memory_order_acquire)};
+    }
 
     /// @brief Wraps @p fn so it runs only while this scope is alive and un-stopped.
     ///
@@ -267,7 +273,14 @@ public:
     }
 
 private:
-    std::shared_ptr<detail::CallbackScopeState> _state;
+    /// Atomic because the class documents *every* member as safe to call
+    /// concurrently, and `reset()` writes this while `token()`, `guard()`,
+    /// `requestStop()` and `stopRequested()` read it. A plain `shared_ptr` made
+    /// that a data race on the pointer object itself -- the control block's
+    /// atomic refcount protects the pointee, not the handle (morph#499). The
+    /// guarantee is deliberate, not incidental: `reset()`'s own doc turns on a
+    /// token holder "that pinned it while racing this call".
+    std::atomic<std::shared_ptr<detail::CallbackScopeState>> _state;
 };
 
 }  // namespace morph::async

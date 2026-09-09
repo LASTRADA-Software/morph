@@ -573,3 +573,39 @@ TEST_CASE("CallbackScope: destroying the scope under a concurrent dispatch loop 
         REQUIRE(hits->load() == settled);
     }
 }
+
+// ── morph#499: reset() races every other member ──
+//
+// `_state` was a plain shared_ptr written by reset() and read by token(),
+// guard(), requestStop() and stopRequested(). Concurrent read/write of the same
+// shared_ptr object is a data race -- the control block's atomic refcount
+// protects the pointee, not the handle. The class documents *every* member as
+// concurrently safe, and reset()'s own doc turns on a token holder "that pinned
+// it while racing this call", so the guarantee is deliberate. Now atomic.
+//
+// This case exists to be run under ThreadSanitizer; it is deliberately
+// assertion-light, because what it proves is the absence of a report.
+TEST_CASE("CallbackScope: reset() concurrent with token()/stopRequested() is race-free",
+          "[callback_scope][thread][morph499]") {
+    morph::async::CallbackScope scope;
+    std::atomic<bool> stop{false};
+    std::atomic<int> observed{0};
+
+    std::thread reader{[&] {
+        while (!stop.load(std::memory_order_acquire)) {
+            auto tok = scope.token();
+            (void)tok.active();
+            (void)scope.stopRequested();
+            observed.fetch_add(1, std::memory_order_relaxed);
+        }
+    }};
+    for (int i = 0; i < 2000; ++i) {
+        scope.reset();
+    }
+    stop.store(true, std::memory_order_release);
+    reader.join();
+
+    REQUIRE(observed.load() > 0);
+    // A fresh generation is live after the last reset().
+    REQUIRE(scope.token().active());
+}

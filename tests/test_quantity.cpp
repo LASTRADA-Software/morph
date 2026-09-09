@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <morph/util/quantity.hpp>
 #include <optional>
 #include <span>
@@ -651,4 +652,21 @@ TEST_CASE("NamedQuantity slices to a plain Quantity", "[quantity]") {
     // NamedQuantity default-constructs empty.
     Tariff blank;
     CHECK_FALSE(blank.hasValue());
+}
+
+// ── morph#496: rendering an un-canonicalised INT64_MIN numerator ──
+//
+// formatRationalDecimal negated the numerator with signed arithmetic, which is
+// UB for INT64_MIN -- confirmed by UBSan at quantity.hpp:101 before the fix.
+// INT64_MIN reaches it because the whole-integer `Rational{value, DecimalPlaces}`
+// constructor does not canonicalise (and `numerator` is a public member), so the
+// clamp in canonicalise() never runs on this path.
+TEST_CASE("formatRationalDecimal: an un-canonicalised INT64_MIN numerator renders exactly",
+          "[quantity][rational][morph496]") {
+    morph::math::Rational const value{std::numeric_limits<std::int64_t>::min(), morph::math::DecimalPlaces{0}};
+    // Precondition: this constructor really does keep the trap value.
+    REQUIRE(value.numerator == std::numeric_limits<std::int64_t>::min());
+    // Under -fsanitize=undefined this line was the UB report; the magnitude must
+    // survive the unsigned negation intact rather than wrapping.
+    REQUIRE(morph::units::detail::formatRationalDecimal(value) == "-9223372036854775808");
 }
