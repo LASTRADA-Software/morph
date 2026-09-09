@@ -253,9 +253,47 @@ this pair's contract does not forbid it on the success path either.
 (they defer the outcome out of the dispatch frame rather than acting on it
 under `_attachMtx`), so an inline completion is legal, not merely tolerated.
 
-`assignPrimary` — the *promote* half of a result-keyed action — has **no**
-async counterpart and is not covered here: it is still synchronous on every
-backend, so a result-keyed creating action still blocks at that step.
+### Promotion — `assignPrimaryAsync`
+
+`assignPrimary` — the *promote* half of a result-keyed action — has the same
+optional non-blocking counterpart, `assignPrimaryAsync`, preferred by
+`Bridge::assignHandlerPrimary` and falling back to the synchronous
+`assignPrimary` when a backend returns `false`. Its `onRegistered` echoes the
+`ModelId` back for symmetry with `registerModelAsync`'s callback shape, and
+fires for the no-op cases `assignPrimary` documents (empty primary, dead `mid`,
+key already taken, `mid` already keyed differently) — those are not backend
+failures, so they resolve `onRegistered` exactly as the synchronous path
+returns normally for them. `onError` is for a genuine backend or transport
+failure only.
+
+### Threading contract — the callback's delivery thread
+
+**All four `*Async` hooks share one requirement: a backend must not deliver
+`onRegistered`/`onError` on a thread from which `~Bridge` can run
+concurrently.** This is a contract on the backend, not an implementation detail
+of `Bridge`.
+
+The reason is on `Bridge`'s side. Each of the four continuations behind these
+hooks — `registerHandlerImpl`, `ensureBoundAsync`, `attachHandlerAsync` and
+`assignHandlerPrimary` in `core/bridge.hpp` — tests `CallbackToken::active()`
+and then dereferences `this` (it takes `_attachMtx` and calls `loadBackend()`).
+Those are two steps, so a `~Bridge` completing between them is the
+use-after-free of issue #486 — the same check-then-act shape
+[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md) describes.
+
+Unlike `~BridgeHandler`, these sites cannot close that window with
+`detail::BridgeLifetime`: the gate makes `~Bridge` *block* for the gated span,
+and these spans reach a backend's own registration path. What closes it instead
+is the delivery thread. `QtWebSocketBackend` — the only backend in the tree
+overriding any of the four — satisfies the contract by construction rather than
+by care: it must itself be used from the Qt event loop thread, and it fires all
+four callbacks from `onTextMessage` on that same thread, so the check and the
+use cannot straddle a destructor.
+
+A backend that replies on its own transport thread therefore reopens #486's
+use-after-free. That is a **contract break**, diagnosable from this page and
+from `IBackend::registerModelAsync`'s doc comment — not a latent race to be
+rediscovered by a sanitizer.
 
 ## Error types
 
