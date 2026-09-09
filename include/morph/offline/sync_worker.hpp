@@ -276,8 +276,10 @@ public:
 
     /// @brief Signals an in-progress `run()` to stop after the current item.
     ///
-    /// Thread-safe. The flag is automatically reset at the start of the next
-    /// `run()` call, so stopping is one-shot.
+    /// Thread-safe. `run()` clears the flag at its start, so stopping is
+    /// one-shot — but note a `stop()` that lands *during* a run leaves the flag
+    /// set on return, so the next `run()` takes its early-out and drains
+    /// nothing; work resumes only on the run after that.
     void stop() { _stopped.store(true); }
 
 private:

@@ -94,8 +94,10 @@ public:
             // out from under us (the erase needs _mapMtx too, and never fires
             // while pending is non-empty).
             //
-            // Lock order is _mapMtx → strand->mtx, matching scheduleNext's
-            // scoped_lock{_mapMtx, strand->mtx}. A freshly created strand's mtx
+            // Lock order is _mapMtx → strand->mtx, matching scheduleNext —
+            // which acquires the two sequentially rather than with one
+            // scoped_lock over both, precisely to keep this order (see its own
+            // comment). A freshly created strand's mtx
             // is uncontended; an existing strand's mtx can only be held
             // elsewhere under the same _mapMtx-first order, so no deadlock.
             std::scoped_lock const mapLock{_mapMtx};

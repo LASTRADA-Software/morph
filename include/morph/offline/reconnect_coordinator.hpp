@@ -17,7 +17,10 @@ namespace morph::offline {
 
 /// @brief Outcome of a single `onOnline()` attempt sequence.
 enum class ReconnectOutcome : std::uint8_t {
-    Reconnected,  ///< Backend reopened, made active, context bound, queue replay invoked.
+    Reconnected,  ///< Backend reopened, made active, context bound. Replay is
+                  ///< invoked only if `shouldContinue()` still holds at that
+                  ///< point — see `onOnline()`; `Reconnected` can be returned
+                  ///< without replaying.
     GaveUp,       ///< Exhausted maxAttempts without a successful reconnect; stayed offline.
     Aborted,      ///< shouldContinue() returned false before any reconnect (e.g. went offline again).
 };

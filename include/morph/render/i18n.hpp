@@ -7,8 +7,9 @@
 ///        message keys (`morph::forms::i18n`, `forms/i18n.hpp`).
 ///
 /// `morph::render` is client-side only and never appears on the wire — it is
-/// the namespace the planned per-field widget-override registry
-/// (`gui_renderer_toolkit.md`'s `SlotRegistry`) will eventually share. morph
+/// the namespace the per-field widget-override registry
+/// (`src/qt/forms/qml/SlotRegistry.qml`, documented in
+/// docs/spec/forms/forms.md) shares. morph
 /// ships this seam and the resolution algorithm below; it defines **no**
 /// translation storage format. A host adapts whatever catalog it already
 /// owns (Qt `QTranslator`/`.qm`, a JSON bundle, a database) into the one

@@ -174,7 +174,7 @@ struct ClientHandshakeRequest {
 /// @brief Parses a client's HTTP/1.1 Upgrade request (header block only, no
 ///        trailing blank line).
 /// @param headerBlock The request's header lines, joined by `\r\n`, with no
-///                     trailing `\r\n\r\n` (see `readHttpHeaderBlock`, Task 6).
+///                     trailing `\r\n\r\n` (see `readHttpHeaderBlock`).
 /// @return The extracted key and path.
 /// @throws std::runtime_error if the request line is not a `GET`, or the
 ///         `Sec-WebSocket-Key`/`Upgrade` headers are missing.
@@ -222,7 +222,7 @@ inline ClientHandshakeRequest parseClientHandshakeRequest(std::string_view heade
 /// @brief Verifies the server's HTTP/1.1 101 response against the key the
 ///        client sent.
 /// @param headerBlock The response's header lines, joined by `\r\n`, with no
-///                     trailing `\r\n\r\n` (see `readHttpHeaderBlock`, Task 6).
+///                     trailing `\r\n\r\n` (see `readHttpHeaderBlock`).
 /// @param clientKey   The `Sec-WebSocket-Key` this client sent in its request.
 /// @throws std::runtime_error if the status line is not `101`, or
 ///         `Sec-WebSocket-Accept` does not match `computeAcceptKey(clientKey)`.

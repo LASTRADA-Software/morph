@@ -380,10 +380,11 @@ private:
     }
 
     void stepOrThrow(sqlite3_stmt* stmt, const char* what) const {
-        // A busy/error code is treated the same as reaching the end -- a
-        // production consumer wanting to distinguish SQLITE_BUSY should retry
-        // instead, but a single in-process mutex around the whole connection
-        // makes SQLITE_BUSY practically unreachable for this reference queue.
+        // Anything but SQLITE_DONE throws, so SQLITE_BUSY is not distinguished
+        // from a genuine error -- a production consumer wanting to retry on busy
+        // would need to split them. A single in-process mutex around the whole
+        // connection makes SQLITE_BUSY practically unreachable for this
+        // reference queue, which is why the distinction is not made here.
         if (sqlite3_step(stmt) != SQLITE_DONE) {
             throw SqliteOfflineQueueError{std::string{"SqliteOfflineQueue: "} + what +
                                           " failed: " + sqlite3_errmsg(_db)};
