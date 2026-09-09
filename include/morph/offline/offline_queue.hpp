@@ -22,8 +22,8 @@ struct QueueItem {
     /// @brief Stable identifier assigned at enqueue time.
     ///
     /// Local to *this* queue instance; it is **not** a cross-subsystem
-    /// idempotency key (a durable queue re-presents the same logical op with a
-    /// fresh `id` after a restart, and the journal never sees it). Use
+    /// idempotency key (it is queue-local and the journal never sees it; both
+    /// shipped durable queues re-present the *stored* id after a restart). Use
     /// `idempotencyKey` to dedup a replay against already-applied ops.
     uint64_t id{};
 

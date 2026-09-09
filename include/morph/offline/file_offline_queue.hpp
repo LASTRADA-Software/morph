@@ -29,8 +29,10 @@
 
 namespace morph::offline {
 
-/// @brief Thrown by `FileOfflineQueue` when its on-disk NDJSON cannot be
-///        opened, or a non-trailing line is malformed.
+/// @brief Thrown by `FileOfflineQueue` when a non-trailing line of its on-disk
+///        NDJSON is malformed (via `detail::throwOnGlazeError`). Note the
+///        "cannot be opened" paths throw plain `std::runtime_error`, not this
+///        type — see the constructor's own `@throws`.
 struct FileOfflineQueueError : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -70,8 +72,11 @@ inline void throwOnGlazeError(const glz::error_ctx& errCode, std::string_view co
 /// escaped `\` or `"`, glaze's chunked writer path silently rewrites the
 /// control byte as two 0x00 bytes, corrupting the payload before it ever
 /// reaches disk. Mirrors `morph::wire::detail::EscapingWriteOpts` (`core/wire.hpp`)
-/// exactly; duplicated here (rather than shared) so this header stays free of
-/// a `core/` dependency. Escaping is lossless, so any such byte still
+/// exactly; duplicated here (rather than shared) so this header does not pull in
+/// `core/wire.hpp`'s envelope machinery for a four-line options struct (it
+/// already depends on `core/file_io_ops.hpp`, `core/logger.hpp` and
+/// `core/observability.hpp`, so it is this one header that is being avoided, not
+/// `core/` as such). Escaping is lossless, so any such byte still
 /// round-trips through `fromJson` unchanged.
 struct EscapingWriteOpts : glz::opts {
     /// @brief Emit control bytes as `\\uXXXX` rather than raw.

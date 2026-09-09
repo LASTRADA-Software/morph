@@ -168,7 +168,7 @@ inline Envelope makeRegister(std::string typeId, std::string contextKey = {}) {
 /// is recorded with no owner principal, so `IAuthorizer::authorizeInstance`'s
 /// documented `ownerPrincipal == ctx.principal` policy does not lock the second
 /// client out of an instance the first created — see
-/// docs/planned/shared_model_instances.md.
+/// docs/spec/core/shared_instances.md.
 ///
 /// @param typeId     Model type id to register or attach to.
 /// @param primary    Canonical string encoding of the instance's primary key.
@@ -402,8 +402,10 @@ struct EscapingWriteOpts : glz::opts {
 ///
 /// @p message may embed untrusted content (e.g. an unrecognized `Envelope::kind`
 /// or a caught exception's `what()`) — any raw control byte it contains is
-/// replaced with a `\xHH` placeholder so the encoded envelope is always valid,
-/// re-decodable JSON (see `detail::sanitizeControlChars`).
+/// replaced with a `\xHH` placeholder. This is *output sanitization*, not JSON
+/// validity: `encode`'s `detail::EscapingWriteOpts` already guarantees validity
+/// for every field. What this stops is a raw control byte reaching a terminal or
+/// log that interprets it (see `detail::sanitizeControlChars`).
 inline Envelope makeErr(std::string message, uint64_t callId = 0) {
     Envelope env;
     env.kind = "err";
@@ -414,7 +416,7 @@ inline Envelope makeErr(std::string message, uint64_t callId = 0) {
 
 /// @brief The `err` reply message `RemoteServer` sends when
 ///        `LimitPolicy::executeTimeout` fires server-side (see
-///        `RemoteServer::execute`'s `_timeoutScheduler` path).
+///        `RemoteServer::dispatchExecute`'s `_timeoutScheduler` path).
 ///
 /// `"timeout"` exactly is the documented wire contract (`docs/spec/core/
 /// backend.md`'s `executeTimeout` row, `docs/spec/core/completion.md`'s

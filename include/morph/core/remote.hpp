@@ -288,7 +288,9 @@ public:
     /// to call from a thread that *is* the worker pool — for example, from a
     /// `BridgeHandler` constructor invoked from inside an action handler.
     ///
-    /// Only safe for control messages (`register`, `deregister`). An `execute`
+    /// Safe for every kind except `execute` — `register`, `attach`, `assign`,
+    /// `instances`, `schemas` and `hello` all route through here (see
+    /// `SimulatedRemoteBackend` below, which uses all six). An `execute`
     /// envelope posts to the strand and produces its reply asynchronously, after
     /// this synchronous call has already returned and destroyed the local reply
     /// buffer the deferred callback would write into. To keep that from becoming a
@@ -334,7 +336,7 @@ private:
     /// Peeks at @p msg's `kind`/`modelId` — a cheap, best-effort decode, thrown
     /// away immediately either way — and, for an `execute` naming a `modelId`,
     /// takes an execute-ordering ticket (see `_executeGate`'s own doc comment
-    /// on the class-private members above, and
+    /// on the class-private members, and
     /// `morph::backend::detail::ExecuteOrderGate::take`) *before* posting to
     /// `_pool`, so two same-model `execute`s
     /// posted back-to-back always take their tickets in call order — the
@@ -397,10 +399,13 @@ public:
     /// @brief Reclaims every model still registered under @p cid, then drops the scope.
     ///
     /// Call once the transport observes the connection is gone (disconnect,
-    /// close, error). Erases every surviving model in `cid`'s scope from the
-    /// registry exactly as an explicit `deregister` would (so a later
-    /// `execute` against one of those ids replies `err "model not found"`),
-    /// then drops the scope itself.
+    /// close, error). Releases exactly as many references as this connection
+    /// held, exactly as an explicit `deregister` would, then drops the scope
+    /// itself. A *private* instance (count 1, no directory entry) is erased
+    /// outright, so a later `execute` against its id replies
+    /// `err "model not found"`; a *shared* instance another connection is still
+    /// attached to survives, and an `execute` against it still succeeds — see
+    /// `releaseInstanceLocked`'s early return.
     ///
     /// Idempotent: `cid == 0`, an unknown `cid`, or a `cid` already closed is a
     /// no-op. Deliberately does **not** consult `IAuthorizer` — this is the
@@ -443,8 +448,11 @@ public:
     using LogProvider = std::function<std::shared_ptr<::morph::journal::IActionLog>(std::string_view modelType,
                                                                                     std::string_view contextKey)>;
 
-    /// @brief Installs @p provider, consulted on every `register` envelope whose
-    ///        `contextKey` is non-empty.
+    /// @brief Installs @p provider, consulted whenever an instance is
+    ///        constructed with a non-empty `contextKey` — every `register`
+    ///        envelope, and every `attach` that misses the shared directory and
+    ///        therefore creates the instance (both reach
+    ///        `attachLogIfConfigured`).
     ///
     /// This is what closes the gap `IModelHolder::attachActionLog` leaves open
     /// for remote topologies: `RemoteServer` owns the actual model instances for
@@ -546,9 +554,11 @@ public:
         }
     }
 
-    /// @brief Enters shutdown: from now on, `register` and `execute` envelopes
-    ///        are rejected with `err "server shutting down"`. `deregister` is
-    ///        still served so clients can tear down cleanly.
+    /// @brief Enters shutdown: from now on, `register`, `attach` and `execute`
+    ///        envelopes are rejected with `err "server shutting down"`.
+    ///        `deregister` is still served so clients can tear down cleanly.
+    ///        Note `attach` is refused too, so a client cannot re-attach to a
+    ///        shared instance during the drain window.
     ///
     /// Idempotent — safe to call more than once, and safe to call while
     /// `handle()`/`handleInline()` calls are concurrently in flight on other
@@ -1345,9 +1355,9 @@ private:
             }
         }
         if (!holder) {
-            // The one path this whole mechanism exists to keep fast (finding
-            // 035, and the reverted first attempt this doc comment on the
-            // class-private members describes): a lookup against a modelId
+            // The one path this whole mechanism exists to keep fast (and the
+            // reverted first attempt the doc comment on the class-private
+            // members describes): a lookup against a modelId
             // that is not (or no longer) live must resolve immediately,
             // never waiting on some other, unrelated model's strand — this
             // ticket is released right here, before any wait could ever be
@@ -1462,8 +1472,8 @@ private:
                 // script's own module docstring on its scan scope). This is
                 // the single call site that produces this message, so the
                 // typo-drift risk a shared constant guards against doesn't
-                // apply here the way it does for the consumer-side
-                // comparisons below.
+                // apply here the way it does for the consumer-side comparison
+                // in `core/detail/reply_router.hpp`.
                 timeoutHandle = _timeoutScheduler->schedule(limits.executeTimeout, [complete, callId]() mutable {
                     complete(::morph::wire::encode(::morph::wire::makeErr("timeout", callId)));
                 });
@@ -1714,8 +1724,9 @@ private:
     std::atomic<std::size_t> _inFlightExecutes{0};
     std::unique_ptr<::morph::async::detail::TimeoutScheduler> _timeoutScheduler;
     // Set once by beginShutdown() and never cleared — there is no
-    // un-shutdown. Checked at the top of dispatchMessage() for register and
-    // execute envelopes only; deregister and any other kind are unaffected.
+    // un-shutdown. Checked at the top of dispatchMessage() for register,
+    // attach and execute envelopes; deregister and any other kind are
+    // unaffected.
     std::atomic<bool> _shuttingDown{false};
     // Readiness flag for health(). Flipped to false exactly once, by
     // beginShutdown() — there is no un-shutdown, so once false it stays false.

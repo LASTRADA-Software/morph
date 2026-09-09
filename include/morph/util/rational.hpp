@@ -726,7 +726,8 @@ private:
     /// @brief Logs an `INT64_MIN` component clamped by `canonicalise`.
     ///
     /// Skipped during constant evaluation, and non-throwing, like
-    /// `reportOverflow` -- see that function for why the `catch` is there.
+    /// `reportOverflow` -- see that function for why no local try/catch is
+    /// needed (morph#158 moved that guarantee into the logging layer).
     static constexpr void reportClamp() noexcept {
         if (!std::is_constant_evaluated()) {
             ::morph::log::logError(
@@ -794,8 +795,9 @@ private:
     /// forming that product, so a helper that returns the already-multiplied
     /// values would have to compute the very product being checked for.
     /// @param rhs The other operand.
-    /// @return `leftScaled` multiplies `this->denominator`/`numerator`;
-    ///         `rightScaled` multiplies `rhs.numerator`.
+    /// @return `rightScaled` multiplies `this->numerator` and
+    ///         `this->denominator`; `leftScaled` multiplies `rhs.numerator`
+    ///         (see `addAssignUnchecked`, which applies them).
     [[nodiscard]] constexpr DenominatorScale scaleFactorsFor(const Rational& rhs) const noexcept {
         auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
         return DenominatorScale{
@@ -1355,8 +1357,10 @@ template <std::floating_point Float>
     // the half-ulp llround adds: values in [2^63 - 0.5, 2^63) round *up* to
     // 2^63 and would overflow int64. Casting INT64_MAX instead would itself
     // round up to 2^63 where long double == double. The negative bound is
-    // asymmetric because INT64_MIN == -2^63 is a valid result and llround
-    // maps (-2^63 - 0.5, -2^63] onto it, hence `<` against -2^63 exactly.
+    // asymmetric because llround maps (-2^63 - 0.5, -2^63] onto INT64_MIN,
+    // hence `<` against -2^63 exactly. Note the accepted INT64_MIN does not
+    // survive as such: the constructor below canonicalises, and canonicalise()
+    // clamps it to -INT64_MAX with an error log (see reportClamp).
     constexpr auto twoPow63 = 0x1p63L;
     if (scaled >= twoPow63 - 0.5L || scaled < -twoPow63) {
         return std::unexpected(RationalError::Overflow);

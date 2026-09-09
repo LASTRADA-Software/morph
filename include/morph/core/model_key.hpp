@@ -27,7 +27,7 @@
 ///
 /// Keys travel the wire as strings (`wire::Envelope::primary`) regardless of
 /// their C++ type, so the directory in `RemoteServer` needs exactly one map type
-/// rather than one per key type. See docs/planned/shared_model_instances.md.
+/// rather than one per key type. See docs/spec/core/shared_instances.md.
 
 namespace morph::model {
 
@@ -84,9 +84,10 @@ using UnwrappedKeyOf = std::remove_cvref_t<decltype(*std::declval<const K&>())>;
 
 /// @brief The key type of a model, when one has been declared *for* it.
 ///
-/// Specialised by `BRIDGE_KEY_FROM`, which deduces the type from the action
-/// member it is given — so a model does not have to say anything about keys
-/// inside its own class. The primary template is deliberately empty: a model
+/// Specialised by `BRIDGE_MODEL_KEY` (and `BRIDGE_MODEL_KEY_FROM_RESULT`);
+/// `BRIDGE_KEY_FROM` emits only `ActionKeyTraits` and deliberately leaves this
+/// alone, since the model's key type is already established by its one
+/// `BRIDGE_MODEL_KEY` line. The primary template is deliberately empty: a model
 /// with neither this specialisation nor a nested alias is simply unkeyed.
 /// @tparam Model Concrete model type.
 template <typename Model>
@@ -108,8 +109,8 @@ concept DeducedKey =
 /// @brief Satisfied by model types that have a primary key, however it was named.
 ///
 /// Two ways in, and neither requires touching the model's own class body beyond
-/// the first: a nested `PrimaryKey` alias, or a `BRIDGE_KEY_FROM` declaration
-/// that deduces the type from the action field carrying it. Following
+/// the first: a nested `PrimaryKey` alias, or a `BRIDGE_MODEL_KEY` declaration
+/// naming the type. Following
 /// `morph::forms`' standing rule — *infer by default, declare to override* — a
 /// nested alias wins when both are present, which is what lets a model whose
 /// key type differs from the field's type (an `int` column keyed as a

@@ -422,18 +422,15 @@ dispatch's completion instead of issuing its own; tracked as a follow-up.
 Until then, a caller should not fire the same keyed action twice back-to-back
 before the first settles.
 
-**Not covered: the result-keyed *promote* step is still synchronous.** This
-section made the **bind** half of a result-keyed action async
-(`ensureBoundAsync` → `registerModelSharedAsync`). The **promote** half did
-not change: `Bridge::assignHandlerPrimary` still calls the synchronous
-`IBackend::assignPrimary`, which on `QtWebSocketBackend` is a `sendSync` —
-a nested `QEventLoop`. There is no `assignPrimaryAsync`. So a **WASM client
-dispatching a result-keyed creating action** (a `CreatePoll`-shaped action:
-create the entity, adopt the key its result carries) still blocks, and still
-aborts the page, at the promote step — after the bind step this section fixed
-already succeeded. Payload-keyed actions (`OpenPoll{pollId}`-shaped, the
-attach path) are fully covered and do not block. Giving `assignPrimary` an
-async form is a separate follow-up.
+**The result-keyed *promote* step has since been covered too.** This section
+made the **bind** half of a result-keyed action async (`ensureBoundAsync` →
+`registerModelSharedAsync`). At the time of writing the **promote** half still
+called the synchronous `IBackend::assignPrimary` — a `sendSync`, and so a nested
+`QEventLoop`, on `QtWebSocketBackend` — which blocked and aborted a WASM page.
+That is no longer true: `IBackend::assignPrimaryAsync` exists
+([backend.md](backend.md#promotion--assignprimaryasync)),
+`QtWebSocketBackend` overrides it, and `Bridge::assignHandlerPrimary` prefers it,
+falling back to the synchronous call only when a backend returns `false`.
 
 ## Ownership and authorization
 

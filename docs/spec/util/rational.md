@@ -188,16 +188,21 @@ site when that exact value reaches it:
   straight into the canonicalising constructor.
 - **`reciprocal`** — negates the numerator in the `numerator < 0` branch;
   `INT64_MIN` there overflows.
-- **`canonicalise`** — flips sign for a negative denominator (`numerator =
-  -numerator`) and takes `absoluteNumerator = numerator < 0 ? -numerator :
-  numerator`; both negate `INT64_MIN`. This is the shared sink for every
-  constructor and operator, so any path that lets `INT64_MIN` reach
-  canonicalisation is unsafe.
+- **`canonicalise`** — **no longer one of these.** It clamps an `INT64_MIN`
+  numerator to `-INT64_MAX` (with an `error`-level log, `reportClamp`) *before*
+  any sign flip, and computes the gcd through `detail::absU64`, which negates in
+  unsigned arithmetic. There is no `absoluteNumerator` local any more. Since it
+  is the shared sink for every constructor and operator, a value that reaches it
+  is safe.
 
-Only the wire codec (`setWire`) defends against this: it maps an `INT64_MIN`
+The wire codec (`setWire`) also defends independently: it maps an `INT64_MIN`
 `num`/`den` to `-INT64_MAX` *before* constructing, so untrusted input never
-negates the trap value. In-code call sites get no such guard — keep operands
-well inside the envelope above.
+reaches the trap value at all.
+
+The entry points that do **not** canonicalise are where the hazard remains — the
+whole-integer `Rational{value, DecimalPlaces{n}}` constructor retains its
+numerator verbatim, and `numerator` is a public member. See morph#496 for a
+confirmed UB site reached that way.
 
 ### Checked arithmetic
 
