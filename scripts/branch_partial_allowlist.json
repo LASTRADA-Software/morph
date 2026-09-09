@@ -92,7 +92,7 @@
     },
     {
       "file": "include/morph/core/backend.hpp",
-      "line": 773,
+      "line": 777,
       "source": "if (iter != _models.end()) {",
       "reason": "Unreachable by construction given the `_changeAware`/`_models` invariant (core audit finding BK2). Every model id is inserted into `_changeAware` (when change-aware) in the same `_regMtx`-held critical section that inserts it into `_models` (`createAndTrack`, this file: `if (holder->isBackendChangeAware()) { _changeAware.insert(mid); } _models[mid] = std::move(holder);`), and both are erased together at the single erasure site (`deregisterModel`: `_models.erase(mid); _changeAware.erase(mid);`, also under `_regMtx`). `notifyBackendChanged()` (this function) holds the same `_regMtx` while iterating `_changeAware` and looking each id up in `_models` at this line, so every id it walks is guaranteed still present in `_models` -- the \"not found\" arm cannot occur without a code change that breaks this lockstep bookkeeping."
     },
