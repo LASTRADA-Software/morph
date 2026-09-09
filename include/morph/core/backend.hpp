@@ -149,9 +149,13 @@ struct IBackend {
     ///       `Bridge`. `QtWebSocketBackend` — the only backend in the tree
     ///       overriding any of these — satisfies that by construction: it must
     ///       itself be used from the Qt event loop thread
-    ///       (`qt/qt_websocket_backend.hpp`) and fires all four callbacks from
-    ///       `onTextMessage` on that same thread, so check and use cannot
-    ///       straddle a destructor. **A backend that delivers these callbacks on
+    ///       (`qt/qt_websocket_backend.hpp`), and every *reply-driven* callback
+    ///       fires from `onTextMessage` on that same thread, so check and use
+    ///       cannot straddle a destructor. Its two non-reply paths do not weaken
+    ///       this: a disconnected or no-op dispatch invokes the callback inline,
+    ///       still inside the caller's own frame (which `detail::parkIfInFrame`
+    ///       exists to handle), and `cancelPending` fires the remainder from
+    ///       `~Bridge` itself — which is not a *concurrent* destructor. **A backend that delivers these callbacks on
     ///       a thread the `Bridge`'s owner does not control breaks this contract
     ///       and reopens that use-after-free** — it is a contract break, not a
     ///       latent race to be discovered. See morph#489 and

@@ -292,9 +292,12 @@ gated span, and each span acquires `_attachMtx` — which the synchronous
 on a wire backend. What closes the window instead is the delivery thread.
 `QtWebSocketBackend` — the only backend in the tree overriding any of the four —
 satisfies the contract by construction rather than by care: it must itself be
-used from the Qt event loop thread, and it fires all four callbacks from
+used from the Qt event loop thread, and every *reply-driven* callback fires from
 `onTextMessage` on that same thread, so the check and the use cannot straddle a
-destructor.
+destructor. Its two non-reply paths do not weaken this — a disconnected or no-op
+dispatch invokes the callback inline, inside the caller's own frame (which
+`Bridge::detail::parkIfInFrame` exists to handle), and `cancelPending` fires the
+remainder from `~Bridge` itself, which is not a *concurrent* destructor.
 
 A backend that replies on its own transport thread therefore reopens #486's
 use-after-free. That is a **contract break**, diagnosable from this page and
