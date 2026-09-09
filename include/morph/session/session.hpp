@@ -93,9 +93,25 @@ struct Principal {
 
 /// @brief Authorizes incoming actions on a `RemoteServer`.
 ///
-/// Called once per `execute` envelope, before the action is dispatched. A `false`
-/// return causes the server to reply with `err|unauthorized` (the client surfaces
-/// the error through the `.onError(...)` callback).
+/// Called before dispatch on **three** envelope kinds, not only `execute`. A
+/// `false` return causes the server to reply with `err|unauthorized` (the client
+/// surfaces the error through the `.onError(...)` callback):
+///
+/// | Envelope | `modelType` | `actionType` |
+/// |---|---|---|
+/// | `execute`   | `env.modelType` | `env.actionType` |
+/// | `instances` | `env.typeId`    | **empty** |
+/// | `schemas`   | `env.typeId`    | **empty** |
+///
+/// The two read channels are gated deliberately, so a deployer can refuse
+/// enumeration or schema disclosure without refusing use -- `schemas` returns
+/// field names, bounds, rules and the payload fingerprint of every action, so it
+/// must not be reachable by a caller the server would not let execute.
+///
+/// **An implementation that switches or matches on `actionType` must handle the
+/// empty case explicitly**, or it will hit its default arm on exactly those two
+/// disclosure verbs. Whether that fails open or closed is the implementation's
+/// choice, but it has to be a choice (morph#500).
 ///
 /// Default implementation supplied by the framework is `AllowAllAuthorizer`. Real
 /// deployments install a custom subclass that checks principal claims, action
@@ -108,7 +124,9 @@ struct IAuthorizer {
     ///
     /// @param ctx        Per-call session attached by the client.
     /// @param modelType  String id of the target model type.
-    /// @param actionType String id of the action being invoked.
+    /// @param actionType String id of the action being invoked, or **empty** for
+    ///                   the `instances` and `schemas` envelopes -- see the
+    ///                   table on this interface's own doc comment.
     /// @return `true` to allow dispatch, `false` to reject with `err|unauthorized`.
     [[nodiscard]] virtual bool authorize(const Context& ctx,
                                          // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
