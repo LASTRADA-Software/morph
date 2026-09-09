@@ -267,7 +267,9 @@ struct HandshakeReadResult {
 /// @param socket Connected socket to read from.
 /// @return The header text and any leftover bytes read past the terminator.
 /// @throws std::runtime_error if the peer closes before completing the header,
-///         or if the header exceeds a 64 KiB safety cap.
+///         or if the header exceeds a ~64 KiB safety cap. The check runs before
+///         each `recvSome`, so the true bound is 64 KiB rounded up to the next
+///         read chunk (tests/net/test_handshake_over_socket.cpp says the same).
 inline HandshakeReadResult readHttpHeaderBlock(TcpSocket& socket) {
     std::string buf;
     char chunk[4096];

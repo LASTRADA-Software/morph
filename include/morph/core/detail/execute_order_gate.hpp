@@ -87,7 +87,12 @@ public:
         std::scoped_lock const lock{_mtx};
         auto iter = _gates.find(mid);
         if (iter == _gates.end()) {
-            return;  // Defensive; should not happen (this ticket's own take() created the entry).
+            // A supported call, not an impossibility: the file-level contract
+            // above lists "tolerate a gate already erased" as a first-class
+            // element, and tests/test_execute_order_gate.cpp names the case
+            // ("releasing a ticket for a model with no gate entry is a
+            // harmless no-op").
+            return;
         }
         auto& gate = *iter->second;
         // `nextToRun` is the lowest ticket that has *not* released yet, which

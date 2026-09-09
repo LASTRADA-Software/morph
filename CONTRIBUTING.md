@@ -93,6 +93,16 @@ serialising independent rungs behind one file.
 - **Formatting/linting:** `.clang-format` and `.clang-tidy` govern C++;
   markdown follows `.markdownlint.yaml` (119-column limit; code blocks and
   tables exempt). `pre-commit run --all-files` runs the configured hooks.
+
+  **Public macro definitions are exempt, by `// clang-format off`.** They are
+  the framework's documented API and contributors read them as reference, so
+  the continuation backslashes are hand-aligned and the body stays legible as
+  a block; leaving them to the formatter means any unrelated edit nearby
+  re-wraps the whole definition, and in one case it broke a token-paste
+  (`##`) invocation apart. Freeze them, and realign by hand if a body changes.
+  The sites carry a one-line pointer back here rather than repeating this
+  paragraph — it used to be copy-pasted at all seventeen of them, and two of
+  those copies had drifted into describing code that was not there.
 - **Keep mechanical facts honest:** `docs/spec/pinned_facts.toml` pins the
   mechanical facts that recur across specs — enum cardinalities, key
   constants (`kMaxEnvelopeBytes`, `kMaxDecimalPlaces`, `kClockSkewMs`),

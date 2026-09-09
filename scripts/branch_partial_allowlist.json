@@ -122,19 +122,19 @@
     },
     {
       "file": "include/morph/net/socket_server.hpp",
-      "line": 188,
+      "line": 189,
       "source": "if (t.joinable()) {",
       "reason": "Unreachable by construction (net audit, `socket_server.hpp` finding #6, re-verified against the current `close()` after the morph#451 fix serialized its whole body under `_closeMtx`). `_clientThreads` has exactly one push site (`acceptLoop()`, always a freshly-constructed, running `std::thread`) and this loop is the only place any entry is ever joined or detached. With `close()`'s entire body now serialized by `_closeMtx`, only one caller's `close()` can ever reach this loop: a second, later call observes `wasAlreadyClosing == true` and `!_acceptThread.joinable()` (already joined by the winner) and takes the early return above, before ever reaching the client-thread swap-and-join section this line is in. So every `std::thread` this loop iterates over is a fresh entry pushed by `acceptLoop()` that nothing has touched yet -- `joinable()` cannot be false here."
     },
     {
       "file": "include/morph/net/socket_server.hpp",
-      "line": 211,
+      "line": 212,
       "source": "if (closed.load() || !socket.valid()) {",
       "reason": "The `!socket.valid()` disjunct is unreachable by construction (net audit, `socket_server.hpp` finding #7). `ClientConnection::socket` is set once at construction and never moved from or reassigned anywhere in this file (`grep -n \"conn->socket\\|->socket\\.\"` finds only method calls on it, never an assignment or `std::move`). `sendText()` is only ever called while a `shared_ptr<ClientConnection>` keeps the connection alive, and the only place `TcpSocket::valid()` can become false is that socket's own destructor, which cannot run while such a `shared_ptr` is held. `closed.store(true)` (this same class's `close()` handling, `clientLoop`'s catches) is what every code path that could plausibly invalidate the socket sets first, so the `closed.load()` disjunct alone already accounts for every real teardown path this connection can take."
     },
     {
       "file": "include/morph/net/socket_server.hpp",
-      "line": 253,
+      "line": 254,
       "source": "if (!clientSocket) {",
       "reason": "Real, reachable race (`tryAccept()` returning nullopt because the pending connection went away before it was taken), but accepted as documented rather than forced with a flaky test after extensive attempts (net audit, `socket_server.hpp` finding #10). Three different techniques were tried: a single real `TcpSocket::connect()` immediately followed by an abortive (`SO_LINGER{1,0}`) close (0/150 hits); a burst of many such attempts to build backlog depth (still 0 hits); and a burst of bare non-blocking `::connect()`+abort attempts skipping `TcpSocket::connect()`'s `getaddrinfo()`/poll overhead (960 attempts across 15 bursts, still 0 hits, with most connections resetting before the TCP handshake progressed far enough to make the listener readable at all, rather than after). No way was found, from outside the process, to reliably land in the specific narrow window this branch requires on this machine. Reported as attempted-and-left-open rather than forcing something flakier."
     },

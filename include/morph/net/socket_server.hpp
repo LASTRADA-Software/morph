@@ -41,8 +41,9 @@ struct SocketServerConfig {
 /// @par Threading
 /// Owns one accept thread plus one thread per accepted connection — there is
 /// no shared event loop. `RemoteServer::handle()` replies arrive on the
-/// server's worker-pool thread and are marshalled back onto the owning
-/// connection's own write path, serialized by a per-connection mutex.
+/// server's worker-pool thread and are written back on that same thread, over
+/// the owning connection's socket, serialized by a per-connection write mutex.
+/// Nothing is handed to the connection's own reader thread.
 ///
 /// @par Lifetime
 /// Holds `RemoteServer& _server` by reference, exactly like

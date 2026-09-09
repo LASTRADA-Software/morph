@@ -66,6 +66,11 @@ inline constexpr std::uint32_t kProtocolVersion = 1;
 ///                   the serialized result in `body`. For `register` replies,
 ///                   `modelId` carries the new id.
 /// - `"err"`       — server failure reply. Uses `callId` if present and `message`.
+/// - `"hello"`     — client opens protocol-version negotiation, once per
+///                   connection before any other kind. Uses `protocolVersion`;
+///                   see `makeHello()` and `interpretHelloReply()`. A peer
+///                   predating negotiation answers `err "unknown envelope kind:
+///                   hello"`, which is how a legacy server is detected.
 struct Envelope {
     /// @brief Discriminator — see class docstring for valid values.
     std::string kind;
@@ -568,7 +573,7 @@ enum class ProtocolNegotiationResult : std::uint8_t {
 /// @param reply Decoded reply envelope — the result of `decode()` on the
 ///        response to a `"hello"` round-trip.
 /// @return `Negotiated` if @p reply's `kind` is `"ok"`; `LegacyPeer` if it is
-///         an `"err"` whose `message` is exactly `"unknown envelope kind:
+///         an envelope whose `message` is exactly `"unknown envelope kind:
 ///         hello"` — the generic unrecognised-`kind` message a pre-negotiation
 ///         `RemoteServer` produces for a `kind` it does not switch on.
 /// @throws std::runtime_error if @p reply is any other `"err"` (e.g.
@@ -579,6 +584,10 @@ inline ProtocolNegotiationResult interpretHelloReply(const Envelope& reply) {
     if (reply.kind == "ok") {
         return ProtocolNegotiationResult::Negotiated;
     }
+    // Matched on `message` alone: `kind` is deliberately not inspected, because a
+    // peer old enough to not know `hello` is also a peer whose error shape we do
+    // not want to depend on. Any envelope carrying exactly this message is
+    // treated as a legacy peer.
     if (reply.message == "unknown envelope kind: hello") {
         return ProtocolNegotiationResult::LegacyPeer;
     }

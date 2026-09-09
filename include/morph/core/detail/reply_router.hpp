@@ -92,7 +92,10 @@ enum class ExecuteReplyKind : std::uint8_t {
 ///         `operator[]`, which value-initializes before assigning.
 ///
 /// Owns the call-id counter as well as the map, so the two cannot be
-/// allocated and stored under different locks by accident.
+/// allocated and stored by different owners by accident. Note the counter is a
+/// lock-free `std::atomic` read *outside* `_mtx`, on purpose: allocating an id
+/// and inserting its entry are deliberately not one atomic step -- `insertIf`'s
+/// admit predicate is what makes the insert safe, not a shared lock.
 template <class PendingT>
 class PendingCallTable {
 public:
