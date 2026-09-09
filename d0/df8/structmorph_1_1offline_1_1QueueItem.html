@@ -156,7 +156,7 @@ Public Attributes</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Stable identifier assigned at enqueue time. </p>
-<p>Local to <em>this</em> queue instance; it is <b>not</b> a cross-subsystem idempotency key (a durable queue re-presents the same logical op with a fresh <span class="tt"><a class="el" href="#a2a14f744ed7ff3f42104b17239932e84" title="Stable identifier assigned at enqueue time.">id</a></span> after a restart, and the journal never sees it). Use <span class="tt"><a class="el" href="#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">idempotencyKey</a></span> to dedup a replay against already-applied ops. </p>
+<p>Local to <em>this</em> queue instance; it is <b>not</b> a cross-subsystem idempotency key (it is queue-local and the journal never sees it; both shipped durable queues re-present the <em>stored</em> id after a restart). Use <span class="tt"><a class="el" href="#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">idempotencyKey</a></span> to dedup a replay against already-applied ops. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 

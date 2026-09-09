@@ -128,14 +128,14 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/ded/structm
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Model&gt;<br />
 struct morph::model::ModelKeyTraits&lt; Model &gt;</div><p>The key type of a model, when one has been declared <em>for</em> it. </p>
-<p>Specialised by <span class="tt"><a class="el" href="../../d1/dd8/model__key_8hpp.html#a79a6fa314d058ddd9e12101c176394cf" title="Declares that action A also carries its model&#39;s primary key in MEMBER.">BRIDGE_KEY_FROM</a></span>, which deduces the type from the action member it is given — so a model does not have to say anything about keys inside its own class. The primary template is deliberately empty: a model with neither this specialisation nor a nested alias is simply unkeyed. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+<p>Specialised by <span class="tt"><a class="el" href="../../d1/dd8/model__key_8hpp.html#a28cbd851334147678a680d1057cadcd3" title="Declares that action A is the one that defines model M&#39;s primary key.">BRIDGE_MODEL_KEY</a></span> (and <span class="tt"><a class="el" href="../../d1/dd8/model__key_8hpp.html#af5e54ba674bd5c947b94a8199d662d60" title="Declares that action A&#39;s result establishes its model&#39;s primary key.">BRIDGE_MODEL_KEY_FROM_RESULT</a></span>); <span class="tt"><a class="el" href="../../d1/dd8/model__key_8hpp.html#a79a6fa314d058ddd9e12101c176394cf" title="Declares that action A also carries its model&#39;s primary key in MEMBER.">BRIDGE_KEY_FROM</a></span> emits only <span class="tt"><a class="el" href="../../d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html" title="Declares where an action&#39;s model key comes from.">ActionKeyTraits</a></span> and deliberately leaves this alone, since the model's key type is already established by its one <span class="tt"><a class="el" href="../../d1/dd8/model__key_8hpp.html#a28cbd851334147678a680d1057cadcd3" title="Declares that action A is the one that defines model M&#39;s primary key.">BRIDGE_MODEL_KEY</a></span> line. The primary template is deliberately empty: a model with neither this specialisation nor a nested alias is simply unkeyed. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Model</td><td>Concrete model type. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
 </div><hr/>The documentation for this struct was generated from the following file:<ul>
 <li>morph/core/<a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a></li>
 </ul>

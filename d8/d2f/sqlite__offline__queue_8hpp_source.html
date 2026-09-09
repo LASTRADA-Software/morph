@@ -523,57 +523,58 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span>    }</div>
 <div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span> </div>
 <div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span>    <span class="keywordtype">void</span> stepOrThrow(sqlite3_stmt* stmt, <span class="keyword">const</span> <span class="keywordtype">char</span>* what)<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span>        <span class="comment">// A busy/error code is treated the same as reaching the end -- a</span></div>
-<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span>        <span class="comment">// production consumer wanting to distinguish SQLITE_BUSY should retry</span></div>
-<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span>        <span class="comment">// instead, but a single in-process mutex around the whole connection</span></div>
-<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span>        <span class="comment">// makes SQLITE_BUSY practically unreachable for this reference queue.</span></div>
-<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span>        <span class="keywordflow">if</span> (sqlite3_step(stmt) != SQLITE_DONE) {</div>
-<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: &quot;</span>} + what +</div>
-<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span>                                          <span class="stringliteral">&quot; failed: &quot;</span> + sqlite3_errmsg(_db)};</div>
-<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>        }</div>
-<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>    }</div>
-<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span> </div>
-<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span>    <span class="keyword">static</span> std::string textColumn(sqlite3_stmt* stmt, <span class="keywordtype">int</span> index) {</div>
-<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span>        <span class="keyword">const</span> <span class="keyword">auto</span>* text = <span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span><span class="keywordtype">char</span>*<span class="keyword">&gt;</span>(sqlite3_column_text(stmt, index));</div>
-<div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span>        <span class="keywordflow">return</span> text != <span class="keyword">nullptr</span> ? std::string{text} : std::string{};</div>
-<div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span>    }</div>
-<div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span> </div>
-<div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span>    <span class="keyword">static</span> std::int64_t nowMillis() {</div>
-<div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span>        <span class="keywordflow">return</span> std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</div>
-<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>                   std::chrono::system_clock::now().time_since_epoch())</div>
-<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>            .count();</div>
-<div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span>    }</div>
-<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span><span class="comment"></span> </div>
-<div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span><span class="comment">    /// @brief Returns the current row count. Caller must hold `_mtx`.</span></div>
-<div class="line"><a id="l00405" name="l00405"></a><span class="lineno">  405</span><span class="comment">    /// @return `COUNT(*)` against `morph_offline_queue`.</span></div>
-<div class="line"><a id="l00406" name="l00406"></a><span class="lineno">  406</span>    std::size_t countLocked()<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00407" name="l00407"></a><span class="lineno">  407</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;SELECT COUNT(*) FROM morph_offline_queue;&quot;</span>)};</div>
-<div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span>        sqlite3_step(guard.get());</div>
-<div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>std::size_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 0));</div>
-<div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span>    }</div>
-<div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span><span class="comment"></span> </div>
-<div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span><span class="comment">    /// @brief Throws `OfflineQueueFullError` if the queue is already at</span></div>
-<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span><span class="comment">    ///        `maxDepth()`. Caller must hold `_mtx`. No-op if unbounded.</span></div>
-<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span>    <span class="keywordtype">void</span> checkCapacityLocked()<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span>        <span class="keywordflow">if</span> (!_maxDepth) {</div>
-<div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span>            <span class="keywordflow">return</span>;</div>
-<div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span>        }</div>
-<div class="line"><a id="l00418" name="l00418"></a><span class="lineno">  418</span>        std::size_t <span class="keyword">const</span> current = countLocked();</div>
-<div class="line"><a id="l00419" name="l00419"></a><span class="lineno">  419</span>        <span class="keywordflow">if</span> (current &gt;= *_maxDepth) {</div>
-<div class="line"><a id="l00420" name="l00420"></a><span class="lineno">  420</span>            ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,</div>
-<div class="line"><a id="l00421" name="l00421"></a><span class="lineno">  421</span>                                                 <span class="keyword">static_cast&lt;</span><span class="keywordtype">double</span><span class="keyword">&gt;</span>(current));</div>
-<div class="line"><a id="l00422" name="l00422"></a><span class="lineno">  422</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html">OfflineQueueFullError</a>{*_maxDepth, current};</div>
-<div class="line"><a id="l00423" name="l00423"></a><span class="lineno">  423</span>        }</div>
-<div class="line"><a id="l00424" name="l00424"></a><span class="lineno">  424</span>    }</div>
-<div class="line"><a id="l00425" name="l00425"></a><span class="lineno">  425</span> </div>
-<div class="line"><a id="l00426" name="l00426"></a><span class="lineno">  426</span>    std::filesystem::path _path;</div>
-<div class="line"><a id="l00427" name="l00427"></a><span class="lineno">  427</span>    <span class="keyword">mutable</span> sqlite3* _db = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00428" name="l00428"></a><span class="lineno">  428</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
-<div class="line"><a id="l00429" name="l00429"></a><span class="lineno">  429</span>    std::optional&lt;std::size_t&gt; _maxDepth;</div>
-<div class="line"><a id="l00430" name="l00430"></a><span class="lineno">  430</span>};</div>
+<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span>        <span class="comment">// Anything but SQLITE_DONE throws, so SQLITE_BUSY is not distinguished</span></div>
+<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span>        <span class="comment">// from a genuine error -- a production consumer wanting to retry on busy</span></div>
+<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span>        <span class="comment">// would need to split them. A single in-process mutex around the whole</span></div>
+<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span>        <span class="comment">// connection makes SQLITE_BUSY practically unreachable for this</span></div>
+<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span>        <span class="comment">// reference queue, which is why the distinction is not made here.</span></div>
+<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>        <span class="keywordflow">if</span> (sqlite3_step(stmt) != SQLITE_DONE) {</div>
+<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{std::string{<span class="stringliteral">&quot;SqliteOfflineQueue: &quot;</span>} + what +</div>
+<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>                                          <span class="stringliteral">&quot; failed: &quot;</span> + sqlite3_errmsg(_db)};</div>
+<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>        }</div>
+<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span>    }</div>
+<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span> </div>
+<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span>    <span class="keyword">static</span> std::string textColumn(sqlite3_stmt* stmt, <span class="keywordtype">int</span> index) {</div>
+<div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span>        <span class="keyword">const</span> <span class="keyword">auto</span>* text = <span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span><span class="keywordtype">char</span>*<span class="keyword">&gt;</span>(sqlite3_column_text(stmt, index));</div>
+<div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span>        <span class="keywordflow">return</span> text != <span class="keyword">nullptr</span> ? std::string{text} : std::string{};</div>
+<div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span>    }</div>
+<div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span> </div>
+<div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span>    <span class="keyword">static</span> std::int64_t nowMillis() {</div>
+<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>        <span class="keywordflow">return</span> std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</div>
+<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>                   std::chrono::system_clock::now().time_since_epoch())</div>
+<div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span>            .count();</div>
+<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span>    }</div>
+<div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span><span class="comment"></span> </div>
+<div class="line"><a id="l00405" name="l00405"></a><span class="lineno">  405</span><span class="comment">    /// @brief Returns the current row count. Caller must hold `_mtx`.</span></div>
+<div class="line"><a id="l00406" name="l00406"></a><span class="lineno">  406</span><span class="comment">    /// @return `COUNT(*)` against `morph_offline_queue`.</span></div>
+<div class="line"><a id="l00407" name="l00407"></a><span class="lineno">  407</span>    std::size_t countLocked()<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;SELECT COUNT(*) FROM morph_offline_queue;&quot;</span>)};</div>
+<div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span>        sqlite3_step(guard.get());</div>
+<div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>std::size_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 0));</div>
+<div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span>    }</div>
+<div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span><span class="comment"></span> </div>
+<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span><span class="comment">    /// @brief Throws `OfflineQueueFullError` if the queue is already at</span></div>
+<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span><span class="comment">    ///        `maxDepth()`. Caller must hold `_mtx`. No-op if unbounded.</span></div>
+<div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span>    <span class="keywordtype">void</span> checkCapacityLocked()<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span>        <span class="keywordflow">if</span> (!_maxDepth) {</div>
+<div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00418" name="l00418"></a><span class="lineno">  418</span>        }</div>
+<div class="line"><a id="l00419" name="l00419"></a><span class="lineno">  419</span>        std::size_t <span class="keyword">const</span> current = countLocked();</div>
+<div class="line"><a id="l00420" name="l00420"></a><span class="lineno">  420</span>        <span class="keywordflow">if</span> (current &gt;= *_maxDepth) {</div>
+<div class="line"><a id="l00421" name="l00421"></a><span class="lineno">  421</span>            ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,</div>
+<div class="line"><a id="l00422" name="l00422"></a><span class="lineno">  422</span>                                                 <span class="keyword">static_cast&lt;</span><span class="keywordtype">double</span><span class="keyword">&gt;</span>(current));</div>
+<div class="line"><a id="l00423" name="l00423"></a><span class="lineno">  423</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html">OfflineQueueFullError</a>{*_maxDepth, current};</div>
+<div class="line"><a id="l00424" name="l00424"></a><span class="lineno">  424</span>        }</div>
+<div class="line"><a id="l00425" name="l00425"></a><span class="lineno">  425</span>    }</div>
+<div class="line"><a id="l00426" name="l00426"></a><span class="lineno">  426</span> </div>
+<div class="line"><a id="l00427" name="l00427"></a><span class="lineno">  427</span>    std::filesystem::path _path;</div>
+<div class="line"><a id="l00428" name="l00428"></a><span class="lineno">  428</span>    <span class="keyword">mutable</span> sqlite3* _db = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00429" name="l00429"></a><span class="lineno">  429</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
+<div class="line"><a id="l00430" name="l00430"></a><span class="lineno">  430</span>    std::optional&lt;std::size_t&gt; _maxDepth;</div>
+<div class="line"><a id="l00431" name="l00431"></a><span class="lineno">  431</span>};</div>
 </div>
-<div class="line"><a id="l00431" name="l00431"></a><span class="lineno">  431</span> </div>
-<div class="line"><a id="l00432" name="l00432"></a><span class="lineno">  432</span>}  <span class="comment">// namespace morph::offline</span></div>
+<div class="line"><a id="l00432" name="l00432"></a><span class="lineno">  432</span> </div>
+<div class="line"><a id="l00433" name="l00433"></a><span class="lineno">  433</span>}  <span class="comment">// namespace morph::offline</span></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">morph::offline::SqliteOfflineQueue</a></div><div class="ttdoc">Reference SQLite-backed IOfflineQueue: persists payload, idempotencyKey, and attempts across process ...</div><div class="ttdef"><b>Definition</b> <a href="#l00098">sqlite_offline_queue.hpp:98</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a158cd872caa3d353fd4a7a04e0327b5c"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">morph::offline::SqliteOfflineQueue::setIdempotencyKey</a></div><div class="ttdeci">void setIdempotencyKey(uint64_t itemId, std::string idempotencyKey) override</div><div class="ttdoc">Stamps an idempotency key onto an already-inserted row. No-op if itemId is absent....</div><div class="ttdef"><b>Definition</b> <a href="#l00316">sqlite_offline_queue.hpp:316</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a502fb36fc3b6d06d0b71562886764d70"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">morph::offline::SqliteOfflineQueue::maxDepth</a></div><div class="ttdeci">std::optional&lt; std::size_t &gt; maxDepth() const override</div><div class="ttdoc">Returns the configured maximum depth, or std::nullopt if unbounded.</div><div class="ttdef"><b>Definition</b> <a href="#l00306">sqlite_offline_queue.hpp:306</a></div></div>

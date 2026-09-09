@@ -145,8 +145,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d1c/offline
 <div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="comment">    /// @brief Stable identifier assigned at enqueue time.</span></div>
 <div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">    ///</span></div>
 <div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">    /// Local to *this* queue instance; it is **not** a cross-subsystem</span></div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">    /// idempotency key (a durable queue re-presents the same logical op with a</span></div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">    /// fresh `id` after a restart, and the journal never sees it). Use</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">    /// idempotency key (it is queue-local and the journal never sees it; both</span></div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">    /// shipped durable queues re-present the *stored* id after a restart). Use</span></div>
 <div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">    /// `idempotencyKey` to dedup a replay against already-applied ops.</span></div>
 <div class="line"><a id="l00028" name="l00028"></a><span class="lineno"><a class="line" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84">   28</a></span>    uint64_t <span class="keywordtype">id</span>{};</div>
 <div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment"></span> </div>

@@ -384,9 +384,9 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Signals an in-progress <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> to stop after the current item. </p>
-<p>Thread-safe. The flag is automatically reset at the start of the next <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> call, so stopping is one-shot. </p>
+<p>Thread-safe. <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> clears the flag at its start, so stopping is one-shot — but note a <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress run() to stop after the current item.">stop()</a></span> that lands <em>during</em> a run leaves the flag set on return, so the next <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> takes its early-out and drains nothing; work resumes only on the run after that. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00281">281</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00283">283</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>

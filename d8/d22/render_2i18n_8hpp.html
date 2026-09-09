@@ -142,7 +142,7 @@ Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The renderer-side translation-catalog seam over morph's derived message keys (<span class="tt">morph::forms::i18n</span>, <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html" title="Stable, schema-derived message-key vocabulary for renderer i18n.">forms/i18n.hpp</a></span>). </p>
-<p><span class="tt">morph::render</span> is client-side only and never appears on the wire — it is the namespace the planned per-field widget-override registry (<span class="tt">gui_renderer_toolkit.md</span>'s <span class="tt">SlotRegistry</span>) will eventually share. morph ships this seam and the resolution algorithm below; it defines <b>no</b> translation storage format. A host adapts whatever catalog it already owns (Qt <span class="tt">QTranslator</span>/<span class="tt">.qm</span>, a JSON bundle, a database) into the one <span class="tt">TranslationProvider</span> signature. </p>
+<p><span class="tt">morph::render</span> is client-side only and never appears on the wire — it is the C++ side of the client-side rendering seam. The per-field widget-override registry that pairs with it is <em>not</em> C++ at all: it is <span class="tt">SlotRegistry</span>, a QML type in module <span class="tt">MorphForms</span> (<span class="tt">src/qt/forms/qml/SlotRegistry.qml</span>, documented in docs/spec/forms/forms.md), so do not look for it under this namespace. morph ships this seam and the resolution algorithm below; it defines <b>no</b> translation storage format. A host adapts whatever catalog it already owns (Qt <span class="tt">QTranslator</span>/<span class="tt">.qm</span>, a JSON bundle, a database) into the one <span class="tt">TranslationProvider</span> signature. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html">i18n.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Typedef Documentation</h2>
@@ -164,7 +164,7 @@ Functions</h2></td></tr>
 <p>A default-constructed (empty) <span class="tt">TranslationProvider</span> means "no catalog
 installed" — <span class="tt">resolveText</span> treats it the same as a provider that misses on every key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html">i18n.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html">i18n.hpp</a>.</p>
 
 </div>
 </div>
@@ -229,7 +229,7 @@ installed" — <span class="tt">resolveText</span> treats it the same as a provi
 </li>
 </ol>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html">i18n.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html">i18n.hpp</a>.</p>
 
 </div>
 </div>

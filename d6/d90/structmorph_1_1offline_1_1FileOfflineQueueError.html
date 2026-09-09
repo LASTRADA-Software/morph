@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d90/structm
 </div><!--header-->
 <div class="contents">
 
-<p>Thrown by <span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span> when its on-disk NDJSON cannot be opened, or a non-trailing line is malformed.  
+<p>Thrown by <span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span> when a non-trailing line of its on-disk NDJSON is malformed (via <span class="tt">detail::throwOnGlazeError</span>). Note the "cannot be opened" paths throw plain <span class="tt">std::runtime_error</span>, not this type — see the constructor's own exception documentation.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>&gt;</code></p>
@@ -132,9 +132,9 @@ Inheritance diagram for morph::offline::FileOfflineQueueError:</div>
   <img src="../../d6/d90/structmorph_1_1offline_1_1FileOfflineQueueError.png" alt=""/>
  </div></div>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Thrown by <span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span> when its on-disk NDJSON cannot be opened, or a non-trailing line is malformed. </p>
+<div class="textblock"><p>Thrown by <span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span> when a non-trailing line of its on-disk NDJSON is malformed (via <span class="tt">detail::throwOnGlazeError</span>). Note the "cannot be opened" paths throw plain <span class="tt">std::runtime_error</span>, not this type — see the constructor's own exception documentation. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00034">34</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 </div><hr/>The documentation for this struct was generated from the following file:<ul>
 <li>morph/offline/<a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a></li>
 </ul>

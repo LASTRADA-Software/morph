@@ -150,7 +150,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a9c30776adb059a937a151eceeccc5875" id="r_a9c30776adb059a937a151eceeccc5875"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9c30776adb059a937a151eceeccc5875">closeConnection</a> (ConnectionId cid)</td></tr>
 <tr class="memdesc:a9c30776adb059a937a151eceeccc5875"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reclaims every model still registered under <code class="param">cid</code>, then drops the scope.  <br /></td></tr>
 <tr class="memitem:a99f2c685f538d7cbdbdc8f762c9cca47" id="r_a99f2c685f538d7cbdbdc8f762c9cca47"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a99f2c685f538d7cbdbdc8f762c9cca47">setLogProvider</a> (<a class="el" href="#a7a5bff8cb318d46f4347cc5211b92e81">LogProvider</a> provider)</td></tr>
-<tr class="memdesc:a99f2c685f538d7cbdbdc8f762c9cca47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code class="param">provider</code>, consulted on every <span class="tt">register</span> envelope whose <span class="tt">contextKey</span> is non-empty.  <br /></td></tr>
+<tr class="memdesc:a99f2c685f538d7cbdbdc8f762c9cca47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code class="param">provider</code>, consulted whenever an instance is constructed with a non-empty <span class="tt">contextKey</span> — every <span class="tt">register</span> envelope, and every <span class="tt">attach</span> that misses the shared directory and therefore creates the instance (both reach <span class="tt">attachLogIfConfigured</span>).  <br /></td></tr>
 <tr class="memitem:ad6812db7373f28d3f34df893d2f1fb20" id="r_ad6812db7373f28d3f34df893d2f1fb20"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad6812db7373f28d3f34df893d2f1fb20">setLimitPolicy</a> (<a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html">LimitPolicy</a> policy)</td></tr>
 <tr class="memdesc:ad6812db7373f28d3f34df893d2f1fb20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code class="param">policy</code>, consulted by every subsequent <span class="tt">register</span> and <span class="tt">execute</span>. Thread-safe.  <br /></td></tr>
 <tr class="memitem:aea98b941e48b910baee37e617393e50f" id="r_aea98b941e48b910baee37e617393e50f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aea98b941e48b910baee37e617393e50f">setSupportedVersionRange</a> (std::uint32_t min, std::uint32_t max)</td></tr>
@@ -164,7 +164,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a5cff8e36190c13564e05bb05fb35bcbe" id="r_a5cff8e36190c13564e05bb05fb35bcbe"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5cff8e36190c13564e05bb05fb35bcbe">setHealthHandler</a> (std::function&lt; void(const <a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html">HealthStatus</a> &amp;)&gt; handler)</td></tr>
 <tr class="memdesc:a5cff8e36190c13564e05bb05fb35bcbe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code class="param">handler</code>, invoked immediately with the current <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span> snapshot, and again whenever readiness changes.  <br /></td></tr>
 <tr class="memitem:a9ea8ed30f49ff089f677e09210ffc486" id="r_a9ea8ed30f49ff089f677e09210ffc486"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9ea8ed30f49ff089f677e09210ffc486">beginShutdown</a> ()</td></tr>
-<tr class="memdesc:a9ea8ed30f49ff089f677e09210ffc486"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enters shutdown: from now on, <span class="tt">register</span> and <span class="tt">execute</span> envelopes are rejected with <span class="tt">err "server shutting down"</span>. <span class="tt">deregister</span> is still served so clients can tear down cleanly.  <br /></td></tr>
+<tr class="memdesc:a9ea8ed30f49ff089f677e09210ffc486"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enters shutdown: from now on, <span class="tt">register</span>, <span class="tt">attach</span> and <span class="tt">execute</span> envelopes are rejected with <span class="tt">err "server shutting down"</span>. <span class="tt">deregister</span> is still served so clients can tear down cleanly. Note <span class="tt">attach</span> is refused too, so a client cannot re-attach to a shared instance during the drain window.  <br /></td></tr>
 <tr class="memitem:aa3de29a47fe56d091889756e7e1faadd" id="r_aa3de29a47fe56d091889756e7e1faadd"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aa3de29a47fe56d091889756e7e1faadd">drainedWithin</a> (std::chrono::milliseconds deadline)</td></tr>
 <tr class="memdesc:aa3de29a47fe56d091889756e7e1faadd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Blocks until every in-flight <span class="tt">execute</span> has delivered its reply, or <code class="param">deadline</code> elapses.  <br /></td></tr>
 </table>
@@ -193,7 +193,7 @@ Public Member Functions</h2></td></tr>
 <p>Callable that supplies the action log to attach to a newly registered instance, given its model type and <span class="tt">contextKey</span>. </p>
 <p>Return <span class="tt">nullptr</span> to register the instance with no log attached (e.g. for model types or context keys the host app doesn't want journaled). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00443">443</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00449">449</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -413,7 +413,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Synchronously processes a JSON <span class="tt">Envelope</span> on the calling thread and returns the reply. </p>
 <p>Equivalent to <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> but never posts to the worker pool, so it is safe to call from a thread that <em>is</em> the worker pool — for example, from a <span class="tt">BridgeHandler</span> constructor invoked from inside an action handler.</p>
-<p>Only safe for control messages (<span class="tt">register</span>, <span class="tt">deregister</span>). An <span class="tt">execute</span> envelope posts to the strand and produces its reply asynchronously, after this synchronous call has already returned and destroyed the local reply buffer the deferred callback would write into. To keep that from becoming a dangling write, <span class="tt">execute</span> is rejected up front with an <span class="tt">err</span> reply.</p>
+<p>Safe for every kind except <span class="tt">execute</span> — <span class="tt">register</span>, <span class="tt">deregister</span>, <span class="tt">attach</span>, <span class="tt">assign</span>, <span class="tt">instances</span>, <span class="tt">schemas</span> and <span class="tt">hello</span> all route through here (see <span class="tt"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html" title="IBackend adapter that routes all calls through a RemoteServer as wire Envelope messages.">SimulatedRemoteBackend</a></span> below, which uses all seven). An <span class="tt">execute</span> envelope posts to the strand and produces its reply asynchronously, after this synchronous call has already returned and destroyed the local reply buffer the deferred callback would write into. To keep that from becoming a dangling write, <span class="tt">execute</span> is rejected up front with an <span class="tt">err</span> reply.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">msg</td><td>JSON-encoded <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></span> (via <span class="tt">wire::encode</span>). </td></tr>
@@ -422,7 +422,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00299">299</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00302">302</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -464,7 +464,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00314">314</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -495,7 +495,7 @@ Public Member Functions</h2></td></tr>
 <p>Call once per accepted transport connection (e.g. from a WebSocket server's "new connection" callback). The returned id is never <span class="tt">0</span>, so it can always be distinguished from the reserved "unscoped" value. Pass it to the scoped <span class="tt">handle(msg, reply, cid)</span> overload for every message received on that connection, and to <span class="tt">closeConnection(cid)</span> once the connection is gone.</p>
 <p>Thread-safe. </p><dl class="section return"><dt>Returns</dt><dd>A fresh, non-zero <span class="tt">ConnectionId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00390">390</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -523,7 +523,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Reclaims every model still registered under <code class="param">cid</code>, then drops the scope. </p>
-<p>Call once the transport observes the connection is gone (disconnect, close, error). Erases every surviving model in <span class="tt">cid</span>'s scope from the registry exactly as an explicit <span class="tt">deregister</span> would (so a later <span class="tt">execute</span> against one of those ids replies <span class="tt">err "model not found"</span>), then drops the scope itself.</p>
+<p>Call once the transport observes the connection is gone (disconnect, close, error). Releases exactly as many references as this connection held, exactly as an explicit <span class="tt">deregister</span> would, then drops the scope itself. A <em>private</em> instance (count 1, no directory entry) is erased outright, so a later <span class="tt">execute</span> against its id replies <span class="tt">err "model not found"</span>; a <em>shared</em> instance another connection is still attached to survives, and an <span class="tt">execute</span> against it still succeeds — see <span class="tt">releaseInstanceLocked</span>'s early return.</p>
 <p>Idempotent: <span class="tt">cid == 0</span>, an unknown <span class="tt">cid</span>, or a <span class="tt">cid</span> already closed is a no-op. Deliberately does <b>not</b> consult <span class="tt">IAuthorizer</span> — this is the server's own housekeeping in reaction to a transport-level event, not an action attributable to any caller (see docs/spec/core/backend.md).</p>
 <p>Safe to call while a model in the scope has an <span class="tt">execute</span> in flight: the strand task already holds its own <span class="tt">shared_ptr</span> to the model holder, so erasing the registry entry here only prevents <em>new</em> lookups (see docs/spec/concurrency_and_lifetimes.md).</p>
 <p>Thread-safe. </p><dl class="params"><dt>Parameters</dt><dd>
@@ -533,7 +533,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00423">423</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -560,7 +560,7 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Installs <code class="param">provider</code>, consulted on every <span class="tt">register</span> envelope whose <span class="tt">contextKey</span> is non-empty. </p>
+<p>Installs <code class="param">provider</code>, consulted whenever an instance is constructed with a non-empty <span class="tt">contextKey</span> — every <span class="tt">register</span> envelope, and every <span class="tt">attach</span> that misses the shared directory and therefore creates the instance (both reach <span class="tt">attachLogIfConfigured</span>). </p>
 <p>This is what closes the gap <span class="tt">IModelHolder::attachActionLog</span> leaves open for remote topologies: <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> owns the actual model instances for every remote/simulated-remote client, so it is the only place that can attach a log to them. Pass <span class="tt">nullptr</span> to remove a previously installed provider (new registrations get no log). Thread-safe. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">provider</td><td>Callable invoked synchronously while handling <span class="tt">register</span>. </td></tr>
@@ -568,7 +568,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -603,7 +603,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00466">466</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00475">475</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -650,7 +650,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00495">495</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -686,7 +686,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00504">504</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00513">513</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -716,7 +716,7 @@ Public Member Functions</h2></td></tr>
 <p>Returns the configured payload-completeness rule. </p>
 <dl class="section return"><dt>Returns</dt><dd>The current <span class="tt">PayloadCompleteness</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00508">508</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00517">517</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -746,7 +746,7 @@ Public Member Functions</h2></td></tr>
 <p>Snapshots the server's current health. Cheap; safe from any thread. </p>
 <dl class="section return"><dt>Returns</dt><dd>Current <span class="tt"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html" title="Snapshot of a RemoteServer&#39;s current health.">HealthStatus</a></span> (<span class="tt">liveModels</span> from the registry, <span class="tt">inFlight</span> from the same counter the <span class="tt">executeInFlight</span> metric reads). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00513">513</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00522">522</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -774,14 +774,14 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Installs <code class="param">handler</code>, invoked immediately with the current <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span> snapshot, and again whenever readiness changes. </p>
-<p>Thread-safe. Pass <span class="tt">nullptr</span> to remove a previously installed handler (clearing does not itself invoke anything). <span class="tt"><a class="el" href="#a9ea8ed30f49ff089f677e09210ffc486" title="Enters shutdown: from now on, register and execute envelopes are rejected with err &quot;server shutting d...">beginShutdown()</a></span> is currently the only internal path that flips <span class="tt"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html#a1ad58997d6bb39d5bcfb32a4abc244e9" title="true if the server currently accepts and dispatches new work.">HealthStatus::ready</a></span> to <span class="tt">false</span>; it re-invokes this handler (if installed) with the post-shutdown snapshot. A deployment's transport (e.g. <span class="tt">QtWebSocketServer</span>) can expose <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span>/this handler over an HTTP/probe endpoint; <span class="tt">morph</span> does not embed an HTTP server. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Thread-safe. Pass <span class="tt">nullptr</span> to remove a previously installed handler (clearing does not itself invoke anything). <span class="tt"><a class="el" href="#a9ea8ed30f49ff089f677e09210ffc486" title="Enters shutdown: from now on, register, attach and execute envelopes are rejected with err &quot;server sh...">beginShutdown()</a></span> is currently the only internal path that flips <span class="tt"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html#a1ad58997d6bb39d5bcfb32a4abc244e9" title="true if the server currently accepts and dispatches new work.">HealthStatus::ready</a></span> to <span class="tt">false</span>; it re-invokes this handler (if installed) with the post-shutdown snapshot. A deployment's transport (e.g. <span class="tt">QtWebSocketServer</span>) can expose <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span>/this handler over an HTTP/probe endpoint; <span class="tt">morph</span> does not embed an HTTP server. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handler</td><td>Callback invoked with the current <span class="tt"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html" title="Snapshot of a RemoteServer&#39;s current health.">HealthStatus</a></span>. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00537">537</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -808,11 +808,11 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Enters shutdown: from now on, <span class="tt">register</span> and <span class="tt">execute</span> envelopes are rejected with <span class="tt">err "server shutting down"</span>. <span class="tt">deregister</span> is still served so clients can tear down cleanly. </p>
+<p>Enters shutdown: from now on, <span class="tt">register</span>, <span class="tt">attach</span> and <span class="tt">execute</span> envelopes are rejected with <span class="tt">err "server shutting down"</span>. <span class="tt">deregister</span> is still served so clients can tear down cleanly. Note <span class="tt">attach</span> is refused too, so a client cannot re-attach to a shared instance during the drain window. </p>
 <p>Idempotent — safe to call more than once, and safe to call while <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span>/<span class="tt"><a class="el" href="#abcdee5e1504ebcbef2415b029eec8818" title="Synchronously processes a JSON Envelope on the calling thread and returns the reply.">handleInline()</a></span> calls are concurrently in flight on other threads. There is no way back: a restarted service constructs a fresh <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> rather than un-shutting-down this one.</p>
 <p>Also flips <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a>.ready</span> to <span class="tt">false</span> and, if a handler is installed via <span class="tt"><a class="el" href="#a5cff8e36190c13564e05bb05fb35bcbe" title="Installs handler, invoked immediately with the current health() snapshot, and again whenever readines...">setHealthHandler()</a></span>, re-invokes it with the post-shutdown snapshot — the same "invoked again whenever readiness changes" contract <span class="tt"><a class="el" href="#a5cff8e36190c13564e05bb05fb35bcbe" title="Installs handler, invoked immediately with the current health() snapshot, and again whenever readines...">setHealthHandler</a></span> documents. This is what lets an orchestrator stop routing to this server while <span class="tt"><a class="el" href="#aa3de29a47fe56d091889756e7e1faadd" title="Blocks until every in-flight execute has delivered its reply, or deadline elapses.">drainedWithin()</a></span>'s drain runs. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00564">564</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00575">575</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -840,7 +840,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Blocks until every in-flight <span class="tt">execute</span> has delivered its reply, or <code class="param">deadline</code> elapses. </p>
-<p>"In-flight" is one counter (<span class="tt">_inFlightExecutes</span>), incremented when <span class="tt">dispatchExecute</span> admits a call for dispatch (right before posting to the model's strand) and decremented right before its reply is sent, on every resolving path (<span class="tt">ok</span>, <span class="tt">err</span>, or a <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c" title="Max wall-clock time a single execute may take before the server sends an err &quot;timeout&quot; reply and disc...">LimitPolicy::executeTimeout</a></span> firing first) — the same state <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#afc681a5bc09275d4c4b1ffd91bea794b" title="Max concurrent in-flight execute calls this server will accept before replying err &quot;server busy&quot; inst...">LimitPolicy::maxInFlightExecutes</a></span> (if configured) gates and <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span>'s <span class="tt">inFlight</span> field reads, shared rather than double-counted. Waits on a condition variable signalled when the counter reaches zero — not a busy poll. Safe to call from any thread, independently of <span class="tt"><a class="el" href="#a9ea8ed30f49ff089f677e09210ffc486" title="Enters shutdown: from now on, register and execute envelopes are rejected with err &quot;server shutting d...">beginShutdown()</a></span> (it only observes the counter; it does not itself stop new work from arriving). </p><dl class="params"><dt>Parameters</dt><dd>
+<p>"In-flight" is one counter (<span class="tt">_inFlightExecutes</span>), incremented when <span class="tt">dispatchExecute</span> admits a call for dispatch (right before posting to the model's strand) and decremented right before its reply is sent, on every resolving path (<span class="tt">ok</span>, <span class="tt">err</span>, or a <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c" title="Max wall-clock time a single execute may take before the server sends an err &quot;timeout&quot; reply and disc...">LimitPolicy::executeTimeout</a></span> firing first) — the same state <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#afc681a5bc09275d4c4b1ffd91bea794b" title="Max concurrent in-flight execute calls this server will accept before replying err &quot;server busy&quot; inst...">LimitPolicy::maxInFlightExecutes</a></span> (if configured) gates and <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span>'s <span class="tt">inFlight</span> field reads, shared rather than double-counted. Waits on a condition variable signalled when the counter reaches zero — not a busy poll. Safe to call from any thread, independently of <span class="tt"><a class="el" href="#a9ea8ed30f49ff089f677e09210ffc486" title="Enters shutdown: from now on, register, attach and execute envelopes are rejected with err &quot;server sh...">beginShutdown()</a></span> (it only observes the counter; it does not itself stop new work from arriving). </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">deadline</td><td>Maximum time to wait. </td></tr>
   </table>
@@ -848,7 +848,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the in-flight count reached zero before <code class="param">deadline</code> elapsed; <span class="tt">false</span> on timeout. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00593">593</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00604">604</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
