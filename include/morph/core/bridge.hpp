@@ -1978,10 +1978,9 @@ private:
     // handler registration" (tests/test_shared_instances.cpp) was written to
     // catch, and which taking the lock there demonstrably reproduces. That read
     // is ordered rather than locked; see its own comment for the requirement
-    // that places on a caller of the pre-built-binding overload (morph#505). `switchBackend()` and the reconnect handler, which also touch
-    // them alongside `_handlers`, take both mutexes together via
-    // `std::scoped_lock{_mtx, _attachMtx}` (deadlock-safe regardless of
-    // acquisition order, by `std::scoped_lock`'s own guarantee).
+    // that places on a caller of the pre-built-binding overload (morph#505). `switchBackend()` and the reconnect
+    // handler, which also touch them alongside `_handlers`, take both mutexes together via `std::scoped_lock{_mtx,
+    // _attachMtx}` (deadlock-safe regardless of acquisition order, by `std::scoped_lock`'s own guarantee).
     std::mutex _attachMtx;
     mutable std::mutex _sessionMtx;
     ::morph::session::Context _defaultSession;

@@ -339,7 +339,6 @@ private:
             ::morph::backend::ConnectionId cid;
         } const guard{_server, conn->cid};
 
-
         std::string leftover;
         try {
             leftover = ::morph::net::detail::performServerHandshake(conn->socket);

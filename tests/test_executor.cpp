@@ -140,7 +140,7 @@ TEST_CASE("morph::exec::MainThreadExecutor drain runs a bounded chain of tasks t
 TEST_CASE("MainThreadExecutor: a task throwing a non-std::exception is contained", "[executor][morph501]") {
     morph::exec::MainThreadExecutor exec;
     bool ranAfter = false;
-    exec.post([] { throw 42; });          // not derived from std::exception
+    exec.post([] { throw 42; });  // not derived from std::exception
     exec.post([&ranAfter] { ranAfter = true; });
 
     // Before the fix this call propagated the `int` instead of returning.

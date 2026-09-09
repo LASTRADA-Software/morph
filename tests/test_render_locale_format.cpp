@@ -153,8 +153,7 @@ TEST_CASE("render::locale_format round-trips through a multi-byte separator", "[
 // guard still believed nothing had been emitted and accepted an injected sign.
 // The QML mirror (src/qt/forms/qml/DynamicForm.qml, documented as mirroring
 // this function) always rejected these, so the two control edges disagreed.
-TEST_CASE("normalizeLocaleNumber: a sign after the decimal separator is rejected",
-          "[render][locale][morph497]") {
+TEST_CASE("normalizeLocaleNumber: a sign after the decimal separator is rejected", "[render][locale][morph497]") {
     // de-DE: comma decimal, dot grouping -- the reported shape.
     REQUIRE_FALSE(morph::render::normalizeLocaleNumber(",-5", ",", ".").has_value());
     // en-US equivalent.

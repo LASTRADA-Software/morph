@@ -8,8 +8,8 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
-#include <memory>
 #include <filesystem>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
