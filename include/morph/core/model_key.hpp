@@ -109,8 +109,9 @@ concept DeducedKey =
 /// @brief Satisfied by model types that have a primary key, however it was named.
 ///
 /// Two ways in, and neither requires touching the model's own class body beyond
-/// the first: a nested `PrimaryKey` alias, or a `BRIDGE_MODEL_KEY` declaration
-/// naming the type. Following
+/// the first: a nested `PrimaryKey` alias, or a `BRIDGE_MODEL_KEY` declaration,
+/// which deduces the type from the model field it is given
+/// (`MemberTypeOf<decltype(MEMBER)>`). Following
 /// `morph::forms`' standing rule — *infer by default, declare to override* — a
 /// nested alias wins when both are present, which is what lets a model whose
 /// key type differs from the field's type (an `int` column keyed as a

@@ -15,9 +15,12 @@
 /// below is the main surface, not an exhaustive enumeration of every key
 /// emitted:
 ///
-/// - **`required`** — glaze never *derives* `required` from member types; it
-///   emits one only where a type declares `meta<V>::required` (and for a tagged
-///   variant's discriminator).
+/// - **`required`** — under the options `schemaJson<A>()` uses, glaze derives no
+///   `required` entries from member types: `glz::requires_key` only returns
+///   `true` for a member when `meta<T>::requires_key` says so or when
+///   `Opts.error_on_missing_keys` is set, and morph sets neither. (A type
+///   declaring `meta<V>::required`, and a tagged variant's discriminator, do
+///   still get one.)
 ///   `schemaJson<A>()` always writes its own, overwriting whatever the schema
 ///   writer did or did not produce: a member is *required* unless it is a
 ///   `std::optional<...>` or its name is listed in the action's opt-out list

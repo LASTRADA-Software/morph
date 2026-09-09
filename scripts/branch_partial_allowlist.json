@@ -46,13 +46,13 @@
       "file": "include/morph/util/rational.hpp",
       "line": 758,
       "source": "return std::is_gt(ordering) ? 1 : 0;",
-      "reason": "The false arm (a tie, returning 0) is unreachable. compareForSaturation has exactly two call sites, both from the saturating branch of operator+=/operator-=, and both are guarded by addWouldOverflow/subWouldOverflow having just returned true. A tie in compareForSaturation (*this == -rhs for +=, or *this == rhs for -=) requires -- since operator== compares canonical numerator/denominator pairs directly -- identical denominators. With equal denominators, addWouldOverflow/subWouldOverflow's own scaling factors collapse to rightScaled == leftScaled == 1 (gcd(D, D) == D), so the cross-multiplication checks reduce to numerator +/- rhs.numerator directly on already-canonical (so already in-range) int64_t values whose sum/difference is provably 0 -- never an overflow (and canonicalise() already forbids either component from being INT64_MIN, so negating one to check the other is always representable). So whenever the two operands could produce a tie, the overflow predicate that gates the call to compareForSaturation is always false, and the saturating path -- hence compareForSaturation's tie return -- is never reached with a tied pair. Shares this root cause with saturateToward's sign == 0 arm at line 775 below."
+      "reason": "The false arm (a tie, returning 0) is unreachable. compareForSaturation has exactly two call sites, both from the saturating branch of operator+=/operator-=, and both are guarded by addWouldOverflow/subWouldOverflow having just returned true. A tie in compareForSaturation (*this == -rhs for +=, or *this == rhs for -=) requires -- since operator== compares canonical numerator/denominator pairs directly -- identical denominators. With equal denominators, addWouldOverflow/subWouldOverflow's own scaling factors collapse to rightScaled == leftScaled == 1 (gcd(D, D) == D), so the cross-multiplication checks reduce to numerator +/- rhs.numerator directly on already-canonical (so already in-range) int64_t values whose sum/difference is provably 0 -- never an overflow (and canonicalise() already forbids either component from being INT64_MIN, so negating one to check the other is always representable). So whenever the two operands could produce a tie, the overflow predicate that gates the call to compareForSaturation is always false, and the saturating path -- hence compareForSaturation's tie return -- is never reached with a tied pair. Shares this root cause with saturateToward's sign == 0 arm at line 776 below."
     },
     {
       "file": "include/morph/util/rational.hpp",
       "line": 776,
       "source": "numerator = sign == 0 ? 0 : (sign < 0 ? -maxValue : maxValue);",
-      "reason": "The sign == 0 arm is unreachable, for the same root cause as compareForSaturation's tie return at line 757 above: saturateToward is only ever called with the sign compareForSaturation returned, and compareForSaturation can only return 0 (a tie) for a pair whose overflow predicate is provably false -- so the saturating path that calls saturateToward is never entered with a tied pair, and sign is never 0 when this line runs."
+      "reason": "The sign == 0 arm is unreachable, for the same root cause as compareForSaturation's tie return at line 758 above: saturateToward is only ever called with the sign compareForSaturation returned, and compareForSaturation can only return 0 (a tie) for a pair whose overflow predicate is provably false -- so the saturating path that calls saturateToward is never entered with a tied pair, and sign is never 0 when this line runs."
     },
     {
       "file": "include/morph/util/rational.hpp",
@@ -104,7 +104,7 @@
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1425,
+      "line": 1426,
       "source": "if (_inFlightExecutes.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {",
       "reason": "Real but requires genuine thread contention to trigger -- accepted as documented rather than closed with a flaky test (core audit finding RM11). The false arm (the CAS lost the race and must retry) needs two threads to genuinely collide on the same atomic increment at the same instant; it is a real, reachable hazard the retry loop correctly handles, not dead code, but inherently non-deterministic to trigger from a test without exact thread-timing control. Same disposition class as `strand.hpp`'s ST1 above, and as core audit finding O1 (`observability.hpp`'s `endSpan`), whose entry left this file once a coverage run showed its arm taken: a stress test with many concurrent `execute()` calls against a tight `maxInFlightExecutes` limit would probably eventually hit it, but flakily."
     },
@@ -118,17 +118,17 @@
       "file": "include/morph/core/bridge.hpp",
       "line": 1571,
       "source": "if (deadlineHandle && schedulerRef) {",
-      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1421 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible."
+      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1453 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible."
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1466,
+      "line": 1467,
       "source": "if (_timeoutScheduler) {",
       "reason": "Unreachable by construction, mirrors `bridge.hpp`'s B6 (core audit finding RM10). `setLimitPolicy` (this file) is the only writer of both `_limits.executeTimeout` and `_timeoutScheduler`: `_limits = policy; if (_limits.executeTimeout.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_unique<...>(); }`, both under `_limitsMtx` -- the same lock this line's enclosing block holds. Nothing anywhere nulls `_timeoutScheduler` afterward, so `dispatchExecute`'s `limits.executeTimeout.count() > 0` guard (this line's enclosing `if`, a few lines above) already guarantees `_timeoutScheduler` is non-null whenever this line runs."
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1351,
+      "line": 1352,
       "source": "if (auto ownerIter = _owners.find(mid); ownerIter != _owners.end()) {",
       "reason": "Unreachable by construction given the `_owners`/`_models` invariant (core audit finding RM16). `grep -n \"_owners\\[\" remote.hpp` shows `_owners` is created in lockstep with `_models` at both of its insertion sites (the shared path, `_owners[fresh] = std::string{}`, and the private-registration path, `_owners[mid] = std::move(env.session.principal)`) and erased together with `_models` at the single erasure site (`releaseInstanceLocked`: `_models.erase(mid); _owners.erase(mid);`). This line is reached only after `iter != _models.end()` (`mid` found in `_models`, a few lines above, same locked block) -- unlike RM1's `_attachCount`/`_sharedKeyOf` pair, which has a documented exception at a poisoned-eviction site, no such exception exists for `_owners`/`_models`: every write site keeps them lockstep, so `mid` being present in `_models` guarantees it is present in `_owners` too."
     },

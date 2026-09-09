@@ -288,9 +288,10 @@ public:
     /// to call from a thread that *is* the worker pool — for example, from a
     /// `BridgeHandler` constructor invoked from inside an action handler.
     ///
-    /// Safe for every kind except `execute` — `register`, `attach`, `assign`,
-    /// `instances`, `schemas` and `hello` all route through here (see
-    /// `SimulatedRemoteBackend` below, which uses all six). An `execute`
+    /// Safe for every kind except `execute` — `register`, `deregister`,
+    /// `attach`, `assign`, `instances`, `schemas` and `hello` all route through
+    /// here (see `SimulatedRemoteBackend` below, which uses all seven). An
+    /// `execute`
     /// envelope posts to the strand and produces its reply asynchronously, after
     /// this synchronous call has already returned and destroyed the local reply
     /// buffer the deferred callback would write into. To keep that from becoming a

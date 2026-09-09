@@ -446,11 +446,14 @@ already happened.
 A pure-virtual interface for durable, append-only storage of action entries.
 No *entry-level* deletion API exists — there is nothing corresponding to
 `morph::offline::IOfflineQueue::markDone()`, which deletes items once retried.
-Two file-level operations do change what `entries()` subsequently returns, and
-neither is an exception to the append-only rule so much as a boundary of it:
-[`rotate()`](#rotation-and-retention), which seals the active file and reopens an
-empty one, and `repairTornTail()`, which discards a truncated trailing record at
-construction.
+Two operations on the *shipped file implementation* — not on this interface —
+do change what a subsequent `entries()` returns, and neither is an exception to
+the append-only rule so much as a boundary of it:
+`FileActionLog::`[`rotate()`](#rotation-and-retention), which seals the active
+file and reopens an empty one, and `FileActionLog`'s private
+`repairTornTail()`, which discards a truncated trailing record and runs only
+from that class's constructor. An `IActionLog` implementation over another sink
+owes neither.
 
 | Method | Signature | Purpose |
 |---|---|---|
@@ -1143,7 +1146,7 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 |---|---|---|
 | `LogEntry` is a plain aggregate | **No `glz::meta`** | Same automatic reflection `BRIDGE_REGISTER_ACTION` uses; no manual schema maintenance. |
 | Error path sharing | **`detail::throwOnGlazeError` for both `toJson`/`fromJson`** | `fromJson`'s failure is easy to test (malformed input); `toJson`'s is structurally unreachable for `LogEntry`. Routing both through one non-template function means the same compiled branch covers both, so `toJson`'s error path is exercised by `fromJson`'s tests. |
-| No entry-level deletion | **Append-only, no per-entry deletion API** | Permanent audit trail — unlike `IOfflineQueue` whose `markDone()` deletes retried items. `rotate()` and `repairTornTail()` operate on the file, not on entries. |
+| No entry-level deletion | **Append-only, no per-entry deletion API** | Permanent audit trail — unlike `IOfflineQueue` whose `markDone()` deletes retried items. `FileActionLog`'s `rotate()` and private `repairTornTail()` operate on the file, not on entries, and are not part of `IActionLog`. |
 | Default log is a function-local static | **`detail::defaultActionLogState()` returns a `pair<mutex, shared_ptr>`** | Safe regardless of translation-unit init order, unlike a namespace-scope global. |
 | `SessionLog::checkpoint` advances the watermark *before* forwarding | **At-most-once / forward-only** | A checkpoint is a forward-only commit point, not a transaction to retry: the watermark advances first, so a throwing durable sink drops that batch permanently. (`IOfflineQueue`'s retry semantics do *not* carry over — the shared shape is superficial.) |
 | Checkpoint watermark is a committed-`seq` threshold, not an `_all` index | **Track committed state by entry identity** | `seq` is assigned once and never reused, so it stays a valid commit marker even as coalescing forwards fewer entries than it consumes and as `undoLast()` pops tail entries. A raw index into the mutable `_all` vector cannot: it silently shifts meaning when entries are removed, which is the root of the undo/coalescing incoherence this replaces. |
