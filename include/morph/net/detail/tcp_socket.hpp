@@ -8,10 +8,12 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -90,7 +92,9 @@ public:
     /// @brief Connects to `host:port`, failing after @p timeout.
     /// @param host    Numeric or resolvable hostname.
     /// @param port    TCP port.
-    /// @param timeout Maximum time to wait for the connection to establish.
+    /// @param timeout Maximum time to wait for the connection to establish,
+    ///                across *all* resolved addresses -- one deadline for the
+    ///                whole call, not one per candidate.
     /// @return A connected `TcpSocket`.
     /// @throws std::runtime_error on resolution failure, connect failure, or timeout.
     static TcpSocket connect(const std::string& host, std::uint16_t port, std::chrono::milliseconds timeout) {
@@ -111,6 +115,14 @@ public:
             ~AddrInfoGuard() { ::freeaddrinfo(p); }
         } guard{resolved};
 
+        // One deadline for the whole call, not one timeout per candidate.
+        // `ai_family = AF_UNSPEC` makes several candidates the norm ("localhost"
+        // resolves to both ::1 and 127.0.0.1), and polling `timeout` inside the
+        // loop meant the worst case was N x timeout -- while two doc comments
+        // (here and SocketBackend's destructor note) state it as a single bound.
+        // morph#507.
+        auto const deadline = std::chrono::steady_clock::now() + timeout;
+
         for (addrinfo* rp = resolved; rp != nullptr; rp = rp->ai_next) {
             int fd = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
             if (fd < 0) {
@@ -130,15 +142,39 @@ public:
             pollfd pfd{};
             pfd.fd = fd;
             pfd.events = POLLOUT;
-            int const pollRc = ::poll(&pfd, 1, static_cast<int>(timeout.count()));
+            // Retry on EINTR rather than treating a delivered signal as a
+            // connect failure. Every other blocking syscall in this file already
+            // does (accept, tryAccept, recvSome, sendAll), and the accept loop's
+            // own comment makes the case: "any signal the host happens to
+            // deliver (a profiler's timer, SIGCHLD, SIGWINCH)" must not tear the
+            // operation down. This poll was the one that did not honour it.
+            int pollRc = 0;
+            for (;;) {
+                auto const remaining =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+                if (remaining.count() <= 0) {
+                    pollRc = 0;  // deadline reached: treat as timeout
+                    break;
+                }
+                // Clamped: poll takes int milliseconds, and a multi-week timeout
+                // would otherwise truncate to a garbage (possibly negative,
+                // i.e. infinite) value.
+                auto const waitMs = static_cast<int>(
+                    std::min<std::chrono::milliseconds::rep>(remaining.count(), std::numeric_limits<int>::max()));
+                pollRc = ::poll(&pfd, 1, waitMs);
+                if (pollRc >= 0 || errno != EINTR) {
+                    break;
+                }
+            }
             if (pollRc <= 0) {
                 ::close(fd);
                 continue;
             }
             int soErr = 0;
             socklen_t soErrLen = sizeof(soErr);
-            ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &soErrLen);
-            if (soErr != 0) {
+            // Checked: a failing getsockopt leaves `soErr` at 0, which would
+            // otherwise hand back a broken socket as successfully connected.
+            if (::getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &soErrLen) != 0 || soErr != 0) {
                 ::close(fd);
                 continue;
             }

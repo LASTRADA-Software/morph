@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
+#include <filesystem>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
@@ -1336,3 +1337,76 @@ TEST_CASE("SocketServer: teardown racing a connecting client still finishes prom
         REQUIRE(elapsed < kBudget);
     }
 }
+
+// ── morph#498: finished connections must be reclaimed while the server runs ──
+//
+// `_clients` and `_clientThreads` were only ever pushed to in acceptLoop and
+// cleared in close(); nothing removed a connection whose clientLoop had
+// returned. The shared_ptr kept the ClientConnection -- and its TcpSocket --
+// alive, so the fd stayed open, and each std::thread stayed joinable. The leak
+// was therefore per connection *ever accepted*, not per live connection.
+//
+// The class doc and docs/spec/core/backend.md both say destruction leaves no
+// dangling threads, and both are true -- at teardown. That is exactly why this
+// test samples the fd count *while the server is still running*: a test that
+// opened N connections and then destroyed the server would have passed before
+// the fix and proved nothing (invariant 7).
+#if !defined(_WIN32)
+namespace {
+std::size_t openFdCount() {
+    std::size_t count = 0;
+    for (const auto& entry : std::filesystem::directory_iterator{"/proc/self/fd"}) {
+        (void)entry;
+        ++count;
+    }
+    return count;
+}
+}  // namespace
+
+TEST_CASE("SocketServer: a finished connection's fd and thread are reclaimed before shutdown",
+          "[net][socket_server][morph498]") {
+    if (!std::filesystem::exists("/proc/self/fd")) {
+        SUCCEED("no /proc/self/fd on this platform");
+        return;
+    }
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    // RawWsClient closes its socket on destruction, so each scope block below is
+    // one full connect/disconnect cycle.
+    //
+    // Warm up: the first few settle one-off allocations, so the baseline reflects
+    // steady state rather than start-up.
+    for (int i = 0; i < 4; ++i) {
+        RawWsClient const client{wsServer.port()};
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+
+    std::size_t const baseline = openFdCount();
+
+    // Each iteration opens and closes one connection. Before the fix every one
+    // of these left an fd behind, so the count grew monotonically with N.
+    constexpr int kRounds = 25;
+    for (int i = 0; i < kRounds; ++i) {
+        RawWsClient const client{wsServer.port()};
+    }
+    // Reaping happens on accept, so the last couple of connections are still
+    // tracked; give the loop one more accept and a moment to settle.
+    {
+        RawWsClient const trigger{wsServer.port()};
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+    {
+        RawWsClient const trigger2{wsServer.port()};
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+    std::size_t const after = openFdCount();
+    INFO("baseline=" << baseline << " after=" << after << " rounds=" << kRounds);
+    // Allow generous slack for the two still-unreaped connections and any
+    // transient fds; what must NOT happen is growth proportional to kRounds.
+    CHECK(after < baseline + static_cast<std::size_t>(kRounds) / 2);
+}
+#endif  // !defined(_WIN32)

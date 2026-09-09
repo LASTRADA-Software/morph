@@ -86,11 +86,19 @@ public:
     /// implementation. See `docs/spec/core/backend.md`'s `morph::net` section.
     ~SocketBackend() override {
         _shuttingDown.store(true);
-        {
-            std::scoped_lock lock{_socketMtx};
-            if (_socket.valid()) {
-                _socket.shutdownBoth();
-            }
+        // Deliberately NOT under `_socketMtx` -- this is the same trap
+        // `SocketServer::close()` documents avoiding, reached from the client
+        // side. `sendFrame` holds `_socketMtx` across `_socket.sendAll()`, which
+        // loops on a blocking `::send` with no timeout, so a thread stalled
+        // against a peer that has stopped reading holds that lock indefinitely.
+        // Waiting for it here would block the destructor on exactly the
+        // condition that only `shutdownBoth()` can clear -- and `shutdownBoth()`
+        // is documented safe from any thread (detail/tcp_socket.hpp), which is
+        // what makes taking the lock unnecessary as well as harmful. The I/O
+        // thread's own Pong/Close echo in `drainFrames` reaches `sendFrame` too,
+        // so the stuck holder need not even be an application thread. morph#506.
+        if (_socket.valid()) {
+            _socket.shutdownBoth();
         }
         _reconnectCv.notify_all();
         if (_ioThread.joinable()) {
