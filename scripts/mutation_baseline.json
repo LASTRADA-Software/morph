@@ -16,5 +16,10 @@
     "instead of comparing against a stale number; see",
     "scripts/check_mutation_regression.py's 'no recorded baseline' case."
   ],
-  "baselines": {}
+  "baselines": {
+    "core-forms": {
+      "survived": 199,
+      "mutants": 773
+    }
+  }
 }
