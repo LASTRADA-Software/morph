@@ -132,18 +132,23 @@ struct IBackend {
     ///
     /// @note **Threading contract, shared by all four `*Async` hooks: the
     ///       callback's thread must not be able to run `~Bridge` concurrently.**
-    ///       Every `Bridge` continuation behind these hooks — `registerHandlerImpl`,
-    ///       `ensureBoundAsync`, `attachHandlerAsync` and `assignHandlerPrimary`
-    ///       in `core/bridge.hpp` — tests `CallbackToken::active()` and then
-    ///       dereferences `this`. Those are two steps, so a `~Bridge` that
-    ///       completes between them is morph#486's use-after-free. Unlike
-    ///       `~BridgeHandler`, these sites cannot close the window with
-    ///       `detail::BridgeLifetime`: that gate makes `~Bridge` *block* for the
-    ///       gated span, and these spans reach `loadBackend()` and a backend's
-    ///       own registration path. What closes it instead is delivery on the
-    ///       thread that owns the `Bridge`. `QtWebSocketBackend` — the only
-    ///       backend in the tree overriding any of these — satisfies that by
-    ///       construction: it must itself be used from the Qt event loop thread
+    ///       Three of the four `Bridge` continuations behind these hooks —
+    ///       `attachHandlerAsync`, `ensureBoundAsync` and `assignHandlerPrimary`
+    ///       in `core/bridge.hpp` — test `CallbackToken::active()` and then
+    ///       dereference `this`. Those are two steps, so a `~Bridge` that
+    ///       completes between them is morph#486's use-after-free.
+    ///       (`registerHandlerImpl`'s callback is the exception: it holds
+    ///       `detail::BridgeLifetime` across its whole touch of `this`, so it
+    ///       does not depend on this contract.)
+    ///
+    ///       Those three cannot take that same gate. It makes `~Bridge` *block*
+    ///       for the gated span, and each span acquires `_attachMtx` — which
+    ///       the synchronous `Bridge::attachHandler` holds across a full
+    ///       `attachModel` round trip, unbounded on a wire backend. What closes
+    ///       the window instead is delivery on the thread that owns the
+    ///       `Bridge`. `QtWebSocketBackend` — the only backend in the tree
+    ///       overriding any of these — satisfies that by construction: it must
+    ///       itself be used from the Qt event loop thread
     ///       (`qt/qt_websocket_backend.hpp`) and fires all four callbacks from
     ///       `onTextMessage` on that same thread, so check and use cannot
     ///       straddle a destructor. **A backend that delivers these callbacks on

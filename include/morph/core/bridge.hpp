@@ -591,13 +591,13 @@ public:
                         return;  // Completed inline: the dispatching frame will finish this.
                     }
                     // This check and the `this` touch below it are two steps -- the
-                    // morph#486 shape. What closes the window here is not a gate but
-                    // `IBackend::registerModelAsync`'s threading contract: a backend
-                    // overriding the `*Async` hooks must deliver their callbacks on a
-                    // thread that cannot run `~Bridge` concurrently, which
-                    // `QtWebSocketBackend` (the only such backend) satisfies by being
-                    // Qt-event-loop-thread-only. Gating instead would make `~Bridge`
-                    // block behind `loadBackend()`'s backend. See morph#489.
+                    // morph#486 shape. Closed not by a gate but by
+                    // `IBackend::registerModelAsync`'s threading contract (see its
+                    // doc comment): an overriding backend must deliver `*Async`
+                    // replies on a thread that cannot run `~Bridge` concurrently.
+                    // Gating instead would block `~Bridge` behind `_attachMtx`,
+                    // which `attachHandler` holds across a full `attachModel` round
+                    // trip. See morph#489.
                     if (!weakLiveness.active()) {
                         return;  // The Bridge is gone; publishing this id would be pointless.
                     }
@@ -748,13 +748,13 @@ public:
                         return;  // Completed inline: the dispatching frame will finish this.
                     }
                     // This check and the `this` touch below it are two steps -- the
-                    // morph#486 shape. What closes the window here is not a gate but
-                    // `IBackend::registerModelAsync`'s threading contract: a backend
-                    // overriding the `*Async` hooks must deliver their callbacks on a
-                    // thread that cannot run `~Bridge` concurrently, which
-                    // `QtWebSocketBackend` (the only such backend) satisfies by being
-                    // Qt-event-loop-thread-only. Gating instead would make `~Bridge`
-                    // block behind `loadBackend()`'s backend. See morph#489.
+                    // morph#486 shape. Closed not by a gate but by
+                    // `IBackend::registerModelAsync`'s threading contract (see its
+                    // doc comment): an overriding backend must deliver `*Async`
+                    // replies on a thread that cannot run `~Bridge` concurrently.
+                    // Gating instead would block `~Bridge` behind `_attachMtx`,
+                    // which `attachHandler` holds across a full `attachModel` round
+                    // trip. See morph#489.
                     if (!weakLiveness.active()) {
                         return;  // The Bridge is gone; publishing this id would be pointless.
                     }
@@ -892,13 +892,13 @@ public:
             ::morph::exec::detail::ModelId{raw}, binding->typeId, primary,
             [this, weakLiveness, weakBackend, weakBinding, primary](::morph::exec::detail::ModelId) {
                 // This check and the `this` touch below it are two steps -- the
-                // morph#486 shape. What closes the window here is not a gate but
-                // `IBackend::registerModelAsync`'s threading contract: a backend
-                // overriding the `*Async` hooks must deliver their callbacks on a
-                // thread that cannot run `~Bridge` concurrently, which
-                // `QtWebSocketBackend` (the only such backend) satisfies by being
-                // Qt-event-loop-thread-only. Gating instead would make `~Bridge`
-                // block behind `loadBackend()`'s backend. See morph#489.
+                // morph#486 shape. Closed not by a gate but by
+                // `IBackend::registerModelAsync`'s threading contract (see its
+                // doc comment): an overriding backend must deliver `*Async`
+                // replies on a thread that cannot run `~Bridge` concurrently.
+                // Gating instead would block `~Bridge` behind `_attachMtx`,
+                // which `attachHandler` holds across a full `attachModel` round
+                // trip. See morph#489.
                 if (!weakLiveness.active()) {
                     return;  // The Bridge is gone; do not touch `this`.
                 }

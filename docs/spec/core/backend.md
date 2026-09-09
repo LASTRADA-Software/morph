@@ -273,22 +273,28 @@ failure only.
 concurrently.** This is a contract on the backend, not an implementation detail
 of `Bridge`.
 
-The reason is on `Bridge`'s side. Each of the four continuations behind these
-hooks — `registerHandlerImpl`, `ensureBoundAsync`, `attachHandlerAsync` and
-`assignHandlerPrimary` in `core/bridge.hpp` — tests `CallbackToken::active()`
-and then dereferences `this` (it takes `_attachMtx` and calls `loadBackend()`).
-Those are two steps, so a `~Bridge` completing between them is the
-use-after-free of issue #486 — the same check-then-act shape
+The reason is on `Bridge`'s side. Three of the four continuations behind these
+hooks — `ensureBoundAsync`, `attachHandlerAsync` and `assignHandlerPrimary` in
+`core/bridge.hpp` — test `CallbackToken::active()` and then dereference `this`
+(each takes `_attachMtx` and calls `loadBackend()`). Those are two steps, so a
+`~Bridge` completing between them is the use-after-free of issue #486 — the same
+check-then-act shape
 [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md) describes.
 
-Unlike `~BridgeHandler`, these sites cannot close that window with
-`detail::BridgeLifetime`: the gate makes `~Bridge` *block* for the gated span,
-and these spans reach a backend's own registration path. What closes it instead
-is the delivery thread. `QtWebSocketBackend` — the only backend in the tree
-overriding any of the four — satisfies the contract by construction rather than
-by care: it must itself be used from the Qt event loop thread, and it fires all
-four callbacks from `onTextMessage` on that same thread, so the check and the
-use cannot straddle a destructor.
+`registerHandlerImpl`'s callback is the exception and does **not** rely on this
+contract: it holds `detail::BridgeLifetime` across its whole touch of `this`
+(`_mtx`, `loadBackend()`), which is safe there because nothing inside that span
+calls into consumer code or a blocking backend path.
+
+The other three cannot take that same gate. It makes `~Bridge` *block* for the
+gated span, and each span acquires `_attachMtx` — which the synchronous
+`Bridge::attachHandler` holds across a full `attachModel` round trip, unbounded
+on a wire backend. What closes the window instead is the delivery thread.
+`QtWebSocketBackend` — the only backend in the tree overriding any of the four —
+satisfies the contract by construction rather than by care: it must itself be
+used from the Qt event loop thread, and it fires all four callbacks from
+`onTextMessage` on that same thread, so the check and the use cannot straddle a
+destructor.
 
 A backend that replies on its own transport thread therefore reopens #486's
 use-after-free. That is a **contract break**, diagnosable from this page and
