@@ -130,6 +130,28 @@ struct IBackend {
     /// falls back to `registerModelWithContext` in that case, so a backend
     /// with no override behaves synchronously.
     ///
+    /// @note **Threading contract, shared by all four `*Async` hooks: the
+    ///       callback's thread must not be able to run `~Bridge` concurrently.**
+    ///       Every `Bridge` continuation behind these hooks — `registerHandlerImpl`,
+    ///       `ensureBoundAsync`, `attachHandlerAsync` and `assignHandlerPrimary`
+    ///       in `core/bridge.hpp` — tests `CallbackToken::active()` and then
+    ///       dereferences `this`. Those are two steps, so a `~Bridge` that
+    ///       completes between them is morph#486's use-after-free. Unlike
+    ///       `~BridgeHandler`, these sites cannot close the window with
+    ///       `detail::BridgeLifetime`: that gate makes `~Bridge` *block* for the
+    ///       gated span, and these spans reach `loadBackend()` and a backend's
+    ///       own registration path. What closes it instead is delivery on the
+    ///       thread that owns the `Bridge`. `QtWebSocketBackend` — the only
+    ///       backend in the tree overriding any of these — satisfies that by
+    ///       construction: it must itself be used from the Qt event loop thread
+    ///       (`qt/qt_websocket_backend.hpp`) and fires all four callbacks from
+    ///       `onTextMessage` on that same thread, so check and use cannot
+    ///       straddle a destructor. **A backend that delivers these callbacks on
+    ///       a thread the `Bridge`'s owner does not control breaks this contract
+    ///       and reopens that use-after-free** — it is a contract break, not a
+    ///       latent race to be discovered. See morph#489 and
+    ///       docs/spec/concurrency_and_lifetimes.md.
+    ///
     /// @note Scope: only `Bridge::registerHandler()`'s plain (non-shared)
     ///       registration path — a `BridgeHandler`'s initial construction —
     ///       uses this. Shared/keyed registration has its own opt-in async
@@ -169,7 +191,9 @@ struct IBackend {
     /// returns `true` immediately, then invokes exactly one of
     /// @p onRegistered / @p onError once the reply arrives, on the backend's
     /// own thread (unless the backend is destroyed first, in which case
-    /// neither fires).
+    /// neither fires) — subject to `registerModelAsync`'s threading contract,
+    /// which applies here unchanged: that thread must not be able to run
+    /// `~Bridge` concurrently.
     ///
     /// The default implementation offers no async path and returns `false`
     /// without calling either callback — the caller (`Bridge::ensureBoundAsync`)
@@ -266,7 +290,8 @@ struct IBackend {
     ///
     /// Same rationale and shape as `registerModelSharedAsync` immediately
     /// above (itself mirroring `registerModelAsync`) — see that doc comment
-    /// for the full opt-in/fallback contract.
+    /// for the full opt-in/fallback contract, and `registerModelAsync`'s for
+    /// the threading contract the callback's delivery thread must satisfy.
     ///
     /// @note Unlike the synchronous `attachModel` default above, this method
     ///       does *not* release @p current itself: an overriding backend is
@@ -342,7 +367,9 @@ struct IBackend {
     /// request and return `true` immediately, then invoke exactly one of
     /// @p onRegistered / @p onError once the reply arrives, on the backend's
     /// own thread (unless the backend is destroyed first, in which case
-    /// neither fires). `Bridge::assignHandlerPrimary` prefers this path when
+    /// neither fires) — subject to `registerModelAsync`'s threading contract,
+    /// which applies here unchanged: that thread must not be able to run
+    /// `~Bridge` concurrently. `Bridge::assignHandlerPrimary` prefers this path when
     /// it is available and falls back to the synchronous `assignPrimary`
     /// otherwise, so every backend that has not opted in (every backend as of
     /// this writing, other than `QtWebSocketBackend`) is unaffected.
