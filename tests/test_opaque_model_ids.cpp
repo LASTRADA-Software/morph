@@ -110,7 +110,7 @@ TEST_CASE("OpaqueIdGenerator is a bijection: 20000 counters produce 20000 distin
 // and both are invisible to the existing sample.
 TEST_CASE("OpaqueIdGenerator is a bijection over counters that exercise the high half",
           "[opaque_id][unit][morph453]") {
-    morph::backend::detail::OpaqueIdGenerator gen;
+    morph::backend::detail::OpaqueIdGenerator const gen;
     std::unordered_set<uint64_t> seen;
     constexpr uint64_t n = 20000;
     // Stride by 2^32 so every counter has a distinct, non-zero high word; the

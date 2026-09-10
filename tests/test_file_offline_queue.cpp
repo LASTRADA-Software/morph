@@ -732,7 +732,7 @@ TEST_CASE("FileOfflineQueue: an unreadable queue file is not silently compacted 
 
     std::filesystem::permissions(path, std::filesystem::perms::owner_all);
     REQUIRE(std::filesystem::file_size(path) == sizeBefore);
-    morph::offline::FileOfflineQueue reopened{path};
+    morph::offline::FileOfflineQueue const reopened{path};
     REQUIRE(reopened.drain().size() == 3);
     std::filesystem::remove(path);
 }
