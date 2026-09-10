@@ -179,8 +179,10 @@ bool QtWebSocketBackend::registerModelAsync(
         // happens, cancelPending() drains this queue too and still invokes
         // onError exactly once.
         std::scoped_lock const lock{_pendingMtx};
-        _queuedRegistrations.push_back(
-            QueuedRegistration{typeId, std::string{contextKey}, std::move(onRegistered), std::move(onError)});
+        _queuedRegistrations.push_back(QueuedRegistration{.typeId = typeId,
+                                                          .contextKey = std::string{contextKey},
+                                                          .onRegistered = std::move(onRegistered),
+                                                          .onError = std::move(onError)});
         return true;
     }
     sendRegisterAsync(typeId, contextKey, std::move(onRegistered), std::move(onError));
@@ -204,7 +206,8 @@ void QtWebSocketBackend::sendRegisterAsync(const std::string& typeId, std::strin
     auto const encoded = QString::fromStdString(::morph::wire::encode(env));
     {
         std::scoped_lock const lock{_pendingMtx};
-        _pendingRegistrations[callId] = PendingRegistration{std::move(onRegistered), std::move(onError)};
+        _pendingRegistrations[callId] =
+            PendingRegistration{.onRegistered = std::move(onRegistered), .onError = std::move(onError)};
     }
     _socket.sendTextMessage(encoded);
 }
@@ -391,7 +394,8 @@ bool QtWebSocketBackend::assignPrimaryAsync(::morph::exec::detail::ModelId mid, 
     auto const encoded = QString::fromStdString(::morph::wire::encode(env));
     {
         std::scoped_lock const lock{_pendingMtx};
-        _pendingAssigns[callId] = PendingAssign{std::move(onRegistered), std::move(onError)};
+        _pendingAssigns[callId] =
+            PendingAssign{.onRegistered = std::move(onRegistered), .onError = std::move(onError)};
     }
     _socket.sendTextMessage(encoded);
     return true;
@@ -446,7 +450,7 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
         return comp;
     }
 
-    uint64_t callId = ++_nextCallId;
+    uint64_t const callId = ++_nextCallId;
     ::morph::wire::Envelope env;
     env.kind = "execute";
     env.callId = callId;
@@ -457,8 +461,9 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     env.session = std::move(call.session);
 
     {
-        std::scoped_lock lock{_pendingMtx};
-        _pending[callId] = PendingExecute{compState, std::move(call.deserializeResult), cbExec};
+        std::scoped_lock const lock{_pendingMtx};
+        _pending[callId] =
+            PendingExecute{.state = compState, .deserialize = std::move(call.deserializeResult), .cbExec = cbExec};
     }
 
     _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
@@ -471,7 +476,7 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
     std::vector<QueuedRegistration> drainedQueue;
     std::unordered_map<uint64_t, PendingAssign> drainedAssigns;
     {
-        std::scoped_lock lock{_pendingMtx};
+        std::scoped_lock const lock{_pendingMtx};
         drainedExecutes.swap(_pending);
         drainedRegistrations.swap(_pendingRegistrations);
         drainedQueue.swap(_queuedRegistrations);
@@ -480,20 +485,27 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
         // just drop the bookkeeping, there is no callback to invoke.
         _pendingDeregisters.clear();
     }
-    for (auto& [_, pending] : drainedExecutes) {
+    for (auto& [ignoredCallId, pending] : drainedExecutes) {
         if (pending.state) {
             pending.state->setException(exc);
         }
     }
-    std::string message = "disconnected";
+    // Every caller passes a `make_exception_ptr`, so `rethrow_exception` always
+    // throws and one of the two handlers always assigns `message`.
+    std::string message;
     try {
         std::rethrow_exception(exc);
     } catch (const std::exception& concrete) {
         message = concrete.what();
     } catch (...) {
-        // Non-std::exception thrown in: keep the "disconnected" fallback above.
+        // A non-std::exception carries no portable message, so report the
+        // disconnect itself -- which is what a caller can act on anyway. Doing
+        // it here rather than as an initializer above keeps the handler from
+        // being lexically empty, which `bugprone-empty-catch` rejects however
+        // well the intent is commented (morph#514).
+        message = "disconnected";
     }
-    for (auto& [_, pending] : drainedRegistrations) {
+    for (auto& [ignoredCallId, pending] : drainedRegistrations) {
         if (pending.onError) {
             pending.onError(message);
         }
@@ -509,7 +521,7 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
             entry.onError(message);
         }
     }
-    for (auto& [_, pending] : drainedAssigns) {
+    for (auto& [ignoredCallId, pending] : drainedAssigns) {
         if (pending.onError) {
             pending.onError(message);
         }
@@ -527,8 +539,13 @@ void QtWebSocketBackend::setSession(::morph::session::Context session) { _sessio
 void QtWebSocketBackend::scheduleReconnect() {
     _reconnectTimer.start(static_cast<int>(_currentReconnectDelay.count()));
     // Pre-compute the next backoff so the timer above used the *current* one.
-    auto next = std::chrono::milliseconds{
-        static_cast<std::chrono::milliseconds::rep>(_currentReconnectDelay.count() * _cfg.backoffMultiplier)};
+    // Cast up to double first so the multiplication is openly floating-point.
+    // Written as `count() * backoffMultiplier` the integral `rep` is narrowed to
+    // double *inside* the expression, which the narrowing-conversions checks
+    // flag separately from the explicit cast back (morph#514). Same arithmetic,
+    // same result -- only the one deliberate narrowing is left, on the outside.
+    auto next = std::chrono::milliseconds{static_cast<std::chrono::milliseconds::rep>(
+        static_cast<double>(_currentReconnectDelay.count()) * _cfg.backoffMultiplier)};
     _currentReconnectDelay = std::min(next, _cfg.maxReconnectDelay);
 }
 
@@ -694,7 +711,7 @@ void QtWebSocketBackend::onTextMessage(const QString& message) {
     }
 
     _pendingReply = std::move(msg);
-    if (_syncLoop) {
+    if (_syncLoop != nullptr) {
         _syncLoop->quit();
     }
 }

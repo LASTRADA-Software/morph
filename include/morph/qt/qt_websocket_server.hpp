@@ -135,6 +135,13 @@ public:
     /// @brief Closes the server and disconnects all clients.
     ~QtWebSocketServer() override;
 
+    // Neither copyable nor movable: a QObject with signal/slot connections bound
+    // to this address, holding per-client state keyed by QWebSocket pointer.
+    QtWebSocketServer(const QtWebSocketServer&) = delete;
+    QtWebSocketServer& operator=(const QtWebSocketServer&) = delete;
+    QtWebSocketServer(QtWebSocketServer&&) = delete;
+    QtWebSocketServer& operator=(QtWebSocketServer&&) = delete;
+
     /// @brief Starts listening for incoming WebSocket connections.
     ///
     /// Refuses — returns `false` without binding, and logs at
@@ -202,10 +209,10 @@ private:
         double tokens = 0.0;
 
         /// @brief Last time `tokens` was refilled (used to compute elapsed time on the next frame).
-        std::chrono::steady_clock::time_point lastRefill{};
+        std::chrono::steady_clock::time_point lastRefill;
 
         /// @brief Last time any frame was received on this connection (drives `idleTimeout`).
-        std::chrono::steady_clock::time_point lastActivity{};
+        std::chrono::steady_clock::time_point lastActivity;
 
         /// @brief One-shot timer enforcing `handshakeTimeout`; `nullptr` once cancelled by the
         ///        first frame, or if `handshakeTimeout == 0`.
@@ -222,7 +229,7 @@ private:
     /// @param state Per-connection state to update.
     /// @return `true` if a token was available (the frame is admitted), `false` if
     ///         the bucket was empty (the frame must be dropped).
-    bool consumeToken(ClientState& state);
+    bool consumeToken(ClientState& state) const;
 
     /// @brief Qt slot: periodic sweep that closes any connection idle past `idleTimeout`.
     Q_SLOT void onHousekeepingTick();
