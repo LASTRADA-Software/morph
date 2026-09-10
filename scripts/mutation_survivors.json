@@ -429,9 +429,12 @@
   },
   "classification_2026_09_09": {
     "_comment": [
-      "Partial classification of run[2]'s 199 survivors (morph#453 item A).",
-      "Recorded so the next pass starts from evidence rather than from zero.",
-      "UNCLASSIFIED IS THE MAJORITY: 183 of 199 have not been assessed."
+      "Classification of run[2]'s 199 survivors (morph#453 item A).",
+      "Updated 2026-09-10. The headline finding is NOT a classification: sampling",
+      "showed the survivor list itself is unreliable -- 5 of 6 sampled survivors",
+      "are killed by the existing suite when the same mutation is applied by hand.",
+      "See survivor_list_unreliable below and morph#510. Classifying the remaining",
+      "entries against this list would be measuring the tool, not the test suite."
     ],
     "method": "Clustered by (mutator, source shape), then assessed cluster by cluster against what the code actually promises -- not by writing an assertion per mutant, which the issue's own constraint rules out.",
     "equivalent": {
@@ -460,13 +463,68 @@
     },
     "unclassified": {
       "count": 183,
-      "largest_clusters": [
-        "cxx_replace_scalar_call x92 -- replaces a scalar-returning call with 42; concentrated on .empty()/.size() guards",
-        "cxx_init_const x27 and cxx_assign_const x25",
-        "cxx_add_to_sub x13",
-        "cxx_gt_to_ge x8 -- the boundary family morph#434 confirmed mutates and kills correctly, so these should be read as real"
+      "note": "16 classified (13 equivalent, 3 real and closed). The rest are NOT classified, and per survivor_list_unreliable above, classifying them against this run is the wrong next step.",
+      "next_step": "Fix or characterise the tooling first (morph#510). A survivor list where 5 of 6 samples are false is not a worklist."
+    },
+    "survivor_list_unreliable": {
+      "sampled": 6,
+      "detected_by_suite_despite_being_reported_survived": 5,
+      "issue": "morph#510",
+      "status": "Reproduced behaviourally, one of them on a worktree at the campaign's own revision (adfe8e5f) with its own build. Mechanism NOT established -- Mull is not installed here, so no disassembly, unlike morph#434.",
+      "samples": [
+        {
+          "site": "remote.hpp:1031",
+          "mutator": "cxx_replace_scalar_call",
+          "mutation": "if (env.kind == \"register\") forced true",
+          "result": "140 assertion failures (baseline 21985 passing) -- at adfe8e5f",
+          "verdict": "detected"
+        },
+        {
+          "site": "remote.hpp handleInline",
+          "mutator": "cxx_replace_scalar_call",
+          "mutation": "if (env.kind == \"execute\") forced true",
+          "result": "84 assertion failures",
+          "verdict": "detected"
+        },
+        {
+          "site": "bridge.hpp whenBound",
+          "mutator": "cxx_replace_scalar_call",
+          "mutation": "if (isBound(binding)) forced true",
+          "result": "6 assertion failures",
+          "verdict": "detected"
+        },
+        {
+          "site": "bridge.hpp:1683",
+          "mutator": "cxx_assign_const",
+          "mutation": "_lifetime->alive = false -> true in ~Bridge",
+          "result": "suite hangs; mull-runner's --timeout 60000 counts a timeout as detected",
+          "verdict": "detected"
+        },
+        {
+          "site": "forms.hpp:1794",
+          "mutator": "cxx_init_const",
+          "mutation": "bool found = false -> true",
+          "result": "2 assertion failures",
+          "verdict": "detected"
+        },
+        {
+          "site": "bridge.hpp:584",
+          "mutator": "cxx_init_const",
+          "mutation": "bool started = false -> true",
+          "result": "suite unchanged (21985 passing)",
+          "verdict": "genuinely equivalent -- the initialiser is dead, overwritten by `started = backend->attachModelAsync(...)` on the next statement"
+        }
       ],
-      "note": "remote.hpp (82) and bridge.hpp (33) hold 58% of all survivors. Neither has been assessed."
+      "important": [
+        "The defect is per-mutant, not per-family: cxx_init_const produced one genuine equivalent AND one mis-report. An earlier draft of this entry blamed whole families and was wrong.",
+        "So the 199 cannot be bulk-reclassified by mutator. What the sampling establishes is that the list is not trustworthy enough to classify against by hand."
+      ],
+      "ruled_out": [
+        "Test-scope mismatch: scripts/mutation.sh's core-forms scope runs tests/morph_tests, the same binary and full suite, with no filter passed to mull-runner.",
+        "Revision mismatch: the 140-failure measurement is on adfe8e5f itself and the quoted source line matches character-for-character.",
+        "Wholesale mutant-selection failure: 574 of 773 were killed in the same run, so the mechanism works in general."
+      ],
+      "consequence": "The 199-survivor baseline overstates real gaps by an unknown but large margin. It still works as a relative ratchet for morph#408's gate, since the artifacts are stable run to run."
     }
   }
 }
