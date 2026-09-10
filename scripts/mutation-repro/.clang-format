@@ -1,0 +1,5 @@
+# This directory holds a standalone reproduction that exists to be handed to
+# mull-project/mull (morph#510). It is not morph source, and reformatting it to
+# house style would make the artefact diverge from what was measured and from
+# what an upstream reader runs. Left exactly as reported.
+DisableFormat: true

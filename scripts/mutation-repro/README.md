@@ -56,3 +56,12 @@ cat perm.txt
 find compiler flags" and emits no `.mull_mutants` section at all.
 
 Observed: `Surviving mutants: 5` of 8, `Mutation score: 37%`.
+
+## Why this directory opts out of the repo's own lint and formatting
+
+`.clang-format` (`DisableFormat: true`) and `.clang-tidy` (`Checks: -*`) apply
+here and nowhere else. This is an artefact meant to be handed to someone else
+unchanged, so house style would make it diverge from what was measured -- and
+two of the rules would actively break it: `misc-const-correctness` wants `const`
+on the very variable whose initialiser `cxx_init_const` mutates, which is the
+behaviour under test.

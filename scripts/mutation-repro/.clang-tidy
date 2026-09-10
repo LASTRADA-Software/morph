@@ -1,0 +1,5 @@
+# Same reason as .clang-format here: this is an upstream reproduction, not morph
+# source. Several house rules would actively break it -- misc-const-correctness
+# wants `const` on the very variable whose initialiser `cxx_init_const` mutates,
+# which is the behaviour under test. Linting is off for this directory only.
+Checks: '-*'
