@@ -177,9 +177,9 @@ Public Member Functions</h2></td></tr>
 <div class="ttc" id="astructmorph_1_1session_1_1SessionToken_html"><div class="ttname"><a href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html">morph::session::SessionToken</a></div><div class="ttdoc">Verified claims carried by a session token.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d6a/session__auth_8hpp_source.html#l00287">session_auth.hpp:287</a></div></div>
 </div><!-- fragment -->
 <p>Optional per-request policy over verified claims. </p>
-<p>Receives the verified token plus the target ids; return <span class="tt">false</span> to deny. The default (empty) admits any validly-signed, unexpired token. </p>
+<p>Receives the verified token plus the target ids; return <span class="tt">false</span> to deny. The action id is <b>empty</b> for the <span class="tt">instances</span> and <span class="tt">schemas</span> envelopes &ndash; see <span class="tt"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901" title="Returns true if ctx is allowed to invoke actionType on modelType.">IAuthorizer::authorize</a></span>'s own doc comment for why, and handle that case explicitly rather than letting it reach a default arm (morph#500). The default (empty) admits any validly-signed, unexpired token. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00525">525</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00528">528</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +232,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00559">559</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00562">562</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -282,7 +282,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901">morph::session::IAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00569">569</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00572">572</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,7 +320,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a639b6c6bfe77ba9143b0533788726568">morph::session::IAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00582">582</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00585">585</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>

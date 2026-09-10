@@ -178,7 +178,8 @@ Functions</h2></td></tr>
 
 <p>Converts a locale-formatted numeric string to canonical (<span class="tt">-?[0-9]+(\.[0-9]+)?</span>) text. </p>
 <p>Strips every occurrence of <code class="param">groupSeparator</code>, then replaces every occurrence of <code class="param">decimalSeparator</code> with <span class="tt">.</span>. Passing <span class="tt">decimalSeparator ==
-"."</span> and an empty <code class="param">groupSeparator</code> is the identity transform (the locale-free behavior). Malformed input (a second decimal separator, a sign anywhere but the leading position, or any character that is not a digit) yields <span class="tt">std::nullopt</span> rather than a best-effort guess.</p>
+"."</span> and an empty <code class="param">groupSeparator</code> is the identity transform (the locale-free behavior). Malformed input (a second decimal separator, a sign anywhere but the leading position of the <em>output</em>, or any character that is not a digit) yields <span class="tt">std::nullopt</span> rather than a best-effort guess. The decimal point counts as output, so a sign placed straight after the separator ("`,-5`" in a de-DE locale) is rejected &ndash; matching the QML mirror in <span class="tt">src/qt/forms/qml/DynamicForm.qml</span>, which has always rejected it (morph#497).</p>
+<p>The result is <span class="tt">.</span>-decimal and digit-only, but is <b>not</b> narrowed to <span class="tt">-?[0-9]+(\.[0-9]+)?</span>: a bare "`.`", a leading "`.5`" and a trailing "`5.`" are passed through, exactly as that same QML mirror passes them. Tightening one side alone would put the two control edges back out of step, so the shape is documented here rather than changed.</p>
 <p>Separators are matched as whole strings, so a multi-byte one (e.g. U+202F) works; matching them before the per-byte digit scan is what keeps their continuation bytes from being mistaken for stray non-digit characters.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
@@ -190,7 +191,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The canonical <span class="tt">.</span>-decimal text, or <span class="tt">std::nullopt</span> when malformed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -237,7 +238,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The locale-formatted display text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>

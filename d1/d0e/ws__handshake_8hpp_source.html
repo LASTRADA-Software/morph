@@ -389,60 +389,62 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d0e/ws__han
 <div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span><span class="comment">/// @param socket Connected socket to read from.</span></div>
 <div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span><span class="comment">/// @return The header text and any leftover bytes read past the terminator.</span></div>
 <div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span><span class="comment">/// @throws std::runtime_error if the peer closes before completing the header,</span></div>
-<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment">///         or if the header exceeds a 64 KiB safety cap.</span></div>
-<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="keyword">inline</span> HandshakeReadResult readHttpHeaderBlock(TcpSocket&amp; socket) {</div>
-<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span>    std::string buf;</div>
-<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span>    <span class="keywordtype">char</span> chunk[4096];</div>
-<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span>    <span class="keywordflow">for</span> (;;) {</div>
-<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span>        <span class="keyword">auto</span> pos = buf.find(<span class="stringliteral">&quot;\r\n\r\n&quot;</span>);</div>
-<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>        <span class="keywordflow">if</span> (pos != std::string::npos) {</div>
-<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>            HandshakeReadResult result;</div>
-<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span>            result.header = buf.substr(0, pos);</div>
-<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>            result.leftover = buf.substr(pos + 4);</div>
-<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>            <span class="keywordflow">return</span> result;</div>
-<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>        }</div>
-<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>        <span class="keywordflow">if</span> (buf.size() &gt; 64u * 1024u) {</div>
-<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;readHttpHeaderBlock: header exceeds maximum size (64 KiB)&quot;</span>);</div>
-<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>        }</div>
-<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>        std::size_t got = socket.recvSome(chunk, <span class="keyword">sizeof</span>(chunk));</div>
-<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>        <span class="keywordflow">if</span> (got == 0) {</div>
-<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;readHttpHeaderBlock: peer closed connection during handshake&quot;</span>);</div>
-<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span>        }</div>
-<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span>        buf.append(chunk, got);</div>
-<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>    }</div>
-<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>}</div>
-<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span><span class="comment"></span> </div>
-<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span><span class="comment">/// @brief Performs the client side of the WebSocket handshake over @p socket.</span></div>
-<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span><span class="comment">/// @param socket Already-connected socket.</span></div>
-<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span><span class="comment">/// @param url    Parsed target URL (host/port/path) to send in the request.</span></div>
-<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span><span class="comment">/// @return Leftover bytes read past the response header — feed these into a</span></div>
-<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span><span class="comment">///         `WsFrameReader` before reading further from the socket.</span></div>
-<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span><span class="comment">/// @throws std::runtime_error if the server&#39;s response is not a valid 101</span></div>
-<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span><span class="comment">///         Switching Protocols with a matching `Sec-WebSocket-Accept`.</span></div>
-<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span><span class="keyword">inline</span> std::string performClientHandshake(TcpSocket&amp; socket, <span class="keyword">const</span> ParsedWsUrl&amp; url) {</div>
-<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span>    std::string key = generateClientKey();</div>
-<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span>    std::string request = buildClientHandshakeRequest(url, key);</div>
-<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>    socket.sendAll(request.data(), request.size());</div>
-<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span>    HandshakeReadResult result = readHttpHeaderBlock(socket);</div>
-<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span>    verifyServerHandshakeResponse(result.header, key);</div>
-<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span>    <span class="keywordflow">return</span> result.leftover;</div>
-<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span>}</div>
-<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span><span class="comment"></span> </div>
-<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span><span class="comment">/// @brief Performs the server side of the WebSocket handshake over @p socket.</span></div>
-<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span><span class="comment">/// @param socket Freshly accepted socket.</span></div>
-<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span><span class="comment">/// @return Leftover bytes read past the request header — feed these into a</span></div>
-<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span><span class="comment">///         `WsFrameReader` before reading further from the socket.</span></div>
-<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span><span class="comment">/// @throws std::runtime_error if the client&#39;s request is malformed or missing</span></div>
-<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span><span class="comment">///         the required headers.</span></div>
-<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span><span class="keyword">inline</span> std::string performServerHandshake(TcpSocket&amp; socket) {</div>
-<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span>    HandshakeReadResult result = readHttpHeaderBlock(socket);</div>
-<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span>    ClientHandshakeRequest req = parseClientHandshakeRequest(result.header);</div>
-<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span>    std::string response = buildServerHandshakeResponse(req.key);</div>
-<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span>    socket.sendAll(response.data(), response.size());</div>
-<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span>    <span class="keywordflow">return</span> result.leftover;</div>
-<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span>}</div>
-<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span> </div>
-<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span>}  <span class="comment">// namespace morph::net::detail</span></div>
+<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment">///         or if the header exceeds a ~64 KiB safety cap. The check runs before</span></div>
+<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">///         each `recvSome`, so the true bound is 64 KiB rounded up to the next</span></div>
+<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">///         read chunk (tests/net/test_handshake_over_socket.cpp says the same).</span></div>
+<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="keyword">inline</span> HandshakeReadResult readHttpHeaderBlock(TcpSocket&amp; socket) {</div>
+<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span>    std::string buf;</div>
+<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span>    <span class="keywordtype">char</span> chunk[4096];</div>
+<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>    <span class="keywordflow">for</span> (;;) {</div>
+<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>        <span class="keyword">auto</span> pos = buf.find(<span class="stringliteral">&quot;\r\n\r\n&quot;</span>);</div>
+<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span>        <span class="keywordflow">if</span> (pos != std::string::npos) {</div>
+<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>            HandshakeReadResult result;</div>
+<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>            result.header = buf.substr(0, pos);</div>
+<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>            result.leftover = buf.substr(pos + 4);</div>
+<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>            <span class="keywordflow">return</span> result;</div>
+<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>        }</div>
+<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>        <span class="keywordflow">if</span> (buf.size() &gt; 64u * 1024u) {</div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;readHttpHeaderBlock: header exceeds maximum size (64 KiB)&quot;</span>);</div>
+<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>        }</div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>        std::size_t got = socket.recvSome(chunk, <span class="keyword">sizeof</span>(chunk));</div>
+<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span>        <span class="keywordflow">if</span> (got == 0) {</div>
+<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span>            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;readHttpHeaderBlock: peer closed connection during handshake&quot;</span>);</div>
+<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>        }</div>
+<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>        buf.append(chunk, got);</div>
+<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span>    }</div>
+<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>}</div>
+<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span><span class="comment"></span> </div>
+<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span><span class="comment">/// @brief Performs the client side of the WebSocket handshake over @p socket.</span></div>
+<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span><span class="comment">/// @param socket Already-connected socket.</span></div>
+<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span><span class="comment">/// @param url    Parsed target URL (host/port/path) to send in the request.</span></div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span><span class="comment">/// @return Leftover bytes read past the response header — feed these into a</span></div>
+<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span><span class="comment">///         `WsFrameReader` before reading further from the socket.</span></div>
+<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span><span class="comment">/// @throws std::runtime_error if the server&#39;s response is not a valid 101</span></div>
+<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span><span class="comment">///         Switching Protocols with a matching `Sec-WebSocket-Accept`.</span></div>
+<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span><span class="keyword">inline</span> std::string performClientHandshake(TcpSocket&amp; socket, <span class="keyword">const</span> ParsedWsUrl&amp; url) {</div>
+<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>    std::string key = generateClientKey();</div>
+<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span>    std::string request = buildClientHandshakeRequest(url, key);</div>
+<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span>    socket.sendAll(request.data(), request.size());</div>
+<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span>    HandshakeReadResult result = readHttpHeaderBlock(socket);</div>
+<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span>    verifyServerHandshakeResponse(result.header, key);</div>
+<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span>    <span class="keywordflow">return</span> result.leftover;</div>
+<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>}</div>
+<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span><span class="comment"></span> </div>
+<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span><span class="comment">/// @brief Performs the server side of the WebSocket handshake over @p socket.</span></div>
+<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span><span class="comment">/// @param socket Freshly accepted socket.</span></div>
+<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span><span class="comment">/// @return Leftover bytes read past the request header — feed these into a</span></div>
+<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span><span class="comment">///         `WsFrameReader` before reading further from the socket.</span></div>
+<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span><span class="comment">/// @throws std::runtime_error if the client&#39;s request is malformed or missing</span></div>
+<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span><span class="comment">///         the required headers.</span></div>
+<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span><span class="keyword">inline</span> std::string performServerHandshake(TcpSocket&amp; socket) {</div>
+<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span>    HandshakeReadResult result = readHttpHeaderBlock(socket);</div>
+<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span>    ClientHandshakeRequest req = parseClientHandshakeRequest(result.header);</div>
+<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span>    std::string response = buildServerHandshakeResponse(req.key);</div>
+<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span>    socket.sendAll(response.data(), response.size());</div>
+<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span>    <span class="keywordflow">return</span> result.leftover;</div>
+<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span>}</div>
+<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span> </div>
+<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span>}  <span class="comment">// namespace morph::net::detail</span></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

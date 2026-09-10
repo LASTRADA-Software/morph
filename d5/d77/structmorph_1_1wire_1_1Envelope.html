@@ -167,11 +167,13 @@ Public Attributes</h2></td></tr>
 <li><span class="tt">"deregister"</span> — client destroys an instance. Uses <span class="tt"><a class="el" href="#a658710447abce83c9392698bdd1ca5a1" title="Existing model instance id for deregister, execute, ok(register).">modelId</a></span>.</li>
 <li><span class="tt">"execute"</span> — client dispatches an action. Uses <span class="tt"><a class="el" href="#a81aeb13f8b173ffce931e8f117e9ef59" title="Correlation id for matching async replies to their requests.">callId</a></span>, <span class="tt"><a class="el" href="#a658710447abce83c9392698bdd1ca5a1" title="Existing model instance id for deregister, execute, ok(register).">modelId</a></span>, <span class="tt"><a class="el" href="#a2ff3cb841aa7a258ad6f9b65dd6a70ab" title="Model type id for execute (routing key in ActionDispatcher).">modelType</a></span>, <span class="tt"><a class="el" href="#a3d0760f89cb023bdae4bbadb7a97ee95" title="Action type id for execute (the second routing key).">actionType</a></span>, <span class="tt"><a class="el" href="#aa4880619c9deb3551acbbfdd78299326" title="Serialized JSON of the action payload (execute) or of the deserializable result (ok).">body</a></span>, and optionally <span class="tt"><a class="el" href="#a873839ca79760b994eee91b5fb516c18" title="Session context for authorization and routing. Populated on execute; ignored on every other kind.">session</a></span>.</li>
 <li><span class="tt">"ok"</span> — server success reply. Uses <span class="tt"><a class="el" href="#a81aeb13f8b173ffce931e8f117e9ef59" title="Correlation id for matching async replies to their requests.">callId</a></span> if present and carries the serialized result in <span class="tt"><a class="el" href="#aa4880619c9deb3551acbbfdd78299326" title="Serialized JSON of the action payload (execute) or of the deserializable result (ok).">body</a></span>. For <span class="tt">register</span> replies, <span class="tt"><a class="el" href="#a658710447abce83c9392698bdd1ca5a1" title="Existing model instance id for deregister, execute, ok(register).">modelId</a></span> carries the new id.</li>
-<li><span class="tt">"err"</span> — server failure reply. Uses <span class="tt"><a class="el" href="#a81aeb13f8b173ffce931e8f117e9ef59" title="Correlation id for matching async replies to their requests.">callId</a></span> if present and <span class="tt"><a class="el" href="#a31e1d8eb0773faa7d75539ef8da14584" title="Free-text error message on err. Empty on success.">message</a></span>. </li>
+<li><span class="tt">"err"</span> — server failure reply. Uses <span class="tt"><a class="el" href="#a81aeb13f8b173ffce931e8f117e9ef59" title="Correlation id for matching async replies to their requests.">callId</a></span> if present and <span class="tt"><a class="el" href="#a31e1d8eb0773faa7d75539ef8da14584" title="Free-text error message on err. Empty on success.">message</a></span>.</li>
+<li><span class="tt">"hello"</span> — client opens protocol-version negotiation, once per connection before any other kind. Uses <span class="tt"><a class="el" href="#a6b9ae341d63a0f0e0c81fc6a8e342750" title="Protocol version the sender speaks.">protocolVersion</a></span>; see <span class="tt">makeHello()</span> and <span class="tt">interpretHelloReply()</span>. A peer predating negotiation answers <span class="tt">err "unknown envelope <a class="el" href="#a81787fa40e7b4af0cb09babaf404278b" title="Discriminator — see class docstring for valid values.">kind</a>:
+                  hello"</span>, which is how a legacy server is detected. </li>
 </ul>
 </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a81787fa40e7b4af0cb09babaf404278b" name="a81787fa40e7b4af0cb09babaf404278b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a81787fa40e7b4af0cb09babaf404278b">&#9670;&#160;</a></span>kind</h2>
@@ -187,7 +189,7 @@ Public Attributes</h2></td></tr>
 
 <p>Discriminator — see class docstring for valid values. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -205,7 +207,7 @@ Public Attributes</h2></td></tr>
 
 <p>Correlation id for matching async replies to their requests. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -223,7 +225,7 @@ Public Attributes</h2></td></tr>
 
 <p>Model type id for <span class="tt">register</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -241,7 +243,7 @@ Public Attributes</h2></td></tr>
 
 <p>Stable identity of the model instance being registered or attached to (e.g. an account id). Empty means "no identity" — the server-side holder gets no action log attached even if a <span class="tt">LogProvider</span> is configured. Carried on <span class="tt">register</span> and <span class="tt">attach</span>; ignored on every other kind. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -262,7 +264,7 @@ Public Attributes</h2></td></tr>
 <p>Distinct from <span class="tt"><a class="el" href="#a8c17cefc14d6416071233de513237d50" title="Stable identity of the model instance being registered or attached to (e.g. an account id)....">contextKey</a></span>, which continues to mean only "entity key for
 the action log". A keyed model will normally set both to the same value, but conflating the fields would change behaviour for callers already setting <span class="tt"><a class="el" href="#a8c17cefc14d6416071233de513237d50" title="Stable identity of the model instance being registered or attached to (e.g. an account id)....">contextKey</a></span> for journal purposes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00103">103</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -281,7 +283,7 @@ the action log". A keyed model will normally set both to the same value, but con
 <p>Whether a <span class="tt">register</span> should join the shared instance directory. </p>
 <p><span class="tt">true</span> makes the request a <em>register-or-attach</em>: the server returns the existing instance for <span class="tt">(<a class="el" href="#af154f3156a5d37877f06c9ebd33b7192" title="Model type id for register.">typeId</a>, <a class="el" href="#aee97fe75f078c0c2c894a145c1f09f7e" title="Primary key of the instance being registered or attached to.">primary</a>)</span> if one is live, otherwise creates it and enters it in the directory. <span class="tt">false</span> (the default, and the value every pre-existing client sends) is today's behaviour exactly — a private instance, invisible to the directory. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -299,7 +301,7 @@ the action log". A keyed model will normally set both to the same value, but con
 
 <p>Existing model instance id for <span class="tt">deregister</span>, <span class="tt">execute</span>, <span class="tt">ok(register)</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -317,7 +319,7 @@ the action log". A keyed model will normally set both to the same value, but con
 
 <p>Model type id for <span class="tt">execute</span> (routing key in <span class="tt">ActionDispatcher</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -335,7 +337,7 @@ the action log". A keyed model will normally set both to the same value, but con
 
 <p>Action type id for <span class="tt">execute</span> (the second routing key). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -353,7 +355,7 @@ the action log". A keyed model will normally set both to the same value, but con
 
 <p>Serialized JSON of the action payload (<span class="tt">execute</span>) or of the deserializable result (<span class="tt">ok</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -371,7 +373,7 @@ the action log". A keyed model will normally set both to the same value, but con
 
 <p>Free-text error message on <span class="tt">err</span>. Empty on success. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00128">128</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -389,7 +391,7 @@ the action log". A keyed model will normally set both to the same value, but con
 
 <p>Session context for authorization and routing. Populated on <span class="tt">execute</span>; ignored on every other kind. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -409,7 +411,7 @@ the action log". A keyed model will normally set both to the same value, but con
 <p><span class="tt">0</span> means "unspecified / legacy peer" — the value on every envelope an old encoder (unaware of this field) produces, and the value an old decoder (unaware of this field) leaves untouched when it receives one from a newer peer (ignored via <span class="tt">decode</span>'s <span class="tt">error_on_unknown_keys =
 false</span>). Populated by <span class="tt">makeHello()</span> on <span class="tt">"hello"</span>; not otherwise inspected by other <span class="tt"><a class="el" href="#a81787fa40e7b4af0cb09babaf404278b" title="Discriminator — see class docstring for valid values.">kind</a></span>s today. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
