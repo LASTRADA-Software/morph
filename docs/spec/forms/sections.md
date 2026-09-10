@@ -186,9 +186,20 @@ Every continuation is gated on one `morph::async::CallbackScope`
 ([../core/callback_scope.md](../core/callback_scope.md)), declared last so it
 is the first member destroyed, and stopped explicitly at the top of
 `~SectionSet`. A completion resolving after the set is gone finds the token
-stopped and returns without touching anything. As always, how strong that
-guarantee is depends on which thread destroys the set — destroying it off the
-delivery thread is advisory, and that caller owns its own synchronisation.
+stopped and returns without touching anything.
+
+That covers a completion which has not yet started. It does not cover one
+already past its token check: `requestStop()` does not wait, by design. So a
+`SectionSet` may only be destroyed while a dispatch is outstanding if the
+destroying thread is the one completions are delivered on — the ordinary case
+for a UI-thread callback executor, and the boundary
+[../core/callback_scope.md](../core/callback_scope.md) describes.
+
+**Polling `resolved()` is not a substitute for that.** Capture publishes each
+key as it writes it, so a value becoming visible means the completion has
+started, not that it has finished. A caller that destroys a set on one thread
+the moment a value appears on another is destroying it mid-callback. `tests/test_sections.cpp` demonstrates the safe shape: deliver the completions on the
+thread that owns the set.
 
 Unlike `FlowSession`, nothing here is keyed to a current position, so a reply
 arriving late cannot be *stale*: there is no position for it to be stale
@@ -268,6 +279,10 @@ make a member field wrong to set.
 - An unhandled failure logs instead of escaping, and the set survives it.
 - Destroying the set with a dispatch genuinely in flight (a section whose
   model call blocks until the test releases it) delivers nothing afterwards.
+
+Every other case delivers its completions on the test thread through a
+`StepExecutor` and drains before the set leaves scope, for the reason
+[Concurrency and lifetime](#concurrency-and-lifetime) gives.
 
 ## Cross-references
 
