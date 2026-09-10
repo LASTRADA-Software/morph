@@ -595,32 +595,44 @@ TEST_CASE("CallbackScope: token()/requestStop()/stopRequested() are concurrent a
     std::atomic<bool> stop{false};
     std::atomic<int> observed{0};
 
+    // `started` is a handshake, not decoration: the main thread must not begin
+    // its side until the reader is provably inside its loop. Three separate CI
+    // failures came from getting this wrong -- a fixed iteration count that
+    // finished before the reader was scheduled, a `while` whose condition was
+    // tested first and so ran zero times, and finally Valgrind, which serialises
+    // threads and starved the reader for a full ten-second deadline while the
+    // main thread spun on atomics that never yield.
+    std::atomic<bool> started{false};
     std::thread reader{[&] {
+        started.store(true, std::memory_order_release);
         while (!stop.load(std::memory_order_acquire)) {
             auto tok = scope.token();
             (void)tok.active();
             (void)scope.stopRequested();
             observed.fetch_add(1, std::memory_order_relaxed);
+            // Yields inside the loop as well, so neither side can monopolise a
+            // serialised scheduler.
+            std::this_thread::yield();
         }
     }};
+
+    constexpr int kMinInterleavings = 100;
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{30};
+    while (!started.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+
     // requestStop() from this thread while the reader reads: both act on the
     // *current* generation, which is what the narrowed contract still covers.
-    //
-    // Driven by the reader's own progress rather than a fixed iteration count.
-    // A fixed count races thread-start latency -- 2000 relaxed stores finish in
-    // microseconds, so on a loaded machine the reader could still be starting
-    // when `stop` went up, leaving `observed` at 0. That is what happened on
-    // CI's clang-debug leg while this test passed locally.
-    // The first call is unconditional, deliberately: a bare `while` whose
-    // condition is tested first executed zero times when the reader raced ahead
-    // of it, leaving `requestStop()` never called and `stopRequested()` false.
-    // That only appeared under heavy oversubscription.
-    constexpr int kMinInterleavings = 100;
-    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+    // The first call is unconditional so this cannot run zero times.
     scope.requestStop();
     while (observed.load(std::memory_order_relaxed) < kMinInterleavings &&
            std::chrono::steady_clock::now() < deadline) {
         scope.requestStop();
+        // sched_yield(2) is a real syscall, which is what gives Valgrind's
+        // serialising scheduler a point at which to switch to the reader. A
+        // pure atomic-store loop offers it none.
+        std::this_thread::yield();
     }
     stop.store(true, std::memory_order_release);
     reader.join();
