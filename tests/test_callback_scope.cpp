@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -604,13 +605,30 @@ TEST_CASE("CallbackScope: token()/requestStop()/stopRequested() are concurrent a
     }};
     // requestStop() from this thread while the reader reads: both act on the
     // *current* generation, which is what the narrowed contract still covers.
-    for (int i = 0; i < 2000; ++i) {
+    //
+    // Driven by the reader's own progress rather than a fixed iteration count.
+    // A fixed count races thread-start latency -- 2000 relaxed stores finish in
+    // microseconds, so on a loaded machine the reader could still be starting
+    // when `stop` went up, leaving `observed` at 0. That is what happened on
+    // CI's clang-debug leg while this test passed locally.
+    // do/while, not while: the condition is checked *after* the first call, so
+    // this cannot execute zero times. A plain `while` did, when the reader
+    // raced ahead of the first iteration and `observed` was already past the
+    // threshold -- leaving `requestStop()` never called and `stopRequested()`
+    // false. That showed up only under heavy oversubscription.
+    constexpr int kMinInterleavings = 100;
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+    do {
         scope.requestStop();
-    }
+    } while (observed.load(std::memory_order_relaxed) < kMinInterleavings &&
+             std::chrono::steady_clock::now() < deadline);
     stop.store(true, std::memory_order_release);
     reader.join();
 
-    REQUIRE(observed.load() > 0);
+    // Proves the two threads genuinely interleaved, so a clean TSan run means
+    // something. Without this the case could report success having measured
+    // nothing at all.
+    REQUIRE(observed.load() >= kMinInterleavings);
     REQUIRE(scope.stopRequested());
 
     // reset() is the externally-synchronised member: called here with no reader

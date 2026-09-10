@@ -140,19 +140,19 @@
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 104,
+      "line": 109,
       "source": "if (_ioThread.joinable()) {",
       "reason": "Unreachable by construction (net audit, `socket_backend.hpp` extra finding #5). `_ioThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else in the file resets, joins, or detaches it, so at destructor time it is always joinable."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 116,
+      "line": 121,
       "source": "if (_handlerThread.joinable()) {",
-      "reason": "Unreachable by construction, same shape as `_ioThread`'s line 104 above (net audit, `socket_backend.hpp` extra finding #6). `_handlerThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else resets, joins, or detaches it, so at destructor time it is always joinable."
+      "reason": "Unreachable by construction, same shape as `_ioThread`'s line 109 above (net audit, `socket_backend.hpp` extra finding #6). `_handlerThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else resets, joins, or detaches it, so at destructor time it is always joinable."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 555,
+      "line": 560,
       "source": "default:",
       "reason": "Unreachable except via the adjacent `Error` case it deliberately shares a body with (net audit, `socket_backend.hpp` extra finding #7). `detail::ExecuteReplyKind` is a closed 3-value enum (`Value`/`Timeout`/`Error`), all three handled explicitly above this label; `default:` exists only to satisfy this project's `-Wswitch-default`, per the source's own inline comment directly below this line. Reaching it via any value other than through the `Error` case falling through would require an out-of-range `static_cast` producing a value outside the enum's domain -- undefined behavior, not a legitimate test target."
     }

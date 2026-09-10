@@ -86,19 +86,24 @@ public:
     /// implementation. See `docs/spec/core/backend.md`'s `morph::net` section.
     ~SocketBackend() override {
         _shuttingDown.store(true);
-        // Deliberately NOT under `_socketMtx` -- this is the same trap
-        // `SocketServer::close()` documents avoiding, reached from the client
-        // side. `sendFrame` holds `_socketMtx` across `_socket.sendAll()`, which
-        // loops on a blocking `::send` with no timeout, so a thread stalled
-        // against a peer that has stopped reading holds that lock indefinitely.
-        // Waiting for it here would block the destructor on exactly the
-        // condition that only `shutdownBoth()` can clear -- and `shutdownBoth()`
-        // is documented safe from any thread (detail/tcp_socket.hpp), which is
-        // what makes taking the lock unnecessary as well as harmful. The I/O
-        // thread's own Pong/Close echo in `drainFrames` reaches `sendFrame` too,
-        // so the stuck holder need not even be an application thread. morph#506.
-        if (_socket.valid()) {
-            _socket.shutdownBoth();
+        // Under `_socketMtx`, and it has to be -- see morph#506, which proposed
+        // dropping it and was proved wrong by ThreadSanitizer. `shutdownBoth()`
+        // is indeed safe to call from any thread, but that is not what the lock
+        // is protecting here: `onDisconnected()` *reassigns* `_socket`
+        // (`_socket = TcpSocket{}`, a move-assign that closes the old fd), so an
+        // unlocked `_socket.valid()` here races the I/O thread replacing the
+        // object out from under it.
+        //
+        // The hazard #506 describes is real and remains open: `sendFrame` holds
+        // this mutex across a blocking, un-timed `sendAll`, so a peer that stops
+        // reading can park the destructor here. Closing that needs a way to
+        // reach the fd without the mutex (an atomic fd shadowing `_socket`, with
+        // its own fd-reuse story), not simply removing the lock.
+        {
+            std::scoped_lock const lock{_socketMtx};
+            if (_socket.valid()) {
+                _socket.shutdownBoth();
+            }
         }
         _reconnectCv.notify_all();
         if (_ioThread.joinable()) {
