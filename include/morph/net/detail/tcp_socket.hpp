@@ -374,6 +374,28 @@ public:
         }
     }
 
+    /// @brief Bounds how long a single `::send` inside `sendAll()` may block.
+    ///
+    /// Without this a `sendAll` against a peer that has stopped reading blocks
+    /// forever once the kernel send buffer fills, and it does so while holding
+    /// whatever lock its caller took -- which is how `~SocketBackend` came to be
+    /// parkable behind `_socketMtx` (morph#506). With `SO_SNDTIMEO` set, the
+    /// blocked `send` returns `EAGAIN`/`EWOULDBLOCK` instead, `sendAll` throws
+    /// as it already does for any other send error, and the lock is released.
+    ///
+    /// A timeout is not a "slow link" cutoff: it bounds one `send` syscall that
+    /// is making *no* progress, so it should be set generously. Zero disables it
+    /// (the kernel default, block forever).
+    ///
+    /// @param timeout Per-`send` bound; zero to disable.
+    /// @return `true` if the option was applied.
+    [[nodiscard]] bool setSendTimeout(std::chrono::milliseconds timeout) const noexcept {
+        timeval tv{};
+        tv.tv_sec = static_cast<decltype(tv.tv_sec)>(timeout.count() / 1000);
+        tv.tv_usec = static_cast<decltype(tv.tv_usec)>((timeout.count() % 1000) * 1000);
+        return ::setsockopt(_fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == 0;
+    }
+
     /// @brief Shuts down both directions of the socket, unblocking a concurrent
     ///        `recvSome`/`sendAll` on another thread. Safe to call from any thread.
     ///

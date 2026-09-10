@@ -477,3 +477,49 @@ TEST_CASE("TcpSocket::shutdownBoth: a safe no-op on an empty socket", "[net][tcp
     empty.shutdownBoth();  // must not crash
     REQUIRE_FALSE(empty.valid());
 }
+
+// ── morph#506: a peer that stops reading must not park the sender forever ──
+//
+// Once the kernel send buffer fills against a peer that never reads, a blocking
+// `::send` never returns -- and `sendAll` loops on it. `SocketBackend::sendFrame`
+// holds `_socketMtx` across that call, so `~SocketBackend` parks on the same
+// lock with nothing able to release it. (Removing the lock is NOT the fix: it
+// races `onDisconnected()` reassigning `_socket`, 25 ThreadSanitizer reports.)
+//
+// `SO_SNDTIMEO` bounds one no-progress send instead, so `sendAll` throws the way
+// it already does for any other send error and the lock is released.
+TEST_CASE("TcpSocket: setSendTimeout bounds a send against a peer that never reads", "[net][tcp][morph506]") {
+    auto listener = TcpSocket::listen(0);
+    std::uint16_t const port = listener.boundPort();
+
+    // Accepts and then does nothing at all -- never reads a byte. Held open for
+    // the duration of the test so the connection stays established.
+    TcpSocket serverSide;
+    std::thread acceptThread{[&] { serverSide = listener.accept(); }};
+    auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
+    acceptThread.join();
+    REQUIRE(serverSide.valid());
+
+    constexpr auto kTimeout = std::chrono::milliseconds{300};
+    REQUIRE(clientSide.setSendTimeout(kTimeout));
+
+    // Push until the buffers fill. Without the timeout this loop never returns;
+    // with it, sendAll throws once a single send makes no progress.
+    std::string const chunk(std::size_t{256} * 1024, 'x');
+    auto const start = std::chrono::steady_clock::now();
+    bool threw = false;
+    for (int i = 0; i < 400 && !threw; ++i) {
+        try {
+            clientSide.sendAll(chunk.data(), chunk.size());
+        } catch (const std::runtime_error&) {
+            threw = true;
+        }
+    }
+    auto const elapsed = std::chrono::steady_clock::now() - start;
+
+    REQUIRE(threw);
+    // The bound that matters: it gave up rather than blocking indefinitely.
+    // Generous multiple of the timeout, since each successful send before the
+    // buffers filled costs real time too.
+    CHECK(elapsed < std::chrono::seconds{20});
+}

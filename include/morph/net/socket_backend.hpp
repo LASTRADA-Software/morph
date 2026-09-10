@@ -36,6 +36,14 @@ struct SocketBackendConfig {
     double backoffMultiplier = 2.0;
     /// @brief Maximum time to wait for the initial TCP connect to complete.
     std::chrono::milliseconds connectTimeout{5000};
+    /// @brief Bound on a single `::send` that is making no progress.
+    ///
+    /// Applied as `SO_SNDTIMEO`. Without it, a peer that stops reading fills the
+    /// kernel send buffer and parks `sendFrame` inside `sendAll` **while holding
+    /// `_socketMtx`** -- which parks `~SocketBackend` behind the same lock, with
+    /// nothing able to release it (morph#506). Generous on purpose: it bounds a
+    /// send making *no* progress, not a slow one. Zero disables it.
+    std::chrono::milliseconds sendTimeout{30000};
 };
 
 /// @brief `IBackend` implementation that communicates with a `RemoteServer`
@@ -94,11 +102,13 @@ public:
         // unlocked `_socket.valid()` here races the I/O thread replacing the
         // object out from under it.
         //
-        // The hazard #506 describes is real and remains open: `sendFrame` holds
-        // this mutex across a blocking, un-timed `sendAll`, so a peer that stops
-        // reading can park the destructor here. Closing that needs a way to
-        // reach the fd without the mutex (an atomic fd shadowing `_socket`, with
-        // its own fd-reuse story), not simply removing the lock.
+        // The hazard #506 describes is closed from the other end: `sendAll` is
+        // no longer un-timed. `Config::sendTimeout` (SO_SNDTIMEO, 30s default)
+        // bounds any single send that makes no progress, so a peer that stops
+        // reading can hold `_socketMtx` for at most that long instead of
+        // forever, and this wait is bounded rather than open-ended. Fixing it
+        // that way rather than by reaching the fd without the mutex avoids the
+        // fd-reuse hazard an atomic shadow descriptor would carry.
         {
             std::scoped_lock const lock{_socketMtx};
             if (_socket.valid()) {
@@ -639,6 +649,13 @@ private:
             bool connectedOk = false;
             try {
                 auto socket = ::morph::net::detail::TcpSocket::connect(_url.host, _url.port, _cfg.connectTimeout);
+                if (_cfg.sendTimeout.count() > 0) {
+                    // Before the handshake, so even that cannot park forever.
+                    // Bounds any single send that makes no progress, which is
+                    // what keeps ~SocketBackend from being parked behind
+                    // _socketMtx by a peer that stopped reading (morph#506).
+                    (void)socket.setSendTimeout(_cfg.sendTimeout);
+                }
                 std::string leftover = ::morph::net::detail::performClientHandshake(socket, _url);
                 {
                     std::scoped_lock lock{_socketMtx};
