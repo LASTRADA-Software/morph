@@ -288,12 +288,7 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// which `[basic.def.odr]` permits in multiple translation units when the
 /// definitions are token-identical. See docs/spec/core/registry.md, "Header
 /// placement is legal".
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_MODEL_KEY(M, A, MEMBER)                                                                \
     template <>                                                                                       \
     struct morph::model::ActionKeyTraits<A> {                                                         \
@@ -318,12 +313,7 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// Must appear at global scope; a header included by several translation units
 /// is fine (only explicit specialisations are emitted — see
 /// docs/spec/core/registry.md, "Header placement is legal").
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_KEY_FROM(A, MEMBER)                                                                    \
     template <>                                                                                       \
     struct morph::model::ActionKeyTraits<A> {                                                         \
@@ -343,12 +333,7 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// Must appear at global scope; a header included by several translation units
 /// is fine (only explicit specialisations are emitted — see
 /// docs/spec/core/registry.md, "Header placement is legal").
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_MODEL_KEY_FROM_RESULT(M, A, MEMBER)                               \
     template <>                                                                  \
     struct morph::model::ActionKeyTraits<A> {                                    \
@@ -373,12 +358,7 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// Must appear at global scope; a header included by several translation units
 /// is fine (only explicit specialisations are emitted — see
 /// docs/spec/core/registry.md, "Header placement is legal").
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_KEY_FROM_RESULT(A, MEMBER)                     \
     template <>                                               \
     struct morph::model::ActionKeyTraits<A> {                 \

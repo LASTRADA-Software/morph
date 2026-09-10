@@ -742,7 +742,7 @@ public:
 
     /// @brief Schedules `onBackendChanged()` on each change-aware model's strand. Thread-safe.
     ///
-    /// Only models recorded in `_changeAware` — maintained by `registerModel`/
+    /// Only models recorded in `_changeAware` — maintained by `createAndTrack`/
     /// `deregisterModel` from `IModelHolder::isBackendChangeAware()`, a
     /// compile-time answer per model type — are visited; there is no
     /// `dynamic_cast` and no scan of models that never opted in. Each such

@@ -93,6 +93,39 @@ TEST_CASE("OpaqueIdGenerator is a bijection: 20000 counters produce 20000 distin
     REQUIRE(seen.size() == n);
 }
 
+// ── morph#453: the bijection above cannot see the high 32 bits ──
+//
+// Counters 1..20000 all have a zero high half, so the case above passes whether
+// or not `permute` uses `counter >> 32` at all -- it cannot distinguish a
+// 64-bit permutation from one that silently ignores the top half. That is the
+// "would this still pass if the feature did nothing?" failure, and the mutation
+// campaign found it: three survivors sit on the Feistel structure
+// (`counter >> 32`, `hi ^ mix(...)`, `hi << 32`), none of which the sample can
+// reach.
+//
+// Simulated against the real round function, over 20000 counters that *do*
+// exercise the high half: replacing `>>` with `<<` collapses 20000 ids to **1**,
+// and replacing the Feistel `^` with `|` collapses them to **1256**. Both are
+// catastrophic id collisions -- for opaque model ids, a security-relevant one --
+// and both are invisible to the existing sample.
+TEST_CASE("OpaqueIdGenerator is a bijection over counters that exercise the high half",
+          "[opaque_id][unit][morph453]") {
+    morph::backend::detail::OpaqueIdGenerator const gen;
+    std::unordered_set<uint64_t> seen;
+    constexpr uint64_t n = 20000;
+    // Stride by 2^32 so every counter has a distinct, non-zero high word; the
+    // +7 keeps the low half non-zero too, so neither half is degenerate.
+    for (uint64_t i = 0; i < n; ++i) {
+        seen.insert(gen.permute((i << 32U) + 7U));
+    }
+    REQUIRE(seen.size() == n);
+
+    // And mixing both halves: adjacent counters differing only in the high word
+    // must not map to the same id.
+    REQUIRE(gen.permute(1U) != gen.permute((1ULL << 32U) + 1U));
+    REQUIRE(gen.permute(0U) != gen.permute(1ULL << 32U));
+}
+
 TEST_CASE("OpaqueIdGenerator output is not sequential", "[opaque_id][unit]") {
     morph::backend::detail::OpaqueIdGenerator gen;
     const uint64_t first = gen.permute(1);

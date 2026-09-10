@@ -37,8 +37,17 @@ namespace morph::render {
 /// occurrence of @p decimalSeparator with `.`. Passing `decimalSeparator ==
 /// "."` and an empty @p groupSeparator is the identity transform (the
 /// locale-free behavior). Malformed input (a second decimal separator, a
-/// sign anywhere but the leading position, or any character that is not a
-/// digit) yields `std::nullopt` rather than a best-effort guess.
+/// sign anywhere but the leading position of the *output*, or any character that
+/// is not a digit) yields `std::nullopt` rather than a best-effort guess. The
+/// decimal point counts as output, so a sign placed straight after the separator
+/// ("`,-5`" in a de-DE locale) is rejected -- matching the QML mirror in
+/// `src/qt/forms/qml/DynamicForm.qml`, which has always rejected it (morph#497).
+///
+/// The result is `.`-decimal and digit-only, but is **not** narrowed to
+/// `-?[0-9]+(\.[0-9]+)?`: a bare "`.`", a leading "`.5`" and a trailing "`5.`"
+/// are passed through, exactly as that same QML mirror passes them. Tightening
+/// one side alone would put the two control edges back out of step, so the shape
+/// is documented here rather than changed.
 ///
 /// Separators are matched as whole strings, so a multi-byte one (e.g. U+202F)
 /// works; matching them before the per-byte digit scan is what keeps their
@@ -69,6 +78,11 @@ namespace morph::render {
             }
             sawDecimal = true;
             canonical += '.';
+            // The decimal point *is* output: without this, the `chr == '-'`
+            // guard below still believes nothing has been emitted, and a sign
+            // placed straight after the separator ("`,-5`" in a de-DE locale)
+            // is accepted as if it were leading. morph#497.
+            sawAnyOutput = true;
             i += decimalSeparator.size();
             continue;
         }

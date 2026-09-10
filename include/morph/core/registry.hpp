@@ -902,12 +902,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 ///
 /// @param M    Concrete model type.
 /// @param NAME String literal used as the type-id.
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_MODEL(M, NAME)                                       \
     template <>                                                              \
     struct morph::model::ModelTraits<M> {                                    \
@@ -943,12 +938,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param NAME String literal used as the action type-id.
 /// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
 // NOLINTBEGIN(cppcoreguidelines-macro-usage) — registration macros are the intended public API
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_ACTION(...)                                                              \
     BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3) \
     (__VA_ARGS__)
@@ -1003,12 +993,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param RESULT The action's result type, named explicitly.
 /// @param NAME   String literal used as the action type-id.
 /// @param ...    Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                               \
     BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5, \
                                            BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)              \
@@ -1018,12 +1003,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @cond detail
 #define BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(_1, _2, _3, _4, _5, NAME, ...) NAME
 
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_ACTION_FOR_CLIENT_4(M, A, RESULT, NAME) \
     BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, ::morph::model::Loggable::Yes)
 // clang-format on
@@ -1047,12 +1027,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 ///                      deduction from `M::execute(A)`.
 /// @param NAME         String literal used as the action type-id.
 /// @param LOGGABLE     A `morph::model::Loggable` value.
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, RESULT_ALIAS, NAME, LOGGABLE)                                   \
     template <>                                                                                                \
     struct morph::model::ActionTraits<A> {                                                                     \
@@ -1124,12 +1099,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     }
 // clang-format on
 
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, LOGGABLE) \
     BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, RESULT, NAME, LOGGABLE)
 // clang-format on
@@ -1140,12 +1110,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 
 #define BRIDGE_REGISTER_ACTION_3(M, A, NAME) BRIDGE_REGISTER_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)
 
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE) \
     BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, decltype(std::declval<M&>().execute(std::declval<A>())), NAME, LOGGABLE)
 // clang-format on
@@ -1159,12 +1124,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 ///
 /// @param A  Concrete action type.
 /// @param FN Callable `bool(const A&)`.
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_VALIDATOR(A, FN)                            \
     template <>                                                     \
     struct morph::model::ActionValidator<A> {                       \

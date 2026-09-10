@@ -129,3 +129,23 @@ TEST_CASE("morph::exec::MainThreadExecutor drain runs a bounded chain of tasks t
     exec.drain();
     REQUIRE(count.load() == chainLength);
 }
+
+// ── morph#501: a non-std::exception must not escape the main-thread pump ──
+//
+// runTask() caught only `const std::exception&`, while ThreadPoolExecutor::loop
+// has caught `...` as well all along. Three doc claims on this class depended on
+// the missing arm: runFor "execution continues with the next task", runOnce
+// "returns `true` whether or not that task threw" (it did not return at all),
+// and drain, which left the queue undrained.
+TEST_CASE("MainThreadExecutor: a task throwing a non-std::exception is contained", "[executor][morph501]") {
+    morph::exec::MainThreadExecutor exec;
+    bool ranAfter = false;
+    exec.post([] { throw 42; });  // not derived from std::exception
+    exec.post([&ranAfter] { ranAfter = true; });
+
+    // Before the fix this call propagated the `int` instead of returning.
+    REQUIRE(exec.runOnce());
+    // And the queue must still be pumpable afterwards.
+    REQUIRE(exec.runOnce());
+    REQUIRE(ranAfter);
+}

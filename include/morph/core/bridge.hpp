@@ -612,12 +612,12 @@ public:
                     }
                     std::exception_ptr failure;
                     {
-                        // contextKey/primary are plain std::strings that the
-                        // other attach/assign sites read under `_attachMtx`;
-                        // publishing them without it would be a data race, not
-                        // just a stale read. (`registerHandlerImpl`'s two reads
-                        // are the exception and hold neither lock -- see
-                        // morph#505.)
+                        // contextKey/primary are plain std::strings that every
+                        // other site reads under `_attachMtx`; publishing them
+                        // without it would be a data race, not just a stale
+                        // read. (`registerHandlerImpl`'s read during
+                        // registration is the one documented carve-out -- see
+                        // its own comment, and morph#505.)
                         std::scoped_lock const guard{_attachMtx};
                         auto pinned = weakBackend.lock();
                         if (!pinned || pinned != loadBackend()) {
@@ -1549,7 +1549,25 @@ public:
             std::scoped_lock const lock{_sessionMtx};
             call.session = _defaultSession;
         }
-        auto anyCompletion = backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
+        // `backend->execute` is not `noexcept` and genuinely throws: for
+        // `QtWebSocketBackend` it runs `call.serializeAction()` (user `toJson`
+        // and glaze) and `wire::encode(env)`. A throw here escaped
+        // `BridgeHandler::execute` with `_pendingCalls` already incremented and
+        // the deadline already armed, permanently inflating `pendingCalls()` --
+        // which the class documents as a quiescence gate -- and stranding the
+        // timer entry. Undo both, then let the exception continue to the caller
+        // (morph#502).
+        ::morph::async::Completion<std::shared_ptr<void>> anyCompletion = [&] {
+            try {
+                return backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
+            } catch (...) {
+                _pendingCalls->fetch_sub(1, std::memory_order_relaxed);
+                if (deadlineHandle && schedulerRef) {
+                    schedulerRef->cancel(*deadlineHandle);
+                }
+                throw;
+            }
+        }();
         anyCompletion
             .then([typedState, onResult = std::move(onResult), raw, deadlineHandle, schedulerRef,
                    pendingCalls = _pendingCalls, subscriptions = _subscriptions,
@@ -1758,6 +1776,26 @@ private:
 
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
+
+        // `binding->contextKey` is read here without `_attachMtx`, and that is a
+        // deliberate carve-out from the "read only under `_attachMtx`" rule the
+        // member comment states -- not an oversight. Taking the lock here is
+        // *ruled out by test*: "Bridge: an in-flight shared attach does not
+        // block unrelated handler registration"
+        // (tests/test_shared_instances.cpp) exists precisely because
+        // `attachHandler` holds `_attachMtx` across a full backend round trip,
+        // and having registration contend for the same lock is the regression
+        // that test was written to catch. Measured: acquiring it here, even
+        // briefly, fails that case.
+        //
+        // What makes the unlocked read safe is ordering, not locking: the
+        // writers (`attachHandler`, `ensureBound`, `assignHandlerPrimary`) all
+        // operate on a binding that is already registered, and this runs during
+        // registration. The pre-built-binding `registerHandler()` overload hands
+        // the caller the binding first, so the requirement is on the caller:
+        // **set `contextKey` before calling `registerHandler()`, and do not
+        // mutate it concurrently with that call.** After registration returns,
+        // every access goes under `_attachMtx` as documented. morph#505.
         bool const started = backend->registerModelAsync(
             binding->typeId, binding->modelFactory, binding->contextKey,
             [this, weakBackend, weakBinding, lifetime = _lifetime](::morph::exec::detail::ModelId newId) {
@@ -1932,10 +1970,17 @@ private:
     // reply-delivering thread that itself needed `_mtx` could deadlock
     // against it. `HandlerBinding::primary`/`contextKey` are therefore
     // mutated (and must be read) only under `_attachMtx` — never under `_mtx`
-    // alone. `switchBackend()` and the reconnect handler, which also touch
-    // them alongside `_handlers`, take both mutexes together via
-    // `std::scoped_lock{_mtx, _attachMtx}` (deadlock-safe regardless of
-    // acquisition order, by `std::scoped_lock`'s own guarantee).
+    // alone. **One carve-out**, and it is load-bearing rather than an
+    // oversight: `registerHandlerImpl` reads `contextKey` unlocked *during
+    // registration*, because acquiring `_attachMtx` there would make
+    // `registerHandler()` contend with a slow shared attach — the exact
+    // regression "Bridge: an in-flight shared attach does not block unrelated
+    // handler registration" (tests/test_shared_instances.cpp) was written to
+    // catch, and which taking the lock there demonstrably reproduces. That read
+    // is ordered rather than locked; see its own comment for the requirement
+    // that places on a caller of the pre-built-binding overload (morph#505). `switchBackend()` and the reconnect
+    // handler, which also touch them alongside `_handlers`, take both mutexes together via `std::scoped_lock{_mtx,
+    // _attachMtx}` (deadlock-safe regardless of acquisition order, by `std::scoped_lock`'s own guarantee).
     std::mutex _attachMtx;
     mutable std::mutex _sessionMtx;
     ::morph::session::Context _defaultSession;

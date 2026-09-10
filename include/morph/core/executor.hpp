@@ -213,6 +213,14 @@ private:
             task();
         } catch (const std::exception& exc) {
             ::morph::log::logError("[main-thread] callback threw: " + std::string{exc.what()});
+        } catch (...) {
+            // Mirrors ThreadPoolExecutor::loop's own catch-all. Without it a
+            // non-`std::exception` throw unwinds out of runFor()/runOnce()/
+            // drain(), each of which documents that a throwing task is logged
+            // and the pump continues -- runOnce() promises to return `true`
+            // "whether or not that task threw", and would not return at all.
+            // morph#501.
+            ::morph::log::logError("[main-thread] callback threw unknown exception");
         }
     }
 

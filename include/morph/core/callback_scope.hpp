@@ -192,10 +192,21 @@ private:
 ///   construction.
 ///
 /// @par Thread safety
-/// All members are safe to call concurrently from any thread. `requestStop()`
-/// and `stopRequested()` are lock-free atomic operations; `reset()` publishes a
-/// fresh generation and retires the previous one (stopping it first, so a token
-/// holder that raced the swap and pinned the old state still observes refusal).
+/// `token()`, `guard()`, `requestStop()`, `stopRequested()` and the destructor
+/// are safe to call concurrently from any thread; `requestStop()` and
+/// `stopRequested()` are lock-free atomic operations on the current generation.
+///
+/// **`reset()` is the exception and must be externally synchronised** against
+/// the others — call it from the thread that owns the scope. It replaces the
+/// `_state` handle itself, and reading a `shared_ptr` while another thread
+/// assigns it is a data race on the handle: the control block's refcount is
+/// atomic, the pointer object is not. This is a narrower promise than this
+/// paragraph used to make, and the reason is a portability constraint, not
+/// taste — see `_state`'s own comment. In the usage `reset()` exists for
+/// (`void onNewQuery() { _callbacks.reset(); }`, the supersede verb) the owning
+/// thread is the caller anyway. Within a single generation, the old guarantee
+/// holds unchanged: `reset()` stops the outgoing generation before releasing
+/// it, so a token holder that pinned it still observes refusal (morph#499).
 ///
 /// Identity, not a value: neither copyable nor movable. A moved-from scope would
 /// have to either strand or silently retarget tokens already captured in flight;
@@ -221,10 +232,12 @@ public:
     /// Idempotent and safe from any thread. The owner remains alive, so tokens
     /// report `CallbackStatus::Stopped` rather than `Expired`. Undone only by
     /// `reset()`, which starts a new generation.
-    void requestStop() noexcept {
-        if (_state != nullptr) {
-            _state->stopped.store(true, std::memory_order_release);
-        }
+    void requestStop() const noexcept {
+        // `_state` is never null: the sole constructor make_shared's it, the
+        // class is non-copyable and non-movable, and `reset()` always assigns a
+        // fresh value. The former `!= nullptr` guard was an unreachable branch
+        // and is gone (morph#499).
+        _state->stopped.store(true, std::memory_order_release);
     }
 
     /// @brief Retires every token issued so far and starts a fresh, live generation.
@@ -242,9 +255,7 @@ public:
 
     /// @brief Whether this generation has been stopped.
     /// @return `true` after `requestStop()`, until the next `reset()`.
-    [[nodiscard]] bool stopRequested() const noexcept {
-        return _state != nullptr && _state->stopped.load(std::memory_order_acquire);
-    }
+    [[nodiscard]] bool stopRequested() const noexcept { return _state->stopped.load(std::memory_order_acquire); }
 
     /// @brief Issues a weak token for the current generation.
     /// @return A `CallbackToken` observing this scope; keeps nothing alive.
@@ -267,6 +278,14 @@ public:
     }
 
 private:
+    /// Written by `reset()` and read by every other member. **Not** atomic, and
+    /// that is a constraint rather than a preference: `std::atomic<std::shared_ptr<T>>`
+    /// is a C++20 library feature libstdc++ provides and libc++ (as shipped with
+    /// emscripten, which this project builds for) does not -- it falls back to
+    /// the primary template and hard-errors on `is_trivially_copyable`. The
+    /// alternative, a mutex, would cost `token()`/`stopRequested()` their
+    /// `noexcept`. So the concurrency contract is narrowed instead; see this
+    /// class's own Thread safety paragraph (morph#499).
     std::shared_ptr<detail::CallbackScopeState> _state;
 };
 

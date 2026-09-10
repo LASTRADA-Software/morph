@@ -273,8 +273,13 @@ public:
     /// `setLogger()` / `setLogLevel()` and just wants automatic restoration.
     ScopedLoggerOverride() {
         // NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer) — these must be
-        // read while holding the lock; a member-initializer list would read the
-        // global state before the mutex is acquired (a data race).
+        // read while holding the lock, and a member-initializer list would read
+        // the global state before the mutex is acquired. For `sink` (a
+        // std::function) that would be a genuine data race; `minLevel` is a
+        // std::atomic and would merely be stale. The reason both are taken here
+        // is that they must be captured as one *pair*: setLogger and setLogLevel
+        // are separate calls, and a snapshot straddling them would restore a
+        // combination that never existed.
         std::scoped_lock const lock{detail::logState().mtx};
         _savedSink = detail::logState().sink;
         _savedLevel = detail::logState().minLevel;

@@ -756,6 +756,22 @@ It is the same rule `registerHandlerImpl` already follows for `_mtx`. See
 [shared_instances.md](shared_instances.md), "Async register-or-attach and
 attach".
 
+**`registerHandlerImpl` reads `contextKey` without `_attachMtx`, on purpose.**
+`HandlerBinding::primary`/`contextKey` are otherwise mutated and read only under
+`_attachMtx`. Registration is the one carve-out, and it is forced: acquiring
+`_attachMtx` there makes `registerHandler()` contend with a slow shared attach,
+which is exactly the regression *"Bridge: an in-flight shared attach does not
+block unrelated handler registration"* (`tests/test_shared_instances.cpp`)
+exists to catch — taking the lock there reproduces that failure.
+
+The read is made safe by ordering rather than locking: every writer
+(`attachHandler`, `ensureBound`, `assignHandlerPrimary`) operates on an
+already-registered binding, while this read happens *during* registration. The
+pre-built-binding `registerHandler(binding)` overload hands the caller the
+binding first, so the requirement falls on the caller: **set `contextKey` before
+calling `registerHandler()`, and do not mutate it concurrently with that call.**
+Afterwards the ordinary `_attachMtx` rule applies. See morph#505.
+
 The guarantee is unconditional, including for a backend that completes its
 `attachModelAsync`/`registerModelSharedAsync` callback **inline** — from inside
 the dispatch call itself, while the dispatching frame still holds `_attachMtx`

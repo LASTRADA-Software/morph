@@ -2,11 +2,18 @@
 
 #pragma once
 #include <chrono>
+#include <concepts>
 #include <memory>
 #include <stdexcept>
 #include <typeindex>
 #include <typeinfo>
 
+// strand.hpp defines no symbol this header uses. It is kept deliberately:
+// consumers (tests/test_model.cpp among them) reach
+// morph::exec::detail::ModelId through it, and for a header-only public library
+// dropping a transitive include is a source-breaking change for its users --
+// not worth the tidiness. The <concepts> include above is the real gap it was
+// masking; this file uses std::same_as and `concept` without including it.
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
 #include "strand.hpp"

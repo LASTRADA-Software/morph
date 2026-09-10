@@ -23,6 +23,9 @@
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/file_action_log.hpp>
 #include <morph/journal/journal.hpp>
+#ifndef _WIN32
+#include <unistd.h>  // geteuid, for the permission-based fault-injection cases below
+#endif
 #include <string>
 #include <vector>
 
@@ -839,3 +842,54 @@ TEST_CASE("FileActionLog: a torn trailing record whose resize_file() fails is lo
     // but not corrupted further either.
     REQUIRE(std::filesystem::file_size(tmp.path) == sizeBefore);
 }
+
+// ── An unreadable journal must never be mistaken for a torn one (morph#493) ──
+//
+// repairTornTail() scans with an ifstream whose open it did not check, so a
+// scan that never happened left `intactEnd` at 0 and truncated the whole file
+// as one torn record -- reported through the ordinary "discarded N byte(s)"
+// warning, so it looked like a successful repair. Measured before the fix: 3
+// complete, fsynced entries (648 bytes) went to 0.
+//
+// POSIX-only: making a file unreadable-but-writable is what reproduces the
+// probe/open window, and Windows has no portable equivalent (std::filesystem
+// maps permissions onto the read-only attribute alone). Skipped for a root
+// euid, which ignores the permission bits entirely.
+#ifndef _WIN32
+TEST_CASE("FileActionLog: an unreadable journal is left intact, not truncated as a torn record",
+          "[action_log][phase2][file][fault-injection]") {
+    if (::geteuid() == 0) {
+        SUCCEED("running as root: permission bits are not enforced");
+        return;
+    }
+    TempFile const tmp{"file_unreadable_not_torn"};
+    std::uintmax_t sizeBefore = 0;
+    {
+        FileActionLog log{tmp.path};
+        for (int i = 1; i <= 3; ++i) {
+            auto entry = makeEntry("P2_Model", "acct-" + std::to_string(i), "P2_Deposit", "{}", "10");
+            log.append(entry);
+        }
+        log.flush();
+        REQUIRE(log.entries().size() == 3);
+        sizeBefore = std::filesystem::file_size(tmp.path);
+        REQUIRE(sizeBefore > 0);
+    }
+
+    // Write-only: the scan's open fails while resize_file would still succeed,
+    // which is precisely the combination that made the truncation possible.
+    std::filesystem::permissions(tmp.path, std::filesystem::perms::owner_write);
+    morph::core::FileIoOps ioOps;
+    ioOps.canOpenForRead = [](const std::filesystem::path&) { return true; };  // force the probe/open window
+
+    // The constructor must fail loudly rather than hand back a log whose dedup
+    // set is silently empty.
+    REQUIRE_THROWS_AS((FileActionLog{tmp.path, ioOps}), std::runtime_error);
+
+    std::filesystem::permissions(tmp.path, std::filesystem::perms::owner_all);
+    // The whole point: every byte still there.
+    REQUIRE(std::filesystem::file_size(tmp.path) == sizeBefore);
+    FileActionLog reopened{tmp.path};
+    REQUIRE(reopened.entries().size() == 3);
+}
+#endif  // _WIN32

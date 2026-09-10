@@ -242,6 +242,11 @@ bool QtWebSocketBackend::registerModelSharedAsync(
     auto env =
         ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
     env.callId = callId;
+    // Same stamp the synchronous registerModelShared applies: RemoteServer
+    // authenticates and authorizes from env.session, so omitting it here reached
+    // the server as an unauthenticated principal on the async (WASM) path only.
+    // morph#495.
+    env.session = _session;
     // See registerModelAsync's identical comment: encoded before the map
     // insertion, so a throwing encode() cannot orphan a pending entry.
     auto const encoded = QString::fromStdString(::morph::wire::encode(env));
@@ -279,6 +284,8 @@ bool QtWebSocketBackend::attachModelAsync(
     auto env =
         ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey});
     env.callId = callId;
+    // See registerModelSharedAsync above: stamped for the same reason (morph#495).
+    env.session = _session;
     // See registerModelAsync's identical comment: encoded before the map
     // insertion, so a throwing encode() cannot orphan a pending entry.
     auto const encoded = QString::fromStdString(::morph::wire::encode(env));
@@ -371,13 +378,22 @@ bool QtWebSocketBackend::assignPrimaryAsync(::morph::exec::detail::ModelId mid, 
         return true;
     }
     uint64_t const callId = ++_nextCallId;
+    auto env = ::morph::wire::makeAssign(typeId, std::string{primary}, mid.v);
+    env.callId = callId;
+    // Same stamp the synchronous assignPrimary applies -- RemoteServer authorizes
+    // from env.session, so an unstamped assign reached the server as an
+    // unauthenticated principal on the async (WASM) path only (morph#495).
+    env.session = _session;
+    // Encoded before the map insertion below, the invariant registerModelAsync
+    // states and the other two async hooks already follow: wire::encode() can
+    // throw, and a throw after inserting would park this callId's
+    // onRegistered/onError in _pendingAssigns forever with no message sent.
+    auto const encoded = QString::fromStdString(::morph::wire::encode(env));
     {
         std::scoped_lock const lock{_pendingMtx};
         _pendingAssigns[callId] = PendingAssign{std::move(onRegistered), std::move(onError)};
     }
-    auto env = ::morph::wire::makeAssign(typeId, std::string{primary}, mid.v);
-    env.callId = callId;
-    _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    _socket.sendTextMessage(encoded);
     return true;
 }
 

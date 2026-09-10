@@ -86,8 +86,21 @@ public:
     /// implementation. See `docs/spec/core/backend.md`'s `morph::net` section.
     ~SocketBackend() override {
         _shuttingDown.store(true);
+        // Under `_socketMtx`, and it has to be -- see morph#506, which proposed
+        // dropping it and was proved wrong by ThreadSanitizer. `shutdownBoth()`
+        // is indeed safe to call from any thread, but that is not what the lock
+        // is protecting here: `onDisconnected()` *reassigns* `_socket`
+        // (`_socket = TcpSocket{}`, a move-assign that closes the old fd), so an
+        // unlocked `_socket.valid()` here races the I/O thread replacing the
+        // object out from under it.
+        //
+        // The hazard #506 describes is real and remains open: `sendFrame` holds
+        // this mutex across a blocking, un-timed `sendAll`, so a peer that stops
+        // reading can park the destructor here. Closing that needs a way to
+        // reach the fd without the mutex (an atomic fd shadowing `_socket`, with
+        // its own fd-reuse story), not simply removing the lock.
         {
-            std::scoped_lock lock{_socketMtx};
+            std::scoped_lock const lock{_socketMtx};
             if (_socket.valid()) {
                 _socket.shutdownBoth();
             }

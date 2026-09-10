@@ -154,12 +154,7 @@ template <typename AppT>
 /// reference are (see docs/spec/forms/workflows_navigation.md).
 /// @param A    Concrete `morph::app::App<...>` type.
 /// @param NAME String literal used as the app's type-id.
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_APP(A, NAME)                                         \
     template <>                                                              \
     struct morph::app::AppTraits<A> {                                        \

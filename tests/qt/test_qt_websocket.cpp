@@ -2313,3 +2313,76 @@ int main(int argc, char* argv[]) {
     QCoreApplication::processEvents(QEventLoop::AllEvents);
     return result;
 }
+
+// ── morph#495: the async control paths must stamp the session too ──
+//
+// registerModelSharedAsync, attachModelAsync and assignPrimaryAsync each built
+// their envelope and encoded it with no `env.session = _session`, while all
+// three synchronous counterparts stamped it. RemoteServer authenticates and
+// authorizes from env.session (remote.hpp: stampVerifiedPrincipal, and the
+// register/attach/assign authorization sites), so a client using the async path
+// -- which is the WASM path, and the only one a WASM main thread can use --
+// reached an authorizing server as an unauthenticated principal.
+//
+// A test asserting only "the async call succeeds" would have passed before the
+// fix, so this records what the *server* saw.
+namespace {
+struct RecordingAuthorizer : morph::session::IAuthorizer {
+    mutable std::mutex mtx;
+    mutable std::vector<std::string> registerTokens;
+
+    [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
+        return true;
+    }
+    [[nodiscard]] bool authorizeRegister(const morph::session::Context& ctx, std::string_view) const override {
+        // `token`, not `principal`: stampVerifiedPrincipal clears the
+        // client-asserted principal whenever authenticate() cannot vouch for it
+        // (this authorizer does not override authenticate), so principal is ""
+        // either way and would prove nothing. The token rides the same
+        // `env.session` and is not rewritten, so it is the field that shows
+        // whether the envelope carried a session at all.
+        std::scoped_lock const lock{mtx};
+        registerTokens.push_back(ctx.token);
+        return true;
+    }
+};
+}  // namespace
+
+TEST_CASE("morph::qt::QtWebSocketBackend: the async control envelopes carry the session",
+          "[qt][ws][morph495][security]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto authorizer = std::make_shared<RecordingAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(
+        serverPool, authorizer, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry());
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl const url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url, morph::model::detail::defaultDispatcher(),
+                                          morph::model::detail::defaultRegistry(), std::nullopt,
+                                          morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
+    REQUIRE(backend.waitForConnected());
+
+    morph::session::Context session;
+    session.principal = "alice";
+    session.token = "tok-495";
+    backend.setSession(session);
+
+    std::atomic<uint64_t> registered{0};
+    std::string failure;
+    REQUIRE(backend.registerModelSharedAsync(
+        "WsEchoModel", nullptr, {.contextKey = "acct-495", .primary = "acct-495"},
+        [&](morph::exec::detail::ModelId mid) { registered.store(mid.v); },
+        [&](const std::string& message) { failure = message; }));
+    pumpUntil([&] { return registered.load() != 0U || !failure.empty(); });
+    CHECK(failure.empty());
+    REQUIRE(registered.load() != 0U);
+
+    std::scoped_lock const lock{authorizer->mtx};
+    REQUIRE_FALSE(authorizer->registerTokens.empty());
+    // Before the fix this was "" -- registerModelSharedAsync built its envelope
+    // with no `env.session = _session`, so the server received a
+    // default-constructed session and could not authenticate the caller at all.
+    CHECK(authorizer->registerTokens.back() == "tok-495");
+}

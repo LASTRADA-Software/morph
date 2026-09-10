@@ -145,3 +145,36 @@ TEST_CASE("render::locale_format round-trips through a multi-byte separator", "[
     auto const display = formatCanonicalNumber("1050.25", ",", kNarrowNbsp);
     CHECK(normalizeLocaleNumber(display, ",", kNarrowNbsp) == "1050.25");
 }
+
+// ── morph#497: a sign after the decimal separator is not "leading" ──
+//
+// `sawAnyOutput` was only set at the bottom of the loop, and the
+// decimal-separator branch `continue`d past it -- so after a separator the sign
+// guard still believed nothing had been emitted and accepted an injected sign.
+// The QML mirror (src/qt/forms/qml/DynamicForm.qml, documented as mirroring
+// this function) always rejected these, so the two control edges disagreed.
+TEST_CASE("normalizeLocaleNumber: a sign after the decimal separator is rejected", "[render][locale][morph497]") {
+    // de-DE: comma decimal, dot grouping -- the reported shape.
+    REQUIRE_FALSE(morph::render::normalizeLocaleNumber(",-5", ",", ".").has_value());
+    // en-US equivalent.
+    REQUIRE_FALSE(morph::render::normalizeLocaleNumber(".-5", ".", ",").has_value());
+    // With a group separator stripped first, which is the case the guard's own
+    // comment is about.
+    REQUIRE_FALSE(morph::render::normalizeLocaleNumber("1.,-5", ",", ".").has_value());
+
+    // Control: the guard already worked once a digit had been emitted, and must
+    // keep working.
+    REQUIRE_FALSE(morph::render::normalizeLocaleNumber("1-2", ".", ",").has_value());
+    // Control: a genuinely leading sign still parses.
+    REQUIRE(morph::render::normalizeLocaleNumber("-1,5", ",", ".") == "-1.5");
+}
+
+TEST_CASE("normalizeLocaleNumber: the loose shapes stay accepted, in step with the QML mirror",
+          "[render][locale][morph497]") {
+    // Deliberately NOT narrowed to `-?[0-9]+(\.[0-9]+)?`: DynamicForm.qml's
+    // normalizeLocaleNumber accepts all three, and tightening one edge alone
+    // would put them back out of step. Documented on the function.
+    REQUIRE(morph::render::normalizeLocaleNumber(".5", ".", ",") == ".5");
+    REQUIRE(morph::render::normalizeLocaleNumber("5.", ".", ",") == "5.");
+    REQUIRE(morph::render::normalizeLocaleNumber(".", ".", ",") == ".");
+}

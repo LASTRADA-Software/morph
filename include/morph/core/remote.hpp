@@ -1413,6 +1413,13 @@ private:
         // pool's width. That is exactly the burst the limit exists to prevent.
         // Reserving here, at the last point before the slot is genuinely taken,
         // needs no unwind on the early-return paths above.
+        // Created before the reservation below, not after it, so `reservation`
+        // can claim the same completion slot `complete` uses. Everything between
+        // the increment and the strand post is non-`noexcept` -- emitMetric, two
+        // make_shared, TimeoutScheduler::schedule, awaitTurn's mutex, the post
+        // itself -- and a throw there used to leak the slot permanently.
+        auto finished = std::make_shared<std::atomic_flag>();
+
         std::size_t inFlightAfterInc = 0;
         if (limits.maxInFlightExecutes != 0) {
             std::size_t current = _inFlightExecutes.load(std::memory_order_relaxed);
@@ -1434,6 +1441,44 @@ private:
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
         auto self = shared_from_this();
+
+        // Releases the in-flight slot if this frame leaves by exception before
+        // the dispatch is handed off. It claims `finished` rather than replying:
+        // dispatchMessage's catch is what replies on that path, and replying here
+        // too would break handle()'s reply-exactly-once contract. Claiming the
+        // flag also makes an already-armed timeout a no-op, so the caller cannot
+        // receive a second `err "timeout"` for the same callId afterwards.
+        //
+        // Without this, one throw left `_inFlightExecutes` permanently
+        // over-counted: `drainedWithin()` predicates on it reaching zero, so
+        // graceful shutdown could never succeed again for that server, and with
+        // `maxInFlightExecutes` set a slot was lost for good (morph#502).
+        struct InFlightReservation {
+            RemoteServer* server;
+            std::shared_ptr<std::atomic_flag> finished;
+            bool handedOff = false;
+
+            InFlightReservation(RemoteServer* owner, std::shared_ptr<std::atomic_flag> flag)
+                : server{owner}, finished{std::move(flag)} {}
+            ~InFlightReservation() {
+                if (handedOff || finished->test_and_set()) {
+                    return;
+                }
+                auto const remaining = server->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed) - 1;
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                                     static_cast<double>(remaining));
+                if (remaining == 0) {
+                    std::scoped_lock const drainLock{server->_drainMtx};
+                    server->_drainCv.notify_all();
+                }
+            }
+            InFlightReservation(const InFlightReservation&) = delete;
+            InFlightReservation& operator=(const InFlightReservation&) = delete;
+            InFlightReservation(InFlightReservation&&) = delete;
+            InFlightReservation& operator=(InFlightReservation&&) = delete;
+        };
+        InFlightReservation reservation{this, finished};
+
         std::uint64_t const callId = env.callId;
 
         // `finished` fires the caller's `reply` exactly once — whichever of the
@@ -1441,7 +1486,6 @@ private:
         // decrements the in-flight counter exactly once, regardless of which
         // path won. This preserves handle()'s reply-exactly-once contract even
         // though two independent paths can now race to resolve the same call.
-        auto finished = std::make_shared<std::atomic_flag>();
         auto replySlot = std::make_shared<std::function<void(std::string)>>(std::move(reply));
         auto complete = [self, finished, replySlot](std::string msg) {
             if (!finished->test_and_set()) {
@@ -1575,6 +1619,10 @@ private:
         // delay a *different* execute's own pre-strand work for no ordering
         // benefit.
         ticketGuard.release();
+        // The strand task now owns `complete`, so the in-flight slot is its
+        // responsibility rather than this frame's. Anything that throws past
+        // here is on a path where `complete` will still run.
+        reservation.handedOff = true;
     }
 
     /// @brief Returns the next opaque model id.

@@ -41,8 +41,9 @@ struct SocketServerConfig {
 /// @par Threading
 /// Owns one accept thread plus one thread per accepted connection — there is
 /// no shared event loop. `RemoteServer::handle()` replies arrive on the
-/// server's worker-pool thread and are marshalled back onto the owning
-/// connection's own write path, serialized by a per-connection mutex.
+/// server's worker-pool thread and are written back on that same thread, over
+/// the owning connection's socket, serialized by a per-connection write mutex.
+/// Nothing is handed to the connection's own reader thread.
 ///
 /// @par Lifetime
 /// Holds `RemoteServer& _server` by reference, exactly like
@@ -201,6 +202,10 @@ private:
         ::morph::backend::ConnectionId cid{0};
         std::mutex writeMtx;
         std::atomic<bool> closed{false};
+        /// Set by `clientLoop` as its last act, so `acceptLoop` can tell a
+        /// finished connection from a live one and reclaim both its fd and its
+        /// thread handle. See `reapFinishedClients` (morph#498).
+        std::atomic<bool> finished{false};
 
         void sendText(const std::string& payload) {
             std::scoped_lock lock{writeMtx};
@@ -252,6 +257,12 @@ private:
             if (_closing.load()) {
                 return;
             }
+            // Before taking on another one: nothing else ever removed a
+            // finished connection, so an fd and a joinable thread handle
+            // accumulated per connection *ever accepted*, not per live
+            // connection, until close() (morph#498).
+            reapFinishedClients();
+
             auto conn = std::make_shared<ClientConnection>(std::move(*clientSocket), _server.openConnection());
             std::thread clientThread{[this, conn] { clientLoop(conn); }};
             {
@@ -262,7 +273,54 @@ private:
         }
     }
 
+    /// @brief Drops connections whose `clientLoop` has returned, joining their
+    ///        threads and releasing their sockets.
+    ///
+    /// Called from `acceptLoop` only, so it never runs concurrently with itself.
+    /// Threads are moved out and joined *after* `_clientsMtx` is released: a
+    /// join can block, and `clientLoop`'s own teardown takes that same mutex
+    /// through `sendText`, so joining under the lock would deadlock. Every
+    /// thread collected here has already set `finished`, so each join is
+    /// effectively immediate.
+    void reapFinishedClients() {
+        std::vector<std::thread> doneThreads;
+        {
+            std::scoped_lock const lock{_clientsMtx};
+            for (std::size_t i = _clients.size(); i-- > 0;) {
+                auto const clientIt = _clients.begin() + static_cast<std::ptrdiff_t>(i);
+                auto const threadIt = _clientThreads.begin() + static_cast<std::ptrdiff_t>(i);
+                if (!(*clientIt)->finished.load(std::memory_order_acquire)) {
+                    continue;
+                }
+                doneThreads.push_back(std::move(*threadIt));
+                _clientThreads.erase(threadIt);
+                _clients.erase(clientIt);
+            }
+        }
+        for (auto& done : doneThreads) {
+            if (done.joinable()) {
+                done.join();
+            }
+        }
+    }
+
     void clientLoop(const std::shared_ptr<ClientConnection>& conn) {
+        // Announces "this thread is done" on every exit path, so acceptLoop's
+        // reaper can release the fd and join the thread handle rather than
+        // holding both until close(). Declared *before* the scope guard below so
+        // it is destroyed last: the flag must not go up until the connection's
+        // models have actually been reclaimed. morph#498.
+        struct FinishedFlag {
+            explicit FinishedFlag(std::atomic<bool>& target MORPH_LIFETIMEBOUND) : flag{target} {}
+            ~FinishedFlag() { flag.store(true, std::memory_order_release); }
+            FinishedFlag(const FinishedFlag&) = delete;
+            FinishedFlag& operator=(const FinishedFlag&) = delete;
+            FinishedFlag(FinishedFlag&&) = delete;
+            FinishedFlag& operator=(FinishedFlag&&) = delete;
+
+            std::atomic<bool>& flag;
+        } const finishedFlag{conn->finished};
+
         // Reclaim this connection's models however the loop exits — failed
         // handshake, peer close, read error, or shutdown via close(). Without
         // it every model registered over this transport outlived its connection

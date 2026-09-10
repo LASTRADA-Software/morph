@@ -95,11 +95,12 @@ namespace detail {
     // Work on magnitudes; the sign is reattached at the end. The canonical
     // invariant guarantees denominator > 0, so only the numerator carries sign.
     bool const negative = value.numerator < 0;
-    // Negating INT64_MIN would overflow int64; widen before taking the absolute
-    // value so the magnitude is always representable.
-    auto const num =
-        negative ? static_cast<std::uint64_t>(-static_cast<std::int64_t>(static_cast<std::uint64_t>(value.numerator)))
-                 : static_cast<std::uint64_t>(value.numerator);
+    // Negate in unsigned arithmetic: `-INT64_MIN` is undefined as a signed
+    // operation, and INT64_MIN reaches here through the whole-integer
+    // `Rational{value, DecimalPlaces{n}}` constructor, which does not
+    // canonicalise (and `numerator` is public). `absU64` is the shared helper
+    // that gets this right -- see morph#496.
+    auto const num = ::morph::math::detail::absU64(value.numerator);
     auto const den = static_cast<std::uint64_t>(value.denominator);
     auto const places = static_cast<std::uint32_t>(value.decimalPlaces.value);
 
@@ -545,12 +546,7 @@ struct Context {
 /// @cond INTERNAL
 #if MORPH_QUANTITY_PROVENANCE
 #define MORPH_Q_NODE(quantity) (quantity)._ctx.node
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode) \
     do {                                                                             \
         auto morphProvNode = std::make_shared<::morph::units::detail::ASTNode>();    \
@@ -567,12 +563,7 @@ struct Context {
 #else
 
 #define MORPH_Q_NODE(quantity) nullptr
-// clang-format off -- public macro surface: hand-aligned on purpose.
-// These definitions are the framework's documented API; contributors read them
-// as reference, and the continuation backslashes line up so the body is legible
-// as a block. Leaving them to the formatter means any unrelated edit nearby
-// re-wraps the whole definition, and in one case it broke a token-paste
-// invocation apart. Freeze them; realign by hand if a body changes.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode) \
     do {                                                                             \
     } while (0)

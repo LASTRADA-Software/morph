@@ -79,18 +79,6 @@
       "reason": "Unreachable by construction given this class's lock discipline (core audit finding ST1, resolved to (b) by a concurrency-focused review pass after an initial (a)/(b)-undecided pass). `_strands` has exactly two mutation sites: `post()`'s insert-if-absent (this file, `if (!slot) { slot = make_shared<Strand>(); }`) and this exact block's own erase a few lines below, both under `_mapMtx`. At most one lambda per `Strand` runs at a time (`post()` only schedules when `!strand->running`, and re-arming happens only through this same lambda's own `more` branch), so dispatch for one `Strand` is strictly serial; and only a strand's own currently-running lambda can erase its map entry (the erase fires only in the `!more` branch for the entry this frame just found under `_mapMtx`, and a concurrent `post(key)` while this lambda runs can only push onto the existing `Strand`, never replace it). Together these force `_strands.find(key)` to yield this exact strand whenever this line runs, so `iter->second == strand` cannot be false. No stress test needed: one was considered, but given the strength of the lock-discipline argument it would spend CI time re-confirming an already-proven invariant rather than searching for an unknown one."
     },
     {
-      "file": "include/morph/core/callback_scope.hpp",
-      "line": 225,
-      "source": "if (_state != nullptr) {",
-      "reason": "`_state` (a `std::shared_ptr<detail::CallbackScopeState>`) is unreachable-null by construction (core audit finding CS1). It is constructed non-null in `CallbackScope()`'s member-initializer (`_state{std::make_shared<...>()}`) and the only other write site is `reset()`, which always reassigns it to another fresh `make_shared` result, never to `nullptr`. `grep -n \"_state\" callback_scope.hpp` confirms these are the only two write sites in the file. Copy and move are both explicitly `= delete`d (\"Identity, not a value\"), so there is no moved-from state to null it either. Raw branch data confirms it empirically: the `!= nullptr` check's false arm shows exactly 0 hits across every recorded hit on this line. No test would close this -- it is a defensive belt-and-suspenders check against a state the class's own constructors and deleted copy/move already make impossible."
-    },
-    {
-      "file": "include/morph/core/callback_scope.hpp",
-      "line": 246,
-      "source": "return _state != nullptr && _state->stopped.load(std::memory_order_acquire);",
-      "reason": "Same unreachable-null `_state` invariant as line 225 above (core audit finding CS1) applied to this line's leading sub-condition. Only the `_state != nullptr` conjunct is structurally dead; the line's other sub-condition, the actual `stopped` flag, is already exercised both ways by `stopRequested()`'s ordinary tests (both a not-yet-stopped and a stopped read are recorded), so this entry is scoped to the null-check conjunct specifically, not a claim that `stopRequested()`'s real logic is untested."
-    },
-    {
       "file": "include/morph/core/backend.hpp",
       "line": 777,
       "source": "if (iter != _models.end()) {",
@@ -104,7 +92,7 @@
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1426,
+      "line": 1433,
       "source": "if (_inFlightExecutes.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {",
       "reason": "Real but requires genuine thread contention to trigger -- accepted as documented rather than closed with a flaky test (core audit finding RM11). The false arm (the CAS lost the race and must retry) needs two threads to genuinely collide on the same atomic increment at the same instant; it is a real, reachable hazard the retry loop correctly handles, not dead code, but inherently non-deterministic to trigger from a test without exact thread-timing control. Same disposition class as `strand.hpp`'s ST1 above, and as core audit finding O1 (`observability.hpp`'s `endSpan`), whose entry left this file once a coverage run showed its arm taken: a stress test with many concurrent `execute()` calls against a tight `maxInFlightExecutes` limit would probably eventually hit it, but flakily."
     },
@@ -116,13 +104,13 @@
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1571,
+      "line": 1589,
       "source": "if (deadlineHandle && schedulerRef) {",
       "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1453 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible."
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1467,
+      "line": 1511,
       "source": "if (_timeoutScheduler) {",
       "reason": "Unreachable by construction, mirrors `bridge.hpp`'s B6 (core audit finding RM10). `setLimitPolicy` (this file) is the only writer of both `_limits.executeTimeout` and `_timeoutScheduler`: `_limits = policy; if (_limits.executeTimeout.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_unique<...>(); }`, both under `_limitsMtx` -- the same lock this line's enclosing block holds. Nothing anywhere nulls `_timeoutScheduler` afterward, so `dispatchExecute`'s `limits.executeTimeout.count() > 0` guard (this line's enclosing `if`, a few lines above) already guarantees `_timeoutScheduler` is non-null whenever this line runs."
     },
@@ -134,37 +122,37 @@
     },
     {
       "file": "include/morph/net/socket_server.hpp",
-      "line": 188,
+      "line": 189,
       "source": "if (t.joinable()) {",
       "reason": "Unreachable by construction (net audit, `socket_server.hpp` finding #6, re-verified against the current `close()` after the morph#451 fix serialized its whole body under `_closeMtx`). `_clientThreads` has exactly one push site (`acceptLoop()`, always a freshly-constructed, running `std::thread`) and this loop is the only place any entry is ever joined or detached. With `close()`'s entire body now serialized by `_closeMtx`, only one caller's `close()` can ever reach this loop: a second, later call observes `wasAlreadyClosing == true` and `!_acceptThread.joinable()` (already joined by the winner) and takes the early return above, before ever reaching the client-thread swap-and-join section this line is in. So every `std::thread` this loop iterates over is a fresh entry pushed by `acceptLoop()` that nothing has touched yet -- `joinable()` cannot be false here."
     },
     {
       "file": "include/morph/net/socket_server.hpp",
-      "line": 207,
+      "line": 212,
       "source": "if (closed.load() || !socket.valid()) {",
       "reason": "The `!socket.valid()` disjunct is unreachable by construction (net audit, `socket_server.hpp` finding #7). `ClientConnection::socket` is set once at construction and never moved from or reassigned anywhere in this file (`grep -n \"conn->socket\\|->socket\\.\"` finds only method calls on it, never an assignment or `std::move`). `sendText()` is only ever called while a `shared_ptr<ClientConnection>` keeps the connection alive, and the only place `TcpSocket::valid()` can become false is that socket's own destructor, which cannot run while such a `shared_ptr` is held. `closed.store(true)` (this same class's `close()` handling, `clientLoop`'s catches) is what every code path that could plausibly invalidate the socket sets first, so the `closed.load()` disjunct alone already accounts for every real teardown path this connection can take."
     },
     {
       "file": "include/morph/net/socket_server.hpp",
-      "line": 249,
+      "line": 254,
       "source": "if (!clientSocket) {",
       "reason": "Real, reachable race (`tryAccept()` returning nullopt because the pending connection went away before it was taken), but accepted as documented rather than forced with a flaky test after extensive attempts (net audit, `socket_server.hpp` finding #10). Three different techniques were tried: a single real `TcpSocket::connect()` immediately followed by an abortive (`SO_LINGER{1,0}`) close (0/150 hits); a burst of many such attempts to build backlog depth (still 0 hits); and a burst of bare non-blocking `::connect()`+abort attempts skipping `TcpSocket::connect()`'s `getaddrinfo()`/poll overhead (960 attempts across 15 bursts, still 0 hits, with most connections resetting before the TCP handshake progressed far enough to make the listener readable at all, rather than after). No way was found, from outside the process, to reliably land in the specific narrow window this branch requires on this machine. Reported as attempted-and-left-open rather than forcing something flakier."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 96,
+      "line": 109,
       "source": "if (_ioThread.joinable()) {",
       "reason": "Unreachable by construction (net audit, `socket_backend.hpp` extra finding #5). `_ioThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else in the file resets, joins, or detaches it, so at destructor time it is always joinable."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 108,
+      "line": 121,
       "source": "if (_handlerThread.joinable()) {",
-      "reason": "Unreachable by construction, same shape as `_ioThread`'s line 96 above (net audit, `socket_backend.hpp` extra finding #6). `_handlerThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else resets, joins, or detaches it, so at destructor time it is always joinable."
+      "reason": "Unreachable by construction, same shape as `_ioThread`'s line 109 above (net audit, `socket_backend.hpp` extra finding #6). `_handlerThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else resets, joins, or detaches it, so at destructor time it is always joinable."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 547,
+      "line": 560,
       "source": "default:",
       "reason": "Unreachable except via the adjacent `Error` case it deliberately shares a body with (net audit, `socket_backend.hpp` extra finding #7). `detail::ExecuteReplyKind` is a closed 3-value enum (`Value`/`Timeout`/`Error`), all three handled explicitly above this label; `default:` exists only to satisfy this project's `-Wswitch-default`, per the source's own inline comment directly below this line. Reaching it via any value other than through the `Error` case falling through would require an out-of-range `static_cast` producing a value outside the enum's domain -- undefined behavior, not a legitimate test target."
     }

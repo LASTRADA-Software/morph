@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -572,4 +573,79 @@ TEST_CASE("CallbackScope: destroying the scope under a concurrent dispatch loop 
         guarded();
         REQUIRE(hits->load() == settled);
     }
+}
+
+// ── morph#499: what CallbackScope's concurrency contract actually covers ──
+//
+// The class used to document *every* member as concurrently safe. It is not:
+// `reset()` replaces the `_state` handle, and reading a shared_ptr while another
+// thread assigns it races on the handle itself (the control block's refcount is
+// atomic; the pointer object is not). Making `_state` a
+// `std::atomic<std::shared_ptr<...>>` fixes it on libstdc++ and does not
+// compile on libc++/emscripten, which this project targets -- so the contract
+// was narrowed instead: `reset()` must be externally synchronised, everything
+// else stays concurrent.
+//
+// This case pins the half that *is* promised, and is meant to be run under
+// ThreadSanitizer -- deliberately assertion-light, because what it proves is the
+// absence of a report.
+TEST_CASE("CallbackScope: token()/requestStop()/stopRequested() are concurrent among themselves",
+          "[callback_scope][thread][morph499]") {
+    morph::async::CallbackScope scope;
+    std::atomic<bool> stop{false};
+    std::atomic<int> observed{0};
+
+    // `started` is a handshake, not decoration: the main thread must not begin
+    // its side until the reader is provably inside its loop. Three separate CI
+    // failures came from getting this wrong -- a fixed iteration count that
+    // finished before the reader was scheduled, a `while` whose condition was
+    // tested first and so ran zero times, and finally Valgrind, which serialises
+    // threads and starved the reader for a full ten-second deadline while the
+    // main thread spun on atomics that never yield.
+    std::atomic<bool> started{false};
+    std::thread reader{[&] {
+        started.store(true, std::memory_order_release);
+        while (!stop.load(std::memory_order_acquire)) {
+            auto tok = scope.token();
+            (void)tok.active();
+            (void)scope.stopRequested();
+            observed.fetch_add(1, std::memory_order_relaxed);
+            // Yields inside the loop as well, so neither side can monopolise a
+            // serialised scheduler.
+            std::this_thread::yield();
+        }
+    }};
+
+    constexpr int kMinInterleavings = 100;
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{30};
+    while (!started.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+
+    // requestStop() from this thread while the reader reads: both act on the
+    // *current* generation, which is what the narrowed contract still covers.
+    // The first call is unconditional so this cannot run zero times.
+    scope.requestStop();
+    while (observed.load(std::memory_order_relaxed) < kMinInterleavings &&
+           std::chrono::steady_clock::now() < deadline) {
+        scope.requestStop();
+        // sched_yield(2) is a real syscall, which is what gives Valgrind's
+        // serialising scheduler a point at which to switch to the reader. A
+        // pure atomic-store loop offers it none.
+        std::this_thread::yield();
+    }
+    stop.store(true, std::memory_order_release);
+    reader.join();
+
+    // Proves the two threads genuinely interleaved, so a clean TSan run means
+    // something. Without this the case could report success having measured
+    // nothing at all.
+    REQUIRE(observed.load() >= kMinInterleavings);
+    REQUIRE(scope.stopRequested());
+
+    // reset() is the externally-synchronised member: called here with no reader
+    // running, which is the documented usage (the owner thread's supersede verb).
+    scope.reset();
+    REQUIRE(scope.token().active());
+    REQUIRE_FALSE(scope.stopRequested());
 }
