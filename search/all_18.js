@@ -16,9 +16,10 @@ var searchData=
   ['_7escopednowoverride_13',['~ScopedNowOverride',['../d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html#a029ef9b06dcc3cc2d8cf4a9a46dac0cd',1,'morph::time::ScopedNowOverride']]],
   ['_7escopedobserveoverride_14',['~ScopedObserveOverride',['../d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#abf6616cc1ba3b370dbf3e7aef055254d',1,'morph::observe::ScopedObserveOverride']]],
   ['_7escopedreplayflag_15',['~ScopedReplayFlag',['../d5/d82/classmorph_1_1journal_1_1detail_1_1ScopedReplayFlag.html#a60996ac3ec4041ecf77211f9866941c9',1,'morph::journal::detail::ScopedReplayFlag']]],
-  ['_7esocketbackend_16',['~SocketBackend',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a7de340062de34a174bd659f4d68ee69e',1,'morph::net::SocketBackend']]],
-  ['_7esocketserver_17',['~SocketServer',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a120e0fa0fd4691bf8d3b957c1357888d',1,'morph::net::SocketServer']]],
-  ['_7esqliteofflinequeue_18',['~SqliteOfflineQueue',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b',1,'morph::offline::SqliteOfflineQueue']]],
-  ['_7ethreadpoolexecutor_19',['~ThreadPoolExecutor',['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a066c0eb2310d4519dce22b2db5c46057',1,'morph::exec::ThreadPoolExecutor']]],
-  ['_7ewireclampscope_20',['~WireClampScope',['../d3/d68/classmorph_1_1math_1_1WireClampScope.html#aabf463705127cf7821606cb315e0ed36',1,'morph::math::WireClampScope']]]
+  ['_7esectionset_16',['~SectionSet',['../d4/ddc/classmorph_1_1forms_1_1SectionSet.html#ad19a2173c189bcedc6065758c41041ab',1,'morph::forms::SectionSet']]],
+  ['_7esocketbackend_17',['~SocketBackend',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a7de340062de34a174bd659f4d68ee69e',1,'morph::net::SocketBackend']]],
+  ['_7esocketserver_18',['~SocketServer',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a120e0fa0fd4691bf8d3b957c1357888d',1,'morph::net::SocketServer']]],
+  ['_7esqliteofflinequeue_19',['~SqliteOfflineQueue',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b',1,'morph::offline::SqliteOfflineQueue']]],
+  ['_7ethreadpoolexecutor_20',['~ThreadPoolExecutor',['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a066c0eb2310d4519dce22b2db5c46057',1,'morph::exec::ThreadPoolExecutor']]],
+  ['_7ewireclampscope_21',['~WireClampScope',['../d3/d68/classmorph_1_1math_1_1WireClampScope.html#aabf463705127cf7821606cb315e0ed36',1,'morph::math::WireClampScope']]]
 ];

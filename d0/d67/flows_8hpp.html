@@ -141,22 +141,17 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d67/flows_8
 <code>#include &quot;../core/bridge.hpp&quot;</code><br />
 <code>#include &quot;../core/callback_scope.hpp&quot;</code><br />
 <code>#include &quot;../core/logger.hpp&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d3/d3d/session__common_8hpp_source.html">detail/session_common.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d0/d67/flows_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
-<tr class="memitem:morph_3A_3Aflows_3A_3ABind_3C_20Field_2C_20Path_20_3E" id="r_morph_3A_3Aflows_3A_3ABind_3C_20Field_2C_20Path_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html">morph::flows::Bind&lt; Field, Path &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One <span class="tt"><a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html#a7e9cf24276e5a2c0b6946af212ba5d71" title="The step action&#39;s field name this binding fills.">field</a> -&gt; "&lt;PriorAction&gt;.&lt;<a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html#a7e9cf24276e5a2c0b6946af212ba5d71" title="The step action&#39;s field name this binding fills.">field</a>&gt;"</span> prefill binding declared on a wizard step.  <a href="../../d2/daf/structmorph_1_1flows_1_1Bind.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aflows_3A_3AWizardStep_3C_20Action_2C_20Title_2C_20Binds_20_3E" id="r_morph_3A_3Aflows_3A_3AWizardStep_3C_20Action_2C_20Title_2C_20Binds_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/d94/structmorph_1_1flows_1_1WizardStep.html">morph::flows::WizardStep&lt; Action, Title, Binds &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One step of a <span class="tt"><a class="el" href="../../d6/d94/structmorph_1_1flows_1_1Wizard.html" title="An ordered sequence of WizardSteps sharing one flow.">Wizard</a></span>: a registered action, a display title, and zero or more <span class="tt"><a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html" title="One field -&gt; &quot;&lt;PriorAction&gt;.&lt;field&gt;&quot; prefill binding declared on a wizard step.">Bind</a></span> prefill declarations.  <a href="../../d8/d94/structmorph_1_1flows_1_1WizardStep.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One step of a <span class="tt"><a class="el" href="../../d6/d94/structmorph_1_1flows_1_1Wizard.html" title="An ordered sequence of WizardSteps sharing one flow.">Wizard</a></span>: a registered action, a display title, and zero or more <span class="tt"><a class="el" href="#a04bbf5ea692b2cf63be31c2d48f18041" title="Prefill binding for a wizard step.">Bind</a></span> prefill declarations.  <a href="../../d8/d94/structmorph_1_1flows_1_1WizardStep.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aflows_3A_3AWizard_3C_20Title_2C_20Steps_20_3E" id="r_morph_3A_3Aflows_3A_3AWizard_3C_20Title_2C_20Steps_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d94/structmorph_1_1flows_1_1Wizard.html">morph::flows::Wizard&lt; Title, Steps &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An ordered sequence of <span class="tt"><a class="el" href="../../d8/d94/structmorph_1_1flows_1_1WizardStep.html" title="One step of a Wizard: a registered action, a display title, and zero or more Bind prefill declaration...">WizardStep</a></span>s sharing one flow.  <a href="../../d6/d94/structmorph_1_1flows_1_1Wizard.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aflows_3A_3Adetail_3A_3AAllDistinct_3C_20Ts_20_3E" id="r_morph_3A_3Aflows_3A_3Adetail_3A_3AAllDistinct_3C_20Ts_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d90/structmorph_1_1flows_1_1detail_1_1AllDistinct.html">morph::flows::detail::AllDistinct&lt; Ts &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Trait: <span class="tt">true</span> when every type in <span class="tt">Ts...</span> is pairwise distinct.  <a href="../../d6/d90/structmorph_1_1flows_1_1detail_1_1AllDistinct.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aflows_3A_3Adetail_3A_3AAllDistinct_3C_20T_2C_20Rest_2E_2E_2E_20_3E" id="r_morph_3A_3Aflows_3A_3Adetail_3A_3AAllDistinct_3C_20T_2C_20Rest_2E_2E_2E_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d87/structmorph_1_1flows_1_1detail_1_1AllDistinct_3_01T_00_01Rest_8_8_8_01_4.html">morph::flows::detail::AllDistinct&lt; T, Rest... &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Recursive case: <span class="tt">T</span> distinct from every type in <span class="tt">Rest...</span>, and <span class="tt">Rest...</span> pairwise distinct.  <a href="../../de/d87/structmorph_1_1flows_1_1detail_1_1AllDistinct_3_01T_00_01Rest_8_8_8_01_4.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aflows_3A_3AFlowSession_3C_20Model_2C_20Steps_20_3E" id="r_morph_3A_3Aflows_3A_3AFlowSession_3C_20Model_2C_20Steps_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d5c/classmorph_1_1flows_1_1FlowSession.html">morph::flows::FlowSession&lt; Model, Steps &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sequences an ordered list of registered actions (<span class="tt">Steps...</span>) as one multi-step flow sharing captured values across steps.  <a href="../../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
@@ -165,14 +160,14 @@ Macros</h2></td></tr>
 <tr class="memitem:accf4b366d4b02baaa3c465c499700c1d" id="r_accf4b366d4b02baaa3c465c499700c1d"><td class="memItemLeft">#define&#160;</td><td class="memItemRight"><a class="el" href="#accf4b366d4b02baaa3c465c499700c1d">BRIDGE_REGISTER_WIZARD</a>(W,  NAME)</td></tr>
 <tr class="memdesc:accf4b366d4b02baaa3c465c499700c1d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Specialises <span class="tt"><a class="el" href="../../de/d61/structmorph_1_1flows_1_1WizardTraits.html" title="Traits specialisation mapping a Wizard type to its string type-id.">morph::flows::WizardTraits</a>&lt;W&gt;</span> with the string type-id <code class="param">NAME</code>.  <br /></td></tr>
 </table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
+Typedefs</h2></td></tr>
+<tr class="memitem:a04bbf5ea692b2cf63be31c2d48f18041" id="r_a04bbf5ea692b2cf63be31c2d48f18041"><td class="memTemplParams" colspan="2">template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Field, <a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Path&gt; </td></tr>
+<tr class="memitem:a04bbf5ea692b2cf63be31c2d48f18041 template"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a04bbf5ea692b2cf63be31c2d48f18041">morph::flows::Bind</a> = <a class="el" href="../../d6/dd1/structmorph_1_1forms_1_1Bind.html">morph::forms::Bind</a>&lt;Field, Path&gt;</td></tr>
+<tr class="memdesc:a04bbf5ea692b2cf63be31c2d48f18041"><td class="mdescLeft">&#160;</td><td class="mdescRight">Prefill binding for a wizard step.  <br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:a4c13a52cf0ba1731936cd9a1df9c246e" id="r_a4c13a52cf0ba1731936cd9a1df9c246e"><td class="memTemplParams" colspan="2">template&lt;typename Tuple, typename Visitor&gt; </td></tr>
-<tr class="memitem:a4c13a52cf0ba1731936cd9a1df9c246e template"><td class="memItemLeft">constexpr void&#160;</td><td class="memItemRight"><a class="el" href="#a4c13a52cf0ba1731936cd9a1df9c246e">morph::flows::detail::forEachTupleElement</a> (Visitor &amp;&amp;visitor)</td></tr>
-<tr class="memdesc:a4c13a52cf0ba1731936cd9a1df9c246e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Invokes <span class="tt">visitor.template operator()&lt;std::tuple_element_t&lt;I, Tuple&gt;, I&gt;()</span> for every element of <code class="param">Tuple</code>, in order.  <br /></td></tr>
-<tr class="memitem:ae265c452cfed8d411776ee1a2094570b" id="r_ae265c452cfed8d411776ee1a2094570b"><td class="memTemplParams" colspan="2">template&lt;typename... Steps, typename Visitor&gt; </td></tr>
-<tr class="memitem:ae265c452cfed8d411776ee1a2094570b template"><td class="memItemLeft">constexpr void&#160;</td><td class="memItemRight"><a class="el" href="#ae265c452cfed8d411776ee1a2094570b">morph::flows::detail::forStep</a> (std::size_t index, Visitor &amp;&amp;visitor)</td></tr>
-<tr class="memdesc:ae265c452cfed8d411776ee1a2094570b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Invokes <span class="tt">visitor.template operator()&lt;Step&gt;()</span> for the pack element of <span class="tt">Steps...</span> at runtime position <code class="param">index</code>. A no-op when <span class="tt">index &gt;= sizeof...(Steps)</span>.  <br /></td></tr>
 <tr class="memitem:a5b60bfc400ec89a16c70701b2b2a0a27" id="r_a5b60bfc400ec89a16c70701b2b2a0a27"><td class="memTemplParams" colspan="2">template&lt;typename W&gt; </td></tr>
 <tr class="memitem:a5b60bfc400ec89a16c70701b2b2a0a27 template"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a5b60bfc400ec89a16c70701b2b2a0a27">morph::flows::wizardSchemaJson</a> ()</td></tr>
 <tr class="memdesc:a5b60bfc400ec89a16c70701b2b2a0a27"><td class="mdescLeft">&#160;</td><td class="mdescRight">Generates the <span class="tt">w-*</span> JSON document for wizard type <code class="param">W</code>.  <br /></td></tr>
@@ -206,7 +201,7 @@ Functions</h2></td></tr>
 <div class="line"><span class="keyword">struct </span><a class="code hl_struct" href="../../de/d61/structmorph_1_1flows_1_1WizardTraits.html">morph::flows::WizardTraits</a>&lt;W&gt; {                                   \</div>
 <div class="line">    <span class="keyword">static</span> <span class="keyword">constexpr</span> std::string_view typeId() noexcept { <span class="keywordflow">return</span> NAME; } \</div>
 <div class="line">};</div>
-<div class="ttc" id="astructmorph_1_1flows_1_1WizardTraits_html"><div class="ttname"><a href="../../de/d61/structmorph_1_1flows_1_1WizardTraits.html">morph::flows::WizardTraits</a></div><div class="ttdoc">Traits specialisation mapping a Wizard type to its string type-id.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/d67/flows_8hpp_source.html#l00102">flows.hpp:102</a></div></div>
+<div class="ttc" id="astructmorph_1_1flows_1_1WizardTraits_html"><div class="ttname"><a href="../../de/d61/structmorph_1_1flows_1_1WizardTraits.html">morph::flows::WizardTraits</a></div><div class="ttdoc">Traits specialisation mapping a Wizard type to its string type-id.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/d67/flows_8hpp_source.html#l00097">flows.hpp:97</a></div></div>
 </div><!-- fragment -->
 <p>Specialises <span class="tt"><a class="el" href="../../de/d61/structmorph_1_1flows_1_1WizardTraits.html" title="Traits specialisation mapping a Wizard type to its string type-id.">morph::flows::WizardTraits</a>&lt;W&gt;</span> with the string type-id <code class="param">NAME</code>. </p>
 <p>Metadata only: unlike <span class="tt">BRIDGE_REGISTER_ACTION</span>, this performs no static-init registration into any dispatch registry — a wizard is never itself executed, only its steps' already-registered actions are (see docs/spec/forms/workflows_navigation.md). </p><dl class="params"><dt>Parameters</dt><dd>
@@ -217,104 +212,39 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00557">557</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Typedef Documentation</h2>
+<a id="a04bbf5ea692b2cf63be31c2d48f18041" name="a04bbf5ea692b2cf63be31c2d48f18041"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a04bbf5ea692b2cf63be31c2d48f18041">&#9670;&#160;</a></span>Bind</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Field, <a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Path&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#a04bbf5ea692b2cf63be31c2d48f18041">morph::flows::Bind</a> = <a class="el" href="../../d6/dd1/structmorph_1_1forms_1_1Bind.html">morph::forms::Bind</a>&lt;Field, Path&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Prefill binding for a wizard step. </p>
+<p>Alias for <span class="tt"><a class="el" href="../../d6/dd1/structmorph_1_1forms_1_1Bind.html" title="One field -&gt; &quot;&lt;ActionTypeId&gt;.&lt;field&gt;&quot; prefill binding declared on a wizard step or an unordered secti...">morph::forms::Bind</a></span>, which both session types share. Kept in this namespace because it is the name shipped consumers already write. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">Field</td><td>The step action's field name to prefill. </td></tr>
+    <tr><td class="paramname">Path</td><td>Source path, <span class="tt">"&lt;PriorAction&gt;.&lt;field&gt;"</span>, into an earlier step's captured values (see <span class="tt">FlowSession::resolved</span>). </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="a4c13a52cf0ba1731936cd9a1df9c246e" name="a4c13a52cf0ba1731936cd9a1df9c246e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4c13a52cf0ba1731936cd9a1df9c246e">&#9670;&#160;</a></span>forEachTupleElement()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename Tuple, typename Visitor&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::flows::detail::forEachTupleElement </td>
-          <td>(</td>
-          <td class="paramtype">Visitor &amp;&amp;</td>          <td class="paramname"><span class="paramname"><em>visitor</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Invokes <span class="tt">visitor.template operator()&lt;std::tuple_element_t&lt;I, Tuple&gt;, I&gt;()</span> for every element of <code class="param">Tuple</code>, in order. </p>
-<dl class="tparams"><dt>Template Parameters</dt><dd>
-  <table class="tparams">
-    <tr><td class="paramname">Tuple</td><td>A <span class="tt">std::tuple&lt;...&gt;</span> type (only its element types/arity are used). </td></tr>
-    <tr><td class="paramname">Visitor</td><td>Callable with a <span class="tt">template&lt;typename Element, std::size_t I&gt; operator()()</span>. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">visitor</td><td>Callable invoked once per tuple element. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ae265c452cfed8d411776ee1a2094570b" name="ae265c452cfed8d411776ee1a2094570b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae265c452cfed8d411776ee1a2094570b">&#9670;&#160;</a></span>forStep()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename... Steps, typename Visitor&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::flows::detail::forStep </td>
-          <td>(</td>
-          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>index</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">Visitor &amp;&amp;</td>          <td class="paramname"><span class="paramname"><em>visitor</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Invokes <span class="tt">visitor.template operator()&lt;Step&gt;()</span> for the pack element of <span class="tt">Steps...</span> at runtime position <code class="param">index</code>. A no-op when <span class="tt">index &gt;= sizeof...(Steps)</span>. </p>
-<dl class="tparams"><dt>Template Parameters</dt><dd>
-  <table class="tparams">
-    <tr><td class="paramname">Steps</td><td>The pack to index into. </td></tr>
-    <tr><td class="paramname">Visitor</td><td>Callable with a <span class="tt">template&lt;typename Step&gt; operator()()</span>. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">index</td><td>0-based position to visit. </td></tr>
-    <tr><td class="paramname">visitor</td><td>Callable invoked for the step at <code class="param">index</code>. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00126">126</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
-
-</div>
-</div>
 <a id="a5b60bfc400ec89a16c70701b2b2a0a27" name="a5b60bfc400ec89a16c70701b2b2a0a27"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5b60bfc400ec89a16c70701b2b2a0a27">&#9670;&#160;</a></span>wizardSchemaJson()</h2>
 
@@ -349,7 +279,7 @@ template&lt;typename W&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wizard's JSON document. Empty string only if glaze's own JSON writer fails on the assembled DOM (schema generation never throws). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>

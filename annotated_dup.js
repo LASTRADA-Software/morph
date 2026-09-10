@@ -44,11 +44,6 @@ var annotated_dup =
         [ "MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor" ]
       ] ],
       [ "flows", null, [
-        [ "detail", null, [
-          [ "AllDistinct", "d6/d90/structmorph_1_1flows_1_1detail_1_1AllDistinct.html", null ],
-          [ "AllDistinct&lt; T, Rest... &gt;", "de/d87/structmorph_1_1flows_1_1detail_1_1AllDistinct_3_01T_00_01Rest_8_8_8_01_4.html", null ]
-        ] ],
-        [ "Bind", "d2/daf/structmorph_1_1flows_1_1Bind.html", null ],
         [ "WizardStep", "d8/d94/structmorph_1_1flows_1_1WizardStep.html", "d8/d94/structmorph_1_1flows_1_1WizardStep" ],
         [ "Wizard", "d6/d94/structmorph_1_1flows_1_1Wizard.html", "d6/d94/structmorph_1_1flows_1_1Wizard" ],
         [ "WizardTraits", "de/d61/structmorph_1_1flows_1_1WizardTraits.html", null ],
@@ -57,6 +52,7 @@ var annotated_dup =
       [ "forms", null, [
         [ "And", "d3/d81/structmorph_1_1forms_1_1And.html", "d3/d81/structmorph_1_1forms_1_1And" ],
         [ "AtLeastOneOf", "de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html", "de/d4f/structmorph_1_1forms_1_1AtLeastOneOf" ],
+        [ "Bind", "d6/dd1/structmorph_1_1forms_1_1Bind.html", null ],
         [ "Choice", "df/d65/structmorph_1_1forms_1_1Choice.html", "df/d65/structmorph_1_1forms_1_1Choice" ],
         [ "ConstraintViolation", "d4/d51/structmorph_1_1forms_1_1ConstraintViolation.html", "d4/d51/structmorph_1_1forms_1_1ConstraintViolation" ],
         [ "Engaged", "dd/d6b/structmorph_1_1forms_1_1Engaged.html", "dd/d6b/structmorph_1_1forms_1_1Engaged" ],
@@ -81,6 +77,10 @@ var annotated_dup =
         [ "ReadonlyWhen", "dd/d29/structmorph_1_1forms_1_1ReadonlyWhen.html", "dd/d29/structmorph_1_1forms_1_1ReadonlyWhen" ],
         [ "RequiredWhen", "d6/da7/structmorph_1_1forms_1_1RequiredWhen.html", "d6/da7/structmorph_1_1forms_1_1RequiredWhen" ],
         [ "RuleList", "d3/d8b/structmorph_1_1forms_1_1RuleList.html", "d3/d8b/structmorph_1_1forms_1_1RuleList" ],
+        [ "Section", "dc/df1/structmorph_1_1forms_1_1Section.html", "dc/df1/structmorph_1_1forms_1_1Section" ],
+        [ "SectionGroup", "d6/d7b/structmorph_1_1forms_1_1SectionGroup.html", "d6/d7b/structmorph_1_1forms_1_1SectionGroup" ],
+        [ "SectionGroupTraits", "d5/d5d/structmorph_1_1forms_1_1SectionGroupTraits.html", null ],
+        [ "SectionSet", "d4/ddc/classmorph_1_1forms_1_1SectionSet.html", "d4/ddc/classmorph_1_1forms_1_1SectionSet" ],
         [ "UnsatisfiableFormError", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError" ],
         [ "VisibleWhen", "d8/d10/structmorph_1_1forms_1_1VisibleWhen.html", "d8/d10/structmorph_1_1forms_1_1VisibleWhen" ]
       ] ],

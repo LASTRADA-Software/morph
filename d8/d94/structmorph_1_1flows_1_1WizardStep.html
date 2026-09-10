@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d94/structm
 </div><!--header-->
 <div class="contents">
 
-<p>One step of a <span class="tt"><a class="el" href="../../d6/d94/structmorph_1_1flows_1_1Wizard.html" title="An ordered sequence of WizardSteps sharing one flow.">Wizard</a></span>: a registered action, a display title, and zero or more <span class="tt"><a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html" title="One field -&gt; &quot;&lt;PriorAction&gt;.&lt;field&gt;&quot; prefill binding declared on a wizard step.">Bind</a></span> prefill declarations.  
+<p>One step of a <span class="tt"><a class="el" href="../../d6/d94/structmorph_1_1flows_1_1Wizard.html" title="An ordered sequence of WizardSteps sharing one flow.">Wizard</a></span>: a registered action, a display title, and zero or more <span class="tt"><a class="el" href="../../d0/d67/flows_8hpp.html#a04bbf5ea692b2cf63be31c2d48f18041" title="Prefill binding for a wizard step.">Bind</a></span> prefill declarations.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>&gt;</code></p>
@@ -131,7 +131,7 @@ Public Types</h2></td></tr>
 <tr class="memitem:aa0e8b6fc036635f8539d8ca8e3c2f314" id="r_aa0e8b6fc036635f8539d8ca8e3c2f314"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#aa0e8b6fc036635f8539d8ca8e3c2f314">action</a> = Action</td></tr>
 <tr class="memdesc:aa0e8b6fc036635f8539d8ca8e3c2f314"><td class="mdescLeft">&#160;</td><td class="mdescRight">The step's action type.  <br /></td></tr>
 <tr class="memitem:a98d4a48c599245638cb6886b2033f800" id="r_a98d4a48c599245638cb6886b2033f800"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a98d4a48c599245638cb6886b2033f800">binds</a> = std::tuple&lt;Binds...&gt;</td></tr>
-<tr class="memdesc:a98d4a48c599245638cb6886b2033f800"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tuple of this step's <span class="tt"><a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html" title="One field -&gt; &quot;&lt;PriorAction&gt;.&lt;field&gt;&quot; prefill binding declared on a wizard step.">Bind</a>&lt;...&gt;</span> prefill declarations (possibly empty).  <br /></td></tr>
+<tr class="memdesc:a98d4a48c599245638cb6886b2033f800"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tuple of this step's <span class="tt"><a class="el" href="../../d0/d67/flows_8hpp.html#a04bbf5ea692b2cf63be31c2d48f18041" title="Prefill binding for a wizard step.">Bind</a>&lt;...&gt;</span> prefill declarations (possibly empty).  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
@@ -140,17 +140,17 @@ Static Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Action, <a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Title, typename... Binds&gt;<br />
-struct morph::flows::WizardStep&lt; Action, Title, Binds &gt;</div><p>One step of a <span class="tt"><a class="el" href="../../d6/d94/structmorph_1_1flows_1_1Wizard.html" title="An ordered sequence of WizardSteps sharing one flow.">Wizard</a></span>: a registered action, a display title, and zero or more <span class="tt"><a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html" title="One field -&gt; &quot;&lt;PriorAction&gt;.&lt;field&gt;&quot; prefill binding declared on a wizard step.">Bind</a></span> prefill declarations. </p>
+struct morph::flows::WizardStep&lt; Action, Title, Binds &gt;</div><p>One step of a <span class="tt"><a class="el" href="../../d6/d94/structmorph_1_1flows_1_1Wizard.html" title="An ordered sequence of WizardSteps sharing one flow.">Wizard</a></span>: a registered action, a display title, and zero or more <span class="tt"><a class="el" href="../../d0/d67/flows_8hpp.html#a04bbf5ea692b2cf63be31c2d48f18041" title="Prefill binding for a wizard step.">Bind</a></span> prefill declarations. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Action</td><td>Registered action type (<span class="tt">BRIDGE_REGISTER_ACTION</span>) this step fires. </td></tr>
     <tr><td class="paramname">Title</td><td>Human title for the step (breadcrumb / header). </td></tr>
-    <tr><td class="paramname">Binds</td><td>Zero or more <span class="tt"><a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html" title="One field -&gt; &quot;&lt;PriorAction&gt;.&lt;field&gt;&quot; prefill binding declared on a wizard step.">Bind</a>&lt;Field, Path&gt;</span> prefill declarations. </td></tr>
+    <tr><td class="paramname">Binds</td><td>Zero or more <span class="tt"><a class="el" href="../../d0/d67/flows_8hpp.html#a04bbf5ea692b2cf63be31c2d48f18041" title="Prefill binding for a wizard step.">Bind</a>&lt;Field, Path&gt;</span> prefill declarations. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="aa0e8b6fc036635f8539d8ca8e3c2f314" name="aa0e8b6fc036635f8539d8ca8e3c2f314"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa0e8b6fc036635f8539d8ca8e3c2f314">&#9670;&#160;</a></span>action</h2>
@@ -168,7 +168,7 @@ template&lt;typename Action, <a class="el" href="../../d1/d8b/choice_8hpp.html#a
 
 <p>The step's action type. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -186,9 +186,9 @@ template&lt;typename Action, <a class="el" href="../../d1/d8b/choice_8hpp.html#a
       </table>
 </div><div class="memdoc">
 
-<p>Tuple of this step's <span class="tt"><a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html" title="One field -&gt; &quot;&lt;PriorAction&gt;.&lt;field&gt;&quot; prefill binding declared on a wizard step.">Bind</a>&lt;...&gt;</span> prefill declarations (possibly empty). </p>
+<p>Tuple of this step's <span class="tt"><a class="el" href="../../d0/d67/flows_8hpp.html#a04bbf5ea692b2cf63be31c2d48f18041" title="Prefill binding for a wizard step.">Bind</a>&lt;...&gt;</span> prefill declarations (possibly empty). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>
@@ -221,7 +221,7 @@ template&lt;typename Action, <a class="el" href="../../d1/d8b/choice_8hpp.html#a
 <p>The step's display title. </p>
 <dl class="section return"><dt>Returns</dt><dd>The declared title. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
 
 </div>
 </div>

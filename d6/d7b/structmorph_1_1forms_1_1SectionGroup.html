@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::flows::Bind&lt; Field, Path &gt; Struct Template Reference</title>
+<title>morph: morph::forms::SectionGroup&lt; Title, Sections &gt; Struct Template Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/daf/structmorph_1_1flows_1_1Bind.html','../../','d6/d49/structmorph_1_1flows_1_1Bind-members'); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d7b/structmorph_1_1forms_1_1SectionGroup.html','../../','d3/dcc/structmorph_1_1forms_1_1SectionGroup-members'); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,48 +117,72 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/daf/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::flows::Bind&lt; Field, Path &gt; Struct Template Reference</div></div>
+  <div class="headertitle"><div class="title">morph::forms::SectionGroup&lt; Title, Sections &gt; Struct Template Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>One <span class="tt"><a class="el" href="#a7e9cf24276e5a2c0b6946af212ba5d71" title="The step action&#39;s field name this binding fills.">field</a> -&gt; "&lt;PriorAction&gt;.&lt;<a class="el" href="#a7e9cf24276e5a2c0b6946af212ba5d71" title="The step action&#39;s field name this binding fills.">field</a>&gt;"</span> prefill binding declared on a wizard step.  
+<p>An unordered set of <span class="tt"><a class="el" href="../../dc/df1/structmorph_1_1forms_1_1Section.html" title="One section of a SectionGroup: a registered action, a display title, and zero or more Bind prefill de...">Section</a></span>s sharing one screen.  
  <a href="#details">More...</a></p>
 
-<p><code>#include &lt;<a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>&gt;</code></p>
+<p><code>#include &lt;<a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>&gt;</code></p>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-types" class="groupheader"><a id="pub-types" name="pub-types"></a>
+Public Types</h2></td></tr>
+<tr class="memitem:ad2c59329c775c0d799947b94e799e288" id="r_ad2c59329c775c0d799947b94e799e288"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#ad2c59329c775c0d799947b94e799e288">sections</a> = std::tuple&lt;Sections...&gt;</td></tr>
+<tr class="memdesc:ad2c59329c775c0d799947b94e799e288"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tuple of this group's <span class="tt"><a class="el" href="../../dc/df1/structmorph_1_1forms_1_1Section.html" title="One section of a SectionGroup: a registered action, a display title, and zero or more Bind prefill de...">Section</a>&lt;...&gt;</span> types.  <br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
-<tr class="memitem:a7e9cf24276e5a2c0b6946af212ba5d71" id="r_a7e9cf24276e5a2c0b6946af212ba5d71"><td class="memItemLeft">static constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a7e9cf24276e5a2c0b6946af212ba5d71">field</a> () noexcept</td></tr>
-<tr class="memdesc:a7e9cf24276e5a2c0b6946af212ba5d71"><td class="mdescLeft">&#160;</td><td class="mdescRight">The step action's field name this binding fills.  <br /></td></tr>
-<tr class="memitem:a57fcfa8218493fca0de5e55d87073ec3" id="r_a57fcfa8218493fca0de5e55d87073ec3"><td class="memItemLeft">static constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a57fcfa8218493fca0de5e55d87073ec3">path</a> () noexcept</td></tr>
-<tr class="memdesc:a57fcfa8218493fca0de5e55d87073ec3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The source path into an earlier step's captured values.  <br /></td></tr>
+<tr class="memitem:aa1497c925d25249331df5548ff93741c" id="r_aa1497c925d25249331df5548ff93741c"><td class="memItemLeft">static constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#aa1497c925d25249331df5548ff93741c">title</a> () noexcept</td></tr>
+<tr class="memdesc:aa1497c925d25249331df5548ff93741c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The group's display title.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><div class="compoundTemplParams">template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Field, <a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Path&gt;<br />
-struct morph::flows::Bind&lt; Field, Path &gt;</div><p>One <span class="tt"><a class="el" href="#a7e9cf24276e5a2c0b6946af212ba5d71" title="The step action&#39;s field name this binding fills.">field</a> -&gt; "&lt;PriorAction&gt;.&lt;<a class="el" href="#a7e9cf24276e5a2c0b6946af212ba5d71" title="The step action&#39;s field name this binding fills.">field</a>&gt;"</span> prefill binding declared on a wizard step. </p>
+<div class="textblock"><div class="compoundTemplParams">template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Title, typename... Sections&gt;<br />
+struct morph::forms::SectionGroup&lt; Title, Sections &gt;</div><p>An unordered set of <span class="tt"><a class="el" href="../../dc/df1/structmorph_1_1forms_1_1Section.html" title="One section of a SectionGroup: a registered action, a display title, and zero or more Bind prefill de...">Section</a></span>s sharing one screen. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
-    <tr><td class="paramname">Field</td><td>The step action's field name to prefill. </td></tr>
-    <tr><td class="paramname">Path</td><td>Source path, <span class="tt">"&lt;PriorAction&gt;.&lt;<a class="el" href="#a7e9cf24276e5a2c0b6946af212ba5d71" title="The step action&#39;s field name this binding fills.">field</a>&gt;"</span>, into an earlier step's captured values (see <span class="tt"><a class="el" href="../../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a5708d29e6b2c89001f5bf74eadf660a1" title="Looks up a value captured from an earlier step&#39;s submitted draft or result.">FlowSession::resolved</a></span>). </td></tr>
+    <tr><td class="paramname">Title</td><td>Human title for the whole group. </td></tr>
+    <tr><td class="paramname">Sections</td><td>One or more <span class="tt"><a class="el" href="../../dc/df1/structmorph_1_1forms_1_1Section.html" title="One section of a SectionGroup: a registered action, a display title, and zero or more Bind prefill de...">Section</a>&lt;Action, Title, Binds...&gt;</span> types. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
-</div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
-<a id="a7e9cf24276e5a2c0b6946af212ba5d71" name="a7e9cf24276e5a2c0b6946af212ba5d71"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7e9cf24276e5a2c0b6946af212ba5d71">&#9670;&#160;</a></span>field()</h2>
+<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
+</div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
+<a id="ad2c59329c775c0d799947b94e799e288" name="ad2c59329c775c0d799947b94e799e288"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad2c59329c775c0d799947b94e799e288">&#9670;&#160;</a></span>sections</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Field, <a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Path&gt; </div>
+template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Title, typename... Sections&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="../../d6/d7b/structmorph_1_1forms_1_1SectionGroup.html">morph::forms::SectionGroup</a>&lt; Title, Sections &gt;::sections = std::tuple&lt;Sections...&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Tuple of this group's <span class="tt"><a class="el" href="../../dc/df1/structmorph_1_1forms_1_1Section.html" title="One section of a SectionGroup: a registered action, a display title, and zero or more Bind prefill de...">Section</a>&lt;...&gt;</span> types. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="aa1497c925d25249331df5548ff93741c" name="aa1497c925d25249331df5548ff93741c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa1497c925d25249331df5548ff93741c">&#9670;&#160;</a></span>title()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Title, typename... Sections&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">constexpr std::string_view <a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html">morph::flows::Bind</a>&lt; Field, Path &gt;::field </td>
+          <td class="memname">constexpr std::string_view <a class="el" href="../../d6/d7b/structmorph_1_1forms_1_1SectionGroup.html">morph::forms::SectionGroup</a>&lt; Title, Sections &gt;::title </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
@@ -171,47 +195,15 @@ template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e3745
 </table>
 </div><div class="memdoc">
 
-<p>The step action's field name this binding fills. </p>
-<dl class="section return"><dt>Returns</dt><dd>The declared field name. </dd></dl>
+<p>The group's display title. </p>
+<dl class="section return"><dt>Returns</dt><dd>The declared title. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a57fcfa8218493fca0de5e55d87073ec3" name="a57fcfa8218493fca0de5e55d87073ec3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a57fcfa8218493fca0de5e55d87073ec3">&#9670;&#160;</a></span>path()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Field, <a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88">morph::forms::FixedString</a> Path&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">constexpr std::string_view <a class="el" href="../../d2/daf/structmorph_1_1flows_1_1Bind.html">morph::flows::Bind</a>&lt; Field, Path &gt;::path </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The source path into an earlier step's captured values. </p>
-<dl class="section return"><dt>Returns</dt><dd>The declared <span class="tt">"&lt;PriorAction&gt;.&lt;<a class="el" href="#a7e9cf24276e5a2c0b6946af212ba5d71" title="The step action&#39;s field name this binding fills.">field</a>&gt;"</span> path. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/d67/flows_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
 
 </div>
 </div>
 <hr/>The documentation for this struct was generated from the following file:<ul>
-<li>morph/forms/<a class="el" href="../../d0/d67/flows_8hpp_source.html">flows.hpp</a></li>
+<li>morph/forms/<a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->
@@ -226,7 +218,7 @@ template&lt;<a class="el" href="../../d1/d8b/choice_8hpp.html#ab910f400a845e3745
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>flows</b></li><li class="navelem"><a href="../../d2/daf/structmorph_1_1flows_1_1Bind.html">Bind</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>forms</b></li><li class="navelem"><a href="../../d6/d7b/structmorph_1_1forms_1_1SectionGroup.html">SectionGroup</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>
