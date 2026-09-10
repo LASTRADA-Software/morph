@@ -390,10 +390,15 @@ public:
     /// @param timeout Per-`send` bound; zero to disable.
     /// @return `true` if the option was applied.
     [[nodiscard]] bool setSendTimeout(std::chrono::milliseconds timeout) const noexcept {
-        timeval tv{};
-        tv.tv_sec = static_cast<decltype(tv.tv_sec)>(timeout.count() / 1000);
-        tv.tv_usec = static_cast<decltype(tv.tv_usec)>((timeout.count() % 1000) * 1000);
-        return ::setsockopt(_fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == 0;
+        // Assigned without casts on purpose: `milliseconds::rep` and
+        // `timeval`'s members are both `long` on the platforms this builds for,
+        // so an explicit cast is an identity cast and GCC rejects it under
+        // -Werror=useless-cast. clang-tidy also wants names of three characters
+        // or more, hence `timeoutVal` rather than the conventional `tv`.
+        timeval timeoutVal{};
+        timeoutVal.tv_sec = timeout.count() / 1000;
+        timeoutVal.tv_usec = (timeout.count() % 1000) * 1000;
+        return ::setsockopt(_fd, SOL_SOCKET, SO_SNDTIMEO, &timeoutVal, sizeof(timeoutVal)) == 0;
     }
 
     /// @brief Shuts down both directions of the socket, unblocking a concurrent
