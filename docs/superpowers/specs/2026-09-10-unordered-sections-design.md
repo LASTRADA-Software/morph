@@ -160,7 +160,7 @@ The guarantee has the same boundary as `FlowSession`'s and the same caveat
 applies verbatim: destroying the session on the thread its continuations are
 delivered on makes check-then-run atomic; destroying it from another thread is
 advisory, and that caller owns its own synchronisation. See
-`docs/spec/core/callback_scope.md`, "Boundary of the guarantee".
+`docs/spec/core/callback_scope.md`, "Thread safety and the boundary of the guarantee".
 
 ## Schema document
 

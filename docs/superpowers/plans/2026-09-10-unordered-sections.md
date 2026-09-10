@@ -1025,7 +1025,8 @@ the destructor anyway per Step 3 and keep the case as the regression guard for a
     /// if one is added.
     ///
     /// The strength of the gate depends on which thread destroys this object,
-    /// exactly as `CallbackScope`'s "Boundary of the guarantee" describes.
+    /// exactly as callback_scope.md's "Thread safety and the boundary of
+    /// the guarantee" describes.
     /// Destroying it off the delivery thread is advisory only, and that caller
     /// owns its own synchronisation.
     ~SectionSet() { _callbacks.requestStop(); }
