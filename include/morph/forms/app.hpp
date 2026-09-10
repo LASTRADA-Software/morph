@@ -18,6 +18,7 @@
 #include <string_view>
 #include <tuple>
 
+#include "detail/session_common.hpp"
 #include "flows.hpp"
 
 namespace morph::app {
@@ -125,7 +126,7 @@ template <typename AppT>
     dom["app-title"] = std::string{AppT::title()};
 
     glz::generic_u64::array_t menu{};
-    ::morph::flows::detail::forEachTupleElement<typename AppT::menu>([&]<typename Entry, std::size_t I>() {
+    ::morph::forms::detail::forEachTupleElement<typename AppT::menu>([&]<typename Entry, std::size_t I>() {
         static_cast<void>(I);
         glz::generic_u64 entry{};
         entry["label"] = std::string{Entry::label()};
@@ -135,7 +136,7 @@ template <typename AppT>
     dom["app-menu"] = menu;
 
     auto& screensNode = dom["app-screens"];
-    ::morph::flows::detail::forEachTupleElement<typename AppT::screens>([&]<typename S, std::size_t I>() {
+    ::morph::forms::detail::forEachTupleElement<typename AppT::screens>([&]<typename S, std::size_t I>() {
         static_cast<void>(I);
         auto& screenNode = screensNode[std::string{S::id()}];
         screenNode["kind"] = std::string{S::kind()};
