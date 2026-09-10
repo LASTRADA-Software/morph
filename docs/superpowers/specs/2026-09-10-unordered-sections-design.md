@@ -13,7 +13,7 @@ Closes [morph#513](https://github.com/LASTRADA-Software/morph/issues/513).
 - [Headers](#headers)
 - [Declaration layer](#declaration-layer)
 - [SectionSet](#sectionset)
-- [Reactive prefill](#reactive-prefill)
+- [Prefill](#prefill)
 - [Concurrency and lifetime](#concurrency-and-lifetime)
 - [Schema document](#schema-document)
 - [Testing](#testing)
@@ -93,6 +93,7 @@ public:
     template <auto FieldPtr> void set(ValueType value);
     template <typename A>    void reset();
     template <typename A>    [[nodiscard]] A draft() const;
+    [[nodiscard]] std::optional<std::string> resolved(std::string_view path) const;
 };
 ```
 
@@ -114,25 +115,34 @@ already resolved for it. It touches no other section.
 `draft<A>()` returns a snapshot for a renderer to display. It is a copy taken
 under the lock, not a reference into live state.
 
-## Reactive prefill
+## Prefill
 
-A section declaring `Bind<&B::field, "A.result">` is filled when `A` produces
-its result, whenever that happens. `FlowSession` never faced this question —
-its ordering guarantees the source has already fired. Without ordering, the
-alternatives were to resolve lazily at read time (which pushes the work back
-onto the consumer, the thing morph#513 objects to) or to require a fired source
-(which reintroduces sequencing through the back door).
+A section declaring `Bind<&B::field, "A.result">` publishes a *declaration*, not
+a write. This matches `FlowSession` exactly, and the parity is worth stating
+because it is easy to assume otherwise: `binds` are consumed in exactly one
+place in `flows.hpp` — emitted into the schema document under a `prefill` node
+for a renderer. `FlowSession` never writes a prefill value into a draft.
 
-On a successful result the fields are recorded into `_resolvedValues` under
-`"<ActionTypeId>.<field>"`, then every *other* section with a `Bind` naming one
-of those paths has its draft field written.
+`SectionSet` does the same two things:
 
-**A prefill write never fires its section.** Only `set<>` does.
+- `sectionGroupSchemaJson<G>()` emits each section's binds under `prefill`, as
+  `{ "<field>": "<ActionTypeId>.<field>" }`.
+- On a successful result, the submitted draft's fields and then the result's
+  fields are recorded into `_resolvedValues` under `"<ActionTypeId>.<field>"`,
+  result fields winning on a name collision — the same order `FlowSession`
+  records them in.
+- `resolved(path)` returns a captured field's JSON-encoded value, or
+  `std::nullopt` if that path was never captured.
 
-This is the one constraint chosen rather than requested, and it is load-bearing:
-without it, `A` completing could cascade-fire `B`, and two sections bound to
-each other would ping-pong. The cost is visible and accepted — a section made
-ready purely by prefill waits for one user edit before dispatching.
+The renderer decides what to do with a resolved value: it is the component that
+knows whether a field the user has already edited should be overwritten, and
+the framework has no basis for that judgement.
+
+**No ordering is implied.** In a wizard a bind's source always precedes its
+target, so `resolved` is populated by the time a step is entered. Here a bind
+may name a section that has not fired, and `resolved` returns `std::nullopt`
+for it — which is the same answer `FlowSession` gives for a path that was never
+captured, so the accessor's contract is unchanged.
 
 ## Concurrency and lifetime
 
@@ -172,15 +182,15 @@ a suite that would pass either way measures nothing.
 | 2 | A not-ready draft does not dispatch; a ready one does | The readiness gate |
 | 3 | Editing an already-fired section fires again | The no-latch rule |
 | 4 | `reset<A>()` clears A, leaves B's draft intact | Per-section isolation |
-| 5 | A fires → B's bound field fills, **and B does not fire** | The prefill-never-fires rule, in both directions |
+| 5 | A fires → `resolved("A.field")` returns its value; a path whose section has not fired returns `nullopt` | Result capture and the resolved-values map |
 | 6 | `onError` runs on dispatch failure; default path logs | Error routing |
 | 7 | Destroying the set with a dispatch in flight delivers nothing | The `CallbackScope` gate |
 | 8 | Schema carries each section's title and action id | Schema emission |
 | 9 | Duplicate action types, and a field outside the set, are rejected | The two `static_assert`s |
 
-Case 5 is the one worth writing carefully: it must assert both halves, because
-a test that only checks the field filled would pass under a cascading
-implementation.
+Case 5 asserts both halves — a captured path and an uncaptured one — because a
+test that only checked the captured case would pass against an implementation
+that returned a value for everything.
 
 Case 9 is compile-time. It is covered by a documented negative example rather
 than a runtime assertion, since a `static_assert` that fires cannot also be
@@ -192,5 +202,11 @@ linked into the suite.
   wizard and stays.
 - In-flight coalescing. It was removed with the reactive draft in `779bd8aa`
   and is not reintroduced here; `FlowSession` does without it too.
+- **Writing prefill values into drafts.** An earlier draft of this design had
+  the framework write a bound field when its source fired. That is not parity
+  with `FlowSession` — it is a mechanism that exists nowhere in the tree, and
+  would need JSON-to-typed-field deserialization keyed by field name. Rejected
+  in favour of matching the sibling type; if it is wanted later it is its own
+  piece of work, and the renderer can do it today from `resolved()`.
 - A QML renderer for section groups. The schema document is emitted; consuming
   it is a separate piece of work.
