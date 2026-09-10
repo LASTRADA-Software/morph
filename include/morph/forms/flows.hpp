@@ -41,25 +41,20 @@
 #include "../core/bridge.hpp"
 #include "../core/callback_scope.hpp"
 #include "../core/logger.hpp"
+#include "detail/session_common.hpp"
 #include "forms.hpp"
 
 namespace morph::flows {
 
-/// @brief One `field -> "<PriorAction>.<field>"` prefill binding declared on
-///        a wizard step.
+/// @brief Prefill binding for a wizard step.
+///
+/// Alias for `morph::forms::Bind`, which both session types share. Kept in this
+/// namespace because it is the name shipped consumers already write.
 /// @tparam Field The step action's field name to prefill.
 /// @tparam Path  Source path, `"<PriorAction>.<field>"`, into an earlier
 ///               step's captured values (see `FlowSession::resolved`).
 template <morph::forms::FixedString Field, morph::forms::FixedString Path>
-struct Bind {
-    /// @brief The step action's field name this binding fills.
-    /// @return The declared field name.
-    [[nodiscard]] static constexpr std::string_view field() noexcept { return Field.view(); }
-
-    /// @brief The source path into an earlier step's captured values.
-    /// @return The declared `"<PriorAction>.<field>"` path.
-    [[nodiscard]] static constexpr std::string_view path() noexcept { return Path.view(); }
-};
+using Bind = morph::forms::Bind<Field, Path>;
 
 /// @brief One step of a `Wizard`: a registered action, a display title, and
 ///        zero or more `Bind` prefill declarations.
@@ -101,47 +96,6 @@ struct Wizard {
 template <typename W>
 struct WizardTraits;  // forward — specialise or use BRIDGE_REGISTER_WIZARD
 
-namespace detail {
-
-/// @brief Invokes `visitor.template operator()<std::tuple_element_t<I, Tuple>, I>()`
-///        for every element of @p Tuple, in order.
-/// @tparam Tuple   A `std::tuple<...>` type (only its element types/arity are used).
-/// @tparam Visitor Callable with a `template<typename Element, std::size_t I> operator()()`.
-/// @param visitor Callable invoked once per tuple element.
-template <typename Tuple, typename Visitor>
-constexpr void forEachTupleElement(Visitor&& visitor) {
-    []<std::size_t... I>(std::index_sequence<I...>, Visitor&& innerVisitor) {
-        (innerVisitor.template operator()<std::tuple_element_t<I, Tuple>, I>(), ...);
-    }(std::make_index_sequence<std::tuple_size_v<Tuple>>{}, std::forward<Visitor>(visitor));
-}
-
-/// @brief Invokes `visitor.template operator()<Step>()` for the pack element
-///        of `Steps...` at runtime position @p index. A no-op when
-///        `index >= sizeof...(Steps)`.
-/// @tparam Steps   The pack to index into.
-/// @tparam Visitor Callable with a `template<typename Step> operator()()`.
-/// @param index   0-based position to visit.
-/// @param visitor Callable invoked for the step at @p index.
-template <typename... Steps, typename Visitor>
-constexpr void forStep(std::size_t index, Visitor&& visitor) {
-    std::size_t i = 0;
-    (void)((i++ == index ? (visitor.template operator()<Steps>(), true) : false) || ...);
-}
-
-/// @brief Trait: `true` when every type in `Ts...` is pairwise distinct.
-/// @tparam Ts Types to check for pairwise distinctness.
-template <typename... Ts>
-struct AllDistinct : std::true_type {};
-
-/// @brief Recursive case: `T` distinct from every type in `Rest...`, and `Rest...` pairwise distinct.
-/// @tparam T    The type being checked against `Rest...`.
-/// @tparam Rest The remaining types.
-template <typename T, typename... Rest>
-struct AllDistinct<T, Rest...> : std::bool_constant<(!std::is_same_v<T, Rest> && ...) && AllDistinct<Rest...>::value> {
-};
-
-}  // namespace detail
-
 /// @brief Generates the `w-*` JSON document for wizard type @p W.
 ///
 /// Emits `w-title` and an ordered `w-steps` array; each step carries `action`
@@ -158,17 +112,14 @@ template <typename W>
     dom["w-title"] = std::string{W::title()};
 
     glz::generic_u64::array_t steps{};
-    detail::forEachTupleElement<typename W::steps>([&]<typename StepT, std::size_t I>() {
+    ::morph::forms::detail::forEachTupleElement<typename W::steps>([&]<typename StepT, std::size_t I>() {
         static_cast<void>(I);
         glz::generic_u64 step{};
         step["action"] = std::string{::morph::model::ActionTraits<typename StepT::action>::typeId()};
         step["title"] = std::string{StepT::title()};
         if constexpr (std::tuple_size_v<typename StepT::binds> != 0) {
-            auto& prefillNode = step["prefill"];
-            detail::forEachTupleElement<typename StepT::binds>([&]<typename BindT, std::size_t J>() {
-                static_cast<void>(J);
-                prefillNode[std::string{BindT::field()}] = std::string{BindT::path()};
-            });
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+            ::morph::forms::detail::emitBindsInto<typename StepT::binds>(step["prefill"]);
         }
         steps.emplace_back(std::move(step));
     });
@@ -199,7 +150,8 @@ template <typename W>
 template <typename Model, typename... Steps>
 class FlowSession {
     static_assert(sizeof...(Steps) > 0, "FlowSession: a flow needs at least one step");
-    static_assert(detail::AllDistinct<Steps...>::value, "FlowSession: step action types must be pairwise distinct");
+    static_assert(::morph::forms::detail::AllDistinct<Steps...>::value,
+                  "FlowSession: step action types must be pairwise distinct");
 
 public:
     /// @brief Constructs a flow over @p handler, starting at step 0.
@@ -406,7 +358,8 @@ public:
     /// @return Empty when `finished()` (no current step).
     [[nodiscard]] std::string_view currentActionType() const noexcept {
         std::string_view id{};
-        detail::forStep<Steps...>(_index, [&id]<typename A> { id = ::morph::model::ActionTraits<A>::typeId(); });
+        ::morph::forms::detail::forPackElement<Steps...>(
+            _index, [&id]<typename A> { id = ::morph::model::ActionTraits<A>::typeId(); });
         return id;
     }
 

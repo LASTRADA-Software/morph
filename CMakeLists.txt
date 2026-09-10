@@ -225,6 +225,7 @@ target_sources(morph
         include/morph/forms/app.hpp
         include/morph/forms/flows.hpp
         include/morph/forms/layout.hpp
+        include/morph/forms/sections.hpp
         include/morph/forms/views.hpp
         include/morph/forms/widget_hints.hpp
         include/morph/journal/outbox.hpp
