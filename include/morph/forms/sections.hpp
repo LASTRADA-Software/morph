@@ -260,10 +260,12 @@ private:
                 value, [&]<std::size_t I>(std::string_view name, const auto& member) {
                     static_cast<void>(I);
                     std::string json;
-                    // Mirrors flows.hpp: a field glaze cannot write is skipped
-                    // rather than stored as a broken string. The false arm is
-                    // unreachable for any type that got this far, since the
-                    // same writer already served schema generation.
+                    // The `!write_json(...)` guard's false arm (write failure)
+                    // is not exercised by this file's own test suite: every
+                    // section action's fields are plain, well-formed data
+                    // glaze's JSON writer cannot fail on. The same
+                    // "untestable line" flows.hpp's captureResult already
+                    // carries, for the same reason.
                     if (!glz::write_json(member, json)) {
                         _resolvedValues[std::string{typeId} + "." + std::string{name}] = std::move(json);
                     }
