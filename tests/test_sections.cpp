@@ -128,3 +128,69 @@ TEST_CASE("sectionGroupSchemaJson carries each section's title, action and binds
     CHECK_FALSE(sections[0].contains("index"));
     CHECK_FALSE(sections[1].contains("index"));
 }
+
+// ---------------------------------------------------------------------------
+// Each case builds its own bridge/handler/section set: a SectionSet holds no
+// global state, and a shared one would let a late dispatch from a previous case
+// land in this one's recorder.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("SectionSet: sections fire independently, in any order", "[sections]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::InlineExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
+    morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
+
+    recorder().clear();
+
+    // Edit the SECOND section first. Under FlowSession this throws
+    // std::logic_error -- "field belongs to an action that is not the current
+    // step" -- which is exactly the gap morph#513 reports.
+    sections.set<&SecPrefs::theme>("dark");
+    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 1; }));
+
+    // Then the first. Both fire; neither was ever "current".
+    sections.set<&SecProfile::name>("ada");
+    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 2; }));
+
+    auto const fired = recorder().snapshot();
+    CHECK(fired[0] == "SectionsTest_Prefs");
+    CHECK(fired[1] == "SectionsTest_Profile");
+}
+
+TEST_CASE("SectionSet: a not-ready draft does not dispatch", "[sections]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::InlineExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
+    morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
+
+    recorder().clear();
+
+    // SecPrefs::validate() requires a non-empty theme; profileId alone is not
+    // ready. Without the readiness gate this would dispatch a half-filled action.
+    sections.set<&SecPrefs::profileId>(7);
+    CHECK(recorder().snapshot().empty());
+
+    // Completing it dispatches, carrying the field set earlier.
+    sections.set<&SecPrefs::theme>("light");
+    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 1; }));
+}
+
+TEST_CASE("SectionSet: an already-fired section fires again on the next edit", "[sections]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::InlineExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
+    morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
+
+    recorder().clear();
+    sections.set<&SecProfile::name>("ada");
+    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 1; }));
+
+    // No latch: the draft is still ready, so it dispatches again. Matching
+    // FlowSession, which also re-fires a ready step on every set<>.
+    sections.set<&SecProfile::name>("grace");
+    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 2; }));
+}
