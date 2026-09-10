@@ -1,0 +1,8 @@
+mutators:
+  - cxx_replace_scalar_call
+  - cxx_assign_const
+  - cxx_init_const
+  - cxx_gt_to_ge
+  - cxx_add_to_sub
+includePaths:
+  - .*perm\.cpp

@@ -464,13 +464,13 @@
     "unclassified": {
       "count": 183,
       "note": "16 classified (13 equivalent, 3 real and closed). The rest are NOT classified, and per survivor_list_unreliable above, classifying them against this run is the wrong next step.",
-      "next_step": "Fix or characterise the tooling first (morph#510). A survivor list where 5 of 6 samples are false is not a worklist."
+      "next_step": "The 55 survivors outside the three affected families can be classified normally. The other 144 need the mutation applied by hand first; scripts/mutation-repro/README.md shows the method."
     },
     "survivor_list_unreliable": {
       "sampled": 6,
       "detected_by_suite_despite_being_reported_survived": 5,
       "issue": "morph#510",
-      "status": "Reproduced behaviourally, one of them on a worktree at the campaign's own revision (adfe8e5f) with its own build. Mechanism NOT established -- Mull is not installed here, so no disassembly, unlike morph#434.",
+      "status": "CONFIRMED with a minimal reproduction and a built-in control (scripts/mutation-repro/, morph#510). Measured with Mull 0.34.0's LLVM-22 build against clang 22.1.8.",
       "samples": [
         {
           "site": "remote.hpp:1031",
@@ -524,7 +524,33 @@
         "Revision mismatch: the 140-failure measurement is on adfe8e5f itself and the quoted source line matches character-for-character.",
         "Wholesale mutant-selection failure: 574 of 773 were killed in the same run, so the mechanism works in general."
       ],
-      "consequence": "The 199-survivor baseline overstates real gaps by an unknown but large margin. It still works as a relative ratchet for morph#408's gate, since the artifacts are stable run to run."
+      "consequence": "The 199-survivor baseline overstates real gaps by an unknown but large margin. It still works as a relative ratchet for morph#408's gate, since the artifacts are stable run to run.",
+      "confirmed_2026_09_10": {
+        "reproduction": "scripts/mutation-repro/perm.cpp -- ~18 lines, no morph code.",
+        "result": "8 mutants, 5 survived, score 37%. Every mutated site makes main return non-zero, so all should be killed.",
+        "mis_reporting": [
+          "cxx_replace_scalar_call",
+          "cxx_init_const",
+          "cxx_assign_const"
+        ],
+        "correct": [
+          "cxx_gt_to_ge",
+          "cxx_add_to_sub"
+        ],
+        "why_the_control_matters": "The two correct mutators run in the same binary and the same mull-runner invocation, so a broken harness, an undetectable exit code, and wholesale mutant-selection failure are all ruled out.",
+        "not_the_same_bug_as_434": "morph#434's cxx_remove_void_call is a codegen no-op -- the mutant disassembles byte-identical to its `_original` twin. These mutants ARE generated: the bodies differ and .mull_mutants carries the identifier. The failure is at or after activation, so it is a different upstream defect.",
+        "per_site_not_per_mutator": "A cxx_replace_scalar_call mutant on `addTwo(2,2) != 4` WAS killed correctly in the same run, and a cxx_init_const mutant on a value that is unconditionally overwritten was correctly reported as survived. So these mutators are unreliable per site rather than uniformly dead -- which is why they are still enabled in scripts/mutation.sh.",
+        "what_it_means_for_a_reader": "A survivor from one of the three families is not evidence of a gap until the mutation is applied by hand and the suite is watched. Survivors from other families can be read normally.",
+        "upstream": "Not yet filed at mull-project/mull. scripts/mutation-repro/ is written to be handed over as-is. Filing is a public action on someone else's project and is left to the maintainer, as morph#408 left morph#434's filing."
+      },
+      "affected_share_of_run_2": {
+        "cxx_replace_scalar_call": 92,
+        "cxx_init_const": 27,
+        "cxx_assign_const": 25,
+        "total": 144,
+        "of": 199,
+        "caveat": "Membership of an affected family is NOT the same as being a false survivor -- see per_site_not_per_mutator. 144 is the population needing hand-verification, not a count of artifacts."
+      }
     }
   }
 }

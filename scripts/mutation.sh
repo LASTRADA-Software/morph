@@ -222,6 +222,36 @@ mkdir -p "$build_dir"
     # newer Mull will not have fixed it silently): compile one TU containing a
     # void-returning member call, and disassemble the mutant against its
     # `_original`. If they are byte-identical, the mutator is still broken.
+    #
+    # ── A SECOND, DIFFERENT defect: three mutators mis-report kills ──────────
+    #
+    # `cxx_replace_scalar_call` and both members of `cxx_assignment`
+    # (`cxx_assign_const`, `cxx_init_const`) report *survived* for mutants the
+    # test binary demonstrably fails on. Reproduced in ~18 lines with a built-in
+    # control -- scripts/mutation-repro/, morph#510: five sites that each make
+    # `main` return non-zero when mutated, of which `cxx_gt_to_ge` and
+    # `cxx_add_to_sub` are correctly killed in the same run while the three
+    # above are reported survived.
+    #
+    # NOT the same bug as cxx_remove_void_call above. That one is a codegen
+    # no-op -- the mutant disassembles identically to its `_original`. These
+    # mutants *are* generated: the bodies differ and `.mull_mutants` carries the
+    # identifier. Whatever fails happens at or after activation.
+    #
+    # They are deliberately still enabled, and that is a judgement call rather
+    # than an oversight. Unlike cxx_remove_void_call, these are unreliable
+    # *per-site*, not uniformly dead: the same reproduction shows a
+    # `cxx_replace_scalar_call` mutant being killed correctly. Excluding them
+    # would throw away that signal to remove the noise. What they cost instead
+    # is that a survivor from one of these three families is not evidence of a
+    # gap until someone applies the mutation by hand and watches the suite --
+    # scripts/mutation_survivors.json records that, and morph#453's
+    # classification work depends on it.
+    #
+    # To exclude them anyway: drop `cxx_assignment` and
+    # `cxx_replace_scalar_call` from the list below. Expect the survivor count
+    # to fall sharply (they were 144 of run[2]'s 199) and the score to move for
+    # reasons that have nothing to do with the suite.
     echo "mutators:"
     echo "  - cxx_assignment"
     echo "  - cxx_increment"
