@@ -148,8 +148,15 @@ QTimer::singleShot(0, _callbacks.guard([this] { tick(); }));
 ```
 
 The returned callable forwards every argument and returns `void`. A
-value-returning callable is rejected at compile time: there is no defensible
-value to return when delivery is suppressed.
+value-returning callable is rejected: there is no defensible value to return
+when delivery is suppressed.
+
+The rejection is a `static_assert` **inside the returned wrapper's body**, so it
+fires when the wrapper is *invoked*, not when `guard()` is called. A wrapper
+built from a value-returning callable and then never called compiles cleanly —
+worth knowing when the guarded callback is stored and its subscription torn down
+before its first tick. Constraining `guard()` itself would make the rejection
+unconditional; that has not been done.
 
 ### Gated overloads elsewhere
 

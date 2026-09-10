@@ -95,7 +95,6 @@
 ///       (e.g. sums over large coprime denominators). Keep operands within
 ///       the decimal-scaled ranges the precision tags imply.
 
-#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <compare>
@@ -108,8 +107,8 @@
 #include <morph/core/logger.hpp>
 #include <morph/core/payload_shape_tag.hpp>
 #include <numeric>
-#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 

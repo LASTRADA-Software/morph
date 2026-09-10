@@ -1688,10 +1688,11 @@ private:
     // (`test_remote_connection_scope.cpp`'s "an in-flight execute completes
     // safely across a disconnect" test — a lookup against a since-reclaimed
     // modelId must resolve without waiting on some other blocked model's
-    // strand — never touches this gate at all, since it never gets a ticket
-    // for a model that turns out to be gone... except it does get a ticket,
-    // and must release it immediately rather than hold up a live ticket
-    // behind it; see `ExecuteOrderGate::release`'s own doc comment).
+    // strand). That path *does* take a ticket: `handleImpl` takes one for any
+    // well-formed `execute` with a non-zero `modelId`, long before the registry
+    // lookup that discovers the model is gone. What keeps it fast is releasing
+    // that ticket immediately rather than holding up a live one behind it; see
+    // `ExecuteOrderGate::release`'s own doc comment.
     //
     // Keyed by ModelId internally, not held forever: a model with no
     // outstanding tickets has no entry in the gate's map at all (erased once

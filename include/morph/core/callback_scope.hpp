@@ -98,8 +98,10 @@ public:
     ///
     /// @tparam F Callable type to wrap. Must return `void` for every argument
     ///           list it is invoked with; a value-returning callable has no
-    ///           defensible answer for the suppressed case and is rejected at
-    ///           compile time.
+    ///           defensible answer for the suppressed case. Rejected by a
+    ///           `static_assert` in the returned wrapper's body, so it fires
+    ///           when the wrapper is *invoked* -- a wrapper that is created and
+    ///           never called compiles either way.
     /// @param fn Callable to gate. Moved into the returned wrapper.
     /// @return A callable with @p fn's argument list and a `void` return.
     template <typename F>

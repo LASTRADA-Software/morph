@@ -723,11 +723,11 @@ struct Quantity {
         Quantity out;
         out.payload = adjusted;
         // Not `out._ctx = _ctx`: that would copy this quantity's derivation
-        // node verbatim, so equation() and operator<<(std::format) would
+        // node verbatim, so equation() and std::formatter<Quantity> would
         // disagree -- the node's own recorded `result` is still *this*
         // quantity's old payload/precision, but `out.payload` is the
         // retagged one. A fresh node (same convention as operator
-        // Quantity<To>()'s unit conversion above) keeps the two consistent.
+        // Quantity<To>()'s unit conversion, below) keeps the two consistent.
         MORPH_Q_BUILD(out, "retag decimal places", payload, std::nullopt, out.payload, MORPH_Q_NODE(*this), nullptr);
         return out;
     }

@@ -611,9 +611,11 @@ public:
 
     /// @brief Creates a model instance via @p factory and registers it.
     ///
-    /// @p typeId is accepted for interface compatibility but not used — the
-    /// concrete type is captured by the factory closure. If the new holder's
-    /// `isBackendChangeAware()` returns `true`, @p mid is also recorded in
+    /// The `typeId` parameter is accepted for interface compatibility but not
+    /// used — it is unnamed in the signature below, and the concrete type is
+    /// captured by the factory closure. If the new holder's
+    /// `isBackendChangeAware()` returns `true`, the new id (a local in
+    /// `createAndTrack`, not a parameter here) is also recorded in
     /// `_changeAware` so `notifyBackendChanged()` finds it without a
     /// `dynamic_cast` sweep.
     /// @param factory  Callable that constructs the `IModelHolder`.
