@@ -138,6 +138,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a86d877007461559a660f5e0183a76e75"><td class="mdescLeft">&#160;</td><td class="mdescRight">Multiplier applied to the delay after each failed attempt.  <br /></td></tr>
 <tr class="memitem:acd8e19b0807613d9c4d494b407115e1e" id="r_acd8e19b0807613d9c4d494b407115e1e"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#acd8e19b0807613d9c4d494b407115e1e">connectTimeout</a> {5000}</td></tr>
 <tr class="memdesc:acd8e19b0807613d9c4d494b407115e1e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Maximum time to wait for the initial TCP connect to complete.  <br /></td></tr>
+<tr class="memitem:a981e0b8e3f410980b8f22671c7f1f8ec" id="r_a981e0b8e3f410980b8f22671c7f1f8ec"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a981e0b8e3f410980b8f22671c7f1f8ec">sendTimeout</a> {30000}</td></tr>
+<tr class="memdesc:a981e0b8e3f410980b8f22671c7f1f8ec"><td class="mdescLeft">&#160;</td><td class="mdescRight">Bound on a single <span class="tt">::send</span> that is making no progress.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Reconnect tuning for <span class="tt"><a class="el" href="../../d5/d98/classmorph_1_1net_1_1SocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over a raw-socket RFC 6455 WebSocket co...">SocketBackend</a></span>. </p>
@@ -231,6 +233,25 @@ Public Attributes</h2></td></tr>
 <p>Maximum time to wait for the initial TCP connect to complete. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a981e0b8e3f410980b8f22671c7f1f8ec" name="a981e0b8e3f410980b8f22671c7f1f8ec"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a981e0b8e3f410980b8f22671c7f1f8ec">&#9670;&#160;</a></span>sendTimeout</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::chrono::milliseconds morph::net::SocketBackendConfig::sendTimeout {30000}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Bound on a single <span class="tt">::send</span> that is making no progress. </p>
+<p>Applied as <span class="tt">SO_SNDTIMEO</span>. Without it, a peer that stops reading fills the kernel send buffer and parks <span class="tt">sendFrame</span> inside <span class="tt">sendAll</span> <b>while holding <span class="tt">_socketMtx</span></b> &ndash; which parks <span class="tt">~SocketBackend</span> behind the same lock, with nothing able to release it (morph#506). Generous on purpose: it bounds a send making <em>no</em> progress, not a slow one. Zero disables it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>

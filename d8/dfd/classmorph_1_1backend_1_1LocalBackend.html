@@ -224,7 +224,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Creates a model instance via <code class="param">factory</code> and registers it. </p>
-<p><code class="param">typeId</code> is accepted for interface compatibility but not used — the concrete type is captured by the factory closure. If the new holder's <span class="tt">isBackendChangeAware()</span> returns <span class="tt">true</span>, <code class="param">mid</code> is also recorded in <span class="tt">_changeAware</span> so <span class="tt"><a class="el" href="#adaa4fa967c7321689e55514788800a91" title="Schedules onBackendChanged() on each change-aware model&#39;s strand. Thread-safe.">notifyBackendChanged()</a></span> finds it without a <span class="tt">dynamic_cast</span> sweep. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>The <span class="tt">typeId</span> parameter is accepted for interface compatibility but not used — it is unnamed in the signature below, and the concrete type is captured by the factory closure. If the new holder's <span class="tt">isBackendChangeAware()</span> returns <span class="tt">true</span>, the new id (a local in <span class="tt">createAndTrack</span>, not a parameter here) is also recorded in <span class="tt">_changeAware</span> so <span class="tt"><a class="el" href="#adaa4fa967c7321689e55514788800a91" title="Schedules onBackendChanged() on each change-aware model&#39;s strand. Thread-safe.">notifyBackendChanged()</a></span> finds it without a <span class="tt">dynamic_cast</span> sweep. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">factory</td><td>Callable that constructs the <span class="tt">IModelHolder</span>. </td></tr>
   </table>
@@ -232,7 +232,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Newly assigned <span class="tt">ModelId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00621">621</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00623">623</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -279,7 +279,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Id of the shared (or newly created) instance. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00637">637</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00639">639</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -325,7 +325,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00676">676</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00678">678</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -361,7 +361,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Canonical key strings of the live shared instances, in unspecified order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00706">706</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00708">708</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -396,7 +396,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00724">724</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00726">726</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -431,7 +431,7 @@ Public Member Functions</h2></td></tr>
 </ul>
 <p>A <span class="tt">shared_ptr</span> copy of each holder is captured into the posted task so a concurrent <span class="tt"><a class="el" href="#a9a539d67d97dbb987f5a644d2c6073d5" title="Removes the model with mid, or releases one attachment to it. Thread-safe.">deregisterModel</a></span> cannot free the model out from under its pending notification (mirrors <span class="tt"><a class="el" href="#ac638da4c0824021c5a63f1bd5f13b6f4" title="Schedules call.localOp on the model&#39;s strand and returns a Completion.">execute</a></span>'s holder capture). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00769">769</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00771">771</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -479,7 +479,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that will carry the result or an exception. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00796">796</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00798">798</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -514,7 +514,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00888">888</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00890">890</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

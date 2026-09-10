@@ -185,7 +185,7 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 <p><b><span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span> is the exception and must be externally synchronised</b> against the others — call it from the thread that owns the scope. It replaces the <span class="tt">_state</span> handle itself, and reading a <span class="tt">shared_ptr</span> while another thread assigns it is a data race on the handle: the control block's refcount is atomic, the pointer object is not. This is a narrower promise than this paragraph used to make, and the reason is a portability constraint, not taste — see <span class="tt">_state</span>'s own comment. In the usage <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span> exists for (<span class="tt">void onNewQuery() { _callbacks.reset(); }</span>, the supersede verb) the owning thread is the caller anyway. Within a single generation, the old guarantee holds unchanged: <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span> stops the outgoing generation before releasing it, so a token holder that pinned it still observes refusal (morph#499).</p>
 <p>Identity, not a value: neither copyable nor movable. A moved-from scope would have to either strand or silently retarget tokens already captured in flight; <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span> covers the one case (regeneration) that motivates a move at all. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="aaf2d4181e3e700c9e308e1a2e7959699" name="aaf2d4181e3e700c9e308e1a2e7959699"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aaf2d4181e3e700c9e308e1a2e7959699">&#9670;&#160;</a></span>CallbackScope()</h2>
@@ -212,7 +212,7 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 
 <p>Constructs a live, un-stopped scope. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -242,7 +242,7 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 <p>Refuses every outstanding token, then releases the state. </p>
 <p>Equivalent, from a pending callback's point of view, to <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span>. Does not wait for in-flight callbacks — see "Boundary of the guarantee". </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +273,7 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 <p>Marks this generation stopped: gated callbacks stop being delivered. </p>
 <p>Idempotent and safe from any thread. The owner remains alive, so tokens report <span class="tt">CallbackStatus::Stopped</span> rather than <span class="tt">Expired</span>. Undone only by <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span>, which starts a new generation. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -303,7 +303,7 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 <p>Retires every token issued so far and starts a fresh, live generation. </p>
 <p>The supersede verb: an old in-flight reply can no longer be delivered (its token reports <span class="tt">Expired</span>), while callbacks attached <em>after</em> this call are deliverable again even if <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span> had been called before it. The outgoing generation is stopped before it is released, so a token holder that pinned it while racing this call still observes refusal. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00250">250</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00252">252</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -333,7 +333,7 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 <p>Whether this generation has been stopped. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> after <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span>, until the next <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -363,7 +363,7 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 <p>Issues a weak token for the current generation. </p>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt"><a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html" title="Weak, copyable observer of a CallbackScope — the half a callback captures.">CallbackToken</a></span> observing this scope; keeps nothing alive. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00264">264</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -408,7 +408,7 @@ template&lt;typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A callable with <code class="param">fn's</code> argument list and a <span class="tt">void</span> return. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>

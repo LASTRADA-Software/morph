@@ -175,7 +175,7 @@ Public Member Functions</h2></td></tr>
 <p>Mirrors <span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">morph::qt::QtWebSocketBackend</a></span>'s observable behavior (<span class="tt"><a class="el" href="#ac5a056aa77b757402abe435eb19dcf22" title="Sends a register message and blocks until the reply arrives.">registerModel</a></span> synchronous, <span class="tt"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel</a></span> fire-and-forget, <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span> asynchronous and callId-multiplexed, <span class="tt">DisconnectedError</span>/reconnect semantics) but runs its own dedicated I/O thread and uses <span class="tt">std::condition_variable</span> instead of a nested Qt event loop. Unlike <span class="tt">QtWebSocketBackend</span>, <span class="tt"><a class="el" href="../../d5/d98/classmorph_1_1net_1_1SocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over a raw-socket RFC 6455 WebSocket co...">SocketBackend</a></span> may safely be driven from multiple threads concurrently (<span class="tt"><a class="el" href="#ac5a056aa77b757402abe435eb19dcf22" title="Sends a register message and blocks until the reply arrives.">registerModel</a></span>/<span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span>/<span class="tt"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel</a></span> are all thread-safe) — there is no single "owning" event-loop thread.</p>
 <dl class="section user"><dt>TLS</dt><dd>Not supported. <span class="tt">serverUrl</span> must be <span class="tt">ws://</span>; <span class="tt">wss://</span> throws from the constructor. See <span class="tt">docs/spec/core/backend.md</span>'s <span class="tt">morph::net</span> section. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a755c2c6460ac094c256a5910c2776c7e" name="a755c2c6460ac094c256a5910c2776c7e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a755c2c6460ac094c256a5910c2776c7e">&#9670;&#160;</a></span>Config</h2>
@@ -191,7 +191,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the reconnect configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -238,7 +238,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -268,7 +268,7 @@ Public Member Functions</h2></td></tr>
 <p>Shuts down the I/O thread and resolves any still-pending completions. </p>
 <dl class="section note"><dt>Note</dt><dd>May block up to <span class="tt"><a class="el" href="../../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#acd8e19b0807613d9c4d494b407115e1e" title="Maximum time to wait for the initial TCP connect to complete.">Config::connectTimeout</a></span> if destruction races an in-flight (re)connect attempt — the TCP connect phase is bounded by that timeout, but the handshake read that follows a successful TCP connect has no separate timeout of its own in this reference implementation. See <span class="tt">docs/spec/core/backend.md</span>'s <span class="tt">morph::net</span> section. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -306,7 +306,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if connected before the timeout, <span class="tt">false</span> otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -352,7 +352,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -405,7 +405,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00189">189</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -464,7 +464,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00198">198</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -510,7 +510,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00227">227</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -552,7 +552,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00241">241</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -590,7 +590,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -637,7 +637,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -684,7 +684,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion resolved asynchronously when the server's reply arrives, or immediately with <span class="tt">DisconnectedError</span> if not connected. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -713,7 +713,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00360">360</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -748,7 +748,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00354">354</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00364">364</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -783,7 +783,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00366">366</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00376">376</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -818,7 +818,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00385">385</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>

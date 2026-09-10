@@ -1,5 +1,6 @@
 var NAVTREEINDEX3 =
 {
+"dc/d7a/structmorph_1_1util_1_1Tagged.html#a67cd865d67b5ceb297b12962258d3ce7":[2,0,0,20,1,4],
 "dc/d7a/structmorph_1_1util_1_1Tagged.html#a9641d329038d65e28aa2fbb7f1837967":[2,0,0,20,1,6],
 "dc/d7a/structmorph_1_1util_1_1Tagged.html#aa7778ae18ba5c97e388f4ef159c697bd":[2,0,0,20,1,2],
 "dc/d7a/structmorph_1_1util_1_1Tagged.html#aa9e07fd308f6fe4c238aa785a4b6b771":[2,0,0,20,1,7],
@@ -248,6 +249,5 @@ var NAVTREEINDEX3 =
 "functions_func_p.html":[2,3,1,14],
 "functions_func_q.html":[2,3,1,15],
 "functions_func_r.html":[2,3,1,16],
-"functions_func_s.html":[2,3,1,17],
-"functions_func_t.html":[2,3,1,18]
+"functions_func_s.html":[2,3,1,17]
 };

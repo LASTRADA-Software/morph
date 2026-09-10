@@ -185,6 +185,7 @@ var NAVTREEINDEX2 =
 "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html":[2,0,0,13,1],
 "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a58367d4680072d3a300a3ea6c22e096c":[2,0,0,13,1,2],
 "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a86d877007461559a660f5e0183a76e75":[2,0,0,13,1,3],
+"db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a981e0b8e3f410980b8f22671c7f1f8ec":[2,0,0,13,1,5],
 "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#acd8e19b0807613d9c4d494b407115e1e":[2,0,0,13,1,4],
 "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#adf70a71cf984710cd99bdb10fbce9c0e":[2,0,0,13,1,1],
 "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#ae502aa3027e50788b13def4e14136fb9":[2,0,0,13,1,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX2 =
 "dc/d5e/structmorph_1_1app_1_1MenuEntry.html":[2,0,0,0,0],
 "dc/d7a/structmorph_1_1util_1_1Tagged.html":[2,0,0,20,1],
 "dc/d7a/structmorph_1_1util_1_1Tagged.html#a4adb3a226c06842df7696964734d1de5":[2,0,0,20,1,0],
-"dc/d7a/structmorph_1_1util_1_1Tagged.html#a51b8422ec44363e9f8c4d28afc61518d":[2,0,0,20,1,3],
-"dc/d7a/structmorph_1_1util_1_1Tagged.html#a67cd865d67b5ceb297b12962258d3ce7":[2,0,0,20,1,4]
+"dc/d7a/structmorph_1_1util_1_1Tagged.html#a51b8422ec44363e9f8c4d28afc61518d":[2,0,0,20,1,3]
 };

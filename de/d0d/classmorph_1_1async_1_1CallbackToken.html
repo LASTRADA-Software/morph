@@ -270,7 +270,7 @@ template&lt;typename F&gt; </div>
 <p>A suppressed callback is destroyed, not leaked: the wrapper (and with it <code class="param">fn</code> and its captures) is released wherever the refused task is discarded — normally on the delivery executor's thread.</p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
-    <tr><td class="paramname">F</td><td>Callable type to wrap. Must return <span class="tt">void</span> for every argument list it is invoked with; a value-returning callable has no defensible answer for the suppressed case and is rejected at compile time. </td></tr>
+    <tr><td class="paramname">F</td><td>Callable type to wrap. Must return <span class="tt">void</span> for every argument list it is invoked with; a value-returning callable has no defensible answer for the suppressed case. Rejected by a <span class="tt">static_assert</span> in the returned wrapper's body, so it fires when the wrapper is <em>invoked</em> &ndash; a wrapper that is created and never called compiles either way. </td></tr>
   </table>
   </dd>
 </dl>
@@ -282,7 +282,7 @@ template&lt;typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A callable with <code class="param">fn's</code> argument list and a <span class="tt">void</span> return. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
