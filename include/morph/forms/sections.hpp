@@ -183,8 +183,8 @@ public:
     /// @tparam FieldPtr Pointer-to-data-member of a declared section's action struct.
     /// @param value New value for the field.
     template <auto FieldPtr>
-    void set(typename ::morph::bridge::detail::MemberPointerTraits<decltype(FieldPtr)>::ValueType value) {
-        using A = typename ::morph::bridge::detail::MemberPointerTraits<decltype(FieldPtr)>::ClassType;
+    void set(::morph::bridge::detail::MemberPointerTraits<decltype(FieldPtr)>::ValueType value) {
+        using A = ::morph::bridge::detail::MemberPointerTraits<decltype(FieldPtr)>::ClassType;
         static_assert((std::is_same_v<A, typename Sections::action> || ...),
                       "SectionSet::set<>: the field's action is not a section of this group");
         A draft{};
@@ -300,7 +300,9 @@ private:
     void fire(A draft) {
         _handler.execute(std::move(draft))
             .then(_callbacks,
-                  [this](::morph::model::ActionTraits<A>::Result result) { this->template captureResult<A>(result); })
+                  [this](const ::morph::model::ActionTraits<A>::Result& result) {
+                      this->template captureResult<A>(result);
+                  })
             .onError(_callbacks, [this](const std::exception_ptr& err) {
                 if (_onError) {
                     _onError(err);
@@ -328,6 +330,7 @@ private:
 }  // namespace morph::forms
 
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+// NOLINTBEGIN(cppcoreguidelines-macro-usage) — registration macro is the intended public API
 /// @brief Specialises `morph::forms::SectionGroupTraits<G>` with the string type-id @p NAME.
 #define BRIDGE_REGISTER_SECTION_GROUP(G, NAME)                               \
     template <>                                                              \
@@ -335,3 +338,4 @@ private:
         static constexpr std::string_view typeId() noexcept { return NAME; } \
     };
 // clang-format on
+// NOLINTEND(cppcoreguidelines-macro-usage)

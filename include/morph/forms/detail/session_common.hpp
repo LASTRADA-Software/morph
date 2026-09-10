@@ -51,7 +51,9 @@ namespace detail {
 /// @tparam Visitor Callable with a `template<typename Element, std::size_t I> operator()()`.
 /// @param visitor Callable invoked once per tuple element.
 template <typename Tuple, typename Visitor>
+// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward) — invoked once per element, never moved from
 constexpr void forEachTupleElement(Visitor&& visitor) {
+    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved) — same: one call per element
     []<std::size_t... I>(std::index_sequence<I...>, Visitor&& innerVisitor) {
         (innerVisitor.template operator()<std::tuple_element_t<I, Tuple>, I>(), ...);
     }(std::make_index_sequence<std::tuple_size_v<Tuple>>{}, std::forward<Visitor>(visitor));
@@ -65,6 +67,7 @@ constexpr void forEachTupleElement(Visitor&& visitor) {
 /// @param index   0-based position to visit.
 /// @param visitor Callable invoked for the element at @p index.
 template <typename... Ts, typename Visitor>
+// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward) — the visited element is a run-time choice
 constexpr void forPackElement(std::size_t index, Visitor&& visitor) {
     std::size_t i = 0;
     (void)((i++ == index ? (visitor.template operator()<Ts>(), true) : false) || ...);

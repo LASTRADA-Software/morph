@@ -101,15 +101,15 @@ struct SecSlowResult {
 };
 
 struct SecModel {
-    SecProfileResult execute(SecProfile action) {
+    SecProfileResult execute(const SecProfile& action) {
         recorder().record("SectionsTest_Profile");
         return {.id = static_cast<std::int64_t>(action.name.size())};
     }
-    SecPrefsResult execute(SecPrefs action) {
+    SecPrefsResult execute(const SecPrefs& action) {
         recorder().record("SectionsTest_Prefs");
         return {.summary = action.theme};
     }
-    SecExplodesResult execute(SecExplodes) {
+    SecExplodesResult execute(const SecExplodes&) {
         recorder().record("SectionsTest_Explodes");
         throw std::runtime_error{"section boom"};
     }
@@ -208,7 +208,7 @@ TEST_CASE("SectionSet: a not-ready draft is not sent at all", "[sections]") {
     // that cost is visible.
     std::atomic<int> errors{0};
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{
-        handler, [&errors](std::exception_ptr) { errors.fetch_add(1); }};
+        handler, [&errors](const std::exception_ptr&) { errors.fetch_add(1); }};
 
     recorder().clear();
 
@@ -296,7 +296,7 @@ TEST_CASE("SectionSet: a failing dispatch reaches the onError callback", "[secti
 
     std::atomic<int> errors{0};
     morph::forms::SectionSet<SecModel, ProfileSection, ExplodesSection> sections{
-        handler, [&errors](std::exception_ptr) { errors.fetch_add(1); }};
+        handler, [&errors](const std::exception_ptr&) { errors.fetch_add(1); }};
 
     recorder().clear();
     sections.set<&SecExplodes::label>("boom");
@@ -340,7 +340,7 @@ TEST_CASE("SectionSet: destroying it with a dispatch in flight delivers nothing"
     std::atomic<int> errors{0};
     {
         morph::forms::SectionSet<SecModel, ProfileSection, SlowSection> sections{
-            handler, [&errors](std::exception_ptr) { errors.fetch_add(1); }};
+            handler, [&errors](const std::exception_ptr&) { errors.fetch_add(1); }};
         sections.set<&SecSlow::label>("held");
         // Wait until the model call is genuinely inside execute() before
         // leaving the scope. Without this the dispatch would usually finish
