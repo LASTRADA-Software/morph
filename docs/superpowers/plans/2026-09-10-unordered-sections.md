@@ -14,6 +14,38 @@ declaration types (`Section`, `SectionGroup`), the schema emitter, and the runti
 
 **Tech Stack:** C++23, header-only. Catch2 v3 for tests. glaze for JSON. No new dependencies.
 
+## Where execution diverged from this plan
+
+Recorded because the task steps below are wrong in one way that matters, and a
+reader following them verbatim would reintroduce a real bug.
+
+1. **The tests here wait on `resolved()` before leaving scope. That is not
+   safe.** `captureResult` publishes its first key while still writing the
+   rest, so a value becoming visible means the completion has *started*, not
+   finished — and `CallbackScope::requestStop()` does not wait for a callback
+   already past its token check. A test that polls `resolved()` on one thread
+   and then destroys the set tears it down mid-callback. It segfaulted on
+   Windows CI and TSan reproduces it about once in fifteen runs. As shipped,
+   every case except the lifetime one uses `StepExecutor` and an explicit
+   `drain()`, so the thread that delivers the completion is the thread that
+   destroys the set. See `docs/spec/forms/sections.md`, "Concurrency and
+   lifetime".
+
+2. **Task 3's "not-ready draft" test measured nothing.** It checked the
+   recorder immediately after an incomplete `set<>`; dispatch is asynchronous,
+   so it passed with or without the gate. The shipped test watches `onError`
+   instead — `BridgeHandler::execute` enforces `ActionValidator` on its own
+   path, so a missing section-level gate shows up as a spurious validation
+   failure, not as a bad execution.
+
+3. **A gate this plan missed:** `CMakeLists.txt` fails configure for a public
+   header that belongs to no target's `FILE_SET HEADERS`, so
+   `include/morph/forms/sections.hpp` had to be added there (morph#230).
+   Headers under `detail/` are exempt.
+
+4. **`app.hpp` reached into `flows::detail`** for a walker, so Task 1 had to
+   repoint it at the shared header as well.
+
 ## Global Constraints
 
 Every task's requirements implicitly include these. They are the gates CI applies.
