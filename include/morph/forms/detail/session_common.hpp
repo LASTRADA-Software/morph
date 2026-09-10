@@ -91,6 +91,7 @@ struct AllDistinct<T, Rest...> : std::bool_constant<(!std::is_same_v<T, Rest> &&
 /// materialising an empty `prefill` object.
 /// @tparam BindsTuple `std::tuple<Bind<...>...>`.
 /// @param node Destination JSON object node.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
 template <typename BindsTuple>
 void emitBindsInto(glz::generic_u64& node) {
     forEachTupleElement<BindsTuple>([&]<typename BindT, std::size_t J>() {
@@ -98,6 +99,7 @@ void emitBindsInto(glz::generic_u64& node) {
         node[std::string{BindT::field()}] = std::string{BindT::path()};
     });
 }
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace detail
 }  // namespace morph::forms

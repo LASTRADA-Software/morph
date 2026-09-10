@@ -118,6 +118,7 @@ template <typename W>
         step["action"] = std::string{::morph::model::ActionTraits<typename StepT::action>::typeId()};
         step["title"] = std::string{StepT::title()};
         if constexpr (std::tuple_size_v<typename StepT::binds> != 0) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
             ::morph::forms::detail::emitBindsInto<typename StepT::binds>(step["prefill"]);
         }
         steps.emplace_back(std::move(step));

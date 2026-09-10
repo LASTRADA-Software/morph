@@ -10,6 +10,7 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/forms/sections.hpp>
 #include <mutex>
@@ -137,6 +138,31 @@ using SlowSection = morph::forms::Section<SecSlow, "Slow">;
 using DemoGroup = morph::forms::SectionGroup<"Account settings", ProfileSection, PrefsSection>;
 BRIDGE_REGISTER_SECTION_GROUP(DemoGroup, "SectionsTest_DemoGroup")
 
+// Delivers every queued completion on the *test* thread and returns how many ran.
+//
+// SectionSet's callbacks are gated on a CallbackScope, which by contract does
+// not wait for a callback already past its token check (callback_scope.md).
+// Polling a published value is not enough to know one has finished: captureResult
+// makes its first key visible through resolved() while it is still writing the
+// rest, so a test that waits on resolved() and then leaves scope can destroy the
+// set underneath its own completion. That is a real use-after-free -- it
+// segfaulted on Windows CI and TSan reproduces it about once in fifteen runs.
+//
+// Draining on the test thread removes the race rather than narrowing it: the
+// thread that delivers the callback is the thread that destroys the set, which
+// is exactly the case CallbackScope's guarantee covers.
+namespace {
+std::size_t drain(morph::testing::StepExecutor& exec) {
+    REQUIRE(morph::testing::waitUntil([&exec] { return exec.pending() > 0; }));
+    std::size_t ran = exec.runAll();
+    // A completion can post follow-up work; keep going while more arrives.
+    while (morph::testing::waitUntil([&exec] { return exec.pending() > 0; }, std::chrono::milliseconds{50})) {
+        ran += exec.runAll();
+    }
+    return ran;
+}
+}  // namespace
+
 TEST_CASE("sectionGroupSchemaJson carries each section's title, action and binds", "[sections]") {
     auto const json = morph::forms::sectionGroupSchemaJson<DemoGroup>();
     REQUIRE_FALSE(json.empty());
@@ -172,7 +198,7 @@ TEST_CASE("sectionGroupSchemaJson carries each section's title, action and binds
 
 TEST_CASE("SectionSet: sections fire independently, in any order", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
+    morph::testing::StepExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
@@ -183,20 +209,23 @@ TEST_CASE("SectionSet: sections fire independently, in any order", "[sections]")
     // std::logic_error -- "field belongs to an action that is not the current
     // step" -- which is exactly the gap morph#513 reports.
     sections.set<&SecPrefs::theme>("dark");
-    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 1; }));
+    drain(cbExec);
 
     // Then the first. Both fire; neither was ever "current".
     sections.set<&SecProfile::name>("ada");
-    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 2; }));
+    drain(cbExec);
 
     auto const fired = recorder().snapshot();
+    REQUIRE(fired.size() == 2);
     CHECK(fired[0] == "SectionsTest_Prefs");
     CHECK(fired[1] == "SectionsTest_Profile");
+    CHECK(sections.resolved("SectionsTest_Prefs.summary").has_value());
+    CHECK(sections.resolved("SectionsTest_Profile.id").has_value());
 }
 
 TEST_CASE("SectionSet: a not-ready draft is not sent at all", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
+    morph::testing::StepExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
 
@@ -214,14 +243,16 @@ TEST_CASE("SectionSet: a not-ready draft is not sent at all", "[sections]") {
 
     // SecPrefs::validate() requires a non-empty theme; profileId alone is not ready.
     sections.set<&SecPrefs::profileId>(7);
-    CHECK(morph::testing::waitUntil([&errors] { return errors.load() != 0; }, std::chrono::milliseconds{300}) ==
-          false);
+    CHECK(cbExec.pending() == 0);
+    CHECK(cbExec.runAll() == 0);
+    CHECK(errors.load() == 0);
 
     // Completing it dispatches, carrying the field set earlier, and succeeds.
     // Waiting on the capture rather than on the recorder: the recorder is
     // written inside execute(), which runs before the completion that captures.
     sections.set<&SecPrefs::theme>("light");
-    REQUIRE(morph::testing::waitUntil([&] { return sections.resolved("SectionsTest_Prefs.summary").has_value(); }));
+    drain(cbExec);
+    CHECK(sections.resolved("SectionsTest_Prefs.summary").has_value());
     CHECK(recorder().snapshot().size() == 1);
     CHECK(errors.load() == 0);
     CHECK(sections.resolved("SectionsTest_Prefs.profileId") == std::string{"7"});
@@ -229,24 +260,28 @@ TEST_CASE("SectionSet: a not-ready draft is not sent at all", "[sections]") {
 
 TEST_CASE("SectionSet: an already-fired section fires again on the next edit", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
+    morph::testing::StepExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
 
     recorder().clear();
     sections.set<&SecProfile::name>("ada");
-    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 1; }));
+    drain(cbExec);
+    REQUIRE(recorder().snapshot().size() == 1);
 
     // No latch: the draft is still ready, so it dispatches again. Matching
     // FlowSession, which also re-fires a ready step on every set<>.
     sections.set<&SecProfile::name>("grace");
-    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 2; }));
+    drain(cbExec);
+    CHECK(recorder().snapshot().size() == 2);
+    // The second dispatch really carried the new value, not a replay of the first.
+    CHECK(sections.resolved("SectionsTest_Profile.name") == std::string{R"("grace")"});
 }
 
 TEST_CASE("SectionSet: reset clears one section and leaves the others intact", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
+    morph::testing::StepExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
@@ -264,18 +299,22 @@ TEST_CASE("SectionSet: reset clears one section and leaves the others intact", "
     // Per-section isolation is the point: resetting one editor must not wipe
     // what the user typed into another.
     CHECK(sections.draft<SecProfile>().name == "ada");
+
+    // The profile dispatch above is still outstanding; let it land before the
+    // set is destroyed.
+    drain(cbExec);
 }
 
 TEST_CASE("SectionSet: a fired section's fields are resolvable; an unfired one is not", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
+    morph::testing::StepExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
 
     recorder().clear();
     sections.set<&SecProfile::name>("ada");
-    REQUIRE(morph::testing::waitUntil([&] { return sections.resolved("SectionsTest_Profile.id").has_value(); }));
+    drain(cbExec);
 
     // The result's field: SecProfileResult::id == name.size() == 3.
     CHECK(sections.resolved("SectionsTest_Profile.id") == std::string{"3"});
@@ -290,7 +329,7 @@ TEST_CASE("SectionSet: a fired section's fields are resolvable; an unfired one i
 
 TEST_CASE("SectionSet: a failing dispatch reaches the onError callback", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
+    morph::testing::StepExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
 
@@ -300,32 +339,48 @@ TEST_CASE("SectionSet: a failing dispatch reaches the onError callback", "[secti
 
     recorder().clear();
     sections.set<&SecExplodes::label>("boom");
-    REQUIRE(morph::testing::waitUntil([&] { return errors.load() == 1; }));
+    drain(cbExec);
+    CHECK(errors.load() == 1);
 
     // A section that succeeds does not route to onError, so the count above is
     // the failure and not merely "some callback ran".
     sections.set<&SecProfile::name>("ada");
-    REQUIRE(morph::testing::waitUntil([&] { return sections.resolved("SectionsTest_Profile.id").has_value(); }));
+    drain(cbExec);
+    CHECK(sections.resolved("SectionsTest_Profile.id").has_value());
     CHECK(errors.load() == 1);
 }
 
 TEST_CASE("SectionSet: an unhandled failure logs instead of escaping", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
+    morph::testing::StepExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
 
-    // No onError: the failure has nowhere to go but the log. It must not
-    // propagate out of the completion and take the executor thread down.
-    morph::forms::SectionSet<SecModel, ProfileSection, ExplodesSection> sections{handler};
+    // Capture the log rather than only asserting nothing threw: the logged
+    // line is also the signal that the error continuation has finished, which
+    // is what lets the set be destroyed safely at the end of this case.
+    std::atomic<bool> logged{false};
+    morph::log::ScopedLoggerOverride const logGuard{[&logged](morph::log::LogLevel, std::string_view msg) {
+        if (msg.contains("SectionsTest_Explodes")) {
+            logged.store(true);
+        }
+    }};
 
-    recorder().clear();
-    REQUIRE_NOTHROW(sections.set<&SecExplodes::label>("boom"));
-    REQUIRE(morph::testing::waitUntil([&] { return recorder().snapshot().size() == 1; }));
+    {
+        // No onError: the failure has nowhere to go but the log. It must not
+        // propagate out of the completion and take the executor thread down.
+        morph::forms::SectionSet<SecModel, ProfileSection, ExplodesSection> sections{handler};
 
-    // The set survives its own failed section: an unrelated one still works.
-    sections.set<&SecProfile::name>("ada");
-    REQUIRE(morph::testing::waitUntil([&] { return sections.resolved("SectionsTest_Profile.id").has_value(); }));
+        recorder().clear();
+        REQUIRE_NOTHROW(sections.set<&SecExplodes::label>("boom"));
+        REQUIRE_NOTHROW(drain(cbExec));
+        CHECK(logged.load());
+
+        // The set survives its own failed section: an unrelated one still works.
+        sections.set<&SecProfile::name>("ada");
+        drain(cbExec);
+        CHECK(sections.resolved("SectionsTest_Profile.id").has_value());
+    }
 }
 
 TEST_CASE("SectionSet: destroying it with a dispatch in flight delivers nothing", "[sections]") {

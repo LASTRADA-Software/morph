@@ -92,6 +92,7 @@ struct SectionGroupTraits;  // forward — specialise or use BRIDGE_REGISTER_SEC
 /// @tparam G Concrete `SectionGroup<Title, Sections...>` type.
 /// @return The group's JSON document. Empty string only if glaze's own JSON
 ///         writer fails on the assembled DOM (schema generation never throws).
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
 template <typename G>
 [[nodiscard]] std::string sectionGroupSchemaJson() {
     glz::generic_u64 dom{};
@@ -113,6 +114,7 @@ template <typename G>
 
     return glz::write_json(dom).value_or(std::string{});
 }
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 /// @brief Drives N independently editable action drafts on one screen.
 ///
