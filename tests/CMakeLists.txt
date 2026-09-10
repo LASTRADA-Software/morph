@@ -100,6 +100,7 @@ add_executable(morph_tests
     test_quantity_decode_validation.cpp
     test_nested_forms.cpp
     test_flows_apps.cpp
+    test_sections.cpp
     test_views.cpp
     test_computed_fields.cpp
     test_forms_rules.cpp
