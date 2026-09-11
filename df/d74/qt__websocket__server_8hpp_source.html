@@ -259,109 +259,116 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('df/d74/qt__web
 <div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span><span class="comment"></span> </div>
 <div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span><span class="comment">    /// @brief Closes the server and disconnects all clients.</span></div>
 <div class="line"><a id="l00136" name="l00136"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aebb69c7cd338c785e4a2b738ba181381">  136</a></span>    <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aebb69c7cd338c785e4a2b738ba181381">~QtWebSocketServer</a>() <span class="keyword">override</span>;</div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment"></span> </div>
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span><span class="comment">    /// @brief Starts listening for incoming WebSocket connections.</span></div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span><span class="comment">    /// Refuses — returns `false` without binding, and logs at</span></div>
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span><span class="comment">    /// `morph::log::LogLevel::error` — when the configured `bindAddress` is not</span></div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span><span class="comment">    /// loopback, no TLS configuration was passed to the constructor, and</span></div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span><span class="comment">    /// `allowPlaintextExposure` is `false`. See `QtWebSocketServerConfig`.</span></div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span><span class="comment">    /// @return `true` if the server successfully bound to the requested port.</span></div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a60f2df58f77a6986c07463cd4bbbf13b">  146</a></span>    <span class="keywordtype">bool</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a60f2df58f77a6986c07463cd4bbbf13b">listen</a>();</div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment"></span> </div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment">    /// @brief Returns the port the server is currently bound to.</span></div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">    /// When constructed with port 0, this returns the OS-assigned port after</span></div>
-<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">    /// a successful `listen()` call.</span></div>
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment">    /// @return Bound TCP port number.</span></div>
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#ae0c10d4515db3903e09bdd89a66e23b5">  153</a></span>    [[nodiscard]] quint16 <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#ae0c10d4515db3903e09bdd89a66e23b5">port</a>() <span class="keyword">const</span>;</div>
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span> </div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>    <span class="comment">// Neither copyable nor movable: a QObject with signal/slot connections bound</span></div>
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>    <span class="comment">// to this address, holding per-client state keyed by QWebSocket pointer.</span></div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>    <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a605d6c58de80094bb56ea255a4f0d9cc">QtWebSocketServer</a>(<span class="keyword">const</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a605d6c58de80094bb56ea255a4f0d9cc">QtWebSocketServer</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>    <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a605d6c58de80094bb56ea255a4f0d9cc">QtWebSocketServer</a>&amp; operator=(<span class="keyword">const</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a605d6c58de80094bb56ea255a4f0d9cc">QtWebSocketServer</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>    <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a605d6c58de80094bb56ea255a4f0d9cc">QtWebSocketServer</a>(<a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a605d6c58de80094bb56ea255a4f0d9cc">QtWebSocketServer</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span>    <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a605d6c58de80094bb56ea255a4f0d9cc">QtWebSocketServer</a>&amp; operator=(<a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a605d6c58de80094bb56ea255a4f0d9cc">QtWebSocketServer</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment"></span> </div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span><span class="comment">    /// @brief Starts listening for incoming WebSocket connections.</span></div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment">    /// Refuses — returns `false` without binding, and logs at</span></div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment">    /// `morph::log::LogLevel::error` — when the configured `bindAddress` is not</span></div>
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment">    /// loopback, no TLS configuration was passed to the constructor, and</span></div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">    /// `allowPlaintextExposure` is `false`. See `QtWebSocketServerConfig`.</span></div>
+<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment">    /// @return `true` if the server successfully bound to the requested port.</span></div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a60f2df58f77a6986c07463cd4bbbf13b">  153</a></span>    <span class="keywordtype">bool</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a60f2df58f77a6986c07463cd4bbbf13b">listen</a>();</div>
 <div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span><span class="comment"></span> </div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">    /// @brief Stops accepting new connections and closes the server socket.</span></div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aaa1c8ceb2b58f6e6de7c950ddede71a1">  156</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aaa1c8ceb2b58f6e6de7c950ddede71a1">close</a>();</div>
-<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment"></span> </div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment">    /// @brief Gracefully stops the server: refuse new work, let in-flight</span></div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment">    ///        replies deliver, close each client with a proper WebSocket</span></div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment">    ///        close frame, then hard-stop anything still connected.</span></div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">    /// Sequence: `QWebSocketServer::pauseAccepting()` (no new connections),</span></div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="comment">    /// `RemoteServer::beginShutdown()` (new `register`/`execute` now fail</span></div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment">    /// fast with `&quot;server shutting down&quot;`), waiting up to @p deadline for</span></div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span><span class="comment">    /// `RemoteServer::drainedWithin()` to report every in-flight execute has</span></div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment">    /// replied, sending each still-connected client a real close frame</span></div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">    /// (`CloseCodeGoingAway`, reason `&quot;server shutting down&quot;`) instead of an</span></div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    /// abort, and finally running the existing `close()` hard stop for</span></div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// whatever @p deadline did not leave time to finish gracefully.</span></div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    /// Pumps the Qt event loop internally while it waits, so it is safe to</span></div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    /// call from the Qt thread — which is also the thread that must run</span></div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">    /// `sendTextMessage` for replies and close frames to actually reach</span></div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">    /// clients. Purely additive and opt-in: a server that never calls this</span></div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">    /// behaves exactly as it does today, and `close()` itself is unchanged.</span></div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="comment">    /// @param deadline Total time budget for the whole sequence, measured</span></div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment">    ///                 from the moment this call starts. Whatever the drain</span></div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">    ///                 and graceful-close steps have not finished within it</span></div>
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span><span class="comment">    ///                 is hard-stopped exactly as `close()` does.</span></div>
-<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="comment">    /// @return `true` if every in-flight execute drained before @p deadline</span></div>
-<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span><span class="comment">    ///         elapsed; `false` if the hard stop had to reclaim stragglers.</span></div>
-<div class="line"><a id="l00183" name="l00183"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a546e51a6654a4c664685b301e820b5aa">  183</a></span>    <span class="keywordtype">bool</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a546e51a6654a4c664685b301e820b5aa">closeGracefully</a>(std::chrono::milliseconds deadline);</div>
-<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span><span class="comment"></span> </div>
-<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span><span class="comment">    /// @brief Qt slot called when a new client connects.</span></div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a961b4f3170dc9ee8ab596919b6f38edd">  186</a></span>    Q_SLOT <span class="keywordtype">void</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a961b4f3170dc9ee8ab596919b6f38edd">onNewConnection</a>();</div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment"></span> </div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span><span class="comment">    /// @brief Qt slot called when a connected client sends a text message.</span></div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment">    /// @param message Raw text frame received from the client.</span></div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a29cb9ac5dce058104fdb6513907e5230">  190</a></span>    Q_SLOT <span class="keywordtype">void</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a29cb9ac5dce058104fdb6513907e5230">onTextMessage</a>(<span class="keyword">const</span> QString&amp; message);</div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">    /// @brief Returns the port the server is currently bound to.</span></div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment">    /// When constructed with port 0, this returns the OS-assigned port after</span></div>
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment">    /// a successful `listen()` call.</span></div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment">    /// @return Bound TCP port number.</span></div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#ae0c10d4515db3903e09bdd89a66e23b5">  160</a></span>    [[nodiscard]] quint16 <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#ae0c10d4515db3903e09bdd89a66e23b5">port</a>() <span class="keyword">const</span>;</div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment"></span> </div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">    /// @brief Stops accepting new connections and closes the server socket.</span></div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aaa1c8ceb2b58f6e6de7c950ddede71a1">  163</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aaa1c8ceb2b58f6e6de7c950ddede71a1">close</a>();</div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment"></span> </div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span><span class="comment">    /// @brief Gracefully stops the server: refuse new work, let in-flight</span></div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment">    ///        replies deliver, close each client with a proper WebSocket</span></div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">    ///        close frame, then hard-stop anything still connected.</span></div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// Sequence: `QWebSocketServer::pauseAccepting()` (no new connections),</span></div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    /// `RemoteServer::beginShutdown()` (new `register`/`execute` now fail</span></div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    /// fast with `&quot;server shutting down&quot;`), waiting up to @p deadline for</span></div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    /// `RemoteServer::drainedWithin()` to report every in-flight execute has</span></div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">    /// replied, sending each still-connected client a real close frame</span></div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">    /// (`CloseCodeGoingAway`, reason `&quot;server shutting down&quot;`) instead of an</span></div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">    /// abort, and finally running the existing `close()` hard stop for</span></div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">    /// whatever @p deadline did not leave time to finish gracefully.</span></div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment">    /// Pumps the Qt event loop internally while it waits, so it is safe to</span></div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">    /// call from the Qt thread — which is also the thread that must run</span></div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span><span class="comment">    /// `sendTextMessage` for replies and close frames to actually reach</span></div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="comment">    /// clients. Purely additive and opt-in: a server that never calls this</span></div>
+<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span><span class="comment">    /// behaves exactly as it does today, and `close()` itself is unchanged.</span></div>
+<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span><span class="comment">    /// @param deadline Total time budget for the whole sequence, measured</span></div>
+<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span><span class="comment">    ///                 from the moment this call starts. Whatever the drain</span></div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span><span class="comment">    ///                 and graceful-close steps have not finished within it</span></div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment">    ///                 is hard-stopped exactly as `close()` does.</span></div>
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span><span class="comment">    /// @return `true` if every in-flight execute drained before @p deadline</span></div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment">    ///         elapsed; `false` if the hard stop had to reclaim stragglers.</span></div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a546e51a6654a4c664685b301e820b5aa">  190</a></span>    <span class="keywordtype">bool</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a546e51a6654a4c664685b301e820b5aa">closeGracefully</a>(std::chrono::milliseconds deadline);</div>
 <div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment"></span> </div>
-<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">    /// @brief Qt slot called when a client disconnects.</span></div>
-<div class="line"><a id="l00193" name="l00193"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a23de858ec93e3a49b91c805caf86d5b3">  193</a></span>    Q_SLOT <span class="keywordtype">void</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a23de858ec93e3a49b91c805caf86d5b3">onDisconnected</a>();</div>
-<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span> </div>
-<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span><span class="keyword">private</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span><span class="comment">    /// @brief Per-connection state tracked between accept and disconnect.</span></div>
-<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>    <span class="keyword">struct </span>ClientState {<span class="comment"></span></div>
-<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span><span class="comment">        /// @brief The connection this state belongs to (for symmetry with the map key; unused for lookup).</span></div>
-<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span>        QWebSocket* socket = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="comment"></span> </div>
-<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="comment">        /// @brief Current token-bucket balance for `messagesPerSecond`.</span></div>
-<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span>        <span class="keywordtype">double</span> tokens = 0.0;</div>
-<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span><span class="comment"></span> </div>
-<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span><span class="comment">        /// @brief Last time `tokens` was refilled (used to compute elapsed time on the next frame).</span></div>
-<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>        std::chrono::steady_clock::time_point lastRefill{};</div>
-<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span><span class="comment"></span> </div>
-<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="comment">        /// @brief Last time any frame was received on this connection (drives `idleTimeout`).</span></div>
-<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>        std::chrono::steady_clock::time_point lastActivity{};</div>
-<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="comment"></span> </div>
-<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment">        /// @brief One-shot timer enforcing `handshakeTimeout`; `nullptr` once cancelled by the</span></div>
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="comment">        ///        first frame, or if `handshakeTimeout == 0`.</span></div>
-<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>        QTimer* handshakeTimer = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">    /// @brief Qt slot called when a new client connects.</span></div>
+<div class="line"><a id="l00193" name="l00193"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a961b4f3170dc9ee8ab596919b6f38edd">  193</a></span>    Q_SLOT <span class="keywordtype">void</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a961b4f3170dc9ee8ab596919b6f38edd">onNewConnection</a>();</div>
+<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="comment"></span> </div>
+<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span><span class="comment">    /// @brief Qt slot called when a connected client sends a text message.</span></div>
+<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span><span class="comment">    /// @param message Raw text frame received from the client.</span></div>
+<div class="line"><a id="l00197" name="l00197"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a29cb9ac5dce058104fdb6513907e5230">  197</a></span>    Q_SLOT <span class="keywordtype">void</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a29cb9ac5dce058104fdb6513907e5230">onTextMessage</a>(<span class="keyword">const</span> QString&amp; message);</div>
+<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span><span class="comment"></span> </div>
+<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span><span class="comment">    /// @brief Qt slot called when a client disconnects.</span></div>
+<div class="line"><a id="l00200" name="l00200"></a><span class="lineno"><a class="line" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a23de858ec93e3a49b91c805caf86d5b3">  200</a></span>    Q_SLOT <span class="keywordtype">void</span> <a class="code hl_function" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a23de858ec93e3a49b91c805caf86d5b3">onDisconnected</a>();</div>
+<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span> </div>
+<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span><span class="keyword">private</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span><span class="comment">    /// @brief Per-connection state tracked between accept and disconnect.</span></div>
+<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>    <span class="keyword">struct </span>ClientState {<span class="comment"></span></div>
+<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span><span class="comment">        /// @brief The connection this state belongs to (for symmetry with the map key; unused for lookup).</span></div>
+<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span>        QWebSocket* socket = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="comment"></span> </div>
+<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span><span class="comment">        /// @brief Current token-bucket balance for `messagesPerSecond`.</span></div>
+<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span>        <span class="keywordtype">double</span> tokens = 0.0;</div>
+<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment"></span> </div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="comment">        /// @brief Last time `tokens` was refilled (used to compute elapsed time on the next frame).</span></div>
+<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>        std::chrono::steady_clock::time_point lastRefill;</div>
 <div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment"></span> </div>
-<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span><span class="comment">        /// @brief Connection scope `RemoteServer::openConnection()` assigned this</span></div>
-<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span><span class="comment">        ///        client at accept time, so its disconnect can reclaim every model</span></div>
-<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span><span class="comment">        ///        it registered (see `RemoteServer::closeConnection`).</span></div>
-<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>        ::morph::backend::ConnectionId cid = 0;</div>
-<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span>    };</div>
-<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment"></span> </div>
-<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// @brief Refills @p state&#39;s token bucket for elapsed time, then consumes one</span></div>
-<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">    ///        token if available.</span></div>
-<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment">    /// @param state Per-connection state to update.</span></div>
-<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">    /// @return `true` if a token was available (the frame is admitted), `false` if</span></div>
-<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span><span class="comment">    ///         the bucket was empty (the frame must be dropped).</span></div>
-<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span>    <span class="keywordtype">bool</span> consumeToken(ClientState&amp; state);</div>
+<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span><span class="comment">        /// @brief Last time any frame was received on this connection (drives `idleTimeout`).</span></div>
+<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>        std::chrono::steady_clock::time_point lastActivity;</div>
+<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span><span class="comment"></span> </div>
+<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span><span class="comment">        /// @brief One-shot timer enforcing `handshakeTimeout`; `nullptr` once cancelled by the</span></div>
+<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span><span class="comment">        ///        first frame, or if `handshakeTimeout == 0`.</span></div>
+<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span>        QTimer* handshakeTimer = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment"></span> </div>
+<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">        /// @brief Connection scope `RemoteServer::openConnection()` assigned this</span></div>
+<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment">        ///        client at accept time, so its disconnect can reclaim every model</span></div>
+<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">        ///        it registered (see `RemoteServer::closeConnection`).</span></div>
+<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span>        ::morph::backend::ConnectionId cid = 0;</div>
+<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span>    };</div>
 <div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="comment"></span> </div>
-<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">    /// @brief Qt slot: periodic sweep that closes any connection idle past `idleTimeout`.</span></div>
-<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span>    Q_SLOT <span class="keywordtype">void</span> onHousekeepingTick();</div>
-<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span> </div>
-<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span>    <a class="code hl_class" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">::morph::backend::RemoteServer</a>&amp; _server;</div>
-<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span>    quint16 _requestedPort;</div>
-<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span>    QtWebSocketServerConfig _cfg;</div>
-<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span>    QWebSocketServer _wsServer;</div>
-<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>    std::unordered_map&lt;QWebSocket*, ClientState&gt; _clients;</div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>    QTimer _housekeepingTimer;</div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>};</div>
+<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">    /// @brief Refills @p state&#39;s token bucket for elapsed time, then consumes one</span></div>
+<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span><span class="comment">    ///        token if available.</span></div>
+<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span><span class="comment">    /// @param state Per-connection state to update.</span></div>
+<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="comment">    /// @return `true` if a token was available (the frame is admitted), `false` if</span></div>
+<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="comment">    ///         the bucket was empty (the frame must be dropped).</span></div>
+<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span>    <span class="keywordtype">bool</span> consumeToken(ClientState&amp; state) <span class="keyword">const</span>;</div>
+<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span><span class="comment"></span> </div>
+<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span><span class="comment">    /// @brief Qt slot: periodic sweep that closes any connection idle past `idleTimeout`.</span></div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>    Q_SLOT <span class="keywordtype">void</span> onHousekeepingTick();</div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span> </div>
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>    <a class="code hl_class" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">::morph::backend::RemoteServer</a>&amp; _server;</div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>    quint16 _requestedPort;</div>
+<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>    <a class="code hl_struct" href="../../de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html">QtWebSocketServerConfig</a> _cfg;</div>
+<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>    QWebSocketServer _wsServer;</div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>    std::unordered_map&lt;QWebSocket*, ClientState&gt; _clients;</div>
+<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>    QTimer _housekeepingTimer;</div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>};</div>
 </div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span> </div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>}  <span class="comment">// namespace morph::qt</span></div>
+<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span> </div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>}  <span class="comment">// namespace morph::qt</span></div>
 <div class="ttc" id="aclassmorph_1_1backend_1_1RemoteServer_html"><div class="ttname"><a href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">morph::backend::RemoteServer</a></div><div class="ttdoc">Server-side message handler that owns model instances and dispatches actions.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00204">remote.hpp:204</a></div></div>
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketServer_html_a23de858ec93e3a49b91c805caf86d5b3"><div class="ttname"><a href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a23de858ec93e3a49b91c805caf86d5b3">morph::qt::QtWebSocketServer::onDisconnected</a></div><div class="ttdeci">Q_SLOT void onDisconnected()</div><div class="ttdoc">Qt slot called when a client disconnects.</div></div>
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketServer_html_a29cb9ac5dce058104fdb6513907e5230"><div class="ttname"><a href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a29cb9ac5dce058104fdb6513907e5230">morph::qt::QtWebSocketServer::onTextMessage</a></div><div class="ttdeci">Q_SLOT void onTextMessage(const QString &amp;message)</div><div class="ttdoc">Qt slot called when a connected client sends a text message.</div></div>
