@@ -159,6 +159,14 @@ public:
     /// @brief Closes the socket and cleans up pending operations.
     ~QtWebSocketBackend() override;
 
+    // Neither copyable nor movable: the backend owns a QWebSocket bound to this
+    // object's address through Qt's signal/slot connections, and its pending-call
+    // maps are keyed to callbacks that capture `this`.
+    QtWebSocketBackend(const QtWebSocketBackend&) = delete;
+    QtWebSocketBackend& operator=(const QtWebSocketBackend&) = delete;
+    QtWebSocketBackend(QtWebSocketBackend&&) = delete;
+    QtWebSocketBackend& operator=(QtWebSocketBackend&&) = delete;
+
     /// @brief Pumps the Qt event loop until the socket is connected or @p timeoutMs elapses.
     ///
     /// Must be called on the Qt event loop thread after construction.
@@ -498,7 +506,7 @@ private:
     struct PendingExecute {
         std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
         std::function<std::shared_ptr<void>(std::string_view)> deserialize;
-        ::morph::exec::IExecutor* cbExec;
+        ::morph::exec::IExecutor* cbExec{nullptr};
     };
     uint64_t _nextCallId{0};
     std::unordered_map<uint64_t, PendingExecute> _pending;

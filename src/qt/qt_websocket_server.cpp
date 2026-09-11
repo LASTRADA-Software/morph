@@ -23,7 +23,7 @@ QtWebSocketServer::QtWebSocketServer(::morph::backend::RemoteServer& server, qui
     : QObject{parent},
       _server{server},
       _requestedPort{port},
-      _cfg{cfg},
+      _cfg{std::move(cfg)},
 #ifndef QT_NO_SSL
       _wsServer{QStringLiteral("morph"),
                 tls.has_value() ? QWebSocketServer::SecureMode : QWebSocketServer::NonSecureMode, this},
@@ -73,7 +73,7 @@ void QtWebSocketServer::close() {
     for (auto& [socket, state] : _clients) {
         socket->disconnect(this);
         _server.closeConnection(state.cid);
-        if (state.handshakeTimer) {
+        if (state.handshakeTimer != nullptr) {
             state.handshakeTimer->stop();
             state.handshakeTimer->deleteLater();
         }
@@ -149,7 +149,7 @@ bool QtWebSocketServer::closeGracefully(std::chrono::milliseconds deadline) {
 
 void QtWebSocketServer::onNewConnection() {
     QWebSocket* socket = _wsServer.nextPendingConnection();
-    if (!socket) {
+    if (socket == nullptr) {
         return;
     }
     if (_cfg.maxConnections != 0 && _clients.size() >= _cfg.maxConnections) {
@@ -176,6 +176,13 @@ void QtWebSocketServer::onNewConnection() {
     ::morph::log::logInfo("[QtWebSocketServer] connection {} accepted ({} live)", state.cid, _clients.size() + 1);
 
     if (_cfg.handshakeTimeout.count() > 0) {
+        // Qt parent-child ownership: `this` owns the timer and deletes it, and every path that
+        // drops the reference calls deleteLater() first (see the handshakeTimer handling below).
+        // cppcoreguidelines-owning-memory has no model of that convention -- it flags any raw
+        // `new` bound to a non-gsl::owner pointer (morph#514). Suppressed here rather than for the
+        // whole directory: this is the only such site in src/, and a directory-wide disable would
+        // turn the check off for a future `new` that really is unowned.
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) — QObject parent owns this
         auto* timer = new QTimer(this);
         timer->setSingleShot(true);
         connect(timer, &QTimer::timeout, this, [this, socket] {
@@ -190,15 +197,15 @@ void QtWebSocketServer::onNewConnection() {
     _clients.emplace(socket, state);
 }
 
-bool QtWebSocketServer::consumeToken(ClientState& state) {
+bool QtWebSocketServer::consumeToken(ClientState& state) const {
     if (_cfg.messagesPerSecond == 0) {
         return true;  // unbounded (today's behavior)
     }
     auto const now = std::chrono::steady_clock::now();
     double const elapsedSeconds = std::chrono::duration<double>(now - state.lastRefill).count();
     state.lastRefill = now;
-    double const capacity = static_cast<double>(_cfg.messagesPerSecond);
-    state.tokens = std::min(capacity, state.tokens + elapsedSeconds * capacity);
+    auto const capacity = static_cast<double>(_cfg.messagesPerSecond);
+    state.tokens = std::min(capacity, state.tokens + (elapsedSeconds * capacity));
     if (state.tokens < 1.0) {
         return false;
     }
@@ -208,7 +215,7 @@ bool QtWebSocketServer::consumeToken(ClientState& state) {
 
 void QtWebSocketServer::onTextMessage(const QString& message) {
     auto* socket = qobject_cast<QWebSocket*>(sender());
-    if (!socket) {
+    if (socket == nullptr) {
         return;
     }
     auto iter = _clients.find(socket);
@@ -217,7 +224,7 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
     }
     ClientState& state = iter->second;
     state.lastActivity = std::chrono::steady_clock::now();
-    if (state.handshakeTimer) {
+    if (state.handshakeTimer != nullptr) {
         state.handshakeTimer->stop();
         state.handshakeTimer->deleteLater();
         state.handshakeTimer = nullptr;
@@ -259,7 +266,7 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
         return;
     }
 
-    QPointer<QWebSocket> weakSocket{socket};
+    QPointer<QWebSocket> const weakSocket{socket};
     _server.handle(
         message.toStdString(),
         [weakSocket](const std::string& reply) {
@@ -277,7 +284,7 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
 
 void QtWebSocketServer::onDisconnected() {
     auto* socket = qobject_cast<QWebSocket*>(sender());
-    if (!socket) {
+    if (socket == nullptr) {
         return;
     }
     auto iter = _clients.find(socket);
@@ -290,7 +297,7 @@ void QtWebSocketServer::onDisconnected() {
                               iter->second.cid, _clients.size() - 1, static_cast<int>(socket->closeCode()),
                               socket->closeReason().toStdString());
         _server.closeConnection(iter->second.cid);
-        if (iter->second.handshakeTimer) {
+        if (iter->second.handshakeTimer != nullptr) {
             iter->second.handshakeTimer->stop();
             iter->second.handshakeTimer->deleteLater();
         }
