@@ -173,3 +173,35 @@ TEST_CASE("Completion: mismatched attach (onError on a value-ready state) is sti
     REQUIRE_FALSE(errFired1);
     REQUIRE_FALSE(errFired2);
 }
+
+// Regression coverage for morph#520 (part of the sweep tracked in #518, finding F2).
+// setValue() used to move out of its own `value` optional to build the settle-time
+// fan-out closure for handlers attached *before* settling, leaving `value` engaged
+// but holding a moved-from T. A then() attached *after* settling (attachThen's
+// `ready && value` branch) then copied that husk instead of the real value. The
+// value-path-before-settling and error-path-after-settling combinations already had
+// coverage above (and in the onError-after-ready case); this is the one combination
+// that did not: a value-path handler attached before settling, followed by a second
+// one attached after. A short int (as every other test in this file uses) would not
+// reveal the bug -- a moved-from int is still a well-defined int, often still 0 by
+// luck or unchanged by move -- so this uses a heap-allocating string long enough that
+// libstdc++'s SSO cannot mask a real move, matching the issue's own repro.
+TEST_CASE("Completion: a then() attached after settlement observes the same value as one attached before",
+          "[completion][issue-520]") {
+    SyncExecutor exec;
+    auto state = std::make_shared<morph::async::detail::CompletionState<std::string>>();
+    morph::async::Completion<std::string> comp{state, &exec};
+
+    const std::string original = "hello-world-long-enough-to-heap-allocate";
+
+    std::string firstSeen;
+    comp.then([&](std::string v) { firstSeen = std::move(v); });  // attached BEFORE settling
+
+    state->setValue(original);
+
+    std::string secondSeen;
+    comp.then([&](std::string v) { secondSeen = std::move(v); });  // attached AFTER settling
+
+    REQUIRE(firstSeen == original);
+    REQUIRE(secondSeen == original);
+}

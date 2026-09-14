@@ -44,11 +44,23 @@ struct CompletionState {
             if (ready) {
                 return;
             }
-            value = std::move(val);
-            ready = true;
             if (!onOk.empty()) {
+                // Copy from `val` -- and before anything below mutates state --
+                // rather than moving out of `value` after the fact: `value` is
+                // this state's own store, and a `then()` attached *after* this
+                // point (attachThen's `ready && value` branch) reads it again,
+                // so moving out of it left it engaged but moved-from, and a
+                // later attacher silently copied a husk (morph#520). Copying
+                // first, before `onOk` is drained or `value`/`ready` are set,
+                // gives this block the strong exception guarantee: if `T`'s
+                // copy constructor throws, nothing here has changed yet --
+                // `onOk` still holds every handler and the state is still
+                // unready -- rather than a corrupted state that already looks
+                // settled with its handlers already lost.
+                auto savedVal = val;
                 auto savedFns = std::move(onOk);
-                auto savedVal = std::move(*value);
+                value = std::move(val);
+                ready = true;
                 callback = [savedFns = std::move(savedFns), savedVal = std::move(savedVal)]() mutable {
                     // Every handler but the last sees a copy (the value is only
                     // moved into the final invocation), so an earlier handler
@@ -73,6 +85,9 @@ struct CompletionState {
                         ::morph::log::logError("[completion] then handler threw; continuing with next handler");
                     }
                 };
+            } else {
+                value = std::move(val);
+                ready = true;
             }
         }
         if (callback != nullptr && cbExec != nullptr) {
