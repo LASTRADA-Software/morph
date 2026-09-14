@@ -31,7 +31,7 @@
 | File | Responsibility |
 |---|---|
 | `.github/self-hosted-runner/run-runner.sh` | **Create.** Mint a token, build the `docker run` argv, exec it. One runner, by index. |
-| `.github/self-hosted-runner/morph-runner@.service.in` | **Create.** systemd template, with `@PLACEHOLDER@` paths substituted at install. |
+| `.github/self-hosted-runner/lastrada-runner@.service.in` | **Create.** systemd template, with `@PLACEHOLDER@` paths substituted at install. |
 | `.github/self-hosted-runner/install-runner-units.sh` | **Create.** Install unit + wrapper + config; user mode or system mode. |
 | `.github/self-hosted-runner/config.example` | **Create.** Documented configuration defaults. |
 | `.github/self-hosted-runner/job-started-hook.sh` | **Create.** Clear `sccache`/`ccache` before each job. |
@@ -55,7 +55,7 @@
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `run-runner.sh <index>`. Reads config from `$MORPH_RUNNER_CONFIG`. Honours `MORPH_RUNNER_DRY_RUN=1` (print argv, then `STDIN:<token>`, exit 0), `MORPH_RUNNER_GH` (gh binary, default `gh`), `MORPH_RUNNER_DOCKER` (docker binary, default `docker`). Config keys it requires: `GITHUB_ORG`, `RUNNER_NAME_PREFIX`, `RUNNER_GROUP`, `RUNNER_LABELS`, `RUNNER_IMAGE`, `RUNNER_CPUS`, `RUNNER_MEMORY`; optional `FASTCACHE_ADDR`, `CMAKE_BUILD_PARALLEL_LEVEL`.
+- Produces: `run-runner.sh <index>`. Reads config from `$LASTRADA_RUNNER_CONFIG`. Honours `LASTRADA_RUNNER_DRY_RUN=1` (print argv, then `STDIN:<token>`, exit 0), `LASTRADA_RUNNER_GH` (gh binary, default `gh`), `LASTRADA_RUNNER_DOCKER` (docker binary, default `docker`). Config keys it requires: `GITHUB_ORG`, `RUNNER_NAME_PREFIX`, `RUNNER_GROUP`, `RUNNER_LABELS`, `RUNNER_IMAGE`, `RUNNER_CPUS`, `RUNNER_MEMORY`; optional `FASTCACHE_ADDR`, `CMAKE_BUILD_PARALLEL_LEVEL`.
 
 - [ ] **Step 1: Write the failing self-test**
 
@@ -81,7 +81,7 @@ Create `scripts/test_run_runner.sh`:
 #     systemd is already supervising.
 #
 # None of that is observable from the outside once the script execs docker, so
-# it is asserted through MORPH_RUNNER_DRY_RUN with stub gh/docker binaries.
+# it is asserted through LASTRADA_RUNNER_DRY_RUN with stub gh/docker binaries.
 set -euo pipefail
 
 readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -118,7 +118,7 @@ RUNNER_GROUP=linux-docker
 RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
 RUNNER_CPUS=2
 RUNNER_MEMORY=6g
-RUNNER_IMAGE=morph-runner:latest
+RUNNER_IMAGE=lastrada-runner:latest
 FASTCACHE_ADDR=host.docker.internal:6674
 CMAKE_BUILD_PARALLEL_LEVEL=2
 CONF
@@ -126,10 +126,10 @@ CONF
 export STUB_GH_LOG="${scratch}/gh.log"
 : >"${STUB_GH_LOG}"
 
-out="$(MORPH_RUNNER_DRY_RUN=1 \
-      MORPH_RUNNER_CONFIG="${scratch}/config" \
-      MORPH_RUNNER_GH="${scratch}/gh" \
-      MORPH_RUNNER_DOCKER="${scratch}/docker" \
+out="$(LASTRADA_RUNNER_DRY_RUN=1 \
+      LASTRADA_RUNNER_CONFIG="${scratch}/config" \
+      LASTRADA_RUNNER_GH="${scratch}/gh" \
+      LASTRADA_RUNNER_DOCKER="${scratch}/docker" \
       bash "$launcher" 3 2>&1)" || {
     fail "run-runner.sh exited non-zero in dry-run mode:"
     printf '%s\n' "$out" >&2
@@ -202,7 +202,7 @@ else
 fi
 
 # ── a missing config must fail loudly, not launch an unconfigured runner ─────
-if MORPH_RUNNER_DRY_RUN=1 MORPH_RUNNER_CONFIG="${scratch}/absent" \
+if LASTRADA_RUNNER_DRY_RUN=1 LASTRADA_RUNNER_CONFIG="${scratch}/absent" \
    bash "$launcher" 1 >/dev/null 2>&1; then
     fail "a missing config file was accepted"
 else
@@ -210,8 +210,8 @@ else
 fi
 
 # ── a missing index must fail loudly ─────────────────────────────────────────
-if MORPH_RUNNER_DRY_RUN=1 MORPH_RUNNER_CONFIG="${scratch}/config" \
-   MORPH_RUNNER_GH="${scratch}/gh" MORPH_RUNNER_DOCKER="${scratch}/docker" \
+if LASTRADA_RUNNER_DRY_RUN=1 LASTRADA_RUNNER_CONFIG="${scratch}/config" \
+   LASTRADA_RUNNER_GH="${scratch}/gh" LASTRADA_RUNNER_DOCKER="${scratch}/docker" \
    bash "$launcher" >/dev/null 2>&1; then
     fail "a missing runner index was accepted"
 else
@@ -241,7 +241,7 @@ Create `.github/self-hosted-runner/run-runner.sh`:
 #
 # Usage: run-runner.sh <index>
 #
-# systemd's morph-runner@<index>.service is the only intended caller.
+# systemd's lastrada-runner@<index>.service is the only intended caller.
 #
 # The token is minted here rather than baked into the container by whoever
 # created it. A GitHub registration token expires after ~1 hour, so a token
@@ -250,7 +250,7 @@ Create `.github/self-hosted-runner/run-runner.sh`:
 # (5,972 failed registrations) until this script existed. Minting per start
 # means there is no stored credential that can go stale.
 #
-# MORPH_RUNNER_DRY_RUN=1 prints the docker argv and the stdin payload instead
+# LASTRADA_RUNNER_DRY_RUN=1 prints the docker argv and the stdin payload instead
 # of executing, so scripts/test_run_runner.sh can assert the launch contract
 # without Docker or GitHub.
 set -euo pipefail
@@ -261,7 +261,7 @@ if [ "$#" -lt 1 ]; then
 fi
 readonly index="$1"
 
-config="${MORPH_RUNNER_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/morph-runner/config}"
+config="${LASTRADA_RUNNER_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/lastrada-runner/config}"
 if [ ! -r "$config" ]; then
     echo "run-runner.sh: no readable config at ${config}" >&2
     exit 1
@@ -278,8 +278,8 @@ fi
 : "${RUNNER_MEMORY:?config must set RUNNER_MEMORY}"
 
 readonly name="${RUNNER_NAME_PREFIX}-${index}"
-readonly gh="${MORPH_RUNNER_GH:-gh}"
-readonly docker="${MORPH_RUNNER_DOCKER:-docker}"
+readonly gh="${LASTRADA_RUNNER_GH:-gh}"
+readonly docker="${LASTRADA_RUNNER_DOCKER:-docker}"
 
 # Organisation-level, not repo-level: one fleet serves morph, fastcached and
 # Lightweight. Needs admin:org on whatever credential gh holds -- and that
@@ -311,7 +311,7 @@ argv=(
     "${RUNNER_IMAGE}"
 )
 
-if [ -n "${MORPH_RUNNER_DRY_RUN:-}" ]; then
+if [ -n "${LASTRADA_RUNNER_DRY_RUN:-}" ]; then
     printf '%s\n' "${argv[@]}"
     printf 'STDIN:%s\n' "$token"
     exit 0
@@ -356,7 +356,7 @@ it out of the environment."
 
 **Interfaces:**
 - Consumes: `run-runner.sh` from Task 1 passes the token on stdin and sets `RUNNER_SCOPE_URL`, `RUNNER_GROUP`, `RUNNER_LABELS`, `RUNNER_NAME`.
-- Produces: `entrypoint.sh` defines `read_runner_token()` (echoes the token: first line of stdin when stdin is not a TTY and is non-empty, else `$RUNNER_TOKEN`). Sourcing with `MORPH_RUNNER_ENTRYPOINT_SOURCE_ONLY=1` defines functions and returns without side effects.
+- Produces: `entrypoint.sh` defines `read_runner_token()` (echoes the token: first line of stdin when stdin is not a TTY and is non-empty, else `$RUNNER_TOKEN`). Sourcing with `LASTRADA_RUNNER_ENTRYPOINT_SOURCE_ONLY=1` defines functions and returns without side effects.
 
 - [ ] **Step 1: Write the failing self-test**
 
@@ -391,7 +391,7 @@ fail() {
 # Sourcing must not run the registration; the guard makes that safe.
 resolve() {
     # shellcheck disable=SC1090
-    MORPH_RUNNER_ENTRYPOINT_SOURCE_ONLY=1 . "$entrypoint"
+    LASTRADA_RUNNER_ENTRYPOINT_SOURCE_ONLY=1 . "$entrypoint"
     read_runner_token
 }
 
@@ -501,7 +501,7 @@ read_runner_token() {
 }
 
 # Sourced by the self-test: define the functions above, do nothing else.
-if [ -n "${MORPH_RUNNER_ENTRYPOINT_SOURCE_ONLY:-}" ]; then
+if [ -n "${LASTRADA_RUNNER_ENTRYPOINT_SOURCE_ONLY:-}" ]; then
     return 0 2>/dev/null || exit 0
 fi
 
@@ -569,7 +569,7 @@ linux-docker runner group."
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `job-started-hook.sh`, wired in Task 4 via `ACTIONS_RUNNER_HOOK_JOB_STARTED`. Honours `MORPH_RUNNER_HOOK_DIRS` (space-separated directory list) so the self-test can point it at a scratch tree.
+- Produces: `job-started-hook.sh`, wired in Task 4 via `ACTIONS_RUNNER_HOOK_JOB_STARTED`. Honours `LASTRADA_RUNNER_HOOK_DIRS` (space-separated directory list) so the self-test can point it at a scratch tree.
 
 - [ ] **Step 1: Write the failing self-test**
 
@@ -614,7 +614,7 @@ for f in "${scratch}/bin_a/sccache" "${scratch}/bin_a/ccache" \
     chmod +x "$f"
 done
 
-MORPH_RUNNER_HOOK_DIRS="${scratch}/bin_a ${scratch}/bin_b" bash "$hook" >/dev/null
+LASTRADA_RUNNER_HOOK_DIRS="${scratch}/bin_a ${scratch}/bin_b" bash "$hook" >/dev/null
 
 for gone in "${scratch}/bin_a/sccache" "${scratch}/bin_a/ccache" \
             "${scratch}/bin_b/ccache"; do
@@ -632,14 +632,14 @@ else
 fi
 
 # A directory that does not exist must not fail the job before it starts.
-if MORPH_RUNNER_HOOK_DIRS="${scratch}/absent" bash "$hook" >/dev/null 2>&1; then
+if LASTRADA_RUNNER_HOOK_DIRS="${scratch}/absent" bash "$hook" >/dev/null 2>&1; then
     note "a missing directory is tolerated"
 else
     fail "a missing directory made the hook fail, which would fail the job"
 fi
 
 # Running twice must be a no-op, not an error.
-if MORPH_RUNNER_HOOK_DIRS="${scratch}/bin_a ${scratch}/bin_b" \
+if LASTRADA_RUNNER_HOOK_DIRS="${scratch}/bin_a ${scratch}/bin_b" \
    bash "$hook" >/dev/null 2>&1; then
     note "re-running on an already-clean tree succeeds"
 else
@@ -685,7 +685,7 @@ Create `.github/self-hosted-runner/job-started-hook.sh`:
 # to help.
 set -euo pipefail
 
-dirs="${MORPH_RUNNER_HOOK_DIRS:-/usr/local/bin /usr/bin /home/runner/.cargo/bin}"
+dirs="${LASTRADA_RUNNER_HOOK_DIRS:-/usr/local/bin /usr/bin /home/runner/.cargo/bin}"
 
 for dir in $dirs; do
     [ -d "$dir" ] || continue
@@ -794,14 +794,14 @@ ENV ACTIONS_RUNNER_HOOK_JOB_STARTED=/home/runner/job-started-hook.sh
 - [ ] **Step 3: Build the image**
 
 ```bash
-docker build -t morph-runner:latest .github/self-hosted-runner
+docker build -t lastrada-runner:latest .github/self-hosted-runner
 ```
 Expected: build succeeds.
 
 - [ ] **Step 4: Verify the image contents**
 
 ```bash
-docker run --rm --entrypoint bash morph-runner:latest -c '
+docker run --rm --entrypoint bash lastrada-runner:latest -c '
   set -e
   for p in pkg-config zstd unzip file rsync; do
     command -v $p >/dev/null || { echo "MISSING: $p"; exit 1; }
@@ -834,14 +834,14 @@ hook."
 ## Task 5: systemd units and the installer
 
 **Files:**
-- Create: `.github/self-hosted-runner/morph-runner@.service.in`
+- Create: `.github/self-hosted-runner/lastrada-runner@.service.in`
 - Create: `.github/self-hosted-runner/install-runner-units.sh`
 - Create: `.github/self-hosted-runner/config.example`
 - Create: `scripts/test_runner_units.sh`
 
 **Interfaces:**
 - Consumes: `run-runner.sh` from Task 1.
-- Produces: `install-runner-units.sh`, honouring `MORPH_RUNNER_PREFIX_DIR` (install root, for tests) and `MORPH_RUNNER_NO_SYSTEMCTL=1` (generate files without calling `systemctl`). Template placeholders: `@LIBEXEC@`, `@CONFIG@`, `@PREFIX@`, `@WANTEDBY@`.
+- Produces: `install-runner-units.sh`, honouring `LASTRADA_RUNNER_PREFIX_DIR` (install root, for tests) and `LASTRADA_RUNNER_NO_SYSTEMCTL=1` (generate files without calling `systemctl`). Template placeholders: `@LIBEXEC@`, `@CONFIG@`, `@PREFIX@`, `@WANTEDBY@`.
 
 - [ ] **Step 1: Write the failing self-test**
 
@@ -883,12 +883,12 @@ fail() {
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
-MORPH_RUNNER_PREFIX_DIR="$scratch" MORPH_RUNNER_NO_SYSTEMCTL=1 \
+LASTRADA_RUNNER_PREFIX_DIR="$scratch" LASTRADA_RUNNER_NO_SYSTEMCTL=1 \
     bash "$installer" >/dev/null
 
-unit="$(find "$scratch" -name 'morph-runner@.service' -print -quit)"
+unit="$(find "$scratch" -name 'lastrada-runner@.service' -print -quit)"
 if [ -z "$unit" ]; then
-    fail "no morph-runner@.service was rendered"
+    fail "no lastrada-runner@.service was rendered"
     printf '\n%d check(s) failed\n' "$failures" >&2
     exit 1
 fi
@@ -957,8 +957,8 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     # Instantiate %i rather than verifying the template itself: systemd-analyze
     # cannot resolve %i in a bare foo@.service path, and would fail for that
     # reason rather than for any defect in the unit.
-    sed 's/%i/1/g' "$unit" >"${staging}/morph-runner-verify.service"
-    if out="$(systemd-analyze verify "${staging}/morph-runner-verify.service" 2>&1)"; then
+    sed 's/%i/1/g' "$unit" >"${staging}/lastrada-runner-verify.service"
+    if out="$(systemd-analyze verify "${staging}/lastrada-runner-verify.service" 2>&1)"; then
         note "systemd-analyze verify accepts the unit"
     else
         # Missing ExecStart targets are expected in a scratch prefix; anything
@@ -988,10 +988,10 @@ Expected: FAIL — `bash: .../install-runner-units.sh: No such file or directory
 
 - [ ] **Step 3: Write the unit template**
 
-Create `.github/self-hosted-runner/morph-runner@.service.in`:
+Create `.github/self-hosted-runner/lastrada-runner@.service.in`:
 
 ```ini
-# Template unit: one instance per runner, morph-runner@1 .. morph-runner@N.
+# Template unit: one instance per runner, lastrada-runner@1 .. lastrada-runner@N.
 # Rendered by install-runner-units.sh, which substitutes the @...@ paths for
 # either a user install (systemctl --user) or a system one.
 [Unit]
@@ -1011,7 +1011,7 @@ StartLimitBurst=5
 
 [Service]
 Type=exec
-Environment=MORPH_RUNNER_CONFIG=@CONFIG@
+Environment=LASTRADA_RUNNER_CONFIG=@CONFIG@
 ExecStart=@LIBEXEC@/run-runner.sh %i
 
 # --rm covers a clean exit; this covers a SIGKILL or a Docker daemon restart
@@ -1037,8 +1037,8 @@ WantedBy=@WANTEDBY@
 Create `.github/self-hosted-runner/config.example`:
 
 ```sh
-# Copied to ~/.config/morph-runner/config (user install) or
-# /etc/morph-runner/config (system install) by install-runner-units.sh.
+# Copied to ~/.config/lastrada-runner/config (user install) or
+# /etc/lastrada-runner/config (system install) by install-runner-units.sh.
 
 # Registration is organisation-level so one fleet serves morph, fastcached
 # and Lightweight.
@@ -1057,7 +1057,7 @@ RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
 RUNNER_CPUS=2
 RUNNER_MEMORY=6g
 
-RUNNER_IMAGE=morph-runner:latest
+RUNNER_IMAGE=lastrada-runner:latest
 
 # fastcached runs on the host (bound to the Docker bridge), not in a
 # container; host.docker.internal is how a container reaches it.
@@ -1084,8 +1084,8 @@ Create `.github/self-hosted-runner/install-runner-units.sh`:
 #   as root          -> system units under /etc/systemd/system. This is what
 #                       bootstrap-cloud-node.sh uses on a fresh VM.
 #
-# MORPH_RUNNER_PREFIX_DIR redirects every install path under one directory,
-# and MORPH_RUNNER_NO_SYSTEMCTL=1 skips the systemctl calls, so
+# LASTRADA_RUNNER_PREFIX_DIR redirects every install path under one directory,
+# and LASTRADA_RUNNER_NO_SYSTEMCTL=1 skips the systemctl calls, so
 # scripts/test_runner_units.sh can render and inspect the unit without
 # touching the real system.
 set -euo pipefail
@@ -1094,22 +1094,22 @@ readonly here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ "$(id -u)" -eq 0 ]; then
     unit_dir="/etc/systemd/system"
-    config_dir="/etc/morph-runner"
-    libexec_dir="/usr/local/libexec/morph-runner"
+    config_dir="/etc/lastrada-runner"
+    libexec_dir="/usr/local/libexec/lastrada-runner"
     wantedby="multi-user.target"
     systemctl=(systemctl)
 else
     unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-    config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/morph-runner"
-    libexec_dir="${XDG_DATA_HOME:-$HOME/.local/share}/morph-runner"
+    config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lastrada-runner"
+    libexec_dir="${XDG_DATA_HOME:-$HOME/.local/share}/lastrada-runner"
     wantedby="default.target"
     systemctl=(systemctl --user)
 fi
 
-if [ -n "${MORPH_RUNNER_PREFIX_DIR:-}" ]; then
-    unit_dir="${MORPH_RUNNER_PREFIX_DIR}${unit_dir}"
-    config_dir="${MORPH_RUNNER_PREFIX_DIR}${config_dir}"
-    libexec_dir="${MORPH_RUNNER_PREFIX_DIR}${libexec_dir}"
+if [ -n "${LASTRADA_RUNNER_PREFIX_DIR:-}" ]; then
+    unit_dir="${LASTRADA_RUNNER_PREFIX_DIR}${unit_dir}"
+    config_dir="${LASTRADA_RUNNER_PREFIX_DIR}${config_dir}"
+    libexec_dir="${LASTRADA_RUNNER_PREFIX_DIR}${libexec_dir}"
 fi
 
 mkdir -p "$unit_dir" "$config_dir" "$libexec_dir"
@@ -1135,11 +1135,11 @@ sed \
     -e "s|@CONFIG@|${config_dir}/config|g" \
     -e "s|@PREFIX@|${RUNNER_NAME_PREFIX}|g" \
     -e "s|@WANTEDBY@|${wantedby}|g" \
-    "${here}/morph-runner@.service.in" >"${unit_dir}/morph-runner@.service"
-echo "wrote ${unit_dir}/morph-runner@.service"
+    "${here}/lastrada-runner@.service.in" >"${unit_dir}/lastrada-runner@.service"
+echo "wrote ${unit_dir}/lastrada-runner@.service"
 
-if [ -n "${MORPH_RUNNER_NO_SYSTEMCTL:-}" ]; then
-    echo "MORPH_RUNNER_NO_SYSTEMCTL set; not touching systemd"
+if [ -n "${LASTRADA_RUNNER_NO_SYSTEMCTL:-}" ]; then
+    echo "LASTRADA_RUNNER_NO_SYSTEMCTL set; not touching systemd"
     exit 0
 fi
 
@@ -1147,9 +1147,9 @@ fi
 
 # Disable instances left over from a previously larger fleet, so shrinking
 # RUNNER_COUNT actually shrinks it.
-for existing in $("${systemctl[@]}" list-unit-files 'morph-runner@*.service' \
+for existing in $("${systemctl[@]}" list-unit-files 'lastrada-runner@*.service' \
                     --no-legend --plain 2>/dev/null | awk '{print $1}'); do
-    idx="${existing#morph-runner@}"
+    idx="${existing#lastrada-runner@}"
     idx="${idx%.service}"
     if [ "$idx" -gt "$RUNNER_COUNT" ] 2>/dev/null; then
         echo "disabling ${existing} (beyond RUNNER_COUNT=${RUNNER_COUNT})"
@@ -1158,13 +1158,13 @@ for existing in $("${systemctl[@]}" list-unit-files 'morph-runner@*.service' \
 done
 
 for i in $(seq 1 "$RUNNER_COUNT"); do
-    "${systemctl[@]}" enable --now "morph-runner@${i}.service"
-    echo "enabled morph-runner@${i}"
+    "${systemctl[@]}" enable --now "lastrada-runner@${i}.service"
+    echo "enabled lastrada-runner@${i}"
 done
 
 echo
-echo "status:  ${systemctl[*]} status 'morph-runner@*'"
-echo "logs:    journalctl${systemctl[1]:+ --user} -u 'morph-runner@1' -f"
+echo "status:  ${systemctl[*]} status 'lastrada-runner@*'"
+echo "logs:    journalctl${systemctl[1]:+ --user} -u 'lastrada-runner@1' -f"
 ```
 
 - [ ] **Step 6: Make executable and run the test**
@@ -1178,7 +1178,7 @@ Expected: PASS — ending `all unit-installation checks passed`.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add .github/self-hosted-runner/morph-runner@.service.in \
+git add .github/self-hosted-runner/lastrada-runner@.service.in \
         .github/self-hosted-runner/install-runner-units.sh \
         .github/self-hosted-runner/config.example \
         scripts/test_runner_units.sh
@@ -1379,8 +1379,8 @@ Replace the whole of section `# ── 7. Start the workers ──` (the `for i 
 echo ""
 echo "=== Installing systemd units for ${WORKER_COUNT} worker(s) ==="
 
-$SUDO mkdir -p /etc/morph-runner
-$SUDO tee /etc/morph-runner/config >/dev/null <<CONF
+$SUDO mkdir -p /etc/lastrada-runner
+$SUDO tee /etc/lastrada-runner/config >/dev/null <<CONF
 GITHUB_ORG=LASTRADA-Software
 RUNNER_GROUP=linux-docker
 RUNNER_COUNT=${WORKER_COUNT}
@@ -1388,11 +1388,11 @@ RUNNER_NAME_PREFIX=${RUNNER_NAME_PREFIX}
 RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
 RUNNER_CPUS=${WORKER_CPUS}
 RUNNER_MEMORY=${WORKER_MEM_GB}g
-RUNNER_IMAGE=morph-runner:latest
+RUNNER_IMAGE=lastrada-runner:latest
 FASTCACHE_ADDR=host.docker.internal:6674
 CMAKE_BUILD_PARALLEL_LEVEL=${WORKER_CPUS}
 CONF
-$SUDO chmod 0600 /etc/morph-runner/config
+$SUDO chmod 0600 /etc/lastrada-runner/config
 
 $SUDO bash "$MORPH_ROOT/.github/self-hosted-runner/install-runner-units.sh"
 ```
@@ -1402,8 +1402,8 @@ $SUDO bash "$MORPH_ROOT/.github/self-hosted-runner/install-runner-units.sh"
 Replace the final `echo "workers: ..."` and `echo "verify runners: ..."` lines with:
 
 ```bash
-echo "workers:         systemctl status 'morph-runner@*'"
-echo "worker logs:     journalctl -u 'morph-runner@1' -f"
+echo "workers:         systemctl status 'lastrada-runner@*'"
+echo "worker logs:     journalctl -u 'lastrada-runner@1' -f"
 echo "verify runners:  gh api orgs/LASTRADA-Software/actions/runners --jq '.runners[] | {name,status,busy}'"
 ```
 
@@ -1463,7 +1463,7 @@ Two changes make it unreachable rather than unlikely. There is no stored
 token to go stale, because `run-runner.sh` mints one per start. And a
 failure is now bounded and visible: `StartLimitBurst=5` puts the unit into
 `failed` after five attempts in ten minutes, so `systemctl --user status
-'morph-runner@*'` shows red instead of a loop nobody looks at.
+'lastrada-runner@*'` shows red instead of a loop nobody looks at.
 
 Hosts without systemd (Docker Desktop, WSL2) still use the plain `docker
 run` path below. That path is reboot-fragile by design: it has the same
@@ -1483,7 +1483,7 @@ Replace steps 3 and 4 of the **Quick start** section with:
 bash .github/self-hosted-runner/install-runner-units.sh
 
 # 4. Check it registered.
-systemctl --user status 'morph-runner@*'
+systemctl --user status 'lastrada-runner@*'
 gh api orgs/LASTRADA-Software/actions/runners \
   --jq '.runners[] | {name,status,busy,labels:[.labels[].name]}'
 ```
@@ -1601,7 +1601,7 @@ Expected: `0`.
 
 ```bash
 bash .github/self-hosted-runner/install-runner-units.sh
-systemctl --user status 'morph-runner@*' --no-pager | head -40
+systemctl --user status 'lastrada-runner@*' --no-pager | head -40
 ```
 Expected: five units `active (running)`.
 
@@ -1618,8 +1618,8 @@ Expected: five rows `lastrada-docker-N online false self-hosted,Linux,X64,lastra
 This is the assertion the whole change rests on — that no stored credential can go stale.
 
 ```bash
-journalctl --user -u morph-runner@3 --since "-2min" | grep -c "Listening for Jobs" || true
-systemctl --user restart morph-runner@3
+journalctl --user -u lastrada-runner@3 --since "-2min" | grep -c "Listening for Jobs" || true
+systemctl --user restart lastrada-runner@3
 sleep 25
 gh api orgs/LASTRADA-Software/actions/runners \
   --jq '.runners[] | select(.name=="lastrada-docker-3") | {name,status}'
@@ -1629,10 +1629,10 @@ Expected: `lastrada-docker-3` is `online` again. Confirms `config.sh` succeeded 
 - [ ] **Step 7: Prove stopping leaves nothing behind**
 
 ```bash
-systemctl --user stop 'morph-runner@*'
+systemctl --user stop 'lastrada-runner@*'
 sleep 5
 docker ps -a --filter name=lastrada-docker --format '{{.Names}}' || true
-systemctl --user start 'morph-runner@*'
+systemctl --user start 'lastrada-runner@*'
 ```
 Expected: no containers listed while stopped; all five back after `start`.
 
@@ -1641,7 +1641,7 @@ Expected: no containers listed while stopped; all five back after `start`.
 This gates sub-projects B and C: it is the only way to know the image package list is complete rather than guessed.
 
 ```bash
-docker run --rm -v /tmp/lw:/src morph-runner:latest bash -lc '
+docker run --rm -v /tmp/lw:/src lastrada-runner:latest bash -lc '
   set -e
   sudo apt-get update -q
   sudo apt-get install -y --no-install-recommends \
@@ -1669,6 +1669,6 @@ No repository change. Record the group id and the live verification output in th
 1. Reissue `RUNNER_STATUS_TOKEN` in `LASTRADA-Software/morph` with `admin:org` (or fine-grained "Self-hosted runners: Read-only"). Until then the probe's API call fails and every job falls back to GitHub-hosted — degraded, not broken.
 2. Add that secret to `fastcached` and `Lightweight` when B and C land.
 
-**Type consistency.** `MORPH_RUNNER_CONFIG`, `MORPH_RUNNER_DRY_RUN`, `MORPH_RUNNER_GH`, `MORPH_RUNNER_DOCKER`, `MORPH_RUNNER_HOOK_DIRS`, `MORPH_RUNNER_PREFIX_DIR`, `MORPH_RUNNER_NO_SYSTEMCTL`, `MORPH_RUNNER_ENTRYPOINT_SOURCE_ONLY` are each defined in exactly one task and used consistently. `read_runner_token` is defined in Task 2 and referenced only by its own self-test. Template placeholders `@LIBEXEC@`, `@CONFIG@`, `@PREFIX@`, `@WANTEDBY@` are substituted in Task 5 step 5 and asserted in Task 5 step 1.
+**Type consistency.** `LASTRADA_RUNNER_CONFIG`, `LASTRADA_RUNNER_DRY_RUN`, `LASTRADA_RUNNER_GH`, `LASTRADA_RUNNER_DOCKER`, `LASTRADA_RUNNER_HOOK_DIRS`, `LASTRADA_RUNNER_PREFIX_DIR`, `LASTRADA_RUNNER_NO_SYSTEMCTL`, `LASTRADA_RUNNER_ENTRYPOINT_SOURCE_ONLY` are each defined in exactly one task and used consistently. `read_runner_token` is defined in Task 2 and referenced only by its own self-test. Template placeholders `@LIBEXEC@`, `@CONFIG@`, `@PREFIX@`, `@WANTEDBY@` are substituted in Task 5 step 5 and asserted in Task 5 step 1.
 
 **Known risk, deliberately left as a test rather than a design change.** Task 1 delivers the token on stdin. If `run.sh` proves intolerant of EOF on stdin, Task 9 step 5 will show runners failing to come online. The fallback is `-e RUNNER_TOKEN` in `run-runner.sh`'s argv, accepting the exposure documented in the spec — do not silently make that change; it reverses a security decision and belongs in review.

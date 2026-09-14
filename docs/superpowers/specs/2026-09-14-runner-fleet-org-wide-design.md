@@ -57,12 +57,12 @@ The section is corrected as part of this work.
 
 systemd owns the containers. Docker's restart policy is dropped entirely.
 
-A template unit `morph-runner@.service` is enabled once per runner
-(`morph-runner@1` … `morph-runner@5`):
+A template unit `lastrada-runner@.service` is enabled once per runner
+(`lastrada-runner@1` … `lastrada-runner@5`):
 
 ```ini
 [Unit]
-Description=morph self-hosted GitHub Actions runner %i
+Description=LASTRADA self-hosted GitHub Actions runner %i
 After=docker.service network-online.target
 Wants=network-online.target
 
@@ -97,8 +97,8 @@ entirely.
 
 **Failure is bounded and visible.** `StartLimitBurst=5` over ten minutes
 puts the unit into `failed` instead of retrying forever. The six-day silent
-outage becomes a red `systemctl --user status morph-runner@3`, with the
-reason in `journalctl --user -u morph-runner@3` rather than 149,000 lines
+outage becomes a red `systemctl --user status lastrada-runner@3`, with the
+reason in `journalctl --user -u lastrada-runner@3` rather than 149,000 lines
 of `docker logs`.
 
 **A dead runner comes back.** A container killed mid-life — OOM during a
@@ -122,7 +122,7 @@ points at a wrapper that mints the token *and* `exec`s Docker:
 # run-runner.sh <index>
 set -euo pipefail
 index="$1"
-. "${MORPH_RUNNER_CONFIG:?}"
+. "${LASTRADA_RUNNER_CONFIG:?}"
 
 token="$(gh api -X POST \
     "orgs/${GITHUB_ORG}/actions/runners/registration-token" --jq '.token')"
@@ -167,8 +167,8 @@ scope explicitly. `admin:org` is what the organisation endpoint requires.
 
 ## Configuration
 
-An env-style file, `~/.config/morph-runner/config` for a user install or
-`/etc/morph-runner/config` for a system install:
+An env-style file, `~/.config/lastrada-runner/config` for a user install or
+`/etc/lastrada-runner/config` for a system install:
 
 ```sh
 GITHUB_ORG=LASTRADA-Software
@@ -178,7 +178,7 @@ RUNNER_GROUP=linux-docker
 RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
 RUNNER_CPUS=2
 RUNNER_MEMORY=6g
-RUNNER_IMAGE=morph-runner:latest
+RUNNER_IMAGE=lastrada-runner:latest
 FASTCACHE_ADDR=host.docker.internal:6674
 CMAKE_BUILD_PARALLEL_LEVEL=2
 ```
@@ -316,14 +316,14 @@ runs as root:
 
 | | User install (this host) | System install (cloud VM) |
 |---|---|---|
-| Unit | `~/.config/systemd/user/morph-runner@.service` | `/etc/systemd/system/morph-runner@.service` |
-| Config | `~/.config/morph-runner/config` | `/etc/morph-runner/config` |
-| Wrapper | `~/.local/libexec/morph-runner/` | `/usr/local/libexec/morph-runner/` |
+| Unit | `~/.config/systemd/user/lastrada-runner@.service` | `/etc/systemd/system/lastrada-runner@.service` |
+| Config | `~/.config/lastrada-runner/config` | `/etc/lastrada-runner/config` |
+| Wrapper | `~/.local/libexec/lastrada-runner/` | `/usr/local/libexec/lastrada-runner/` |
 | Control | `systemctl --user` | `systemctl` |
 | Boot | requires lingering (already enabled here) | ordinary system unit |
 
 The same template body is used for both, with paths substituted at install
-time. The script enables `morph-runner@1`…`@N` from `RUNNER_COUNT`, and
+time. The script enables `lastrada-runner@1`…`@N` from `RUNNER_COUNT`, and
 disables any higher-numbered instances left over from a previous, larger
 fleet.
 
@@ -348,7 +348,7 @@ Two things cannot be automated here and belong to the repository owner:
 ## Testing
 
 **Unit-level, no Docker or GitHub required.** `run-runner.sh` gains a
-dry-run mode (`MORPH_RUNNER_DRY_RUN=1`) that prints the `docker` argv
+dry-run mode (`LASTRADA_RUNNER_DRY_RUN=1`) that prints the `docker` argv
 instead of `exec`ing it, and the tests put a stub `gh` on `PATH` that
 returns a known token. Assertions: the org endpoint is called (not the repo
 one), `--cpus=2` and `--memory=6g` are present, `--rm` is present, no
@@ -371,7 +371,7 @@ present and `en_US.UTF-8` is generated.
 are gone and a planted `fastcache-cc` survives.
 
 **Live, on this host.** Five runners online in the organisation with the
-`lastrada-docker` label; `systemctl --user restart morph-runner@3`
+`lastrada-docker` label; `systemctl --user restart lastrada-runner@3`
 re-registers with a *different* token than its previous start; a full
 `systemctl --user stop` of all five leaves no containers behind; and a morph
 CI run lands on a self-hosted runner and reports a fastcache hit against the
