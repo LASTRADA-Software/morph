@@ -32,13 +32,28 @@ ExecStopPost=-/usr/bin/docker rm -f @PREFIX@-%i
 Restart=always
 RestartSec=30
 
-# NOT a drain window: ExecStart execs `docker run --rm -i`, so systemd is
-# tracking the docker client, and SIGTERM/SIGKILL at this timeout hit that
-# client -- not the container running the job. The client dying does not
-# stop the container; ExecStopPost's `docker rm -f` then force-kills it.
-# Real C++/sanitizer jobs here run far longer than 90s, so a stop or restart
-# mid-job kills that job rather than draining it. Left at 90s pending a
-# deliberate decision on the right value; not changed by this pass.
+# `docker run -i` (no -t) has sig-proxy on by default, so SIGTERM sent to
+# the docker client here is forwarded straight into the container. Verified
+# from a real restart's journal: the entrypoint's EXIT trap runs, `config.sh
+# remove` deregisters the runner, and the whole stop completes in ~3s:
+#
+#   23:58:18 Stopping LASTRADA self-hosted GitHub Actions runner 3...
+#            Removing runner registration...
+#            √ Runner removed successfully
+#   23:58:21 Stopped
+#
+# ExecStopPost's `docker rm -f` is a backstop for a container that somehow
+# outlived its client (SIGKILL, daemon restart) -- normally it never fires.
+# A job in flight is killed, not drained, by a stop or restart mid-job.
+# TimeoutStopSec=90 below is essentially never used in the common case.
+#
+# Because sig-proxy relays it, the docker client exits with the container's
+# own exit code for a signal-terminated process: 128+15=143, not 0. Without
+# the line below, systemd treats that as a failed unit -- every deliberate
+# stop or restart shows red in `systemctl status`, drowning the signal
+# StartLimitBurst exists to create. 143 from this client is a normal,
+# clean stop, so tell systemd not to flag it as a failure.
+SuccessExitStatus=143
 TimeoutStopSec=90
 
 [Install]

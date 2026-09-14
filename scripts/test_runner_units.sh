@@ -145,6 +145,21 @@ fi
 # placed first on PATH that only logs its argv and exits 0. This is the only
 # systemctl the installer can reach in this invocation, so nothing here can
 # touch the real system.
+#
+# Crucially, `list-unit-files 'lastrada-runner@*.service'` is NOT how the
+# installer finds existing instances (see install-runner-units.sh for why:
+# for a template unit, that command only ever shows the template itself,
+# never the enabled instances). So the stub must not emit fabricated
+# per-instance list-unit-files rows -- the real systemctl never does. It
+# instead prints the *template's* row, exactly as verified live:
+#
+#   $ systemctl --user list-unit-files 'lastrada-runner@*.service' --no-legend --plain
+#   lastrada-runner@.service indirect enabled
+#
+# The real fleet state instead lives as enablement symlinks under
+# <unit_dir>/<wantedby>.wants/. So this test represents "a previously larger
+# fleet" the same way: it pre-creates those symlinks in the scratch prefix
+# before running the installer.
 stub_bin="$(mktemp -d)"
 scratch2="$(mktemp -d)"
 trap 'rm -rf "$scratch" "$stub_bin" "$scratch2"' EXIT
@@ -159,14 +174,27 @@ if [ "\${args[0]:-}" = "--user" ]; then
     args=("\${args[@]:1}")
 fi
 if [ "\${args[0]:-}" = "list-unit-files" ]; then
-    # One instance within RUNNER_COUNT (kept), one beyond it (must be
-    # disabled) -- config.example's default RUNNER_COUNT is 5.
-    printf 'lastrada-runner@1.service enabled\n'
-    printf 'lastrada-runner@7.service enabled\n'
+    # This is what the real systemctl prints for a templated unit: only the
+    # template's own row, never per-instance rows. If the installer were
+    # still (mis)using this command to find instances to disable, it would
+    # see nothing here and the shrink assertions below would fail.
+    printf 'lastrada-runner@.service indirect enabled\n'
 fi
 exit 0
 STUBEOF
 chmod +x "${stub_bin}/systemctl"
+
+# Pre-seed enablement symlinks representing a previously larger fleet:
+# instances 1..5 within the config.example default RUNNER_COUNT=5 (must be
+# left alone), plus 6 and 7 beyond it (must be disabled). These live under
+# <unit_dir>/<wantedby>.wants/, which for a non-root run under
+# LASTRADA_RUNNER_PREFIX_DIR is
+# "${scratch2}${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/default.target.wants".
+wants_dir="${scratch2}${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/default.target.wants"
+mkdir -p "$wants_dir"
+for i in 1 2 3 4 5 6 7; do
+    ln -s "../lastrada-runner@.service" "${wants_dir}/lastrada-runner@${i}.service"
+done
 
 if ! PATH="${stub_bin}:${PATH}" LASTRADA_RUNNER_PREFIX_DIR="$scratch2" \
         bash "$installer" >/dev/null 2>"${stub_bin}/installer.stderr"; then
@@ -197,16 +225,26 @@ if [ "$enable_missing" -eq 0 ]; then
     note "enable --now called for lastrada-runner@1..5"
 fi
 
-if grep -qxF 'disable --now lastrada-runner@7.service' "$normalized_log"; then
-    note "disable --now called for the instance beyond RUNNER_COUNT"
-else
-    fail "disable --now lastrada-runner@7.service (beyond RUNNER_COUNT) was not called"
+shrink_missing=0
+for i in 6 7; do
+    if ! grep -qxF "disable --now lastrada-runner@${i}.service" "$normalized_log"; then
+        shrink_missing=1
+        fail "disable --now lastrada-runner@${i}.service (beyond RUNNER_COUNT) was not called"
+    fi
+done
+if [ "$shrink_missing" -eq 0 ]; then
+    note "disable --now called for the instances beyond RUNNER_COUNT (6, 7)"
 fi
 
-if grep -qxF 'disable --now lastrada-runner@1.service' "$normalized_log"; then
-    fail "disable --now was called for lastrada-runner@1.service, which is within RUNNER_COUNT"
-else
-    note "the in-range instance was left alone"
+in_range_touched=0
+for i in 1 2 3 4 5; do
+    if grep -qxF "disable --now lastrada-runner@${i}.service" "$normalized_log"; then
+        in_range_touched=1
+        fail "disable --now was called for lastrada-runner@${i}.service, which is within RUNNER_COUNT"
+    fi
+done
+if [ "$in_range_touched" -eq 0 ]; then
+    note "the in-range instances (1..5) were left alone"
 fi
 
 if [ "$failures" -ne 0 ]; then

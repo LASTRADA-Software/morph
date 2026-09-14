@@ -93,8 +93,24 @@ fi
 
 # Disable instances left over from a previously larger fleet, so shrinking
 # RUNNER_COUNT actually shrinks it.
-for existing in $("${systemctl[@]}" list-unit-files 'lastrada-runner@*.service' \
-                    --no-legend --plain 2>/dev/null | awk '{print $1}'); do
+#
+# `systemctl list-unit-files 'lastrada-runner@*.service'` does NOT work for
+# this: for a template unit, list-unit-files only ever shows the template
+# itself (`lastrada-runner@.service`), never the instances enabled from it.
+# Verified live against this exact fleet:
+#
+#   $ systemctl --user list-unit-files 'lastrada-runner@*.service' --no-legend --plain
+#   lastrada-runner@.service indirect enabled
+#
+# ...while `~/.config/systemd/user/default.target.wants/` actually holds the
+# five enablement symlinks lastrada-runner@1.service .. @5.service. The same
+# is true of any templated unit (e.g. getty@.service vs. getty@tty1.service).
+# `systemctl list-units --all` is not a substitute either -- it only shows
+# *loaded* units, not everything enabled. So enumerate the enablement
+# symlinks directly.
+for existing_path in "${unit_dir}/${wantedby}.wants/lastrada-runner@"*.service; do
+    [ -e "$existing_path" ] || continue
+    existing="$(basename "$existing_path")"
     idx="${existing#lastrada-runner@}"
     idx="${idx%.service}"
     # The redirect below used to be the only guard against a non-numeric idx
