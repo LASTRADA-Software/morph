@@ -369,25 +369,26 @@ private:
             // duplicating that error path here would serve no purpose since
             // this peek's only job is deciding whether to take a ticket.
         }
+        // Moves msg/reply into its own captures exactly once, on whichever of
+        // the two calls below actually happens, and enqueues the one shared
+        // dispatch task -- ticketed or not.
+        auto doPost = [this, self, msg = std::move(msg), reply = std::move(reply),
+                       cid](std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> ticket) mutable {
+            _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
+                self->dispatchMessage(msg, reply, cid, ticket);
+            });
+        };
         if (executeMid) {
             // Ticket and enqueue happen inside one call, under the gate's own
             // lock: if `_pool.post` throws, `takeAndPost` releases the ticket
             // itself before rethrowing (see its own doc comment) — no local
             // `ExecuteTicketGuard` is needed here the way the old two-step
             // take()-then-post() shape required one.
-            _executeGate.takeAndPost(
-                *executeMid, [this, self, &msg, &reply, cid, executeMid](std::uint64_t ticketNum) {
-                    std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> const ticket{
-                        std::in_place, *executeMid, ticketNum};
-                    _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
-                        self->dispatchMessage(msg, reply, cid, ticket);
-                    });
-                });
-        } else {
-            std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> const ticket;
-            _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
-                self->dispatchMessage(msg, reply, cid, ticket);
+            _executeGate.takeAndPost(*executeMid, [&doPost, mid = *executeMid](std::uint64_t ticketNum) {
+                doPost(std::make_pair(mid, ticketNum));
             });
+        } else {
+            doPost(std::nullopt);
         }
     }
 

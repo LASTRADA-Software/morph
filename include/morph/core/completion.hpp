@@ -52,11 +52,15 @@ struct CompletionState {
                 // so moving out of it left it engaged but moved-from, and a
                 // later attacher silently copied a husk (morph#520). Copying
                 // first, before `onOk` is drained or `value`/`ready` are set,
-                // gives this block the strong exception guarantee: if `T`'s
-                // copy constructor throws, nothing here has changed yet --
-                // `onOk` still holds every handler and the state is still
-                // unready -- rather than a corrupted state that already looks
-                // settled with its handlers already lost.
+                // gives this block the strong exception guarantee against a
+                // throwing copy constructor specifically: if it throws,
+                // nothing here has changed yet -- `onOk` still holds every
+                // handler and the state is still unready -- rather than a
+                // corrupted state that already looks settled with its
+                // handlers already lost. (A `T` whose *move* constructor can
+                // throw is a separate, narrower hazard this ordering does not
+                // cover, since `onOk` is already drained by the time
+                // `value = std::move(val)` runs below.)
                 auto savedVal = val;
                 auto savedFns = std::move(onOk);
                 value = std::move(val);

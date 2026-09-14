@@ -54,11 +54,7 @@ public:
     /// @return This call's ticket number.
     [[nodiscard]] std::uint64_t take(::morph::exec::detail::ModelId mid) {
         std::scoped_lock const lock{_mtx};
-        auto& gate = _gates[mid];
-        if (!gate) {
-            gate = std::make_shared<Gate>();
-        }
-        return gate->nextTicket++;
+        return getOrCreateGateLocked(mid)->nextTicket++;
     }
 
     /// @brief Atomically hands out the next ticket for @p mid and invokes
@@ -104,11 +100,7 @@ public:
         std::shared_ptr<Gate> gate;
         {
             std::scoped_lock const lock{_mtx};
-            auto& slot = _gates[mid];
-            if (!slot) {
-                slot = std::make_shared<Gate>();
-            }
-            gate = slot;
+            gate = getOrCreateGateLocked(mid);
         }
         // Per-model, not global: a synchronous (inline) executor can run
         // postFn's whole dispatch chain before returning, and a handler that
@@ -191,6 +183,18 @@ private:
         // own doc comment for the full reasoning.
         std::mutex enqueueMtx;
     };
+
+    /// @brief Returns @p mid's `Gate`, creating it if this is its first ticket.
+    ///        Assumes `_mtx` is already held by the caller.
+    /// @param mid The model to find or create a gate for.
+    /// @return The (possibly just-created) gate for @p mid.
+    [[nodiscard]] std::shared_ptr<Gate>& getOrCreateGateLocked(::morph::exec::detail::ModelId mid) {
+        auto& slot = _gates[mid];
+        if (!slot) {
+            slot = std::make_shared<Gate>();
+        }
+        return slot;
+    }
 
     /// @brief `release`'s implementation, assuming `_mtx` is already held by
     ///        the caller. Shared by `release()` (which takes the lock itself)
