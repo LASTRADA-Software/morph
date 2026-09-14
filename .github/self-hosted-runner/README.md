@@ -64,7 +64,7 @@ needed for C++23 `<print>` regardless of which matrix leg runs first).
 - systemd, to supervise the runner containers via
   `lastrada-runner@N.service` (see **Quick start** below). A host without
   it (Docker Desktop, WSL2) falls back to the plain `docker run` path
-  documented under **Host restarts**.
+  documented under **Docker Desktop / WSL2 (no systemd)**.
 - `gh` CLI authenticated with **`admin:org`** access on `LASTRADA-Software`
   (needed because the runners are organisation-level, not repo-level —
   each start mints its own one-hour registration token via
@@ -74,9 +74,11 @@ needed for C++23 `<print>` regardless of which matrix leg runs first).
 ## Quick start (any host, including a fresh cloud VM)
 
 ```bash
-# 1. Get the code onto the box (only these two files are needed, or clone
-#    the whole repo — either works, since the image build doesn't touch
-#    anything else in the tree).
+# 1. Get the code onto the box. Cloning the whole repo is simplest; step 2
+#    needs Dockerfile, entrypoint.sh and job-started-hook.sh, and step 3
+#    needs install-runner-units.sh plus config.example,
+#    lastrada-runner@.service.in and run-runner.sh alongside it -- all
+#    from this same directory, so a partial copy has to bring all seven.
 git clone https://github.com/LASTRADA-Software/morph.git
 cd morph/.github/self-hosted-runner
 
@@ -435,12 +437,22 @@ docker exec -u root lastrada-docker-1 git config --system http.version HTTP/1.1
 
 `linux-compilers`, `linux-sanitizers`, `linux-all-features`, `ladder-tests`,
 and `ladder-sanitizers` each set `FASTCACHE_ADDR=host.docker.internal:6674`
-and `FASTCACHE_AUTO_INSTALL=ON`
 as job-level env — but **only** when `probe-self-hosted` chose the
-self-hosted path; both are left empty/OFF on the GitHub-hosted fallback,
-where `host.docker.internal` does not resolve (it isn't a Docker
-container) and morph's `cmake/CompileCache.cmake` has no daemon to reach
-anyway.
+self-hosted path; it is left empty on the GitHub-hosted fallback, where
+`host.docker.internal` does not resolve (it isn't a Docker container) and
+morph's `cmake/CompileCache.cmake` has no daemon to reach anyway.
+
+`FASTCACHE_AUTO_INSTALL` is a plain CMake `option()`, not something
+`CompileCache.cmake` reads from the environment the way it does
+`FASTCACHE_ADDR` — a job-level env var of that name would be silently
+ignored, reaching only `option()`'s CMake-cache default rather than
+CompileCache.cmake's auto-install logic. So `ci.yml` never sets it as env
+at all. Instead each of those five jobs precomputes a same-named job-level
+env var, `MORPH_FASTCACHE_AUTO_INSTALL_FLAG`, whose value on the
+self-hosted path is the literal string `-DFASTCACHE_AUTO_INSTALL=ON` (and
+empty on the GitHub-hosted fallback), and every Configure step splices
+`$MORPH_FASTCACHE_AUTO_INSTALL_FLAG` directly onto the `cmake --preset`
+command line, so the flag reaches CMake the only way it can take effect.
 
 `host.docker.internal:6674` is the same literal address on every host --
 `ci.yml` hardcodes it, it does not vary by which runner picks up the job --
