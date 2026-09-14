@@ -158,10 +158,13 @@ else
     fail "token was not delivered on stdin"
 fi
 
-if printf '%s\n' "$out" | grep -q -- '-e RUNNER_TOKEN'; then
+# Each argv element prints on its own line, so the -e and its value are
+# separate lines -- match the value line, not "-e RUNNER_TOKEN", which
+# would never match and would make this assertion vacuous.
+if printf '%s\n' "$out" | grep -q '^RUNNER_TOKEN='; then
     fail "token passed via -e RUNNER_TOKEN; jobs on the container could read it"
 else
-    note "no -e RUNNER_TOKEN argument"
+    note "no RUNNER_TOKEN environment argument"
 fi
 
 if printf '%s\n' "$out" | grep -v '^STDIN:' | grep -q 'tok-ABC123'; then
@@ -951,8 +954,11 @@ fi
 if command -v systemd-analyze >/dev/null 2>&1; then
     staging="${scratch}/verify"
     mkdir -p "$staging"
-    cp "$unit" "${staging}/morph-runner@.service"
-    if out="$(systemd-analyze verify "${staging}/morph-runner@.service" 2>&1)"; then
+    # Instantiate %i rather than verifying the template itself: systemd-analyze
+    # cannot resolve %i in a bare foo@.service path, and would fail for that
+    # reason rather than for any defect in the unit.
+    sed 's/%i/1/g' "$unit" >"${staging}/morph-runner-verify.service"
+    if out="$(systemd-analyze verify "${staging}/morph-runner-verify.service" 2>&1)"; then
         note "systemd-analyze verify accepts the unit"
     else
         # Missing ExecStart targets are expected in a scratch prefix; anything
