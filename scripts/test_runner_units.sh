@@ -50,20 +50,30 @@ else
     note "all placeholders substituted"
 fi
 
-# StartLimit* must be in [Unit]; systemd ignores them in [Service].
+# StartLimit* must be in [Unit]; systemd ignores them in [Service]. Track
+# both directives independently -- a mutation that moves only one of the two
+# must still be caught.
 section=""
-start_limit_section=""
+start_limit_burst_section=""
+start_limit_interval_section=""
 while IFS= read -r line; do
     case "$line" in
         \[*\]) section="$line" ;;
-        StartLimitBurst=*) start_limit_section="$section" ;;
+        StartLimitBurst=*) start_limit_burst_section="$section" ;;
+        StartLimitIntervalSec=*) start_limit_interval_section="$section" ;;
     esac
 done <"$unit"
 
-if [ "$start_limit_section" = "[Unit]" ]; then
+if [ "$start_limit_burst_section" = "[Unit]" ]; then
     note "StartLimitBurst is in [Unit]"
 else
-    fail "StartLimitBurst is in '${start_limit_section:-nowhere}', must be [Unit] or systemd ignores it"
+    fail "StartLimitBurst is in '${start_limit_burst_section:-nowhere}', must be [Unit] or systemd ignores it"
+fi
+
+if [ "$start_limit_interval_section" = "[Unit]" ]; then
+    note "StartLimitIntervalSec is in [Unit]"
+else
+    fail "StartLimitIntervalSec is in '${start_limit_interval_section:-nowhere}', must be [Unit] or systemd ignores it"
 fi
 
 for directive in 'Restart=always' 'StartLimitBurst=5' 'StartLimitIntervalSec=600'; do
@@ -108,20 +118,95 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     # cannot resolve %i in a bare foo@.service path, and would fail for that
     # reason rather than for any defect in the unit.
     sed 's/%i/1/g' "$unit" >"${staging}/lastrada-runner-verify.service"
-    if out="$(systemd-analyze verify "${staging}/lastrada-runner-verify.service" 2>&1)"; then
-        note "systemd-analyze verify accepts the unit"
+    # Exit status alone does not gate this: a directive in the wrong section
+    # (e.g. StartLimitIntervalSec under [Service]) makes systemd-analyze print
+    # "Unknown key ... ignoring." to stderr and still exit 0. So the *output*
+    # is the signal, checked regardless of exit status -- and the one kind of
+    # noise this scratch prefix legitimately produces (ExecStart pointing at
+    # a wrapper that was not actually installed there) is carved out by
+    # matching only that specific message, so an "Unknown key" line -- or
+    # anything else systemd-analyze complains about -- is never swallowed by
+    # the carve-out.
+    out="$(systemd-analyze verify "${staging}/lastrada-runner-verify.service" 2>&1)" || true
+    unexpected="$(printf '%s\n' "$out" | grep -v 'Command .* is not executable' || true)"
+    if [ -n "$unexpected" ]; then
+        fail "systemd-analyze verify complained about the unit:"
+        printf '%s\n' "$unexpected" >&2
     else
-        # Missing ExecStart targets are expected in a scratch prefix; anything
-        # else is a real defect in the unit.
-        if printf '%s\n' "$out" | grep -vq 'Command .* is not executable'; then
-            fail "systemd-analyze verify rejected the unit:"
-            printf '%s\n' "$out" >&2
-        else
-            note "systemd-analyze verify clean apart from the scratch ExecStart path"
-        fi
+        note "systemd-analyze verify clean apart from the scratch ExecStart path"
     fi
 else
     note "systemd-analyze absent; skipping unit verification"
+fi
+
+# The systemctl-driving code -- daemon-reload, the shrink loop, `enable --now`
+# -- is never reached above: that run always sets LASTRADA_RUNNER_NO_SYSTEMCTL,
+# which returns before any of it. Exercise it here against a stub systemctl
+# placed first on PATH that only logs its argv and exits 0. This is the only
+# systemctl the installer can reach in this invocation, so nothing here can
+# touch the real system.
+stub_bin="$(mktemp -d)"
+scratch2="$(mktemp -d)"
+trap 'rm -rf "$scratch" "$stub_bin" "$scratch2"' EXIT
+
+systemctl_log="${stub_bin}/systemctl.log"
+: >"$systemctl_log"
+cat >"${stub_bin}/systemctl" <<STUBEOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"${systemctl_log}"
+args=("\$@")
+if [ "\${args[0]:-}" = "--user" ]; then
+    args=("\${args[@]:1}")
+fi
+if [ "\${args[0]:-}" = "list-unit-files" ]; then
+    # One instance within RUNNER_COUNT (kept), one beyond it (must be
+    # disabled) -- config.example's default RUNNER_COUNT is 5.
+    printf 'lastrada-runner@1.service enabled\n'
+    printf 'lastrada-runner@7.service enabled\n'
+fi
+exit 0
+STUBEOF
+chmod +x "${stub_bin}/systemctl"
+
+if ! PATH="${stub_bin}:${PATH}" LASTRADA_RUNNER_PREFIX_DIR="$scratch2" \
+        bash "$installer" >/dev/null 2>"${stub_bin}/installer.stderr"; then
+    fail "installer exited non-zero against the stubbed systemctl:"
+    cat "${stub_bin}/installer.stderr" >&2
+fi
+
+# The stub logs "--user daemon-reload" for a non-root run and plain
+# "daemon-reload" for a root one; normalize away the leading --user so the
+# assertions below do not care which mode ran.
+normalized_log="${stub_bin}/systemctl.normalized.log"
+sed -e 's/^--user //' "$systemctl_log" >"$normalized_log"
+
+if grep -qxF 'daemon-reload' "$normalized_log"; then
+    note "daemon-reload was called"
+else
+    fail "daemon-reload was not called"
+fi
+
+enable_missing=0
+for i in $(seq 1 5); do
+    if ! grep -qxF "enable --now lastrada-runner@${i}.service" "$normalized_log"; then
+        enable_missing=1
+        fail "enable --now lastrada-runner@${i}.service was not called"
+    fi
+done
+if [ "$enable_missing" -eq 0 ]; then
+    note "enable --now called for lastrada-runner@1..5"
+fi
+
+if grep -qxF 'disable --now lastrada-runner@7.service' "$normalized_log"; then
+    note "disable --now called for the instance beyond RUNNER_COUNT"
+else
+    fail "disable --now lastrada-runner@7.service (beyond RUNNER_COUNT) was not called"
+fi
+
+if grep -qxF 'disable --now lastrada-runner@1.service' "$normalized_log"; then
+    fail "disable --now was called for lastrada-runner@1.service, which is within RUNNER_COUNT"
+else
+    note "the in-range instance was left alone"
 fi
 
 if [ "$failures" -ne 0 ]; then

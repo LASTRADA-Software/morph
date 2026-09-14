@@ -58,6 +58,24 @@ fi
 : "${RUNNER_COUNT:?config must set RUNNER_COUNT}"
 : "${RUNNER_NAME_PREFIX:?config must set RUNNER_NAME_PREFIX}"
 
+# A non-numeric RUNNER_COUNT is not caught by the check above (":?" only
+# rejects empty/unset), and feeding it to `seq` below is not caught by `set
+# -e` either: a failed command substitution inside a `for ... in $(...)`
+# word-list does not trip -e, so the enable loop below would silently run
+# zero times while the script still reaches its success banner and exits 0 --
+# a fleet of zero runners, reported as a successful install. Fail loudly here
+# instead.
+case "$RUNNER_COUNT" in
+    ''|*[!0-9]*)
+        echo "install-runner-units.sh: RUNNER_COUNT must be a positive integer, got '${RUNNER_COUNT}'" >&2
+        exit 1
+        ;;
+esac
+if [ "$RUNNER_COUNT" -eq 0 ]; then
+    echo "install-runner-units.sh: RUNNER_COUNT must be a positive integer, got '${RUNNER_COUNT}'" >&2
+    exit 1
+fi
+
 sed \
     -e "s|@LIBEXEC@|${libexec_dir}|g" \
     -e "s|@CONFIG@|${config_dir}/config|g" \
@@ -79,7 +97,18 @@ for existing in $("${systemctl[@]}" list-unit-files 'lastrada-runner@*.service' 
                     --no-legend --plain 2>/dev/null | awk '{print $1}'); do
     idx="${existing#lastrada-runner@}"
     idx="${idx%.service}"
-    if [ "$idx" -gt "$RUNNER_COUNT" ] 2>/dev/null; then
+    # The redirect below used to be the only guard against a non-numeric idx
+    # ([ -gt ] on a non-integer would abort the script under `set -e`), but
+    # this loop is inside `if`, which is already `set -e`-exempt -- so it did
+    # not do what it appeared to. Skip non-numeric idx values explicitly
+    # instead of relying on that.
+    case "$idx" in
+        ''|*[!0-9]*)
+            echo "skipping ${existing}: index '${idx}' is not numeric" >&2
+            continue
+            ;;
+    esac
+    if [ "$idx" -gt "$RUNNER_COUNT" ]; then
         echo "disabling ${existing} (beyond RUNNER_COUNT=${RUNNER_COUNT})"
         "${systemctl[@]}" disable --now "$existing" || true
     fi

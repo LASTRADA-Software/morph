@@ -32,7 +32,13 @@ ExecStopPost=-/usr/bin/docker rm -f @PREFIX@-%i
 Restart=always
 RestartSec=30
 
-# The runner drains its current job on SIGTERM; give it room before SIGKILL.
+# NOT a drain window: ExecStart execs `docker run --rm -i`, so systemd is
+# tracking the docker client, and SIGTERM/SIGKILL at this timeout hit that
+# client -- not the container running the job. The client dying does not
+# stop the container; ExecStopPost's `docker rm -f` then force-kills it.
+# Real C++/sanitizer jobs here run far longer than 90s, so a stop or restart
+# mid-job kills that job rather than draining it. Left at 90s pending a
+# deliberate decision on the right value; not changed by this pass.
 TimeoutStopSec=90
 
 [Install]
