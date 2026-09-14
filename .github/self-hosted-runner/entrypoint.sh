@@ -15,14 +15,9 @@
 #   RUNNER_TOKEN      - fallback registration token when stdin carries none
 #   RUNNER_SCOPE_URL  - defaults to the LASTRADA-Software organisation
 #   RUNNER_GROUP      - runner group to join; defaults to linux-docker
-#   RUNNER_NAME       - defaults to "lastrada-docker-<hostname>"
+#   RUNNER_NAME       - defaults to "lastrada-docker-$HOSTNAME"
 #   RUNNER_LABELS     - defaults to "self-hosted,Linux,X64,lastrada-docker"
 set -euo pipefail
-
-RUNNER_SCOPE_URL="${RUNNER_SCOPE_URL:-https://github.com/LASTRADA-Software}"
-RUNNER_GROUP="${RUNNER_GROUP:-linux-docker}"
-RUNNER_NAME="${RUNNER_NAME:-lastrada-docker-$(hostname)}"
-RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,Linux,X64,lastrada-docker}"
 
 # Reads the first line of stdin when there is one, else falls back to the
 # environment. Kept as a function so scripts/test_runner_entrypoint.sh can
@@ -43,6 +38,11 @@ read_runner_token() {
 if [ -n "${LASTRADA_RUNNER_ENTRYPOINT_SOURCE_ONLY:-}" ]; then
     return 0 2>/dev/null || exit 0
 fi
+
+RUNNER_SCOPE_URL="${RUNNER_SCOPE_URL:-https://github.com/LASTRADA-Software}"
+RUNNER_GROUP="${RUNNER_GROUP:-linux-docker}"
+RUNNER_NAME="${RUNNER_NAME:-lastrada-docker-${HOSTNAME}}"
+RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,Linux,X64,lastrada-docker}"
 
 cd /home/runner/actions-runner
 
