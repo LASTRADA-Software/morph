@@ -59,22 +59,47 @@ else
 fi
 
 # ── the registration itself must be org-scoped and group-aware ───────────────
-if grep -q 'runnergroup' "$entrypoint"; then
-    note "config.sh is passed --runnergroup"
+# These assert against the actual config.sh argument line, not just that the
+# variable name appears somewhere in the file -- a hardcoded --url value with
+# the RUNNER_SCOPE_URL comment/default left untouched must fail here.
+if grep -Eq '^[[:space:]]*--url[[:space:]]+"\$\{RUNNER_SCOPE_URL\}"[[:space:]]*\\?[[:space:]]*$' "$entrypoint"; then
+    note "config.sh's --url argument is \"\${RUNNER_SCOPE_URL}\""
 else
-    fail "entrypoint.sh does not pass --runnergroup"
+    fail "config.sh's --url argument is not literally \"\${RUNNER_SCOPE_URL}\""
 fi
 
-if grep -q 'RUNNER_SCOPE_URL' "$entrypoint"; then
-    note "registration URL comes from RUNNER_SCOPE_URL"
+if grep -Eq '^[[:space:]]*--runnergroup[[:space:]]+"\$\{RUNNER_GROUP\}"[[:space:]]*\\?[[:space:]]*$' "$entrypoint"; then
+    note "config.sh's --runnergroup argument is \"\${RUNNER_GROUP}\""
 else
-    fail "entrypoint.sh still hardcodes a repository URL"
+    fail "config.sh's --runnergroup argument is not literally \"\${RUNNER_GROUP}\""
 fi
 
-if grep -q 'rm -f /usr/local/bin/sccache' "$entrypoint"; then
-    fail "the start-time sccache wipe is still here; it belongs in the job hook"
+if grep -Eq '^[[:space:]]*--labels[[:space:]]+"\$\{RUNNER_LABELS\}"[[:space:]]*\\?[[:space:]]*$' "$entrypoint"; then
+    note "config.sh's --labels argument is \"\${RUNNER_LABELS}\""
+else
+    fail "config.sh's --labels argument is not literally \"\${RUNNER_LABELS}\""
+fi
+
+# The start-time sccache wipe belongs in the per-job hook, not here. Match
+# case-insensitively with no fixed wording so quoting/rm-flag/whitespace
+# reformatting of a reintroduced wipe can't slip past this check.
+if grep -qi 'sccache' "$entrypoint"; then
+    fail "entrypoint.sh still mentions sccache; the wipe belongs in the job hook"
 else
     note "start-time sccache wipe removed"
+fi
+
+# ── labels must be the agreed set, and the retired name must be fully gone ──
+if grep -qF 'RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,Linux,X64,lastrada-docker}"' "$entrypoint"; then
+    note "RUNNER_LABELS defaults to self-hosted,Linux,X64,lastrada-docker"
+else
+    fail "RUNNER_LABELS default is not exactly self-hosted,Linux,X64,lastrada-docker"
+fi
+
+if grep -qi 'morph-docker' "$entrypoint"; then
+    fail "entrypoint.sh still mentions the retired morph-docker label"
+else
+    note "morph-docker does not appear in entrypoint.sh"
 fi
 
 if [ "$failures" -ne 0 ]; then
