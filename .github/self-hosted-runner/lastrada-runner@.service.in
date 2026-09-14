@@ -1,0 +1,39 @@
+# Template unit: one instance per runner, lastrada-runner@1 .. lastrada-runner@N.
+# Rendered by install-runner-units.sh, which substitutes the @...@ paths for
+# either a user install (systemctl --user) or a system one.
+[Unit]
+Description=LASTRADA self-hosted GitHub Actions runner %i
+Documentation=https://github.com/LASTRADA-Software/morph/blob/master/.github/self-hosted-runner/README.md
+After=docker.service network-online.target
+Wants=network-online.target
+
+# StartLimit* belong in [Unit] -- systemd moved them here in v229 and ignores
+# them in [Service]. That is not cosmetic: without a working start limit this
+# unit retries forever exactly like the `--restart unless-stopped` policy it
+# replaces, and a broken credential produces thousands of silent retries
+# instead of a failed unit somebody can see. Five attempts in ten minutes,
+# then stop and show up red in `systemctl status`.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=exec
+Environment=LASTRADA_RUNNER_CONFIG=@CONFIG@
+ExecStart=@LIBEXEC@/run-runner.sh %i
+
+# --rm covers a clean exit; this covers a SIGKILL or a Docker daemon restart
+# leaving the container behind still holding the name. `-` so a missing
+# container is not a stop failure.
+ExecStopPost=-/usr/bin/docker rm -f @PREFIX@-%i
+
+# Brings a runner back after an OOM kill mid-link without waiting for a
+# reboot. Each restart re-runs run-runner.sh, which mints a fresh token --
+# there is no stored credential that can go stale.
+Restart=always
+RestartSec=30
+
+# The runner drains its current job on SIGTERM; give it room before SIGKILL.
+TimeoutStopSec=90
+
+[Install]
+WantedBy=@WANTEDBY@

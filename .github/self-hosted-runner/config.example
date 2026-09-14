@@ -1,0 +1,26 @@
+# Copied to ~/.config/lastrada-runner/config (user install) or
+# /etc/lastrada-runner/config (system install) by install-runner-units.sh.
+
+# Registration is organisation-level so one fleet serves morph, fastcached
+# and Lightweight.
+GITHUB_ORG=LASTRADA-Software
+
+# The runner group must allow public repositories -- all three consuming
+# repositories are public, and the organisation's Default group does not.
+RUNNER_GROUP=linux-docker
+
+RUNNER_COUNT=5
+RUNNER_NAME_PREFIX=lastrada-docker
+RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
+
+# Five runners x 2 CPUs uses 10 of this host's 12, leaving two for the OS and
+# the natively-running fastcached daemon. Matches CMAKE_BUILD_PARALLEL_LEVEL.
+RUNNER_CPUS=2
+RUNNER_MEMORY=6g
+
+RUNNER_IMAGE=lastrada-runner:latest
+
+# fastcached runs on the host (bound to the Docker bridge), not in a
+# container; host.docker.internal is how a container reaches it.
+FASTCACHE_ADDR=host.docker.internal:6674
+CMAKE_BUILD_PARALLEL_LEVEL=2
