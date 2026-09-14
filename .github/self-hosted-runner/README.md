@@ -1,18 +1,42 @@
 # Self-hosted Linux runner (Docker)
 
-Runs repo-level GitHub Actions runners for `LASTRADA-Software/morph` inside
-Docker containers. Used by `ci.yml`'s `linux-compilers`, `linux-sanitizers`,
-and `linux-all-features` jobs whenever a runner is online and idle (see
+Runs **organisation-level** GitHub Actions runners for `LASTRADA-Software`
+inside Docker containers, supervised by systemd. Used by `ci.yml`'s
+`linux-compilers`, `linux-sanitizers`, `linux-all-features`, `ladder-tests`,
+and `ladder-sanitizers` jobs whenever a runner is online and idle (see
 **ci.yml integration** below).
 
-Any number of hosts can register runners to this repo; they are
+## Which repositories use this
+
+The runners register against the **`LASTRADA-Software` organisation**, not a
+single repository, and belong to the `linux-docker` runner group. The group
+is scoped to `morph`, `fastcached` and `Lightweight` and has
+`allows_public_repositories: true` — which it must, because all three are
+public and the organisation's `Default` group does not allow public
+repositories at all.
+
+Adding a fourth repository is one call against the group; no
+re-registration and no restart:
+
+```bash
+gh api -X PUT \
+  "orgs/LASTRADA-Software/actions/runner-groups/<group-id>/repositories/<repo-id>"
+```
+
+A consuming repository needs a `RUNNER_STATUS_TOKEN` secret with
+organisation self-hosted-runner read access (`admin:org`, or a fine-grained
+PAT with "Self-hosted runners: Read-only"), and a `probe-self-hosted` job
+like the one in this repository's `ci.yml`. Without the secret the probe
+falls back to GitHub-hosted, which is also what forked-repo PRs get.
+
+Any number of hosts can register runners to the organisation; they are
 indistinguishable to `ci.yml` — a job lands on whichever is online and
 idle. Which machines are currently registered is not recorded here (it
-changes): read it off **Settings → Actions → Runners**, or
-`gh api repos/LASTRADA-Software/morph/actions/runners`. Registrations for
-hosts that no longer exist stay listed there as `offline` and are harmless
-— the probe counts only online, non-busy ones — but are worth deleting so
-the list reflects what actually runs.
+changes): read it off the organisation's **Settings → Actions → Runners**,
+or `gh api orgs/LASTRADA-Software/actions/runners`. Registrations for hosts
+that no longer exist stay listed there as `offline` and are harmless — the
+probe counts only online, non-busy ones — but are worth deleting so the
+list reflects what actually runs.
 
 Multiple runners exist so a multi-leg matrix (`linux-compilers` has 4,
 `linux-sanitizers` has 3) actually runs its legs in parallel instead of
@@ -37,9 +61,15 @@ needed for C++23 `<print>` regardless of which matrix leg runs first).
 
 - Docker, on any Linux x86_64 host (a cloud VM, a spare machine, WSL2/Docker
   Desktop on Windows). The container itself is Linux regardless of host OS.
-- `gh` CLI authenticated with **admin** access to `LASTRADA-Software/morph`
-  (needed only to mint the one-hour registration token below — not stored
-  in the container or the image).
+- systemd, to supervise the runner containers via
+  `lastrada-runner@N.service` (see **Quick start** below). A host without
+  it (Docker Desktop, WSL2) falls back to the plain `docker run` path
+  documented under **Host restarts**.
+- `gh` CLI authenticated with **`admin:org`** access on `LASTRADA-Software`
+  (needed because the runners are organisation-level, not repo-level —
+  each start mints its own one-hour registration token via
+  `run-runner.sh`; the credential stays on the host and never enters a
+  container).
 
 ## Quick start (any host, including a fresh cloud VM)
 
@@ -51,39 +81,30 @@ git clone https://github.com/LASTRADA-Software/morph.git
 cd morph/.github/self-hosted-runner
 
 # 2. Build the image.
-docker build -t morph-runner:latest .
+docker build -t lastrada-runner:latest .
 
-# 3. Mint a short-lived registration token (expires ~1 hour; run this
-#    right before step 4, not ahead of time). Requires gh auth with repo
-#    admin — run this on a machine where you're logged in, e.g. your own
-#    laptop, then copy just the token to the cloud box if `gh` isn't
-#    authenticated there.
-gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token'
+# 3. Install the systemd units (already in this directory from step 1). No
+#    token needed -- each runner mints its own on every start. Needs `gh`
+#    authenticated with admin:org on LASTRADA-Software; that credential
+#    stays on this host and never enters a container.
+./install-runner-units.sh
 
-# 4. Start the runner as a long-lived, auto-restarting container.
-docker run -d \
-  --name morph-runner \
-  --restart unless-stopped \
-  -e RUNNER_TOKEN="<token from step 3>" \
-  morph-runner:latest
-```
-
-Check it registered:
-
-```bash
-docker logs morph-runner          # should end with "Listening for Jobs"
-gh api repos/LASTRADA-Software/morph/actions/runners \
+# 4. Check it registered.
+systemctl --user status 'lastrada-runner@*'
+gh api orgs/LASTRADA-Software/actions/runners \
   --jq '.runners[] | {name,status,busy,labels:[.labels[].name]}'
 ```
 
-It will show up in the repo under **Settings → Actions → Runners**, and
-any workflow with `runs-on: [self-hosted, ...]` matching its labels can
-pick up jobs on it — see the **Trust boundary** note below before wiring
-one up.
+It will show up in the organisation under **Settings → Actions →
+Runners**, in the `linux-docker` group, and any workflow (in `morph`,
+`fastcached`, or `Lightweight`) with `runs-on: [self-hosted, ...]` matching
+its labels can pick up jobs on it — see the **Trust boundary** note below
+before wiring one up.
 
 ## On a fresh cloud instance (e.g. Hetzner)
 
-Same four steps as above, just from scratch on a bare VM:
+Same steps as **Quick start** above, from scratch on a bare VM, plus
+installing Docker itself:
 
 ```bash
 # Docker isn't preinstalled on a plain Ubuntu/Debian Hetzner image.
@@ -91,28 +112,26 @@ curl -fsSL https://get.docker.com | sh
 
 git clone https://github.com/LASTRADA-Software/morph.git
 cd morph/.github/self-hosted-runner
-docker build -t morph-runner:latest .
+docker build -t lastrada-runner:latest .
 
-# Token: mint it from wherever you have gh admin auth (your laptop is
-# fine) and paste it in here — it's short-lived and only used once.
-docker run -d \
-  --name morph-runner \
-  --restart unless-stopped \
-  -e RUNNER_TOKEN="<token>" \
-  -e RUNNER_NAME="morph-hetzner-$(hostname)" \
-  morph-runner:latest
+# gh needs to be authenticated with admin:org on LASTRADA-Software on this
+# box -- run-runner.sh (invoked by systemd on every start, including every
+# restart) mints its own registration token locally each time.
+sudo ./install-runner-units.sh
 ```
 
-`--restart unless-stopped` means the container comes back after a reboot
-of the VM (Docker's own daemon is enabled by `get.docker.com` by default)
-without anything else to configure.
+`install-runner-units.sh` writes `/etc/lastrada-runner/config` from
+`config.example` the first time it runs and never overwrites it again
+(it prints `kept existing ...` on a re-run instead).  `config.example`'s
+defaults (`RUNNER_COUNT=5`, `RUNNER_CPUS=2`, `RUNNER_MEMORY=6g`) are sized
+for the maintainer's own 12-CPU host, not necessarily this VM — edit that
+file to match before or after the first install, then re-run
+`install-runner-units.sh` to pick up the change (it also disables any
+instance left over above the new `RUNNER_COUNT`).
 
-That's the minimal path for one runner with no local cache daemon (it still
-gets `fastcache-cc` if `FASTCACHE_ADDR` reaches some *other* machine's
-`fastcached`, or falls back to `sccache`). To also run a `fastcached`
-daemon on the same box, sized dynamically for however many CPUs/RAM it
-actually has, use `bootstrap-cloud-node.sh` instead — see **Bootstrapping
-a cloud node with its own fastcached** below.
+Working out that sizing by hand is what `bootstrap-cloud-node.sh` automates
+instead — see **Bootstrapping a cloud node with its own fastcached** below,
+which also sets up a local `fastcached` daemon.
 
 ## Bootstrapping a cloud node with its own fastcached
 
@@ -128,13 +147,15 @@ curl -fsSLo bootstrap-cloud-node.sh \
   https://raw.githubusercontent.com/LASTRADA-Software/morph/master/.github/self-hosted-runner/bootstrap-cloud-node.sh
 chmod +x bootstrap-cloud-node.sh
 
-RUNNER_TOKEN="$(gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token')" \
-  ./bootstrap-cloud-node.sh
+./bootstrap-cloud-node.sh
 ```
 
-(`gh api ...` needs to run wherever you have `gh` authenticated with repo
-admin — your laptop is fine; paste just the resulting token into
-`RUNNER_TOKEN` on the cloud box if `gh` isn't set up there too.)
+No registration token to mint or pass in — `gh` just needs to be
+installed and authenticated *on this box*, with `admin:org` on
+`LASTRADA-Software`, before running the script (it checks `gh auth status`
+up front and refuses otherwise). Unlike the token, this can't be minted
+elsewhere and copied over: every runner start from here on, including
+every restart, calls `gh` locally via `run-runner.sh`.
 
 ### The sizing rule
 
@@ -161,74 +182,122 @@ admin — your laptop is fine; paste just the resulting token into
 ### What it does, step by step
 
 1. Installs Docker if not already present (`get.docker.com`).
-2. Clones (or reuses) `morph` and `fastcached` checkouts.
+2. Clones (or reuses, `git pull --ff-only`) `morph` and `fastcached`
+   checkouts under `$HOME` (`MORPH_ROOT`/`FASTCACHED_ROOT` override).
 3. Builds `fastcached`'s own image from its Dockerfile and starts it,
    capped per the sizing rule above, with persistent storage under
    `/var/lib/fastcached` (`FASTCACHED_STORAGE_DIR` overrides).
-4. Builds this directory's runner image.
-5. Starts each worker with `FASTCACHE_ADDR=host.docker.internal:6674` and
-   `--add-host=host.docker.internal:host-gateway` — the latter is what
-   makes `host.docker.internal` resolve to the Docker host's own IP on
-   plain Linux Docker Engine (Docker Desktop provides this automatically;
-   a bare Linux Engine needs the explicit `--add-host`). Note this env var
-   only matters if `ci.yml`'s own job-level `FASTCACHE_ADDR` (see **ci.yml
-   integration** below) is ever changed to read from the runner's
-   environment instead of hardcoding the address — right now `ci.yml`
-   always sends the literal `host.docker.internal:6674` itself, so this is
-   what actually has to resolve on every runner host, cloud or otherwise.
-6. Each worker after the first mints its own fresh registration token via
-   `gh` (the one you passed in is single-use) — `gh` needs to be
-   installed and authenticated on the cloud box itself for `WORKER_COUNT
-   > 1`, or re-run per worker by hand with `WORKER_CPUS`/`FASTCACHED_CPUS`
-   adjusted so the computed count is 1.
+4. Builds this directory's runner image, tagged `lastrada-runner:latest`.
+5. Writes `/etc/lastrada-runner/config` with the computed sizing
+   (`GITHUB_ORG=LASTRADA-Software`, `RUNNER_GROUP=linux-docker`,
+   `RUNNER_COUNT`, per-worker `RUNNER_CPUS`/`RUNNER_MEMORY`,
+   `FASTCACHE_ADDR=host.docker.internal:6674`) and runs
+   `install-runner-units.sh`, which installs and enables one
+   `lastrada-runner@N.service` per worker under systemd. Every worker's
+   `run-runner.sh` always passes `--add-host=host.docker.internal:host-gateway`
+   — what makes `host.docker.internal` resolve to the Docker host's own IP
+   on plain Linux Docker Engine (Docker Desktop provides this
+   automatically). This only matters because `ci.yml`'s own job-level
+   `FASTCACHE_ADDR` (see **ci.yml integration** below) always sends the
+   literal `host.docker.internal:6674` itself, so that is what actually has
+   to resolve on every runner host, cloud or otherwise.
+6. Each unit's `run-runner.sh` mints its own fresh registration token from
+   `orgs/LASTRADA-Software/actions/runners/registration-token` on every
+   start — nothing is passed into the script and no token is stored in a
+   container. `gh` needs to stay installed and authenticated with
+   `admin:org` on the cloud box itself for as long as the fleet runs there,
+   not just for this one invocation.
 
 ## Stopping / deregistering
 
 ```bash
-docker stop morph-runner && docker rm morph-runner
+systemctl --user stop 'lastrada-runner@1'      # or plain `systemctl`, system install
 ```
 
 `entrypoint.sh` traps `EXIT` and calls `./config.sh remove` before the
-process exits, so a normal `docker stop` (which sends `SIGTERM`, not
-`SIGKILL`) deregisters the runner from the repo automatically — you
-should *not* see a stale offline runner left behind in the repo's runner
-list. If the container is killed harder than that (host crash, `docker
+process exits, so a normal stop (systemd sends `SIGTERM`, and
+`TimeoutStopSec=90` gives the runner room to drain its current job and
+deregister before a `SIGKILL`) removes the runner from the organisation
+automatically — you should *not* see a stale offline runner left behind
+in its runner list. The unit's `ExecStopPost` also force-removes the
+container by name as a backstop, since `--rm` alone only covers a clean
+exit. If the container is killed harder than that (host crash, `docker
 kill`, out-of-memory), the cleanup trap doesn't run and the runner is
-left registered but shows as offline; remove it manually via **Settings →
-Actions → Runners** or `gh api -X DELETE
-repos/LASTRADA-Software/morph/actions/runners/<id>`.
+left registered but shows as offline; remove it manually via the
+organisation's **Settings → Actions → Runners**, or `gh api -X DELETE
+orgs/LASTRADA-Software/actions/runners/<id>`.
 
-### Docker Desktop / host restarts
+To stop the fleet for good rather than just for now, disable the unit(s)
+too (`systemctl --user disable --now 'lastrada-runner@*'`), or lower
+`RUNNER_COUNT` in the config and re-run `install-runner-units.sh`, which
+disables whatever instances that leaves in excess.
 
-These are long-lived containers (`--restart unless-stopped`), not
-recreated from scratch on every start — a Docker Desktop restart (or a
-host reboot) re-runs `entrypoint.sh` against the **same** container
-filesystem, with `.runner`/`.credentials` from the previous registration
-still on disk. `entrypoint.sh` removes those files unconditionally before
-calling `config.sh`, so the container always re-registers cleanly on
-restart rather than restart-looping — confirmed live: before this fix, a
-Docker Desktop restart left all 4 containers stuck in `Restarting (1)`,
-each printing "Cannot configure the runner because it is already
-configured" followed by a failed cleanup attempt (the old registration
-was already gone server-side, so removing it 404's), forever, because
-`--replace` alone did not get past that stale local state. If a container
-is ever seen restart-looping despite this, `docker logs <name>` is the
-first thing to check.
+### Host restarts
+
+systemd owns the containers, and each start mints its own registration
+token — so a reboot re-registers cleanly no matter how long the machine was
+off.
+
+This was not always true, and the failure was expensive. Until 2026-09-14
+the containers ran `--restart unless-stopped` with `RUNNER_TOKEN` baked into
+the container environment at `docker run` time. A GitHub registration token
+expires after about an hour, so every reboot after that hour re-ran
+`config.sh` against a dead token: 404, exit 1, Docker restarts it, forever.
+Five containers sat in that loop from 2026-09-08 to 2026-09-14 — 5,972
+failed registrations on one of them — and nothing reported it.
+
+Two changes make it unreachable rather than unlikely. There is no stored
+token to go stale, because `run-runner.sh` mints one per start. And a
+failure is now bounded and visible: `StartLimitBurst=5` puts the unit into
+`failed` after five attempts in ten minutes, so `systemctl --user status
+'lastrada-runner@*'` shows red instead of a loop nobody looks at.
+
+Hosts without systemd (Docker Desktop, WSL2) still use the plain `docker
+run` path below. That path is reboot-fragile by design: it has the same
+one-hour token, and re-running the `docker run` command with a fresh token
+is the recovery.
+
+### Docker Desktop / WSL2 (no systemd)
+
+With no supervisor to mint a fresh token per start, `entrypoint.sh` falls
+back to reading one from `RUNNER_TOKEN` in the container's own environment
+instead of stdin:
+
+```bash
+gh api -X POST orgs/LASTRADA-Software/actions/runners/registration-token --jq '.token'
+
+docker run -d \
+  --name lastrada-docker-1 \
+  --restart unless-stopped \
+  -e RUNNER_TOKEN="<token from above, ~1 hour TTL>" \
+  lastrada-runner:latest
+```
+
+This is the path described just above: the token is only good for about an
+hour, so a Docker Desktop restart or a host reboot more than an hour after
+this `docker run` leaves `config.sh` registering against a dead token.
+Recovery is re-running the command above with a fresh token — there is
+nothing else to fix, since `entrypoint.sh` already removes stale
+`.runner`/`.credentials` files unconditionally before calling `config.sh`;
+that part of the container's local state was never the problem.
 
 ## Environment variables (`entrypoint.sh`)
 
 | Variable        | Required | Default                                | Notes |
 |-----------------|----------|-----------------------------------------|-------|
-| `RUNNER_TOKEN`  | yes      | —                                        | Registration token, ~1 hour TTL. Mint a fresh one for each `docker run` / re-registration — it is not reusable after the runner has registered once, and a stale token just fails `config.sh`. |
-| `RUNNER_NAME`   | no       | `morph-docker-<container hostname>`     | Set this explicitly (e.g. `morph-hetzner-1`) when running more than one runner, so they're distinguishable in the repo's runner list. |
-| `RUNNER_LABELS` | no       | `self-hosted,Linux,X64,morph-docker`    | Only change this if you also update the `runs-on:` label list in the workflow(s) that should target it. |
+| `RUNNER_TOKEN`  | no       | —                                        | Fallback registration token for the plain `docker run` path only, ~1 hour TTL. Under systemd the token arrives on **stdin** from `run-runner.sh` instead, so it never sits in the container environment where a job could read it out of `/proc/1/environ`. |
+| `RUNNER_SCOPE_URL` | no    | `https://github.com/LASTRADA-Software`   | What `config.sh --url` registers against. |
+| `RUNNER_GROUP`  | no       | `linux-docker`                           | Runner group to join. Must allow public repositories. |
+| `RUNNER_NAME`   | no       | `lastrada-docker-<container hostname>`  | Under systemd, `run-runner.sh` always sets this explicitly to `<RUNNER_NAME_PREFIX>-<index>` from the config instead of relying on the default; only the plain `docker run` path needs to set it by hand for multiple runners to stay distinguishable in the organisation's runner list. |
+| `RUNNER_LABELS` | no       | `self-hosted,Linux,X64,lastrada-docker` | Only change this if you also update the `runs-on:` label list in the workflow(s) that should target it. |
 
 ## Trust boundary
 
 A self-hosted runner executes arbitrary job code on whatever host runs the
 container — a cloud VM here, or your own machine. `linux-compilers`,
-`linux-sanitizers`, and `linux-all-features` inherit `ci.yml`'s top-level
-`on: pull_request:` trigger with no fork restriction of their own, but
+`linux-sanitizers`, `linux-all-features`, `ladder-tests`, and
+`ladder-sanitizers` inherit `ci.yml`'s top-level `on: pull_request:`
+trigger with no fork restriction of their own, but
 they cannot actually run on this runner from a forked PR: `probe-self-hosted`
 picks the runner by reading the `RUNNER_STATUS_TOKEN` repo secret (see
 **ci.yml integration** below), and a `pull_request` (not
@@ -244,116 +313,84 @@ directly.
 
 ## Running more than one runner
 
-Each container is one runner process. To add capacity (another container
-here, or a registration on a second machine), repeat the Quick start with
-a distinct `RUNNER_NAME` per container/host — no coordination between them
-is needed, they all just poll the same repo's job queue. On a host where
-`host.docker.internal` resolves by itself (Docker Desktop), that is just
-the Quick start in a loop:
+Each container is one runner process, and capacity is controlled by
+`RUNNER_COUNT` in the systemd config (`config.example`, installed to
+`~/.config/lastrada-runner/config` for a user install or
+`/etc/lastrada-runner/config` for a system one) rather than a manual loop
+of `docker run` commands. `install-runner-units.sh` enables one
+`lastrada-runner@N.service` per index from `1` to `RUNNER_COUNT`, and each
+unit's `run-runner.sh <index>` mints its own token and starts its own
+container — no coordination between them is needed, they all just poll
+the same organisation's job queue. To add or remove capacity, edit
+`RUNNER_COUNT` in the config and re-run `install-runner-units.sh`: it
+enables the new instances and disables whatever is left over above the
+new count.
 
-```bash
-for i in 1 2 3 4; do
-  RUNNER_TOKEN=$(gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token')
-  docker run -d \
-    --name "morph-runner-$i" \
-    --restart unless-stopped \
-    --cpus=6 \
-    -e RUNNER_TOKEN="$RUNNER_TOKEN" \
-    -e RUNNER_NAME="morph-docker-$i" \
-    morph-runner:latest
-done
-```
+Per-worker sizing is `RUNNER_CPUS`/`RUNNER_MEMORY` in that same config,
+which `run-runner.sh` passes straight through as `--cpus=`/`--memory=` on
+`docker run` — a CFS quota, **not** a pinned `--cpuset-cpus`. That
+distinction used to be load-bearing here and still is: `--cpus=N` throttles
+a container without changing what it *sees*, so `nproc` inside a 2-CPU
+container on a 12-processor host still answers **12**, and anything that
+fans out on `nproc` directly — ninja run without a cap, `ctest -j`,
+`clang-tidy-diff`'s own `-j "$(nproc)"` — oversubscribes the box regardless
+of the quota. Measured here once, before this fleet's config-driven sizing
+existed: **32 OOM kills** across five containers on one run, `g++: fatal
+error: Killed signal terminated program cc1plus` in every one.
+`CMAKE_BUILD_PARALLEL_LEVEL` (also set per worker in `config`, and matched
+to `RUNNER_CPUS` by convention — `config.example`'s own comment says so,
+nothing enforces it automatically) is what actually bounds the one build
+step every self-hosted job runs, `cmake --build --preset`, since that tool
+reads the variable instead of `nproc`. The Linux jobs that would otherwise
+exercise an uncapped `ctest -j`/`clang-tidy-diff` (`valgrind`, `clang-tidy`)
+are kept off this fleet entirely — see **ci.yml integration** above — so
+raising `RUNNER_COUNT` or lowering `RUNNER_CPUS` without also updating
+`CMAKE_BUILD_PARALLEL_LEVEL` is a real, if currently unexercised, way to
+reintroduce this.
 
-`--cpus=N` is a plain `docker run` flag, not anything `entrypoint.sh` or
-the image needs to know about — size it to (host logical processors) ÷
-(number of runner containers you want), leaving some headroom for the host
-itself, and adjust down if the containers are still oversubscribing the
-box under load.
-
-On a **plain Linux Docker Engine** host two more flags are needed. A
-12-processor / 61 GiB box running five containers, for example:
-
-```bash
-for i in 1 2 3 4 5; do
-  lo=$(( (i-1)*2 )); hi=$(( lo+1 ))
-  RUNNER_TOKEN=$(gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token')
-  docker run -d \
-    --name "morph-runner-$i" \
-    --restart unless-stopped \
-    --cpuset-cpus="${lo}-${hi}" \
-    --memory=6g \
-    --add-host=host.docker.internal:host-gateway \
-    -e RUNNER_TOKEN="$RUNNER_TOKEN" \
-    -e RUNNER_NAME="morph-docker-$i" \
-    -e FASTCACHE_ADDR="host.docker.internal:6674" \
-    -e CMAKE_BUILD_PARALLEL_LEVEL=2 \
-    morph-runner:latest
-done
-```
-
-- `--cpuset-cpus`, **not `--cpus`** — and this one is load bearing. `--cpus=N`
-  is a CFS quota: it throttles the container without changing what it *sees*,
-  so `nproc` inside a 2-CPU container on this 12-processor box still answers
-  **12**. Ninja then starts ~14 parallel compiles per container, five
-  containers make ~70 on 12 processors, and every one of them wants a
-  gigabyte or so of C++23 template instantiation inside a 6 GiB cap.
-  Measured, on the first run configured that way: **32 OOM kills** across the
-  five containers (`memory.events`), five red jobs, and `g++: fatal error:
-  Killed signal terminated program cc1plus` in every one. `--cpuset-cpus`
-  pins actual processors, so `sched_getaffinity` — and therefore `nproc`,
-  ninja, `ctest -j` and `clang-tidy-diff`'s own `-j "$(nproc)"` — all agree
-  with reality. Disjoint sets per container, leaving the top two processors
-  for the host and `fastcached`.
-- `-e CMAKE_BUILD_PARALLEL_LEVEL=2` — belt and braces over the above, since
-  every build step in `ci.yml` goes through `cmake --build --preset`.
-- `--add-host=host.docker.internal:host-gateway` — Docker Desktop provides
-  that name automatically, a bare Linux Engine does not, and `ci.yml` sends
-  the literal `host.docker.internal:6674` to every self-hosted job. Without
-  it the address does not resolve and every job silently compiles uncached.
-- `--memory=Ng` — a cap, not a reservation, and worth setting on a machine
-  that is also somebody's desktop: it bounds what a runaway link step can
-  take from the host rather than letting the OOM killer choose.
-
-The registration token is single-use, which is why it is minted inside the
-loop rather than once before it.
-
-Any host that starts its containers with `--cpus=N` instead carries the
-same latent hazard — the box's full logical-processor count is reported to
-every build inside an N-CPU container. It only bites where a memory cap is
-also set: without one the oversubscription costs wall-clock rather than
-killed compiles.
+`run-runner.sh` always passes `--add-host=host.docker.internal:host-gateway`
+regardless of host type — Docker Desktop provides that name automatically,
+a bare Linux Engine does not, and `ci.yml` sends the literal
+`host.docker.internal:6674` to every self-hosted job. Without it the
+address does not resolve and every job silently compiles uncached.
 
 ## ci.yml integration
 
-None of `linux-compilers`, `linux-sanitizers`, or `linux-all-features`
-hardcode `runs-on:`. A `probe-self-hosted` job that runs first checks the
-runners API for an online, non-busy runner labeled `morph-docker` and
-outputs the label set each of them should use — self-hosted if one is
-free, otherwise the plain `ubuntu-24.04` GitHub-hosted label. Nothing
-needs to be started or stopped by hand for this fallback to work; it's
-just naturally in effect whenever no morph-docker runner happens to be
-online or all of them are busy on another job.
+None of `linux-compilers`, `linux-sanitizers`, `linux-all-features`,
+`ladder-tests`, or `ladder-sanitizers` hardcode `runs-on:`. A
+`probe-self-hosted` job that runs first checks the runners API for an
+online, non-busy runner labeled `lastrada-docker` and outputs the label
+set each of them should use — self-hosted if one is free, otherwise the
+plain `ubuntu-24.04` GitHub-hosted label. Nothing needs to be started or
+stopped by hand for this fallback to work; it's just naturally in effect
+whenever no `lastrada-docker` runner happens to be online or all of them
+are busy on another job. `linux-coverage`, `kanban-tsan`, `linux-qt`,
+`valgrind`, and `clang-tidy` are intentionally left on `ubuntu-24.04` for
+now, with no `probe-self-hosted` dependency at all.
 
 The one piece that doesn't come for free: `GITHUB_TOKEN` cannot call the
-runners API — `GET /repos/.../actions/runners` is a repo-admin operation
-regardless of what the workflow's `permissions:` block grants. The probe
-job instead reads a repo secret named `RUNNER_STATUS_TOKEN`, which must
-be a **fine-grained PAT scoped to this repo only, with the
-"Administration: Read-only" permission** (nothing else — it cannot
-register, delete, or otherwise manage runners, and has no code access).
-Set it up once at **Settings → Secrets and variables → Actions → New
-repository secret**. Until that secret exists, the probe always falls
-back to `ubuntu-24.04` — nothing breaks, the jobs above just never pick up
-the self-hosted path.
+runners API, and — because the fleet is organisation-level, not
+repo-level — the *repo* runners endpoint wouldn't answer for it even if
+it could: `GET /repos/.../actions/runners` returns zero for these
+runners, silently, with no error to notice. The probe therefore calls
+`GET https://api.github.com/orgs/LASTRADA-Software/actions/runners`
+instead, authenticated with a repo secret named `RUNNER_STATUS_TOKEN`,
+which must carry **organisation-level self-hosted-runner read access** —
+either `admin:org` on a classic PAT, or a fine-grained PAT with
+"Self-hosted runners: Read-only" granted **on the `LASTRADA-Software`
+organisation**, not scoped to this repo alone (a repo-scoped grant, even
+with "Administration: Read-only", cannot see an org-level runner and the
+call comes back empty exactly like a missing secret). It cannot register,
+delete, or otherwise manage runners, and has no code access. Set it up
+once at **Settings → Secrets and variables → Actions → New repository
+secret**. Until that secret exists, the probe always falls back to
+`ubuntu-24.04` — nothing breaks, the jobs above just never pick up the
+self-hosted path.
 
 Forked-repo pull requests never receive repo secrets at all (GitHub
 withholds them for security), so `RUNNER_STATUS_TOKEN` reads as empty
 there and the probe falls back the same way — no separate handling
 needed for that case.
-
-`linux-coverage` (split out of `linux-sanitizers`'s old 4th matrix leg) and
-the remaining Linux jobs (valgrind, Qt, ladder tests, clang-tidy) are
-intentionally left on `ubuntu-24.04` for now.
 
 ## Dependency clones and HTTP/2
 
@@ -391,13 +428,14 @@ recreated; to fix a running one in place, without disturbing the job it
 may be executing:
 
 ```bash
-docker exec -u root morph-runner-1 git config --system http.version HTTP/1.1
+docker exec -u root lastrada-docker-1 git config --system http.version HTTP/1.1
 ```
 
 ## Compiler cache: fastcache-cc
 
-`linux-compilers`, `linux-sanitizers`, and `linux-all-features` each set
-`FASTCACHE_ADDR=host.docker.internal:6674` and `FASTCACHE_AUTO_INSTALL=ON`
+`linux-compilers`, `linux-sanitizers`, `linux-all-features`, `ladder-tests`,
+and `ladder-sanitizers` each set `FASTCACHE_ADDR=host.docker.internal:6674`
+and `FASTCACHE_AUTO_INSTALL=ON`
 as job-level env — but **only** when `probe-self-hosted` chose the
 self-hosted path; both are left empty/OFF on the GitHub-hosted fallback,
 where `host.docker.internal` does not resolve (it isn't a Docker
