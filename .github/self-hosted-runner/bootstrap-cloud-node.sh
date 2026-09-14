@@ -14,7 +14,13 @@
 # No registration token is needed up front: each runner mints its own, fresh,
 # on every start (see run-runner.sh). This box needs `gh` authenticated with
 # admin:org on LASTRADA-Software instead -- a credential that stays on the
-# host and never enters a container.
+# host and never enters a container. The preflight below proves that with a
+# real, read-only org-scoped API call (not just `gh auth status`, which only
+# proves *some* credential is stored, not that it has admin:org against this
+# org) -- and it runs that call through $SUDO, because the systemd units
+# install-runner-units.sh installs run as whatever identity $SUDO resolves to
+# (root, under sudo), so root's own `gh` credential is the one that actually
+# has to be authenticated, not the invoking user's.
 #
 # Optional env vars (override the dynamic sizing below):
 #   RUNNER_NAME_PREFIX     - defaults to "morph-cloud-$(hostname)"
@@ -41,14 +47,27 @@ fi
 SUDO=""
 [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
-if ! command -v gh >/dev/null 2>&1; then
+if ! $SUDO command -v gh >/dev/null 2>&1; then
     echo "ERROR: the gh CLI is required -- each runner mints its own" >&2
     echo "       registration token on every start." >&2
     exit 1
 fi
 
-if ! gh auth status >/dev/null 2>&1; then
-    echo "ERROR: gh is not authenticated. Needs admin:org on LASTRADA-Software." >&2
+# `gh auth status` is not enough here: it only proves some credential is
+# stored, not that it has admin:org against LASTRADA-Software, nor that it
+# belongs to the identity the systemd units actually run as. Query an
+# endpoint that requires org-level self-hosted-runner read (admin:org) and
+# mints/changes nothing, through $SUDO so it exercises the exact credential
+# store install-runner-units.sh's units will use.
+if ! $SUDO gh api orgs/LASTRADA-Software/actions/runners --jq '.total_count' >/dev/null 2>&1; then
+    echo "ERROR: could not list LASTRADA-Software's self-hosted runners via gh." >&2
+    echo "       The credential the runner units will use must be authenticated" >&2
+    echo "       with admin:org on LASTRADA-Software." >&2
+    if [ -n "$SUDO" ]; then
+        echo "       This ran as root (via sudo), because that's the identity the" >&2
+        echo "       systemd units install as -- so it's root's own gh credential" >&2
+        echo "       that needs 'gh auth login', not the invoking user's." >&2
+    fi
     exit 1
 fi
 
