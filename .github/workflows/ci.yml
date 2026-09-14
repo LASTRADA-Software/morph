@@ -124,7 +124,9 @@ jobs:
   # access (admin:org, or fine-grained "Self-hosted runners: Read-only" on
   # LASTRADA-Software), stored as a repo secret. Forked-repo PRs don't get
   # repo secrets at all (the token comes through empty), which this treats
-  # the same as "no runner online": fall back to GitHub-hosted. See
+  # the same as "no runner online": fall back to GitHub-hosted. A failed
+  # curl, or a 200 response whose body is missing or the wrong shape for
+  # `.runners`, are treated the same way. See
   # .github/self-hosted-runner/README.md for the fleet itself.
   probe-self-hosted:
     name: Probe self-hosted runner
@@ -155,9 +157,17 @@ jobs:
               exit 0
             }
 
-          online=$(echo "${runners}" | jq '[.runners[] |
+          online=$(echo "${runners}" | jq '[(.runners // [])[] |
             select(.status == "online" and .busy == false and
-                   (.labels | map(.name) | contains(["lastrada-docker"])))] | length')
+                   (.labels | map(.name) | contains(["lastrada-docker"])))] | length') || {
+              echo "Malformed runners response -- using GitHub-hosted."
+              echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
+              exit 0
+            }
+
+          if ! [[ "${online}" =~ ^[0-9]+$ ]]; then
+            online=0
+          fi
 
           if [ "${online}" -gt 0 ]; then
             echo "Found an idle lastrada-docker runner -- using self-hosted."
