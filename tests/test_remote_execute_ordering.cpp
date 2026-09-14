@@ -702,6 +702,168 @@ private:
 
 }  // namespace
 
+namespace {
+
+/// @brief Wraps a real executor and, once armed, blocks the *next* `post()`
+///        call until `releaseFirst()` is called, forwarding it then; every
+///        other call forwards immediately.
+///
+/// Not armed by default -- like `HoldOnePostExecutor` above, a caller must
+/// opt in via `armNextPost()` before anything is intercepted, so setup
+/// traffic (e.g. a `register` envelope) that also goes through `post()`
+/// passes straight through instead of being caught by surprise.
+///
+/// Lets a test hold open the window between one caller's `take()` (or
+/// `takeAndPost`) and its enqueue reaching the real pool, so a second,
+/// concurrent caller gets every chance to run in between -- without touching
+/// production code. See morph#519.
+class StallFirstPostExecutor : public morph::exec::IExecutor {
+public:
+    explicit StallFirstPostExecutor(morph::exec::IExecutor& inner) : _inner{inner} {}
+
+    /// @brief Forwards @p task, unless interception is armed and this is the
+    ///        next call, which blocks until `releaseFirst()` before forwarding.
+    /// @param task Callable to execute.
+    void post(std::function<void()> task) override {
+        bool shouldStall = false;
+        {
+            std::scoped_lock const lock{_mtx};
+            if (_armed) {
+                _armed = false;
+                shouldStall = true;
+            }
+        }
+        if (shouldStall) {
+            {
+                std::scoped_lock const lock{_mtx};
+                _arrived = true;
+            }
+            _cv.notify_all();
+            std::unique_lock lock{_mtx};
+            _cv.wait(lock, [this] { return _released; });
+        }
+        _inner.post(std::move(task));
+    }
+
+    /// @brief Arms interception of the next `post()` call.
+    void armNextPost() {
+        std::scoped_lock const lock{_mtx};
+        _armed = true;
+    }
+
+    /// @brief Blocks until the armed `post()` call has arrived and is stalling.
+    void waitForArrival() {
+        std::unique_lock lock{_mtx};
+        _cv.wait(lock, [this] { return _arrived; });
+    }
+
+    /// @brief Releases the stalled call, letting it forward.
+    void releaseFirst() {
+        {
+            std::scoped_lock const lock{_mtx};
+            _released = true;
+        }
+        _cv.notify_all();
+    }
+
+private:
+    morph::exec::IExecutor& _inner;
+    std::mutex _mtx;
+    std::condition_variable _cv;
+    bool _armed = false;
+    bool _arrived = false;
+    bool _released = false;
+};
+
+}  // namespace
+
+TEST_CASE("two concurrent handle() callers on one modelId with a pool of one do not deadlock",
+          "[remote][execute-ordering][morph-519]") {
+    // Regression test for #519 (part of the sweep tracked in #518, finding F1).
+    // handleImpl used to take an execute-ordering ticket and enqueue the dispatch
+    // work as two separate, unlocked steps. Two threads calling handle() concurrently
+    // for the same model could take tickets in order but enqueue out of order: if the
+    // later ticket's task reached the pool's FIFO queue first, a pool worker picked it
+    // up, called ExecuteOrderGate::awaitTurn and blocked waiting for the earlier
+    // ticket -- and with a pool no larger than the number of same-model callers, every
+    // worker ended up parked that way while the earlier ticket's task never got a
+    // worker to run on. That is exactly the topology morph::net::SocketServer uses
+    // (one thread per connection, all calling handle()).
+    //
+    // Forced, not raced: StallFirstPostExecutor blocks thread A's post() call until
+    // told to proceed, so thread B's handle() call gets every chance to run first.
+    // Manually reverting the takeAndPost fix and re-running this test reproduces the
+    // deadlock (both replies time out); with the fix, ExecuteOrderGate::takeAndPost's
+    // atomicity means thread B cannot even take its ticket until thread A's whole
+    // take-and-post call (post() included) has returned, so thread A's task is
+    // unconditionally enqueued first -- deterministically, regardless of exactly when
+    // thread B is scheduled relative to the release below.
+    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(1);  // matches the issue's confirmed-stalling size
+    StallFirstPostExecutor gated{*pool};
+    auto server = std::make_shared<morph::backend::RemoteServer>(gated, eroDispatcher(), eroRegistry());
+
+    WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("ERO_CounterModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+    REQUIRE(regReply.env.kind == "ok");
+    const auto modelId = regReply.env.modelId;
+    REQUIRE(modelId != 0U);
+
+    morph::wire::Envelope reqA;
+    reqA.kind = "execute";
+    reqA.callId = 1;
+    reqA.modelId = modelId;
+    reqA.modelType = "ERO_CounterModel";
+    reqA.actionType = "ERO_AddAction";
+    reqA.body = R"({"by":10})";
+
+    morph::wire::Envelope reqB = reqA;
+    reqB.callId = 2;
+    reqB.body = R"({"by":100})";
+
+    // Armed *before* starting thread A, and only now -- the registration call
+    // above also goes through post(), and must not be the one intercepted.
+    gated.armNextPost();
+    WaitReply replyA;
+    std::thread threadA([&] { server->handle(morph::wire::encode(reqA), std::ref(replyA)); });
+
+    // Deterministic: proceed only once A's handle() call has actually reached
+    // _pool.post() and is stalled there.
+    gated.waitForArrival();
+
+    WaitReply replyB;
+    std::thread threadB([&] { server->handle(morph::wire::encode(reqB), std::ref(replyB)); });
+    // Give B's thread a moment to start and attempt its own take-then-post before
+    // releasing A -- best-effort only (see the reproduction note above): it does not
+    // affect the fixed code's correctness, which holds regardless of scheduling, but
+    // maximises the chance of reproducing the inversion when this test is run
+    // deliberately against the pre-fix code.
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    gated.releaseFirst();
+
+    threadA.join();
+    threadB.join();
+
+    bool const aCompleted = replyA.await(std::chrono::milliseconds{5000});
+    bool const bCompleted = aCompleted && replyB.await(std::chrono::milliseconds{5000});
+    if (!aCompleted || !bCompleted) {
+        // Pre-fix reproduction: the pool's one worker is parked forever in
+        // ExecuteOrderGate::awaitTurn. Leak rather than hang the whole binary in
+        // ~ThreadPoolExecutor, exactly as this file's other tests already do for the
+        // same deadline-less cv.wait.
+        (void)server.get();
+        (void)pool.release();
+    }
+    REQUIRE(aCompleted);
+    REQUIRE(bCompleted);
+    CHECK(replyA.env.kind == "ok");
+    CHECK(replyB.env.kind == "ok");
+    // Load-bearing: A was sent first, so it must settle first -- 10, then 110 -- not
+    // whichever thread happened to win the race to enqueue.
+    CHECK(replyA.env.body == "10");
+    CHECK(replyB.env.body == "110");
+}
+
 // The Catch2 assertion macros, not branching logic, are what push this over
 // the cognitive-complexity threshold -- as in the sibling TEST_CASEs above.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)

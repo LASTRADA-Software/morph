@@ -61,6 +61,77 @@ public:
         return gate->nextTicket++;
     }
 
+    /// @brief Atomically hands out the next ticket for @p mid and invokes
+    ///        @p postFn with it, holding @p mid's own take-then-enqueue window
+    ///        open (via `Gate::enqueueMtx`) for the whole call.
+    ///
+    /// `take()` followed by a separate, unlocked enqueue (e.g. to a worker
+    /// pool) lets two concurrent callers' ticket numbers and enqueue order
+    /// diverge: caller A can take ticket 0 and then be pre-empted before
+    /// enqueueing, while caller B takes ticket 1 and enqueues immediately — so
+    /// a pool worker picks up ticket 1 first, blocks in `awaitTurn` waiting for
+    /// ticket 0, and A's own enqueued work never gets a worker to run on
+    /// (morph#519: exactly this, with `RemoteServer::handleImpl` and its worker
+    /// pool). Folding the enqueue into the same critical section as `take`
+    /// makes that divergence impossible: whichever caller's `takeAndPost` runs
+    /// first for a given model gets both the lower ticket number and the
+    /// earlier enqueue slot, for any thread scheduling, because a second
+    /// concurrent caller *for that same model* cannot even take its ticket
+    /// until the first has finished enqueueing.
+    ///
+    /// Deliberately per-model (`Gate::enqueueMtx`) rather than one mutex shared
+    /// across every model, and deliberately separate from `_mtx`. Both choices
+    /// exist for the same reason: `postFn` runs while `enqueueMtx` is held, and
+    /// with a synchronous (inline) executor `postFn`'s `pool.post(...)` call
+    /// can run the *whole* dispatch chain before returning — including a
+    /// re-entrant call back into this gate. A re-entrant `awaitTurn`/`release`
+    /// for the *same* model only ever touches `_mtx` (separate from
+    /// `enqueueMtx`, so no self-relock there), and a re-entrant `takeAndPost`
+    /// for a *different* model locks that other model's own `enqueueMtx` (not
+    /// this one) precisely because the lock lives per-`Gate` rather than on
+    /// the gate object as a whole.
+    ///
+    /// @param mid    The model the upcoming turn is for.
+    /// @param postFn Invoked synchronously, with this call's ticket number,
+    ///               while @p mid's own take-then-enqueue window is held open
+    ///               (via that model's `Gate::enqueueMtx` — see its doc
+    ///               comment) — but *not* while `_mtx` (the ticket-bookkeeping
+    ///               lock `take`, `awaitTurn` and `release` use) is held. If it
+    ///               throws, the ticket is released before the exception
+    ///               propagates, exactly as if it had never been taken.
+    template <typename PostFn>
+    void takeAndPost(::morph::exec::detail::ModelId mid, PostFn&& postFn) {
+        std::shared_ptr<Gate> gate;
+        {
+            std::scoped_lock const lock{_mtx};
+            auto& slot = _gates[mid];
+            if (!slot) {
+                slot = std::make_shared<Gate>();
+            }
+            gate = slot;
+        }
+        // Per-model, not global: a synchronous (inline) executor can run
+        // postFn's whole dispatch chain before returning, and a handler that
+        // makes a nested execute call against a *different* model must not
+        // contend with -- let alone re-lock -- the same mutex this call is
+        // still holding. Keeping `gate` alive locally means this lock stays
+        // valid even if `_gates[mid]`'s entry is (much later) erased; see
+        // `releaseLocked` for why that can never happen while this ticket is
+        // still outstanding.
+        std::scoped_lock const enqueueLock{gate->enqueueMtx};
+        std::uint64_t ticket = 0;
+        {
+            std::scoped_lock const lock{_mtx};
+            ticket = gate->nextTicket++;
+        }
+        try {
+            std::forward<PostFn>(postFn)(ticket);
+        } catch (...) {
+            release(mid, ticket);
+            throw;
+        }
+    }
+
     /// @brief Blocks until @p ticket is next in line for @p mid, then returns.
     /// @param mid    The model @p ticket was taken for.
     /// @param ticket This call's ticket, from `take`.
@@ -85,6 +156,49 @@ public:
     /// @param ticket The ticket to release.
     void release(::morph::exec::detail::ModelId mid, std::uint64_t ticket) {
         std::scoped_lock const lock{_mtx};
+        releaseLocked(mid, ticket);
+    }
+
+    /// @brief Number of models with at least one outstanding (unreleased) ticket.
+    ///
+    /// Test-only observability, mirroring `PendingCallTable::size()` --
+    /// stale the moment the lock is released, so it must not drive a
+    /// check-then-act decision.
+    /// @return Current map size.
+    [[nodiscard]] std::size_t gateCount() const {
+        std::scoped_lock const lock{_mtx};
+        return _gates.size();
+    }
+
+private:
+    struct Gate {
+        std::uint64_t nextTicket = 0;
+        std::uint64_t nextToRun = 0;
+        // Tickets released *before* their turn came, held aside until every
+        // ticket ahead of them has released too. Not an optimisation: it is
+        // what makes `nextToRun` mean "the lowest ticket not yet released"
+        // rather than "one past whichever ticket released last". See
+        // `release` (issue #449). Ordered, because the release loop consumes
+        // it from the front; small by construction (it holds at most the
+        // tickets in flight for one model, minus one).
+        std::set<std::uint64_t> releasedOutOfOrder;
+        std::condition_variable cv;
+        // Serialises `takeAndPost` calls for *this* model only (morph#519).
+        // Per-model rather than a single mutex shared across every `Gate`, so
+        // that a synchronous executor's re-entrant `takeAndPost` call for a
+        // *different* model contends for a different lock rather than trying
+        // to re-lock this same one from the same thread. See `takeAndPost`'s
+        // own doc comment for the full reasoning.
+        std::mutex enqueueMtx;
+    };
+
+    /// @brief `release`'s implementation, assuming `_mtx` is already held by
+    ///        the caller. Shared by `release()` (which takes the lock itself)
+    ///        and `takeAndPost()`'s exception path (already inside the locked
+    ///        region, where re-locking `_mtx` would deadlock).
+    /// @param mid    The model @p ticket was taken for.
+    /// @param ticket The ticket to release.
+    void releaseLocked(::morph::exec::detail::ModelId mid, std::uint64_t ticket) {
         auto iter = _gates.find(mid);
         if (iter == _gates.end()) {
             // A supported call, not an impossibility: the file-level contract
@@ -135,32 +249,6 @@ public:
             gate.cv.notify_all();
         }
     }
-
-    /// @brief Number of models with at least one outstanding (unreleased) ticket.
-    ///
-    /// Test-only observability, mirroring `PendingCallTable::size()` --
-    /// stale the moment the lock is released, so it must not drive a
-    /// check-then-act decision.
-    /// @return Current map size.
-    [[nodiscard]] std::size_t gateCount() const {
-        std::scoped_lock const lock{_mtx};
-        return _gates.size();
-    }
-
-private:
-    struct Gate {
-        std::uint64_t nextTicket = 0;
-        std::uint64_t nextToRun = 0;
-        // Tickets released *before* their turn came, held aside until every
-        // ticket ahead of them has released too. Not an optimisation: it is
-        // what makes `nextToRun` mean "the lowest ticket not yet released"
-        // rather than "one past whichever ticket released last". See
-        // `release` (issue #449). Ordered, because the release loop consumes
-        // it from the front; small by construction (it holds at most the
-        // tickets in flight for one model, minus one).
-        std::set<std::uint64_t> releasedOutOfOrder;
-        std::condition_variable cv;
-    };
 
     mutable std::mutex _mtx;
     std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<Gate>, ::morph::exec::detail::ModelIdHash>
