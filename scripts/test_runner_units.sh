@@ -76,7 +76,7 @@ else
     fail "StartLimitIntervalSec is in '${start_limit_interval_section:-nowhere}', must be [Unit] or systemd ignores it"
 fi
 
-for directive in 'Restart=always' 'StartLimitBurst=5' 'StartLimitIntervalSec=600'; do
+for directive in 'Restart=always' 'StartLimitBurst=12' 'StartLimitIntervalSec=900'; do
     if grep -qxF "$directive" "$unit"; then
         note "${directive} present"
     else

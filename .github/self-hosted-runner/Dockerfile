@@ -7,7 +7,7 @@
 # duplicating that here would just be a second place to keep in sync.
 FROM ubuntu:24.04
 
-ARG RUNNER_VERSION=2.336.0
+ARG RUNNER_VERSION=2.337.0
 ARG TARGETARCH=x64
 ARG CMAKE_VERSION=3.31.12
 

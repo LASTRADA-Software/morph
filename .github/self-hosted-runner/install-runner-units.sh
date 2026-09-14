@@ -6,9 +6,10 @@
 #   as a normal user -> user units under ~/.config/systemd/user, controlled
 #                       with `systemctl --user`. Needs lingering
 #                       (`loginctl enable-linger $USER`) to start at boot
-#                       without a login session. This is the mode used on the
-#                       maintainer's workstation, where `gh` is already
-#                       authenticated for that user.
+#                       without a login session -- this script checks that
+#                       and enables it itself if it's off. This is the mode
+#                       used on the maintainer's workstation, where `gh` is
+#                       already authenticated for that user.
 #   as root          -> system units under /etc/systemd/system. This is what
 #                       bootstrap-cloud-node.sh uses on a fresh VM.
 #
@@ -32,6 +33,21 @@ else
     libexec_dir="${XDG_DATA_HOME:-$HOME/.local/share}/lastrada-runner"
     wantedby="default.target"
     systemctl=(systemctl --user)
+
+    # User units only start at boot without a login session if lingering is
+    # enabled for this user; otherwise the whole fleet simply never comes
+    # back after a reboot, silently. Irrelevant to the root/system path
+    # above, where units are system-wide and lingering doesn't apply. Uses
+    # `loginctl` rather than touching systemd state directly so this honours
+    # a stubbed `loginctl` on PATH the same way the systemctl calls below
+    # honour a stubbed `systemctl` -- see scripts/test_runner_units.sh.
+    linger_state="$(loginctl show-user "$USER" --property=Linger 2>/dev/null || true)"
+    if [ "$linger_state" != "Linger=yes" ]; then
+        echo "lingering is off for ${USER}; enabling it (loginctl enable-linger ${USER}) so this fleet survives a reboot without a login session"
+        loginctl enable-linger "$USER"
+    else
+        echo "lingering already enabled for ${USER}"
+    fi
 fi
 
 if [ -n "${LASTRADA_RUNNER_PREFIX_DIR:-}" ]; then
@@ -76,11 +92,18 @@ if [ "$RUNNER_COUNT" -eq 0 ]; then
     exit 1
 fi
 
+docker_bin="$(command -v docker || true)"
+if [ -z "$docker_bin" ]; then
+    echo "install-runner-units.sh: docker not found on PATH; cannot resolve @DOCKER@ for ExecStopPost" >&2
+    exit 1
+fi
+
 sed \
     -e "s|@LIBEXEC@|${libexec_dir}|g" \
     -e "s|@CONFIG@|${config_dir}/config|g" \
     -e "s|@PREFIX@|${RUNNER_NAME_PREFIX}|g" \
     -e "s|@WANTEDBY@|${wantedby}|g" \
+    -e "s|@DOCKER@|${docker_bin}|g" \
     "${here}/lastrada-runner@.service.in" >"${unit_dir}/lastrada-runner@.service"
 echo "wrote ${unit_dir}/lastrada-runner@.service"
 
