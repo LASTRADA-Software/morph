@@ -5,18 +5,16 @@
 # CPU/RAM the machine actually has -- nothing here is a hardcoded "2 workers,
 # 2 CPUs, 4 GB" assumption. Run as root (or with sudo) on a bare Ubuntu/Debian
 # VM; safe to re-run (idempotent: reuses Docker if already installed, rebuilds
-# images, replaces existing morph-runner-*/fastcached containers by name).
+# images, replaces the existing fastcached container by name, and reinstalls
+# the systemd units that own the runner containers' lifecycle).
 #
 # Usage:
-#   RUNNER_TOKEN=... ./bootstrap-cloud-node.sh
+#   ./bootstrap-cloud-node.sh
 #
-# Required env var:
-#   RUNNER_TOKEN   - a fresh registration token from
-#                    POST /repos/LASTRADA-Software/morph/actions/runners/registration-token
-#                    (expires ~1 hour; mint it right before running this
-#                    script, e.g. `gh api -X POST
-#                    repos/LASTRADA-Software/morph/actions/runners/registration-token
-#                    --jq '.token'` from a machine with gh admin auth).
+# No registration token is needed up front: each runner mints its own, fresh,
+# on every start (see run-runner.sh). This box needs `gh` authenticated with
+# admin:org on LASTRADA-Software instead -- a credential that stays on the
+# host and never enters a container.
 #
 # Optional env vars (override the dynamic sizing below):
 #   RUNNER_NAME_PREFIX     - defaults to "morph-cloud-$(hostname)"
@@ -43,9 +41,14 @@ fi
 SUDO=""
 [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
-if [ -z "${RUNNER_TOKEN:-}" ]; then
-    echo "ERROR: RUNNER_TOKEN is not set. Mint one with:" >&2
-    echo "  gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token'" >&2
+if ! command -v gh >/dev/null 2>&1; then
+    echo "ERROR: the gh CLI is required -- each runner mints its own" >&2
+    echo "       registration token on every start." >&2
+    exit 1
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+    echo "ERROR: gh is not authenticated. Needs admin:org on LASTRADA-Software." >&2
     exit 1
 fi
 
@@ -168,53 +171,38 @@ echo "fastcached started: ${FASTCACHED_CPUS} CPU, ${FASTCACHED_MEMORY_GB}GiB RAM
 
 # ── 6. Build the runner image ───────────────────────────────────────────
 echo ""
-echo "=== Building the morph self-hosted runner image ==="
-$SUDO docker build -t morph-runner:latest "$MORPH_ROOT/.github/self-hosted-runner"
+echo "=== Building the lastrada self-hosted runner image ==="
+$SUDO docker build -t lastrada-runner:latest "$MORPH_ROOT/.github/self-hosted-runner"
 
-# ── 7. Start the workers ────────────────────────────────────────────────
-# FASTCACHE_ADDR here is the loopback address, not host.docker.internal:
-# fastcached and the runner containers are on the same Docker host (this
-# machine), on the default bridge network, so each runner container reaches
-# fastcached the same way it would reach any other service on this box's own
-# network stack -- via the host's IP, which Docker's bridge networking makes
-# reachable as host.docker.internal on Linux too (Docker Engine >= 20.10
-# adds this automatically via --add-host on Linux; belt-and-suspenders
-# added explicitly below in case an older Engine is on this image).
+# ── 7. Configure and start the workers ──────────────────────────────────
+# systemd supervises the containers, not Docker: one owner, a fresh
+# registration token per start, and a bounded start limit so a broken
+# credential shows up as a failed unit instead of retrying forever. The
+# per-worker token minting that used to live here is gone -- run-runner.sh
+# mints one per start, which covers the single-use property by construction.
 echo ""
-echo "=== Starting ${WORKER_COUNT} runner worker(s) ==="
-for i in $(seq 1 "$WORKER_COUNT"); do
-    WORKER_TOKEN="$RUNNER_TOKEN"
-    if [ "$i" -gt 1 ]; then
-        echo "Minting a fresh registration token for worker $i (the one" \
-             "passed in on RUNNER_TOKEN is single-use)..."
-        if command -v gh >/dev/null 2>&1; then
-            WORKER_TOKEN="$(gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token')"
-        else
-            echo "ERROR: gh CLI not available to mint additional tokens for worker $i." >&2
-            echo "       Re-run with RUNNER_TOKEN set to a fresh token and adjust" >&2
-            echo "       WORKER_CPUS/FASTCACHED_CPUS to get WORKER_COUNT=1, or" >&2
-            echo "       install/auth gh on this box first." >&2
-            exit 1
-        fi
-    fi
+echo "=== Installing systemd units for ${WORKER_COUNT} worker(s) ==="
 
-    NAME="${RUNNER_NAME_PREFIX}-${i}"
-    $SUDO docker rm -f "$NAME" 2>/dev/null || true
-    $SUDO docker run -d \
-        --name "$NAME" \
-        --restart unless-stopped \
-        --cpus="${WORKER_CPUS}" \
-        --memory="${WORKER_MEM_GB}g" \
-        --add-host=host.docker.internal:host-gateway \
-        -e RUNNER_TOKEN="$WORKER_TOKEN" \
-        -e RUNNER_NAME="$NAME" \
-        -e FASTCACHE_ADDR="host.docker.internal:6674" \
-        morph-runner:latest
-    echo "started $NAME (${WORKER_CPUS} CPU, ${WORKER_MEM_GB}GiB RAM)"
-done
+$SUDO mkdir -p /etc/lastrada-runner
+$SUDO tee /etc/lastrada-runner/config >/dev/null <<CONF
+GITHUB_ORG=LASTRADA-Software
+RUNNER_GROUP=linux-docker
+RUNNER_COUNT=${WORKER_COUNT}
+RUNNER_NAME_PREFIX=${RUNNER_NAME_PREFIX}
+RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
+RUNNER_CPUS=${WORKER_CPUS}
+RUNNER_MEMORY=${WORKER_MEM_GB}g
+RUNNER_IMAGE=lastrada-runner:latest
+FASTCACHE_ADDR=host.docker.internal:6674
+CMAKE_BUILD_PARALLEL_LEVEL=${WORKER_CPUS}
+CONF
+$SUDO chmod 0600 /etc/lastrada-runner/config
+
+$SUDO bash "$MORPH_ROOT/.github/self-hosted-runner/install-runner-units.sh"
 
 echo ""
 echo "=== Done ==="
 echo "fastcached:      docker logs fastcached"
-echo "workers:         docker ps --filter name=${RUNNER_NAME_PREFIX}"
-echo "verify runners:  gh api repos/LASTRADA-Software/morph/actions/runners --jq '.runners[] | {name,status,busy}'"
+echo "workers:         systemctl status 'lastrada-runner@*'"
+echo "worker logs:     journalctl -u 'lastrada-runner@1' -f"
+echo "verify runners:  gh api orgs/LASTRADA-Software/actions/runners --jq '.runners[] | {name,status,busy}'"
