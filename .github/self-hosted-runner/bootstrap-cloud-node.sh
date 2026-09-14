@@ -5,8 +5,12 @@
 # CPU/RAM the machine actually has -- nothing here is a hardcoded "2 workers,
 # 2 CPUs, 4 GB" assumption. Run as root (or with sudo) on a bare Ubuntu/Debian
 # VM; safe to re-run (idempotent: reuses Docker if already installed, rebuilds
-# images, replaces the existing fastcached container by name, and reinstalls
-# the systemd units that own the runner containers' lifecycle).
+# images, replaces the existing fastcached container by name, reinstalls the
+# systemd units that own the runner containers' lifecycle, and then restarts
+# those units one at a time so a rebuilt runner image is actually picked up --
+# never touching an already-written /etc/lastrada-runner/config, so an
+# operator's hand-tuned settings, e.g. a lowered RUNNER_COUNT, survive a
+# re-run instead of being reverted to this run's detected sizing).
 #
 # Usage:
 #   ./bootstrap-cloud-node.sh
@@ -203,7 +207,14 @@ echo ""
 echo "=== Installing systemd units for ${WORKER_COUNT} worker(s) ==="
 
 $SUDO mkdir -p /etc/lastrada-runner
-$SUDO tee /etc/lastrada-runner/config >/dev/null <<CONF
+
+# Never clobber a config an operator has tuned -- same rule and message style
+# as install-runner-units.sh's own config.example handling. Without this, a
+# re-run (the documented way to pick up an image fix, see section 8 below)
+# would silently revert e.g. a hand-lowered RUNNER_COUNT back to whatever this
+# run's hardware detection computes.
+if [ ! -e /etc/lastrada-runner/config ]; then
+    $SUDO tee /etc/lastrada-runner/config >/dev/null <<CONF
 GITHUB_ORG=LASTRADA-Software
 RUNNER_GROUP=linux-docker
 RUNNER_COUNT=${WORKER_COUNT}
@@ -215,9 +226,37 @@ RUNNER_IMAGE=lastrada-runner:latest
 FASTCACHE_ADDR=host.docker.internal:6674
 CMAKE_BUILD_PARALLEL_LEVEL=${WORKER_CPUS}
 CONF
-$SUDO chmod 0600 /etc/lastrada-runner/config
+    $SUDO chmod 0600 /etc/lastrada-runner/config
+    echo "wrote /etc/lastrada-runner/config"
+else
+    echo "kept existing /etc/lastrada-runner/config (not overwriting operator-tuned settings)"
+    echo "  This run detected ${WORKER_COUNT} worker(s) x ${WORKER_CPUS} CPU / ${WORKER_MEM_GB} GiB RAM each,"
+    echo "  but that is NOT being applied. To change the running config, either edit"
+    echo "  /etc/lastrada-runner/config directly, or delete it and re-run this script"
+    echo "  to regenerate it from this machine's detected hardware."
+fi
 
 $SUDO bash "$MORPH_ROOT/.github/self-hosted-runner/install-runner-units.sh"
+
+# ── 8. Restart the fleet so a rebuilt image is actually used ───────────────
+# install-runner-units.sh's `systemctl enable --now` is a no-op on a unit
+# that's already active, so on a re-run section 6 above may have just built a
+# new lastrada-runner:latest image while every already-running runner keeps
+# using the old one until something restarts it. Read RUNNER_COUNT back from
+# the config on disk (not WORKER_COUNT computed in section 2) so this counts
+# the fleet that's actually installed, including a kept, operator-tuned
+# config from the guard above.
+ACTUAL_RUNNER_COUNT="$(awk -F= '/^RUNNER_COUNT=/ {print $2}' /etc/lastrada-runner/config)"
+
+echo ""
+echo "=== Restarting ${ACTUAL_RUNNER_COUNT} runner unit(s) to pick up the rebuilt image ==="
+echo "This interrupts any job currently running on each unit as it restarts."
+echo "Restarting one at a time, not all at once, so the whole fleet is never"
+echo "down simultaneously."
+for i in $(seq 1 "$ACTUAL_RUNNER_COUNT"); do
+    echo "restarting lastrada-runner@${i}"
+    $SUDO systemctl restart "lastrada-runner@${i}.service"
+done
 
 echo ""
 echo "=== Done ==="
