@@ -4,7 +4,7 @@
 #
 # Usage: run-runner.sh <index>
 #
-# systemd's morph-runner@<index>.service is the only intended caller.
+# systemd's lastrada-runner@<index>.service is the only intended caller.
 #
 # The token is minted here rather than baked into the container by whoever
 # created it. A GitHub registration token expires after ~1 hour, so a token
@@ -13,7 +13,7 @@
 # (5,972 failed registrations) until this script existed. Minting per start
 # means there is no stored credential that can go stale.
 #
-# MORPH_RUNNER_DRY_RUN=1 prints the docker argv and the stdin payload instead
+# LASTRADA_RUNNER_DRY_RUN=1 prints the docker argv and the stdin payload instead
 # of executing, so scripts/test_run_runner.sh can assert the launch contract
 # without Docker or GitHub.
 set -euo pipefail
@@ -24,7 +24,7 @@ if [ "$#" -lt 1 ]; then
 fi
 readonly index="$1"
 
-config="${MORPH_RUNNER_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/morph-runner/config}"
+config="${LASTRADA_RUNNER_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/lastrada-runner/config}"
 if [ ! -r "$config" ]; then
     echo "run-runner.sh: no readable config at ${config}" >&2
     exit 1
@@ -41,17 +41,21 @@ fi
 : "${RUNNER_MEMORY:?config must set RUNNER_MEMORY}"
 
 readonly name="${RUNNER_NAME_PREFIX}-${index}"
-readonly gh="${MORPH_RUNNER_GH:-gh}"
-readonly docker="${MORPH_RUNNER_DOCKER:-docker}"
+readonly gh="${LASTRADA_RUNNER_GH:-gh}"
+readonly docker="${LASTRADA_RUNNER_DOCKER:-docker}"
 
 # Organisation-level, not repo-level: one fleet serves morph, fastcached and
 # Lightweight. Needs admin:org on whatever credential gh holds -- and that
 # credential stays on the host, never entering a container.
 token="$("$gh" api -X POST \
-    "orgs/${GITHUB_ORG}/actions/runners/registration-token" --jq '.token')"
+    "orgs/${GITHUB_ORG}/actions/runners/registration-token" --jq '.token // empty')"
 
-if [ -z "$token" ]; then
-    echo "run-runner.sh: minted an empty registration token" >&2
+# `--jq '.token // empty'` covers a missing field, but `gh` has printed the
+# literal string "null" for one instead of empty output on some versions --
+# and `[ -z "null" ]` is false, so that alone would slip a garbage token
+# through to the container. Check both.
+if [ -z "$token" ] || [ "$token" = "null" ]; then
+    echo "run-runner.sh: minted an empty or null registration token" >&2
     exit 1
 fi
 
@@ -74,7 +78,7 @@ argv=(
     "${RUNNER_IMAGE}"
 )
 
-if [ -n "${MORPH_RUNNER_DRY_RUN:-}" ]; then
+if [ -n "${LASTRADA_RUNNER_DRY_RUN:-}" ]; then
     printf '%s\n' "${argv[@]}"
     printf 'STDIN:%s\n' "$token"
     exit 0

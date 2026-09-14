@@ -17,7 +17,7 @@
 #     systemd is already supervising.
 #
 # None of that is observable from the outside once the script execs docker, so
-# it is asserted through MORPH_RUNNER_DRY_RUN with stub gh/docker binaries.
+# it is asserted through LASTRADA_RUNNER_DRY_RUN with stub gh/docker binaries.
 set -euo pipefail
 
 readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,7 +37,7 @@ trap 'rm -rf "$scratch"' EXIT
 cat >"${scratch}/gh" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${STUB_GH_LOG}"
-printf 'tok-ABC123\n'
+printf '%s\n' "${STUB_GH_TOKEN:-tok-ABC123}"
 STUB
 chmod +x "${scratch}/gh"
 
@@ -54,7 +54,7 @@ RUNNER_GROUP=linux-docker
 RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
 RUNNER_CPUS=2
 RUNNER_MEMORY=6g
-RUNNER_IMAGE=morph-runner:latest
+RUNNER_IMAGE=lastrada-runner:latest
 FASTCACHE_ADDR=host.docker.internal:6674
 CMAKE_BUILD_PARALLEL_LEVEL=2
 CONF
@@ -62,10 +62,10 @@ CONF
 export STUB_GH_LOG="${scratch}/gh.log"
 : >"${STUB_GH_LOG}"
 
-out="$(MORPH_RUNNER_DRY_RUN=1 \
-      MORPH_RUNNER_CONFIG="${scratch}/config" \
-      MORPH_RUNNER_GH="${scratch}/gh" \
-      MORPH_RUNNER_DOCKER="${scratch}/docker" \
+out="$(LASTRADA_RUNNER_DRY_RUN=1 \
+      LASTRADA_RUNNER_CONFIG="${scratch}/config" \
+      LASTRADA_RUNNER_GH="${scratch}/gh" \
+      LASTRADA_RUNNER_DOCKER="${scratch}/docker" \
       bash "$launcher" 3 2>&1)" || {
     fail "run-runner.sh exited non-zero in dry-run mode:"
     printf '%s\n' "$out" >&2
@@ -138,7 +138,7 @@ else
 fi
 
 # ── a missing config must fail loudly, not launch an unconfigured runner ─────
-if MORPH_RUNNER_DRY_RUN=1 MORPH_RUNNER_CONFIG="${scratch}/absent" \
+if LASTRADA_RUNNER_DRY_RUN=1 LASTRADA_RUNNER_CONFIG="${scratch}/absent" \
    bash "$launcher" 1 >/dev/null 2>&1; then
     fail "a missing config file was accepted"
 else
@@ -146,12 +146,24 @@ else
 fi
 
 # ── a missing index must fail loudly ─────────────────────────────────────────
-if MORPH_RUNNER_DRY_RUN=1 MORPH_RUNNER_CONFIG="${scratch}/config" \
-   MORPH_RUNNER_GH="${scratch}/gh" MORPH_RUNNER_DOCKER="${scratch}/docker" \
+if LASTRADA_RUNNER_DRY_RUN=1 LASTRADA_RUNNER_CONFIG="${scratch}/config" \
+   LASTRADA_RUNNER_GH="${scratch}/gh" LASTRADA_RUNNER_DOCKER="${scratch}/docker" \
    bash "$launcher" >/dev/null 2>&1; then
     fail "a missing runner index was accepted"
 else
     note "a missing runner index is rejected"
+fi
+
+# ── a null registration token must fail loudly, not launch a misconfigured
+# runner -- `gh api --jq '.token'` prints the literal string "null" when the
+# response has no token field, which `[ -z "$token" ]` alone would not catch.
+if STUB_GH_TOKEN=null \
+   LASTRADA_RUNNER_DRY_RUN=1 LASTRADA_RUNNER_CONFIG="${scratch}/config" \
+   LASTRADA_RUNNER_GH="${scratch}/gh" LASTRADA_RUNNER_DOCKER="${scratch}/docker" \
+   bash "$launcher" 1 >/dev/null 2>&1; then
+    fail "a null registration token was accepted"
+else
+    note "a null registration token is rejected"
 fi
 
 if [ "$failures" -ne 0 ]; then
