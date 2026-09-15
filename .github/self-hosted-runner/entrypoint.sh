@@ -12,11 +12,13 @@
 # have no systemd to run the wrapper.
 #
 # Environment:
-#   RUNNER_TOKEN      - fallback registration token when stdin carries none
-#   RUNNER_SCOPE_URL  - defaults to the LASTRADA-Software organisation
-#   RUNNER_GROUP      - runner group to join; defaults to linux-docker
-#   RUNNER_NAME       - defaults to "lastrada-docker-$HOSTNAME"
-#   RUNNER_LABELS     - defaults to "self-hosted,Linux,X64,lastrada-docker"
+#   RUNNER_TOKEN            - fallback registration token when stdin carries none
+#   RUNNER_SCOPE_URL        - defaults to the LASTRADA-Software organisation
+#   RUNNER_GROUP            - runner group to join; defaults to linux-docker
+#   RUNNER_NAME             - defaults to "lastrada-docker-$HOSTNAME"
+#   RUNNER_LABELS           - defaults to "self-hosted,Linux,X64,lastrada-docker"
+#   RUNNER_SELF_DEREGISTER  - set to "0" to skip this container's own EXIT-time
+#                             deregistration; defaults to enabled (see below)
 set -euo pipefail
 
 # Reads the first line of stdin when there is one, else falls back to the
@@ -32,6 +34,37 @@ read_runner_token() {
     else
         printf '%s' "${RUNNER_TOKEN:-}"
     fi
+}
+
+# Removes this runner's registration; the body of the EXIT trap below.
+cleanup() {
+    echo "Removing runner registration..."
+    ./config.sh remove --token "${runner_token}" || true
+}
+
+# Installs the cleanup trap unless the host is already doing this job.
+#
+# Under systemd, run-runner.sh sets RUNNER_SELF_DEREGISTER=0 and
+# lastrada-runner@.service.in's ExecStop runs deregister-runner.sh on the
+# HOST instead: this container's only credential is the REGISTRATION token
+# it started with, and GitHub expires those after ~1 hour, so by the time a
+# long-lived container is stopped this trap's own `config.sh remove` would
+# fail here and strand the registration -- exactly what host-side ExecStop
+# exists to avoid. Standalone (`docker run`, no systemd -- the path
+# documented in README.md for Docker Desktop/WSL2), there is no host
+# supervisor to do it, so this trap must remain the only mechanism;
+# RUNNER_SELF_DEREGISTER unset here defaults to enabled, leaving that path
+# unchanged.
+#
+# Kept as a function, like read_runner_token, so
+# scripts/test_runner_entrypoint.sh can assert -- behaviourally, by actually
+# letting the trap fire -- whether cleanup runs, not just grep the source for
+# a string.
+install_deregister_trap() {
+    if [ "${RUNNER_SELF_DEREGISTER:-1}" = "0" ]; then
+        return 0
+    fi
+    trap cleanup EXIT
 }
 
 # Sourced by the self-test: define the functions above, do nothing else.
@@ -52,11 +85,7 @@ if [ -z "$runner_token" ]; then
     exit 1
 fi
 
-cleanup() {
-    echo "Removing runner registration..."
-    ./config.sh remove --token "${runner_token}" || true
-}
-trap cleanup EXIT
+install_deregister_trap
 
 # A restart re-runs this entrypoint. Under systemd the container is always
 # fresh (--rm), so there is nothing left on disk -- but the plain `docker run`

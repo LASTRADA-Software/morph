@@ -59,6 +59,7 @@ fi
 mkdir -p "$unit_dir" "$config_dir" "$libexec_dir"
 
 install -m 0755 "${here}/run-runner.sh" "${libexec_dir}/run-runner.sh"
+install -m 0755 "${here}/deregister-runner.sh" "${libexec_dir}/deregister-runner.sh"
 
 # Never clobber a config an operator has tuned; config.example is the
 # reference, the installed file is theirs.

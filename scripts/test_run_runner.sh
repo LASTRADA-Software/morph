@@ -137,6 +137,18 @@ else
     note "no morph-docker name or label"
 fi
 
+# ── the container must not race the host's ExecStop deregistration ─────────
+# Under systemd, ExecStop (deregister-runner.sh) removes the registration
+# from the host -- see that script and the unit template for why. Without
+# this flag the container's own entrypoint.sh EXIT trap would also try, with
+# a registration token that is likely stale by stop time, doubling the
+# removal attempt for no benefit.
+if has 'RUNNER_SELF_DEREGISTER=0'; then
+    note "RUNNER_SELF_DEREGISTER=0 present"
+else
+    fail "RUNNER_SELF_DEREGISTER=0 missing; the container would race the host's ExecStop deregistration"
+fi
+
 # ── a missing config must fail loudly, not launch an unconfigured runner ─────
 if LASTRADA_RUNNER_DRY_RUN=1 LASTRADA_RUNNER_CONFIG="${scratch}/absent" \
    bash "$launcher" 1 >/dev/null 2>&1; then

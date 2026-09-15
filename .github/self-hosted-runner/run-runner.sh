@@ -97,6 +97,12 @@ argv=(
     -e "RUNNER_SCOPE_URL=https://github.com/${GITHUB_ORG}"
     -e "RUNNER_GROUP=${RUNNER_GROUP}"
     -e "RUNNER_LABELS=${RUNNER_LABELS}"
+    # Under systemd, ExecStop (deregister-runner.sh) deregisters this runner
+    # from the host, where the credential hasn't expired -- see that script's
+    # header and the unit template for why. Tell entrypoint.sh's own EXIT
+    # trap to stand down so removal is never attempted twice, or attempted a
+    # second time with a token that is certain to be stale by then.
+    -e "RUNNER_SELF_DEREGISTER=0"
     -e "FASTCACHE_ADDR=${FASTCACHE_ADDR:-}"
     -e "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
     "${RUNNER_IMAGE}"

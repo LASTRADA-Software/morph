@@ -18,6 +18,13 @@
 #
 # Neither is observable without rendering the unit, so it is rendered into a
 # scratch prefix and inspected, then handed to `systemd-analyze verify`.
+#
+# Also covers deregister-runner.sh, since it is installed by
+# install-runner-units.sh and wired in by ExecStop=-@LIBEXEC@/deregister-runner.sh
+# %i in the unit template: that its path is installed and its ExecStop=
+# actually renders with the substituted path, and that its own GitHub
+# id-resolution logic (against a stub gh) picks the right id, deletes
+# nothing for an absent name, and never fails the stop even when gh does.
 set -euo pipefail
 
 readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -108,6 +115,23 @@ if [ -n "$wrapper" ] && [ -x "$wrapper" ]; then
     note "wrapper installed and executable"
 else
     fail "wrapper not installed or not executable"
+fi
+
+deregister_wrapper="$(find "$scratch" -name deregister-runner.sh -print -quit)"
+if [ -n "$deregister_wrapper" ] && [ -x "$deregister_wrapper" ]; then
+    note "deregister-runner.sh installed and executable"
+else
+    fail "deregister-runner.sh not installed or not executable"
+fi
+
+# ExecStop must render with the actual substituted @LIBEXEC@ path, not just
+# be free of leftover @...@ markers in general (the generic placeholder scan
+# above would not catch a forgotten ExecStop= line entirely, since a missing
+# line leaves no placeholder behind to find).
+if [ -n "$deregister_wrapper" ] && grep -qxF "ExecStop=-${deregister_wrapper} %i" "$unit"; then
+    note "ExecStop renders with the substituted deregister-runner.sh path"
+else
+    fail "ExecStop missing or not correctly substituted (expected 'ExecStop=-${deregister_wrapper} %i')"
 fi
 
 # systemd's own opinion of the rendered unit.
@@ -245,6 +269,71 @@ for i in 1 2 3 4 5; do
 done
 if [ "$in_range_touched" -eq 0 ]; then
     note "the in-range instances (1..5) were left alone"
+fi
+
+# ── deregister-runner.sh: GitHub id resolution ───────────────────────────────
+# ExecStop above runs deregister-runner.sh; exercise its id-resolution logic
+# against a stub gh, the same way scripts/test_run_runner.sh exercises
+# run-runner.sh's token minting. Reuses the config install-runner-units.sh
+# wrote earlier in this script (GITHUB_ORG=LASTRADA-Software,
+# RUNNER_NAME_PREFIX=lastrada-docker), so index 3 resolves to the name
+# "lastrada-docker-3".
+readonly deregister="${repo_root}/.github/self-hosted-runner/deregister-runner.sh"
+
+dereg_scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch" "$stub_bin" "$scratch2" "$dereg_scratch"' EXIT
+
+cat >"${dereg_scratch}/gh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${DEREG_GH_LOG}"
+if [ "${DEREG_GH_FAIL:-}" = "1" ]; then
+    exit 1
+fi
+if [ "$1" = "api" ] && [ "${3:-}" = "--jq" ]; then
+    if [ -n "${DEREG_RUNNER_NAME:-}" ] && printf '%s\n' "$4" | grep -qF "\"${DEREG_RUNNER_NAME}\""; then
+        printf '%s\n' "${DEREG_RUNNER_ID:-9001}"
+    fi
+fi
+exit 0
+STUB
+chmod +x "${dereg_scratch}/gh"
+
+export DEREG_GH_LOG="${dereg_scratch}/gh.log"
+
+# Resolves the right id for an existing name.
+: >"$DEREG_GH_LOG"
+out="$(DEREG_RUNNER_NAME=lastrada-docker-3 DEREG_RUNNER_ID=9001 \
+    LASTRADA_RUNNER_CONFIG="$config" LASTRADA_RUNNER_GH="${dereg_scratch}/gh" \
+    LASTRADA_RUNNER_DRY_RUN=1 \
+    bash "$deregister" 3 2>&1)" && rc=0 || rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q '9001'; then
+    note "deregister-runner.sh resolves the id of an existing runner"
+else
+    fail "deregister-runner.sh did not resolve id 9001 for lastrada-docker-3 (exit ${rc}); got: ${out}"
+fi
+
+# Exits 0 and deletes nothing when the name is absent.
+: >"$DEREG_GH_LOG"
+out="$(DEREG_RUNNER_NAME=some-other-runner DEREG_RUNNER_ID=9002 \
+    LASTRADA_RUNNER_CONFIG="$config" LASTRADA_RUNNER_GH="${dereg_scratch}/gh" \
+    bash "$deregister" 3 2>&1)" && rc=0 || rc=$?
+if [ "$rc" -ne 0 ]; then
+    fail "deregister-runner.sh exited ${rc} for an absent runner, must exit 0"
+elif grep -q -- '-X DELETE' "$DEREG_GH_LOG"; then
+    fail "deregister-runner.sh issued a DELETE for a runner that was never resolved: $(cat "$DEREG_GH_LOG")"
+else
+    note "deregister-runner.sh exits 0 and deletes nothing when the name is absent"
+fi
+
+# Exits 0 even when gh fails outright.
+: >"$DEREG_GH_LOG"
+out="$(DEREG_GH_FAIL=1 \
+    LASTRADA_RUNNER_CONFIG="$config" LASTRADA_RUNNER_GH="${dereg_scratch}/gh" \
+    bash "$deregister" 3 2>&1)" && rc=0 || rc=$?
+if [ "$rc" -eq 0 ]; then
+    note "deregister-runner.sh exits 0 when gh fails"
+else
+    fail "deregister-runner.sh exited ${rc} when gh failed, must exit 0"
 fi
 
 if [ "$failures" -ne 0 ]; then

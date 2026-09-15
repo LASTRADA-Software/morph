@@ -42,6 +42,23 @@ Type=exec
 Environment=LASTRADA_RUNNER_CONFIG=@CONFIG@
 ExecStart=@LIBEXEC@/run-runner.sh %i
 
+# Deregisters this runner from the organisation from the HOST, not the
+# container. By stop time the container's only credential -- the
+# REGISTRATION token entrypoint.sh started with -- can easily be over an
+# hour old and GitHub will have expired it, so its own EXIT trap's removal
+# would fail and strand both the registration and its live session (see
+# deregister-runner.sh and run-runner.sh for the full story, including the
+# ~2-minute "Conflict. Retrying until reconnected" that stranding causes).
+# The host's `gh` credential never expires that way. run-runner.sh passes
+# the container `-e RUNNER_SELF_DEREGISTER=0` so entrypoint.sh's trap stands
+# down and the two sides never race each other or double-remove.
+#
+# `-` because a runner already removed, or a `gh` API failure, must not fail
+# the stop -- deregister-runner.sh already exits 0 for those on its own;
+# this is a second, belt-and-braces guard, the same reasoning as
+# ExecStopPost's `-` below.
+ExecStop=-@LIBEXEC@/deregister-runner.sh %i
+
 # --rm covers a clean exit; this covers a SIGKILL or a Docker daemon restart
 # leaving the container behind still holding the name. `-` so a missing
 # container is not a stop failure. @DOCKER@ is resolved at install time by

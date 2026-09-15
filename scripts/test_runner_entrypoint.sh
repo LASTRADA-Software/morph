@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: bash scripts/test_runner_entrypoint.sh
 #
-# Self-test for read_runner_token() in
+# Self-test for read_runner_token() and install_deregister_trap() in
 # .github/self-hosted-runner/entrypoint.sh.
 #
 # Two callers deliver the registration token two different ways and both must
@@ -11,6 +11,13 @@
 # has no stdin to pipe. Getting the precedence wrong fails closed in the worst
 # way -- the runner registers with an empty token and the container
 # restart-loops, which is the exact failure this whole change exists to end.
+#
+# Separately, exactly one side must ever deregister a runner: under systemd
+# the host's ExecStop does it (deregister-runner.sh, with a credential that
+# hasn't expired); standalone (`docker run`, no systemd) this container's own
+# EXIT trap is the only mechanism there is. install_deregister_trap() picks
+# between them based on RUNNER_SELF_DEREGISTER, and that choice is asserted
+# below behaviourally -- by actually letting the trap fire -- not textually.
 set -euo pipefail
 
 readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -100,6 +107,56 @@ if grep -qi 'morph-docker' "$entrypoint"; then
     fail "entrypoint.sh still mentions the retired morph-docker label"
 else
     note "morph-docker does not appear in entrypoint.sh"
+fi
+
+# ── the EXIT deregistration trap is owned by exactly one side ────────────────
+# Behavioural, not textual: source entrypoint.sh into a real subshell, point
+# it at a stub ./config.sh standing in for the runner binary, call
+# install_deregister_trap, and let the subshell actually exit -- then look at
+# what the stub observed, not at what the source text says. Under systemd,
+# run-runner.sh sets RUNNER_SELF_DEREGISTER=0 and the host's ExecStop
+# (deregister-runner.sh) removes the registration instead; standalone
+# (`docker run`, no systemd) this trap remains the only mechanism.
+trap_scratch="$(mktemp -d)"
+trap 'rm -rf "$trap_scratch"' EXIT
+
+cat >"${trap_scratch}/config.sh" <<'STUB'
+#!/usr/bin/env bash
+printf 'config.sh called: %s\n' "$*" >>"${TRAP_STUB_LOG}"
+STUB
+chmod +x "${trap_scratch}/config.sh"
+
+run_trap_subshell() {
+    # $1: value to export as RUNNER_SELF_DEREGISTER, or "" to leave it unset.
+    (
+        cd "$trap_scratch"
+        export TRAP_STUB_LOG="${trap_scratch}/config-calls.log"
+        if [ -n "$1" ]; then
+            export RUNNER_SELF_DEREGISTER="$1"
+        else
+            unset RUNNER_SELF_DEREGISTER 2>/dev/null || true
+        fi
+        # shellcheck disable=SC1090
+        LASTRADA_RUNNER_ENTRYPOINT_SOURCE_ONLY=1 . "$entrypoint"
+        runner_token="tok-for-trap-test"
+        install_deregister_trap
+    )
+}
+
+: >"${trap_scratch}/config-calls.log"
+run_trap_subshell "0"
+if [ -s "${trap_scratch}/config-calls.log" ]; then
+    fail "cleanup ran ./config.sh remove even though RUNNER_SELF_DEREGISTER=0: $(cat "${trap_scratch}/config-calls.log")"
+else
+    note "trap is skipped when RUNNER_SELF_DEREGISTER=0"
+fi
+
+: >"${trap_scratch}/config-calls.log"
+run_trap_subshell ""
+if grep -q 'remove' "${trap_scratch}/config-calls.log"; then
+    note "trap is installed and runs ./config.sh remove when RUNNER_SELF_DEREGISTER is unset"
+else
+    fail "trap did not run ./config.sh remove when RUNNER_SELF_DEREGISTER is unset"
 fi
 
 if [ "$failures" -ne 0 ]; then
