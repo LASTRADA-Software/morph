@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs the systemd units that supervise the self-hosted runner fleet.
 #
-# Two modes, chosen by who runs it:
+# Two modes, chosen by who runs it (or by LASTRADA_RUNNER_FORCE_SYSTEM, below):
 #
 #   as a normal user -> user units under ~/.config/systemd/user, controlled
 #                       with `systemctl --user`. Needs lingering
@@ -14,14 +14,19 @@
 #                       bootstrap-cloud-node.sh uses on a fresh VM.
 #
 # LASTRADA_RUNNER_PREFIX_DIR redirects every install path under one directory,
-# and LASTRADA_RUNNER_NO_SYSTEMCTL=1 skips the systemctl calls, so
-# scripts/test_runner_units.sh can render and inspect the unit without
-# touching the real system.
+# and LASTRADA_RUNNER_NO_SYSTEMCTL=1 skips the systemctl calls (and, see
+# below, the lingering check too), so scripts/test_runner_units.sh can render
+# and inspect the unit without touching the real system.
+#
+# LASTRADA_RUNNER_FORCE_SYSTEM=1 selects the root/system path regardless of
+# the running user's actual uid, so scripts/test_runner_units.sh can render
+# and assert the system-unit variant -- the one bootstrap-cloud-node.sh
+# depends on -- without actually running as root.
 set -euo pipefail
 
 readonly here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ "$(id -u)" -eq 0 ]; then
+if [ "$(id -u)" -eq 0 ] || [ -n "${LASTRADA_RUNNER_FORCE_SYSTEM:-}" ]; then
     unit_dir="/etc/systemd/system"
     config_dir="/etc/lastrada-runner"
     libexec_dir="/usr/local/libexec/lastrada-runner"
@@ -41,12 +46,36 @@ else
     # `loginctl` rather than touching systemd state directly so this honours
     # a stubbed `loginctl` on PATH the same way the systemctl calls below
     # honour a stubbed `systemctl` -- see scripts/test_runner_units.sh.
-    linger_state="$(loginctl show-user "$USER" --property=Linger 2>/dev/null || true)"
-    if [ "$linger_state" != "Linger=yes" ]; then
-        echo "lingering is off for ${USER}; enabling it (loginctl enable-linger ${USER}) so this fleet survives a reboot without a login session"
-        loginctl enable-linger "$USER"
+    #
+    # Skipped entirely under LASTRADA_RUNNER_NO_SYSTEMCTL: that flag's whole
+    # contract is "render files, don't touch the real system", and
+    # `loginctl` mutates real login-manager state just as much as `systemctl`
+    # does. Checked *before* anything below tries to call `loginctl`, not
+    # after -- this used to run unconditionally, ahead of the
+    # LASTRADA_RUNNER_NO_SYSTEMCTL check further down, so isolation-mode
+    # callers (including this script's own self-test) were mutating real
+    # lingering state despite the flag, and an environment with no usable
+    # login session (an ordinary GitHub Actions runner, for instance) could
+    # fail `loginctl` outright and abort the install before any file was
+    # rendered.
+    #
+    # Non-fatal even when it does run: a missing or failing `loginctl` must
+    # not abort an otherwise-successful install, it should just warn loudly
+    # that the fleet won't survive a reboot and say exactly what to run.
+    if [ -n "${LASTRADA_RUNNER_NO_SYSTEMCTL:-}" ]; then
+        echo "LASTRADA_RUNNER_NO_SYSTEMCTL set; skipping the lingering check (this mode must not touch loginctl either)"
+    elif ! command -v loginctl >/dev/null 2>&1; then
+        echo "warning: loginctl not found on PATH; cannot check or enable lingering for ${USER} -- this fleet will NOT survive a reboot until you run: loginctl enable-linger ${USER}" >&2
     else
-        echo "lingering already enabled for ${USER}"
+        linger_state="$(loginctl show-user "$USER" --property=Linger 2>/dev/null || true)"
+        if [ "$linger_state" != "Linger=yes" ]; then
+            echo "lingering is off for ${USER}; enabling it (loginctl enable-linger ${USER}) so this fleet survives a reboot without a login session"
+            if ! loginctl enable-linger "$USER" 2>/dev/null; then
+                echo "warning: 'loginctl enable-linger ${USER}' failed -- this fleet will NOT survive a reboot until you run: loginctl enable-linger ${USER}" >&2
+            fi
+        else
+            echo "lingering already enabled for ${USER}"
+        fi
     fi
 fi
 

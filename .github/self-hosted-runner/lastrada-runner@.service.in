@@ -75,19 +75,34 @@ ExecStopPost=-@DOCKER@ rm -f @PREFIX@-%i
 Restart=always
 RestartSec=30
 
-# `docker run -i` (no -t) has sig-proxy on by default, so SIGTERM sent to
-# the docker client here is forwarded straight into the container. Verified
-# from a real restart's journal: the entrypoint's EXIT trap runs, `config.sh
-# remove` deregisters the runner, and the whole stop completes in ~3s:
+# The stop sequence in practice, given the host-side ExecStop above (not the
+# container's own EXIT trap -- see ExecStop's comment). Verified live against
+# this exact fleet (lastrada-runner@2, journalctl --user -u lastrada-runner@2):
 #
-#   23:58:18 Stopping LASTRADA self-hosted GitHub Actions runner 3...
-#            Removing runner registration...
-#            √ Runner removed successfully
-#   23:58:21 Stopped
+#   11:17:47 Stopping LASTRADA self-hosted GitHub Actions runner 2...
+#   11:17:48 deregister-runner.sh: removed lastrada-docker-2 (id 10097)
+#   11:18:08 The runner no longer exists on the server. Cleaning up local configuration.
+#            √ Removed .credentials
+#            √ Removed .runner
+#            Runner listener exit with 0 return code, stop the service, no retry needed.
+#            Exiting runner...
+#   11:18:08 Stopped LASTRADA self-hosted GitHub Actions runner 2.
 #
-# ExecStopPost's `docker rm -f` is a backstop for a container that somehow
-# outlived its client (SIGKILL, daemon restart) -- normally it never fires.
-# A job in flight is killed, not drained, by a stop or restart mid-job.
+# ExecStop's deregister-runner.sh removes the registration via the host's
+# `gh` credential in ~1s; the container's own Runner.Listener, on its next
+# poll, discovers it no longer exists on the server, cleans up its local
+# `.credentials`/`.runner` state, and exits 0 on its own -- the API removal
+# drives that exit, not a signal to the container. The ~20s gap above
+# (11:17:48 -> 11:18:08) is that listener noticing, not the deregister call
+# itself, which already completed a moment after "Stopping" was logged.
+#
+# `docker run -i` (no -t) still has sig-proxy on by default, so a container
+# that has NOT noticed removal by the time systemd's stop timeout would
+# otherwise trip still gets SIGTERM relayed straight into it as a fallback.
+#
+# ExecStopPost's `docker rm -f` is a further backstop for a container that
+# somehow outlived its client (SIGKILL, daemon restart) -- normally it never
+# fires. A job in flight is killed, not drained, by a stop or restart mid-job.
 # TimeoutStopSec=90 below is essentially never used in the common case.
 #
 # Because sig-proxy relays it, the docker client exits with the container's

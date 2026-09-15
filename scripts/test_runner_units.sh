@@ -271,6 +271,135 @@ if [ "$in_range_touched" -eq 0 ]; then
     note "the in-range instances (1..5) were left alone"
 fi
 
+# ── both install modes: user vs. system ──────────────────────────────────────
+# Everything above ran the installer as whoever is running this script --
+# normally a non-root developer or a CI job -- so it only ever exercised the
+# non-root branch of install-runner-units.sh: ~/.config/systemd/user,
+# default.target, `systemctl --user`. bootstrap-cloud-node.sh depends on the
+# OTHER branch -- the root/system one taken when `id -u` is 0: /etc/systemd/
+# system, /etc/lastrada-runner, /usr/local/libexec/lastrada-runner,
+# multi-user.target, plain `systemctl` with no --user -- and nothing above
+# ever rendered or asserted it. A change that silently broke that branch (the
+# wrong WantedBy, or system mode reusing a user-mode path) would ship
+# unnoticed with every check above still green.
+#
+# install-runner-units.sh honours LASTRADA_RUNNER_FORCE_SYSTEM=1 precisely so
+# this can be exercised without actually running as root: it forces the
+# root/system branch regardless of the real uid, defaulting to the ordinary
+# UID-based detection when unset (as every check above relied on).
+
+# First, confirm the render already done at the top of this script (no
+# LASTRADA_RUNNER_FORCE_SYSTEM set, run as this non-root user) actually took
+# the user-mode branch, not just that *a* unit came out the other end. This
+# does not weaken or replace any assertion already made against $unit/$config
+# above -- it adds mode-specific checks on the same render.
+case "$unit" in
+    "$scratch"*/systemd/user/lastrada-runner@.service) note "user mode: unit rendered under systemd/user" ;;
+    *) fail "user mode: unit not rendered under systemd/user (got ${unit})" ;;
+esac
+case "$config" in
+    "$scratch"*/lastrada-runner/config) note "user mode: config rendered under .../lastrada-runner, not /etc" ;;
+    *) fail "user mode: config not rendered under .../lastrada-runner (got ${config})" ;;
+esac
+case "$wrapper" in
+    "$scratch"*/lastrada-runner/run-runner.sh) note "user mode: wrapper rendered under a user data dir, not /usr/local/libexec" ;;
+    *) fail "user mode: wrapper not rendered under a .../lastrada-runner data dir, or wrongly under /usr/local/libexec (got ${wrapper})" ;;
+esac
+if grep -qxF 'WantedBy=default.target' "$unit"; then
+    note "user mode: WantedBy=default.target"
+else
+    fail "user mode: WantedBy=default.target missing (got $(grep '^WantedBy=' "$unit" || echo 'nothing'))"
+fi
+
+# Now render the system variant fresh, forced via LASTRADA_RUNNER_FORCE_SYSTEM
+# so this does not need to actually run as root, into its own scratch prefix
+# so it cannot be confused with the user-mode render above.
+system_scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch" "$stub_bin" "$scratch2" "$system_scratch"' EXIT
+
+LASTRADA_RUNNER_PREFIX_DIR="$system_scratch" LASTRADA_RUNNER_NO_SYSTEMCTL=1 \
+    LASTRADA_RUNNER_FORCE_SYSTEM=1 \
+    bash "$installer" >/dev/null
+
+system_unit="$(find "$system_scratch" -name 'lastrada-runner@.service' -print -quit)"
+if [ -z "$system_unit" ]; then
+    fail "system mode: no lastrada-runner@.service was rendered"
+else
+    case "$system_unit" in
+        "${system_scratch}/etc/systemd/system/lastrada-runner@.service") note "system mode: unit rendered under /etc/systemd/system" ;;
+        *) fail "system mode: unit not rendered under /etc/systemd/system (got ${system_unit})" ;;
+    esac
+    if grep -qxF 'WantedBy=multi-user.target' "$system_unit"; then
+        note "system mode: WantedBy=multi-user.target"
+    else
+        fail "system mode: WantedBy=multi-user.target missing (got $(grep '^WantedBy=' "$system_unit" || echo 'nothing'))"
+    fi
+fi
+
+system_config="$(find "$system_scratch" -name config -print -quit)"
+case "$system_config" in
+    "${system_scratch}/etc/lastrada-runner/config") note "system mode: config rendered under /etc/lastrada-runner" ;;
+    *) fail "system mode: config not rendered under /etc/lastrada-runner (got ${system_config:-nothing})" ;;
+esac
+
+system_wrapper="$(find "$system_scratch" -name run-runner.sh -print -quit)"
+case "$system_wrapper" in
+    "${system_scratch}/usr/local/libexec/lastrada-runner/run-runner.sh")
+        if [ -x "$system_wrapper" ]; then
+            note "system mode: wrapper rendered under /usr/local/libexec/lastrada-runner"
+        else
+            fail "system mode: wrapper at the expected path is not executable (${system_wrapper})"
+        fi
+        ;;
+    *) fail "system mode: wrapper not rendered under /usr/local/libexec/lastrada-runner (got ${system_wrapper:-nothing})" ;;
+esac
+
+# Finally, confirm the systemctl invocation itself differs between the two
+# modes: user mode drives `systemctl --user ...`, system mode drives plain
+# `systemctl ...`. Re-exercise system mode against a stub systemctl on PATH
+# (the only "systemctl" this invocation can reach), mirroring the user-mode
+# exercise above -- that one's normalized log already proves user mode's raw
+# invocations carried a leading "--user" (stripped before its assertions by
+# `sed -e 's/^--user //'`); this proves system mode's raw invocations do not.
+system_stub_bin="$(mktemp -d)"
+system_stub_scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch" "$stub_bin" "$scratch2" "$system_scratch" "$system_stub_bin" "$system_stub_scratch"' EXIT
+
+system_systemctl_log="${system_stub_bin}/systemctl.log"
+: >"$system_systemctl_log"
+cat >"${system_stub_bin}/systemctl" <<STUBEOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"${system_systemctl_log}"
+if [ "\${1:-}" = "list-unit-files" ]; then
+    printf 'lastrada-runner@.service indirect enabled\n'
+fi
+exit 0
+STUBEOF
+chmod +x "${system_stub_bin}/systemctl"
+
+if ! PATH="${system_stub_bin}:${PATH}" LASTRADA_RUNNER_PREFIX_DIR="$system_stub_scratch" \
+        LASTRADA_RUNNER_FORCE_SYSTEM=1 \
+        bash "$installer" >/dev/null 2>"${system_stub_bin}/installer.stderr"; then
+    fail "installer exited non-zero in forced-system mode against the stubbed systemctl:"
+    cat "${system_stub_bin}/installer.stderr" >&2
+fi
+
+if grep -qxF 'daemon-reload' "$system_systemctl_log"; then
+    note "system mode: systemctl invoked as plain 'systemctl' (no --user)"
+else
+    fail "system mode: expected a plain 'daemon-reload' call (no --user) in the systemctl log: $(cat "$system_systemctl_log")"
+fi
+if grep -q -- '--user' "$system_systemctl_log"; then
+    fail "system mode: systemctl was invoked with --user, which is the user-mode invocation, not system"
+else
+    note "system mode: no --user ever appeared in the systemctl invocations"
+fi
+if grep -qxF -- '--user daemon-reload' "$systemctl_log"; then
+    note "user mode: systemctl invoked as 'systemctl --user' (raw log carried --user)"
+else
+    fail "user mode: expected the raw systemctl log to carry a leading --user (got: $(cat "$systemctl_log"))"
+fi
+
 # ── deregister-runner.sh: GitHub id resolution ───────────────────────────────
 # ExecStop above runs deregister-runner.sh; exercise its id-resolution logic
 # against a stub gh, the same way scripts/test_run_runner.sh exercises
@@ -281,7 +410,7 @@ fi
 readonly deregister="${repo_root}/.github/self-hosted-runner/deregister-runner.sh"
 
 dereg_scratch="$(mktemp -d)"
-trap 'rm -rf "$scratch" "$stub_bin" "$scratch2" "$dereg_scratch"' EXIT
+trap 'rm -rf "$scratch" "$stub_bin" "$scratch2" "$system_scratch" "$system_stub_bin" "$system_stub_scratch" "$dereg_scratch"' EXIT
 
 cat >"${dereg_scratch}/gh" <<'STUB'
 #!/usr/bin/env bash
