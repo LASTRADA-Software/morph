@@ -387,7 +387,10 @@ TEST_CASE(
         // and can never be joined.
         (void)server.get();
         (void)gated.release();
-        (void)pool.release();
+        // Assigned rather than `(void)pool.release()`: bugprone-unused-return-value
+        // flags the discarded unique_ptr::release(), and a cast to void does not
+        // satisfy it. Naming the leaked pointer says the same thing and lints clean.
+        [[maybe_unused]] auto* const leakedPool = pool.release();
     }
     REQUIRE(bCompleted);
     CHECK(replyB.env.kind == "ok");
@@ -545,7 +548,10 @@ void runThrowingHookStrandsNothing(ThrowingHook hook) {
         // joined; leak the fixture rather than hang the run (see above).
         (void)server.get();
         (void)gated.release();
-        (void)pool.release();
+        // Assigned rather than `(void)pool.release()`: bugprone-unused-return-value
+        // flags the discarded unique_ptr::release(), and a cast to void does not
+        // satisfy it. Naming the leaked pointer says the same thing and lints clean.
+        [[maybe_unused]] auto* const leakedPool = pool.release();
     }
     REQUIRE(bCompleted);
     CHECK(replyB.env.kind == "ok");
@@ -852,7 +858,10 @@ TEST_CASE("two concurrent handle() callers on one modelId with a pool of one do 
         // ~ThreadPoolExecutor, exactly as this file's other tests already do for the
         // same deadline-less cv.wait.
         (void)server.get();
-        (void)pool.release();
+        // Assigned rather than `(void)pool.release()`: bugprone-unused-return-value
+        // flags the discarded unique_ptr::release(), and a cast to void does not
+        // satisfy it. Naming the leaked pointer says the same thing and lints clean.
+        [[maybe_unused]] auto* const leakedPool = pool.release();
     }
     REQUIRE(aCompleted);
     REQUIRE(bCompleted);
@@ -972,7 +981,10 @@ TEST_CASE(
         (void)server.get();
         // NOLINTBEGIN(bugprone-unused-return-value) -- leaking is the point.
         (void)gated.release();
-        (void)pool.release();
+        // Assigned rather than `(void)pool.release()`: bugprone-unused-return-value
+        // flags the discarded unique_ptr::release(), and a cast to void does not
+        // satisfy it. Naming the leaked pointer says the same thing and lints clean.
+        [[maybe_unused]] auto* const leakedPool = pool.release();
         // NOLINTEND(bugprone-unused-return-value)
     }
     REQUIRE(aCompleted);

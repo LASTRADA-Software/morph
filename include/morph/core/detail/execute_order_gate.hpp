@@ -205,23 +205,62 @@ public:
     void takeAndPost(::morph::exec::detail::ModelId mid, PostFn&& postFn) {
         std::shared_ptr<Gate> gate;
         std::uint64_t number = 0;
-        // gate-fetch, enqueueMtx acquisition and the ticket increment all
-        // happen in one continuous _mtx hold, so nothing can drain-and-erase
-        // this exact gate between "fetch" and "increment" -- closing a TOCTOU
-        // window a concurrent release() could otherwise slip through, which
-        // would mint this ticket on an already-orphaned generation while a
-        // racing takeAndPost(mid) on another thread gets a fresh one, letting
-        // the two diverge with no ordering relationship between them at all.
         std::unique_lock<std::recursive_mutex> enqueueLock;
-        {
-            std::scoped_lock const lock{_mtx};
-            gate = getOrCreateGateLocked(mid);
-            // Acquired here, while _mtx is still held, then carried past this
-            // block's closing brace for the rest of the call (including
+        // ── Lock order: `enqueueMtx` is *always* acquired before `_mtx`, never
+        // the other way round. ───────────────────────────────────────────────
+        //
+        // The obvious spelling -- hold `_mtx` across the gate fetch, the
+        // `enqueueMtx` acquisition and the increment, in one continuous hold --
+        // takes them in the opposite order, and `enqueueLock` is deliberately
+        // carried across `postFn`, whose re-entrant `takeAndPost` then needs
+        // `_mtx` while still holding `enqueueMtx`. That is a genuine cycle, not
+        // a sanitizer artefact: thread A re-entering holds `enqueueMtx` and
+        // waits for `_mtx`, while thread B in a plain `takeAndPost` for the
+        // same model holds `_mtx` and waits for `enqueueMtx`. Neither can
+        // proceed. ThreadSanitizer reports it as `lock-order-inversion
+        // (potential deadlock)`.
+        //
+        // So `enqueueMtx` is taken with no other lock held, and `_mtx` only
+        // after. The increment cannot simply move earlier to avoid the second
+        // acquisition: minting the number *outside* `enqueueMtx` would let two
+        // threads take numbers 0 and 1 and then enqueue in the opposite order,
+        // which is precisely the take-then-enqueue atomicity this gate exists
+        // to provide.
+        //
+        // Splitting the hold reopens the TOCTOU the single hold used to close:
+        // between fetching `gate` and incrementing it, a concurrent `release()`
+        // can fully drain that gate and erase its map entry, after which a
+        // racing `takeAndPost(mid)` installs a fresh one -- and this call would
+        // mint its ticket on the orphaned generation, with no ordering
+        // relationship to the tickets the other thread is handing out. Rather
+        // than prevent that, the loop below *detects* it: the map is re-checked
+        // under `_mtx` after `enqueueMtx` is held, and a gate that is no longer
+        // the registered one is abandoned and the whole sequence retried
+        // against the current one.
+        //
+        // The re-entrant path never retries, and so never drops a lock its
+        // caller is holding: the outer frame's ticket is still outstanding, so
+        // the gate cannot report itself fully drained, so its entry cannot have
+        // been erased and the re-check always matches.
+        while (true) {
+            {
+                std::scoped_lock const lock{_mtx};
+                gate = getOrCreateGateLocked(mid);
+            }
+            // Carried past this loop for the rest of the call (including
             // postFn) via RAII on `enqueueLock` -- see that member's own doc
             // comment for why it is per-model and recursive.
             enqueueLock = std::unique_lock<std::recursive_mutex>{gate->enqueueMtx};
-            number = gate->nextTicket++;
+            {
+                std::scoped_lock const lock{_mtx};
+                auto iter = _gates.find(mid);
+                if (iter != _gates.end() && iter->second == gate) {
+                    number = gate->nextTicket++;
+                    break;
+                }
+            }
+            // Stale generation: drop it and adopt whatever is registered now.
+            enqueueLock.unlock();
         }
         Ticket const ticket{mid, number, gate};
         try {
