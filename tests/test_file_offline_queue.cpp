@@ -548,8 +548,15 @@ TEST_CASE(
     // silently dropped the "third" item to a parse failure tolerated as a
     // torn trailing line. Post-fix, the short write left no trace, so exactly
     // "first" and "third" survive.
-    morph::offline::FileOfflineQueue const reopened{path, ioOps};
-    auto const pending = reopened.drain();
+    // Scoped for the same reason as the close above: the queue holds `path`
+    // open for its whole lifetime, and the std::filesystem::remove() at the end
+    // of this test cannot unlink a file another handle still has open on
+    // Windows.
+    std::vector<morph::offline::QueueItem> pending;
+    {
+        morph::offline::FileOfflineQueue const reopened{path, ioOps};
+        pending = reopened.drain();
+    }
     std::vector<std::string> payloads;
     payloads.reserve(pending.size());
     for (const auto& item : pending) {
@@ -655,11 +662,15 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing directory fsync during co
     REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
 
     // The failed construction must not leave the queue unusable -- a fresh,
-    // real-I/O open of the same path must succeed cleanly.
-    morph::core::FileIoOps const realOps;
-    morph::offline::FileOfflineQueue reopened{path, realOps};
-    (void)reopened.enqueue("payload");
-    REQUIRE(reopened.size() == 1);
+    // real-I/O open of the same path must succeed cleanly. Scoped so the handle
+    // is closed before the remove() below: Windows cannot unlink a file another
+    // handle still has open.
+    {
+        morph::core::FileIoOps const realOps;
+        morph::offline::FileOfflineQueue reopened{path, realOps};
+        (void)reopened.enqueue("payload");
+        REQUIRE(reopened.size() == 1);
+    }
     std::filesystem::remove(path);
 }
 
