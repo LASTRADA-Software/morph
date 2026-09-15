@@ -372,9 +372,9 @@ private:
         // Moves msg/reply into its own captures exactly once, on whichever of
         // the two calls below actually happens, and enqueues the one shared
         // dispatch task -- ticketed or not.
-        auto doPost = [this, self, msg = std::move(msg), reply = std::move(reply),
+        auto doPost = [self, msg = std::move(msg), reply = std::move(reply),
                        cid](::morph::backend::detail::ExecuteOrderGate::Ticket ticket) mutable {
-            _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
+            self->_pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
                 self->dispatchMessage(msg, reply, cid, std::move(ticket));
             });
         };

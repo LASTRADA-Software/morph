@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -82,11 +83,24 @@ public:
         friend class ExecuteOrderGate;
 
         Ticket(::morph::exec::detail::ModelId mid, std::uint64_t number, std::shared_ptr<Gate> gate)
-            : _mid{mid}, _number{number}, _gate{std::move(gate)} {}
+            : _mid{mid}, _number{number}, _gate{std::move(gate)}, _released{std::make_shared<std::atomic<bool>>()} {}
 
         ::morph::exec::detail::ModelId _mid{};
         std::uint64_t _number{0};
         std::shared_ptr<Gate> _gate;
+        // Shared across every copy of this logical ticket -- `Ticket` is
+        // freely copyable and both `ExecuteTicketGuard` (via `dispatchMessage`)
+        // and `takeAndPost`'s own exception path can independently decide to
+        // release the "same" ticket (a non-`std::exception` throw escaping
+        // dispatchMessage's `catch (const std::exception&)` unwinds through
+        // both). `release(Ticket)` claims this flag with `exchange(true)`
+        // before doing any work, so only the first caller actually runs the
+        // release logic -- a second call is a silent no-op instead of
+        // inserting an already-passed ticket number into `releasedOutOfOrder`
+        // a second time, which would sit there as the set's permanent
+        // minimum and quietly break every future out-of-order release for
+        // this gate (issue #449's own mechanism, from the wrong end).
+        std::shared_ptr<std::atomic<bool>> _released;
     };
 
     /// @brief Hands out the next ticket for @p mid, in call order.
@@ -154,42 +168,59 @@ public:
     /// until the first has finished enqueueing.
     ///
     /// Deliberately per-model (`Gate::enqueueMtx`) rather than one mutex shared
-    /// across every model, and deliberately separate from `_mtx`. Both choices
-    /// exist for the same reason: `postFn` runs while `enqueueMtx` is held, and
-    /// with a synchronous (inline) executor `postFn`'s `pool.post(...)` call
-    /// can run the *whole* dispatch chain before returning — including a
-    /// re-entrant call back into this gate. A re-entrant `awaitTurn`/`release`
-    /// for the *same* model only ever touches `_mtx` (separate from
-    /// `enqueueMtx`, so no self-relock there), and a re-entrant `takeAndPost`
-    /// for a *different* model locks that other model's own `enqueueMtx` (not
-    /// this one) precisely because the lock lives per-`Gate` rather than on
-    /// the gate object as a whole.
+    /// across every model, and deliberately separate from `_mtx`, for the same
+    /// underlying reason: `postFn` runs while `enqueueMtx` is held, and with a
+    /// synchronous (inline) executor `postFn`'s `pool.post(...)` call can run
+    /// the *whole* dispatch chain before returning — including a re-entrant
+    /// call back into this gate, on the *same* thread. A re-entrant
+    /// `awaitTurn`/`release` for the *same* model only ever touches `_mtx`
+    /// (separate from `enqueueMtx`, so no self-relock there); a re-entrant
+    /// `takeAndPost` for a *different* model locks that other model's own
+    /// `enqueueMtx`, never this one; and a re-entrant `takeAndPost` for the
+    /// *same* model re-locks this exact `enqueueMtx` from the same thread,
+    /// which is why it is a `std::recursive_mutex` (see its own doc comment) —
+    /// same-thread re-entrancy is never concurrent with itself and so needs no
+    /// ordering against itself, only exclusion against other threads, which a
+    /// plain `std::mutex` cannot express without self-deadlocking.
+    ///
+    /// The gate-fetch, the `enqueueMtx` acquisition and the ticket increment
+    /// below all happen inside one continuous `_mtx` hold, closing a window a
+    /// separate, later `_mtx` section for the increment used to leave open: a
+    /// concurrent `release()` draining and erasing this exact gate between
+    /// "fetched" and "ticket assigned" would otherwise mint this ticket on an
+    /// already-orphaned generation, indistinguishable from a *fresh* one to
+    /// this call, while a genuinely concurrent `takeAndPost(mid)` elsewhere
+    /// gets a real fresh generation — the two then run independent counters
+    /// with no ordering relationship, silently.
     ///
     /// @param mid    The model the upcoming turn is for.
     /// @param postFn Invoked synchronously, with a `Ticket` for this call,
     ///               while @p mid's own take-then-enqueue window is held open
     ///               (via that model's `Gate::enqueueMtx`) — but *not* while
-    ///               `_mtx` (the ticket-bookkeeping lock `take`, `awaitTurn`
-    ///               and `release` use) is held. If it throws, the ticket is
+    ///               `_mtx` (the ticket-bookkeeping lock `awaitTurn` and
+    ///               `release` use) is held. If it throws, the ticket is
     ///               released before the exception propagates, exactly as if
     ///               it had never been taken.
     template <typename PostFn>
     void takeAndPost(::morph::exec::detail::ModelId mid, PostFn&& postFn) {
         std::shared_ptr<Gate> gate;
+        std::uint64_t number = 0;
+        // gate-fetch, enqueueMtx acquisition and the ticket increment all
+        // happen in one continuous _mtx hold, so nothing can drain-and-erase
+        // this exact gate between "fetch" and "increment" -- closing a TOCTOU
+        // window a concurrent release() could otherwise slip through, which
+        // would mint this ticket on an already-orphaned generation while a
+        // racing takeAndPost(mid) on another thread gets a fresh one, letting
+        // the two diverge with no ordering relationship between them at all.
+        std::unique_lock<std::recursive_mutex> enqueueLock;
         {
             std::scoped_lock const lock{_mtx};
             gate = getOrCreateGateLocked(mid);
-        }
-        // Per-model, not global: a synchronous (inline) executor can run
-        // postFn's whole dispatch chain before returning, and a handler that
-        // makes a nested execute call against a *different* model must not
-        // contend with -- let alone re-lock -- the same mutex this call is
-        // still holding. Keeping `gate` alive locally means this lock stays
-        // valid even if `_gates[mid]`'s entry is (much later) erased.
-        std::scoped_lock const enqueueLock{gate->enqueueMtx};
-        std::uint64_t number = 0;
-        {
-            std::scoped_lock const lock{_mtx};
+            // Acquired here, while _mtx is still held, then carried past this
+            // block's closing brace for the rest of the call (including
+            // postFn) via RAII on `enqueueLock` -- see that member's own doc
+            // comment for why it is per-model and recursive.
+            enqueueLock = std::unique_lock<std::recursive_mutex>{gate->enqueueMtx};
             number = gate->nextTicket++;
         }
         Ticket const ticket{mid, number, gate};
@@ -199,6 +230,8 @@ public:
             release(ticket);
             throw;
         }
+        // `enqueueLock` releases here, at the end of scope -- after postFn,
+        // including any reentrant takeAndPost(mid) it triggered, is done.
     }
 
     /// @brief Blocks until @p ticket is next in line for @p mid, then returns.
@@ -258,10 +291,16 @@ public:
     /// @brief Releases @p ticket on the exact `Gate` it was issued from --
     ///        immune to that model's map entry being erased and recreated
     ///        while this ticket was in flight (see `Ticket`'s own doc
-    ///        comment). A no-op if @p ticket is empty.
+    ///        comment). A no-op if @p ticket is empty **or already released**
+    ///        -- `Ticket` is copyable and two independent owners of the same
+    ///        logical ticket (`ExecuteTicketGuard` and `takeAndPost`'s own
+    ///        exception path both can be, when a non-`std::exception` throw
+    ///        escapes `dispatchMessage`'s narrower catch) can each decide to
+    ///        release it; only the first one actually does (see `Ticket`'s
+    ///        own doc comment on `_released`).
     /// @param ticket A ticket from `takeAndPost`.
     void release(const Ticket& ticket) {
-        if (ticket.empty()) {
+        if (ticket.empty() || ticket._released->exchange(true)) {
             return;
         }
         std::scoped_lock const lock{_mtx};
@@ -309,11 +348,18 @@ private:
         std::condition_variable cv;
         // Serialises `takeAndPost` calls for *this* model only (morph#519).
         // Per-model rather than a single mutex shared across every `Gate`, so
-        // that a synchronous executor's re-entrant `takeAndPost` call for a
-        // *different* model contends for a different lock rather than trying
-        // to re-lock this same one from the same thread. See `takeAndPost`'s
-        // own doc comment for the full reasoning.
-        std::mutex enqueueMtx;
+        // that a re-entrant `takeAndPost` call for a *different* model
+        // contends for a different lock. Recursive, not plain, because a
+        // synchronous (inline) executor can run postFn's whole dispatch chain
+        // -- including a *same-model* re-entrant `takeAndPost` call, on the
+        // *same* thread (e.g. `SimulatedRemoteBackend::execute()` calling back
+        // into `RemoteServer::handle()`), which a plain `std::mutex` would
+        // self-deadlock on. A `std::recursive_mutex` lets that one thread back
+        // in while still fully excluding every other thread, which is exactly
+        // the property needed: same-thread re-entrancy is never concurrent
+        // with itself, so it needs no ordering against itself, only against
+        // *other* threads. See `takeAndPost`'s own doc comment.
+        std::recursive_mutex enqueueMtx;
     };
 
     /// @brief Returns @p mid's `Gate`, creating it if this is its first ticket.

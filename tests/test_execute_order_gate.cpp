@@ -368,3 +368,61 @@ TEST_CASE("ExecuteTicketGuard: awaitTurn forwards to the gate for the held ticke
     guard.release();
     CHECK(gate.gateCount() == 0U);
 }
+
+// ── takeAndPost: same-thread re-entrancy and idempotent release ────────────
+
+TEST_CASE(
+    "ExecuteOrderGate: takeAndPost's postFn may re-enter takeAndPost for the same model, "
+    "on the same thread, without deadlocking",
+    "[remote][execute-order-gate]") {
+    // A synchronous (inline) executor runs postFn's whole dispatch chain
+    // before takeAndPost returns -- including a handler that synchronously
+    // issues another execute against the *same* model (the shape
+    // SimulatedRemoteBackend::execute() calling back into
+    // RemoteServer::handle() takes). Gate::enqueueMtx is a
+    // std::recursive_mutex specifically so this does not self-deadlock: the
+    // outer call still holds it when the inner one re-locks it, on the same
+    // thread.
+    ExecuteOrderGate gate;
+    ModelId const mid{1};
+    int reentryDepth = 0;
+    gate.takeAndPost(mid, [&](const ExecuteOrderGate::Ticket& outer) {
+        ++reentryDepth;
+        REQUIRE(reentryDepth == 1);
+        CHECK_FALSE(outer.empty());
+        // Would hang forever pre-fix (self-deadlock on a plain std::mutex).
+        gate.takeAndPost(mid, [&](const ExecuteOrderGate::Ticket& inner) {
+            CHECK_FALSE(inner.empty());
+            gate.release(inner);
+        });
+        gate.release(outer);
+    });
+    CHECK(gate.gateCount() == 0U);  // Both tickets released; gate drained.
+}
+
+TEST_CASE(
+    "ExecuteOrderGate: releasing the same Ticket twice is a safe no-op that cannot corrupt "
+    "out-of-order state",
+    "[remote][execute-order-gate]") {
+    // Regression for the class of bug where a Ticket reaches two independent
+    // owners (ExecuteTicketGuard, and takeAndPost's own exception path, when
+    // a non-std::exception throw escapes dispatchMessage's narrower catch in
+    // RemoteServer). Simulated here directly: release the same Ticket twice
+    // and confirm the second call is inert rather than inserting an
+    // already-passed ticket number into releasedOutOfOrder a second time --
+    // which would sit there as that set's permanent minimum and silently
+    // block every future out-of-order release for this gate (issue #449's
+    // own mechanism).
+    ExecuteOrderGate gate;
+    ModelId const mid{1};
+    auto t0 = gate.takeTicket(mid);
+    auto t1 = gate.takeTicket(mid);
+
+    gate.release(t1);  // Out of order: releases ticket 1 before ticket 0.
+    gate.release(t1);  // Double release of the identical ticket -- must be a no-op.
+
+    // If the double release above had corrupted releasedOutOfOrder, this
+    // final, correctly-ordered release would fail to fully drain the gate.
+    gate.release(t0);
+    CHECK(gate.gateCount() == 0U);
+}
