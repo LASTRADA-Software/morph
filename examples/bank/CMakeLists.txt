@@ -181,7 +181,7 @@ if(MORPH_BUILD_TESTS)
             tests/test_stateful_account.cpp
         )
         target_include_directories(bank_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
-        target_link_libraries(bank_tests PRIVATE bank_lib Catch2::Catch2WithMain)
+        target_link_libraries(bank_tests PRIVATE bank_lib morph_test_main)
         target_compile_features(bank_tests PRIVATE cxx_std_23)
         apply_bigobj(bank_tests)
 
@@ -222,7 +222,7 @@ if(MORPH_BUILD_TESTS)
             target_include_directories(bank_gui_tests PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests
                 ${PROJECT_SOURCE_DIR}/examples/common)
-            target_link_libraries(bank_gui_tests PRIVATE bank_gui_lib Catch2::Catch2WithMain)
+            target_link_libraries(bank_gui_tests PRIVATE bank_gui_lib morph_test_main)
             target_compile_features(bank_gui_tests PRIVATE cxx_std_23)
             # The audit reads gui/qml/*.qml out of the source tree at run time,
             # and ctest runs the binary from the build directory. Same macro,

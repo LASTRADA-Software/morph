@@ -10,6 +10,8 @@
 #include <QEventLoop>
 #include <atomic>
 #include <catch2/catch_session.hpp>
+
+#include <testkit/log_level.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
@@ -201,5 +203,9 @@ TEST_CASE(
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
-    return Catch::Session().run(argc, argv);
+    Catch::Session session;
+    if (const auto exitCode = morph::testkit::configureSession(session, argc, argv)) {
+        return *exitCode;
+    }
+    return session.run();
 }

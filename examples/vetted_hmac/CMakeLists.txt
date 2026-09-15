@@ -45,7 +45,7 @@ if(MORPH_BUILD_HMAC_EXAMPLE_LIBSODIUM)
         else()
             add_executable(morph_vetted_hmac_libsodium_tests test_libsodium_adapter.cpp)
             target_link_libraries(morph_vetted_hmac_libsodium_tests
-                PRIVATE morph::morph PkgConfig::SODIUM Catch2::Catch2WithMain)
+                PRIVATE morph::morph PkgConfig::SODIUM morph_test_main)
             apply_bigobj(morph_vetted_hmac_libsodium_tests)
 
             list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
@@ -77,7 +77,7 @@ if(MORPH_BUILD_HMAC_EXAMPLE_OPENSSL)
         else()
             add_executable(morph_vetted_hmac_openssl_tests test_openssl_adapter.cpp)
             target_link_libraries(morph_vetted_hmac_openssl_tests
-                PRIVATE morph::morph OpenSSL::Crypto Catch2::Catch2WithMain)
+                PRIVATE morph::morph OpenSSL::Crypto morph_test_main)
             apply_bigobj(morph_vetted_hmac_openssl_tests)
 
             list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})

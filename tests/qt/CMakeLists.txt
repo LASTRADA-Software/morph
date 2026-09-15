@@ -34,7 +34,11 @@ add_executable(morph_qt_tests
 target_link_libraries(morph_qt_tests
     PRIVATE
         morph_qt_impl
-        Catch2::Catch2  # we provide our own main() to control QCoreApplication lifetime
+        # Our own main() controls the QCoreApplication lifetime, so this cannot
+        # link morph_test_main; morph_test_log_level carries the --log-level
+        # helper that main calls instead.
+        Catch2::Catch2
+        morph_test_log_level
 )
 
 set_target_properties(morph_qt_tests PROPERTIES AUTOMOC ON)

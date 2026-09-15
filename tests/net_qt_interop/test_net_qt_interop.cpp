@@ -3,6 +3,8 @@
 #include <QCoreApplication>
 #include <atomic>
 #include <catch2/catch_session.hpp>
+
+#include <testkit/log_level.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
@@ -149,7 +151,11 @@ TEST_CASE("QtWebSocketBackend interop: connects to a SocketServer and completes 
 // ── Custom main: own the QCoreApplication explicitly (see tests/qt/test_qt_websocket.cpp) ──
 int main(int argc, char* argv[]) {
     QCoreApplication app{argc, argv};
-    int result = Catch::Session().run(argc, argv);
+    Catch::Session session;
+    if (const auto exitCode = morph::testkit::configureSession(session, argc, argv)) {
+        return *exitCode;
+    }
+    int result = session.run();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QCoreApplication::processEvents(QEventLoop::AllEvents);
     return result;

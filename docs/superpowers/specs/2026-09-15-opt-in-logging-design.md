@@ -175,15 +175,28 @@ add_library(morph_test_main STATIC tests/test_main.cpp)
 target_link_libraries(morph_test_main PUBLIC morph::morph Catch2::Catch2)
 ```
 
-Consumers, each of which links `Catch2::Catch2WithMain` today:
+Ten targets link `Catch2::Catch2WithMain` today and move to `morph_test_main`:
 
 ```
-morph_tests            morph_net_tests           morph_qt_tests
-morph_offline_sqlite_tests   morph_net_qt_interop_tests
-bank_tests             ladder_common_tests       morph_concepts_tests
-morph_forms_controller_core_tests
+morph_tests   morph_net_tests   morph_offline_sqlite_tests   morph_bench
+morph_soak    bank_tests        bank_gui_tests               morph_concepts_tests
 morph_vetted_hmac_{libsodium,openssl}_tests
 ```
+
+**Four already define their own `main`** and cannot link a second one — an
+earlier revision of this design listed them as `Catch2WithMain` consumers,
+which was wrong:
+
+```
+morph_qt_tests   morph_net_qt_interop_tests
+ladder_common_tests   morph_forms_controller_core_tests
+```
+
+Each owns a `QCoreApplication` whose lifetime must bracket the run, so each
+keeps its `main` and calls `morph::testkit::configureSession()` from inside it.
+They link `morph_test_log_level`, an INTERFACE target carrying the header and
+its include path, which `morph_test_main` also links — so all fourteen binaries
+share one implementation of the option and cannot drift.
 
 `catch_discover_tests` keeps working: it invokes the binary with `--list-tests`
 and friends, which `session.applyCommandLine` handles exactly as Catch2's own
@@ -219,9 +232,9 @@ overridden by it locally.
 
 ## Tests that depended on the default
 
-Eleven sites install a sink with a bare `setLogger()` after a snapshot-only
+Thirteen sites install a sink with a bare `setLogger()` after a snapshot-only
 `ScopedLoggerOverride`, and never set a level — so they inherit whatever is
-ambient. With the gate forcing `off`, the seven that **capture and assert**
+ambient. With the gate forcing `off`, the nine that **capture and assert**
 would capture nothing:
 
 | Site | What it captures |
@@ -233,6 +246,19 @@ would capture nothing:
 | `tests/test_coverage_push95.cpp:448` | `"null Deps member"` message |
 | `tests/test_coverage_gaps.cpp:307` | throwing sink covering a `catch(...)` arm |
 | `tests/test_completion_extra.cpp:305` | throwing sink covering a `catch(...)` arm |
+| `tests/test_logger.cpp:46` | the level and message the sink received |
+| `tests/test_logger.cpp:97` | nothing — see below |
+
+The last two were missed by the first audit, which excluded `test_logger.cpp`
+on the strength of its aggregate counts (20 `setLogger` calls, 27 level-setting
+calls) rather than checking each case. `:46` failed outright once the gate
+landed. `:97` is the more instructive one: it installs a **null** sink to prove
+a null sink does not crash, and asserts only `REQUIRE(true)`. Under `off`,
+`detail::log` returns on the level check *before* reaching the `if
+(state.sink)` branch the test exists to exercise — so it would have kept
+passing while measuring nothing, which is exactly the failure mode
+`AGENTS.md` names. It now installs the null sink at `debug` and asserts the
+level it is running at.
 
 The other four (`tests/test_sync_worker.cpp:279`, `:526`, `:546`,
 `tests/test_coverage_push95.cpp:507`) install a no-op sink purely for silence
@@ -339,9 +365,18 @@ correct and is untouched.
 
 ## What a quiet run still prints
 
-The 23 surviving lines are not all banner and summary. Thirteen of them are a
-`FAILED:` block, and no log level can suppress it, because it is not a log
-record:
+A default run is **24 lines**, not zero, and neither remaining piece is
+suppressible by a log level.
+
+**One `[ERROR]` line on stderr.** `tests/test_coverage_gaps.cpp:344` covers the
+default sink's lambda body, and the default sink's only observable behaviour
+*is* writing to `stderr` — there is no seam to watch it through, so exercising
+it means letting it write. The message says so in place
+(`"default-sink-coverage: expected, proves the default sink body ran"`), since
+it is the sole log record a quiet run emits and would otherwise read as a stray
+error.
+
+**Thirteen lines of `FAILED:` block on stdout,** which is not a log record:
 
 ```
 -------------------------------------------------------------------------------

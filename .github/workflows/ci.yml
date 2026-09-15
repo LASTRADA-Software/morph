@@ -27,6 +27,16 @@ permissions:
   contents: read
 
 env:
+  # Turn morph's own log stream back on for CI. Test binaries default to
+  # LogLevel::off so a local run is quiet; a CI log is read after the fact, by
+  # someone diagnosing a failure that has already happened, and the full stream
+  # is what makes that possible. Set here rather than passed as --log-level
+  # because every leg runs its suites through `ctest --preset ...` and
+  # catch_discover_tests registers each test case as its own invocation, so
+  # there is nowhere to thread an extra argument through. Costs ~2,949 stderr
+  # lines per suite per leg, which the Valgrind leg pays three times over.
+  MORPH_TEST_LOG_LEVEL: debug
+
   # vcpkg's x-gha binary caching backend has been removed upstream (confirmed
   # live: every Windows CI run logged "warning: The 'x-gha' binary caching
   # backend has been removed" and silently cached nothing, rebuilding every

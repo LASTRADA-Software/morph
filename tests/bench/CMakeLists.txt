@@ -3,7 +3,7 @@
 # -DMORPH_BUILD_LOAD_TESTS=ON; never part of the default `morph_tests` target
 # or the fast ctest sweep. See docs/spec/testing_strategy.md.
 add_executable(morph_bench bench_dispatch_latency.cpp)
-target_link_libraries(morph_bench PRIVATE morph::morph Catch2::Catch2WithMain)
+target_link_libraries(morph_bench PRIVATE morph::morph morph_test_main)
 target_include_directories(morph_bench PRIVATE ${CMAKE_SOURCE_DIR}/tests)
 target_compile_definitions(morph_bench PRIVATE BENCH_ARTIFACT_DIR="${CMAKE_CURRENT_BINARY_DIR}")
 apply_warnings(morph_bench)

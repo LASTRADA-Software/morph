@@ -187,7 +187,7 @@ add_library(morph::ladder_testkit ALIAS morph_ladder_testkit)
 target_include_directories(morph_ladder_testkit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(morph_ladder_testkit PUBLIC
     morph::morph morph::qt morph_qt_impl morph::ladder_gui morph::ladder_app
-    Catch2::Catch2 Qt6::WebSockets Lightweight::Lightweight
+    Catch2::Catch2 morph_test_log_level Qt6::WebSockets Lightweight::Lightweight
 )
 target_compile_features(morph_ladder_testkit PUBLIC cxx_std_23)
 set_target_properties(morph_ladder_testkit PROPERTIES AUTOMOC ON)

@@ -14,6 +14,8 @@
 #include <QWebSocket>
 #include <atomic>
 #include <catch2/catch_session.hpp>
+
+#include <testkit/log_level.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
@@ -2306,7 +2308,14 @@ TEST_CASE("Process separation: TLS handshake works across processes", "[qt][wss]
 // returning from main() and before the C++ runtime tears down statics.
 int main(int argc, char* argv[]) {
     QCoreApplication app{argc, argv};
-    int result = Catch::Session().run(argc, argv);
+    Catch::Session session;
+    // Same --log-level gate as every other morph suite; this main cannot link
+    // morph_test_main (it would be a second definition of main), so it calls
+    // the shared helper directly.
+    if (const auto exitCode = morph::testkit::configureSession(session, argc, argv)) {
+        return *exitCode;
+    }
+    int result = session.run();
     // Drain any Qt-deferred deletes one last time so destructors run with a
     // valid event loop instead of during static teardown.
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);

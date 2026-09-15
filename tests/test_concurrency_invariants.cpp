@@ -197,13 +197,12 @@ TEST_CASE("morph::async::Completion: concurrent setValue calls fire the success 
 
 TEST_CASE("morph::async::Completion: unhandled exception emits orphan log via the configured sink",
           "[completion][orphan][quantum-parity]") {
-    LogGuard guard;
-    std::atomic<int> orphanCount{0};
-    morph::log::setLogger([&](morph::log::LogLevel lvl, std::string_view msg) {
+    std::atomic<int> orphanCount{0};  // declared first: it must outlive the guard's sink
+    LogGuard const guard{[&](morph::log::LogLevel lvl, std::string_view msg) {
         if (lvl == morph::log::LogLevel::error && msg.contains("[orphan]")) {
             orphanCount.fetch_add(1);
         }
-    });
+    }};
 
     {
         auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
