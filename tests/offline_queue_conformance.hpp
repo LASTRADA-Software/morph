@@ -191,4 +191,49 @@ inline void checkIdempotencyKeyContractAcrossReopen(const std::string& name, Key
     }
 }
 
+/// @brief Asserts an implementation round-trips a NUL-bearing payload and
+///        idempotency key intact, rather than truncating at the first `\0`
+///        (morph#531).
+///
+/// `QueueItem::payload` is documented as an opaque string whose serialisation
+/// format is the caller's choice (JSON, binary-hex, plain text, ...), so a
+/// backend that measures a C string by scanning for a NUL silently corrupts
+/// any payload or key containing one -- and two keys that differ only after
+/// their shared NUL prefix collapse to the same dedup token, discarding one
+/// enqueue as a false "duplicate".
+///
+/// @param name Implementation name, reported on failure.
+/// @param make Factory producing a fresh, empty queue.
+inline void checkNulPayloadRoundTrip(const std::string& name, const QueueFactory& make) {
+    INFO("implementation under test: " << name);
+
+    std::string const payload{"A\0B", 3};
+    std::string const keyA{
+        "k\0"
+        "1",
+        3};
+    std::string const keyB{
+        "k\0"
+        "2",
+        3};
+
+    auto queue = make();
+    auto const firstId = queue->enqueue(payload, keyA);
+    auto const secondId = queue->enqueue(payload, keyB);
+
+    INFO("keys differing only after a shared NUL prefix must not collapse to one dedup token");
+    CHECK(firstId != secondId);
+    CHECK(queue->size() == 2);
+
+    auto const firstItem = detail::itemById(*queue, firstId);
+    auto const secondItem = detail::itemById(*queue, secondId);
+    REQUIRE(firstItem.has_value());
+    REQUIRE(secondItem.has_value());
+    INFO("a NUL inside the payload or key must survive the round trip, not truncate at the first byte");
+    CHECK(firstItem->payload == payload);
+    CHECK(firstItem->idempotencyKey == keyA);
+    CHECK(secondItem->payload == payload);
+    CHECK(secondItem->idempotencyKey == keyB);
+}
+
 }  // namespace morph::test

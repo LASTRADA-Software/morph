@@ -755,6 +755,15 @@ TEST_CASE("morph::offline::FileOfflineQueue: the idempotency-key contract surviv
     std::filesystem::remove(path);
 }
 
+TEST_CASE("morph::offline::FileOfflineQueue: a NUL-bearing payload and key round-trip intact (morph#531)",
+          "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    morph::test::checkNulPayloadRoundTrip(
+        "FileOfflineQueue", [&path] { return std::make_unique<morph::offline::FileOfflineQueue>(path); });
+    std::filesystem::remove(path);
+}
+
 // ── An unreadable queue file must not be committed away (morph#494) ──
 //
 // load() read with an unchecked ifstream and the constructor calls compact()

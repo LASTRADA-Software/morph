@@ -4,6 +4,7 @@
 #include <sqlite3.h>
 
 #include <chrono>
+#include <climits>
 #include <cstdint>
 #include <filesystem>
 #include <mutex>
@@ -368,7 +369,15 @@ private:
     // machine for a single low-value branch that a legitimate offline-queue
     // payload will never approach in practice.
     void bindText(sqlite3_stmt* stmt, int index, const std::string& value) const {
-        if (sqlite3_bind_text(stmt, index, value.c_str(), -1, detail::kSqliteTransient) != SQLITE_OK) {
+        // An explicit length (not -1) is required so a NUL inside `value` --
+        // legitimate, since payload/idempotencyKey are opaque strings the
+        // caller controls the serialisation of (morph#531) -- doesn't tell
+        // SQLite to measure only up to that byte and silently truncate.
+        if (value.size() > static_cast<std::size_t>(INT_MAX)) {
+            throw SqliteOfflineQueueError{"SqliteOfflineQueue: value exceeds INT_MAX bytes"};
+        }
+        if (sqlite3_bind_text(stmt, index, value.c_str(), static_cast<int>(value.size()), detail::kSqliteTransient) !=
+            SQLITE_OK) {
             throw SqliteOfflineQueueError{std::string{"SqliteOfflineQueue: bind failed: "} + sqlite3_errmsg(_db)};
         }
     }
@@ -392,8 +401,15 @@ private:
     }
 
     static std::string textColumn(sqlite3_stmt* stmt, int index) {
+        // sqlite3_column_bytes() gives the real stored length; constructing a
+        // std::string from the raw `const char*` alone would stop at the
+        // first NUL and silently truncate a NUL-bearing payload or
+        // idempotency key on the way back out (morph#531) -- the read-side
+        // half of the same truncation bindText() above fixes on the write
+        // side.
         const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, index));
-        return text != nullptr ? std::string{text} : std::string{};
+        return text != nullptr ? std::string{text, static_cast<std::size_t>(sqlite3_column_bytes(stmt, index))}
+                               : std::string{};
     }
 
     static std::int64_t nowMillis() {

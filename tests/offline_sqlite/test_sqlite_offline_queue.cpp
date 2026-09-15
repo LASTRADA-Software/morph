@@ -291,6 +291,15 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: the idempotency-key contract surv
     removeDbFiles(dbPath);
 }
 
+TEST_CASE("morph::offline::SqliteOfflineQueue: a NUL-bearing payload and key round-trip intact (morph#531)",
+          "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    morph::test::checkNulPayloadRoundTrip(
+        "SqliteOfflineQueue", [&dbPath] { return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath); });
+    removeDbFiles(dbPath);
+}
+
 // ── setIdempotencyKey on a conflicting key (morph#249) ───────────────────────
 //
 // The protected hook is reached only through the *base* default
