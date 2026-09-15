@@ -63,6 +63,30 @@ fi
 # crash) and still own the name; --rm only covers a clean exit.
 "$docker" rm -f "$name" >/dev/null 2>&1 || true
 
+# Clear any registration this name still holds server-side before starting.
+#
+# entrypoint.sh's EXIT trap deregisters with `config.sh remove --token`, but
+# the only token it has is the REGISTRATION token it started with, and GitHub
+# expires those after ~1 hour. So stopping a container that has been up
+# longer than that prints "Failed: Removing runner from the server" and
+# leaves both the registration and its live session behind. The replacement
+# then sits in "A session for this runner already exists ... Conflict.
+# Retrying until reconnected" for minutes until GitHub reaps the old session
+# -- observed live on a fleet restarted seven hours after it came up.
+#
+# The host credential has no such expiry, so do it here. The container
+# deliberately holds no credential that could: that is the point of minting
+# per start and passing the token on stdin.
+if [ -z "${LASTRADA_RUNNER_DRY_RUN:-}" ]; then
+    stale_id="$("$gh" api "orgs/${GITHUB_ORG}/actions/runners" \
+        --jq ".runners[] | select(.name == \"${name}\") | .id" 2>/dev/null || true)"
+    if [ -n "$stale_id" ]; then
+        echo "run-runner.sh: clearing stale registration for ${name} (id ${stale_id})"
+        "$gh" api -X DELETE \
+            "orgs/${GITHUB_ORG}/actions/runners/${stale_id}" >/dev/null 2>&1 || true
+    fi
+fi
+
 argv=(
     "$docker" run --rm -i
     --name "$name"
