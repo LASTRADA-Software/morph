@@ -221,8 +221,7 @@ inline void rollBackShortWrite(FileIoOps& ioOps, std::FILE* file, const std::fil
 /// @param logComponent Name to prefix warning log lines with (the calling
 ///        class's own name), so a log reader can tell which file the
 ///        warning is about without `path` alone disambiguating it.
-inline void repairTornTail(FileIoOps& ioOps, const std::filesystem::path& path,
-                           std::string_view logComponent) {
+inline void repairTornTail(FileIoOps& ioOps, const std::filesystem::path& path, std::string_view logComponent) {
     std::error_code errorCode;
     auto const size = std::filesystem::file_size(path, errorCode);
     if (errorCode || size == 0) {
