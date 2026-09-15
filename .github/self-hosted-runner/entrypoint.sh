@@ -105,4 +105,23 @@ rm -f .runner .credentials .credentials_rsaparams
     --unattended \
     --replace
 
+# Under systemd the host owns deregistration (run-runner.sh sets
+# RUNNER_SELF_DEREGISTER=0, ExecStop runs deregister-runner.sh) and no EXIT
+# trap is installed here -- so replace this shell with run.sh rather than
+# running it as a child.
+#
+# That matters because Docker signals only PID 1. As a child, run.sh never
+# sees SIGTERM: bash takes it instead and dies, tearing the container down
+# and killing the runner abruptly under whatever job it was running. As
+# PID 1 it receives the signal itself, and run.sh already traps it
+# (`trap 'kill -INT -$PID' INT TERM`) to forward an interrupt to the runner
+# process group -- the shutdown path the runner is designed for.
+# TimeoutStopSec in the unit still bounds how long that may take.
+#
+# Standalone (`docker run`, no systemd) the EXIT trap IS the deregistration
+# mechanism and `exec` would discard it, so that path keeps run.sh as a child.
+if [ "${RUNNER_SELF_DEREGISTER:-1}" = "0" ]; then
+    exec ./run.sh
+fi
+
 ./run.sh
