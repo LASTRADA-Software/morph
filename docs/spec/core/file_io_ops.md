@@ -35,7 +35,7 @@ behaves normally around the one injected failure.
 
 ## Shape
 
-A plain aggregate of six `std::function` members, each mirroring one
+A plain aggregate of seven `std::function` members, each mirroring one
 underlying call:
 
 | Member | Mirrors | Signature |
@@ -46,6 +46,20 @@ underlying call:
 | `fopen` | `std::fopen` | `FILE*(const std::string&, const char*)` |
 | `canOpenForRead` | `std::ifstream{path}`'s own open check | `bool(const std::filesystem::path&)` |
 | `resizeFile` | `std::filesystem::resize_file` | `void(const std::filesystem::path&, uintmax_t, std::error_code&)` |
+| `syncPath` | `open(dir, O_RDONLY\|O_DIRECTORY)` + `fsync` (POSIX); no-op on Windows | `int(const std::filesystem::path&)` |
+
+`syncPath` (morph#532) commits a directory's own metadata — a new or
+renamed entry within it — to durable storage; `fsync` on a *file* makes
+only that file's data durable, not the directory entry that names it. Both
+`FileActionLog` and `FileOfflineQueue` call it after every directory
+mutation (file creation at construction, `rotate()`'s seal rename, and
+`compact()`'s rewrite-in-place rename), surfacing a failure rather than
+swallowing it — see `docs/spec/journal/journal.md` and
+`docs/spec/offline/offline.md` for the call sites. `rollBackShortWrite()`
+(morph#530) is the other seam-driven addition in this header: on a short
+`fwrite`, it truncates the file back to its pre-write length using the
+same injectable `resizeFile`/`fflush` this struct provides, so a partial
+write never sits where the next append would otherwise merge with it.
 
 `canOpenForRead` exists because a fault-injection test has no way to make a
 *real* `std::ifstream` construction fail without actually breaking the
