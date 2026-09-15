@@ -136,6 +136,37 @@ Working out that sizing by hand is what `bootstrap-cloud-node.sh` automates
 instead — see **Bootstrapping a cloud node with its own fastcached** below,
 which also sets up a local `fastcached` daemon.
 
+## Keep the daemon's version equal to the newest fastcached release
+
+`CompileCache.cmake` has each container auto-install the **newest released**
+`fastcache-cc`, and fastcached's wire versions do not interoperate in either
+direction. So a daemon pinned to an older release rejects the client the
+containers install, and every self-hosted build compiles uncached.
+
+This has already happened once here. The host daemon was pinned to 0.1.1 on
+2026-09-08; fastcached released 0.2.0 on 2026-09-09; the containers began
+installing the 0.2.0 client, and from then until 2026-09-15 every
+self-hosted build reported
+
+```
+-- [cache] Not using fastcache-cc at host.docker.internal:6674: rejected (unsupported-version)
+-- [cache] No other compiler-cache launcher found (sccache, ccache); caching disabled
+```
+
+and the daemon served literally nothing — `fastcached_cmd_get_total 0`,
+`fastcached_cmd_set_total 0`. Nothing failed; the builds were just slower,
+which is why it went unnoticed for a week.
+
+To check, on the host:
+
+```bash
+curl -s http://127.0.0.1:9260/metrics | grep -E 'cmd_(get|set)_total|get_(hits|misses)_total'
+```
+
+Both counters sitting at zero while self-hosted jobs run means the fleet is
+not using the cache at all. Compare `fastcached --version` against the latest
+release and upgrade the daemon to match.
+
 ## Bootstrapping a cloud node with its own fastcached
 
 `bootstrap-cloud-node.sh` sets up a fresh Linux VM (bare Ubuntu/Debian —
