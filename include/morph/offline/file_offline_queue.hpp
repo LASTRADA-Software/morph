@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -158,6 +159,16 @@ public:
     explicit FileOfflineQueue(std::filesystem::path path, ::morph::core::FileIoOps ioOps = {},
                               std::optional<std::size_t> maxDepth = std::nullopt)
         : _path{std::move(path)}, _io{std::move(ioOps)}, _maxDepth{maxDepth} {
+        // Discard a torn trailing record before load() ever sees it (morph#530).
+        // The file is opened "a", so a crash mid-writeLine (or damage from
+        // before this fix existed) leaves a truncated JSON line at the tail;
+        // load() tolerates that only while it stays the *trailing* line, and
+        // compact() would otherwise be the thing that heals it -- but compact()
+        // runs after load(), so a torn tail that load() cannot tolerate (an
+        // interior merge from a doubled-up short write) throws first and
+        // compact() never gets the chance. FileActionLog's constructor does
+        // the identical thing, for the identical reason -- see its own comment.
+        ::morph::core::repairTornTail(_io, _path, "FileOfflineQueue");
         load();
         compact();
         _file = _io.fopen(_path.string(), "a");
@@ -315,7 +326,22 @@ private:
     void writeLine(const std::string& json) {
         std::string line = json;
         line.push_back('\n');
+        long long const offsetBeforeWrite = ::morph::core::wideFtell(_file);
         if (_io.fwrite(line.data(), line.size(), _file) != line.size()) {
+            // The file is opened "a" (append), so a short write's partial bytes
+            // sit right where the *next* writeLine would otherwise resume, with
+            // no separating newline -- merging into one line load() can only
+            // tolerate while it stays the trailing line, and stops being able
+            // to the moment a further write pushes it into an interior position
+            // (morph#530). Roll the file back to its pre-write length instead,
+            // so a failed write leaves no trace at all for the next one to
+            // merge with. Best-effort: this is already the failure path, and
+            // repairTornTail() (run at construction, before load()) is the
+            // backstop if even this cleanup cannot complete (e.g. the crash
+            // that caused the short write also prevents the flush/resize).
+            // See `rollBackShortWrite`'s own doc comment for why it also
+            // resyncs `_file`'s stdio position after the resize.
+            ::morph::core::rollBackShortWrite(_io, _file, _path, offsetBeforeWrite);
             throw std::runtime_error("FileOfflineQueue: short write to " + _path.string());
         }
         syncFile(_file, _path.string());

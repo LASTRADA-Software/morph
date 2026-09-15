@@ -77,7 +77,7 @@ public:
         // throws -- from this very constructor, leaving the journal permanently
         // unopenable. FileOfflineQueue heals the same damage in compact(); this
         // is FileActionLog's equivalent.
-        repairTornTail();
+        ::morph::core::repairTornTail(_io, _path, "FileActionLog");
 
         // Rebuild the idempotencyKey dedup set from whatever is already durably on
         // disk, so a re-relayed outbox row is recognised even after this process
@@ -149,7 +149,22 @@ public:
         entry.seq = ++_nextSeq;
         auto line = toJson(entry);
         line.push_back('\n');
+        long long const offsetBeforeWrite = ::morph::core::wideFtell(_file);
         if (_io.fwrite(line.data(), line.size(), _file) != line.size()) {
+            // See FileOfflineQueue::writeLine's identical comment (morph#530):
+            // "a"-mode means a short write's partial bytes sit exactly where the
+            // next append() would resume, merging into one line repairTornTail()
+            // can only heal at construction, before this can happen. Roll the
+            // file back to its pre-write length instead, so the failed write
+            // leaves nothing for a later append to merge with. Best-effort --
+            // already the failure path. See `rollBackShortWrite()`'s own docs
+            // for why it also resyncs `_file`'s stdio position, not just the
+            // on-disk length: without that, a second consecutive short write
+            // (e.g. `OutboxRelay::relay()` retrying `append()` on this same
+            // long-lived sink while disk space stays exhausted) would roll back
+            // to a stale offset and pad the file with NUL bytes instead of
+            // truncating it.
+            ::morph::core::rollBackShortWrite(_io, _file, _path, offsetBeforeWrite);
             throw std::runtime_error("FileActionLog::append: short write to " + _path.string());
         }
         if (!entry.idempotencyKey.empty()) {
@@ -327,69 +342,6 @@ private:
             throw std::runtime_error("FileActionLog::" + std::string{what} + ": " + _path.string() +
                                      " is not open (a previous rotate() failed to reopen it)");
         }
-    }
-
-    /// Truncates any bytes following the last newline in the file.
-    ///
-    /// A crash between `append()`'s `fwrite` and the next `flush()` can leave a
-    /// partial record at the end. Because every complete record is written
-    /// newline-terminated in a single `fwrite`, whatever follows the final
-    /// newline is by construction an incomplete record and never a whole one —
-    /// which makes discarding it safe: it can only remove bytes that no reader
-    /// could ever have decoded. Complete records, including a malformed
-    /// *interior* line, are left exactly as they are; diagnosing those stays
-    /// `entries()`' job.
-    void repairTornTail() const {
-        std::error_code errorCode;
-        auto const size = std::filesystem::file_size(_path, errorCode);
-        if (errorCode || size == 0) {
-            return;  // absent or empty: nothing to repair
-        }
-        if (!_io.canOpenForRead(_path)) {
-            return;
-        }
-        std::ifstream input{_path, std::ios::binary};
-        if (!input) {
-            // The probe above said readable and this open still failed (a
-            // permission change or fd exhaustion landing in between). Falling
-            // through would scan nothing, leave `intactEnd` at 0, and truncate
-            // the whole journal as if it were one torn record -- so bail
-            // instead. The safety argument below holds only for bytes this
-            // function actually read.
-            ::morph::log::logWarn("FileActionLog: could not read " + _path.string() +
-                                  " to check for a torn trailing record; leaving it untouched");
-            return;
-        }
-        std::uintmax_t intactEnd = 0;
-        std::uintmax_t offset = 0;
-        std::string line;
-        while (std::getline(input, line)) {
-            offset += line.size();
-            if (input.eof()) {
-                break;  // no trailing newline: this line is the torn remainder
-            }
-            ++offset;  // the '\n' getline consumed
-            intactEnd = offset;
-        }
-        if (input.bad()) {
-            // Terminated by an I/O error rather than by end-of-file, so
-            // everything past `intactEnd` is unread rather than established to
-            // be torn. Truncating here would discard complete, fsynced records.
-            ::morph::log::logWarn("FileActionLog: read error while checking " + _path.string() +
-                                  " for a torn trailing record; leaving it untouched");
-            return;
-        }
-        if (intactEnd == size) {
-            return;
-        }
-        _io.resizeFile(_path, intactEnd, errorCode);
-        if (errorCode) {
-            ::morph::log::logWarn("FileActionLog: could not truncate torn trailing record in " + _path.string() +
-                                  ": " + errorCode.message());
-            return;
-        }
-        ::morph::log::logWarn("FileActionLog: discarded " + std::to_string(size - intactEnd) +
-                              " byte(s) of a torn trailing record in " + _path.string());
     }
 
     std::filesystem::path _path;

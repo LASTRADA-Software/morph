@@ -643,6 +643,58 @@ TEST_CASE("FileActionLog::append: a short fwrite() throws and does not record th
     REQUIRE(log2.entries().size() == 1);
 }
 
+TEST_CASE("FileActionLog::append: a short write does not merge with the next successful append (morph#530)",
+          "[action_log][phase2][file][fault-injection]") {
+    // Regression for morph#530. The single-write case above (fwrite always
+    // short) never exercises the actual defect: append() used to throw on a
+    // short write without rolling the file back, and the handle is
+    // append-mode, so a *subsequent* successful append concatenated directly
+    // onto the truncated JSON with no separating newline -- merging two
+    // records into one line. This drives the real sequence: one durable
+    // append, one short-written append, one more durable append -- and
+    // confirms the log reopens with exactly the two durable rows, not a
+    // merged, unparseable one.
+    TempFile const tmp{"file_fault_append_short_write_merge"};
+    auto shouldFail = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.fwrite = [shouldFail](const void* buffer, std::size_t size, std::FILE* file) {
+        if (!*shouldFail) {
+            return std::fwrite(buffer, 1, size, file);
+        }
+        // A real short write still lands *some* bytes on disk -- just fewer
+        // than requested. Actually writing size - 1 of them (not merely
+        // reporting size - 1 while writing nothing) is what lets this test
+        // reach the real defect: a truncated line sitting in the file for the
+        // next append to merge with.
+        return std::fwrite(buffer, 1, size - 1, file);
+    };
+
+    {
+        FileActionLog log{tmp.path, ioOps};
+        auto first = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+        first.idempotencyKey = "row-1";
+        log.append(first);
+        log.flush();
+
+        auto second = makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20");
+        second.idempotencyKey = "row-2";
+        *shouldFail = true;
+        REQUIRE_THROWS_AS(log.append(second), std::runtime_error);
+        *shouldFail = false;
+
+        auto third = makeEntry("P2_Model", "acct-3", "P2_Deposit", "{}", "30");
+        third.idempotencyKey = "row-3";
+        log.append(third);
+        log.flush();
+    }  // Close before reopening.
+
+    FileActionLog reopened{tmp.path, ioOps};
+    auto entries = reopened.entries();
+    REQUIRE(entries.size() == 2);
+    CHECK(entries[0].idempotencyKey == "row-1");
+    CHECK(entries[1].idempotencyKey == "row-3");
+}
+
 TEST_CASE("FileActionLog::flush: a failing fflush() throws and forgets the unflushed idempotencyKeys",
           "[action_log][phase2][file][fault-injection]") {
     TempFile const tmp{"file_fault_flush_fflush"};

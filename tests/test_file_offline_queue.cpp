@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -500,6 +501,64 @@ TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a short fwrite() to the ap
         *shouldFail = true;
         REQUIRE_THROWS_AS(queue.enqueue("payload"), std::runtime_error);
     }  // queue's own file handle must close before remove() -- Windows cannot delete an open file
+    std::filesystem::remove(path);
+}
+
+TEST_CASE(
+    "morph::offline::FileOfflineQueue::enqueue: a short write does not brick the queue for the next enqueue "
+    "(morph#530)",
+    "[file_queue][fault-injection]") {
+    // Regression for morph#530: writeLine() used to throw on a short write
+    // without rolling the file back. The handle is append-mode, so the next
+    // successful write concatenated directly onto the truncated JSON with no
+    // separating newline -- merging two records into one line that load()
+    // tolerates only while it is the trailing line, and stops tolerating the
+    // moment a third write pushes it into an interior position. This drives
+    // exactly that sequence -- one real enqueue, one short-written enqueue,
+    // one more real enqueue -- and confirms the queue still opens cleanly
+    // afterwards with only the two real items, not a merged, unparseable one.
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    auto shouldFail = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.fwrite = [shouldFail](const void* buffer, std::size_t size, std::FILE* file) {
+        if (!*shouldFail) {
+            return std::fwrite(buffer, 1, size, file);
+        }
+        // A real short write still lands *some* bytes on disk -- just fewer
+        // than requested. Actually writing size - 1 of them (not merely
+        // reporting size - 1 while writing nothing) is what lets this test
+        // reach the real defect: a truncated line sitting in the file for the
+        // next enqueue to concatenate onto.
+        return std::fwrite(buffer, 1, size - 1, file);
+    };
+
+    {
+        morph::offline::FileOfflineQueue queue{path, ioOps};
+        auto const first = queue.enqueue("first");
+        *shouldFail = true;
+        REQUIRE_THROWS_AS(queue.enqueue("second"), std::runtime_error);
+        *shouldFail = false;
+        auto const third = queue.enqueue("third");
+        CHECK(third != first);
+    }  // Close before reopening -- Windows cannot open the same file twice concurrently.
+
+    // The reopen is the real assertion: pre-fix, the merged line either made
+    // this constructor throw outright, or (with only two lines on disk)
+    // silently dropped the "third" item to a parse failure tolerated as a
+    // torn trailing line. Post-fix, the short write left no trace, so exactly
+    // "first" and "third" survive.
+    morph::offline::FileOfflineQueue reopened{path, ioOps};
+    auto const pending = reopened.drain();
+    std::vector<std::string> payloads;
+    payloads.reserve(pending.size());
+    for (const auto& item : pending) {
+        payloads.push_back(item.payload);
+    }
+    CHECK(payloads.size() == 2U);
+    CHECK(std::find(payloads.begin(), payloads.end(), "first") != payloads.end());
+    CHECK(std::find(payloads.begin(), payloads.end(), "third") != payloads.end());
+    CHECK(std::find(payloads.begin(), payloads.end(), "second") == payloads.end());
     std::filesystem::remove(path);
 }
 
