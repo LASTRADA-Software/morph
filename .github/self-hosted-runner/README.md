@@ -77,8 +77,9 @@ needed for C++23 `<print>` regardless of which matrix leg runs first).
 # 1. Get the code onto the box. Cloning the whole repo is simplest; step 2
 #    needs Dockerfile, entrypoint.sh and job-started-hook.sh, and step 3
 #    needs install-runner-units.sh plus config.example,
-#    lastrada-runner@.service.in and run-runner.sh alongside it -- all
-#    from this same directory, so a partial copy has to bring all seven.
+#    lastrada-runner@.service.in, run-runner.sh and deregister-runner.sh
+#    alongside it -- all from this same directory, so a partial copy has
+#    to bring all eight.
 git clone https://github.com/LASTRADA-Software/morph.git
 cd morph/.github/self-hosted-runner
 
@@ -216,18 +217,36 @@ every restart, calls `gh` locally via `run-runner.sh`.
 systemctl --user stop 'lastrada-runner@1'      # or plain `systemctl`, system install
 ```
 
-`entrypoint.sh` traps `EXIT` and calls `./config.sh remove` before the
-process exits, so a normal stop (systemd sends `SIGTERM`, and
-`TimeoutStopSec=90` gives the runner room to drain its current job and
-deregister before a `SIGKILL`) removes the runner from the organisation
-automatically — you should *not* see a stale offline runner left behind
-in its runner list. The unit's `ExecStopPost` also force-removes the
+Deregistration happens on the **host**, not inside the container.
+`run-runner.sh` starts every container with `-e RUNNER_SELF_DEREGISTER=0`,
+which tells `entrypoint.sh` to skip installing its own `EXIT` trap; the
+unit's `ExecStop=-<libexec>/deregister-runner.sh %i` looks this runner up
+by name against the organisation's runners API and `DELETE`s it instead,
+using the host's own `gh` login. That split exists because the container's
+only credential by stop time is the *registration* token it started with,
+and GitHub expires those after about an hour — a container that has been up
+longer than that would have its own `config.sh remove` fail, stranding the
+registration and its live session (which GitHub then holds in a "Conflict.
+Retrying until reconnected" state for a couple of minutes on the next
+start). The host's `gh` credential has no such expiry, so it deregisters
+instead. `run-runner.sh` also clears any stale registration for this name
+before every start, as a second layer against the same failure.
+
+Separately — and unrelated to deregistration — systemd sends `SIGTERM` to
+the `docker run -i` process that is this unit's main process; sig-proxy (on
+by default without `-t`) relays it straight into the container, and the
+runner process there exits, ending whatever job is currently running rather
+than letting it finish. There is no drain. `TimeoutStopSec=90` is only the
+ceiling before a `SIGKILL` if that hasn't happened by then; in practice a
+stop or restart completes in a few seconds — verified from a real restart's
+journal, `Stopping ...` to `Stopped` in about 3 seconds — so that budget is
+essentially never used. The unit's `ExecStopPost` also force-removes the
 container by name as a backstop, since `--rm` alone only covers a clean
-exit. If the container is killed harder than that (host crash, `docker
-kill`, out-of-memory), the cleanup trap doesn't run and the runner is
-left registered but shows as offline; remove it manually via the
-organisation's **Settings → Actions → Runners**, or `gh api -X DELETE
-orgs/LASTRADA-Software/actions/runners/<id>`.
+exit. If the container is killed harder than a normal stop (host crash,
+`docker kill`, out-of-memory), or `deregister-runner.sh` itself fails to
+reach the API, the runner can be left registered but shows as offline;
+remove it manually via the organisation's **Settings → Actions → Runners**,
+or `gh api -X DELETE orgs/LASTRADA-Software/actions/runners/<id>`.
 
 To stop the fleet for good rather than just for now, disable the unit(s)
 too (`systemctl --user disable --now 'lastrada-runner@*'`), or lower
@@ -250,9 +269,27 @@ failed registrations on one of them — and nothing reported it.
 
 Two changes make it unreachable rather than unlikely. There is no stored
 token to go stale, because `run-runner.sh` mints one per start. And a
-failure is now bounded and visible: `StartLimitBurst=5` puts the unit into
-`failed` after five attempts in ten minutes, so `systemctl --user status
+failure is now bounded and visible: `StartLimitBurst=12` puts the unit into
+`failed` after twelve attempts within a 900-second (15-minute)
+`StartLimitIntervalSec` window, so `systemctl --user status
 'lastrada-runner@*'` shows red instead of a loop nobody looks at.
+
+That 12/900 budget is wider than a first cut of 5 attempts over 10 minutes,
+and deliberately so. `lastrada-runner@.service`'s `After=docker.service
+network-online.target` / `Wants=network-online.target` only resolve for a
+**system** install (`systemctl`, run as root) — both names are system
+units, and under `systemctl --user`, the mode this README's **Quick start**
+uses, neither resolves at all, so a user-mode install has *no* boot
+ordering against Docker or the network. At boot this unit can start racing
+a Docker daemon that is still coming up. With `RestartSec=30`, 5 attempts
+gave only 150 seconds of runway before the unit went permanently `failed` —
+not enough margin against a slow-booting host's Docker daemon, observed
+taking close to two minutes to come up. 12 attempts at the same
+`RestartSec=30` gives at least 360 seconds (6 minutes) of runway, and the
+900-second window is widened in step so it can't itself lapse mid-burst.
+It is still bounded, not a return to the unbounded-retry failure this
+`StartLimit` exists to prevent — a genuinely dead credential still ends in
+a visible `failed` state, just with a realistic amount of runway first.
 
 Hosts without systemd (Docker Desktop, WSL2) still use the plain `docker
 run` path below. That path is reboot-fragile by design: it has the same
@@ -292,6 +329,7 @@ that part of the container's local state was never the problem.
 | `RUNNER_GROUP`  | no       | `linux-docker`                           | Runner group to join. Must allow public repositories. |
 | `RUNNER_NAME`   | no       | `lastrada-docker-<container hostname>`  | Under systemd, `run-runner.sh` always sets this explicitly to `<RUNNER_NAME_PREFIX>-<index>` from the config instead of relying on the default; only the plain `docker run` path needs to set it by hand for multiple runners to stay distinguishable in the organisation's runner list. |
 | `RUNNER_LABELS` | no       | `self-hosted,Linux,X64,lastrada-docker` | Only change this if you also update the `runs-on:` label list in the workflow(s) that should target it. |
+| `RUNNER_SELF_DEREGISTER` | no | `1` (enabled) | Set to `0` to skip `entrypoint.sh`'s own `EXIT`-trap deregistration. `run-runner.sh` always passes `0` under systemd, because the host-side `ExecStop=deregister-runner.sh` (see **Stopping / deregistering**) does it instead, with a credential that doesn't expire the way the container's registration token does. Only the plain `docker run` path (no systemd) needs the trap, and leaves this unset so it defaults to enabled. |
 
 ## Trust boundary
 

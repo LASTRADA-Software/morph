@@ -65,22 +65,45 @@ A template unit `lastrada-runner@.service` is enabled once per runner
 Description=LASTRADA self-hosted GitHub Actions runner %i
 After=docker.service network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=900
+StartLimitBurst=12
 
 [Service]
 ExecStart=<libexec>/run-runner.sh %i
 ExecStopPost=-/usr/bin/docker rm -f <prefix>-%i
 Restart=always
 RestartSec=30
-StartLimitIntervalSec=600
-StartLimitBurst=5
 TimeoutStopSec=90
 
 [Install]
 WantedBy=default.target
 ```
 
+`StartLimitIntervalSec`/`StartLimitBurst` live in `[Unit]`, not `[Service]`:
+systemd moved them there in v229 and silently ignores them if left under
+`[Service]`. 12 attempts over a 900-second window, not the 5-over-600 a
+first cut of this design used, because `After=`/`Wants=` above only resolve
+for a system install — `docker.service` and `network-online.target` are
+system units, and under `systemctl --user` (the mode used on this host)
+neither resolves, so a user-mode boot has no ordering against Docker at
+all. At `RestartSec=30`, 5 attempts gave only 150 seconds of runway before
+the unit went permanently `failed`, which a slow-booting Docker daemon
+(observed taking close to two minutes) could exhaust; 12 attempts gives at
+least 360 seconds, and the wider interval keeps the rolling window from
+lapsing mid-burst. It stays bounded — a genuinely dead credential still
+ends in a visible `failed` state.
+
 `<libexec>`, `<prefix>` and `WantedBy` are substituted at install time —
 `default.target` for a user install, `multi-user.target` for a system one.
+This excerpt is illustrative and omits several lines the shipped
+`lastrada-runner@.service.in` also carries: `Documentation=`,
+`Environment=`, `SuccessExitStatus=143` (sig-proxy relays the container's
+own signal-terminated exit code through the `docker` client, which is not
+a failure), and an `ExecStop=-<libexec>/deregister-runner.sh %i` that
+deregisters the runner from the organisation using the *host's* `gh`
+credential rather than the container's — the container's own registration
+token can be over an hour old by stop time and GitHub will have expired
+it. See **Stopping / deregistering** in `README.md` for the full mechanics.
 
 `entrypoint.sh` changes with it: `REPO_URL` becomes a `RUNNER_SCOPE_URL`
 environment variable defaulting to the organisation, `--runnergroup` is
@@ -95,11 +118,14 @@ this, nothing competes. It also means each start gets a clean container
 filesystem, which retires the stale-`.runner` class of bug on this path
 entirely.
 
-**Failure is bounded and visible.** `StartLimitBurst=5` over ten minutes
-puts the unit into `failed` instead of retrying forever. The six-day silent
-outage becomes a red `systemctl --user status lastrada-runner@3`, with the
-reason in `journalctl --user -u lastrada-runner@3` rather than 149,000 lines
-of `docker logs`.
+**Failure is bounded and visible.** `StartLimitBurst=12` over 900 seconds (15
+minutes) puts the unit into `failed` instead of retrying forever — wider
+than a first cut of 5 over 10 minutes, because a user-mode install has no
+boot ordering against Docker (see the note above the unit excerpt) and the
+narrower budget could be exhausted by a slow-booting Docker daemon alone.
+The six-day silent outage becomes a red `systemctl --user status
+lastrada-runner@3`, with the reason in `journalctl --user -u
+lastrada-runner@3` rather than 149,000 lines of `docker logs`.
 
 **A dead runner comes back.** A container killed mid-life — OOM during a
 link, a job that takes the runner down — is restarted by `Restart=always`
@@ -318,9 +344,9 @@ runs as root:
 |---|---|---|
 | Unit | `~/.config/systemd/user/lastrada-runner@.service` | `/etc/systemd/system/lastrada-runner@.service` |
 | Config | `~/.config/lastrada-runner/config` | `/etc/lastrada-runner/config` |
-| Wrapper | `~/.local/libexec/lastrada-runner/` | `/usr/local/libexec/lastrada-runner/` |
+| Wrapper | `~/.local/share/lastrada-runner/` (`$XDG_DATA_HOME` if set) | `/usr/local/libexec/lastrada-runner/` |
 | Control | `systemctl --user` | `systemctl` |
-| Boot | requires lingering (already enabled here) | ordinary system unit |
+| Boot | requires lingering; `install-runner-units.sh` checks and enables it itself if it's off | ordinary system unit |
 
 The same template body is used for both, with paths substituted at install
 time. The script enables `lastrada-runner@1`…`@N` from `RUNNER_COUNT`, and
