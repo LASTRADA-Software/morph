@@ -51,7 +51,13 @@ fi
 SUDO=""
 [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
-if ! $SUDO command -v gh >/dev/null 2>&1; then
+# `command` is a shell builtin, not an executable, so `sudo command -v gh`
+# can never work -- sudo execs a program named "command", which doesn't
+# exist, and always fails regardless of whether gh is actually installed.
+# Run the lookup inside a shell instead (through $SUDO, or directly when
+# $SUDO is empty/root) so the builtin resolves in the identity that will
+# actually run the systemd units.
+if ! $SUDO sh -c 'command -v gh' >/dev/null 2>&1; then
     echo "ERROR: the gh CLI is required -- each runner mints its own" >&2
     echo "       registration token on every start." >&2
     exit 1
@@ -246,16 +252,61 @@ $SUDO bash "$MORPH_ROOT/.github/self-hosted-runner/install-runner-units.sh"
 # the config on disk (not WORKER_COUNT computed in section 2) so this counts
 # the fleet that's actually installed, including a kept, operator-tuned
 # config from the guard above.
-ACTUAL_RUNNER_COUNT="$(awk -F= '/^RUNNER_COUNT=/ {print $2}' /etc/lastrada-runner/config)"
+# /etc/lastrada-runner/config is installed root:root mode 0600 by
+# install-runner-units.sh, so an unprivileged read here would fail with
+# "Permission denied" under `set -euo pipefail` -- aborting after the units
+# are installed but before the rollout finishes. Read it through $SUDO, same
+# as the preflight's gh check above. Also read GITHUB_ORG and
+# RUNNER_NAME_PREFIX back from the same on-disk config (not the env vars
+# computed earlier in this script) so the restart-and-wait loop below tracks
+# whatever fleet is actually installed, including a kept, operator-tuned
+# config from the guard above.
+ACTUAL_RUNNER_COUNT="$($SUDO awk -F= '/^RUNNER_COUNT=/ {print $2}' /etc/lastrada-runner/config)"
+ACTUAL_GITHUB_ORG="$($SUDO awk -F= '/^GITHUB_ORG=/ {print $2}' /etc/lastrada-runner/config)"
+ACTUAL_RUNNER_NAME_PREFIX="$($SUDO awk -F= '/^RUNNER_NAME_PREFIX=/ {print $2}' /etc/lastrada-runner/config)"
 
 echo ""
 echo "=== Restarting ${ACTUAL_RUNNER_COUNT} runner unit(s) to pick up the rebuilt image ==="
 echo "This interrupts any job currently running on each unit as it restarts."
-echo "Restarting one at a time, not all at once, so the whole fleet is never"
-echo "down simultaneously."
+echo "Restarting one at a time, and waiting for each to come back online before"
+echo "restarting the next, so the whole fleet is never down simultaneously."
+
+# lastrada-runner@.service is Type=exec, so `systemctl restart` returns as
+# soon as run-runner.sh has exec'd the Docker client -- not when the runner
+# has actually registered with GitHub and gone online. Registration takes
+# roughly 10s after that; without waiting here, this loop could restart all
+# N runners within a couple of seconds, taking the whole fleet down at once
+# despite the message above. Poll the org's runner list instead of trusting
+# systemctl's (premature) success. 30s is ~3x the observed ~10s registration
+# time -- generous headroom without blocking indefinitely on a genuinely
+# stuck runner. A runner that doesn't come online in time only logs a
+# warning; it does not fail the rest of the rollout.
+RUNNER_ONLINE_TIMEOUT="${RUNNER_ONLINE_TIMEOUT:-30}"
+
+wait_for_runner_online() {
+    runner_name="$1"
+    waited=0
+    while [ "$waited" -lt "$RUNNER_ONLINE_TIMEOUT" ]; do
+        status="$($SUDO gh api "orgs/${ACTUAL_GITHUB_ORG}/actions/runners" \
+            --jq ".runners[] | select(.name == \"${runner_name}\") | .status" 2>/dev/null || true)"
+        if [ "$status" = "online" ]; then
+            echo "  ${runner_name} is online (after ${waited}s)"
+            return 0
+        fi
+        sleep 2
+        waited=$(( waited + 2 ))
+    done
+    echo "  WARNING: ${runner_name} did not report online within ${RUNNER_ONLINE_TIMEOUT}s;" >&2
+    echo "  continuing with the rest of the fleet -- check its status manually:" >&2
+    echo "  gh api orgs/${ACTUAL_GITHUB_ORG}/actions/runners --jq '.runners[] | {name,status,busy}'" >&2
+    return 0
+}
+
 for i in $(seq 1 "$ACTUAL_RUNNER_COUNT"); do
-    echo "restarting lastrada-runner@${i}"
+    runner_name="${ACTUAL_RUNNER_NAME_PREFIX}-${i}"
+    echo "restarting lastrada-runner@${i} (${runner_name})"
     $SUDO systemctl restart "lastrada-runner@${i}.service"
+    wait_for_runner_online "$runner_name"
 done
 
 echo ""
