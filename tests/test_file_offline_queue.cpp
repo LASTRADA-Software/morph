@@ -548,7 +548,7 @@ TEST_CASE(
     // silently dropped the "third" item to a parse failure tolerated as a
     // torn trailing line. Post-fix, the short write left no trace, so exactly
     // "first" and "third" survive.
-    morph::offline::FileOfflineQueue reopened{path, ioOps};
+    morph::offline::FileOfflineQueue const reopened{path, ioOps};
     auto const pending = reopened.drain();
     std::vector<std::string> payloads;
     payloads.reserve(pending.size());
@@ -556,9 +556,9 @@ TEST_CASE(
         payloads.push_back(item.payload);
     }
     CHECK(payloads.size() == 2U);
-    CHECK(std::find(payloads.begin(), payloads.end(), "first") != payloads.end());
-    CHECK(std::find(payloads.begin(), payloads.end(), "third") != payloads.end());
-    CHECK(std::find(payloads.begin(), payloads.end(), "second") == payloads.end());
+    CHECK(std::ranges::find(payloads, "first") != payloads.end());
+    CHECK(std::ranges::find(payloads, "third") != payloads.end());
+    CHECK(std::ranges::find(payloads, "second") == payloads.end());
     std::filesystem::remove(path);
 }
 
@@ -631,7 +631,15 @@ TEST_CASE("morph::offline::FileOfflineQueue: construction syncs the containing d
         return 0;
     };
 
-    morph::offline::FileOfflineQueue queue{path, ioOps};
+    // Scoped: the queue holds `path` open in append mode for its whole
+    // lifetime, and Windows refuses to unlink a file another handle still has
+    // open -- std::filesystem::remove() below threw "The process cannot access
+    // the file because it is being used by another process" on the cl-debug
+    // and clangcl-debug legs. POSIX allows the unlink either way, so this only
+    // ever failed on Windows.
+    {
+        morph::offline::FileOfflineQueue const queue{path, ioOps};
+    }
 
     REQUIRE(syncedPaths.size() == 1);
     CHECK(syncedPaths[0] == path.parent_path());

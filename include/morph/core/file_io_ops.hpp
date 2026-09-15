@@ -125,6 +125,10 @@ struct FileIoOps {
         return 0;
 #else
         std::filesystem::path const resolved = dir.empty() ? std::filesystem::path{"."} : dir;
+        // POSIX ::open is variadic only to make the third `mode` argument
+        // optional; it is not passed here (no O_CREAT), and there is no
+        // non-variadic spelling of the syscall to prefer.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
         int const dirFd = ::open(resolved.c_str(), O_RDONLY | O_DIRECTORY);
         if (dirFd < 0) {
             return -1;
@@ -174,22 +178,26 @@ inline long long wideFtell(std::FILE* file) {
 /// disk, so every subsequent `ftell` on @p file is trustworthy again
 /// regardless of how many short writes happen back to back.
 ///
-/// @param io                Injectable I/O primitives to use for the flush/resize.
+/// @param ioOps             Injectable I/O primitives to use for the flush/resize.
 /// @param file              Open stdio handle the short write happened on.
 /// @param path              Path @p file was opened from.
 /// @param offsetBeforeWrite `wideFtell(file)` as captured immediately before
 ///                          the short write; negative (a failed query) skips
 ///                          the resize, since there is no offset to roll back to.
-inline void rollBackShortWrite(FileIoOps& io, std::FILE* file, const std::filesystem::path& path,
+inline void rollBackShortWrite(FileIoOps& ioOps, std::FILE* file, const std::filesystem::path& path,
                                long long offsetBeforeWrite) {
-    io.fflush(file);
+    ioOps.fflush(file);
     if (offsetBeforeWrite >= 0) {
         std::error_code errorCode;
-        io.resizeFile(path, static_cast<std::uintmax_t>(offsetBeforeWrite), errorCode);
+        ioOps.resizeFile(path, static_cast<std::uintmax_t>(offsetBeforeWrite), errorCode);
     }
     // Best-effort resync, regardless of whether the resize above ran or
     // succeeded: cheaper and safer than conditioning it on that outcome, and
     // a stream position that is merely still-correct is a harmless no-op.
+    // The return value is deliberately unchecked: this is already the failure
+    // path, a failed reposition leaves the caller no better recovery than the
+    // throw it is about to do anyway, and repairTornTail() is the backstop.
+    // NOLINTNEXTLINE(cert-err33-c)
     std::fseek(file, 0, SEEK_END);
 }
 
@@ -208,18 +216,19 @@ inline void rollBackShortWrite(FileIoOps& io, std::FILE* file, const std::filesy
 /// `morph::offline::FileOfflineQueue`'s constructors, both of which used to
 /// carry an identical copy of this scan.
 ///
-/// @param io          Injectable I/O primitives to use for the read-check/resize.
+/// @param ioOps       Injectable I/O primitives to use for the read-check/resize.
 /// @param path        File to check and, if needed, truncate.
 /// @param logComponent Name to prefix warning log lines with (the calling
 ///        class's own name), so a log reader can tell which file the
 ///        warning is about without `path` alone disambiguating it.
-inline void repairTornTail(FileIoOps& io, const std::filesystem::path& path, std::string_view logComponent) {
+inline void repairTornTail(FileIoOps& ioOps, const std::filesystem::path& path,
+                           std::string_view logComponent) {
     std::error_code errorCode;
     auto const size = std::filesystem::file_size(path, errorCode);
     if (errorCode || size == 0) {
         return;  // absent or empty: nothing to repair
     }
-    if (!io.canOpenForRead(path)) {
+    if (!ioOps.canOpenForRead(path)) {
         return;
     }
     std::ifstream input{path, std::ios::binary};
@@ -255,7 +264,7 @@ inline void repairTornTail(FileIoOps& io, const std::filesystem::path& path, std
     if (intactEnd == size) {
         return;
     }
-    io.resizeFile(path, intactEnd, errorCode);
+    ioOps.resizeFile(path, intactEnd, errorCode);
     if (errorCode) {
         ::morph::log::logWarn(std::string{logComponent} + ": could not truncate torn trailing record in " +
                               path.string() + ": " + errorCode.message());

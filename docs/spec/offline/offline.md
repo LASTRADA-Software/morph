@@ -371,6 +371,32 @@ just id 1), restart again, and the next `enqueue()` reissued id 2, the id of a
 completed and acknowledged item. Mutations also raise rather than swallow I/O
 failures: a short write or a failed `fflush`/`fsync` throws, since every
 mutation is documented as a committed transaction by the time the call returns.
+
+A **short write is rolled back before it throws** (morph#530). The file is
+opened `"a"`, so a partial line's bytes sit exactly where the next `writeLine`
+would resume, with no separating newline — the two merge into a single line that
+`load()` can tolerate only while it remains the *trailing* one, and stops being
+able to the moment a further append pushes it into an interior position, where a
+malformed line is genuine corruption and is rethrown. `writeLine` records the
+offset before writing and, on a short write, calls
+`morph::core::rollBackShortWrite` to truncate the file back to it, so a failed
+write leaves nothing for the next one to merge with. The rollback is
+best-effort: it is already the failure path, and the crash that caused the short
+write may equally prevent the cleanup.
+
+The backstop for that case is `morph::core::repairTornTail`, which the
+constructor runs **before `load()`**. Compaction heals a torn tail, but
+compaction runs *after* `load()` — so a tail damaged badly enough for `load()`
+to reject (an interior merge from a doubled-up short write) threw before
+compaction ever got the chance. `FileActionLog`'s constructor does the identical
+thing for the identical reason.
+
+`compact()` additionally fsyncs the **containing directory** after its
+`rename()` (morph#532). The fsync on the temporary file makes the compacted
+*data* durable; it says nothing about the directory entry that now names it
+`_path`. The failure is surfaced rather than swallowed, like every other fsync
+failure in this class, and is safe to throw from: `compact()` always runs before
+`_file` is opened, so nothing is left dangling.
 They are also ordered **durable-first**: `markDone()` appends the tombstone
 before erasing from `_items`, and `setAttempts()` writes before updating memory.
 The reverse order meant a throwing append left the item gone from memory with no
@@ -434,6 +460,42 @@ existing row's id; empty keys are exempt and are never deduplicated, matching
 and `markDone()` loses nothing; every write is its own committed statement
 under `PRAGMA journal_mode=WAL`. All operations serialise on an internal
 mutex, so the queue is safe to share between the write and drain/replay paths.
+
+**Durability settings, set once at construction** (morph#532):
+
+| Pragma | Value | Why |
+|---|---|---|
+| `journal_mode` | `WAL` | Per-statement commit durability. **Read back and verified**, not trusted. |
+| `synchronous` | `FULL` | WAL's default `NORMAL` can lose the tail of the last transaction on a power loss. |
+| `busy_timeout` | `kBusyTimeoutMillis` (5000) | The internal mutex makes `SQLITE_BUSY` unreachable for one instance, but the class documents no single-opener restriction. |
+
+The `journal_mode` read-back matters because `sqlite3_exec` discards the row a
+`PRAGMA` returns, so a **silent fallback to `delete` mode** — which is what
+happens on a filesystem without the shared-memory support WAL needs, such as NFS
+or some container mounts — would otherwise go unnoticed and quietly cost the
+durability the rest of this section promises. Construction re-reads the pragma
+through a prepared statement and throws if it is not `wal`.
+
+Construction also **fsyncs the containing directory** once, after
+`sqlite3_open()` and every schema statement succeed. `sqlite3_open()` creates
+`_path` (and, once WAL took, its `-wal`/`-shm` siblings) if absent; SQLite's own
+fsyncs cover those files' *contents*, never the directory entries naming them.
+This is the same file-vs-directory gap `FileIoOps::syncPath` closes for
+`FileActionLog` and `FileOfflineQueue`. It is unconditional — syncing an
+unchanged directory is a cheap no-op — and its failure throws. To make that
+branch reachable in a test without a real OS failure, the constructor takes an
+optional third `morph::core::FileIoOps` parameter, used for `syncPath` **only**;
+every other SQLite interaction goes through the C API directly.
+
+**A NUL byte inside a payload or idempotency key survives a round trip**
+(morph#531). `payload` and `idempotencyKey` are opaque strings whose
+serialisation the caller owns, so an embedded NUL is legitimate. Both halves
+previously truncated at the first one: `sqlite3_bind_text` was called with
+length `-1`, telling SQLite to measure to the first NUL, and the read side
+constructed a `std::string` from the bare `const char*`. Writes now pass an
+explicit `value.size()` (throwing if it exceeds `INT_MAX`, which the `int`
+parameter cannot represent) and reads use `sqlite3_column_bytes()` for the
+stored length.
 
 ## Ownership: who enqueues
 

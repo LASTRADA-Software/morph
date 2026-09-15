@@ -157,7 +157,7 @@ public:
             // would otherwise go unnoticed (morph#532). Read the pragma back
             // through a real prepared statement instead of trusting the set.
             {
-                detail::StatementGuard guard{prepare("PRAGMA journal_mode;")};
+                detail::StatementGuard const guard{prepare("PRAGMA journal_mode;")};
                 if (sqlite3_step(guard.get()) != SQLITE_ROW) {
                     throw SqliteOfflineQueueError{"SqliteOfflineQueue: failed to read back journal_mode"};
                 }

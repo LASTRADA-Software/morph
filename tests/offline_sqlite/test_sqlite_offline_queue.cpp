@@ -535,6 +535,9 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: journal_mode=WAL persists and is 
     sqlite3_stmt* stmt = nullptr;
     REQUIRE(sqlite3_prepare_v2(raw, "PRAGMA journal_mode;", -1, &stmt, nullptr) == SQLITE_OK);
     REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
+    // sqlite3_column_text returns `const unsigned char*`; reading it as text
+    // has no other spelling.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     std::string const mode{reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))};
     CHECK(mode == "wal");
     sqlite3_finalize(stmt);
@@ -623,7 +626,14 @@ TEST_CASE(
         return 0;
     };
 
-    morph::offline::SqliteOfflineQueue queue{dbPath, std::nullopt, ioOps};
+    // Scoped so the connection (and its -wal/-shm siblings) is closed before
+    // removeDbFiles() unlinks them -- the same open-handle-vs-unlink ordering
+    // that made the FileOfflineQueue twin of this test fail on Windows. This
+    // suite is Linux-only today, where the unlink would succeed regardless;
+    // scoped anyway so it does not become a Windows failure the day it is not.
+    {
+        morph::offline::SqliteOfflineQueue const queue{dbPath, std::nullopt, ioOps};
+    }
 
     REQUIRE(syncedPaths.size() == 1);
     CHECK(syncedPaths[0] == dbPath.parent_path());
