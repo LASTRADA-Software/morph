@@ -373,9 +373,9 @@ private:
         // the two calls below actually happens, and enqueues the one shared
         // dispatch task -- ticketed or not.
         auto doPost = [this, self, msg = std::move(msg), reply = std::move(reply),
-                       cid](std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> ticket) mutable {
+                       cid](::morph::backend::detail::ExecuteOrderGate::Ticket ticket) mutable {
             _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
-                self->dispatchMessage(msg, reply, cid, ticket);
+                self->dispatchMessage(msg, reply, cid, std::move(ticket));
             });
         };
         if (executeMid) {
@@ -383,12 +383,12 @@ private:
             // lock: if `_pool.post` throws, `takeAndPost` releases the ticket
             // itself before rethrowing (see its own doc comment) — no local
             // `ExecuteTicketGuard` is needed here the way the old two-step
-            // take()-then-post() shape required one.
-            _executeGate.takeAndPost(*executeMid, [&doPost, mid = *executeMid](std::uint64_t ticketNum) {
-                doPost(std::make_pair(mid, ticketNum));
-            });
+            // take()-then-post() shape required one. `doPost` already matches
+            // `takeAndPost`'s callback signature, so it is passed straight
+            // through rather than behind a redundant forwarding lambda.
+            _executeGate.takeAndPost(*executeMid, doPost);
         } else {
-            doPost(std::nullopt);
+            doPost({});
         }
     }
 
@@ -980,10 +980,10 @@ private:
     // the rest of this frame — including `dispatchExecute`, the only branch that
     // does anything with it beyond releasing it. Every other `kind` ignores it;
     // `handleImpl` never takes one for a non-`execute` envelope in the first
-    // place, so it is always `std::nullopt` for those.
+    // place, so it is always the empty `Ticket` for those.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0,
-                         std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> executeTicket = {}) {
+                         ::morph::backend::detail::ExecuteOrderGate::Ticket executeTicket = {}) {
         // Adopted before anything that can fail, including the decode: from
         // here on every way out of this function — each early return below,
         // the outer catch, and any branch a later change adds — releases the
@@ -1715,7 +1715,13 @@ private:
     // Keyed by ModelId internally, not held forever: a model with no
     // outstanding tickets has no entry in the gate's map at all (erased once
     // its last ticket is released), so this never grows unbounded across the
-    // server's lifetime the way a per-model map with no cleanup would.
+    // server's lifetime the way a per-model map with no cleanup would. Under
+    // load this erase-and-recreate can happen while a same-model ticket is
+    // still in flight (its dispatch task enqueued but not yet reached by a
+    // pool worker), which is why `handleImpl`/`dispatchExecute` carry an
+    // `ExecuteOrderGate::Ticket` end to end rather than a bare `ModelId` --
+    // it is bound to the exact `Gate` it was issued from, so a fresh map
+    // lookup finding a newer generation can never redirect it.
     //
     // The gate itself -- `take`/`takeAndPost`/`awaitTurn`/`release`, the
     // out-of-order-release handling that closed issue #449, the atomic

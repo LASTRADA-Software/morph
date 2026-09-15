@@ -26,9 +26,7 @@
 #include <chrono>
 #include <cstdint>
 #include <morph/core/detail/execute_order_gate.hpp>
-#include <optional>
 #include <thread>
-#include <utility>
 
 #include "test_support.hpp"
 
@@ -250,14 +248,55 @@ TEST_CASE(
     CHECK(gate.gateCount() == 0U);
 }
 
+// ── Ticket: immune to a drain-and-recreate of the map entry ────────────────
+
+TEST_CASE(
+    "ExecuteOrderGate: a stray release of an already-drained ticket does not disturb "
+    "a newer gate created for the same model afterwards",
+    "[remote][execute-order-gate][ticket]") {
+    // Threadless reproduction of the scenario `Ticket`'s own doc comment
+    // describes: a caller that (a duplicate delivery, or any other bug that
+    // violates the "release exactly once" contract) re-releases a ticket
+    // whose gate has already fully drained and been erased, *after* a
+    // brand-new gate has since been created for the same model. `staleTicket`
+    // still carries a `shared_ptr` to the OLD, detached `Gate` object -- this
+    // is what `release(const Ticket&)`'s identity check
+    // (`iter->second.get() == &gate` in the by-`Ticket` overload) exists to
+    // guard against: without it, the stray release would find *whatever is
+    // currently at* `_gates[mid]` -- the new, unrelated gate -- and could
+    // erase it (or otherwise misinterpret its state) even though it belongs
+    // to a completely different ticket epoch.
+    //
+    // This is precisely the class of bug the old by-`ModelId` API
+    // (`take`/`awaitTurn(mid, ticket)`/`release(mid, ticket)`) remains
+    // exposed to, since it always re-derives "the gate for mid" by a fresh
+    // map lookup -- see `Ticket`'s own doc comment.
+    ExecuteOrderGate gate;
+    ModelId const mid{1};
+
+    auto const staleTicket = gate.takeTicket(mid);  // First epoch's only ticket.
+    gate.release(staleTicket);                      // Fully drains it -- its gate is erased.
+    CHECK(gate.gateCount() == 0U);
+
+    auto const freshTicket = gate.takeTicket(mid);  // A brand-new gate for the same mid.
+    CHECK(gate.gateCount() == 1U);
+
+    // The stray, out-of-contract second release: bound to the first epoch's
+    // long-gone gate, not the current one.
+    gate.release(staleTicket);
+    CHECK(gate.gateCount() == 1U);  // The new epoch's gate is untouched -- still outstanding.
+
+    gate.release(freshTicket);
+    CHECK(gate.gateCount() == 0U);
+}
+
 // ── ExecuteTicketGuard ───────────────────────────────────────────────────────
 
 TEST_CASE("ExecuteTicketGuard: releases its ticket on destruction", "[remote][execute-order-gate][guard]") {
     ExecuteOrderGate gate;
     ModelId const mid{1};
     {
-        auto const ticket = gate.take(mid);
-        ExecuteTicketGuard guard{gate, std::make_pair(mid, ticket)};
+        ExecuteTicketGuard guard{gate, gate.takeTicket(mid)};
         CHECK(gate.gateCount() == 1U);
     }  // Destructor releases; nothing else does.
     CHECK(gate.gateCount() == 0U);
@@ -266,8 +305,7 @@ TEST_CASE("ExecuteTicketGuard: releases its ticket on destruction", "[remote][ex
 TEST_CASE("ExecuteTicketGuard: release() is explicit-then-idempotent", "[remote][execute-order-gate][guard]") {
     ExecuteOrderGate gate;
     ModelId const mid{1};
-    auto const ticket = gate.take(mid);
-    ExecuteTicketGuard guard{gate, std::make_pair(mid, ticket)};
+    ExecuteTicketGuard guard{gate, gate.takeTicket(mid)};
     guard.release();
     CHECK(gate.gateCount() == 0U);
     guard.release();  // Second call: no ticket held, must not double-release.
@@ -277,21 +315,21 @@ TEST_CASE("ExecuteTicketGuard: release() is explicit-then-idempotent", "[remote]
 TEST_CASE("ExecuteTicketGuard: disarm() gives up ownership without releasing", "[remote][execute-order-gate][guard]") {
     ExecuteOrderGate gate;
     ModelId const mid{1};
-    auto const ticket = gate.take(mid);
+    auto ticket = gate.takeTicket(mid);
     {
-        ExecuteTicketGuard guard{gate, std::make_pair(mid, ticket)};
+        ExecuteTicketGuard guard{gate, ticket};  // Guard holds its own copy.
         guard.disarm();
     }  // Destructor: ticket already disarmed, must not release it.
     CHECK(gate.gateCount() == 1U);
     // The caller that adopted ownership via disarm() is responsible for the
     // eventual release; simulate that here so the gate is left clean.
-    gate.release(mid, ticket);
+    gate.release(ticket);
     CHECK(gate.gateCount() == 0U);
 }
 
 TEST_CASE("ExecuteTicketGuard: constructed with no ticket is inert", "[remote][execute-order-gate][guard]") {
     ExecuteOrderGate gate;
-    ExecuteTicketGuard guard{gate, std::nullopt};
+    ExecuteTicketGuard guard{gate, {}};
     guard.awaitTurn();  // No-op: nothing to wait for.
     guard.release();    // No-op: nothing to release.
     CHECK(gate.gateCount() == 0U);
@@ -310,8 +348,7 @@ TEST_CASE("ExecuteTicketGuard: awaitTurn forwards to the gate for the held ticke
     ExecuteOrderGate gate;
     ModelId const mid{1};
     auto const t0 = gate.take(mid);
-    auto const t1 = gate.take(mid);
-    ExecuteTicketGuard guard{gate, std::make_pair(mid, t1)};
+    ExecuteTicketGuard guard{gate, gate.takeTicket(mid)};
 
     std::atomic<bool> t1Turn{false};
     std::thread waiter{[&] {
