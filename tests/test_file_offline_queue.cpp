@@ -613,6 +613,48 @@ TEST_CASE(
     std::filesystem::remove(path);
 }
 
+// ── Directory fsync (morph#532) ──────────────────────────────────────────
+//
+// compact() renames a temp file onto `_path` on every construction -- a
+// directory mutation that its own fsync of the temp file's *data* never
+// makes durable. These confirm `FileIoOps::syncPath` is actually called
+// after that rename, with the right directory, and that a failure there is
+// surfaced rather than swallowed.
+
+TEST_CASE("morph::offline::FileOfflineQueue: construction syncs the containing directory after compacting (morph#532)",
+          "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    std::vector<std::filesystem::path> syncedPaths;
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [&syncedPaths](const std::filesystem::path& dir) {
+        syncedPaths.push_back(dir);
+        return 0;
+    };
+
+    morph::offline::FileOfflineQueue queue{path, ioOps};
+
+    REQUIRE(syncedPaths.size() == 1);
+    CHECK(syncedPaths[0] == path.parent_path());
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: a failing directory fsync during construction-time compaction throws",
+          "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return -1; };
+
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+
+    // The failed construction must not leave the queue unusable -- a fresh,
+    // real-I/O open of the same path must succeed cleanly.
+    morph::core::FileIoOps const realOps;
+    morph::offline::FileOfflineQueue reopened{path, realOps};
+    (void)reopened.enqueue("payload");
+    REQUIRE(reopened.size() == 1);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush() during construction-time compaction throws",
           "[file_queue][fault-injection]") {
     auto path = tempQueuePath();

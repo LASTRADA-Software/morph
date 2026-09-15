@@ -465,6 +465,15 @@ private:
         // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory) — the data is already fsynced above
         std::fclose(out);
         std::filesystem::rename(tmp, _path);
+        // The rename is a directory mutation, not a file-content one -- fsync
+        // on `out` above made the compacted *data* durable, but not the
+        // directory entry that now names it `_path` instead of the tmp name
+        // (morph#532). Surfaced rather than swallowed, same as every other
+        // fsync failure in this class; safe to throw here, since compact()
+        // always runs before `_file` is opened -- nothing left dangling.
+        if (_io.syncPath(_path.parent_path()) != 0) {
+            throw std::runtime_error("FileOfflineQueue: failed to fsync directory after compacting " + _path.string());
+        }
     }
 
     std::filesystem::path _path;

@@ -14,6 +14,7 @@
 #ifdef _WIN32
 #include <io.h>
 #else
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -96,6 +97,43 @@ struct FileIoOps {
         resizeFile = [](const std::filesystem::path& path, std::uintmax_t newSize, std::error_code& errorCode) {
             std::filesystem::resize_file(path, newSize, errorCode);
         };
+
+    /// @brief Commits a directory's own metadata (new/renamed entries within
+    ///        it) to durable storage. `fsync` on a *file* makes only that
+    ///        file's data durable -- not the directory entry that names it,
+    ///        so a fresh file's creation or a rename can vanish on power loss
+    ///        even after the file's own contents were fsynced (morph#532).
+    ///        POSIX: `open(dir, O_RDONLY|O_DIRECTORY)` + `fsync` + `close`. A
+    ///        no-op on Windows, documented as such rather than faked --
+    ///        `FlushFileBuffers`'s semantics for a directory handle differ
+    ///        enough from POSIX `fsync` that pretending otherwise would be
+    ///        misleading, and this seam's Windows story is already
+    ///        file-`fsync`-only.
+    /// @param dir Directory whose entries were just mutated. A `path::parent_path()`
+    ///        of a bare relative filename (e.g. `"queue.ndjson"`, with no
+    ///        directory component) is the *empty* path, not `"."` -- treated
+    ///        here as the current directory, the same resolution the shell
+    ///        and every POSIX call already give an empty path's implicit
+    ///        caller, so a relative, directory-less @p path still gets its
+    ///        containing directory synced instead of failing `open()` with
+    ///        `ENOENT` on every call site that derives @p dir from
+    ///        `parent_path()`.
+    /// @return `0` on success, nonzero on failure.
+    std::function<int(const std::filesystem::path& dir)> syncPath = [](const std::filesystem::path& dir) {
+#ifdef _WIN32
+        (void)dir;
+        return 0;
+#else
+        std::filesystem::path const resolved = dir.empty() ? std::filesystem::path{"."} : dir;
+        int const dirFd = ::open(resolved.c_str(), O_RDONLY | O_DIRECTORY);
+        if (dirFd < 0) {
+            return -1;
+        }
+        int const result = ::fsync(dirFd);
+        ::close(dirFd);
+        return result;
+#endif
+    };
 };
 
 /// @brief Returns @p file's current stdio position, wide enough to represent

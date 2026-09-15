@@ -779,6 +779,93 @@ TEST_CASE("FileActionLog::rotate: a failing pre-rotation fsync() throws before a
     REQUIRE(log.entries().size() == 1);
 }
 
+// ── Directory fsync (morph#532) ──────────────────────────────────────────
+//
+// `fsync` on a file makes its *data* durable but not a new directory entry
+// or a rename -- the constructor's first `fopen("a")` can create the file,
+// and `rotate()` performs two directory mutations (the seal rename and a
+// fresh active-file creation). `FileIoOps::syncPath` closes that gap; these
+// confirm it is actually called at each site, with the right directory, and
+// that a failure there is surfaced rather than swallowed.
+
+TEST_CASE("FileActionLog: construction syncs the containing directory after creating the file (morph#532)",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const tmp{"file_fault_construct_syncpath"};
+    std::vector<std::filesystem::path> syncedPaths;
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [&syncedPaths](const std::filesystem::path& dir) {
+        syncedPaths.push_back(dir);
+        return 0;
+    };
+
+    FileActionLog log{tmp.path, ioOps};
+
+    REQUIRE(syncedPaths.size() == 1);
+    CHECK(syncedPaths[0] == tmp.path.parent_path());
+}
+
+TEST_CASE("FileActionLog: a failing directory fsync during construction throws and leaks no file handle",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const tmp{"file_fault_construct_syncpath_fails"};
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return -1; };
+
+    REQUIRE_THROWS_AS(FileActionLog(tmp.path, ioOps), std::runtime_error);
+
+    // The failed construction must not have left the file handle open --
+    // a fresh, real-I/O open of the same path must succeed cleanly.
+    morph::core::FileIoOps const realOps;
+    FileActionLog reopened{tmp.path, realOps};
+    reopened.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    reopened.flush();
+    REQUIRE(reopened.entries().size() == 1);
+}
+
+TEST_CASE("FileActionLog::rotate: syncs both the seal rename's and the reopen's directory (morph#532)",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const active{"file_fault_rotate_syncpath_active"};
+    TempFile const sealed{"file_fault_rotate_syncpath_sealed"};
+    std::vector<std::filesystem::path> syncedPaths;
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [&syncedPaths](const std::filesystem::path& dir) {
+        syncedPaths.push_back(dir);
+        return 0;
+    };
+
+    FileActionLog log{active.path, ioOps};
+    syncedPaths.clear();  // drop the construction-time sync; this test is about rotate()'s own
+    log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    log.rotate(sealed.path);
+
+    // active.path and sealed.path share a parent (both under temp_directory_path()),
+    // so rotate()'s "only sync twice if the directories differ" branch collapses
+    // to one sync -- confirmed here rather than asserted away.
+    REQUIRE(syncedPaths.size() == 1);
+    CHECK(syncedPaths[0] == active.path.parent_path());
+}
+
+TEST_CASE("FileActionLog::rotate: a failing directory fsync throws after the rename and reopen already succeeded",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const active{"file_fault_rotate_syncpath_fails_active"};
+    TempFile const sealed{"file_fault_rotate_syncpath_fails_sealed"};
+    auto shouldFail = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [shouldFail](const std::filesystem::path&) { return *shouldFail ? -1 : 0; };
+
+    FileActionLog log{active.path, ioOps};  // construction's own sync must succeed
+    *shouldFail = true;
+    log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    REQUIRE_THROWS_AS(log.rotate(sealed.path), std::runtime_error);
+
+    // The rename and reopen both actually succeeded before the sync failure
+    // was surfaced -- rotate() does not undo real progress just because the
+    // trailing durability step could not be confirmed.
+    REQUIRE(std::filesystem::exists(sealed.path));
+    log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20"));
+    log.flush();
+    REQUIRE(log.entries().size() == 1);
+}
+
 TEST_CASE(
     "FileActionLog::rotate: a failing reopen after a successful rename leaves the log closed, "
     "requireOpen()'s throwing arm reachable, and the destructor's null check load-bearing",

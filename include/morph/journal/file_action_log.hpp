@@ -104,6 +104,20 @@ public:
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog: failed to open " + _path.string());
         }
+        // "a" mode creates the file if it did not already exist -- a fresh
+        // directory entry that `_file`'s own later fsyncs never make durable
+        // (morph#532). Unconditional: harmless when the file already existed,
+        // since syncing an unchanged directory is a cheap no-op: a failure
+        // here is surfaced rather than swallowed, the same discipline
+        // `flush()`/`rotate()` already apply to the file-content fsync.
+        // `_file` is closed first -- this constructor never completes, so
+        // ~FileActionLog() never runs to close what fopen() already opened.
+        if (_io.syncPath(_path.parent_path()) != 0) {
+            // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory) — about to rethrow, nothing to report a close failure to
+            std::fclose(_file);
+            _file = nullptr;
+            throw std::runtime_error("FileActionLog: failed to fsync directory after creating " + _path.string());
+        }
     }
 
     /// @brief Closes the underlying file.
@@ -322,6 +336,18 @@ public:
         // same pre-rotation file (still holding every prior entry), so a
         // failed rotation never leaves the log unusable.
         _file = _io.fopen(_path.string(), "a");
+
+        // Two directory mutations just happened -- the seal rename and, on
+        // success, a brand-new active file -- and neither is durable until
+        // its directory entry is fsynced (morph#532). Run regardless of what
+        // failed above, so a rotation that is about to throw still leaves
+        // whatever succeeded as durable as it can be made; the failure is
+        // surfaced below rather than swallowed, same as the pre-rotation
+        // fsync above.
+        bool const dirSyncFailed = _io.syncPath(_path.parent_path()) != 0;
+        bool const sealedDirSyncFailed =
+            sealedPath.parent_path() != _path.parent_path() && _io.syncPath(sealedPath.parent_path()) != 0;
+
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog::rotate: failed to reopen " + _path.string() + " after " +
                                      (renameError ? "a failed" : "a successful") + " rename to " +
@@ -330,6 +356,10 @@ public:
         if (renameError) {
             throw std::runtime_error("FileActionLog::rotate: failed to rename " + _path.string() + " to " +
                                      sealedPath.string() + ": " + renameError.message());
+        }
+        if (dirSyncFailed || sealedDirSyncFailed) {
+            throw std::runtime_error("FileActionLog::rotate: failed to fsync the directory after rotating " +
+                                     _path.string() + " to " + sealedPath.string());
         }
     }
 
