@@ -5,18 +5,26 @@
 # CPU/RAM the machine actually has -- nothing here is a hardcoded "2 workers,
 # 2 CPUs, 4 GB" assumption. Run as root (or with sudo) on a bare Ubuntu/Debian
 # VM; safe to re-run (idempotent: reuses Docker if already installed, rebuilds
-# images, replaces existing morph-runner-*/fastcached containers by name).
+# images, replaces the existing fastcached container by name, reinstalls the
+# systemd units that own the runner containers' lifecycle, and then restarts
+# those units one at a time so a rebuilt runner image is actually picked up --
+# never touching an already-written /etc/lastrada-runner/config, so an
+# operator's hand-tuned settings, e.g. a lowered RUNNER_COUNT, survive a
+# re-run instead of being reverted to this run's detected sizing).
 #
 # Usage:
-#   RUNNER_TOKEN=... ./bootstrap-cloud-node.sh
+#   ./bootstrap-cloud-node.sh
 #
-# Required env var:
-#   RUNNER_TOKEN   - a fresh registration token from
-#                    POST /repos/LASTRADA-Software/morph/actions/runners/registration-token
-#                    (expires ~1 hour; mint it right before running this
-#                    script, e.g. `gh api -X POST
-#                    repos/LASTRADA-Software/morph/actions/runners/registration-token
-#                    --jq '.token'` from a machine with gh admin auth).
+# No registration token is needed up front: each runner mints its own, fresh,
+# on every start (see run-runner.sh). This box needs `gh` authenticated with
+# admin:org on LASTRADA-Software instead -- a credential that stays on the
+# host and never enters a container. The preflight below proves that with a
+# real, read-only org-scoped API call (not just `gh auth status`, which only
+# proves *some* credential is stored, not that it has admin:org against this
+# org) -- and it runs that call through $SUDO, because the systemd units
+# install-runner-units.sh installs run as whatever identity $SUDO resolves to
+# (root, under sudo), so root's own `gh` credential is the one that actually
+# has to be authenticated, not the invoking user's.
 #
 # Optional env vars (override the dynamic sizing below):
 #   RUNNER_NAME_PREFIX     - defaults to "morph-cloud-$(hostname)"
@@ -43,9 +51,33 @@ fi
 SUDO=""
 [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
-if [ -z "${RUNNER_TOKEN:-}" ]; then
-    echo "ERROR: RUNNER_TOKEN is not set. Mint one with:" >&2
-    echo "  gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token'" >&2
+# `command` is a shell builtin, not an executable, so `sudo command -v gh`
+# can never work -- sudo execs a program named "command", which doesn't
+# exist, and always fails regardless of whether gh is actually installed.
+# Run the lookup inside a shell instead (through $SUDO, or directly when
+# $SUDO is empty/root) so the builtin resolves in the identity that will
+# actually run the systemd units.
+if ! $SUDO sh -c 'command -v gh' >/dev/null 2>&1; then
+    echo "ERROR: the gh CLI is required -- each runner mints its own" >&2
+    echo "       registration token on every start." >&2
+    exit 1
+fi
+
+# `gh auth status` is not enough here: it only proves some credential is
+# stored, not that it has admin:org against LASTRADA-Software, nor that it
+# belongs to the identity the systemd units actually run as. Query an
+# endpoint that requires org-level self-hosted-runner read (admin:org) and
+# mints/changes nothing, through $SUDO so it exercises the exact credential
+# store install-runner-units.sh's units will use.
+if ! $SUDO gh api orgs/LASTRADA-Software/actions/runners --jq '.total_count' >/dev/null 2>&1; then
+    echo "ERROR: could not list LASTRADA-Software's self-hosted runners via gh." >&2
+    echo "       The credential the runner units will use must be authenticated" >&2
+    echo "       with admin:org on LASTRADA-Software." >&2
+    if [ -n "$SUDO" ]; then
+        echo "       This ran as root (via sudo), because that's the identity the" >&2
+        echo "       systemd units install as -- so it's root's own gh credential" >&2
+        echo "       that needs 'gh auth login', not the invoking user's." >&2
+    fi
     exit 1
 fi
 
@@ -168,53 +200,118 @@ echo "fastcached started: ${FASTCACHED_CPUS} CPU, ${FASTCACHED_MEMORY_GB}GiB RAM
 
 # ── 6. Build the runner image ───────────────────────────────────────────
 echo ""
-echo "=== Building the morph self-hosted runner image ==="
-$SUDO docker build -t morph-runner:latest "$MORPH_ROOT/.github/self-hosted-runner"
+echo "=== Building the lastrada self-hosted runner image ==="
+$SUDO docker build -t lastrada-runner:latest "$MORPH_ROOT/.github/self-hosted-runner"
 
-# ── 7. Start the workers ────────────────────────────────────────────────
-# FASTCACHE_ADDR here is the loopback address, not host.docker.internal:
-# fastcached and the runner containers are on the same Docker host (this
-# machine), on the default bridge network, so each runner container reaches
-# fastcached the same way it would reach any other service on this box's own
-# network stack -- via the host's IP, which Docker's bridge networking makes
-# reachable as host.docker.internal on Linux too (Docker Engine >= 20.10
-# adds this automatically via --add-host on Linux; belt-and-suspenders
-# added explicitly below in case an older Engine is on this image).
+# ── 7. Configure and start the workers ──────────────────────────────────
+# systemd supervises the containers, not Docker: one owner, a fresh
+# registration token per start, and a bounded start limit so a broken
+# credential shows up as a failed unit instead of retrying forever. The
+# per-worker token minting that used to live here is gone -- run-runner.sh
+# mints one per start, which covers the single-use property by construction.
 echo ""
-echo "=== Starting ${WORKER_COUNT} runner worker(s) ==="
-for i in $(seq 1 "$WORKER_COUNT"); do
-    WORKER_TOKEN="$RUNNER_TOKEN"
-    if [ "$i" -gt 1 ]; then
-        echo "Minting a fresh registration token for worker $i (the one" \
-             "passed in on RUNNER_TOKEN is single-use)..."
-        if command -v gh >/dev/null 2>&1; then
-            WORKER_TOKEN="$(gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token')"
-        else
-            echo "ERROR: gh CLI not available to mint additional tokens for worker $i." >&2
-            echo "       Re-run with RUNNER_TOKEN set to a fresh token and adjust" >&2
-            echo "       WORKER_CPUS/FASTCACHED_CPUS to get WORKER_COUNT=1, or" >&2
-            echo "       install/auth gh on this box first." >&2
-            exit 1
-        fi
-    fi
+echo "=== Installing systemd units for ${WORKER_COUNT} worker(s) ==="
 
-    NAME="${RUNNER_NAME_PREFIX}-${i}"
-    $SUDO docker rm -f "$NAME" 2>/dev/null || true
-    $SUDO docker run -d \
-        --name "$NAME" \
-        --restart unless-stopped \
-        --cpus="${WORKER_CPUS}" \
-        --memory="${WORKER_MEM_GB}g" \
-        --add-host=host.docker.internal:host-gateway \
-        -e RUNNER_TOKEN="$WORKER_TOKEN" \
-        -e RUNNER_NAME="$NAME" \
-        -e FASTCACHE_ADDR="host.docker.internal:6674" \
-        morph-runner:latest
-    echo "started $NAME (${WORKER_CPUS} CPU, ${WORKER_MEM_GB}GiB RAM)"
+$SUDO mkdir -p /etc/lastrada-runner
+
+# Never clobber a config an operator has tuned -- same rule and message style
+# as install-runner-units.sh's own config.example handling. Without this, a
+# re-run (the documented way to pick up an image fix, see section 8 below)
+# would silently revert e.g. a hand-lowered RUNNER_COUNT back to whatever this
+# run's hardware detection computes.
+if [ ! -e /etc/lastrada-runner/config ]; then
+    $SUDO tee /etc/lastrada-runner/config >/dev/null <<CONF
+GITHUB_ORG=LASTRADA-Software
+RUNNER_GROUP=linux-docker
+RUNNER_COUNT=${WORKER_COUNT}
+RUNNER_NAME_PREFIX=${RUNNER_NAME_PREFIX}
+RUNNER_LABELS=self-hosted,Linux,X64,lastrada-docker
+RUNNER_CPUS=${WORKER_CPUS}
+RUNNER_MEMORY=${WORKER_MEM_GB}g
+RUNNER_IMAGE=lastrada-runner:latest
+FASTCACHE_ADDR=host.docker.internal:6674
+CMAKE_BUILD_PARALLEL_LEVEL=${WORKER_CPUS}
+CONF
+    $SUDO chmod 0600 /etc/lastrada-runner/config
+    echo "wrote /etc/lastrada-runner/config"
+else
+    echo "kept existing /etc/lastrada-runner/config (not overwriting operator-tuned settings)"
+    echo "  This run detected ${WORKER_COUNT} worker(s) x ${WORKER_CPUS} CPU / ${WORKER_MEM_GB} GiB RAM each,"
+    echo "  but that is NOT being applied. To change the running config, either edit"
+    echo "  /etc/lastrada-runner/config directly, or delete it and re-run this script"
+    echo "  to regenerate it from this machine's detected hardware."
+fi
+
+$SUDO bash "$MORPH_ROOT/.github/self-hosted-runner/install-runner-units.sh"
+
+# ── 8. Restart the fleet so a rebuilt image is actually used ───────────────
+# install-runner-units.sh's `systemctl enable --now` is a no-op on a unit
+# that's already active, so on a re-run section 6 above may have just built a
+# new lastrada-runner:latest image while every already-running runner keeps
+# using the old one until something restarts it. Read RUNNER_COUNT back from
+# the config on disk (not WORKER_COUNT computed in section 2) so this counts
+# the fleet that's actually installed, including a kept, operator-tuned
+# config from the guard above.
+# /etc/lastrada-runner/config is installed root:root mode 0600 by
+# install-runner-units.sh, so an unprivileged read here would fail with
+# "Permission denied" under `set -euo pipefail` -- aborting after the units
+# are installed but before the rollout finishes. Read it through $SUDO, same
+# as the preflight's gh check above. Also read GITHUB_ORG and
+# RUNNER_NAME_PREFIX back from the same on-disk config (not the env vars
+# computed earlier in this script) so the restart-and-wait loop below tracks
+# whatever fleet is actually installed, including a kept, operator-tuned
+# config from the guard above.
+ACTUAL_RUNNER_COUNT="$($SUDO awk -F= '/^RUNNER_COUNT=/ {print $2}' /etc/lastrada-runner/config)"
+ACTUAL_GITHUB_ORG="$($SUDO awk -F= '/^GITHUB_ORG=/ {print $2}' /etc/lastrada-runner/config)"
+ACTUAL_RUNNER_NAME_PREFIX="$($SUDO awk -F= '/^RUNNER_NAME_PREFIX=/ {print $2}' /etc/lastrada-runner/config)"
+
+echo ""
+echo "=== Restarting ${ACTUAL_RUNNER_COUNT} runner unit(s) to pick up the rebuilt image ==="
+echo "This interrupts any job currently running on each unit as it restarts."
+echo "Restarting one at a time, and waiting for each to come back online before"
+echo "restarting the next, so the whole fleet is never down simultaneously."
+
+# lastrada-runner@.service is Type=exec, so `systemctl restart` returns as
+# soon as run-runner.sh has exec'd the Docker client -- not when the runner
+# has actually registered with GitHub and gone online. Registration takes
+# roughly 10s after that; without waiting here, this loop could restart all
+# N runners within a couple of seconds, taking the whole fleet down at once
+# despite the message above. Poll the org's runner list instead of trusting
+# systemctl's (premature) success. 30s is ~3x the observed ~10s registration
+# time -- generous headroom without blocking indefinitely on a genuinely
+# stuck runner. A runner that doesn't come online in time only logs a
+# warning; it does not fail the rest of the rollout.
+RUNNER_ONLINE_TIMEOUT="${RUNNER_ONLINE_TIMEOUT:-30}"
+
+wait_for_runner_online() {
+    runner_name="$1"
+    waited=0
+    while [ "$waited" -lt "$RUNNER_ONLINE_TIMEOUT" ]; do
+        status="$($SUDO gh api "orgs/${ACTUAL_GITHUB_ORG}/actions/runners" \
+            --jq ".runners[] | select(.name == \"${runner_name}\") | .status" 2>/dev/null || true)"
+        if [ "$status" = "online" ]; then
+            echo "  ${runner_name} is online (after ${waited}s)"
+            return 0
+        fi
+        sleep 2
+        waited=$(( waited + 2 ))
+    done
+    echo "  WARNING: ${runner_name} did not report online within ${RUNNER_ONLINE_TIMEOUT}s;" >&2
+    echo "  continuing with the rest of the fleet -- check its status manually:" >&2
+    echo "  gh api orgs/${ACTUAL_GITHUB_ORG}/actions/runners --jq '.runners[] | {name,status,busy}'" >&2
+    return 0
+}
+
+for i in $(seq 1 "$ACTUAL_RUNNER_COUNT"); do
+    runner_name="${ACTUAL_RUNNER_NAME_PREFIX}-${i}"
+    echo "restarting lastrada-runner@${i} (${runner_name})"
+    $SUDO systemctl restart "lastrada-runner@${i}.service"
+    wait_for_runner_online "$runner_name"
 done
 
 echo ""
 echo "=== Done ==="
 echo "fastcached:      docker logs fastcached"
-echo "workers:         docker ps --filter name=${RUNNER_NAME_PREFIX}"
-echo "verify runners:  gh api repos/LASTRADA-Software/morph/actions/runners --jq '.runners[] | {name,status,busy}'"
+echo "workers:         systemctl status 'lastrada-runner@*'"
+echo "worker logs:     journalctl -u 'lastrada-runner@1' -f"
+echo "verify runners:  gh api orgs/LASTRADA-Software/actions/runners --jq '.runners[] | {name,status,busy}'"

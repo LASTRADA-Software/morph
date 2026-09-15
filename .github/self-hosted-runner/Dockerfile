@@ -7,7 +7,7 @@
 # duplicating that here would just be a second place to keep in sync.
 FROM ubuntu:24.04
 
-ARG RUNNER_VERSION=2.336.0
+ARG RUNNER_VERSION=2.337.0
 ARG TARGETARCH=x64
 ARG CMAKE_VERSION=3.31.12
 
@@ -96,6 +96,44 @@ RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test \
     && apt-get install -y --no-install-recommends libstdc++-15-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Packages GitHub-hosted ubuntu-24.04 ships that morph's own jobs never
+# needed, but fastcached's and Lightweight's do now that one fleet serves all
+# three repositories. Each was found absent by auditing those two repos'
+# Linux jobs against this image, not guessed:
+#
+#   pkg-config  Lightweight resolves unixodbc, libzip and yaml-cpp through
+#               find_package(PkgConfig). The one most likely to be a hard
+#               configure failure rather than a slowdown.
+#   python-is-python3
+#               `python`, not just `python3`. jurplel/install-qt-action
+#               shells out to bare `python`, so morph's own "Install Qt
+#               6.8.1" step dies with `python: command not found` without
+#               it -- observed live, failing four jobs (all optional
+#               features gcc+clang, Application ladder, ladder ASan+UBSan)
+#               the first time those legs actually landed on this fleet.
+#               GitHub-hosted ubuntu-24.04 provides the alias; a bare
+#               ubuntu:24.04 with python3 installed does not.
+#   zstd        what actions/cache compresses with when it is present; both
+#               repos use actions/cache, and without it they fall back to gzip.
+#   unzip       assumed present by several actions and archive steps.
+#   file/rsync  shelled out to by some actions.
+#   locales     the image otherwise has only C/C.utf8, so tests asserting
+#               formatted output diverge from GitHub-hosted.
+#
+# LANG is deliberately NOT set here: generating the locale lets a job opt in,
+# while forcing it would change the behaviour of morph's existing jobs as a
+# side effect of a change made for two other repositories.
+RUN apt-get update -q && apt-get install -y --no-install-recommends \
+        pkg-config \
+        python-is-python3 \
+        zstd \
+        unzip \
+        file \
+        rsync \
+        locales \
+    && locale-gen en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd -m -s /bin/bash runner \
     && usermod -aG sudo runner \
     && echo "runner ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/runner
@@ -118,6 +156,12 @@ RUN curl -fsSL -o actions-runner.tar.gz \
 RUN sudo ./bin/installdependencies.sh
 
 COPY --chown=runner:runner entrypoint.sh /home/runner/entrypoint.sh
-RUN sudo chmod +x /home/runner/entrypoint.sh
+COPY --chown=runner:runner job-started-hook.sh /home/runner/job-started-hook.sh
+RUN sudo chmod +x /home/runner/entrypoint.sh /home/runner/job-started-hook.sh
+
+# The runner reads this from its own process environment and runs the hook
+# before every job. See job-started-hook.sh for why it must be per-job rather
+# than per-container-start.
+ENV ACTIONS_RUNNER_HOOK_JOB_STARTED=/home/runner/job-started-hook.sh
 
 ENTRYPOINT ["/home/runner/entrypoint.sh"]

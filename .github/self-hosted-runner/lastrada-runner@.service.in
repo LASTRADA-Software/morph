@@ -1,0 +1,118 @@
+# Template unit: one instance per runner, lastrada-runner@1 .. lastrada-runner@N.
+# Rendered by install-runner-units.sh, which substitutes the @...@ paths for
+# either a user install (systemctl --user) or a system one.
+[Unit]
+Description=LASTRADA self-hosted GitHub Actions runner %i
+Documentation=https://github.com/LASTRADA-Software/morph/blob/master/.github/self-hosted-runner/README.md
+# These two only resolve for the system install (systemctl, run as root):
+# docker.service and network-online.target are system units. Under
+# `systemctl --user` -- the mode install-runner-units.sh uses for a normal
+# user, and what the README's Quick start walks through -- neither name
+# resolves at all ("could not be found"), so for a user install these lines
+# are inert: zero boot ordering against Docker or the network. Resilience for
+# that mode comes instead from the widened StartLimit*/RestartSec budget
+# below, not from ordering directives that don't apply to it.
+After=docker.service network-online.target
+Wants=network-online.target
+
+# StartLimit* belong in [Unit] -- systemd moved them here in v229 and ignores
+# them in [Service]. That is not cosmetic: without a working start limit this
+# unit retries forever exactly like the `--restart unless-stopped` policy it
+# replaces, and a broken credential produces thousands of silent retries
+# instead of a failed unit somebody can see.
+#
+# Sized for user-mode boot, which (see After=/Wants= above) has no ordering
+# against docker.service or the network: at boot this unit can start racing
+# a Docker daemon that is still coming up. The old 5-attempts/600s pairing
+# with RestartSec=30 below gave only 5*30s = 150s (2.5 min) of runway before
+# going permanently `failed` -- barely covering, with no margin, the ~2
+# minutes a slow-booting host's Docker daemon has been observed to take
+# (journal-verified: containers self-update within ~1 minute of finally
+# starting). Burst=12 at the same RestartSec=30 gives >=12*30s = 360s (6 min)
+# of runway -- 3x the observed 2-minute case -- before the unit gives up and
+# shows red, which is still bounded, not the unbounded retries this StartLimit
+# exists to prevent. IntervalSec is widened in step with it (900s, i.e. 15
+# min) so the rolling window comfortably outlasts that 6-minute worst case
+# and can't itself lapse mid-burst and mask a genuinely broken unit forever.
+StartLimitIntervalSec=900
+StartLimitBurst=12
+
+[Service]
+Type=exec
+Environment=LASTRADA_RUNNER_CONFIG=@CONFIG@
+ExecStart=@LIBEXEC@/run-runner.sh %i
+
+# Deregisters this runner from the organisation from the HOST, not the
+# container. By stop time the container's only credential -- the
+# REGISTRATION token entrypoint.sh started with -- can easily be over an
+# hour old and GitHub will have expired it, so its own EXIT trap's removal
+# would fail and strand both the registration and its live session (see
+# deregister-runner.sh and run-runner.sh for the full story, including the
+# ~2-minute "Conflict. Retrying until reconnected" that stranding causes).
+# The host's `gh` credential never expires that way. run-runner.sh passes
+# the container `-e RUNNER_SELF_DEREGISTER=0` so entrypoint.sh's trap stands
+# down and the two sides never race each other or double-remove.
+#
+# `-` because a runner already removed, or a `gh` API failure, must not fail
+# the stop -- deregister-runner.sh already exits 0 for those on its own;
+# this is a second, belt-and-braces guard, the same reasoning as
+# ExecStopPost's `-` below.
+ExecStop=-@LIBEXEC@/deregister-runner.sh %i
+
+# --rm covers a clean exit; this covers a SIGKILL or a Docker daemon restart
+# leaving the container behind still holding the name. `-` so a missing
+# container is not a stop failure. @DOCKER@ is resolved at install time by
+# install-runner-units.sh (`command -v docker`), not hardcoded to
+# /usr/bin/docker -- run-runner.sh itself honours LASTRADA_RUNNER_DOCKER/PATH
+# for where docker lives, and the leading `-` means a wrong hardcoded path
+# here would fail silently, permanently disabling this cleanup backstop on
+# any host where docker isn't at /usr/bin/docker.
+ExecStopPost=-@DOCKER@ rm -f @PREFIX@-%i
+
+# Brings a runner back after an OOM kill mid-link without waiting for a
+# reboot. Each restart re-runs run-runner.sh, which mints a fresh token --
+# there is no stored credential that can go stale.
+Restart=always
+RestartSec=30
+
+# The stop sequence in practice, given the host-side ExecStop above (not the
+# container's own EXIT trap -- see ExecStop's comment). Verified live against
+# this exact fleet (lastrada-runner@2, journalctl --user -u lastrada-runner@2):
+#
+#   11:17:47 Stopping LASTRADA self-hosted GitHub Actions runner 2...
+#   11:17:48 deregister-runner.sh: removed lastrada-docker-2 (id 10097)
+#   11:18:08 The runner no longer exists on the server. Cleaning up local configuration.
+#            √ Removed .credentials
+#            √ Removed .runner
+#            Runner listener exit with 0 return code, stop the service, no retry needed.
+#            Exiting runner...
+#   11:18:08 Stopped LASTRADA self-hosted GitHub Actions runner 2.
+#
+# ExecStop's deregister-runner.sh removes the registration via the host's
+# `gh` credential in ~1s; the container's own Runner.Listener, on its next
+# poll, discovers it no longer exists on the server, cleans up its local
+# `.credentials`/`.runner` state, and exits 0 on its own -- the API removal
+# drives that exit, not a signal to the container. The ~20s gap above
+# (11:17:48 -> 11:18:08) is that listener noticing, not the deregister call
+# itself, which already completed a moment after "Stopping" was logged.
+#
+# `docker run -i` (no -t) still has sig-proxy on by default, so a container
+# that has NOT noticed removal by the time systemd's stop timeout would
+# otherwise trip still gets SIGTERM relayed straight into it as a fallback.
+#
+# ExecStopPost's `docker rm -f` is a further backstop for a container that
+# somehow outlived its client (SIGKILL, daemon restart) -- normally it never
+# fires. A job in flight is killed, not drained, by a stop or restart mid-job.
+# TimeoutStopSec=90 below is essentially never used in the common case.
+#
+# Because sig-proxy relays it, the docker client exits with the container's
+# own exit code for a signal-terminated process: 128+15=143, not 0. Without
+# the line below, systemd treats that as a failed unit -- every deliberate
+# stop or restart shows red in `systemctl status`, drowning the signal
+# StartLimitBurst exists to create. 143 from this client is a normal,
+# clean stop, so tell systemd not to flag it as a failure.
+SuccessExitStatus=143
+TimeoutStopSec=90
+
+[Install]
+WantedBy=@WANTEDBY@

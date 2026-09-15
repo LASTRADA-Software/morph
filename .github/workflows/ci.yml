@@ -112,22 +112,29 @@ jobs:
         if: matrix.preset == 'cl-debug' || matrix.preset == 'clangcl-debug'
         run: ctest --preset ${{ matrix.preset }}
 
-  # Picks the self-hosted morph-docker runner for linux-compilers when one is
+  # Picks a self-hosted lastrada-docker runner for the Linux legs when one is
   # registered, online, and idle; falls back to the GitHub-hosted label
-  # otherwise. GITHUB_TOKEN can't call the runners API (it's a repo-admin
-  # operation regardless of the permissions: block below), so this needs
-  # RUNNER_STATUS_TOKEN -- a PAT with Administration: Read-only on this repo,
-  # stored as a repo secret. Forked-repo PRs don't get repo secrets at all
-  # (the token comes through empty), which this treats the same as "no
-  # runner online": fall back to GitHub-hosted. See
-  # .github/self-hosted-runner/README.md for the runner itself.
+  # otherwise. The runners are ORGANISATION-level (one fleet serves morph,
+  # fastcached and Lightweight), so this queries the org endpoint -- the
+  # repo endpoint returns zero for them and every run would silently go
+  # GitHub-hosted with no error anywhere.
+  #
+  # GITHUB_TOKEN can't call the runners API, so this needs
+  # RUNNER_STATUS_TOKEN: a PAT with organisation self-hosted-runner read
+  # access (admin:org, or fine-grained "Self-hosted runners: Read-only" on
+  # LASTRADA-Software), stored as a repo secret. Forked-repo PRs don't get
+  # repo secrets at all (the token comes through empty), which this treats
+  # the same as "no runner online": fall back to GitHub-hosted. A failed
+  # curl, or a 200 response whose body is missing or the wrong shape for
+  # `.runners`, are treated the same way. See
+  # .github/self-hosted-runner/README.md for the fleet itself.
   probe-self-hosted:
     name: Probe self-hosted runner
     runs-on: ubuntu-24.04
     outputs:
       runs_on: ${{ steps.probe.outputs.runs_on }}
     steps:
-      - name: Check for an idle morph-docker runner
+      - name: Check for an idle lastrada-docker runner
         id: probe
         env:
           RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
@@ -144,21 +151,29 @@ jobs:
           runners=$(curl -fsSL \
             -H "Authorization: Bearer ${RUNNER_STATUS_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runners") || {
+            "https://api.github.com/orgs/LASTRADA-Software/actions/runners") || {
               echo "Runners API call failed -- using GitHub-hosted."
               echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
               exit 0
             }
 
-          online=$(echo "${runners}" | jq '[.runners[] |
+          online=$(echo "${runners}" | jq '[(.runners // [])[] |
             select(.status == "online" and .busy == false and
-                   (.labels | map(.name) | contains(["morph-docker"])))] | length')
+                   (.labels | map(.name) | contains(["lastrada-docker"])))] | length') || {
+              echo "Malformed runners response -- using GitHub-hosted."
+              echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
+              exit 0
+            }
+
+          if ! [[ "${online}" =~ ^[0-9]+$ ]]; then
+            online=0
+          fi
 
           if [ "${online}" -gt 0 ]; then
-            echo "Found an idle morph-docker runner -- using self-hosted."
-            echo 'runs_on=["self-hosted", "Linux", "X64", "morph-docker"]' >> "$GITHUB_OUTPUT"
+            echo "Found an idle lastrada-docker runner -- using self-hosted."
+            echo 'runs_on=["self-hosted", "Linux", "X64", "lastrada-docker"]' >> "$GITHUB_OUTPUT"
           else
-            echo "No idle morph-docker runner -- using GitHub-hosted."
+            echo "No idle lastrada-docker runner -- using GitHub-hosted."
             echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
           fi
 
@@ -2013,6 +2028,21 @@ jobs:
       # lines, which is exactly what VERSIONING.md forbids.
       - name: Self-test the deprecation-marker checker
         run: bash scripts/test_check_deprecated_markers.sh
+
+      # The runner fleet's scripts are not exercised by any build, so their
+      # self-tests are the only thing standing between a typo and a fleet
+      # that silently stops registering. See each test's own header.
+      - name: Self-test the runner launch contract
+        run: bash scripts/test_run_runner.sh
+
+      - name: Self-test the runner entrypoint token resolution
+        run: bash scripts/test_runner_entrypoint.sh
+
+      - name: Self-test the runner job-started hook
+        run: bash scripts/test_runner_job_hook.sh
+
+      - name: Self-test the runner systemd units
+        run: bash scripts/test_runner_units.sh
 
       - name: Check [[deprecated]] markers cite a replacement and removal version
         run: bash scripts/check_deprecated_markers.sh include/morph
