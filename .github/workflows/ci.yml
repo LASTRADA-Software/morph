@@ -315,6 +315,38 @@ jobs:
         if: "always() && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
+      # Cache statistics for this leg. The `sccache stats` step is skipped
+      # whenever the probe put this job on the self-hosted fleet, because
+      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
+      # it, so those legs ran with no cache reporting at all: exactly the
+      # "unfalsifiable" state the sccache step's own comment warns about, where
+      # a thrashing cache and a working one look identical from the outside and
+      # only the build duration hints at which one you have.
+      #
+      # The line that matters is
+      #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
+      # which is how a daemon that is configured but never answering shows up.
+      # Configure still prints "Enabling fastcache-cc at ..." in that case and
+      # the build simply takes as long as a cold one, so no other signal in the
+      # job would reveal it.
+      #
+      # Mirror of the sccache step's condition, so exactly one of the two runs.
+      # `|| true` for the same reason it has one: a stats failure must never
+      # fail the job.
+      - name: fastcache-cc stats
+        if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        run: |
+          FC="$(command -v fastcache-cc || true)"
+          if [ -z "$FC" ]; then
+            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
+          fi
+          if [ -z "$FC" ]; then
+            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
+            exit 0
+          fi
+          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          "$FC" --show-stats || true
+
       # Save only on a push to master. Every run used to write a new
       # per-commit entry, and with 16 cache-writing legs at 1 GB each one
       # generation already exceeds GitHub's 10 GB per-repo budget -- so
@@ -437,6 +469,38 @@ jobs:
             EXCLUDE_ARGS+=(-E "OomInjector|morph#108")
           fi
           ctest --preset ${{ matrix.preset }} "${EXCLUDE_ARGS[@]}"
+
+      # Cache statistics for this leg. The `sccache stats` step is skipped
+      # whenever the probe put this job on the self-hosted fleet, because
+      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
+      # it, so those legs ran with no cache reporting at all: exactly the
+      # "unfalsifiable" state the sccache step's own comment warns about, where
+      # a thrashing cache and a working one look identical from the outside and
+      # only the build duration hints at which one you have.
+      #
+      # The line that matters is
+      #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
+      # which is how a daemon that is configured but never answering shows up.
+      # Configure still prints "Enabling fastcache-cc at ..." in that case and
+      # the build simply takes as long as a cold one, so no other signal in the
+      # job would reveal it.
+      #
+      # Mirror of the sccache step's condition, so exactly one of the two runs.
+      # `|| true` for the same reason it has one: a stats failure must never
+      # fail the job.
+      - name: fastcache-cc stats
+        if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        run: |
+          FC="$(command -v fastcache-cc || true)"
+          if [ -z "$FC" ]; then
+            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
+          fi
+          if [ -z "$FC" ]; then
+            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
+            exit 0
+          fi
+          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          "$FC" --show-stats || true
 
   # ── Linux: coverage (clang, ladder + Qt) ─────────────────────────────
   #
@@ -1246,6 +1310,38 @@ jobs:
         if: "always() && steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
+      # Cache statistics for this leg. The `sccache stats` step is skipped
+      # whenever the probe put this job on the self-hosted fleet, because
+      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
+      # it, so those legs ran with no cache reporting at all: exactly the
+      # "unfalsifiable" state the sccache step's own comment warns about, where
+      # a thrashing cache and a working one look identical from the outside and
+      # only the build duration hints at which one you have.
+      #
+      # The line that matters is
+      #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
+      # which is how a daemon that is configured but never answering shows up.
+      # Configure still prints "Enabling fastcache-cc at ..." in that case and
+      # the build simply takes as long as a cold one, so no other signal in the
+      # job would reveal it.
+      #
+      # Mirror of the sccache step's condition, so exactly one of the two runs.
+      # `|| true` for the same reason it has one: a stats failure must never
+      # fail the job.
+      - name: fastcache-cc stats
+        if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        run: |
+          FC="$(command -v fastcache-cc || true)"
+          if [ -z "$FC" ]; then
+            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
+          fi
+          if [ -z "$FC" ]; then
+            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
+            exit 0
+          fi
+          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          "$FC" --show-stats || true
+
       # Save only on a push to master. Every run used to write a new
       # per-commit entry, and with 16 cache-writing legs at 1 GB each one
       # generation already exceeds GitHub's 10 GB per-repo budget -- so
@@ -1443,6 +1539,38 @@ jobs:
       - name: sccache stats
         if: "always() && steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
+
+      # Cache statistics for this leg. The `sccache stats` step is skipped
+      # whenever the probe put this job on the self-hosted fleet, because
+      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
+      # it, so those legs ran with no cache reporting at all: exactly the
+      # "unfalsifiable" state the sccache step's own comment warns about, where
+      # a thrashing cache and a working one look identical from the outside and
+      # only the build duration hints at which one you have.
+      #
+      # The line that matters is
+      #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
+      # which is how a daemon that is configured but never answering shows up.
+      # Configure still prints "Enabling fastcache-cc at ..." in that case and
+      # the build simply takes as long as a cold one, so no other signal in the
+      # job would reveal it.
+      #
+      # Mirror of the sccache step's condition, so exactly one of the two runs.
+      # `|| true` for the same reason it has one: a stats failure must never
+      # fail the job.
+      - name: fastcache-cc stats
+        if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        run: |
+          FC="$(command -v fastcache-cc || true)"
+          if [ -z "$FC" ]; then
+            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
+          fi
+          if [ -z "$FC" ]; then
+            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
+            exit 0
+          fi
+          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          "$FC" --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
       # per-commit entry, and with 16 cache-writing legs at 1 GB each one
@@ -1653,6 +1781,38 @@ jobs:
       - name: sccache stats
         if: "always() && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
+
+      # Cache statistics for this leg. The `sccache stats` step is skipped
+      # whenever the probe put this job on the self-hosted fleet, because
+      # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
+      # it, so those legs ran with no cache reporting at all: exactly the
+      # "unfalsifiable" state the sccache step's own comment warns about, where
+      # a thrashing cache and a working one look identical from the outside and
+      # only the build duration hints at which one you have.
+      #
+      # The line that matters is
+      #     unavailable : N  (x% of all compiles -- CACHE NOT REACHED)
+      # which is how a daemon that is configured but never answering shows up.
+      # Configure still prints "Enabling fastcache-cc at ..." in that case and
+      # the build simply takes as long as a cold one, so no other signal in the
+      # job would reveal it.
+      #
+      # Mirror of the sccache step's condition, so exactly one of the two runs.
+      # `|| true` for the same reason it has one: a stats failure must never
+      # fail the job.
+      - name: fastcache-cc stats
+        if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        run: |
+          FC="$(command -v fastcache-cc || true)"
+          if [ -z "$FC" ]; then
+            FC="$(ls -t "$HOME"/.cache/fastcache-cc/*/*/fastcache-cc 2>/dev/null | head -1 || true)"
+          fi
+          if [ -z "$FC" ]; then
+            echo "::warning::fastcache-cc not found on a self-hosted runner -- the build ran uncached."
+            exit 0
+          fi
+          echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          "$FC" --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
       # per-commit entry, and with 16 cache-writing legs at 1 GB each one
