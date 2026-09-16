@@ -2310,11 +2310,10 @@ int main(int argc, char* argv[]) {
     Catch::Session session;
     // Same --log-level gate as every other morph suite; this main cannot link
     // morph_test_main (it would be a second definition of main), so it calls
-    // the shared helper directly.
-    if (const auto exitCode = morph::testkit::configureSession(session, argc, argv)) {
-        return *exitCode;
-    }
-    int result = session.run();
+    // the shared helper directly. runSession also keeps any exception from
+    // escaping main, which would tear the QCoreApplication down by runtime
+    // unwind rather than by the scope exit this main exists to control.
+    int const result = morph::testkit::runSession(session, argc, argv);
     // Drain any Qt-deferred deletes one last time so destructors run with a
     // valid event loop instead of during static teardown.
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);

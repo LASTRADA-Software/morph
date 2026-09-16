@@ -151,10 +151,7 @@ TEST_CASE("QtWebSocketBackend interop: connects to a SocketServer and completes 
 int main(int argc, char* argv[]) {
     QCoreApplication app{argc, argv};
     Catch::Session session;
-    if (const auto exitCode = morph::testkit::configureSession(session, argc, argv)) {
-        return *exitCode;
-    }
-    int result = session.run();
+    int const result = morph::testkit::runSession(session, argc, argv);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QCoreApplication::processEvents(QEventLoop::AllEvents);
     return result;

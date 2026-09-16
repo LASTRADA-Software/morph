@@ -5,6 +5,7 @@
 #include <catch2/internal/catch_clara.hpp>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <morph/core/logger.hpp>
 #include <optional>
 #include <print>
@@ -127,8 +128,10 @@ inline void addLogLevelOption(Catch::Session& session, std::string& sink) {
     if (requested.empty()) {
         source = kLogLevelEnvVar;
         detail::resolvedSourceStorage() = LogLevelSource::environment;
-        // std::getenv over a cached copy: the value is read once, at startup,
-        // before any test thread exists.
+        // Read once, from `main`, before Catch2 has started a single test -- so
+        // the environment cannot be mutated concurrently with this call, which
+        // is the hazard concurrency-mt-unsafe exists to flag for getenv.
+        // NOLINTNEXTLINE(concurrency-mt-unsafe)
         if (const char* fromEnv = std::getenv(std::string{kLogLevelEnvVar}.c_str()); fromEnv != nullptr) {
             requested = fromEnv;
         }
@@ -174,6 +177,43 @@ inline void addLogLevelOption(Catch::Session& session, std::string& sink) {
         return 1;
     }
     return std::nullopt;
+}
+
+/// @brief Configures and runs @p session, letting no exception escape.
+///
+/// `main` must not throw: `bugprone-exception-escape` flags it, and an
+/// exception unwinding out of `main` runs no destructor for anything already
+/// on the stack -- which for the Qt-owning suites means the `QCoreApplication`
+/// is torn down by the runtime rather than by its own scope exit, the very
+/// ordering those mains exist to control.
+///
+/// Everything reachable from here can throw: `std::format` (via the diagnostic
+/// `applyLogLevel` prints), Clara's parser, and every Catch2 assertion that
+/// escapes a test's own handler. Catching here rather than in each `main` keeps
+/// the four Qt-owning mains and the shared one on exactly one implementation.
+///
+/// @param session Session to configure and run.
+/// @param argc    Argument count, as given to `main`.
+/// @param argv    Argument vector, as given to `main`.
+/// @return Catch2's exit code, or 1 if something threw or the command line was
+///         unusable.
+[[nodiscard]] inline int runSession(Catch::Session& session, int argc, char* argv[]) noexcept {
+    try {
+        if (const auto exitCode = configureSession(session, argc, argv)) {
+            return *exitCode;
+        }
+        return session.run();
+    } catch (const std::exception& ex) {
+        // fputs, not println: this is the handler of last resort, and
+        // std::format is one of the things that can have thrown to get here.
+        std::fputs("fatal: unhandled exception escaped the test session: ", stderr);
+        std::fputs(ex.what(), stderr);
+        std::fputs("\n", stderr);
+        return 1;
+    } catch (...) {
+        std::fputs("fatal: unhandled non-std exception escaped the test session\n", stderr);
+        return 1;
+    }
 }
 
 }  // namespace morph::testkit

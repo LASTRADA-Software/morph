@@ -203,8 +203,5 @@ TEST_CASE(
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
     Catch::Session session;
-    if (const auto exitCode = morph::testkit::configureSession(session, argc, argv)) {
-        return *exitCode;
-    }
-    return session.run();
+    return morph::testkit::runSession(session, argc, argv);
 }
