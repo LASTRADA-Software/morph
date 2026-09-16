@@ -22,5 +22,14 @@ if(AF_COVERAGE)
     apply_coverage(morph_offline_sqlite_tests)
 endif()
 
+# Was missing for the same reason, with a sharper consequence (morph#542): the
+# `clang-asan` leg turns MORPH_BUILD_OFFLINE_SQLITE on precisely because the
+# SQLite queue "is where the memory/threading/UB risk actually lives -- a C
+# API", then built this suite with zero sanitizer flags and ran it. The job was
+# green and had checked nothing.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_offline_sqlite_tests ${AF_SANITIZER})
+endif()
+
 include(Catch)
 catch_discover_tests(morph_offline_sqlite_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)

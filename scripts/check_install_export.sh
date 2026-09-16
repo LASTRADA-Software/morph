@@ -195,9 +195,20 @@ note "the prefix contains morph's headers and package config"
 
 # ── 4. Build a consumer against the prefix ──────────────────────────────────
 #
-# The TU includes headers that reach the parts of the install a filename check
-# cannot see: forms.hpp and quantity.hpp both include morph/detail/, and
-# rational.hpp reaches Glaze.
+# The TU includes *every installed non-detail header*, generated from the prefix
+# rather than hand-listed. A hand-list is what let morph#540 ship: it named
+# `<morph/forms/forms.hpp>` and not `app.hpp`/`flows.hpp`/`sections.hpp`, all
+# three of which include `forms/detail/session_common.hpp` -- a header no
+# FILE_SET installed. `cmake --install` exited 0, this check stayed green, and
+# the prefix could not compile three public headers.
+#
+# `detail/` is excluded deliberately, and that exclusion is the whole design:
+# those headers are not public surface and are not required to be
+# self-contained (`morph/detail/quantity_equation.hpp` is included from partway
+# down quantity.hpp and does not compile alone), so globbing them in would make
+# this check fail on a file that is working as intended. What matters is that
+# every *public* header compiles against the prefix -- which transitively
+# proves every detail/ header it needs was installed.
 mkdir -p "$consumer_dir"
 cat > "${consumer_dir}/CMakeLists.txt" <<'CONSUMER_CMAKE'
 cmake_minimum_required(VERSION 3.25)
@@ -212,15 +223,23 @@ add_executable(consumer main.cpp)
 target_link_libraries(consumer PRIVATE morph::morph morph::net)
 CONSUMER_CMAKE
 
-cat > "${consumer_dir}/main.cpp" <<'CONSUMER_MAIN'
-// Compiled entirely outside the repository, against the install prefix alone.
-#include <morph/core/bridge.hpp>       // includes morph/core/detail/subscription_registry.hpp
-#include <morph/core/remote.hpp>       // includes morph/core/detail/execute_order_gate.hpp
-#include <morph/forms/forms.hpp>      // includes morph/detail/fixed_string.hpp
-#include <morph/net/socket_backend.hpp>
-#include <morph/util/quantity.hpp>    // includes morph/detail/quantity_equation.hpp
-#include <morph/util/rational.hpp>    // reaches Glaze
-#include <morph/version.hpp>
+mapfile -t installed_public_headers < <(
+    find "${prefix}/include/morph" -name '*.hpp' -not -path '*/detail/*' -printf '%P\n' \
+        | LC_ALL=C sort
+)
+
+if [ "${#installed_public_headers[@]}" -lt 20 ]; then
+    fail "the install prefix holds only ${#installed_public_headers[@]} public headers -- too few for the consumer TU below to prove anything"
+fi
+
+{
+    echo "// Compiled entirely outside the repository, against the install prefix alone."
+    echo "// Generated from the prefix: every installed non-detail header, so a public"
+    echo "// header added without its detail/ dependencies being installed fails here."
+    for header in "${installed_public_headers[@]}"; do
+        echo "#include <morph/${header}>"
+    done
+    cat <<'CONSUMER_MAIN'
 
 #include <cstdio>
 
@@ -235,6 +254,9 @@ int main() {
     return 0;
 }
 CONSUMER_MAIN
+} > "${consumer_dir}/main.cpp"
+
+echo "check_install_export: consumer TU includes ${#installed_public_headers[@]} installed public headers."
 
 if run_step "the consumer project could not configure against the install prefix" \
     cmake -S "$consumer_dir" -B "$consumer_build" ${generator_args[@]+"${generator_args[@]}"} \

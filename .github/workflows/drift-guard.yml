@@ -43,6 +43,25 @@ permissions:
   contents: read
 
 jobs:
+  # A sanitizer leg that cannot fail is worse than no sanitizer leg: it reports
+  # success over a build full of undefined behaviour and every reader treats the
+  # green tick as evidence (morph#541). UBSan *recovers* by default -- it prints
+  # the diagnostic and lets the process exit 0 -- so this asserts the opposite
+  # behaviourally, by compiling real undefined behaviour with the flags
+  # apply_sanitizers() actually produces and requiring a non-zero exit.
+  #
+  # Behavioural rather than a grep for the flag, for the reason morph#298
+  # established: a flag that silently stops reaching the compile line is
+  # indistinguishable from one that was never needed.
+  sanitizer-can-fail:
+    name: A sanitizer leg can actually fail
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert UBSan halts instead of recovering
+        run: bash scripts/check_sanitizer_can_fail.sh
+
   prose-lint:
     name: Spec-citation, banned-terminology & CI-clang-pin lint
     runs-on: ubuntu-24.04

@@ -407,6 +407,23 @@ jobs:
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
 
+      # A sanitizer job whose binaries are not instrumented runs the whole suite
+      # and learns nothing, while reporting success (morph#542). CI already
+      # asserted this, but only over the ladder's binaries and only for
+      # `__asan_` -- an assertion that is vacuous on the tsan and ubsan legs,
+      # which is the same "control that measures nothing" it exists to prevent.
+      # This walks what ctest will actually run and keys the expected symbol on
+      # the preset, so none of the three legs can pass on a blind build.
+      - name: Every ctest binary is instrumented
+        run: |
+          case "${{ matrix.preset }}" in
+            clang-asan)  mode=asan ;;
+            clang-tsan)  mode=tsan ;;
+            clang-ubsan) mode=ubsan ;;
+            *) echo "::error::no sanitizer mode for preset ${{ matrix.preset }}"; exit 1 ;;
+          esac
+          bash scripts/check_sanitizer_instrumentation.sh build/${{ matrix.preset }} "$mode"
+
       - name: Test
         env:
           # Known-false-positive suppressions, the same treatment

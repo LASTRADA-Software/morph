@@ -43,6 +43,13 @@ if(MORPH_BUILD_TESTS)
         target_link_libraries(morph_concepts_tests PRIVATE morph::morph morph_test_main)
         apply_warnings(morph_concepts_tests)
         apply_bigobj(morph_concepts_tests)
+        # 8 TUs driving include/morph's journal, offline-queue, validation,
+        # transport-limit, versioning, connection-scope, observability and
+        # shutdown paths -- ctest-registered, so every sanitizer leg ran them
+        # and learned nothing from them (morph#542).
+        if(DEFINED AF_SANITIZER)
+            apply_sanitizers(morph_concepts_tests ${AF_SANITIZER})
+        endif()
 
         list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
         include(Catch)
