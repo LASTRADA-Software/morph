@@ -518,15 +518,11 @@ private:
         // the two owners of a `Ticket`), and returning without a notify left it
         // asleep on a predicate that had already become true.
         gate.cv.notify_all();
-        if (gate.nextToRun == gate.nextTicket) {
-            // No ticket is currently waiting for a number still to come -- safe
-            // to drop the entry so a model with no in-flight tickets leaves no
-            // trace in this map. Reaching `nextTicket` this way means every
-            // ticket handed out has released, so `releasedOutOfOrder` is
-            // necessarily empty here.
-            return true;
-        }
-        return false;
+        // True means: safe to drop the entry, so a model with no in-flight
+        // tickets leaves no trace in this map. Reaching `nextTicket` this way
+        // means every ticket handed out has released, so `releasedOutOfOrder`
+        // is necessarily empty here.
+        return gate.nextToRun == gate.nextTicket;
     }
 
     /// @brief `release(mid, ticket)`'s implementation, assuming `_mtx` is
