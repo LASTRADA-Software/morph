@@ -382,10 +382,10 @@ error.
 -------------------------------------------------------------------------------
 morph::test::checkReplayLedgerContract rejects a no-op ledger
 -------------------------------------------------------------------------------
-/home/yaraslau/repo/morph/tests/test_replay_ledger.cpp:44
+tests/test_replay_ledger.cpp:44
 ...............................................................................
 
-/home/yaraslau/repo/morph/tests/replay_ledger_conformance.hpp:52: FAILED:
+tests/replay_ledger_conformance.hpp:52: FAILED:
   REQUIRE( hit.has_value() )
 with expansion:
   false
