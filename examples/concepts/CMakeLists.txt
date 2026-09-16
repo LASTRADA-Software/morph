@@ -40,7 +40,7 @@ if(MORPH_BUILD_TESTS)
             protocol_and_connections.cpp
             observability_and_shutdown.cpp
         )
-        target_link_libraries(morph_concepts_tests PRIVATE morph::morph Catch2::Catch2WithMain)
+        target_link_libraries(morph_concepts_tests PRIVATE morph::morph morph_test_main)
         apply_warnings(morph_concepts_tests)
         apply_bigobj(morph_concepts_tests)
 

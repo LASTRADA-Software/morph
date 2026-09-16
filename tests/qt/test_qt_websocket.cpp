@@ -30,6 +30,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <testkit/log_level.hpp>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -2306,7 +2307,13 @@ TEST_CASE("Process separation: TLS handshake works across processes", "[qt][wss]
 // returning from main() and before the C++ runtime tears down statics.
 int main(int argc, char* argv[]) {
     QCoreApplication app{argc, argv};
-    int result = Catch::Session().run(argc, argv);
+    Catch::Session session;
+    // Same --log-level gate as every other morph suite; this main cannot link
+    // morph_test_main (it would be a second definition of main), so it calls
+    // the shared helper directly. runSession also keeps any exception from
+    // escaping main, which would tear the QCoreApplication down by runtime
+    // unwind rather than by the scope exit this main exists to control.
+    int const result = morph::testkit::runSession(session, argc, argv);
     // Drain any Qt-deferred deletes one last time so destructors run with a
     // valid event loop instead of during static teardown.
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);

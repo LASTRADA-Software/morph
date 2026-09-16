@@ -302,9 +302,8 @@ struct NotAStdException {};
 }  // namespace
 
 TEST_CASE("CompletionState orphan dtor swallows exceptions from a throwing logger", "[coverage][completion]") {
-    LogGuard guard;
     // Throwing sink covers the inner catch(...) in the std::exception branch (line 105).
-    morph::log::setLogger([](morph::log::LogLevel, std::string_view) { throw std::runtime_error("sink-fail"); });
+    LogGuard const guard{[](morph::log::LogLevel, std::string_view) { throw std::runtime_error("sink-fail"); }};
 
     {
         auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
@@ -353,7 +352,11 @@ TEST_CASE("Default logger sink lambda body is invoked", "[coverage][logger]") {
         morph::log::detail::logState().sink = morph::log::detail::LogState{}.sink;
         morph::log::detail::logState().minLevel = morph::log::LogLevel::error;
     }
-    morph::log::logError("default-sink-coverage");
+    // This one line reaching the real stderr is the assertion: the default sink
+    // has no seam to observe it through, so exercising its body means letting it
+    // write. Worded to say so, because it is the only log record a default
+    // `morph_tests` run emits and would otherwise read as a stray error.
+    morph::log::logError("default-sink-coverage: expected, proves the default sink body ran");
 }
 
 // ── network_monitor.hpp: stop() called from inside the probe → destructor spin-wait (lines 81-82, 113)

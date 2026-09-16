@@ -110,7 +110,18 @@ struct LogState {
     };
     // Atomic so the level check is a lock-free fast path: `logFormat` and `log`
     // can reject a suppressed message without touching `mtx` or formatting it.
-    std::atomic<LogLevel> minLevel{LogLevel::debug};
+    //
+    // `warn`, not `debug`: linking morph must not hand the framework a
+    // consumer's stderr. At `debug` -- the default until 0.1.0 -- a plain
+    // `morph_tests` run wrote 2,949 lines of dispatch tracing, and any
+    // application linking morph inherited the same firehose without asking for
+    // it. Deliberately one value in every build configuration rather than
+    // keying on NDEBUG: this is a default member initializer in a header, so a
+    // config-dependent one gives translation units compiled with different
+    // settings two definitions of `LogState` and of the inline `logState()`,
+    // which is an ODR violation the linker resolves silently and arbitrarily.
+    // `setLogLevel(LogLevel::debug)` is the one line that turns it all back on.
+    std::atomic<LogLevel> minLevel{LogLevel::warn};
     std::mutex mtx;  // guards `sink` (and serialises sink invocation)
     // Records discarded because the sink, the lock, or formatting threw. The
     // logging layer is noexcept, so a failure cannot be reported by

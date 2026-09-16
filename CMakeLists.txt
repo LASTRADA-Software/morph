@@ -548,6 +548,47 @@ if(MORPH_BUILD_TESTS)
         FetchContent_MakeAvailable(Catch2)
     endif()
 
+    # ── The `--log-level` gate, shared by every Catch2 suite ────────────────
+    #
+    # morph::log used to default to LogLevel::debug, so a plain `morph_tests`
+    # run wrote 2,949 lines of framework tracing to stderr against 23 lines of
+    # actual Catch2 output. The library default is now `warn`; these two targets
+    # are what take a *test* run down to silent while keeping the stream one
+    # switch away.
+    #
+    # A Catch2 event listener would have been less machinery, but listeners are
+    # constructed after the command line is parsed and cannot add an option to
+    # it. So every suite owns its `main` (morph_test_main, or its own
+    # QCoreApplication-owning one) and routes through the same helper.
+    #
+    # Defined here rather than in tests/CMakeLists.txt because
+    # examples/{concepts,bank,vetted_hmac} are add_subdirectory()'d *above*,
+    # before this Tests block runs, and link these targets;
+    # target_link_libraries() resolution is deferred to generate time, which is
+    # the same property those directories already rely on for
+    # Catch2::Catch2WithMain (see the note in examples/concepts/CMakeLists.txt).
+    add_library(morph_test_log_level INTERFACE)
+    target_include_directories(morph_test_log_level INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    target_link_libraries(morph_test_log_level INTERFACE morph::morph Catch2::Catch2)
+
+    # STATIC, not OBJECT: the only symbol it carries is `main`, which is always
+    # an undefined symbol in the linking executable, so the archive member is
+    # always extracted. (An OBJECT library would work too; a listener-based
+    # design would have *needed* one, since a static initializer with nothing
+    # referencing it is exactly what a linker is free to drop.)
+    add_library(morph_test_main STATIC tests/testkit/catch_main.cpp)
+    target_link_libraries(morph_test_main PUBLIC morph_test_log_level)
+    apply_warnings(morph_test_main)
+    # Deliberately NOT apply_sanitizers(). That helper adds -fsanitize to both
+    # compile *and* link options as PRIVATE, and PRIVATE link options do not
+    # propagate out of a static library -- so instrumenting this one left
+    # `__asan_init`/`__ubsan_handle_type_mismatch_v1` undefined in every
+    # consumer that is not itself sanitized, which is how the ladder's ASan leg
+    # failed to link. A partially-instrumented binary is fine (no system
+    # library is instrumented either), and an eight-line `main` is not where a
+    # sanitizer finding was ever going to come from. Catch2::Catch2WithMain,
+    # which this replaced, was likewise an uninstrumented prebuilt archive.
+
     add_subdirectory(tests)
 endif()
 

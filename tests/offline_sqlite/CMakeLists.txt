@@ -10,7 +10,7 @@ add_executable(morph_offline_sqlite_tests
 target_link_libraries(morph_offline_sqlite_tests
     PRIVATE
         morph::offline_sqlite
-        Catch2::Catch2WithMain
+        morph_test_main
 )
 
 apply_warnings(morph_offline_sqlite_tests)

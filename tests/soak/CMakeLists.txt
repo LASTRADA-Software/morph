@@ -10,7 +10,7 @@ add_executable(morph_soak
     test_soak_switch_backend.cpp
     test_soak_reconnect_churn.cpp
 )
-target_link_libraries(morph_soak PRIVATE morph::morph Catch2::Catch2WithMain)
+target_link_libraries(morph_soak PRIVATE morph::morph morph_test_main)
 target_include_directories(morph_soak PRIVATE ${CMAKE_SOURCE_DIR}/tests)
 apply_warnings(morph_soak)
 

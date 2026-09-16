@@ -301,8 +301,7 @@ void exerciseCompletionWrapperBranches(const T& sampleValue, morph::exec::IExecu
 template <typename T>
 void exerciseThrowingSinkOrphanBranches() {
     using namespace morph::async;
-    LogGuard guard;
-    morph::log::setLogger([](morph::log::LogLevel, std::string_view) { throw std::runtime_error{"sink-fail"}; });
+    LogGuard const guard{[](morph::log::LogLevel, std::string_view) { throw std::runtime_error{"sink-fail"}; }};
 
     // Inner catch (...) {} after the std::exception branch (lines 104-105).
     auto stateStd = std::make_shared<detail::CompletionState<T>>();

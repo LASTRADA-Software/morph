@@ -131,7 +131,7 @@ add_executable(morph_tests
 target_link_libraries(morph_tests
     PRIVATE
         morph::morph
-        Catch2::Catch2WithMain
+        morph_test_main
 )
 
 apply_warnings(morph_tests)

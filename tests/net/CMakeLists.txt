@@ -12,7 +12,7 @@ add_executable(morph_net_tests
 target_link_libraries(morph_net_tests
     PRIVATE
         morph::net
-        Catch2::Catch2WithMain
+        morph_test_main
 )
 
 apply_warnings(morph_net_tests)

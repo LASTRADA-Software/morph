@@ -17,6 +17,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/qt/forms/forms_controller_core.hpp>
 #include <string>
+#include <testkit/log_level.hpp>
 #include <thread>
 #include <vector>
 
@@ -201,5 +202,6 @@ TEST_CASE(
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
-    return Catch::Session().run(argc, argv);
+    Catch::Session session;
+    return morph::testkit::runSession(session, argc, argv);
 }

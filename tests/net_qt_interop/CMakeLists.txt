@@ -7,6 +7,7 @@ target_link_libraries(morph_net_qt_interop_tests
         morph::net
         morph_qt_impl
         Catch2::Catch2  # custom main() owns QCoreApplication, matching tests/qt
+        morph_test_log_level
 )
 
 set_target_properties(morph_net_qt_interop_tests PROPERTIES AUTOMOC ON)

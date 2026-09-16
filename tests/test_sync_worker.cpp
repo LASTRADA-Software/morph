@@ -175,9 +175,9 @@ TEST_CASE("morph::offline::SyncWorker: stop resets after run  -  next run procee
 
 TEST_CASE("morph::offline::SyncWorker: no DeadLetterSink set  -  default log-and-drop path fires unchanged",
           "[sync][attempts][logger]") {
-    morph::log::ScopedLoggerOverride guard;
-    std::vector<std::string> logged;
-    morph::log::setLogger([&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); });
+    std::vector<std::string> logged;  // declared first: it must outlive the guard's sink
+    morph::log::ScopedLoggerOverride const guard{
+        [&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); }};
 
     morph::offline::InMemoryOfflineQueue queue;
     (void)queue.enqueue("poison-payload");
@@ -203,9 +203,9 @@ TEST_CASE(
     "morph::offline::SyncWorker: DeadLetterSink set  -  receives the exhausted item before removal and suppresses "
     "the default log line",
     "[sync][attempts]") {
-    morph::log::ScopedLoggerOverride guard;
-    std::vector<std::string> logged;
-    morph::log::setLogger([&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); });
+    std::vector<std::string> logged;  // declared first: it must outlive the guard's sink
+    morph::log::ScopedLoggerOverride const guard{
+        [&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); }};
 
     morph::offline::InMemoryOfflineQueue queue;
     auto id = queue.enqueue("poison-payload", "idem-key-1");
@@ -243,9 +243,9 @@ TEST_CASE(
 
 TEST_CASE("morph::offline::SyncWorker: a throwing DeadLetterSink is caught  -  item is still removed",
           "[sync][attempts][exception]") {
-    morph::log::ScopedLoggerOverride guard;
-    std::vector<std::string> logged;
-    morph::log::setLogger([&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); });
+    std::vector<std::string> logged;  // declared first: it must outlive the guard's sink
+    morph::log::ScopedLoggerOverride const guard{
+        [&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); }};
 
     morph::offline::InMemoryOfflineQueue queue;
     (void)queue.enqueue("poison");
@@ -275,8 +275,8 @@ TEST_CASE(
     "morph::offline::SyncWorker: a queue that persists attempts dead-letters cumulatively across a simulated "
     "restart",
     "[sync][attempts][durable]") {
-    morph::log::ScopedLoggerOverride guard;  // silence the "dropping payload" error log (no sink set here)
-    morph::log::setLogger([](morph::log::LogLevel, std::string_view) {});
+    // Silence the "dropping payload" error log.
+    morph::log::ScopedLoggerOverride const guard{[](morph::log::LogLevel, std::string_view) {}};
 
     morph::offline::InMemoryOfflineQueue queue;  // overrides setAttempts -> persists across "restarts"
     (void)queue.enqueue("poison");
@@ -522,8 +522,7 @@ TEST_CASE("morph::offline::SyncWorker: the bool ReplayFunction keeps its exact p
     // `false` must stay "delivered and refused" -- every existing caller is
     // written against that, and silently re-reading it as "undelivered" would
     // turn a poison payload into an item that is retried forever.
-    morph::log::ScopedLoggerOverride guard;
-    morph::log::setLogger([](morph::log::LogLevel, std::string_view) {});
+    morph::log::ScopedLoggerOverride const guard{[](morph::log::LogLevel, std::string_view) {}};
 
     morph::offline::InMemoryOfflineQueue queue;
     (void)queue.enqueue("poison");
@@ -542,8 +541,7 @@ TEST_CASE("morph::offline::SyncWorker: a throwing detailed replay still charges 
     // Unchanged from the bool contract: a throw is a failure, and the safe
     // reading of an unknown failure is that it may well have been delivered.
     // Treating it as undelivered would retry a poison payload forever.
-    morph::log::ScopedLoggerOverride guard;
-    morph::log::setLogger([](morph::log::LogLevel, std::string_view) {});
+    morph::log::ScopedLoggerOverride const guard{[](morph::log::LogLevel, std::string_view) {}};
 
     morph::offline::InMemoryOfflineQueue queue;
     (void)queue.enqueue("throws");

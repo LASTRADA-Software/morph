@@ -9,6 +9,33 @@ API surface).
 
 ## [Unreleased]
 
+### Changed
+
+- **`morph::log` no longer takes over a consumer's `stderr` by default.**
+  `LogState::minLevel` defaults to `LogLevel::warn` instead of
+  `LogLevel::debug`, so linking morph no longer emits its dispatch tracing
+  unasked — a plain `morph_tests` run wrote 2,949 such lines against 23 lines of
+  actual test output. `setLogLevel(LogLevel::debug)` restores the previous
+  behaviour in one line. The new default is deliberately the same in every build
+  configuration rather than keyed on `NDEBUG`: `minLevel` is a default member
+  initializer in a header, so a configuration-dependent one would give
+  translation units compiled with different settings two definitions of
+  `LogState` and of the inline `logState()`, an ODR violation the linker
+  resolves silently. Pre-1.0, so no deprecation window; see
+  `docs/spec/core/logger.md`, "The default level".
+- **Every Catch2 test binary takes `--log-level` and is silent by default.**
+  The suites exercise error paths on purpose, so even `warn` left 54
+  `[ERROR]`/`[WARN ]` records that read as failures but are not; test binaries
+  now default to `LogLevel::off` and accept
+  `--log-level=debug|info|warn|error|off`, falling back to
+  `$MORPH_TEST_LOG_LEVEL` when the switch is absent (CI sets it to `debug`,
+  because `ctest` gives no place to thread an argument through). A default
+  `morph_tests` run is down from 2,972 lines to 24. Implemented by replacing
+  `Catch2::Catch2WithMain` with `morph_test_main` — a Catch2 event listener
+  cannot add a command-line option, since listeners are constructed after the
+  parser is built. The four Qt-owning mains keep their own `main` and call the
+  same `morph::testkit::configureSession()`.
+
 ### Added
 
 - **Every form in the ladder's showcase GUI now renders through

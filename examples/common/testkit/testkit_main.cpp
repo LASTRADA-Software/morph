@@ -18,6 +18,7 @@
 
 #include <QEvent>
 #include <catch2/catch_session.hpp>
+#include <testkit/log_level.hpp>
 
 #ifdef MORPH_LADDER_TESTKIT_GUI_APP
 #include <QGuiApplication>
@@ -29,7 +30,8 @@ using LadderTestApplication = QCoreApplication;
 
 int main(int argc, char* argv[]) {
     LadderTestApplication app{argc, argv};
-    int result = Catch::Session().run(argc, argv);
+    Catch::Session session;
+    int const result = morph::testkit::runSession(session, argc, argv);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QCoreApplication::processEvents(QEventLoop::AllEvents);
     return result;

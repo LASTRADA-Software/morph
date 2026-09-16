@@ -11,6 +11,7 @@ free functions operating on a hidden `LogState` singleton.
 
 - [Log levels](#log-levels)
 - [Global state](#global-state)
+  - [The default level](#the-default-level)
 - [Log-injection sanitisation](#log-injection-sanitisation)
 - [Level helpers](#level-helpers)
 - [Scoped override](#scoped-override)
@@ -53,9 +54,32 @@ A single `detail::LogState` singleton holds:
   `[LEVEL] sanitizeLogLine(msg)` to `stderr` (newline/control-char sanitisation,
   see [Log-injection sanitisation](#log-injection-sanitisation)). Guarded by `mtx`.
 - **`minLevel`** — the minimum `LogLevel` to emit, as a
-  `std::atomic<LogLevel>`. Default: `debug` (everything passes). Read/written
-  lock-free with relaxed ordering; **not** guarded by `mtx`.
+  `std::atomic<LogLevel>`. Default: `warn` (see
+  [The default level](#the-default-level)). Read/written lock-free with relaxed
+  ordering; **not** guarded by `mtx`.
 - **`mtx`** — a `std::mutex` protecting `sink` and serialising sink invocation.
+
+### The default level
+
+`minLevel` defaults to `warn`: linking morph must not hand the framework a
+consumer's `stderr`. It defaulted to `debug` until 0.1.0, which meant every
+application that linked morph inherited its dispatch tracing without asking —
+a plain `morph_tests` run wrote 2,949 such lines against 23 lines of actual
+test output.
+
+`warn` is deliberately **one value in every build configuration**, not keyed on
+`NDEBUG`. `minLevel` is a default member initializer in a header, so a
+configuration-dependent one gives translation units compiled with different
+settings two definitions of `LogState` and of the inline `logState()` — an ODR
+violation the linker resolves silently and arbitrarily, turning the observed
+default into a link-order accident. A debug build therefore does **not** enable
+debug logging by itself; `setLogLevel(LogLevel::debug)` is the one line that
+does, and it is the only documented way to change the level.
+
+morph's own test binaries go further and default to `off`, since expected
+error-path records are still noise in a test run. That is a property of the
+test harness (`tests/testkit/log_level.hpp`, exposed as `--log-level` and
+`$MORPH_TEST_LOG_LEVEL`), not of this library — a consumer sees `warn`.
 
 The two fields have different concurrency disciplines:
 

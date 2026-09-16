@@ -443,13 +443,12 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: cancelPending resolves a stil
 
 TEST_CASE("morph::offline::ReconnectCoordinator: null Deps member is logged at construction",
           "[coverage][reconnect]") {
-    LogGuard guard;
-    std::atomic<bool> sawNull{false};
-    ::morph::log::setLogger([&](::morph::log::LogLevel, std::string_view msg) {
+    std::atomic<bool> sawNull{false};  // declared first: it must outlive the guard's sink
+    LogGuard const guard{[&](::morph::log::LogLevel, std::string_view msg) {
         if (msg.contains("null Deps member")) {
             sawNull.store(true);
         }
-    });
+    }};
 
     ::morph::offline::ReconnectCoordinator::Deps deps;
     deps.tryReconnect = [] { return true; };
@@ -503,8 +502,8 @@ TEST_CASE("morph::offline::ReconnectCoordinator: onOnline reconnects and shouldC
 // ── sync_worker.hpp:132-152 — dead-letter after kMaxAttempts (=5), no-sink branch ──
 
 TEST_CASE("morph::offline::SyncWorker: a payload is dead-lettered after kMaxAttempts", "[coverage][sync]") {
-    LogGuard guard;  // silence the "dropping payload" error log
-    ::morph::log::setLogger([](::morph::log::LogLevel, std::string_view) {});
+    // Silence the "dropping payload" error log.
+    LogGuard const guard{[](::morph::log::LogLevel, std::string_view) {}};
 
     ::morph::offline::InMemoryOfflineQueue queue;
     (void)queue.enqueue("always-fails");

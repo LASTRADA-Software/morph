@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <testkit/log_level.hpp>
 #include <thread>
 #include <vector>
 
@@ -43,14 +44,17 @@ TEST_CASE("morph::log::detail::levelName returns correct label for every level",
 // ── morph::log::setLogger / custom sink ───────────────────────────────────────────────────
 
 TEST_CASE("morph::log::setLogger: custom sink receives level and message", "[logger]") {
-    LogGuard guard;
+    // Captures declared before the guard: they must outlive the sink that
+    // references them. The guard's explicit constructor also sets the level to
+    // debug, so this does not depend on whatever the ambient level happens to
+    // be -- the suite's own default is `off`, which would starve the sink.
     morph::log::LogLevel capturedLevel = morph::log::LogLevel::off;
     std::string capturedMsg;
 
-    morph::log::setLogger([&](morph::log::LogLevel lvl, std::string_view msg) {
+    LogGuard const guard{[&](morph::log::LogLevel lvl, std::string_view msg) {
         capturedLevel = lvl;
         capturedMsg = std::string{msg};
-    });
+    }};
 
     morph::log::logInfo("hello info");
     REQUIRE(capturedLevel == morph::log::LogLevel::info);
@@ -94,10 +98,15 @@ TEST_CASE("morph::log::setLogger: injecting a custom backend (dependency injecti
 }
 
 TEST_CASE("morph::log::setLogger: null sink is a no-op and does not crash", "[logger]") {
-    LogGuard guard;
-    morph::log::setLogger(nullptr);
+    // The level matters even though nothing is captured: `detail::log` rejects
+    // a suppressed record *before* it reaches the `if (state.sink)` branch this
+    // test exists to exercise. At the suite's default of `off` the call would
+    // return early and the test would pass while proving nothing.
+    LogGuard const guard{nullptr, morph::log::LogLevel::debug};
+
     morph::log::logError("silent");
-    REQUIRE(true);
+
+    REQUIRE(morph::log::getLogLevel() == morph::log::LogLevel::debug);
 }
 
 // ── morph::log::setLogLevel / filtering ───────────────────────────────────────────────────
@@ -346,4 +355,50 @@ TEST_CASE("morph::log::logFormat: a throwing formatter is caught and counted, di
 
     REQUIRE(morph::log::droppedLogRecords() == before + 1);
     REQUIRE(sinkCalls == 0);
+}
+
+// ── Pins: the two defaults this suite's quiet output rests on ────────────────
+//
+// Both would regress silently. Nothing else asserts either value, so without
+// these a one-token revert of the library default, or a `main` that quietly
+// stopped applying the gate, would leave every test passing.
+
+TEST_CASE("morph::log: the default minimum level is warn", "[logger][pin]") {
+    // A fresh state, not the process-wide one: this binary's main() sets the
+    // global level before the run starts, so `getLogLevel()` reports the gate's
+    // choice rather than the library's. Constructing a LogState reads the
+    // default member initializer directly, which is what is being pinned, and
+    // is immune to both the gate and to test ordering.
+    morph::log::detail::LogState const fresh;
+
+    REQUIRE(fresh.minLevel.load() == morph::log::LogLevel::warn);
+}
+
+TEST_CASE("the --log-level gate ran before the suite started", "[logger][pin]") {
+    // Teeth: if main() never applied a level, the ambient level would be the
+    // library default (warn) while resolvedLogLevel() still reported its own
+    // initial value (off) -- so this fails. It holds whichever input supplied
+    // the level, which is what lets it pass under CI (MORPH_TEST_LOG_LEVEL=debug)
+    // and locally (no input at all) alike.
+    REQUIRE(morph::log::getLogLevel() == morph::testkit::resolvedLogLevel());
+}
+
+TEST_CASE("with neither --log-level nor MORPH_TEST_LOG_LEVEL, the suite is silent", "[logger][pin]") {
+    // The default that the whole change exists for. Asserted only when no input
+    // was given -- checking the source rather than guessing keeps this from
+    // failing the moment someone runs --log-level=debug, or runs under CI.
+    //
+    // SUCCEED, not SKIP. catch_discover_tests registers every case as its own
+    // ctest invocation, so a binary whose only selected case skips exits with
+    // Catch2's AllTestsSkippedExitCode (4) -- which ctest reports as a failed
+    // test. CI sets MORPH_TEST_LOG_LEVEL=debug workflow-wide, so this case
+    // takes that path on every leg, and SKIP turned it red everywhere while
+    // passing locally.
+    if (morph::testkit::resolvedLogLevelSource() != morph::testkit::LogLevelSource::fallbackDefault) {
+        SUCCEED("a log level was requested explicitly; the quiet default is not under test in this run");
+        return;
+    }
+
+    REQUIRE(morph::testkit::resolvedLogLevel() == morph::log::LogLevel::off);
+    REQUIRE(morph::log::getLogLevel() == morph::log::LogLevel::off);
 }

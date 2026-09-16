@@ -17,6 +17,7 @@
 #include <morph/qt/qt_websocket_server.hpp>
 #include <stdexcept>
 #include <string>
+#include <testkit/log_level.hpp>
 #include <thread>
 
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based
@@ -149,7 +150,8 @@ TEST_CASE("QtWebSocketBackend interop: connects to a SocketServer and completes 
 // ── Custom main: own the QCoreApplication explicitly (see tests/qt/test_qt_websocket.cpp) ──
 int main(int argc, char* argv[]) {
     QCoreApplication app{argc, argv};
-    int result = Catch::Session().run(argc, argv);
+    Catch::Session session;
+    int const result = morph::testkit::runSession(session, argc, argv);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QCoreApplication::processEvents(QEventLoop::AllEvents);
     return result;
