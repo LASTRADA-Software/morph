@@ -387,8 +387,16 @@ TEST_CASE("with neither --log-level nor MORPH_TEST_LOG_LEVEL, the suite is silen
     // The default that the whole change exists for. Asserted only when no input
     // was given -- checking the source rather than guessing keeps this from
     // failing the moment someone runs --log-level=debug, or runs under CI.
+    //
+    // SUCCEED, not SKIP. catch_discover_tests registers every case as its own
+    // ctest invocation, so a binary whose only selected case skips exits with
+    // Catch2's AllTestsSkippedExitCode (4) -- which ctest reports as a failed
+    // test. CI sets MORPH_TEST_LOG_LEVEL=debug workflow-wide, so this case
+    // takes that path on every leg, and SKIP turned it red everywhere while
+    // passing locally.
     if (morph::testkit::resolvedLogLevelSource() != morph::testkit::LogLevelSource::fallbackDefault) {
-        SKIP("a log level was requested explicitly; the quiet default is not under test in this run");
+        SUCCEED("a log level was requested explicitly; the quiet default is not under test in this run");
+        return;
     }
 
     REQUIRE(morph::testkit::resolvedLogLevel() == morph::log::LogLevel::off);
