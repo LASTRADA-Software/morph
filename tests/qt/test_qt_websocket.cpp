@@ -14,8 +14,6 @@
 #include <QWebSocket>
 #include <atomic>
 #include <catch2/catch_session.hpp>
-
-#include <testkit/log_level.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
@@ -32,6 +30,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <testkit/log_level.hpp>
 #include <thread>
 #include <utility>
 #include <vector>

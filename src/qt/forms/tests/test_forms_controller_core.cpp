@@ -10,8 +10,6 @@
 #include <QEventLoop>
 #include <atomic>
 #include <catch2/catch_session.hpp>
-
-#include <testkit/log_level.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
@@ -19,6 +17,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/qt/forms/forms_controller_core.hpp>
 #include <string>
+#include <testkit/log_level.hpp>
 #include <thread>
 #include <vector>
 

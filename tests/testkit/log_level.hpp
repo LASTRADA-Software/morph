@@ -5,12 +5,11 @@
 #include <catch2/internal/catch_clara.hpp>
 #include <cstdint>
 #include <cstdlib>
+#include <morph/core/logger.hpp>
 #include <optional>
 #include <print>
 #include <string>
 #include <string_view>
-
-#include <morph/core/logger.hpp>
 
 namespace morph::testkit {
 
@@ -103,8 +102,8 @@ inline std::optional<morph::log::LogLevel> parseLevel(std::string_view name) {
 /// @param sink    Receives the option's value; must outlive @p session's parse.
 inline void addLogLevelOption(Catch::Session& session, std::string& sink) {
     session.cli(session.cli() | Catch::Clara::Opt(sink, "level")["--log-level"](
-                                   "morph log level: debug|info|warn|error|off (default: off). "
-                                   "Overrides $MORPH_TEST_LOG_LEVEL."));
+                                    "morph log level: debug|info|warn|error|off (default: off). "
+                                    "Overrides $MORPH_TEST_LOG_LEVEL."));
 }
 
 /// @brief Resolves and installs the suite's log level.

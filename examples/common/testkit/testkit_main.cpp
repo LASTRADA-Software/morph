@@ -18,7 +18,6 @@
 
 #include <QEvent>
 #include <catch2/catch_session.hpp>
-
 #include <testkit/log_level.hpp>
 
 #ifdef MORPH_LADDER_TESTKIT_GUI_APP

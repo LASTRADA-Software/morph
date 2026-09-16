@@ -3,8 +3,6 @@
 #include <QCoreApplication>
 #include <atomic>
 #include <catch2/catch_session.hpp>
-
-#include <testkit/log_level.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
@@ -19,6 +17,7 @@
 #include <morph/qt/qt_websocket_server.hpp>
 #include <stdexcept>
 #include <string>
+#include <testkit/log_level.hpp>
 #include <thread>
 
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based

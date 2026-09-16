@@ -15,7 +15,6 @@
 // behaves identically across every suite.
 
 #include <catch2/catch_session.hpp>
-
 #include <testkit/log_level.hpp>
 
 int main(int argc, char* argv[]) {
