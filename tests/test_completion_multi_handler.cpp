@@ -194,8 +194,17 @@ TEST_CASE("Completion: a then() attached after settlement observes the same valu
 
     const std::string original = "hello-world-long-enough-to-heap-allocate";
 
+    // Two pre-settle handlers, not one. With a single handler `savedFns.size()`
+    // is 1, so setValue's fan-out loop (`i + 1 < savedFns.size()`) never runs
+    // and only the `savedFns.back()(std::move(savedVal))` arm is exercised --
+    // yet the fan-out is exactly where `savedVal` is read repeatedly, and it is
+    // the arm a future refactor is most likely to break by moving out of
+    // `savedVal` early. The pre-existing [issue-59] multi-handler tests all use
+    // `int`, which cannot reveal a moved-from value.
     std::string firstSeen;
-    comp.then([&](std::string v) { firstSeen = std::move(v); });  // attached BEFORE settling
+    std::string fanOutSeen;
+    comp.then([&](std::string v) { firstSeen = std::move(v); });   // attached BEFORE settling
+    comp.then([&](std::string v) { fanOutSeen = std::move(v); });  // ditto: forces the fan-out arm
 
     state->setValue(original);
 
@@ -203,5 +212,6 @@ TEST_CASE("Completion: a then() attached after settlement observes the same valu
     comp.then([&](std::string v) { secondSeen = std::move(v); });  // attached AFTER settling
 
     REQUIRE(firstSeen == original);
+    REQUIRE(fanOutSeen == original);
     REQUIRE(secondSeen == original);
 }

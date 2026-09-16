@@ -57,14 +57,22 @@ struct CompletionState {
                 // nothing here has changed yet -- `onOk` still holds every
                 // handler and the state is still unready -- rather than a
                 // corrupted state that already looks settled with its
-                // handlers already lost. (A `T` whose *move* constructor can
-                // throw is a separate, narrower hazard this ordering does not
-                // cover, since `onOk` is already drained by the time
-                // `value = std::move(val)` runs below.)
+                // handlers already lost.
+                //
+                // `onOk` is drained *last*, after `value`/`ready` are set, so
+                // the same guarantee covers a `T` whose *move* constructor can
+                // throw. Draining first (as an earlier revision did) meant a
+                // throwing `value = std::move(val)` unwound with `savedFns` --
+                // a local -- carrying every handler to its destructor while
+                // `onOk` was already empty: permanently unsettled, no handlers,
+                // and silent, because the destructor's orphan logger only fires
+                // when `error` is set. `std::move` on a vector is noexcept and
+                // `savedVal` is already an independent copy, so the reordering
+                // costs nothing.
                 auto savedVal = val;
-                auto savedFns = std::move(onOk);
                 value = std::move(val);
                 ready = true;
+                auto savedFns = std::move(onOk);
                 callback = [savedFns = std::move(savedFns), savedVal = std::move(savedVal)]() mutable {
                     // Every handler but the last sees a copy (the value is only
                     // moved into the final invocation), so an earlier handler

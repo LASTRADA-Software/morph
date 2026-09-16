@@ -27,11 +27,19 @@
 /// authorizer, no model, no executor, no strand, and is expressible without
 /// `RemoteServer` at all.
 ///
-/// This is a faithful, behavior-preserving port of the logic that used to
-/// live directly on `RemoteServer`: same fields, same locking, same
-/// out-of-order-release handling (`releasedOutOfOrder`, closing issue #449 --
-/// already fixed upstream before this extraction; see that field's own doc
-/// comment below for the full history). Nothing here is new logic.
+/// It began as a behavior-preserving port of the logic that used to live
+/// directly on `RemoteServer` -- `releasedOutOfOrder` and its out-of-order
+/// release handling (issue #449) came across unchanged, and that field's own
+/// doc comment carries the full history.
+///
+/// It is **no longer only that port**, and the locking in particular is not the
+/// same. morph#519 added the atomic `takeAndPost`, a nested `Ticket` bound to
+/// the exact `Gate` it was issued from (so a drain-and-recreate cannot redirect
+/// a later `awaitTurn`), a per-`Gate` `std::recursive_mutex` held across the
+/// caller's `postFn`, and a two-phase `enqueueMtx`-then-`_mtx` acquisition with
+/// a stale-generation retry loop. Read `takeAndPost`'s body comments before
+/// reasoning about lock order here; the ordering is load-bearing and was got
+/// wrong once already.
 namespace morph::backend::detail {
 
 /// @brief Hands out monotonic per-`ModelId` tickets and lets callers block
@@ -82,8 +90,20 @@ public:
     private:
         friend class ExecuteOrderGate;
 
-        Ticket(::morph::exec::detail::ModelId mid, std::uint64_t number, std::shared_ptr<Gate> gate)
-            : _mid{mid}, _number{number}, _gate{std::move(gate)}, _released{std::make_shared<std::atomic<bool>>()} {}
+        /// @param mid      The model this ticket orders against.
+        /// @param number    The ticket number minted for it.
+        /// @param gate      The exact `Gate` it was issued from.
+        /// @param released  The shared "already released" flag. Passed in rather
+        ///        than allocated here so the caller can allocate it *before*
+        ///        minting @p number: `make_shared` can throw `bad_alloc`, and a
+        ///        throw between `nextTicket++` and the ticket becoming owned
+        ///        strands that number forever -- `nextToRun` can then never
+        ///        reach `nextTicket`, the gate entry is never erased, and every
+        ///        later ticket for the model parks in the deadline-less
+        ///        `awaitTurn`.
+        Ticket(::morph::exec::detail::ModelId mid, std::uint64_t number, std::shared_ptr<Gate> gate,
+               std::shared_ptr<std::atomic<bool>> released)
+            : _mid{mid}, _number{number}, _gate{std::move(gate)}, _released{std::move(released)} {}
 
         ::morph::exec::detail::ModelId _mid{};
         std::uint64_t _number{0};
@@ -138,6 +158,10 @@ public:
     /// @param mid The model the upcoming turn is for.
     /// @return This call's ticket, bound to @p mid's current gate.
     [[nodiscard]] Ticket takeTicket(::morph::exec::detail::ModelId mid) {
+        // Allocated before the number is minted -- same reason as `takeAndPost`:
+        // a throw between `nextTicket++` and the owning `Ticket` strands that
+        // number, and nothing can ever release it.
+        auto released = std::make_shared<std::atomic<bool>>();
         std::shared_ptr<Gate> gate;
         std::uint64_t number = 0;
         {
@@ -145,7 +169,7 @@ public:
             gate = getOrCreateGateLocked(mid);
             number = gate->nextTicket++;
         }
-        return Ticket{mid, number, std::move(gate)};
+        return Ticket{mid, number, std::move(gate), std::move(released)};
     }
 
     /// @brief Atomically hands out the next ticket for @p mid and invokes
@@ -183,15 +207,23 @@ public:
     /// ordering against itself, only exclusion against other threads, which a
     /// plain `std::mutex` cannot express without self-deadlocking.
     ///
-    /// The gate-fetch, the `enqueueMtx` acquisition and the ticket increment
-    /// below all happen inside one continuous `_mtx` hold, closing a window a
-    /// separate, later `_mtx` section for the increment used to leave open: a
-    /// concurrent `release()` draining and erasing this exact gate between
-    /// "fetched" and "ticket assigned" would otherwise mint this ticket on an
-    /// already-orphaned generation, indistinguishable from a *fresh* one to
-    /// this call, while a genuinely concurrent `takeAndPost(mid)` elsewhere
-    /// gets a real fresh generation — the two then run independent counters
-    /// with no ordering relationship, silently.
+    /// `enqueueMtx` is acquired **first, with no other lock held**, and `_mtx`
+    /// only after — never the other way round. The reverse order deadlocks
+    /// against this function's own re-entrant use: `enqueueLock` is held across
+    /// `postFn`, whose re-entrant `takeAndPost` then wants `_mtx` while holding
+    /// `enqueueMtx`, so a second thread holding `_mtx` and waiting for
+    /// `enqueueMtx` completes a cycle. ThreadSanitizer reports it as
+    /// `lock-order-inversion`.
+    ///
+    /// Splitting the two acquisitions reopens a window that one continuous
+    /// `_mtx` hold used to close: a concurrent `release()` can drain and erase
+    /// this exact gate between "fetched" and "ticket assigned", minting this
+    /// ticket on an already-orphaned generation while a genuinely concurrent
+    /// `takeAndPost(mid)` elsewhere gets a fresh one — the two then run
+    /// independent counters with no ordering relationship, silently. The loop
+    /// in the body *detects* that instead: it re-checks the map under `_mtx`
+    /// once `enqueueMtx` is held, and retries against the current gate if the
+    /// one it holds is stale. Do not "simplify" the re-check away.
     ///
     /// @param mid    The model the upcoming turn is for.
     /// @param postFn Invoked synchronously, with a `Ticket` for this call,
@@ -206,6 +238,9 @@ public:
         std::shared_ptr<Gate> gate;
         std::uint64_t number = 0;
         std::unique_lock<std::recursive_mutex> enqueueLock;
+        // Allocated before a ticket number exists, so nothing between the mint
+        // and the owning `Ticket` can throw. See `Ticket`'s constructor.
+        auto released = std::make_shared<std::atomic<bool>>();
         // ── Lock order: `enqueueMtx` is *always* acquired before `_mtx`, never
         // the other way round. ───────────────────────────────────────────────
         //
@@ -262,7 +297,7 @@ public:
             // Stale generation: drop it and adopt whatever is registered now.
             enqueueLock.unlock();
         }
-        Ticket const ticket{mid, number, gate};
+        Ticket const ticket{mid, number, gate, std::move(released)};
         try {
             std::forward<PostFn>(postFn)(ticket);
         } catch (...) {
@@ -297,7 +332,18 @@ public:
         }
         std::unique_lock lock{_mtx};
         auto& gate = *ticket._gate;
-        gate.cv.wait(lock, [&gate, &ticket] { return gate.nextToRun == ticket._number; });
+        // `>=`, not `==`. `nextToRun` is the lowest ticket not yet released, so
+        // once it has moved *past* this ticket's number the turn has come and
+        // gone and there is nothing left to wait for. An exact match parks
+        // forever in that case, and it is reachable: `Ticket` is deliberately
+        // copyable with two owners that can each release it, so if
+        // `takeAndPost`'s `catch (...)` releases after `postFn` already enqueued
+        // a task holding its own copy, that task's `awaitTurn` would wait on a
+        // number `nextToRun` has already passed. There is no deadline here, so
+        // "wait forever" means a parked pool worker for the life of the process.
+        // Mirrors the by-ModelId overload, which returns immediately once the
+        // gate entry is gone.
+        gate.cv.wait(lock, [&gate, &ticket] { return gate.nextToRun >= ticket._number; });
     }
 
     /// @brief Releases @p ticket for @p mid, letting the next ticket (if any) proceed.
@@ -339,12 +385,25 @@ public:
     ///        own doc comment on `_released`).
     /// @param ticket A ticket from `takeAndPost`.
     void release(const Ticket& ticket) {
-        if (ticket.empty() || ticket._released->exchange(true)) {
+        if (ticket.empty()) {
             return;
         }
         std::scoped_lock const lock{_mtx};
+        // Claimed *under* `_mtx` and *after* the bookkeeping, not before it.
+        // Every release serialises on this mutex, so a plain load/store here is
+        // still exactly-once -- but claiming the flag first meant a throw in the
+        // locked section below (the `releasedOutOfOrder` node allocation can
+        // throw `bad_alloc`) left the ticket permanently un-releasable by every
+        // owner, with `nextToRun` never reaching `nextTicket`, the gate entry
+        // never erased, and every later `awaitTurn` for that model blocked
+        // forever. Leaving the flag clear on a throw lets the other owner retry.
+        if (ticket._released->load()) {
+            return;
+        }
         Gate& gate = *ticket._gate;
-        if (!advanceOnReleaseLocked(gate, ticket._number)) {
+        bool const drained = advanceOnReleaseLocked(gate, ticket._number);
+        ticket._released->store(true);
+        if (!drained) {
             return;
         }
         // Unlike `release(mid, ticket)`, which already holds the exact
@@ -453,15 +512,20 @@ private:
         } else {
             gate.releasedOutOfOrder.insert(ticket);
         }
+        // Notify before the drained-path return, not only on the other branch.
+        // "Fully drained" means every ticket handed out has released -- but a
+        // waiter can still be parked on one of them (see `awaitTurn`'s note on
+        // the two owners of a `Ticket`), and returning without a notify left it
+        // asleep on a predicate that had already become true.
+        gate.cv.notify_all();
         if (gate.nextToRun == gate.nextTicket) {
-            // No ticket is currently waiting and none can arrive for a ticket
-            // number already handed out -- safe to drop the entry so a model
-            // with no in-flight tickets leaves no trace in this map. Reaching
-            // `nextTicket` this way means every ticket handed out has
-            // released, so `releasedOutOfOrder` is necessarily empty here.
+            // No ticket is currently waiting for a number still to come -- safe
+            // to drop the entry so a model with no in-flight tickets leaves no
+            // trace in this map. Reaching `nextTicket` this way means every
+            // ticket handed out has released, so `releasedOutOfOrder` is
+            // necessarily empty here.
             return true;
         }
-        gate.cv.notify_all();
         return false;
     }
 
