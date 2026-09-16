@@ -15,6 +15,7 @@
 
 #include "../attributes.hpp"
 #include "../core/file_io_ops.hpp"
+#include "../core/logger.hpp"
 #include "../core/observability.hpp"
 #include "offline_queue.hpp"
 
@@ -115,6 +116,33 @@ public:
     ///        milliseconds.
     static constexpr int kBusyTimeoutMillis = 5000;
 
+    /// @brief How hard each committed statement is pushed onto the platter.
+    enum class Synchronous : std::uint8_t {
+        /// @brief `PRAGMA synchronous=NORMAL` — the default, and SQLite's own
+        ///        recommendation under WAL. A crash or power loss can lose the
+        ///        most recent commits, which this queue's at-least-once
+        ///        delivery plus `idempotencyKey` dedup already absorb.
+        normal,
+        /// @brief `PRAGMA synchronous=FULL` — fsync on every committed
+        ///        statement. Measured ~18x slower per mutation (~0.08ms to
+        ///        ~1.44ms on NVMe/btrfs, sqlite 3.53.4), and every mutation here
+        ///        is its own commit, so a 200-item `SyncWorker` drain goes from
+        ///        ~16ms to ~290ms — all of it under this class's mutex, where it
+        ///        blocks the producer's `enqueue()` too. Opt in when losing the
+        ///        last few commits is genuinely unacceptable.
+        full,
+    };
+
+    /// @brief The `journal_mode` this database actually ended up in.
+    ///
+    /// Normally `"wal"`. A filesystem without the shared-memory support WAL
+    /// needs reports `"delete"`; `:memory:` and the temp spellings report
+    /// `"memory"`. Construction warns rather than throws on anything but
+    /// `"wal"` (durability is carried by `PRAGMA synchronous`), so this is how
+    /// a caller that cares can tell which mode it got.
+    /// @return The mode string as SQLite reported it at construction.
+    [[nodiscard]] const std::string& journalMode() const noexcept { return _journalMode; }
+
     /// @brief Opens (or creates) the queue database at @p path, creating the
     ///        schema if it does not already exist.
     /// @param path     SQLite database file.
@@ -129,12 +157,29 @@ public:
     ///        seam, mirroring `FileActionLog`/`FileOfflineQueue`'s own
     ///        `FileIoOps` parameter, for forcing the directory-fsync failure
     ///        branch below without needing a real OS-level failure.
+    /// @param synchronous `PRAGMA synchronous` level; see `Synchronous`.
+    ///        Defaults to `normal`.
+    /// @param busyTimeout How long a statement waits out a lock another
+    ///        connection holds before returning `SQLITE_BUSY`. Defaults to
+    ///        `kBusyTimeoutMillis`. This class's own mutex makes `SQLITE_BUSY`
+    ///        unreachable for a single instance, so the timeout only matters
+    ///        when something else has the database open — but when it does, the
+    ///        wait happens under that mutex and blocks every other caller of
+    ///        this instance, a Qt GUI thread included. Pass `0` to restore
+    ///        fail-fast.
     /// @throws SqliteOfflineQueueError if the database cannot be opened, the
     ///         schema cannot be created, or the containing directory cannot
-    ///         be fsynced after `sqlite3_open()` creates a brand-new file.
+    ///         be fsynced after `sqlite3_open()` creates a brand-new file. A
+    ///         `journal_mode` that does not end up as `wal` is **warned about,
+    ///         not thrown** — see the constructor body.
     explicit SqliteOfflineQueue(std::filesystem::path path, std::optional<std::size_t> maxDepth = std::nullopt,
-                                ::morph::core::FileIoOps ioOps = {})
-        : _path{std::move(path)}, _maxDepth{maxDepth}, _io{std::move(ioOps)} {
+                                ::morph::core::FileIoOps ioOps = {}, Synchronous synchronous = Synchronous::normal,
+                                std::chrono::milliseconds busyTimeout = std::chrono::milliseconds{kBusyTimeoutMillis})
+        : _path{std::move(path)},
+          _maxDepth{maxDepth},
+          _io{std::move(ioOps)},
+          _synchronous{synchronous},
+          _busyTimeout{busyTimeout} {
         if (sqlite3_open(_path.string().c_str(), &_db) != SQLITE_OK) {
             std::string msg = "SqliteOfflineQueue: failed to open " + _path.string() + ": " +
                               (_db != nullptr ? sqlite3_errmsg(_db) : "unknown error");
@@ -150,27 +195,58 @@ public:
         // rethrowing, the same discipline the open-failure branch above
         // already applies to its own failure path.
         try {
+            // FIRST, before anything that can return SQLITE_BUSY. Converting a
+            // database to WAL needs an exclusive lock, so with a second
+            // connection open `PRAGMA journal_mode=WAL` is itself a BUSY
+            // candidate -- issued after the timeout it waits, issued before it
+            // fails instantly with "database is locked" (measured: 12ms to
+            // throw without, a full 1001ms wait with a 1000ms timeout set
+            // first). Setting it last, as an earlier revision did, left the
+            // multi-opener case it was added for failing exactly as before.
+            execOrThrow(("PRAGMA busy_timeout=" + std::to_string(_busyTimeout.count()) + ";").c_str());
+
+            // Before journal_mode, and unconditional. SQLite's default for the
+            // rollback journal is already FULL; it is WAL that lowers it to
+            // NORMAL, so raising it here first means the setting holds whether
+            // or not WAL takes. Ordered the other way round, a database that
+            // fell back to the rollback journal kept whatever synchronous it
+            // happened to have.
+            execOrThrow(
+                ("PRAGMA synchronous=" + std::string{_synchronous == Synchronous::full ? "FULL" : "NORMAL"} + ";")
+                    .c_str());
+
             execOrThrow("PRAGMA journal_mode=WAL;");
             // execOrThrow() discards sqlite3_exec's row callback, so a silent
-            // fallback to `delete` mode -- which happens on a filesystem
-            // without shared-memory support, e.g. NFS or some containers --
-            // would otherwise go unnoticed (morph#532). Read the pragma back
-            // through a real prepared statement instead of trusting the set.
+            // fallback would otherwise go unnoticed (morph#532). Read the
+            // pragma back through a real prepared statement rather than
+            // trusting the set.
+            //
+            // Warn, do not throw. An earlier revision made a non-`wal` result a
+            // hard construction failure, which refused configurations that were
+            // never actually less durable: `journal_mode` reports `memory` for
+            // `:memory:` and the temp/"" spellings, and `delete` on filesystems
+            // without the shared-memory WAL needs (NFS, CIFS/SMB, some overlay,
+            // 9p and Docker mounts). All of those persist correctly through the
+            // rollback journal -- whose durability is exactly what the
+            // `synchronous` pragma above now guarantees regardless of mode. The
+            // real call sites are not hypothetical either: kanban's
+            // `enableOfflineQueue()` builds one of these from a user-supplied
+            // path, so a throw here means an NFS home directory cannot open the
+            // app at all.
             {
                 detail::StatementGuard const guard{prepare("PRAGMA journal_mode;")};
                 if (sqlite3_step(guard.get()) != SQLITE_ROW) {
                     throw SqliteOfflineQueueError{"SqliteOfflineQueue: failed to read back journal_mode"};
                 }
-                std::string const mode = textColumn(guard.get(), 0);
-                if (mode != "wal") {
-                    throw SqliteOfflineQueueError{"SqliteOfflineQueue: PRAGMA journal_mode=WAL did not take (got '" +
-                                                  mode +
-                                                  "'); this filesystem likely lacks the shared-memory "
-                                                  "support WAL requires"};
+                _journalMode = textColumn(guard.get(), 0);
+                if (_journalMode != "wal") {
+                    ::morph::log::logWarn(
+                        "SqliteOfflineQueue: PRAGMA journal_mode=WAL did not take for {} (got '{}'); continuing on "
+                        "that mode -- durability is carried by PRAGMA synchronous, but concurrent readers and the "
+                        "writer will not overlap as they do under WAL",
+                        _path.string(), _journalMode);
                 }
             }
-            execOrThrow("PRAGMA synchronous=FULL;");
-            execOrThrow(("PRAGMA busy_timeout=" + std::to_string(kBusyTimeoutMillis) + ";").c_str());
             execOrThrow(
                 "CREATE TABLE IF NOT EXISTS morph_offline_queue ("
                 "  id              INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -190,9 +266,16 @@ public:
             // `FileActionLog`/`FileOfflineQueue` (see `FileIoOps::syncPath`'s
             // own docs). Unconditional: harmless when the file already
             // existed, since syncing an unchanged directory is a cheap no-op.
-            if (_io.syncPath(_path.parent_path()) != 0) {
+            auto const dirSync = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path()));
+            if (dirSync == ::morph::core::DirectorySync::failed) {
                 throw SqliteOfflineQueueError{"SqliteOfflineQueue: failed to fsync directory after creating " +
                                               _path.string()};
+            }
+            if (dirSync == ::morph::core::DirectorySync::unsupported) {
+                ::morph::log::logWarn(
+                    "SqliteOfflineQueue: cannot fsync the directory containing {}; SQLite's own fsyncs still cover "
+                    "the database contents, but its directory entry is only as durable as this filesystem makes it",
+                    _path.string());
             }
         } catch (...) {
             sqlite3_close(_db);
@@ -344,7 +427,7 @@ public:
     /// @param attempts New cumulative attempt count to store.
     void setAttempts(uint64_t itemId, uint32_t attempts) override {
         std::scoped_lock const lock{_mtx};
-        detail::StatementGuard guard{prepare("UPDATE morph_offline_queue SET attempts = ? WHERE id = ?;")};
+        detail::StatementGuard const guard{prepare("UPDATE morph_offline_queue SET attempts = ? WHERE id = ?;")};
         bindInt64(guard.get(), 1, static_cast<std::int64_t>(attempts));
         bindInt64(guard.get(), 2, static_cast<std::int64_t>(itemId));
         stepOrThrow(guard.get(), "setAttempts");
@@ -500,6 +583,11 @@ private:
     mutable std::mutex _mtx;
     std::optional<std::size_t> _maxDepth;
     ::morph::core::FileIoOps _io;
+    Synchronous _synchronous{Synchronous::normal};
+    std::chrono::milliseconds _busyTimeout{kBusyTimeoutMillis};
+    // The mode the database actually ended up in, as read back at construction
+    // -- "wal" normally, something else on a filesystem that cannot support it.
+    std::string _journalMode;
 };
 
 }  // namespace morph::offline

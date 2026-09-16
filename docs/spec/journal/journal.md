@@ -450,9 +450,11 @@ Two operations on the *shipped file implementation* — not on this interface �
 do change what a subsequent `entries()` returns, and neither is an exception to
 the append-only rule so much as a boundary of it:
 `FileActionLog::`[`rotate()`](#rotation-and-retention), which seals the active
-file and reopens an empty one, and `FileActionLog`'s private
-`repairTornTail()`, which discards a truncated trailing record and runs only
-from that class's constructor. An `IActionLog` implementation over another sink
+file and reopens an empty one, and `morph::core::repairTornTail()`, which
+discards a truncated trailing record and runs only from this class's
+constructor. It was private to `FileActionLog` until morph#530 lifted it into
+`core/file_io_ops.hpp` so the logic has one home; `FileOfflineQueue`
+deliberately does not call it (see `docs/spec/offline/offline.md`). An `IActionLog` implementation over another sink
 owes neither.
 
 | Method | Signature | Purpose |
@@ -483,11 +485,15 @@ immediately after `flush()` returns cannot lose data.
 Open (creating if necessary) via `FileActionLog(std::filesystem::path, morph::core::FileIoOps = {})`.
 The second parameter is a test-only fault-injection seam (`morph/core/
 file_io_ops.hpp`) — the raw `fwrite`/`fflush`/`fsync`/`fopen`/file-open/
-`resize_file` calls this class makes, as an injectable strategy defaulting to
-the real syscalls, letting a test force the failure branches that otherwise
-need a real OS-level I/O error to reach. A normal caller never passes one.
-Throws `std::runtime_error` if the file cannot be opened. Closes the file in
-the destructor. Copy and move are deleted.
+`resize_file`/`syncPath` calls this class makes, as an injectable strategy
+defaulting to the real syscalls, letting a test force the failure branches that
+otherwise need a real OS-level I/O error to reach. A normal caller never passes
+one. Throws `std::runtime_error` if the file cannot be opened, or if the
+containing directory's fsync fails for a reason that is a genuine I/O failure
+(morph#532) — a directory fsync the platform or mount simply cannot perform
+warns and continues instead; see
+[Directory durability](#directory-durability). Closes the file in the
+destructor. Copy and move are deleted.
 
 **Process-local `seq`.** `seq` is assigned fresh per process instance — it does
 not resume from the highest `seq` already on disk. Entries remain correctly
@@ -535,12 +541,49 @@ surfaced to the caller.
 **I/O failures are raised, never swallowed.** `append()` throws on a short
 write; `flush()` throws if either `fflush` or the `fsync`/`_commit` fails;
 `rotate()` throws if its pre-rotation flush fails, before anything is closed or
-renamed. `IActionLog::flush()` returns `void`, so throwing is the only channel
-available — and callers depend on it: `OutboxRelay::relay()` calls
+renamed. `rotate()` also throws *after* a fully successful rename and reopen if
+either affected directory's fsync fails for a genuine I/O reason (morph#532):
+the entries are all present and the rotation did happen, but the directory
+entries naming them are not yet durable, and this class's contract is that an
+unreported I/O failure is the one thing it never does. An unsupported directory
+fsync is not such a failure and does not throw — see
+[Directory durability](#directory-durability). `IActionLog::flush()` returns
+`void`, so throwing is the only channel available — and callers depend on it: `OutboxRelay::relay()` calls
 `markRelayed()` immediately after `flush()`, and a silently-failed flush would
 record rows as relayed in the model's own store while nothing reached the
 durable sink, dropping them from the outbox *and* from the log with no error
 anywhere.
+
+### Directory durability
+
+Creating or renaming a file is a **directory** mutation. An `fsync` on the file
+itself makes its *contents* durable and says nothing about the directory entry
+that names it, so a crash can leave a fully-fsynced file that no longer appears
+in its directory. morph#532 closed that gap: `FileActionLog` fsyncs the
+containing directory after its constructor creates the file, and after
+`rotate()`'s rename and reopen.
+
+It is a **ceiling, not a guarantee**, and this spec says so rather than leaving
+it to be discovered:
+
+- **Windows.** `FileIoOps::syncPath` is a documented no-op there;
+  `FlushFileBuffers`'s semantics for a directory handle differ enough from POSIX
+  `fsync` that faking it would be misleading.
+- **Permissions.** A directory fsync needs a *read* handle on the directory,
+  which is strictly stronger than writing a file inside it. On a mode-0300 spool
+  directory — an ordinary hardened layout, and what a write-without-read
+  SELinux/AppArmor policy produces — `fopen(path, "a")` succeeds while
+  `open(dir, O_RDONLY|O_DIRECTORY)` fails `EACCES`.
+- **Filesystems.** Several mounts do not implement it: sshfs, gvfs, Docker
+  Desktop's gRPC-FUSE, WSL drvfs/9p under `/mnt/c`, and some overlay and network
+  filesystems return `EINVAL`/`ENOSYS`/`ENOTSUP`.
+
+None of those is a durability *failure*, and refusing to open over one would
+make three long-working classes unconstructible on ordinary layouts. So
+`morph::core::classifyDirectorySync()` splits a nonzero `syncPath` result into
+`unsupported` — logged at `warn`, construction continues — and `failed` (`EIO`
+and anything unrecognised), which still throws. `syncPath` returns the `errno`
+rather than a bare `-1` precisely so that distinction can be made.
 
 **Dedup keys follow durability.** An entry's `idempotencyKey` is only recorded
 as *seen* once a `flush()` confirms it reached the disk; keys written since the

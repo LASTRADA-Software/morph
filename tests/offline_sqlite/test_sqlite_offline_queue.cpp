@@ -10,6 +10,7 @@
 #include <fstream>
 #include <memory>
 #include <morph/core/file_io_ops.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/observability.hpp>
 #include <morph/offline/sqlite_offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
@@ -19,6 +20,7 @@
 #include <vector>
 
 #include "../offline_queue_conformance.hpp"
+#include "../test_support.hpp"
 
 namespace {
 
@@ -297,8 +299,8 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a NUL-bearing payload and key rou
           "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
-    morph::test::checkNulPayloadRoundTrip(
-        "SqliteOfflineQueue", [&dbPath] { return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath); });
+    auto const open = [&dbPath] { return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath); };
+    morph::test::checkNulPayloadRoundTrip("SqliteOfflineQueue", open, open);
     removeDbFiles(dbPath);
 }
 
@@ -443,7 +445,15 @@ TEST_CASE(
     // instance's own write-statement step() return SQLITE_BUSY.
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
-    morph::offline::SqliteOfflineQueue queue{dbPath};
+    // busyTimeout 0 -- this case is about SQLITE_BUSY *surfacing*, and the
+    // default 5s timeout would make it surface five seconds later while still
+    // passing, turning a sub-millisecond assertion into a stall that says
+    // nothing more than this one does.
+    morph::offline::SqliteOfflineQueue queue{dbPath,
+                                             std::nullopt,
+                                             {},
+                                             morph::offline::SqliteOfflineQueue::Synchronous::normal,
+                                             std::chrono::milliseconds{0}};
     (void)queue.enqueue("seed");
 
     sqlite3* second = nullptr;
@@ -545,17 +555,61 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: journal_mode=WAL persists and is 
     removeDbFiles(dbPath);
 }
 
-TEST_CASE(
-    "morph::offline::SqliteOfflineQueue: the constructor throws if journal_mode=WAL does not actually take "
-    "(morph#532)",
-    "[sqlite]") {
-    // An in-memory database always reports journal_mode "memory" regardless
-    // of what is requested -- SQLite's own documented behavior (WAL requires
-    // shared memory a `:memory:` database does not have), not a fault this
-    // test injects. Exercises the read-back-and-verify path for real, rather
-    // than only trusting that the PRAGMA's exec did not error.
-    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(std::filesystem::path{":memory:"}),
-                      morph::offline::SqliteOfflineQueueError);
+TEST_CASE("morph::offline::SqliteOfflineQueue: a journal_mode that is not WAL warns and keeps working (morph#532)",
+          "[sqlite]") {
+    // An in-memory database always reports journal_mode "memory" regardless of
+    // what is requested -- SQLite's own documented behavior (WAL needs shared
+    // memory a `:memory:` database does not have), not a fault injected here.
+    // It stands in for the real cases: NFS, CIFS/SMB, and some overlay/9p
+    // mounts, which report "delete".
+    //
+    // The read-back must still happen -- that is what makes the fallback
+    // visible instead of silent -- but it must not refuse the database. None of
+    // these modes is less durable than WAL once `PRAGMA synchronous` is set
+    // (SQLite's rollback-journal default is already FULL; it is WAL that lowers
+    // it), and throwing here meant an app whose data directory sits on NFS
+    // could not construct its queue at all.
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+
+    std::optional<morph::offline::SqliteOfflineQueue> queue;
+    REQUIRE_NOTHROW(queue.emplace(std::filesystem::path{":memory:"}));
+
+    CHECK(queue->journalMode() == "memory");
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings[0].contains("journal_mode=WAL did not take"));
+    CHECK(warnings[0].contains("memory"));
+
+    // Load-bearing: the queue is not merely constructible, it works.
+    auto const id = queue->enqueue("payload");
+    CHECK(queue->drain().size() == 1);
+    queue->markDone(id);
+    CHECK(queue->drain().empty());
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: a WAL database reports journalMode() == \"wal\" (morph#532)",
+          "[sqlite]") {
+    // The other side of the case above: on an ordinary filesystem the read-back
+    // must report `wal`, and must emit no warning. Without this, the warn path
+    // above could pass while WAL silently never took anywhere.
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    std::vector<std::string> warnings;
+    {
+        morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+            if (level == morph::log::LogLevel::warn) {
+                warnings.emplace_back(msg);
+            }
+        }};
+        morph::offline::SqliteOfflineQueue const queue{dbPath};
+        CHECK(queue.journalMode() == "wal");
+    }
+    CHECK(warnings.empty());
+    removeDbFiles(dbPath);
 }
 
 TEST_CASE(
@@ -572,29 +626,48 @@ TEST_CASE(
     // all -- this class's internal mutex already serialises every call
     // *within* this process, so nothing short of another connection
     // entirely can contend with it.
+    //
+    // Closed through a guard rather than a bare call at the end: every
+    // assertion below is a Catch2 macro that throws on failure, and an early
+    // unwind would otherwise leak the connection and leave the database locked
+    // for whatever runs next.
     sqlite3* second = nullptr;
     REQUIRE(sqlite3_open(dbPath.string().c_str(), &second) == SQLITE_OK);
+    auto const closeSecond = std::unique_ptr<sqlite3, decltype(&sqlite3_close)>{second, &sqlite3_close};
     char* err = nullptr;
     REQUIRE(sqlite3_exec(second, "BEGIN IMMEDIATE;", nullptr, nullptr, &err) == SQLITE_OK);
 
     std::atomic<bool> enqueueSucceeded{false};
     std::atomic<bool> enqueueThrew{false};
-    std::thread writer{[&] {
+    std::atomic<bool> writerEntered{false};
+    // jthread, not thread: a REQUIRE below throws on failure, and unwinding
+    // past a still-joinable std::thread calls std::terminate -- which would
+    // abort the whole binary and lose every later test case rather than report
+    // the assertion that failed. catch(...) for the same reason: anything
+    // escaping a thread function terminates, and this one is not limited to
+    // throwing SqliteOfflineQueueError.
+    std::jthread writer{[&] {
+        writerEntered = true;
         try {
             (void)queue.enqueue("blocked-until-lock-released");
             enqueueSucceeded = true;
-        } catch (const morph::offline::SqliteOfflineQueueError&) {
+        } catch (...) {
             enqueueThrew = true;  // what a zero/absent busy_timeout would produce instead
         }
     }};
 
-    // Give the writer time to actually block on the lock before releasing
-    // it -- with no busy_timeout it would already have thrown by now.
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    // Wait for the writer to be inside enqueue() and blocked on the lock,
+    // rather than sleeping a fixed 200ms and hoping. On a loaded runner the
+    // fixed sleep could elapse before the writer reached sqlite3_step, so the
+    // COMMIT released a lock nobody was waiting on and the test passed without
+    // ever proving the busy handler ran.
+    REQUIRE(morph::testing::waitUntil([&] { return writerEntered.load(); }));
+    // It must be blocked, not finished: with no busy_timeout it would have
+    // thrown by now, and it cannot have succeeded while the lock is held.
     CHECK_FALSE(enqueueSucceeded.load());
+    CHECK_FALSE(enqueueThrew.load());
 
     REQUIRE(sqlite3_exec(second, "COMMIT;", nullptr, nullptr, &err) == SQLITE_OK);
-    sqlite3_close(second);
     writer.join();
 
     CHECK(enqueueSucceeded.load());

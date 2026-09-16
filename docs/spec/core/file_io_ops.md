@@ -3,14 +3,23 @@
 `morph::core::FileIoOps` (`include/morph/core/file_io_ops.hpp`) is an
 injectable strategy for the raw file-I/O primitives `morph::journal::
 FileActionLog` and `morph::offline::FileOfflineQueue` both call:
-`fwrite`, `fflush`, `fsync`/`_commit`, `fopen`, an ifstream-open probe, and
-`std::filesystem::resize_file`. Every member is a `std::function` defaulting
-to the real syscall/stdlib call it stands in for.
+`fwrite`, `fflush`, `fsync`/`_commit`, `fopen`, an ifstream-open probe,
+`std::filesystem::resize_file`, and a directory `fsync` (`syncPath`). Every
+member is a `std::function` defaulting to the real syscall/stdlib call it
+stands in for.
+
+The header also hosts four **free functions** that are not part of the struct
+and are not injectable — shared file-handling logic that had been duplicated
+across the two classes, or that exists to paper over a platform difference:
+`wideFtell`, `positionAtEnd`, `rollBackShortWrite`, `repairTornTail`, plus the
+`classifyDirectorySync` helper and its `DirectorySync` enum. See
+[Free functions](#free-functions).
 
 ## Contents
 
 - [Why it exists](#why-it-exists)
 - [Shape](#shape)
+- [Free functions](#free-functions)
 - [Usage](#usage)
 - [Thread safety](#thread-safety)
 - [Cross-references](#cross-references)
@@ -68,13 +77,58 @@ is factored out as its own predicate, consulted before the real
 `std::ifstream` is constructed, rather than trying to intercept the stream
 construction itself.
 
+## Free functions
+
+| Function | What it is for |
+|---|---|
+| `long long wideFtell(std::FILE*)` | `std::ftell` widened past ~2 GiB (`_ftelli64`/`ftello`). |
+| `void positionAtEnd(std::FILE*)` | Seeks a just-opened append-mode stream to end-of-file. C11 leaves an append stream's *initial* position implementation-defined: glibc seeks to end, while the Microsoft CRT and musl report position 0 until the first I/O. Every write still lands at the end; only what `ftell` reports differs — which matters because `rollBackShortWrite` takes a pre-write `ftell` as the offset to roll back to. Unnormalised, the first short write after any open would roll a Windows file back to **zero bytes**. Called after each successful append-mode `fopen`. |
+| `void rollBackShortWrite(FileIoOps&, std::FILE*, const path&, long long)` | Undoes a partial record so the next write cannot merge with it. See [Rolling back a short write](#rolling-back-a-short-write). |
+| `void repairTornTail(FileIoOps&, const path&, std::string_view)` | Trims bytes after the final newline at open time. Called by `FileActionLog` only. It trims **by newline, not by parse**, so a *complete* final record whose only missing byte is the terminating newline is discarded along with a genuinely torn one; a caller that accepts externally-appended records needs to know that before adopting it. `FileOfflineQueue` deliberately does not call it — see `docs/spec/offline/offline.md`. |
+| `DirectorySync classifyDirectorySync(int)` | Splits a nonzero `syncPath` result into `unsupported` (warn and continue) and `failed` (throw). See `docs/spec/journal/journal.md`, "Directory durability". |
+
+### Rolling back a short write
+
+`rollBackShortWrite` **flushes first and checks the result**, and truncates
+nothing if that flush fails.
+
+`offsetBeforeWrite` is a *stream* position, and callers buffer —
+`FileActionLog::append()` is documented as buffered-until-`flush()`, so `ftell`
+routinely runs ahead of the file's real on-disk size. `std::filesystem::
+resize_file` to an offset **beyond** the current size does not shrink the file;
+it **grows** it, padding with NUL bytes, and a later flush then appends the
+buffered record after that padding. The result is a NUL-bearing *interior* line
+that the caller's reader rejects for the life of the file — the exact bricking
+morph#530 exists to prevent, manufactured by the rollback meant to prevent it.
+(Measured: `ftell` 30 against an on-disk size of 10, `resize_file(30)` yielding
+a 30-byte file, and a final 50-byte file of data + 20 NULs + the flushed
+record.)
+
+On a full disk the flush is the *likely* failure, since that is what made the
+write short. When it fails nothing is truncated: the on-disk contents are
+unknowable, the buffered bytes cannot portably be discarded, and a later flush
+would re-append them after whatever had been removed. The file is left for
+`repairTornTail`/`compact()` to trim at the next open. The truncation is also
+clamped to the file's actual size, so it can only ever shrink, and `clearerr`
+runs first — a real short write latches the stream's error indicator and `fseek`
+does not clear it, so without that one transient `ENOSPC` could leave the log
+throwing for the life of the process on a CRT that refuses writes to an
+error-flagged stream.
+
 ## Usage
 
-Both classes take an optional second constructor parameter:
+The three classes take it as an optional constructor parameter — **second** for
+the two file-backed ones, **third** for `SqliteOfflineQueue`, which uses it for
+`syncPath` alone and reaches SQLite through the C API directly:
 
 ```cpp
 explicit FileActionLog(std::filesystem::path path, morph::core::FileIoOps ioOps = {});
-explicit FileOfflineQueue(std::filesystem::path path, morph::core::FileIoOps ioOps = {});
+explicit FileOfflineQueue(std::filesystem::path path, morph::core::FileIoOps ioOps = {},
+                          std::optional<std::size_t> maxDepth = std::nullopt);
+explicit SqliteOfflineQueue(std::filesystem::path path, std::optional<std::size_t> maxDepth = std::nullopt,
+                            morph::core::FileIoOps ioOps = {},
+                            SqliteOfflineQueue::Synchronous synchronous = Synchronous::normal,
+                            std::chrono::milliseconds busyTimeout = std::chrono::milliseconds{5000});
 ```
 
 A normal caller never passes one — the default-constructed `FileIoOps` is

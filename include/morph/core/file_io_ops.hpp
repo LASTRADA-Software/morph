@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
+#include <cerrno>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -118,27 +121,101 @@ struct FileIoOps {
     ///        containing directory synced instead of failing `open()` with
     ///        `ENOENT` on every call site that derives @p dir from
     ///        `parent_path()`.
-    /// @return `0` on success, nonzero on failure.
+    /// @return `0` on success, otherwise the `errno` that caused the failure.
+    ///         Returning the code rather than a bare `-1` is what lets
+    ///         `classifyDirectorySync()` tell "this platform cannot do it" from
+    ///         "this platform tried and failed", which the call sites treat very
+    ///         differently. A custom (test) sink is free to return any nonzero
+    ///         value; anything it does not recognise counts as a real failure.
     std::function<int(const std::filesystem::path& dir)> syncPath = [](const std::filesystem::path& dir) {
 #ifdef _WIN32
         (void)dir;
         return 0;
 #else
         std::filesystem::path const resolved = dir.empty() ? std::filesystem::path{"."} : dir;
+        // O_CLOEXEC: this fd exists for one fsync, and must not survive into a
+        // child across a concurrent fork/exec.
+        //
         // POSIX ::open is variadic only to make the third `mode` argument
         // optional; it is not passed here (no O_CREAT), and there is no
         // non-variadic spelling of the syscall to prefer.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-        int const dirFd = ::open(resolved.c_str(), O_RDONLY | O_DIRECTORY);
-        if (dirFd < 0) {
-            return -1;
+        int dirFd = ::open(resolved.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        while (dirFd < 0 && errno == EINTR) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+            dirFd = ::open(resolved.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
         }
-        int const result = ::fsync(dirFd);
+        if (dirFd < 0) {
+            return errno;
+        }
+        int result = ::fsync(dirFd);
+        while (result != 0 && errno == EINTR) {
+            result = ::fsync(dirFd);
+        }
+        int const failure = result == 0 ? 0 : errno;
         ::close(dirFd);
-        return result;
+        return failure;
 #endif
     };
 };
+
+/// @brief What a nonzero `FileIoOps::syncPath` result means for durability.
+enum class DirectorySync : std::uint8_t {
+    /// @brief The directory entry is on stable storage.
+    durable,
+    /// @brief This platform or mount cannot fsync a directory, or will not let
+    ///        this process open one for reading. Nothing is wrong with the
+    ///        data; the extra durability simply is not available here.
+    unsupported,
+    /// @brief A real I/O failure. The directory entry may not survive a crash.
+    failed,
+};
+
+/// @brief Classifies a `FileIoOps::syncPath` return value.
+///
+/// A directory fsync needs a **read** handle on the directory, which is a
+/// strictly stronger permission than writing a file inside it. A mode-0300
+/// spool directory (write + search, no read) — an ordinary hardened layout, and
+/// what an SELinux/AppArmor write-without-read policy produces — lets
+/// `fopen(path, "a")` succeed while `open(dir, O_RDONLY|O_DIRECTORY)` fails
+/// `EACCES`. Treating that as fatal made `FileActionLog`, `FileOfflineQueue`
+/// and `SqliteOfflineQueue` unconstructible on layouts where they had worked
+/// for years, for the sake of a durability refinement.
+///
+/// `fsync` on a directory fd is also simply unimplemented on several mounts —
+/// `EINVAL`/`ENOSYS`/`ENOTSUP` from sshfs, gvfs, Docker Desktop's gRPC-FUSE,
+/// WSL drvfs/9p under `/mnt/c`, and some overlay and network filesystems.
+///
+/// None of those is a durability *failure*; they are a durability *ceiling*.
+/// They warn and continue. `EIO` and anything else unrecognised is a genuine
+/// failure and still throws.
+///
+/// @param syncPathResult The value `FileIoOps::syncPath` returned.
+/// @return Which of the three cases @p syncPathResult falls into.
+[[nodiscard]] inline DirectorySync classifyDirectorySync(int syncPathResult) noexcept {
+    if (syncPathResult == 0) {
+        return DirectorySync::durable;
+    }
+#ifndef _WIN32
+    switch (syncPathResult) {
+        case EACCES:
+        case EPERM:
+        case EINVAL:
+        case ENOSYS:
+        case ENOTDIR:
+#ifdef ENOTSUP
+        case ENOTSUP:
+#endif
+#if defined(EOPNOTSUPP) && (!defined(ENOTSUP) || EOPNOTSUPP != ENOTSUP)
+        case EOPNOTSUPP:
+#endif
+            return DirectorySync::unsupported;
+        default:
+            break;
+    }
+#endif
+    return DirectorySync::failed;
+}
 
 /// @brief Returns @p file's current stdio position, wide enough to represent
 ///        files past the ~2 GiB `std::ftell` can address through its 32-bit
@@ -164,6 +241,37 @@ inline long long wideFtell(std::FILE* file) {
 #endif
 }
 
+/// @brief Positions a just-opened append-mode stream at end-of-file.
+///
+/// C11 leaves an append-mode stream's *initial* position implementation-defined,
+/// and the implementations genuinely differ. glibc seeks to end at `fopen`, so
+/// `ftell` immediately reports the file's size. The Microsoft CRT documents the
+/// opposite in as many words -- "If no I/O operation has yet occurred on a file
+/// opened for appending, the file position is the beginning of the file" -- and
+/// musl behaves the same way. Every write still lands at the end regardless;
+/// what differs is only what `ftell` reports before the first one.
+///
+/// That difference is load-bearing here, because `rollBackShortWrite` takes the
+/// pre-write `wideFtell` as the offset to roll back to. On the Microsoft CRT the
+/// *first* write after any open would report offset 0, and a short write there
+/// would roll the file back to zero bytes -- destroying an entire audit journal
+/// or queue backlog rather than removing one partial record. Linux CI cannot
+/// catch it: glibc makes the bug unreachable, and the `cl-debug`/`cl-release`/
+/// `clangcl-*` legs where it is reachable have no test that short-writes before
+/// writing successfully first.
+///
+/// Calling this once after each successful append-mode `fopen` normalises the
+/// position across CRTs, so `wideFtell` means the same thing everywhere.
+///
+/// @param file Stream to position; a null handle is ignored, so this can be
+///             called before the caller's own open-failure check.
+inline void positionAtEnd(std::FILE* file) noexcept {
+    if (file != nullptr) {
+        // NOLINTNEXTLINE(cert-err33-c)
+        std::fseek(file, 0, SEEK_END);
+    }
+}
+
 /// @brief Rolls @p file/@p path back to @p offsetBeforeWrite bytes after a
 ///        short write, best-effort (morph#530).
 ///
@@ -172,11 +280,36 @@ inline long long wideFtell(std::FILE* file) {
 /// returns) is never resynced by the truncation itself. Left alone, that
 /// stale position would be captured as the *next* write's "offset before
 /// write" — and if that next write also fails short, the rollback would
-/// truncate/pad to the wrong, stale offset instead of the file's real
-/// current size. The trailing `fseek` closes that gap: it forces `file`'s
-/// stdio position back in sync with the (possibly just-truncated) file on
-/// disk, so every subsequent `ftell` on @p file is trustworthy again
-/// regardless of how many short writes happen back to back.
+/// truncate to the wrong, stale offset instead of the file's real current
+/// size. The trailing `fseek` closes that gap.
+///
+/// @par Why the flush must succeed before anything is truncated
+/// @p offsetBeforeWrite is a *stream* position, and callers buffer: a
+/// `FileActionLog::append()` is documented as buffered-until-`flush()`, so
+/// `ftell` routinely runs ahead of the file's real on-disk size. Truncating to
+/// a stream offset that exceeds the on-disk size does not shrink the file —
+/// `std::filesystem::resize_file` **grows** it, padding with NUL bytes, and any
+/// later flush then appends the buffered record *after* that padding. The
+/// result is a NUL-bearing interior line that the caller's own reader rejects
+/// for the life of the file: precisely the bricking morph#530 exists to
+/// prevent, manufactured by the rollback meant to prevent it. (Measured:
+/// `ftell`=30 against an on-disk size of 10, `resize_file(30)` yielding a
+/// 30-byte file, and a final 50-byte file of data + 20 NULs + the flushed
+/// record.)
+///
+/// So the flush comes first and its result is checked. If it fails — which on
+/// a full disk is the *likely* case, since that is what made the write short —
+/// nothing is truncated at all: the on-disk contents are unknowable, the
+/// buffered bytes cannot portably be discarded, and a later flush would
+/// re-append them after whatever this call had removed. The file is left as it
+/// is for `repairTornTail()` to trim at the next open. The truncation is also
+/// clamped to the file's actual size, so it can only ever shrink.
+///
+/// `clearerr` is called first because a real short write latches the stream's
+/// error indicator, and `fseek` does not clear it. glibc keeps accepting writes
+/// on an error-flagged stream, but the standard does not require that, and on a
+/// CRT that refuses them one transient `ENOSPC` would leave the log permanently
+/// throwing for the life of the process.
 ///
 /// @param ioOps             Injectable I/O primitives to use for the flush/resize.
 /// @param file              Open stdio handle the short write happened on.
@@ -186,17 +319,29 @@ inline long long wideFtell(std::FILE* file) {
 ///                          the resize, since there is no offset to roll back to.
 inline void rollBackShortWrite(FileIoOps& ioOps, std::FILE* file, const std::filesystem::path& path,
                                long long offsetBeforeWrite) {
-    ioOps.fflush(file);
-    if (offsetBeforeWrite >= 0) {
-        std::error_code errorCode;
-        ioOps.resizeFile(path, static_cast<std::uintmax_t>(offsetBeforeWrite), errorCode);
+    std::clearerr(file);
+    if (ioOps.fflush(file) != 0) {
+        // Cannot reason about what reached disk, and cannot drop what did not.
+        // Leaving the file untouched is strictly safer than truncating to an
+        // offset that may exceed its real size -- see the note above.
+        return;
     }
-    // Best-effort resync, regardless of whether the resize above ran or
-    // succeeded: cheaper and safer than conditioning it on that outcome, and
-    // a stream position that is merely still-correct is a harmless no-op.
-    // The return value is deliberately unchecked: this is already the failure
-    // path, a failed reposition leaves the caller no better recovery than the
-    // throw it is about to do anyway, and repairTornTail() is the backstop.
+    if (offsetBeforeWrite < 0) {
+        return;  // no offset to roll back to
+    }
+    std::error_code errorCode;
+    auto const onDisk = std::filesystem::file_size(path, errorCode);
+    auto target = static_cast<std::uintmax_t>(offsetBeforeWrite);
+    if (!errorCode) {
+        target = std::min(target, onDisk);  // only ever shrink
+    }
+    ioOps.resizeFile(path, target, errorCode);
+    // Resync `file`'s stdio position with the (now shorter) file on disk. Safe
+    // to flush against here, and only here: the buffer was emptied above, so
+    // this cannot re-append anything the resize just removed. The return value
+    // is deliberately unchecked -- this is already the failure path, and a
+    // failed reposition leaves the caller no better recovery than the throw it
+    // is about to do anyway.
     // NOLINTNEXTLINE(cert-err33-c)
     std::fseek(file, 0, SEEK_END);
 }
@@ -212,9 +357,16 @@ inline void rollBackShortWrite(FileIoOps& ioOps, std::FILE* file, const std::fil
 /// Complete records, including a malformed *interior* line, are left exactly
 /// as they are; diagnosing those is the caller's own read path's job.
 ///
-/// Shared between `morph::journal::FileActionLog` and
-/// `morph::offline::FileOfflineQueue`'s constructors, both of which used to
-/// carry an identical copy of this scan.
+/// Called from `morph::journal::FileActionLog`'s constructor, which is where
+/// this scan has always lived; lifted out of that class so the logic has one
+/// home. `morph::offline::FileOfflineQueue` deliberately does **not** call it --
+/// see the note in its constructor for why running it there both failed to fix
+/// the case it was added for and cost a documented invariant.
+///
+/// @warning It trims by newline, not by parse, so a *complete* final record
+/// whose only missing byte is the terminating newline is discarded along with a
+/// genuinely torn one. Callers that accept externally-appended records need to
+/// know that before adopting it.
 ///
 /// @param ioOps       Injectable I/O primitives to use for the read-check/resize.
 /// @param path        File to check and, if needed, truncate.

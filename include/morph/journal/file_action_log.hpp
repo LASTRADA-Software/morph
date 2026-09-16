@@ -101,6 +101,7 @@ public:
             }
         }
         _file = _io.fopen(_path.string(), "a");
+        ::morph::core::positionAtEnd(_file);
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog: failed to open " + _path.string());
         }
@@ -112,11 +113,22 @@ public:
         // `flush()`/`rotate()` already apply to the file-content fsync.
         // `_file` is closed first -- this constructor never completes, so
         // ~FileActionLog() never runs to close what fopen() already opened.
-        if (_io.syncPath(_path.parent_path()) != 0) {
+        // A directory fsync needs a *read* handle on the directory, a strictly
+        // stronger permission than writing a file inside it, and several mounts
+        // cannot do it at all -- see classifyDirectorySync(). Neither is a
+        // durability failure, and neither is worth refusing to open over.
+        auto const dirSync = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path()));
+        if (dirSync == ::morph::core::DirectorySync::failed) {
             // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory) — about to rethrow, nothing to report a close failure to
             std::fclose(_file);
             _file = nullptr;
             throw std::runtime_error("FileActionLog: failed to fsync directory after creating " + _path.string());
+        }
+        if (dirSync == ::morph::core::DirectorySync::unsupported) {
+            ::morph::log::logWarn(
+                "FileActionLog: cannot fsync the directory containing {}; the log's contents are still fsynced, but "
+                "its directory entry is only as durable as this filesystem makes it",
+                _path.string());
         }
     }
 
@@ -324,8 +336,8 @@ public:
             _seenIdempotencyKeys.insert(key);
         }
         _unflushedIdempotencyKeys.clear();
-        // NOLINTNEXTLINE(cert-err33-c) — the data is already fsynced above
-        std::fclose(_file);
+        // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory)
+        std::fclose(_file);  // the data is already fsynced above
         _file = nullptr;
 
         std::error_code renameError;
@@ -335,7 +347,9 @@ public:
         // success this creates a fresh empty file; on failure it reopens the
         // same pre-rotation file (still holding every prior entry), so a
         // failed rotation never leaves the log unusable.
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) — mirrors std::fopen's own raw-owning-pointer return; closed in the destructor
         _file = _io.fopen(_path.string(), "a");
+        ::morph::core::positionAtEnd(_file);
 
         // Two directory mutations just happened -- the seal rename and, on
         // success, a brand-new active file -- and neither is durable until
@@ -344,9 +358,14 @@ public:
         // whatever succeeded as durable as it can be made; the failure is
         // surfaced below rather than swallowed, same as the pre-rotation
         // fsync above.
-        bool const dirSyncFailed = _io.syncPath(_path.parent_path()) != 0;
+        // `unsupported` is not a failure here either -- same reasoning as the
+        // constructor's own directory fsync.
+        bool const dirSyncFailed = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path())) ==
+                                   ::morph::core::DirectorySync::failed;
         bool const sealedDirSyncFailed =
-            sealedPath.parent_path() != _path.parent_path() && _io.syncPath(sealedPath.parent_path()) != 0;
+            sealedPath.parent_path() != _path.parent_path() &&
+            ::morph::core::classifyDirectorySync(_io.syncPath(sealedPath.parent_path())) ==
+                ::morph::core::DirectorySync::failed;
 
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog::rotate: failed to reopen " + _path.string() + " after " +

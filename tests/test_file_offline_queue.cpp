@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <cerrno>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <morph/core/file_io_ops.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/observability.hpp>
 #include <morph/offline/file_offline_queue.hpp>
 #include <optional>
@@ -820,8 +822,8 @@ TEST_CASE("morph::offline::FileOfflineQueue: a NUL-bearing payload and key round
           "[file_queue]") {
     auto path = tempQueuePath();
     std::filesystem::remove(path);
-    morph::test::checkNulPayloadRoundTrip(
-        "FileOfflineQueue", [&path] { return std::make_unique<morph::offline::FileOfflineQueue>(path); });
+    auto const open = [&path] { return std::make_unique<morph::offline::FileOfflineQueue>(path); };
+    morph::test::checkNulPayloadRoundTrip("FileOfflineQueue", open, open);
     std::filesystem::remove(path);
 }
 
@@ -866,3 +868,106 @@ TEST_CASE("FileOfflineQueue: an unreadable queue file is not silently compacted 
     std::filesystem::remove(path);
 }
 #endif  // _WIN32
+
+// ── The rollback must cover the flush, not only a short fwrite (morph#530) ──
+//
+// A queue record is far smaller than BUFSIZ, so fwrite is a memcpy into the
+// stdio buffer and returns the full count even when the disk is full; the
+// write(2) that fails happens inside the fflush that follows. Wired to the
+// short-fwrite branch alone, the rollback never ran for the *common*
+// manifestation of ENOSPC, and a truncated line stayed on disk exactly where
+// the next writeLine would resume.
+
+TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush rolls the partial record back (morph#530)",
+          "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+
+    // Fails exactly once. A permanently failing flush cannot be rolled back at
+    // all -- the rollback's own flush is what makes the on-disk state knowable
+    // -- so the recoverable case is the one with a testable contract.
+    auto failuresLeft = std::make_shared<int>(0);
+    morph::core::FileIoOps ioOps;
+    ioOps.fflush = [failuresLeft](std::FILE* file) {
+        if (*failuresLeft > 0) {
+            --*failuresLeft;
+            return -1;
+        }
+        return std::fflush(file);
+    };
+
+    {
+        morph::offline::FileOfflineQueue queue{path, ioOps};
+        (void)queue.enqueue("first");
+        *failuresLeft = 1;
+        REQUIRE_THROWS_AS(queue.enqueue("second"), std::runtime_error);
+        REQUIRE(*failuresLeft == 0);
+        (void)queue.enqueue("third");
+    }
+
+    // The real assertion: reopened with genuine I/O, the file must hold exactly
+    // "first" and "third". Pre-fix, "second"'s partial line survived and the
+    // "third" record appended straight onto it with no separating newline.
+    morph::offline::FileOfflineQueue const reopened{path};
+    auto const pending = reopened.drain();
+    std::vector<std::string> payloads;
+    payloads.reserve(pending.size());
+    for (const auto& item : pending) {
+        payloads.push_back(item.payload);
+    }
+    CHECK(payloads.size() == 2U);
+    CHECK(std::ranges::find(payloads, "first") != payloads.end());
+    CHECK(std::ranges::find(payloads, "third") != payloads.end());
+    CHECK(std::ranges::find(payloads, "second") == payloads.end());
+    std::filesystem::remove(path);
+}
+
+// ── A directory fsync this platform cannot do is not a failure (morph#532) ──
+//
+// fsync on a directory fd needs a *read* handle on it, a strictly stronger
+// permission than writing a file inside it, and several mounts do not implement
+// it at all. Treating either as fatal made this class unconstructible on
+// layouts where it had always worked.
+
+TEST_CASE("morph::offline::FileOfflineQueue: an unsupported directory fsync warns instead of throwing (morph#532)",
+          "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return EACCES; };
+
+    {
+        // Constructs, warns, and works -- a mode-0300 spool directory is an
+        // ordinary hardened layout, not a broken one.
+        morph::offline::FileOfflineQueue queue{path, ioOps};
+        auto const id = queue.enqueue("payload");
+        CHECK(queue.size() == 1);
+        queue.markDone(id);
+        CHECK(queue.size() == 0);
+    }
+
+    REQUIRE_FALSE(warnings.empty());
+    CHECK(warnings[0].contains("cannot fsync the directory"));
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: a genuine directory-fsync failure still throws (morph#532)",
+          "[file_queue][fault-injection]") {
+    // The other side of the case above: EIO is a real durability failure and
+    // must not be downgraded to a warning along with the unsupported ones.
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return EIO; };
+
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    std::filesystem::remove(path);
+}

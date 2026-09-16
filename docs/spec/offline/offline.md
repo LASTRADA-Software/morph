@@ -372,32 +372,53 @@ completed and acknowledged item. Mutations also raise rather than swallow I/O
 failures: a short write or a failed `fflush`/`fsync` throws, since every
 mutation is documented as a committed transaction by the time the call returns.
 
-A **short write is rolled back before it throws** (morph#530). The file is
+A **failed write is rolled back before it throws** (morph#530). The file is
 opened `"a"`, so a partial line's bytes sit exactly where the next `writeLine`
 would resume, with no separating newline — the two merge into a single line that
-`load()` can tolerate only while it remains the *trailing* one, and stops being
-able to the moment a further append pushes it into an interior position, where a
-malformed line is genuine corruption and is rethrown. `writeLine` records the
-offset before writing and, on a short write, calls
-`morph::core::rollBackShortWrite` to truncate the file back to it, so a failed
-write leaves nothing for the next one to merge with. The rollback is
-best-effort: it is already the failure path, and the crash that caused the short
-write may equally prevent the cleanup.
+`load()` tolerates only while it remains the *trailing* one, and stops
+tolerating the moment a further append pushes it into an interior position,
+where a malformed line is genuine corruption and is rethrown.
 
-The backstop for that case is `morph::core::repairTornTail`, which the
-constructor runs **before `load()`**. Compaction heals a torn tail, but
-compaction runs *after* `load()` — so a tail damaged badly enough for `load()`
-to reject (an interior merge from a doubled-up short write) threw before
-compaction ever got the chance. `FileActionLog`'s constructor does the identical
-thing for the identical reason.
+The rollback is wired to **all three** failure points, not only the short
+`fwrite`. A queue record is a few hundred bytes, far under `BUFSIZ`, so `fwrite`
+is a `memcpy` into the stdio buffer and returns the full count even on a full
+disk; the `write(2)` that actually fails happens inside the following `fflush`.
+Wired to the short-write branch alone, the rollback never ran for the *common*
+manifestation of `ENOSPC`. `writeLine` records the offset before writing and
+rolls back on a short `fwrite`, a failed `fflush`, or a failed `fsync` alike —
+the last of those because a mutation is documented as committed once the call
+returns, so a caller told the enqueue failed must not find it replayed after a
+restart.
+
+`morph::core::rollBackShortWrite` flushes before it truncates and truncates
+nothing if that flush fails; it also clamps to the file's real size, so it can
+only ever shrink. `docs/spec/core/file_io_ops.md` has the full reasoning —
+briefly, `ftell` on a buffered stream runs ahead of the on-disk size, and
+`resize_file` **grows** a file when asked for an offset beyond its end, so a
+naive rollback padded the queue with NUL bytes instead of trimming it.
+
+**No constructor-time `repairTornTail`.** An earlier revision of morph#530 ran
+it before `load()`, to heal "an interior merge from a doubled-up short write".
+It cannot do that — it only trims bytes after the final newline, and says so
+itself — so it never fixed the case it was added for. It did cost two things:
+it is the constructor's only file mutation that can run *before* `load()`
+throws, which breaks morph#494's guarantee that a failed construction leaves the
+file byte-identical, and it discards a complete final record whose only missing
+byte is the trailing newline, wiping the file outright when that is the only
+line. What prevents the doubled-up short write is the rollback above; `load()` +
+`compact()` heal an ordinary torn tail as they always have. `FileActionLog`
+keeps its own long-standing call — pre-existing behaviour there, not something
+morph#530 introduced.
 
 `compact()` additionally fsyncs the **containing directory** after its
-`rename()` (morph#532). The fsync on the temporary file makes the compacted
-*data* durable; it says nothing about the directory entry that now names it
-`_path`. The failure is surfaced rather than swallowed, like every other fsync
-failure in this class, and is safe to throw from: `compact()` always runs before
-`_file` is opened, so nothing is left dangling.
-They are also ordered **durable-first**: `markDone()` appends the tombstone
+`rename()` (morph#532): the fsync on the temporary file makes the compacted
+*data* durable and says nothing about the directory entry that now names it
+`_path`. A directory fsync the platform or mount cannot perform is logged at
+`warn` and construction continues; only a genuine I/O failure throws. See
+`docs/spec/journal/journal.md`, "Directory durability", for why that split
+exists and which cases fall on each side.
+
+Mutations are also ordered **durable-first**: `markDone()` appends the tombstone
 before erasing from `_items`, and `setAttempts()` writes before updating memory.
 The reverse order meant a throwing append left the item gone from memory with no
 tombstone on disk, so this process never replayed it and a restart resurrected
@@ -461,31 +482,51 @@ and `markDone()` loses nothing; every write is its own committed statement
 under `PRAGMA journal_mode=WAL`. All operations serialise on an internal
 mutex, so the queue is safe to share between the write and drain/replay paths.
 
-**Durability settings, set once at construction** (morph#532):
+**Durability settings, set once at construction** (morph#532), in this order —
+the order is load-bearing:
 
-| Pragma | Value | Why |
-|---|---|---|
-| `journal_mode` | `WAL` | Per-statement commit durability. **Read back and verified**, not trusted. |
-| `synchronous` | `FULL` | WAL's default `NORMAL` can lose the tail of the last transaction on a power loss. |
-| `busy_timeout` | `kBusyTimeoutMillis` (5000) | The internal mutex makes `SQLITE_BUSY` unreachable for one instance, but the class documents no single-opener restriction. |
+| Order | Pragma | Value | Why |
+|---|---|---|---|
+| 1 | `busy_timeout` | `busyTimeout` ctor param, default 5000 ms | Must come **first**: converting a database to WAL needs an exclusive lock, so `journal_mode=WAL` is itself a `SQLITE_BUSY` candidate. Set last, as an earlier revision did, the multi-opener case it was added for failed exactly as before (measured: 12 ms to throw "database is locked" with no timeout, a full 1001 ms wait with a 1000 ms timeout set first). |
+| 2 | `synchronous` | `Synchronous` ctor param, default `normal` | Before `journal_mode`, and unconditional: SQLite's rollback-journal default is already `FULL`, and it is WAL that lowers it to `NORMAL`. Setting it first means the level holds whether or not WAL takes. |
+| 3 | `journal_mode` | `WAL` | Read back and **warned about**, not enforced. |
 
-The `journal_mode` read-back matters because `sqlite3_exec` discards the row a
-`PRAGMA` returns, so a **silent fallback to `delete` mode** — which is what
-happens on a filesystem without the shared-memory support WAL needs, such as NFS
-or some container mounts — would otherwise go unnoticed and quietly cost the
-durability the rest of this section promises. Construction re-reads the pragma
-through a prepared statement and throws if it is not `wal`.
+`synchronous` defaults to `NORMAL`, which is SQLite's own recommendation under
+WAL and can lose only the most recent commits — something this queue's
+at-least-once delivery plus `idempotencyKey` dedup already absorb. `FULL` is
+available (`Synchronous::full`) and costs roughly **18x per mutation**
+(measured: ~0.08 ms to ~1.44 ms, NVMe/btrfs, SQLite 3.53.4). Every mutation here
+is its own commit and `SyncWorker::relay()` calls `markDone`/`setAttempts` once
+per drained item, so a 200-item drain goes from ~16 ms to ~290 ms — all of it
+under this class's mutex, where it also blocks the producer's `enqueue()`.
+
+The `journal_mode` read-back exists because `sqlite3_exec` discards the row a
+`PRAGMA` returns, so a **silent fallback** would otherwise go unnoticed: WAL
+needs shared memory, which `:memory:` and the temp/`""` spellings do not have
+(they report `memory`) and which NFS, CIFS/SMB and some overlay, 9p and Docker
+mounts do not provide (they report `delete`). Construction re-reads the pragma
+through a prepared statement and **logs a warning** if it is not `wal`;
+`journalMode()` exposes what it got.
+
+It deliberately does **not** throw. None of those modes is less durable than WAL
+once `synchronous` is set above — and an earlier revision that did throw made
+the queue unconstructible on an NFS home directory, which `examples/kanban`'s
+`enableOfflineQueue()` reaches with a user-supplied path.
+
+`busy_timeout` buys a wait, not a guarantee: this class's own mutex makes
+`SQLITE_BUSY` unreachable for a single instance, so the timeout matters only
+when something else has the database open — and the wait then happens *under
+that mutex*, blocking every other caller of the instance, a Qt GUI thread
+included. Pass `std::chrono::milliseconds{0}` to restore fail-fast.
 
 Construction also **fsyncs the containing directory** once, after
 `sqlite3_open()` and every schema statement succeed. `sqlite3_open()` creates
 `_path` (and, once WAL took, its `-wal`/`-shm` siblings) if absent; SQLite's own
 fsyncs cover those files' *contents*, never the directory entries naming them.
-This is the same file-vs-directory gap `FileIoOps::syncPath` closes for
-`FileActionLog` and `FileOfflineQueue`. It is unconditional — syncing an
-unchanged directory is a cheap no-op — and its failure throws. To make that
-branch reachable in a test without a real OS failure, the constructor takes an
-optional third `morph::core::FileIoOps` parameter, used for `syncPath` **only**;
-every other SQLite interaction goes through the C API directly.
+Same split as the file-backed queues: unsupported warns, a genuine failure
+throws. The optional third `morph::core::FileIoOps` parameter exists to reach
+that branch from a test and is used for `syncPath` **only** — every other SQLite
+interaction goes through the C API directly.
 
 **A NUL byte inside a payload or idempotency key survives a round trip**
 (morph#531). `payload` and `idempotencyKey` are opaque strings whose
