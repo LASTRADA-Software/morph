@@ -253,8 +253,10 @@ TEST_CASE("Completion: a throwing T copy leaves the state unsettled with every h
     morph::async::Completion<ThrowOnCopy> comp{state, &exec};
 
     int fired = 0;
-    comp.then([&](ThrowOnCopy) { ++fired; });
-    comp.then([&](ThrowOnCopy) { ++fired; });
+    // `const&` parameters: a by-value one would be an extra copy per handler
+    // that this test never reads, and `std::function<void(T)>` accepts either.
+    comp.then([&](const ThrowOnCopy&) { ++fired; });
+    comp.then([&](const ThrowOnCopy&) { ++fired; });
 
     REQUIRE_THROWS_AS(state->setValue(ThrowOnCopy{7, true}), std::runtime_error);
 
