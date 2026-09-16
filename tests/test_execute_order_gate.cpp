@@ -25,6 +25,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <morph/core/detail/execute_order_gate.hpp>
 #include <thread>
 
@@ -425,4 +426,76 @@ TEST_CASE(
     // final, correctly-ordered release would fail to fully drain the gate.
     gate.release(t0);
     CHECK(gate.gateCount() == 0U);
+}
+
+// ── Cross-model re-entrancy must not deadlock two threads (morph#519) ───────
+//
+// `takeAndPost` holds an enqueue mutex across `postFn`, and `postFn` is opaque:
+// on a `ThreadPoolExecutor` it only enqueues, but on a synchronous executor it
+// runs the whole dispatch chain inline -- including any re-entrant
+// `takeAndPost` that chain triggers. Synchronous executors are not
+// hypothetical here: `morph::testing::InlineExecutor` is used as
+// `RemoteServer`'s pool in tests/test_policy_hardening.cpp,
+// tests/test_register_authorization.cpp and tests/test_pinned_facts.cpp, and in
+// five of examples/concepts/.
+//
+// An earlier revision gave every `Gate` its own enqueue mutex. That handed two
+// threads two locks to take in opposite orders -- thread A inside model 1's
+// callback reaching for model 2, thread B the mirror -- and they deadlocked.
+// Measured: this exact case hung every run against the per-model version, and
+// completes against the gate-wide one. `master` could not exhibit it at all,
+// holding no lock across a caller callback, so it was a regression rather than
+// a pre-existing hazard.
+//
+// A gate-wide mutex cannot form a cycle with itself. Note what this test
+// deliberately does *not* do: require both threads to be inside `postFn` at
+// once. A gate-wide lock prevents that by design, so a barrier would deadlock
+// on itself and prove nothing about lock ordering.
+
+TEST_CASE("ExecuteOrderGate: two threads nesting takeAndPost across models do not deadlock",
+          "[execute-order-gate][concurrency]") {
+    // Owned by a unique_ptr and leaked on the hang path, like the gating
+    // fixtures in tests/test_remote_execute_ordering.cpp: the threads detached
+    // below go on reaching through the gate, so it has to outlive them, and a
+    // regression here must be a reported failure rather than a binary that
+    // hangs with no output.
+    auto ownedGate = std::make_unique<morph::backend::detail::ExecuteOrderGate>();
+    auto* const gate = ownedGate.get();
+    morph::exec::detail::ModelId const first{1};
+    morph::exec::detail::ModelId const second{2};
+
+    constexpr int kRounds = 200;  // enough to lose the race reliably, fast enough to be free
+    std::atomic<int> finished{0};
+
+    auto worker = [gate, &finished](morph::exec::detail::ModelId outer, morph::exec::detail::ModelId inner) {
+        for (int round = 0; round < kRounds; ++round) {
+            gate->takeAndPost(outer, [gate, inner](const morph::backend::detail::ExecuteOrderGate::Ticket&) {
+                gate->takeAndPost(inner, [](const morph::backend::detail::ExecuteOrderGate::Ticket&) {});
+            });
+        }
+        ++finished;
+    };
+
+    std::thread forward{[&worker, first, second] { worker(first, second); }};
+    std::thread reverse{[&worker, first, second] { worker(second, first); }};
+
+    const bool completed =
+        morph::testing::waitUntil([&finished] { return finished.load() == 2; }, std::chrono::milliseconds{5000});
+
+    if (!completed) {
+        // Deadlocked: both threads are parked forever on a lock the other
+        // holds. Leak them rather than join, so this reports as a failure --
+        // and leak the gate with them, since they still hold a pointer to it.
+        forward.detach();
+        reverse.detach();
+        // Assigned rather than `(void)ownedGate.release()`: bugprone-unused-return-value
+        // flags the discarded unique_ptr::release(), and a cast to void does not
+        // silence it.
+        [[maybe_unused]] auto* const leakedGate = ownedGate.release();
+    } else {
+        forward.join();
+        reverse.join();
+    }
+
+    REQUIRE(completed);
 }
