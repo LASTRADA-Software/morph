@@ -663,10 +663,20 @@ TEST_CASE(
     // COMMIT released a lock nobody was waiting on and the test passed without
     // ever proving the busy handler ran.
     REQUIRE(morph::testing::waitUntil([&] { return writerEntered.load(); }));
-    // It must be blocked, not finished: with no busy_timeout it would have
-    // thrown by now, and it cannot have succeeded while the lock is held.
-    CHECK_FALSE(enqueueSucceeded.load());
-    CHECK_FALSE(enqueueThrew.load());
+    // `writerEntered` is published *before* the enqueue() call, so on its own it
+    // proves only that the thread started -- not that it reached sqlite3_step
+    // and found the lock held. Checking the two result flags right here would
+    // therefore pass trivially, and keep passing with the busy_timeout PRAGMA
+    // removed, which is the whole thing this test exists to pin.
+    //
+    // Requiring the call to still be *pending* after a bounded window is what
+    // closes that: with no busy_timeout, sqlite3_step returns SQLITE_BUSY as
+    // soon as it sees the lock, so `enqueueThrew` would flip well inside this
+    // window and fail the assertion. The window is far below the 5s timeout
+    // under test, so a correctly configured queue is still blocked when it
+    // elapses.
+    CHECK_FALSE(morph::testing::waitUntil([&] { return enqueueSucceeded.load() || enqueueThrew.load(); },
+                                          std::chrono::milliseconds{500}));
 
     REQUIRE(sqlite3_exec(second, "COMMIT;", nullptr, nullptr, &err) == SQLITE_OK);
     writer.join();

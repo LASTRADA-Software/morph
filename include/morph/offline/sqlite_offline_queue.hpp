@@ -287,16 +287,34 @@ public:
             // `FileActionLog`/`FileOfflineQueue` (see `FileIoOps::syncPath`'s
             // own docs). Unconditional: harmless when the file already
             // existed, since syncing an unchanged directory is a cheap no-op.
-            auto const dirSync = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path()));
-            if (dirSync == ::morph::core::DirectorySync::failed) {
-                throw SqliteOfflineQueueError{"SqliteOfflineQueue: failed to fsync directory after creating " +
-                                              _path.string()};
-            }
-            if (dirSync == ::morph::core::DirectorySync::unsupported) {
-                ::morph::log::logWarn(
-                    "SqliteOfflineQueue: cannot fsync the directory containing {}; SQLite's own fsyncs still cover "
-                    "the database contents, but its directory entry is only as durable as this filesystem makes it",
-                    _path.string());
+            //
+            // Which directory, though, is SQLite's to answer rather than
+            // `_path`'s. `:memory:`, `""` and the `file::memory:` URI spellings
+            // open no file at all, and `parent_path()` is empty for them --
+            // which `FileIoOps::syncPath` resolves to `"."`, so deriving the
+            // directory from `_path` meant fsyncing the *process's current
+            // working directory* and reporting the result as this queue's: a
+            // warning naming a database that is not on disk where a CWD cannot
+            // be fsynced, and a refusal to construct an in-memory queue at all
+            // where that fsync genuinely fails. `sqlite3_db_filename` reports
+            // an empty name for exactly those spellings, so it distinguishes
+            // "no backing file, nothing to sync" from a real path without this
+            // class having to re-parse SQLite's own filename grammar.
+            const char* const backingFile = sqlite3_db_filename(_db, "main");
+            if (backingFile != nullptr && *backingFile != '\0') {
+                std::filesystem::path const backingPath{backingFile};
+                auto const dirSync = ::morph::core::classifyDirectorySync(_io.syncPath(backingPath.parent_path()));
+                if (dirSync == ::morph::core::DirectorySync::failed) {
+                    throw SqliteOfflineQueueError{"SqliteOfflineQueue: failed to fsync directory after creating " +
+                                                  backingPath.string()};
+                }
+                if (dirSync == ::morph::core::DirectorySync::unsupported) {
+                    ::morph::log::logWarn(
+                        "SqliteOfflineQueue: cannot fsync the directory containing {}; SQLite's own fsyncs still "
+                        "cover the database contents, but its directory entry is only as durable as this filesystem "
+                        "makes it",
+                        backingPath.string());
+                }
             }
         } catch (...) {
             sqlite3_close(_db);

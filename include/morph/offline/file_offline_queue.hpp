@@ -338,6 +338,11 @@ private:
     /// than swallowed: a caller told an item was enqueued, or marked done, must
     /// not have that silently be untrue after a restart.
     void writeLine(const std::string& json) {
+        if (_tornTail) {
+            throw std::runtime_error(
+                "FileOfflineQueue: refusing to write to " + _path.string() +
+                " after a short write that could not be rolled back; reopen the queue to have it repaired");
+        }
         std::string line = json;
         line.push_back('\n');
         long long const offsetBeforeWrite = ::morph::core::wideFtell(_file);
@@ -351,7 +356,19 @@ private:
         // newline -- the identical merge morph#530 exists to prevent, and the
         // *common* manifestation of a full disk rather than an exotic one.
         auto const rollBackAndThrow = [&](const std::string& what) {
-            ::morph::core::rollBackShortWrite(_io, _file, _path, offsetBeforeWrite);
+            if (::morph::core::rollBackShortWrite(_io, _file, _path, offsetBeforeWrite) ==
+                ::morph::core::RollBack::torn) {
+                // The rollback could not truncate, so partial bytes may still be
+                // at the end of the file. `load()` tolerates that only while it
+                // is the *trailing* line; one more successful writeLine on this
+                // handle would concatenate onto it and push it into an interior
+                // position, where the merged line makes the next open throw a
+                // parse error and takes the entire backlog with it. Refusing
+                // every later write keeps the damage trailing and therefore
+                // recoverable -- the next open's compact() rewrites the file
+                // without it.
+                _tornTail = true;
+            }
             throw std::runtime_error("FileOfflineQueue: " + what + " " + _path.string());
         };
         if (_io.fwrite(line.data(), line.size(), _file) != line.size()) {
@@ -566,6 +583,12 @@ private:
     std::filesystem::path _path;
     ::morph::core::FileIoOps _io;
     std::FILE* _file = nullptr;
+    // Set when a failed write could not be rolled back, so a partial record may
+    // still sit at the end of `_path`. Every later write on this object is
+    // refused, which is what keeps that partial record the trailing line -- the
+    // only position `load()` can heal it from. Cleared by construction, since
+    // the constructor's compact() rewrites the file without it.
+    bool _tornTail = false;
     mutable std::mutex _mtx;
     std::map<uint64_t, QueueItem> _items;
     uint64_t _nextId{0};

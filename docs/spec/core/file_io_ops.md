@@ -83,7 +83,7 @@ construction itself.
 |---|---|
 | `long long wideFtell(std::FILE*)` | `std::ftell` widened past ~2 GiB (`_ftelli64`/`ftello`). |
 | `void positionAtEnd(std::FILE*)` | Seeks a just-opened append-mode stream to end-of-file. C11 leaves an append stream's *initial* position implementation-defined: glibc seeks to end, while the Microsoft CRT and musl report position 0 until the first I/O. Every write still lands at the end; only what `ftell` reports differs — which matters because `rollBackShortWrite` takes a pre-write `ftell` as the offset to roll back to. Unnormalised, the first short write after any open would roll a Windows file back to **zero bytes**. Called after each successful append-mode `fopen`. |
-| `void rollBackShortWrite(FileIoOps&, std::FILE*, const path&, long long)` | Undoes a partial record so the next write cannot merge with it. See [Rolling back a short write](#rolling-back-a-short-write). |
+| `[[nodiscard]] RollBack rollBackShortWrite(FileIoOps&, std::FILE*, const path&, long long)` | Undoes a partial record so the next write cannot merge with it, and reports whether it succeeded. See [Rolling back a short write](#rolling-back-a-short-write). |
 | `void repairTornTail(FileIoOps&, const path&, std::string_view)` | Trims bytes after the final newline at open time. Called by `FileActionLog` only. It trims **by newline, not by parse**, so a *complete* final record whose only missing byte is the terminating newline is discarded along with a genuinely torn one; a caller that accepts externally-appended records needs to know that before adopting it. `FileOfflineQueue` deliberately does not call it — see `docs/spec/offline/offline.md`. |
 | `DirectorySync classifyDirectorySync(int)` | Splits a nonzero `syncPath` result into `unsupported` (warn and continue) and `failed` (throw). See `docs/spec/journal/journal.md`, "Directory durability". |
 
@@ -103,6 +103,31 @@ morph#530 exists to prevent, manufactured by the rollback meant to prevent it.
 (Measured: `ftell` 30 against an on-disk size of 10, `resize_file(30)` yielding
 a 30-byte file, and a final 50-byte file of data + 20 NULs + the flushed
 record.)
+
+#### The `RollBack` result is load-bearing
+
+`rollBackShortWrite` returns `RollBack::clean` when it left the file with no
+partial tail, and `RollBack::torn` when one may remain — a failed flush, a
+negative `offsetBeforeWrite`, or a `resize_file` that reported an error.
+
+**A caller that gets `torn` must refuse every later write on that handle.** A
+torn tail is survivable only while it stays the file's *trailing* line, which is
+the one position `repairTornTail` (for `FileActionLog`) and `load()`'s
+tolerance of a torn trailing line (for `FileOfflineQueue`) can heal from. One
+further *successful* append on the same live handle ends that: append mode
+resumes exactly at the partial bytes, so the new record concatenates onto them
+with no separating newline and the damage moves to an interior position where
+neither heal applies.
+
+Measured against a queue, with the write short and the rollback's own flush
+failing (one full disk produces both), then space freed and one more enqueue
+succeeding: the merged line makes the next open throw a raw parse error instead
+of loading, so every record in the file — including ones written long before the
+failure — becomes unreachable. That is the same bricking morph#530 exists to
+prevent, reached *through* the rollback rather than around it. Both callers
+therefore latch the `torn` result and throw from every subsequent
+`append()`/`writeLine()`, which keeps the partial record trailing and so
+recoverable at the next open.
 
 On a full disk the flush is the *likely* failure, since that is what made the
 write short. When it fails nothing is truncated: the on-disk contents are

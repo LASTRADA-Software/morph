@@ -168,6 +168,11 @@ public:
     void append(LogEntry entry) override {
         std::scoped_lock const lock{_mtx};
         requireOpen("append");
+        if (_tornTail) {
+            throw std::runtime_error("FileActionLog::append: refusing to append to " + _path.string() +
+                                     " after a short write that could not be rolled back; reopen the log to have it "
+                                     "repaired");
+        }
         if (!entry.idempotencyKey.empty() && (_seenIdempotencyKeys.contains(entry.idempotencyKey) ||
                                               _unflushedIdempotencyKeys.contains(entry.idempotencyKey))) {
             return;  // already recorded; a re-relayed duplicate is a safe no-op
@@ -190,7 +195,17 @@ public:
             // long-lived sink while disk space stays exhausted) would roll back
             // to a stale offset and pad the file with NUL bytes instead of
             // truncating it.
-            ::morph::core::rollBackShortWrite(_io, _file, _path, offsetBeforeWrite);
+            if (::morph::core::rollBackShortWrite(_io, _file, _path, offsetBeforeWrite) ==
+                ::morph::core::RollBack::torn) {
+                // The rollback could not truncate, so partial bytes may remain at
+                // the end of the file. `repairTornTail()` heals that at the next
+                // construction, but only while it is still the *trailing* line --
+                // one more successful append on this handle would concatenate
+                // onto it and move the damage into an interior position, which
+                // nothing heals. Refuse every later append instead, so the file
+                // stays in the one shape the next open can repair.
+                _tornTail = true;
+            }
             throw std::runtime_error("FileActionLog::append: short write to " + _path.string());
         }
         if (!entry.idempotencyKey.empty()) {
@@ -359,13 +374,26 @@ public:
         // surfaced below rather than swallowed, same as the pre-rotation
         // fsync above.
         // `unsupported` is not a failure here either -- same reasoning as the
-        // constructor's own directory fsync.
-        bool const dirSyncFailed = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path())) ==
-                                   ::morph::core::DirectorySync::failed;
+        // constructor's own directory fsync -- but it is not silent either:
+        // the contract is that it warns, so an operator knows the rotated
+        // names are only as durable as the filesystem makes them. Collapsing
+        // the tri-state to a bool here used to drop that warning on the floor
+        // for both directories, leaving `rotate()` quieter than the
+        // construction path that documents the same classification.
+        auto const classifyAndWarn = [this](const std::filesystem::path& dir) {
+            auto const outcome = ::morph::core::classifyDirectorySync(_io.syncPath(dir));
+            if (outcome == ::morph::core::DirectorySync::unsupported) {
+                ::morph::log::logWarn(
+                    "FileActionLog::rotate: cannot fsync the directory {}; the log's contents are still fsynced, but "
+                    "the rotated directory entries are only as durable as this filesystem makes them",
+                    dir.string());
+            }
+            return outcome;
+        };
+        bool const dirSyncFailed = classifyAndWarn(_path.parent_path()) == ::morph::core::DirectorySync::failed;
         bool const sealedDirSyncFailed =
             sealedPath.parent_path() != _path.parent_path() &&
-            ::morph::core::classifyDirectorySync(_io.syncPath(sealedPath.parent_path())) ==
-                ::morph::core::DirectorySync::failed;
+            classifyAndWarn(sealedPath.parent_path()) == ::morph::core::DirectorySync::failed;
 
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog::rotate: failed to reopen " + _path.string() + " after " +
@@ -396,6 +424,11 @@ private:
     std::filesystem::path _path;
     ::morph::core::FileIoOps _io;
     std::FILE* _file = nullptr;
+    // Set when a failed write could not be rolled back, so a partial record may
+    // still sit at the end of `_path`. Every later append is refused, which is
+    // what keeps that partial record the trailing line -- the only position
+    // `repairTornTail()` can heal it from at the next construction.
+    bool _tornTail = false;
     mutable std::mutex _mtx;
     uint64_t _nextSeq{0};
     /// Keys confirmed durable by a successful `flush()`.

@@ -397,6 +397,17 @@ briefly, `ftell` on a buffered stream runs ahead of the on-disk size, and
 `resize_file` **grows** a file when asked for an offset beyond its end, so a
 naive rollback padded the queue with NUL bytes instead of trimming it.
 
+**A rollback that could not truncate ends the handle's life.** `writeLine`
+latches `rollBackShortWrite`'s `RollBack::torn` result and throws from every
+subsequent call, naming the reason and pointing at a reopen. Without that latch
+the partial record is still at the end of the file, and the *next* successful
+enqueue concatenates onto it with no separating newline — moving the damage out
+of the trailing position `load()` tolerates and into an interior one that makes
+the next open throw a parse error, taking the whole backlog with it. Refusing
+later writes keeps the torn record trailing, which is exactly the shape the next
+open's `load()` skips and `compact()` rewrites away. See
+[file_io_ops.md](../core/file_io_ops.md), "Rolling back a short write".
+
 **No constructor-time `repairTornTail`.** An earlier revision of morph#530 ran
 it before `load()`, to heal "an interior merge from a doubled-up short write".
 It cannot do that — it only trims bytes after the final newline, and says so
@@ -527,6 +538,17 @@ Same split as the file-backed queues: unsupported warns, a genuine failure
 throws. The optional third `morph::core::FileIoOps` parameter exists to reach
 that branch from a test and is used for `syncPath` **only** — every other SQLite
 interaction goes through the C API directly.
+
+*Which* directory is asked of SQLite, via `sqlite3_db_filename(db, "main")`,
+rather than derived from the constructor's `path`. `:memory:`, `""` and the
+`file::memory:` URI spellings open no file at all and have an empty
+`parent_path()`, which `FileIoOps::syncPath` resolves to `"."` — so deriving it
+from `path` fsynced the *process's current working directory* and reported the
+result as this queue's: a warning naming a database that is not on disk wherever
+a directory fsync is unsupported, and a refusal to construct an in-memory queue
+at all wherever that fsync genuinely fails. `sqlite3_db_filename` reports an
+empty name for exactly those spellings, so an empty result means "no backing
+file, nothing to sync" and the step is skipped.
 
 **A NUL byte inside a payload or idempotency key survives a round trip**
 (morph#531). `payload` and `idempotencyKey` are opaque strings whose

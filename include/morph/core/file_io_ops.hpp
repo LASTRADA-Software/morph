@@ -189,6 +189,18 @@ enum class DirectorySync : std::uint8_t {
     failed,
 };
 
+/// @brief Whether `rollBackShortWrite` managed to leave the file with no
+///        partial tail, or may have left one behind.
+enum class RollBack : std::uint8_t {
+    /// @brief The failed write left no trace: the next append resumes on a
+    ///        record boundary, exactly as if the write had never happened.
+    clean,
+    /// @brief A partial record may still be at the end of the file. It is
+    ///        survivable only while it stays the *trailing* line, so the
+    ///        caller must not append to this handle again.
+    torn,
+};
+
 /// @brief Classifies a `FileIoOps::syncPath` return value.
 ///
 /// A directory fsync needs a **read** handle on the directory, which is a
@@ -334,31 +346,51 @@ inline void positionAtEnd(std::FILE* file) noexcept {
 /// CRT that refuses them one transient `ENOSPC` would leave the log permanently
 /// throwing for the life of the process.
 ///
+/// @par Why the caller must act on a `torn` result
+/// When the rollback cannot truncate, the partial bytes stay where the *next*
+/// append would resume. That is survivable only for as long as the torn line
+/// stays the file's trailing line -- which both `FileActionLog` (via
+/// `repairTornTail` at construction) and `FileOfflineQueue` (via `load`'s
+/// tolerance of a torn trailing line) are built to heal. A further successful
+/// append on the *same live handle* ends that: it concatenates onto the partial
+/// bytes with no separating newline, pushing the damage into an interior
+/// position where neither heal applies. Measured, against a queue: the merged
+/// line makes the next open throw a raw parse error instead of loading, so the
+/// whole backlog -- including records written long before the failure -- becomes
+/// unreachable. That is the bricking morph#530 exists to prevent, reached
+/// through the rollback rather than around it. A caller that gets `torn` must
+/// therefore refuse further appends on this handle rather than carry on.
+///
 /// @param ioOps             Injectable I/O primitives to use for the flush/resize.
 /// @param file              Open stdio handle the short write happened on.
 /// @param path              Path @p file was opened from.
 /// @param offsetBeforeWrite `wideFtell(file)` as captured immediately before
 ///                          the short write; negative (a failed query) skips
 ///                          the resize, since there is no offset to roll back to.
-inline void rollBackShortWrite(FileIoOps& ioOps, std::FILE* file, const std::filesystem::path& path,
-                               long long offsetBeforeWrite) {
+/// @return `RollBack::clean` when the file was left with no partial tail,
+///         `RollBack::torn` when a partial tail may remain.
+[[nodiscard]] inline RollBack rollBackShortWrite(FileIoOps& ioOps, std::FILE* file, const std::filesystem::path& path,
+                                                 long long offsetBeforeWrite) {
     std::clearerr(file);
     if (ioOps.fflush(file) != 0) {
         // Cannot reason about what reached disk, and cannot drop what did not.
         // Leaving the file untouched is strictly safer than truncating to an
         // offset that may exceed its real size -- see the note above.
-        return;
+        return RollBack::torn;
     }
     if (offsetBeforeWrite < 0) {
-        return;  // no offset to roll back to
+        return RollBack::torn;  // no offset to roll back to
     }
     std::error_code errorCode;
     auto const onDisk = std::filesystem::file_size(path, errorCode);
     auto target = static_cast<std::uintmax_t>(offsetBeforeWrite);
-    if (!errorCode) {
+    bool const sizeKnown = !errorCode;
+    if (sizeKnown) {
         target = std::min(target, onDisk);  // only ever shrink
     }
+    errorCode.clear();
     ioOps.resizeFile(path, target, errorCode);
+    RollBack const outcome = errorCode ? RollBack::torn : RollBack::clean;
     // Resync `file`'s stdio position with the (now shorter) file on disk. Safe
     // to flush against here, and only here: the buffer was emptied above, so
     // this cannot re-append anything the resize just removed. The return value
@@ -367,6 +399,7 @@ inline void rollBackShortWrite(FileIoOps& ioOps, std::FILE* file, const std::fil
     // is about to do anyway.
     // NOLINTNEXTLINE(cert-err33-c)
     std::fseek(file, 0, SEEK_END);
+    return outcome;
 }
 
 /// @brief Truncates any bytes following the last newline in @p path.

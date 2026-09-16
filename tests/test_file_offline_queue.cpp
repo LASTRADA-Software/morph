@@ -1044,3 +1044,60 @@ TEST_CASE("morph::offline::FileOfflineQueue: a mid-read I/O error throws rather 
     std::filesystem::remove_all(dir);
 }
 #endif
+
+TEST_CASE("morph::offline::FileOfflineQueue: a rollback that cannot truncate refuses every later write",
+          "[file_queue][fault-injection]") {
+    // The hole morph#530's rollback left open. When the disk that made the
+    // write short is still full, `rollBackShortWrite` deliberately truncates
+    // nothing and a partial record stays at the end of the file. `load()`
+    // tolerates that *only* while it is the trailing line. If the same live
+    // queue then writes again once space frees up, the new record concatenates
+    // onto the partial bytes with no separating newline, and the merged line is
+    // no longer trailing -- measured, the next open then throws a raw glaze
+    // parse error rather than loading, so every record in the queue, including
+    // ones written long before the failure, becomes unreachable. Exactly the
+    // bricking this issue exists to prevent, reached through the rollback.
+    //
+    // The queue therefore latches the failure and refuses every later write,
+    // which keeps the partial record trailing and so recoverable: the next
+    // open's compact() rewrites the file without it.
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    auto shortWrite = std::make_shared<bool>(false);
+    auto failFlush = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.fwrite = [shortWrite](const void* buffer, std::size_t size, std::FILE* file) {
+        return *shortWrite ? std::fwrite(buffer, 1, size / 2, file) : std::fwrite(buffer, 1, size, file);
+    };
+    ioOps.fflush = [failFlush](std::FILE* file) { return *failFlush ? -1 : std::fflush(file); };
+
+    {
+        morph::offline::FileOfflineQueue queue{path, ioOps};
+        (void)queue.enqueue("first");
+
+        *shortWrite = true;
+        *failFlush = true;
+        REQUIRE_THROWS_AS(queue.enqueue("second"), std::runtime_error);
+
+        // Space is available again, but this handle is finished: appending now
+        // would merge onto the partial "second" and brick the file.
+        *shortWrite = false;
+        *failFlush = false;
+        REQUIRE_THROWS_AS(queue.enqueue("third"), std::runtime_error);
+    }
+
+    // The real assertion: the queue still opens, and the record written before
+    // the failure is intact. Pre-fix, this construction threw a parse error.
+    std::vector<std::string> payloads;
+    {
+        morph::offline::FileOfflineQueue const reopened{path};
+        for (const auto& item : reopened.drain()) {
+            payloads.push_back(item.payload);
+        }
+    }
+    CHECK(payloads.size() == 1U);
+    CHECK(std::ranges::find(payloads, "first") != payloads.end());
+    INFO("the record whose write was short must not survive: the caller was told it failed");
+    CHECK(std::ranges::find(payloads, "second") == payloads.end());
+    std::filesystem::remove(path);
+}

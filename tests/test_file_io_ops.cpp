@@ -159,7 +159,9 @@ TEST_CASE("morph::core::rollBackShortWrite: a negative offset truncates nothing"
         auto const file = openForAppend(path);
         REQUIRE(file != nullptr);
 
-        morph::core::rollBackShortWrite(ioOps, file.get(), path, -1);
+        // `torn`: with no offset to roll back to, the file is left exactly as
+        // it is, so the caller must treat the tail as possibly partial.
+        CHECK(morph::core::rollBackShortWrite(ioOps, file.get(), path, -1) == morph::core::RollBack::torn);
     }
 
     CHECK(std::filesystem::file_size(path) == sizeBefore);
@@ -185,7 +187,9 @@ TEST_CASE("morph::core::rollBackShortWrite: a failing flush truncates nothing", 
         auto const file = openForAppend(path);
         REQUIRE(file != nullptr);
 
-        morph::core::rollBackShortWrite(ioOps, file.get(), path, 0);
+        // `torn`: the flush that had to succeed before anything could be
+        // truncated did not, so nothing was truncated.
+        CHECK(morph::core::rollBackShortWrite(ioOps, file.get(), path, 0) == morph::core::RollBack::torn);
     }
 
     CHECK(std::filesystem::file_size(path) == sizeBefore);
@@ -209,7 +213,9 @@ TEST_CASE("morph::core::rollBackShortWrite: the truncation can only ever shrink"
         auto const file = openForAppend(path);
         REQUIRE(file != nullptr);
 
-        morph::core::rollBackShortWrite(ioOps, file.get(), path, 9999);
+        // `clean`: clamped to the real size, which is a successful resize --
+        // there is no partial tail to warn the caller about.
+        CHECK(morph::core::rollBackShortWrite(ioOps, file.get(), path, 9999) == morph::core::RollBack::clean);
     }
 
     CHECK(std::filesystem::file_size(path) == 10);
@@ -236,7 +242,8 @@ TEST_CASE("morph::core::rollBackShortWrite: a real short write is trimmed back t
         // A partial record, exactly as a short write would leave it.
         REQUIRE(std::fwrite("{\"tw", 1, 4, file.get()) == 4);
 
-        morph::core::rollBackShortWrite(ioOps, file.get(), path, offsetBeforeWrite);
+        CHECK(morph::core::rollBackShortWrite(ioOps, file.get(), path, offsetBeforeWrite) ==
+              morph::core::RollBack::clean);
     }
 
     // The reader is scoped too: it holds the same file open, and Windows
@@ -297,8 +304,12 @@ TEST_CASE("morph::core::rollBackShortWrite: an unreadable size leaves the offset
     OpenFile const file{std::tmpfile()};
     REQUIRE(file != nullptr);
 
-    REQUIRE_NOTHROW(morph::core::rollBackShortWrite(ioOps, file.get(), path, 4));
+    morph::core::RollBack outcome{};
+    REQUIRE_NOTHROW(outcome = morph::core::rollBackShortWrite(ioOps, file.get(), path, 4));
 
+    // `torn`: the resize on a path that does not exist fails, and a caller that
+    // cannot be told the tail is clean must assume it is not.
+    CHECK(outcome == morph::core::RollBack::torn);
     CHECK_FALSE(std::filesystem::exists(path));
 }
 
