@@ -196,7 +196,13 @@ enum class DirectorySync : std::uint8_t {
     if (syncPathResult == 0) {
         return DirectorySync::durable;
     }
-#ifndef _WIN32
+    // Not guarded on `_WIN32`. The real `syncPath` is a documented no-op there
+    // and returns 0, so this only ever sees an injected value on Windows -- but
+    // classifying the *value* rather than the platform is what keeps a test
+    // that injects EACCES meaning the same thing everywhere. (It did not: with
+    // the switch compiled out under _WIN32, every nonzero value fell through to
+    // `failed`, and the unsupported-fsync test failed on the clangcl-debug leg
+    // alone.) Every constant below is in <cerrno> on the Microsoft CRT too.
     switch (syncPathResult) {
         case EACCES:
         case EPERM:
@@ -213,7 +219,6 @@ enum class DirectorySync : std::uint8_t {
         default:
             break;
     }
-#endif
     return DirectorySync::failed;
 }
 
