@@ -908,8 +908,13 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush rolls the partial 
     // The real assertion: reopened with genuine I/O, the file must hold exactly
     // "first" and "third". Pre-fix, "second"'s partial line survived and the
     // "third" record appended straight onto it with no separating newline.
-    morph::offline::FileOfflineQueue const reopened{path};
-    auto const pending = reopened.drain();
+    // Scoped: the queue holds `path` open for its whole lifetime, and Windows
+    // cannot unlink a file another handle still has open.
+    std::vector<morph::offline::QueueItem> pending;
+    {
+        morph::offline::FileOfflineQueue const reopened{path};
+        pending = reopened.drain();
+    }
     std::vector<std::string> payloads;
     payloads.reserve(pending.size());
     for (const auto& item : pending) {
