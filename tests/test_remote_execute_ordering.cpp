@@ -796,8 +796,16 @@ TEST_CASE("two concurrent handle() callers on one modelId with a pool of one do 
     // worker to run on. That is exactly the topology morph::net::SocketServer uses
     // (one thread per connection, all calling handle()).
     //
-    // Forced, not raced: StallFirstPostExecutor blocks thread A's post() call until
-    // told to proceed, so thread B's handle() call gets every chance to run first.
+    // What is forced and what is not: StallFirstPostExecutor deterministically
+    // blocks thread A inside post() until released, so thread B's handle() call
+    // gets every chance to run first. B actually *winning* that window is
+    // best-effort, and deliberately so -- it cannot be made deterministic. The
+    // fix holds `_enqueueMtx` across postFn, so once A is stalled inside post()
+    // it still owns that mutex and B blocks in takeAndPost before taking a
+    // ticket at all; a handshake that waited for B's own post to arrive before
+    // releasing A would therefore wait forever against the *fixed* code. The
+    // sleep below is an aid for reproducing the inversion by hand against the
+    // pre-fix code, not part of what this test asserts.
     // Manually reverting the takeAndPost fix and re-running this test reproduces the
     // deadlock (both replies time out); with the fix, ExecuteOrderGate::takeAndPost's
     // atomicity means thread B cannot even take its ticket until thread A's whole
@@ -839,11 +847,11 @@ TEST_CASE("two concurrent handle() callers on one modelId with a pool of one do 
 
     WaitReply replyB;
     std::thread threadB([&] { server->handle(morph::wire::encode(reqB), std::ref(replyB)); });
-    // Give B's thread a moment to start and attempt its own take-then-post before
-    // releasing A -- best-effort only (see the reproduction note above): it does not
-    // affect the fixed code's correctness, which holds regardless of scheduling, but
-    // maximises the chance of reproducing the inversion when this test is run
-    // deliberately against the pre-fix code.
+    // Best-effort head start for B, for manual pre-fix reproduction only (see the
+    // note above for why it cannot be a deterministic handshake). If B loses this
+    // window the pre-fix code enqueues in order and no inversion is reproduced --
+    // but what CI asserts below is the fixed code's behaviour, which holds
+    // regardless of how these two threads interleave.
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     gated.releaseFirst();
 

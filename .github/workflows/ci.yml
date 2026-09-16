@@ -1329,7 +1329,7 @@ jobs:
       # `|| true` for the same reason it has one: a stats failure must never
       # fail the job.
       - name: fastcache-cc stats
-        if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        if: "always() && steps.filter.outputs.run == 'true' && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           FC="$(command -v fastcache-cc || true)"
           if [ -z "$FC" ]; then
@@ -1559,7 +1559,7 @@ jobs:
       # `|| true` for the same reason it has one: a stats failure must never
       # fail the job.
       - name: fastcache-cc stats
-        if: "always() && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
+        if: "always() && steps.filter.outputs.run == 'true' && contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           FC="$(command -v fastcache-cc || true)"
           if [ -z "$FC" ]; then

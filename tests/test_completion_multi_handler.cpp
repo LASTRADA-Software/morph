@@ -18,6 +18,32 @@
 using SyncExecutor = morph::testing::InlineExecutor;
 using LogGuard = morph::log::ScopedLoggerOverride;
 
+namespace {
+
+/// A value whose *copy* constructor throws on demand. `setValue`'s first act on
+/// a state with handlers attached is `auto savedVal = val;` -- the copy
+/// morph#520 introduced -- so this is what exercises the strong exception
+/// guarantee documented there. The flag travels with the value rather than
+/// living in a global so two tests cannot arm each other.
+struct ThrowOnCopy {
+    int payload = 0;
+    bool explode = false;
+
+    ThrowOnCopy() = default;
+    ThrowOnCopy(int value, bool boom) : payload{value}, explode{boom} {}
+    ThrowOnCopy(const ThrowOnCopy& other) : payload{other.payload}, explode{other.explode} {
+        if (explode) {
+            throw std::runtime_error{"copy ctor blew up"};
+        }
+    }
+    ThrowOnCopy(ThrowOnCopy&&) noexcept = default;
+    ThrowOnCopy& operator=(const ThrowOnCopy&) = default;
+    ThrowOnCopy& operator=(ThrowOnCopy&&) noexcept = default;
+    ~ThrowOnCopy() = default;
+};
+
+}  // namespace
+
 TEST_CASE("Completion: multiple onError handlers all fire, in attachment order", "[completion][issue-59]") {
     SyncExecutor exec;
     auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
@@ -214,4 +240,34 @@ TEST_CASE("Completion: a then() attached after settlement observes the same valu
     REQUIRE(firstSeen == original);
     REQUIRE(fanOutSeen == original);
     REQUIRE(secondSeen == original);
+}
+
+TEST_CASE("Completion: a throwing T copy leaves the state unsettled with every handler intact",
+          "[completion][issue-520]") {
+    // The guarantee `setValue` documents: the copy is taken *before* `onOk` is
+    // drained or `value`/`ready` are set, so a throwing copy constructor must
+    // leave the state exactly as it was -- unready, with every handler still
+    // attached -- rather than half-settled with its handlers already lost.
+    SyncExecutor exec;
+    auto state = std::make_shared<morph::async::detail::CompletionState<ThrowOnCopy>>();
+    morph::async::Completion<ThrowOnCopy> comp{state, &exec};
+
+    int fired = 0;
+    comp.then([&](ThrowOnCopy) { ++fired; });
+    comp.then([&](ThrowOnCopy) { ++fired; });
+
+    REQUIRE_THROWS_AS(state->setValue(ThrowOnCopy{7, true}), std::runtime_error);
+
+    CHECK_FALSE(state->ready);
+    CHECK_FALSE(state->value.has_value());
+    CHECK(state->onOk.size() == 2U);
+    CHECK(fired == 0);
+
+    // And the state is still usable afterwards: the failed settlement consumed
+    // nothing, so a later non-throwing one settles normally and both handlers
+    // -- the ones that survived the throw -- run.
+    state->setValue(ThrowOnCopy{9, false});
+
+    CHECK(state->ready);
+    CHECK(fired == 2);
 }
