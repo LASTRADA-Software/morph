@@ -579,9 +579,15 @@ if(MORPH_BUILD_TESTS)
     add_library(morph_test_main STATIC tests/testkit/catch_main.cpp)
     target_link_libraries(morph_test_main PUBLIC morph_test_log_level)
     apply_warnings(morph_test_main)
-    if(DEFINED AF_SANITIZER)
-        apply_sanitizers(morph_test_main ${AF_SANITIZER})
-    endif()
+    # Deliberately NOT apply_sanitizers(). That helper adds -fsanitize to both
+    # compile *and* link options as PRIVATE, and PRIVATE link options do not
+    # propagate out of a static library -- so instrumenting this one left
+    # `__asan_init`/`__ubsan_handle_type_mismatch_v1` undefined in every
+    # consumer that is not itself sanitized, which is how the ladder's ASan leg
+    # failed to link. A partially-instrumented binary is fine (no system
+    # library is instrumented either), and an eight-line `main` is not where a
+    # sanitizer finding was ever going to come from. Catch2::Catch2WithMain,
+    # which this replaced, was likewise an uninstrumented prebuilt archive.
 
     add_subdirectory(tests)
 endif()
