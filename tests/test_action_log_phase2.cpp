@@ -5,6 +5,7 @@
 // RemoteServer::LogProvider mechanism that closes phase 1's "remote identity"
 // gap. (Phase 3, a Kafka-shaped sink, was dropped for now.)
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_exception.hpp>
@@ -1068,3 +1069,81 @@ TEST_CASE("FileActionLog: an unreadable journal is left intact, not truncated as
     REQUIRE(reopened.entries().size() == 3);
 }
 #endif  // _WIN32
+
+// ── The torn-tail latch and rotate()'s unsupported-directory warning ────────
+
+TEST_CASE("FileActionLog::append: a rollback that cannot truncate refuses every later append",
+          "[action_log][phase2][file][fault-injection]") {
+    // `rollBackShortWrite` truncates nothing when its own flush fails -- the
+    // disk that made the write short is still full -- so partial bytes stay at
+    // the end of the file. `repairTornTail()` heals that at the next
+    // construction, but only while it is the *trailing* line. One more
+    // successful append on this same handle would concatenate onto it and move
+    // the damage to an interior position, which nothing heals. So the log
+    // latches the failure and refuses, keeping the file in the one shape the
+    // next open can repair.
+    TempFile const tmp{"file_fault_append_torn_tail"};
+    auto shortWrite = std::make_shared<bool>(false);
+    auto failFlush = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.fwrite = [shortWrite](const void* buffer, std::size_t size, std::FILE* file) {
+        return *shortWrite ? std::fwrite(buffer, 1, size / 2, file) : std::fwrite(buffer, 1, size, file);
+    };
+    ioOps.fflush = [failFlush](std::FILE* file) { return *failFlush ? -1 : std::fflush(file); };
+
+    FileActionLog log{tmp.path, ioOps};
+    auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+
+    *shortWrite = true;
+    *failFlush = true;
+    REQUIRE_THROWS_AS(log.append(entry), std::runtime_error);
+
+    // Space is available again, but this handle is finished: appending now
+    // would merge onto the partial record and brick the file.
+    *shortWrite = false;
+    *failFlush = false;
+    REQUIRE_THROWS_MATCHES(log.append(entry), std::runtime_error,
+                           Catch::Matchers::MessageMatches(Catch::Matchers::ContainsSubstring("refusing to append")));
+}
+
+TEST_CASE("FileActionLog::rotate: an unsupported directory fsync warns for each parent rather than throwing",
+          "[action_log][phase2][file][fault-injection]") {
+    // EACCES from a directory fsync is `unsupported`, not `failed`: a mode-0300
+    // spool directory, or a write-without-read policy, produces exactly this
+    // while ordinary appends keep working. The constructor already warns and
+    // continues; rotate() must do the same for both directories it mutates
+    // rather than staying silent about a rotation whose directory entries are
+    // not guaranteed durable.
+    auto const sealedDir = std::filesystem::temp_directory_path() / "morph_test_rotate_unsupported_seal";
+    std::filesystem::remove_all(sealedDir);
+    std::filesystem::create_directories(sealedDir);
+    TempFile const active{"file_rotate_unsupported_dirsync"};
+
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return EACCES; };
+
+    FileActionLog log{active.path, ioOps};
+    auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+    log.append(entry);
+    log.flush();
+
+    // A *different* directory for the sealed segment, so both parents are
+    // classified rather than only the active one.
+    auto const sealed = sealedDir / "sealed.ndjson";
+    REQUIRE_NOTHROW(log.rotate(sealed));
+
+    auto const rotateWarnings = std::ranges::count_if(
+        warnings, [](const std::string& msg) { return msg.contains("FileActionLog::rotate: cannot fsync"); });
+    INFO("one warning per distinct unsupported parent: the active path's and the sealed path's");
+    CHECK(rotateWarnings == 2);
+    CHECK(std::filesystem::exists(sealed));
+
+    std::filesystem::remove_all(sealedDir);
+}
