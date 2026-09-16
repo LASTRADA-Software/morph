@@ -206,11 +206,19 @@ inline void addLogLevelOption(Catch::Session& session, std::string& sink) {
     } catch (const std::exception& ex) {
         // fputs, not println: this is the handler of last resort, and
         // std::format is one of the things that can have thrown to get here.
+        //
+        // The write results are deliberately unchecked. This runs while the
+        // process is already failing, on the way to returning 1; a stderr that
+        // cannot be written to leaves nothing more useful to do, and reporting
+        // it would need the same stderr.
+        // NOLINTBEGIN(cert-err33-c)
         std::fputs("fatal: unhandled exception escaped the test session: ", stderr);
         std::fputs(ex.what(), stderr);
         std::fputs("\n", stderr);
+        // NOLINTEND(cert-err33-c)
         return 1;
     } catch (...) {
+        // NOLINTNEXTLINE(cert-err33-c)
         std::fputs("fatal: unhandled non-std exception escaped the test session\n", stderr);
         return 1;
     }
