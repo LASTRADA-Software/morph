@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_exception.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <cerrno>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +18,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/file_io_ops.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
@@ -802,6 +804,40 @@ TEST_CASE("FileActionLog: construction syncs the containing directory after crea
 
     REQUIRE(syncedPaths.size() == 1);
     CHECK(syncedPaths[0] == tmp.path.parent_path());
+}
+
+TEST_CASE("FileActionLog: an unsupported directory fsync warns instead of throwing (morph#532)",
+          "[action_log][phase2][file][fault-injection]") {
+    // A directory fsync needs a *read* handle on the directory, strictly
+    // stronger than writing a file inside it: on a mode-0300 spool directory --
+    // an ordinary hardened layout, and what a write-without-read
+    // SELinux/AppArmor policy produces -- fopen(path, "a") succeeds while
+    // open(dir, O_RDONLY|O_DIRECTORY) returns EACCES. Several FUSE, WSL and
+    // overlay mounts likewise return EINVAL/ENOSYS/ENOTSUP. None of those is a
+    // durability *failure*, and refusing to open over one would make this class
+    // unconstructible where it had worked for years.
+    TempFile const tmp{"file_fault_construct_syncpath_unsupported"};
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return EACCES; };
+
+    // Constructs, warns, and works -- the entries still round-trip, which is
+    // the half that would actually be lost if this threw.
+    {
+        FileActionLog log{tmp.path, ioOps};
+        log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+        log.flush();
+        CHECK(log.entries().size() == 1);
+    }
+
+    REQUIRE_FALSE(warnings.empty());
+    CHECK(warnings[0].contains("cannot fsync the directory"));
 }
 
 TEST_CASE("FileActionLog: a failing directory fsync during construction throws and leaks no file handle",

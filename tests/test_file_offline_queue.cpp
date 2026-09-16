@@ -976,3 +976,71 @@ TEST_CASE("morph::offline::FileOfflineQueue: a genuine directory-fsync failure s
     REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
     std::filesystem::remove(path);
 }
+
+TEST_CASE("morph::offline::FileOfflineQueue: a failing fsync rolls the record back too (morph#530)",
+          "[file_queue][fault-injection]") {
+    // The third of writeLine's three failure points. fsync failing after a
+    // successful flush means the bytes are in the page cache but may not reach
+    // the platter; they are a *complete* record, but this mutation is
+    // documented as committed once the call returns, so a caller told the
+    // enqueue failed must not find it replayed after a restart.
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+
+    auto failuresLeft = std::make_shared<int>(0);
+    morph::core::FileIoOps ioOps;
+    ioOps.fsync = [failuresLeft](std::FILE* file) {
+        if (*failuresLeft > 0) {
+            --*failuresLeft;
+            return -1;
+        }
+        return morph::core::FileIoOps{}.fsync(file);
+    };
+
+    {
+        morph::offline::FileOfflineQueue queue{path, ioOps};
+        (void)queue.enqueue("first");
+        *failuresLeft = 1;
+        REQUIRE_THROWS_AS(queue.enqueue("second"), std::runtime_error);
+        REQUIRE(*failuresLeft == 0);
+        (void)queue.enqueue("third");
+    }
+
+    // Scoped: the queue holds `path` open for its whole lifetime, and Windows
+    // cannot unlink a file another handle still has open.
+    std::vector<std::string> payloads;
+    {
+        morph::offline::FileOfflineQueue const reopened{path};
+        for (const auto& item : reopened.drain()) {
+            payloads.push_back(item.payload);
+        }
+    }
+    CHECK(payloads.size() == 2U);
+    CHECK(std::ranges::find(payloads, "first") != payloads.end());
+    CHECK(std::ranges::find(payloads, "third") != payloads.end());
+    INFO("the record whose fsync failed must not survive: the caller was told it did not commit");
+    CHECK(std::ranges::find(payloads, "second") == payloads.end());
+    std::filesystem::remove(path);
+}
+
+#ifndef _WIN32
+TEST_CASE("morph::offline::FileOfflineQueue: a mid-read I/O error throws rather than committing an empty queue",
+          "[file_queue][fault-injection]") {
+    // morph#494's other half. load() reads with its own ifstream and the
+    // constructor calls compact() straight after, so a read that fails partway
+    // would otherwise commit an empty set over the real backlog -- constructor
+    // returning normally, queue reporting no pending work. A directory stands
+    // in for the I/O error: opening one succeeds and the first read sets
+    // badbit. POSIX-only; Windows refuses the open, which is the branch the
+    // unreadable-file test already covers.
+    auto const dir = std::filesystem::temp_directory_path() / "morph_file_queue_read_error_dir";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir / "child");
+
+    REQUIRE_THROWS(morph::offline::FileOfflineQueue{dir});
+
+    INFO("the directory must still be there: a failed load must not have rewritten anything");
+    CHECK(std::filesystem::exists(dir / "child"));
+    std::filesystem::remove_all(dir);
+}
+#endif

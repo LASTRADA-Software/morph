@@ -133,6 +133,15 @@ public:
         full,
     };
 
+    /// @brief SQLite's numeric `PRAGMA synchronous` level for this connection,
+    ///        as read back at construction.
+    ///
+    /// `0` OFF, `1` NORMAL, `2` FULL, `3` EXTRA. Reported rather than inferred
+    /// from the constructor argument: the argument is what was asked for, this
+    /// is what SQLite confirmed.
+    /// @return The level in force on this queue's own connection.
+    [[nodiscard]] int synchronousLevel() const noexcept { return _synchronousLevel; }
+
     /// @brief The `journal_mode` this database actually ended up in.
     ///
     /// Normally `"wal"`. A filesystem without the shared-memory support WAL
@@ -214,6 +223,18 @@ public:
             execOrThrow(
                 ("PRAGMA synchronous=" + std::string{_synchronous == Synchronous::full ? "FULL" : "NORMAL"} + ";")
                     .c_str());
+            // Read back for the same reason journal_mode is: sqlite3_exec
+            // discards the row a PRAGMA returns, so a setting that did not take
+            // would otherwise be invisible. `synchronous` is a *connection*
+            // property, not a database one, so this is also the only way a
+            // caller can confirm the level it asked for is the level in force.
+            {
+                detail::StatementGuard const guard{prepare("PRAGMA synchronous;")};
+                if (sqlite3_step(guard.get()) != SQLITE_ROW) {
+                    throw SqliteOfflineQueueError{"SqliteOfflineQueue: failed to read back synchronous"};
+                }
+                _synchronousLevel = sqlite3_column_int(guard.get(), 0);
+            }
 
             execOrThrow("PRAGMA journal_mode=WAL;");
             // execOrThrow() discards sqlite3_exec's row callback, so a silent
@@ -585,6 +606,8 @@ private:
     ::morph::core::FileIoOps _io;
     Synchronous _synchronous{Synchronous::normal};
     std::chrono::milliseconds _busyTimeout{kBusyTimeoutMillis};
+    // SQLite's numeric synchronous level, read back at construction.
+    int _synchronousLevel{-1};
     // The mode the database actually ended up in, as read back at construction
     // -- "wal" normally, something else on a filesystem that cannot support it.
     std::string _journalMode;

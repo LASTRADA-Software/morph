@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <cerrno>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -710,6 +711,71 @@ TEST_CASE(
 
     REQUIRE(syncedPaths.size() == 1);
     CHECK(syncedPaths[0] == dbPath.parent_path());
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: an unsupported directory fsync warns instead of throwing (morph#532)",
+          "[sqlite]") {
+    // Same split as the file-backed queues: a directory fsync this platform or
+    // mount cannot perform is a durability *ceiling*, not a failure, and must
+    // not stop the database opening. kanban's enableOfflineQueue() builds one
+    // of these from a user-supplied path, so throwing here would mean a data
+    // directory on NFS could not open the app at all.
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return EACCES; };
+
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath, std::nullopt, ioOps};
+        auto const id = queue.enqueue("payload");
+        CHECK(queue.drain().size() == 1);
+        queue.markDone(id);
+        CHECK(queue.drain().empty());
+    }
+
+    REQUIRE_FALSE(warnings.empty());
+    CHECK(warnings[0].contains("cannot fsync the directory"));
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: Synchronous selects the level SQLite actually applies (morph#532)",
+          "[sqlite]") {
+    // `full` is opt-in because it costs ~18x per mutation, and every mutation
+    // here is its own commit -- so the parameter only earns its place if it
+    // actually reaches SQLite. Asserted against the level read back from the
+    // queue's own connection, not against the argument that was passed in.
+    //
+    // SQLite's numeric levels: 0 OFF, 1 NORMAL, 2 FULL, 3 EXTRA.
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+
+    {
+        morph::offline::SqliteOfflineQueue queue{
+            dbPath, std::nullopt, {}, morph::offline::SqliteOfflineQueue::Synchronous::full};
+        CHECK(queue.synchronousLevel() == 2);
+        // A working queue, not merely a constructible one.
+        auto const id = queue.enqueue("durable-payload");
+        CHECK(queue.drain().size() == 1);
+        queue.markDone(id);
+        CHECK(queue.drain().empty());
+    }
+
+    // The default, and the other side of the assertion: without it, a
+    // read-back that always reported FULL would pass the check above.
+    {
+        morph::offline::SqliteOfflineQueue const queue{dbPath};
+        CHECK(queue.synchronousLevel() == 1);
+    }
+
     removeDbFiles(dbPath);
 }
 

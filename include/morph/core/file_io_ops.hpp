@@ -23,6 +23,29 @@
 
 namespace morph::core {
 
+/// @brief Repeats @p operation while it fails with `EINTR`.
+///
+/// A syscall interrupted by a signal returns a negative result with `errno` set
+/// to `EINTR`, having done nothing; the caller is expected to reissue it. Both
+/// halves of the directory fsync below need that, and inlining the loop at each
+/// put two copies of a two-branch retry in a header where no test can reach
+/// either -- a signal arriving mid-`open` is not something a unit test can
+/// arrange. Factored out, the loop is ordinary code a test drives with a
+/// callable that fails once.
+///
+/// @tparam Operation Callable returning a POSIX-style `int`: negative on
+///         failure, with `errno` set.
+/// @param operation The syscall to issue, and reissue while it reports `EINTR`.
+/// @return @p operation's first result that is not an `EINTR` failure.
+template <typename Operation>
+int retryOnEintr(Operation operation) {
+    int result = operation();
+    while (result < 0 && errno == EINTR) {
+        result = operation();
+    }
+    return result;
+}
+
 /// @brief The raw file-I/O primitives `morph::journal::FileActionLog` and
 ///        `morph::offline::FileOfflineQueue` both call, as an injectable
 ///        strategy. Every member defaults to the real syscall/stdlib call it
@@ -139,19 +162,14 @@ struct FileIoOps {
         // POSIX ::open is variadic only to make the third `mode` argument
         // optional; it is not passed here (no O_CREAT), and there is no
         // non-variadic spelling of the syscall to prefer.
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-        int dirFd = ::open(resolved.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-        while (dirFd < 0 && errno == EINTR) {
+        int const dirFd = retryOnEintr([&resolved] {
             // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-            dirFd = ::open(resolved.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-        }
+            return ::open(resolved.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        });
         if (dirFd < 0) {
             return errno;
         }
-        int result = ::fsync(dirFd);
-        while (result != 0 && errno == EINTR) {
-            result = ::fsync(dirFd);
-        }
+        int const result = retryOnEintr([dirFd] { return ::fsync(dirFd); });
         int const failure = result == 0 ? 0 : errno;
         ::close(dirFd);
         return failure;
