@@ -1364,8 +1364,7 @@ TEST_CASE("an attach racing a failed first action out of the dispatch is not han
         if (evt.metric != morph::observe::Metric::executeErrors || reentered.exchange(true)) {
             return;
         }
-        attached.store(
-            backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "1"}).v);
+        attached.store(backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "1"}).v);
     });
 
     morph::backend::detail::ActionCall call;
@@ -1414,6 +1413,47 @@ TEST_CASE("releasing the last shared instance of a type empties its listInstance
     REQUIRE(backend.listInstances("SHI_CounterModel").empty());
 }
 
+// The server half of the property above. `RemoteServer` kept its own copy of
+// this logic, so it needs its own proof that the directory learns the outcome
+// before anything that can attach gets to run.
+TEST_CASE("the server does not hand out an instance between its first action failing and the directory learning of it",
+          "[shared-instances][remote]") {
+    morph::observe::ScopedObserveOverride const guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto reg = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
+    REQUIRE(reg.kind == "ok");
+
+    std::atomic<std::uint64_t> attached{0};
+    std::atomic<bool> reentered{false};
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric != morph::observe::Metric::executeErrors || reentered.exchange(true)) {
+            return;
+        }
+        auto second = morph::wire::decode(
+            server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
+        if (second.kind == "ok") {
+            attached.store(second.modelId);
+        }
+    });
+
+    morph::wire::Envelope failExec;
+    failExec.kind = "execute";
+    failExec.modelId = reg.modelId;
+    failExec.modelType = "SHI_HydrateModel";
+    failExec.actionType = "SHI_HydrateFail";
+    failExec.body = R"({"id":1})";
+    morph::testing::WaitReply waiter;
+    server->handle(morph::wire::encode(failExec), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "err");
+
+    REQUIRE(reentered.load());
+    REQUIRE(attached.load() != 0U);
+    REQUIRE(attached.load() != reg.modelId);
+}
 
 // morph#523: `InstanceDirectory::promote` drops any hydration state the
 // instance still carries. The only instance that reaches it carrying one is a

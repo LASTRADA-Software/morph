@@ -56,10 +56,10 @@ struct HydrationState {
     /// indivisible: a concurrent `poisoned()` sees either the whole transition
     /// or none of it. Later actions' outcomes are ignored — only the *first*
     /// action decides hydration.
-    /// @param ok `true` if the first action succeeded.
-    void settle(bool ok) noexcept {
+    /// @param succeeded `true` if the first action succeeded.
+    void settle(bool succeeded) noexcept {
         Hydration expected = Hydration::pending;
-        phase.compare_exchange_strong(expected, ok ? Hydration::healthy : Hydration::poisoned);
+        phase.compare_exchange_strong(expected, succeeded ? Hydration::healthy : Hydration::poisoned);
     }
 
     /// @brief Whether the first action has settled as a failure.

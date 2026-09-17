@@ -251,8 +251,8 @@ other's state", which read as a promise of propagation the framework does not
 make.
 
 **The directory is per-process, and that is load-bearing for the claim above.**
-`_directory`, `_models`, `_owners`, `_attachCount`, `_connectionScopes` and
-`_nextId` are ordinary non-static members of a single `RemoteServer` object.
+`_instances` (a `detail::InstanceDirectory`), `_connectionScopes` and `_nextId`
+are ordinary non-static members of a single `RemoteServer` object.
 There is no membership protocol, no shared store, and no placement layer, so
 **two `RemoteServer` processes behind one logical endpoint have independent,
 non-communicating directories**: a client attaching to key 42 on server A and a
@@ -263,16 +263,26 @@ not deduplicated across processes. A deployment that needs one instance per key
 across replicas has to provide that itself, by routing every key to a fixed
 process.
 
-The directory maps `(modelTypeId, primaryKey) → ModelId`, held under the same
-`_regMtx` that guards `_models`/`_owners`, so directory membership can never
-desync from instance existence — the same invariant the connection-scope map
-already maintains ([backend.md](backend.md), "Connection scopes").
+The directory maps `(modelTypeId, primaryKey) → ModelId`, and it is an index
+over the very record that owns the instance rather than a map beside it: one
+`detail::Instance` per live model carries its holder, its recorded owner
+principal, its attach count, its directory key and its hydration state together,
+so directory membership cannot desync from instance existence. The whole
+structure is guarded by `_regMtx` — `InstanceDirectory` is deliberately
+caller-locked, because the `maxLiveModels` admission check and the
+connection-scope update in the same critical section must not be able to
+straddle a directory change ([backend.md](backend.md), "Connection scopes").
+
+`listInstances` is served from a per-type index inside the directory rather than
+by scanning it, so enumerating one model type does not cost the size of every
+other type put together.
 
 Only instances created by an `AllowShared` handler are entered. A plain
 handler's instance is invisible to the directory and unreachable by key.
 
 In local mode (`LocalBackend`) the directory lives in the backend rather than
-the server, with identical semantics. The call site is unchanged between the
+the server, with identical semantics — and it is the *same* `InstanceDirectory`
+type, not a second implementation of it. The call site is unchanged between the
 two, as morph requires everywhere.
 
 ## Enumerating live instances
@@ -549,6 +559,12 @@ strictly reduces pressure on it.
   attacher in that half-hydrated state, so its very first action's outcome is
   tracked: if it fails, the instance is marked and evicted from the directory
   **the next time anyone else attaches to that key** — not immediately. The
+  marking happens *before* anything that could attach gets to run: hydration is
+  settled the moment the outcome is known, ahead of the trace sink's `endSpan`,
+  ahead of the metric sink and ahead of the reply or `Completion` callback, each
+  of which is host code free to attach to that key. It is one atomic cell moved
+  by one compare-exchange, so a reader can never land between "the first action
+  has settled" and "…and it failed". The
   instance itself is not destroyed; it stays alive (and still counts against
   `LimitPolicy::maxLiveModels`) until whoever created it releases it
   normally, the same as any other instance. The handler that hit the failure

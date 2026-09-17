@@ -322,15 +322,29 @@ declared alongside them so callers catch every dispatch failure from one header:
 
 `LocalBackend` is the concrete in-process backend. It owns a
 `StrandExecutor` (wrapping the `IExecutor&` worker pool, typically a
-`ThreadPoolExecutor`) and a `ModelId → shared_ptr<IModelHolder>` map.
+`ThreadPoolExecutor`) and a `detail::InstanceDirectory` holding its live model
+instances.
+
+Both it and `RemoteServer` keep those instances in one
+`detail::InstanceDirectory` (`core/detail/instance_directory.hpp`): one record
+per instance holding its holder, owner principal, attach count, directory key
+and hydration state, plus a `(typeId, primary)` index and a per-type index for
+`listInstances`. It is caller-locked — the owning backend's `_regMtx` guards it,
+because neighbouring decisions in the same critical section (the `maxLiveModels`
+admission check, the connection-scope update) must not be able to straddle a
+directory change. Register-or-attach, the lazy eviction of an instance whose
+first action failed, and promotion by `assignPrimary` are each written once,
+there, rather than once per backend.
 
 **Lifecycle:**
 - `registerModel` — atomically increments a counter, locks the registry mutex,
   calls the factory, records the new id in `_changeAware` if the holder's
-  `isBackendChangeAware()` is `true`, stores the holder, returns the new
-  `ModelId`.
-- `deregisterModel` — locks the registry mutex, erases the entry from both
-  `_models` and `_changeAware`.
+  `isBackendChangeAware()` is `true`, files the holder in the instance
+  directory, returns the new `ModelId`.
+- `deregisterModel` — locks the registry mutex and releases one attachment
+  through the instance directory, which unfiles and destroys the instance in a
+  single step when the last one goes away; `_changeAware` is erased only when
+  the instance is actually destroyed.
 - `execute` — looks up the holder under the registry lock; if `mid` is unknown
   it immediately resolves the completion with
   `std::runtime_error("model not found: id=<n>")`. Otherwise it tracks the
@@ -832,9 +846,9 @@ nothing for a caller that never uses it.
   scope for it. Call once per accepted transport connection.
 - The scoped `handle(msg, reply, cid)` overload attributes any `register` (or
   register-or-attach `attach`) decoded from `msg` to `cid`'s scope: the
-  `ModelId` is recorded in a `cid → (ModelId → count)` map, next to
-  `_models`/`_owners`/the shared-instance directory under the same `_regMtx`,
-  so scope membership can never desync from instance existence. The count
+  `ModelId` is recorded in a `cid → (ModelId → count)` map, next to the
+  instance directory under the same `_regMtx`, so scope membership can never
+  desync from instance existence. The count
   lets one connection hold more than one reference to the same shared
   instance (e.g. two handlers on one connection attaching the same key)
   without either reference leaking the other's release.
@@ -846,7 +860,7 @@ nothing for a caller that never uses it.
   either strand a reference no one will ever decrement, or let one
   connection's deregister silently consume another's hold.
 - `closeConnection(cid)` erases every model still recorded in `cid`'s scope
-  (`_models`, `_owners`, and the per-instance connection entry) exactly as the
+  (its directory record and the per-instance connection entry) exactly as the
   `deregister` path does, then drops the scope itself. Passing `0`, an
   unknown `cid`, or a `cid` already closed is a no-op — idempotent by
   construction.
@@ -1674,8 +1688,8 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | Method | Notes |
 |---|---|
 | `explicit LocalBackend(IExecutor& workerPool)` | Constructs with a strand around `workerPool`. |
-| `registerModel(typeId, factory)` | Atomically increments `_nextId`, stores the holder under `_regMtx`; also records the id in `_changeAware` when the holder is backend-change-aware. `typeId` is accepted for interface compatibility but not used. |
-| `deregisterModel(mid)` | Erases from `_models` and `_changeAware` under `_regMtx`. |
+| `registerModel(typeId, factory)` | Atomically increments `_nextId`, files the holder as a private instance in `_instances` under `_regMtx`; also records the id in `_changeAware` when the holder is backend-change-aware. `typeId` is accepted for interface compatibility but not used. |
+| `deregisterModel(mid)` | Releases one attachment through `_instances` under `_regMtx`; erases from `_changeAware` when that destroys the instance. |
 | `notifyBackendChanged()` | Looks up the models recorded in `_changeAware` under `_regMtx`, then posts `onBackendChanged()` (the `IModelHolder` base virtual — no `dynamic_cast`) onto each such model's strand (outside the lock). Cost is O(change-aware models). |
 | `execute(mid, call, cbExec)` | Posts `call.localOp` on the model's strand with `ScopedContext`. Returns a `Completion`. |
 | `cancelPending(exc)` | Snapshots `_pending`, delivers `exc` to each live state. |
