@@ -530,11 +530,17 @@ convenient for local/simulated development and wrong for production. Always
 install a `SigningAuthorizer` (or a deny-by-default custom authorizer) before
 exposing a server, and never pass `nullptr`.
 
-## Transport security: the Qt WebSocket transport
+## Transport security: the shipped WebSocket transports
 
-`RemoteServer` is transport-agnostic, but morph ships one concrete transport —
-`morph::qt::QtWebSocketServer` / `QtWebSocketBackend` — and its trust properties
-matter in practice:
+`RemoteServer` is transport-agnostic, but morph ships **two** concrete
+transports, and they do not have the same trust properties. Read the one you
+actually build against: everything below about `QtWebSocketServerConfig` is a
+property of the Qt transport alone, and a deployer who picked `morph::net`
+because it needs no Qt gets none of it.
+
+### The Qt WebSocket transport (`morph::qt`)
+
+`morph::qt::QtWebSocketServer` / `QtWebSocketBackend`:
 
 - **TLS is available.** Passing a `QSslConfiguration` puts the server in
   `QWebSocketServer::SecureMode` (`wss://`) and the client into a TLS socket.
@@ -569,6 +575,47 @@ matter in practice:
   unconfigured server behaves exactly as before. See
   [backend.md](core/backend.md#qtwebsocketserver--server-side-websocket-transport).
 
+### The Qt-free reference transport (`morph::net`)
+
+`morph::net::SocketServer` / `SocketBackend` (`MORPH_BUILD_NET=ON`, off by
+default) speak the same RFC 6455 framing over raw POSIX sockets. They are a
+**reference transport for a trusted network**, and the difference from the Qt
+transport above is not a matter of degree:
+
+- **There is no TLS, and no way to add one.** `SocketBackend`/`SocketServer`
+  speak plaintext `ws://` only; `parseWsUrl` throws immediately on a `wss://`
+  URL. Bearer tokens and payloads therefore travel in the clear on every
+  connection, so a captured token can be replayed until it expires. Nothing in
+  this transport can satisfy the "use TLS and verify the peer" item in the
+  checklist below — that item needs the Qt transport, or a TLS-terminating
+  proxy in front of `SocketServer`.
+- **There are no transport-level resource limits.** `SocketServerConfig` has
+  exactly one field (`backlog`). There is no connection cap, no per-frame size
+  limit beyond the wire layer's own `kMaxEnvelopeBytes`, no message rate limit,
+  and no handshake or idle timeout — the four things `QtWebSocketServerConfig`
+  offers. An unauthenticated peer can therefore hold connections open, and open
+  as many as the process has descriptors for. `RemoteServer::LimitPolicy` still
+  applies (it sits above the transport), so `executeTimeout`, `maxLiveModels`
+  and `maxInFlightExecutes` are available here; the connection-level limits are
+  not. `SocketBackendConfig`'s `connectTimeout`/`handshakeTimeout`/`sendTimeout`
+  are not a counter-example: they bound the *client's* own I/O thread against a
+  stalled server, and give a `SocketServer` nothing against a stalled client.
+- **The server is loopback-only, and not by configuration.**
+  `SocketServer::listen()` binds `127.0.0.1` unconditionally — there is no
+  `bindAddress`, so there is also no equivalent of the Qt transport's
+  plaintext-exposure guard, because there is nothing to expose. Reaching a
+  `SocketServer` from another host means deliberately fronting it with a proxy,
+  which puts the confidentiality and peer-authentication decision in that
+  proxy.
+- **Frame-level input validation is strict.** `WsFrameReader` enforces RFC
+  6455's masking rule in both directions, rejects RSV bits, reserved opcodes,
+  oversized or fragmented control frames, invalid Close status codes,
+  non-minimal length encodings and invalid UTF-8 in text messages, and the
+  outgoing mask key is drawn from `std::random_device` per frame. A frame that
+  fails any of these drops the connection (without a Close status code — see
+  [backend.md](core/backend.md#limitations)). This is the one area where the
+  two transports are comparable; it is also the only one.
+
 ## Residual limitations & hardening checklist
 
 Even with `SigningAuthorizer` installed, the following remain the deployer's
@@ -577,7 +624,8 @@ responsibility:
 - **Use TLS and verify the peer — now the documented default.** Bearer tokens
   and payloads travel in plaintext otherwise, and a captured token can be
   replayed until it expires. There is no envelope-level confidentiality or
-  replay protection. The Qt transport supports `wss://` (above); build the
+  replay protection. The Qt transport supports `wss://` (above) — **the
+  `morph::net` transport does not support it at all**; build the
   client's configuration with `tlsVerifyingConfig()` or `tlsPinnedConfig()`
   (`qt_tls.hpp`) rather than `tlsInsecureNoVerify()`, and rely on
   `QtWebSocketServer::listen()`'s exposure guard to catch an accidental
@@ -595,9 +643,12 @@ responsibility:
   `RemoteServer::LimitPolicy` (`executeTimeout`, `maxLiveModels`,
   `maxInFlightExecutes`) and the Qt transport's `QtWebSocketServerConfig`
   (`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
-  `handshakeTimeout`/`idleTimeout`) cover every gap this bullet used to call out.
-  Both default to unbounded/off, so **installing neither changes anything** — a
-  deployer exposing `RemoteServer` publicly should configure both. See
+  `handshakeTimeout`/`idleTimeout`) cover every gap this bullet used to call out
+  **on the Qt transport**. Both default to unbounded/off, so **installing
+  neither changes anything** — a deployer exposing `RemoteServer` publicly
+  should configure both. On `morph::net` only the `LimitPolicy` half exists:
+  `SocketServerConfig` has no connection, size, rate or timeout limits at all
+  (above). See
   [backend.md](core/backend.md#limitpolicy--opt-in-resource-limits).
 - **Do not rely on the authorizer for correctness inside models.** It runs only
   on the remote path and only for `execute`. Enforce invariants in the model so
