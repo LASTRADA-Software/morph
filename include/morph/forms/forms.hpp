@@ -736,6 +736,46 @@ inline constexpr bool isLiteralString<LiteralString<N>> = true;
 template <typename T>
 concept EngageableField = EmptyCapableField<T> || detail::isStdOptional<T>;
 
+/// @brief Concept: @p Cond may be used as a **nested condition** — inside an
+/// `andOf`/`orOf`/`notOf` tree, or as the `when` clause of a `requiredWhen` /
+/// `visibleWhen` / `readonlyWhen` rule.
+///
+/// Every rule and condition node in this header exposes the same shape (`kind`,
+/// `test(const A&) const noexcept`, `emitNode()`), which is what makes them
+/// substitutable — and what made "has a `test()`" a useless admission test.
+/// `VisibleWhen::test()` and `ReadonlyWhen::test()` return `true`
+/// *unconditionally, by design*: they are presentation rules and never gate
+/// submission, so a renderer reads their `when` clause rather than calling
+/// them. Nested as a condition, such a node therefore contributes a constant
+/// and can never influence the tree it sits in — `andOf(visibleWhen(…), c)`
+/// silently collapses to `c`, having compiled and looking like it says
+/// something. `RequiredWhen` is excluded for the neighbouring reason: it is a
+/// rule *about* a condition, not a condition, and nesting one emits a
+/// `"requiredWhen"` node in a `when` position that no renderer's condition
+/// vocabulary has a case for.
+///
+/// So the marker is declared explicitly by the nodes whose `test()` is a
+/// function of the action, rather than inferred from `isPresentation` — which
+/// would admit `RequiredWhen` — or from the presence of `test()`, which admits
+/// everything. Adding a node to the condition vocabulary is one line on the
+/// node itself.
+///
+/// The membership rules (`exactlyOneOf` / `atLeastOneOf` / `mutuallyExclusive`)
+/// *are* conditions by this rule: their `test()` really does range over the
+/// action. A renderer that does not recognise them nested treats them as
+/// "cannot evaluate" and defers to the server, which is the sanctioned
+/// fallback (forms.md, "Renderer fallback") rather than a disagreement.
+///
+/// (`Cond` is the candidate node type. It is deliberately not documented with
+/// a parameter-doc command: -Wdocumentation does not consider a concept a
+/// template declaration, so such a command here is an error under
+/// -Weverything -Werror, which is how the WASM ladder builds. `HasFormRules`
+/// and `HasExplicitSubmit` below omit it for the same reason.)
+template <typename Cond>
+concept Condition = requires {
+    { Cond::isCondition } -> std::convertible_to<bool>;
+} && Cond::isCondition;
+
 /// @brief Condition: `field` is engaged (has a value). One of the closed
 /// condition kinds a `requiredWhen` / `visibleWhen` / `readonlyWhen` rule's
 /// `when` clause accepts.
@@ -747,6 +787,10 @@ struct Engaged {
     V A::* field;
     /// @brief The wire `"kind"` this condition emits: `"engaged"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::Engaged;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
 
     /// @brief Evaluates the condition against @p action.
     /// @param action The action snapshot to inspect.
@@ -787,6 +831,10 @@ struct NotEngaged {
     V A::* field;
     /// @brief The wire `"kind"` this condition emits: `"notEngaged"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::NotEngaged;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
 
     /// @brief Evaluates the condition against @p action.
     /// @param action The action snapshot to inspect.
@@ -835,6 +883,10 @@ struct Greater {
     V A::* rhs;
     /// @brief The wire `"kind"` this node emits: `"greater"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::Greater;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate.
     static constexpr bool isPresentation = false;
 
@@ -890,6 +942,10 @@ struct GreaterOrEqual {
     V A::* rhs;
     /// @brief The wire `"kind"` this node emits: `"greaterOrEqual"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::GreaterOrEqual;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate.
     static constexpr bool isPresentation = false;
 
@@ -945,6 +1001,10 @@ struct Less {
     V A::* rhs;
     /// @brief The wire `"kind"` this node emits: `"less"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::Less;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate.
     static constexpr bool isPresentation = false;
 
@@ -1000,6 +1060,10 @@ struct LessOrEqual {
     V A::* rhs;
     /// @brief The wire `"kind"` this node emits: `"lessOrEqual"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::LessOrEqual;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate.
     static constexpr bool isPresentation = false;
 
@@ -1050,6 +1114,42 @@ template <typename T>
 concept RuleLiteral = std::same_as<T, std::int64_t> || std::same_as<T, bool> || std::same_as<T, std::string> ||
                       std::same_as<T, ::morph::math::Rational> || detail::isLiteralString<T>;
 
+namespace detail {
+
+/// @brief The value `Equals::test` actually compares: the engaged payload of an
+///        `EngageableField`, or the member itself when it has no empty state.
+/// @tparam V Field member type.
+/// @param fieldValue The member to read.
+/// @return A reference to the value the literal is compared against.
+template <typename V>
+[[nodiscard]] constexpr decltype(auto) equalsOperand(const V& fieldValue) noexcept {
+    if constexpr (EngageableField<V>) {
+        // Unevaluated in the concept below; `Equals::test` guards engagement.
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+        return (*fieldValue);
+    } else {
+        return (fieldValue);
+    }
+}
+
+}  // namespace detail
+
+/// @brief Constraint: a field of type @p V can be compared against a literal of
+///        type @p L at all.
+///
+/// Checked at the `equals(...)` call site rather than left to fail inside
+/// `Equals::test`. `equals(&A::someQuantity, "URGENT")` produced 83 lines whose
+/// first error was `no match for 'operator=='` deep inside this header, with no
+/// mention of `equals` and nothing pointing at the caller's own `formRules`.
+///
+/// (@p V is the field member type and @p L the literal type. Neither is
+/// documented with a parameter-doc command: on a concept that is an error
+/// under -Weverything -Werror -- see the note on `Condition` above.)
+template <typename V, typename L>
+concept ComparableAgainstLiteral = requires(const V& fieldValue, const L& literal) {
+    { detail::equalsOperand(fieldValue) == literal } -> std::convertible_to<bool>;
+};
+
 /// @brief The largest N such that *every* integer in `[0, N]` is exactly
 ///        representable as an IEEE-754 double: 2^53.
 ///
@@ -1078,6 +1178,10 @@ struct Equals {
     L literal;
     /// @brief The wire `"kind"` this condition emits: `"equals"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::Equals;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
 
     /// @brief Evaluates the condition against @p action.
     /// @param action The action snapshot to inspect.
@@ -1145,6 +1249,7 @@ struct Equals {
 /// @param literal The value to compare against.
 /// @return The condition node.
 template <typename V, typename A, RuleLiteral L>
+    requires ComparableAgainstLiteral<V, L>
 [[nodiscard]] constexpr auto equals(V A::* field, L literal) {
     return Equals<V, A, L>{field, std::move(literal)};
 }
@@ -1168,6 +1273,7 @@ template <typename V, typename A, RuleLiteral L>
 /// @param literal The string literal to compare against.
 /// @return The condition node, with the literal stored inline.
 template <typename V, typename A, std::size_t N>
+    requires ComparableAgainstLiteral<V, detail::LiteralString<N>>
 [[nodiscard]] constexpr auto equals(V A::* field, const char (&literal)[N]) {
     return Equals<V, A, detail::LiteralString<N>>{field, detail::LiteralString<N>{literal}};
 }
@@ -1220,8 +1326,8 @@ struct RequiredWhen {
 /// @param when  The condition node (`engaged(...)`, `notEngaged(...)`, a
 ///              comparison, or `equals(...)`).
 /// @return The rule node.
-template <typename V, typename A, typename Cond>
-    requires EngageableField<V>
+template <typename V, typename A, Condition Cond>
+    requires EngageableField<V> && std::same_as<detail::ConditionActionType<Cond>, A>
 [[nodiscard]] constexpr auto requiredWhen(V A::* field, Cond when) {
     return RequiredWhen<V, A, Cond>{field, when};
 }
@@ -1236,6 +1342,10 @@ struct ExactlyOneOf {
     std::tuple<Vs A::*...> fields;
     /// @brief The wire `"kind"` this rule emits: `"exactlyOneOf"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::ExactlyOneOf;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate.
     static constexpr bool isPresentation = false;
 
@@ -1283,6 +1393,10 @@ struct AtLeastOneOf {
     std::tuple<Vs A::*...> fields;
     /// @brief The wire `"kind"` this rule emits: `"atLeastOneOf"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::AtLeastOneOf;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate.
     static constexpr bool isPresentation = false;
 
@@ -1330,6 +1444,10 @@ struct MutuallyExclusive {
     std::tuple<Vs A::*...> fields;
     /// @brief The wire `"kind"` this rule emits: `"mutuallyExclusive"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::MutuallyExclusive;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate.
     static constexpr bool isPresentation = false;
 
@@ -1417,7 +1535,8 @@ struct VisibleWhen {
 /// @param field Pointer to the member whose visibility is controlled.
 /// @param when  The condition node.
 /// @return The rule node.
-template <typename V, typename A, typename Cond>
+template <typename V, typename A, Condition Cond>
+    requires std::same_as<detail::ConditionActionType<Cond>, A>
 [[nodiscard]] constexpr auto visibleWhen(V A::* field, Cond when) {
     return VisibleWhen<V, A, Cond>{field, when};
 }
@@ -1471,7 +1590,8 @@ struct ReadonlyWhen {
 /// @param field Pointer to the member whose editability is controlled.
 /// @param when  The condition node.
 /// @return The rule node.
-template <typename V, typename A, typename Cond>
+template <typename V, typename A, Condition Cond>
+    requires std::same_as<detail::ConditionActionType<Cond>, A>
 [[nodiscard]] constexpr auto readonlyWhen(V A::* field, Cond when) {
     return ReadonlyWhen<V, A, Cond>{field, when};
 }
@@ -1491,6 +1611,10 @@ struct And {
     std::tuple<Conds...> conditions;
     /// @brief The wire `"kind"` this node emits: `"and"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::And;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate
     /// when used as a top-level `formRules` entry.
     static constexpr bool isPresentation = false;
@@ -1522,8 +1646,16 @@ struct And {
 /// @param condition0  The first nested condition.
 /// @param conditions  The remaining nested conditions, at least one more.
 /// @return The compound condition node.
-template <typename Cond0, typename... Conds>
+///
+/// The action type is recovered from `Cond0` alone, so every other operand is
+/// required to agree with it here rather than failing deep inside
+/// `std::tuple`'s instantiation: `andOf(engaged(&C::x), engaged(&B::y))`
+/// produced 153 lines whose first error was inside `<type_traits>` and which
+/// named the caller's own `formRules` line only near the end.
+template <Condition Cond0, Condition... Conds>
+    requires(std::same_as<detail::ConditionActionType<Cond0>, detail::ConditionActionType<Conds>> && ...)
 [[nodiscard]] constexpr auto andOf(Cond0 condition0, Conds... conditions) {
+    static_assert(sizeof...(Conds) >= 1, "andOf: needs at least two conditions; one operand is the condition itself");
     return And<detail::ConditionActionType<Cond0>, Cond0, Conds...>{
         std::tuple<Cond0, Conds...>{std::move(condition0), std::move(conditions)...}};
 }
@@ -1539,6 +1671,10 @@ struct Or {
     std::tuple<Conds...> conditions;
     /// @brief The wire `"kind"` this node emits: `"or"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::Or;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate
     /// when used as a top-level `formRules` entry.
     static constexpr bool isPresentation = false;
@@ -1570,8 +1706,11 @@ struct Or {
 /// @param condition0  The first nested condition.
 /// @param conditions  The remaining nested conditions, at least one more.
 /// @return The compound condition node.
-template <typename Cond0, typename... Conds>
+/// Constrained exactly as `andOf` is, and for the same reasons.
+template <Condition Cond0, Condition... Conds>
+    requires(std::same_as<detail::ConditionActionType<Cond0>, detail::ConditionActionType<Conds>> && ...)
 [[nodiscard]] constexpr auto orOf(Cond0 condition0, Conds... conditions) {
+    static_assert(sizeof...(Conds) >= 1, "orOf: needs at least two conditions; one operand is the condition itself");
     return Or<detail::ConditionActionType<Cond0>, Cond0, Conds...>{
         std::tuple<Cond0, Conds...>{std::move(condition0), std::move(conditions)...}};
 }
@@ -1587,6 +1726,10 @@ struct Not {
     Cond condition;
     /// @brief The wire `"kind"` this node emits: `"not"`.
     static constexpr detail::RuleKind kind = detail::RuleKind::Not;
+    /// @brief Usable as a nested condition: this node's `test()` is a
+    /// function of the action, so composing it into an `and`/`or`/`not`
+    /// tree changes what that tree evaluates to.
+    static constexpr bool isCondition = true;
     /// @brief Validation rule (not presentation): participates in the gate
     /// when used as a top-level `formRules` entry.
     static constexpr bool isPresentation = false;
@@ -1611,7 +1754,7 @@ struct Not {
 ///              recovered from `test()`.
 /// @param condition The condition to negate.
 /// @return The compound condition node.
-template <typename Cond>
+template <Condition Cond>
 [[nodiscard]] constexpr auto notOf(Cond condition) {
     return Not<detail::ConditionActionType<Cond>, Cond>{std::move(condition)};
 }
@@ -2330,6 +2473,74 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
     return kind == ruleKindName(RuleKind::ExactlyOneOf) || kind == ruleKindName(RuleKind::MutuallyExclusive);
 }
 
+/// @brief The first capping node in a **conjunction** of emitted rule nodes
+///        that ranges over two or more fields `required` also demands.
+///
+/// Recurses into the `conditions` of any `and` node, because a conjunction of
+/// conjunctions is one conjunction — see `rejectUnsatisfiableRules` for why
+/// `or` and `not` are deliberately left alone.
+///
+/// @param nodes         Rule/condition nodes that must *all* hold.
+/// @param requiredNames Wire names of every member that landed in `required`.
+/// @return The offending node's `kind` and its comma-separated offending field
+///         names, or `std::nullopt` when the conjunction is satisfiable.
+[[nodiscard]] inline std::optional<std::pair<std::string, std::string>> findUnsatisfiableConjunct(
+    const glz::generic_u64::array_t& nodes, const std::vector<std::string_view>& requiredNames) {
+    for (auto const& entry : nodes) {
+        auto const* node = entry.get_if<glz::generic_u64::object_t>();
+        if (node == nullptr) {
+            continue;
+        }
+        auto const kindEntry = node->find("kind");
+        auto const* kind = (kindEntry == node->end()) ? nullptr : kindEntry->second.get_if<std::string>();
+        if (kind == nullptr) {
+            continue;
+        }
+
+        if (*kind == ruleKindName(RuleKind::And)) {
+            auto const nestedEntry = node->find("conditions");
+            auto const* nested =
+                (nestedEntry == node->end()) ? nullptr : nestedEntry->second.get_if<glz::generic_u64::array_t>();
+            if (nested == nullptr) {
+                continue;
+            }
+            if (auto offender = findUnsatisfiableConjunct(*nested, requiredNames); offender.has_value()) {
+                return offender;
+            }
+            continue;
+        }
+
+        if (!capsEngagedCount(*kind)) {
+            continue;
+        }
+        auto const fieldsEntry = node->find("fields");
+        auto const* fields =
+            (fieldsEntry == node->end()) ? nullptr : fieldsEntry->second.get_if<glz::generic_u64::array_t>();
+        if (fields == nullptr) {
+            continue;
+        }
+
+        std::string offenders{};
+        std::size_t offenderCount = 0;
+        for (auto const& fieldNode : *fields) {
+            auto const* fieldName = fieldNode.get_if<std::string>();
+            if (fieldName == nullptr || std::find(requiredNames.begin(), requiredNames.end(),
+                                                  std::string_view{*fieldName}) == requiredNames.end()) {
+                continue;
+            }
+            if (offenderCount > 0) {
+                offenders += ", ";
+            }
+            ++offenderCount;
+            offenders += *fieldName;
+        }
+        if (offenderCount >= 2) {
+            return std::pair{*kind, offenders};
+        }
+    }
+    return std::nullopt;
+}
+
 /// @brief Throws when any emitted rule node caps engagement over two or more
 ///        fields that the emitted `required` array also demands.
 ///
@@ -2357,6 +2568,31 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
 /// keeps them out of `required` on sight. The reachable case is an
 /// `EmptyCapableField` (a `Quantity`, a `Choice`, a strong id) — required by
 /// default, and rangeable by a membership rule.
+/// **The check descends through `and`, and only through `and`.** It reads its
+/// argument as a *conjunction* — every element has to hold — which is what
+/// makes a contradiction in any one element a contradiction of the whole. The
+/// top-level `x-rules` array is such a conjunction (`allRulesSatisfied` folds
+/// it with `&&`) and so are an `and` node's `conditions`, so
+/// `ruleList(andOf(exactlyOneOf(&A::a, &A::b), engaged(&A::c)))` is exactly as
+/// unsubmittable as the direct `ruleList(exactlyOneOf(&A::a, &A::b))` and is
+/// now rejected too. It previously shipped, because the loop skipped any node
+/// without a `fields` key and `and`/`or`/`not` emit `conditions`/`condition`
+/// instead (morph#544) — and the identical contradiction being a hard build
+/// failure in one spelling and a silently unsubmittable form in the other is
+/// worse than not checking at all, since the check's existence is what an
+/// author trusts.
+///
+/// `or` and `not` are **not** descended, and that is not an omission:
+///
+/// - Under `or`, a contradictory operand only makes that branch dead. The
+///   other branch still satisfies the rule, so rejecting would be a false
+///   positive — and a false positive here is a hard build failure on a form
+///   that works.
+/// - Under `not`, the contradiction inverts into a requirement. With `a` and
+///   `b` both required, `notOf(exactlyOneOf(&A::a, &A::b))` asks for *not*
+///   exactly one of them engaged, which engaging both — precisely what
+///   `required` already demands — satisfies.
+///
 /// @tparam A Action type (a reflectable aggregate), used only to name the
 ///           offending type in the diagnostic.
 /// @param xRules       The rule nodes just emitted from `A::formRules`.
@@ -2365,38 +2601,8 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
 template <typename A>
 void rejectUnsatisfiableRules(const glz::generic_u64::array_t& xRules,
                               const std::vector<std::string_view>& requiredNames) {
-    for (auto const& rule : xRules) {
-        auto const* node = rule.get_if<glz::generic_u64::object_t>();
-        if (node == nullptr) {
-            continue;
-        }
-        auto const kindEntry = node->find("kind");
-        auto const fieldsEntry = node->find("fields");
-        if (kindEntry == node->end() || fieldsEntry == node->end()) {
-            continue;
-        }
-        auto const* kind = kindEntry->second.get_if<std::string>();
-        auto const* fields = fieldsEntry->second.get_if<glz::generic_u64::array_t>();
-        if (kind == nullptr || fields == nullptr || !capsEngagedCount(*kind)) {
-            continue;
-        }
-        std::string offenders{};
-        std::size_t offenderCount = 0;
-        for (auto const& fieldNode : *fields) {
-            auto const* fieldName = fieldNode.get_if<std::string>();
-            if (fieldName == nullptr || std::find(requiredNames.begin(), requiredNames.end(),
-                                                  std::string_view{*fieldName}) == requiredNames.end()) {
-                continue;
-            }
-            if (offenderCount > 0) {
-                offenders += ", ";
-            }
-            ++offenderCount;
-            offenders += *fieldName;
-        }
-        if (offenderCount >= 2) {
-            throw UnsatisfiableFormError{glz::name_v<A>, *kind, offenders};
-        }
+    if (auto const offender = findUnsatisfiableConjunct(xRules, requiredNames); offender.has_value()) {
+        throw UnsatisfiableFormError{glz::name_v<A>, offender->first, offender->second};
     }
 }
 

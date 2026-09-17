@@ -157,6 +157,27 @@ API surface).
 
 ### Fixed
 
+- **Both of the cross-field rule vocabulary's safety checks were bypassed by
+  wrapping a rule in one combinator.** Unsatisfiability detection stopped at
+  the first compound node, because it skipped any node without a `fields` key
+  and `and`/`or`/`not` emit `conditions`/`condition` instead — so
+  `ruleList(exactlyOneOf(&A::a, &A::b))` was a hard build failure while the
+  identical contradiction inside `andOf(…)` shipped as a form nobody can
+  submit. It now descends through `and` at any depth, and deliberately not
+  through `or` or `not`, neither of which preserves a contradiction (a capping
+  rule under `not` is satisfied by engaging every field, which is exactly what
+  `required` demands). Separately, `andOf`/`orOf`/`notOf` and the `when` clause
+  of `requiredWhen`/`visibleWhen`/`readonlyWhen` admitted any node exposing
+  `test()`, which every rule node does — including `visibleWhen` and
+  `readonlyWhen`, whose `test()` returns `true` unconditionally by design, so
+  nesting one contributed a constant and silently vanished from the
+  conjunction. Condition operands are now constrained on a new
+  `morph::forms::Condition` concept that those three rules do not declare. The
+  same constraints turn two deep-template failures into call-site errors:
+  `andOf` over two different action types (153 lines → 24), and `equals`
+  against a literal the field cannot be compared to (83 → 54). See
+  `docs/spec/forms/forms.md`, "Unsatisfiable declarations" and "What may be a
+  condition".
 - **Two `Choice` (or `Ranged`) fields of different payload types in one action
   collapsed into a single `$defs` entry, and the renderer drew the wrong
   control.** Every `Choice<...>` instantiation was named `"Choice"` and every

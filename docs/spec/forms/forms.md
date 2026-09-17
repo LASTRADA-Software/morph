@@ -1496,13 +1496,14 @@ struct BookRoom {
 - **`notOf(cond)`** — holds when the single nested condition does **not**
   hold.
 
-Each factory accepts **any** condition or rule node as a child — a leaf
-(`engaged`, `equals`, `greater`, …) or another `andOf`/`orOf`/`notOf` — so a
-tree nests to any depth: `orOf(notOf(engaged(&A::x)), andOf(engaged(&A::y),
-engaged(&A::z)))` is a valid `when` clause. All three nodes share this
-uniform shape with every existing rule/condition node (`kind`, `test(const
-A&) const noexcept`, `emitNode()`), which is what makes them substitutable
-everywhere an existing single-node condition already worked:
+Each factory accepts any node satisfying the `morph::forms::Condition` concept
+as a child — a leaf (`engaged`, `equals`, `greater`, …), a membership rule, or
+another `andOf`/`orOf`/`notOf` — so a tree nests to any depth:
+`orOf(notOf(engaged(&A::x)), andOf(engaged(&A::y), engaged(&A::z)))` is a valid
+`when` clause. All three nodes share this uniform shape with every existing
+rule/condition node (`kind`, `test(const A&) const noexcept`, `emitNode()`),
+which is what makes them substitutable everywhere an existing single-node
+condition already worked:
 
 - **Nested inside a `when` clause** — `requiredWhen`/`visibleWhen`/`readonlyWhen`
   accept a compound condition in the same `when` position a leaf condition
@@ -1516,6 +1517,50 @@ everywhere an existing single-node condition already worked:
 closed-vocabulary *conditions*, matching the existing "closed, typed" design
 of every other node in this table: an application still cannot supply an
 arbitrary lambda, only compose the existing typed primitives into a tree.
+
+#### What may be a condition — the `Condition` concept
+
+The three combinators and the three `when`-bearing rules constrain their
+condition operands on `morph::forms::Condition`, which a node opts into with
+`static constexpr bool isCondition = true`. **`visibleWhen`, `readonlyWhen` and
+`requiredWhen` do not opt in**, and the reason is worth stating because they
+have the same shape as everything that does.
+
+`VisibleWhen::test()` and `ReadonlyWhen::test()` return `true`
+*unconditionally, by design*: they are presentation rules, they never gate
+submission, and a renderer reads their `when` clause rather than calling them
+(see [the rule list](#the-rule-and-condition-kinds)). Nested as a condition,
+such a node therefore contributes a **constant** — `andOf(visibleWhen(…), c)`
+collapses to `c` — while looking exactly like a condition that says something.
+The author wrote "while this field is visible" and got "true". `requiredWhen`
+is excluded for the neighbouring reason: it is a rule *about* a condition
+rather than a condition, and nesting one emits a `"requiredWhen"` node in a
+`when` position no renderer's condition vocabulary has a case for. All six
+spellings compiled before this was enforced, because "exposes
+`test(const A&) const noexcept`" is a test every rule node passes.
+
+The membership rules (`exactlyOneOf` / `atLeastOneOf` / `mutuallyExclusive`)
+**do** opt in: their `test()` genuinely ranges over the action, so composing
+one into a tree changes what the tree evaluates to. A renderer that does not
+recognise them in a `when` position treats them as "cannot evaluate" and defers
+to the server, which is the sanctioned fallback (see
+[Renderer fallback](#renderer-fallback)) rather than a disagreement between the
+two evaluators. The "Also valid as a condition?" column above records which
+kinds the *shipped renderer's* condition vocabulary evaluates directly; it is
+not the same question as which nodes the C++ factories accept.
+
+The marker is declared per node rather than derived from `isPresentation`
+(which would wrongly admit `RequiredWhen`) or from the presence of `test()`
+(which admits everything), so adding a kind to the condition vocabulary is one
+line on the node itself.
+
+The same constraints carry two diagnostics. `andOf`/`orOf` recover the action
+type from their first operand, and now require every other operand to agree,
+so `andOf(engaged(&C::x), engaged(&B::y))` is an error at the call site rather
+than 153 lines whose first line is inside `<type_traits>`. And `equals` requires
+the field to be comparable against the literal at all, so
+`equals(&A::someQuantity, "URGENT")` names `equals` and the caller's own line
+instead of reporting `no match for 'operator=='` from inside `forms.hpp`.
 
 #### Schema emission — nested `conditions` / `condition`
 
@@ -1629,6 +1674,40 @@ fields that are also in `required`:
 `detail::capsEngagedCount(kind)` is the single place the capping kinds are
 named. A future rule kind carrying a ceiling ("at most two of these") joins
 that list and is covered with no other change.
+
+#### A capping rule wrapped in `andOf` is caught too — and only `andOf`
+
+The check reads a list of rule nodes as a **conjunction**: every element has to
+hold, so a contradiction in any one element is a contradiction of the whole.
+The top-level `x-rules` array is such a conjunction — `allRulesSatisfied` folds
+it with `&&` — and so is an `and` node's `conditions`. The check therefore
+descends into `and`, at any depth:
+
+```cpp
+// Both of these are rejected. They are the same contradiction.
+ruleList(exactlyOneOf(&A::a, &A::b))
+ruleList(andOf(exactlyOneOf(&A::a, &A::b), engaged(&A::c)))
+```
+
+The second spelling used to ship silently, because the check skipped any node
+with no `fields` key and `and`/`or`/`not` emit `conditions`/`condition`
+instead. The same contradiction being a hard build failure in one spelling and
+an unsubmittable form in the other is worse than not checking at all: the
+check's *existence* is what an author trusts.
+
+`or` and `not` are **not** descended, and that is a property of the operators
+rather than an omission:
+
+- Under **`or`**, a contradictory operand only makes that branch dead. The
+  other branch can still satisfy the rule, so
+  `ruleList(orOf(exactlyOneOf(&A::a, &A::b), engaged(&A::c)))` generates.
+- Under **`not`**, the contradiction inverts into a requirement. With `a` and
+  `b` both `required`, `ruleList(notOf(exactlyOneOf(&A::a, &A::b)))` asks for
+  *not* exactly one of them engaged — which engaging both, precisely what
+  `required` already demands, satisfies. So it generates too.
+
+Rejecting either would be a false positive, and a false positive here is a hard
+build failure on a form that works.
 
 **Boundaries that deliberately do *not* throw:**
 
@@ -1984,6 +2063,8 @@ for the exhaustive tables and design rationale.
 | Symbol | Kind | Purpose |
 |---|---|---|
 | `EngageableField<T>` | concept | `EmptyCapableField<T>` or `std::optional<...>` — the broader "has an empty state" test the rule vocabulary uses. |
+| `Condition<Cond>` | concept | `true` when `Cond` declares `static constexpr bool isCondition = true` — the admission test for a nested condition. `VisibleWhen`/`ReadonlyWhen`/`RequiredWhen` deliberately do not declare it; see [What may be a condition](#what-may-be-a-condition--the-condition-concept). |
+| `ComparableAgainstLiteral<V, L>` | concept | `true` when a field of type `V` can be compared against a literal of type `L` at all. Constrains both `equals` overloads, so an incomparable pairing is an error at the call site. |
 | `RuleList<Rules...>` | class template | Holds an action's declared rules, in declaration order. Built by `ruleList(...)`; never constructed directly. |
 | `ruleList(rules...)` | function template | Composes rule/condition nodes into the `RuleList` an action assigns to `formRules`. |
 | `HasFormRules<A>` | concept | `true` when `A` declares a `static constexpr formRules` member. |
@@ -1991,8 +2072,9 @@ for the exhaustive tables and design rationale.
 | `engaged`/`notEngaged`/`equals`/`greater`/`greaterOrEqual`/`less`/`lessOrEqual`/`requiredWhen`/`exactlyOneOf`/`atLeastOneOf`/`mutuallyExclusive`/`visibleWhen`/`readonlyWhen`/`andOf`/`orOf`/`notOf` | function templates | Factories building one typed rule/condition node each; see the kind table above. |
 | `UnsatisfiableFormError` | struct (`std::logic_error`) | Thrown by `schemaJson<A>()` when a capping rule ranges over two or more fields `A` also makes `required`. Its `what()` names the action type, the rule kind, and the offending fields. |
 | `detail::capsEngagedCount(kind)` | function | `true` for the emitted rule kinds that impose a ceiling on how many of their fields may be engaged (`"exactlyOneOf"`, `"mutuallyExclusive"`). The single place those kinds are named. |
-| `detail::rejectUnsatisfiableRules<A>(xRules, requiredNames)` | function template | Throws `UnsatisfiableFormError` when a capping rule node names two or more fields present in `requiredNames`. Called from `mergeSchemaExtras`. |
-| `detail::ConditionActionType<Cond>` | alias template | The action type `A` a condition/rule node's `test(const A&) const noexcept` ranges over, deduced from `&Cond::test`'s member-function-pointer type. Used internally by `andOf`/`orOf`/`notOf` to recover `A` without every leaf node separately naming it. |
+| `detail::findUnsatisfiableConjunct(nodes, requiredNames)` | function | The first capping node in a *conjunction* of emitted nodes that ranges over two or more names in `requiredNames`, as `(kind, offenders)`. Recurses into an `and` node's `conditions`; deliberately not into `or` or `not`. |
+| `detail::rejectUnsatisfiableRules<A>(xRules, requiredNames)` | function template | Throws `UnsatisfiableFormError` for whatever `findUnsatisfiableConjunct` returns over the emitted `x-rules` array. Called from `mergeSchemaExtras`. |
+| `detail::ConditionActionType<Cond>` | alias template | The action type `A` a condition/rule node's `test(const A&) const noexcept` ranges over, deduced from `&Cond::test`'s member-function-pointer type. Used by `andOf`/`orOf`/`notOf` to recover `A` without every leaf node separately naming it — and, since the recovery reads the *first* operand only, to require every other operand to agree. |
 
 ### `computed<Dst, Inputs...>()` / `computeList()` / `recomputeAll<A>()`
 
