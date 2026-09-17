@@ -166,11 +166,23 @@ expect_caught "morph's install rules not running at all" \
 # The second needle is the bare header path: clang says "'...' file not found",
 # GCC says "...: No such file or directory", and neither phrasing belongs in an
 # assertion. The path itself is in both.
+#
+# That path names whichever detail/ header the consumer TU reaches *first*, not
+# a fixed one, because the compile stops at the first missing include and never
+# reports the rest. So it moves whenever a public header gains a detail/ include
+# that sorts ahead of the previous first -- it read `morph/detail/fixed_string.hpp`
+# until `morph/core/backend.hpp` started including `detail/instance_directory.hpp`
+# (morph#523), which the consumer reaches earlier. A failure here saying "caught
+# for the WRONG reason" and naming some other detail/ header is that, and the fix
+# is to update this needle, not to touch the install rules. The needle stays
+# specific rather than becoming a loose `detail/` match so that this case still
+# proves the consumer failed on a *missing detail header* and not on something
+# unrelated.
 expect_caught "the detail/ header set dropped from the install" \
     "edit CMakeLists.txt -e '/^# The detail\/ headers that public headers include\./,/^set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)$/d' -e '/FILE_SET morph_detail_headers DESTINATION/d'" \
     fast \
     "the consumer project did not compile against the install prefix" \
-    "morph/detail/fixed_string.hpp"
+    "detail/instance_directory.hpp"
 
 # Bug 2: INTERFACE_HEADER_SETS_TO_VERIFY defaults to *every* interface header
 # set, and quantity_equation.hpp is included partway down quantity.hpp and is
