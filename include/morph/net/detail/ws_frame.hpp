@@ -268,15 +268,12 @@ private:
         if (!_assembling) {
             throw std::runtime_error("WsFrameReader: continuation frame with no message in progress");
         }
-        if (_assemblyIsText && !_textUtf8.feed(frame.payload)) {
-            resetAssembly();
-            throw std::runtime_error("WsFrameReader: text message contains invalid UTF-8");
-        }
+        feedAssemblyTextOrThrow(frame.payload);
         appendFragment(frame.payload);
         if (!frame.fin) {
             return std::nullopt;
         }
-        if (_assemblyIsText && !_textUtf8.complete()) {
+        if (assemblyIsText() && !_textUtf8.complete()) {
             resetAssembly();
             throw std::runtime_error("WsFrameReader: text message ends mid-UTF-8-sequence");
         }
@@ -304,20 +301,32 @@ private:
         }
         _assembling = true;
         _assemblyOpcode = frame.opcode;
-        _assemblyIsText = (frame.opcode == WsOpcode::kText);
         _textUtf8 = ws_frame_impl::Utf8Validator{};
-        if (_assemblyIsText && !_textUtf8.feed(frame.payload)) {
-            resetAssembly();
-            throw std::runtime_error("WsFrameReader: text message contains invalid UTF-8");
-        }
+        feedAssemblyTextOrThrow(frame.payload);
         _assembly.clear();
         appendFragment(frame.payload);
         return std::nullopt;
     }
 
+    /// @brief Whether the message currently being reassembled is a text one,
+    ///        and so subject to RFC 6455 §5.6's UTF-8 requirement. Derived
+    ///        from `_assemblyOpcode` rather than tracked alongside it, so the
+    ///        two cannot drift. Only meaningful while `_assembling`.
+    [[nodiscard]] bool assemblyIsText() const { return _assemblyOpcode == WsOpcode::kText; }
+
+    /// @brief Feeds one fragment of the in-progress message to the incremental
+    ///        UTF-8 validator when that message is a text one, discarding the
+    ///        partial message and throwing if the bytes cannot extend valid
+    ///        UTF-8. A no-op for a binary message, whose payload is opaque.
+    void feedAssemblyTextOrThrow(const std::string& payload) {
+        if (assemblyIsText() && !_textUtf8.feed(payload)) {
+            resetAssembly();
+            throw std::runtime_error("WsFrameReader: text message contains invalid UTF-8");
+        }
+    }
+
     void resetAssembly() {
         _assembling = false;
-        _assemblyIsText = false;
         _textUtf8 = ws_frame_impl::Utf8Validator{};
         _assembly.clear();
         _assembly.shrink_to_fit();
@@ -486,12 +495,11 @@ private:
     std::string _buf;
     // Reassembly state for a fragmented data message: `_assembly` accumulates
     // the payload and `_assemblyOpcode` remembers the opcode of the first
-    // frame, since continuations carry opcode 0. `_assemblyIsText` and
-    // `_textUtf8` track incremental UTF-8 validity across fragments, since a
-    // multi-byte sequence can straddle a fragment boundary.
+    // frame, since continuations carry opcode 0. `_textUtf8` tracks incremental
+    // UTF-8 validity across fragments, since a multi-byte sequence can straddle
+    // a fragment boundary.
     bool _assembling{false};
     WsOpcode _assemblyOpcode{WsOpcode::kText};
-    bool _assemblyIsText{false};
     ws_frame_impl::Utf8Validator _textUtf8;
     std::string _assembly;
 };
