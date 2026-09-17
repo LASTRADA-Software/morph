@@ -38,6 +38,8 @@ set(LIGHTWEIGHT_BUILD_EXAMPLES  OFF CACHE BOOL "" FORCE)
 set(LIGHTWEIGHT_BUILD_TOOLS     OFF CACHE BOOL "" FORCE)
 set(LIGHTWEIGHT_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
 
+include(${CMAKE_SOURCE_DIR}/cmake/DepCache.cmake)
+morph_cache_dep(Lightweight https://github.com/LASTRADA-Software/Lightweight.git bbb972a78e1962b968a2c6ad93f7dade736eaa01)
 FetchContent_Declare(Lightweight
     GIT_REPOSITORY https://github.com/LASTRADA-Software/Lightweight.git
     # Kept in sync with examples/common/CMakeLists.txt's identical pin --

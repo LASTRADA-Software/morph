@@ -20,6 +20,8 @@
 # Asserts five directions:
 #
 #   1. every file under the checkout                   -> pass
+#   1b. a file in the configured dependency cache      -> pass (morph#552)
+#   1c. a foreign worktree, cache also configured      -> still fail
 #   2. one file under another worktree                 -> fail, naming it
 #   3. a sibling directory sharing the root's prefix   -> fail
 #   4. a mapping naming no files at all                -> fail, not a vacuous pass
@@ -97,6 +99,39 @@ else
         fail "2: rejected, but did not name the offending path"
         cat "$tmp/2.out" >&2
     fi
+fi
+
+# 2b. The dependency cache is admitted (morph#552): its trees are third-party
+# sources that coverage.sh filters out anyway, and they live outside the
+# checkout only because DepCache.cmake shares them across a run's dozen
+# configures instead of re-cloning each time.
+write_export "$tmp/depcache.json" \
+    "${repo_root}/include/morph/core/bridge.hpp" \
+    "$tmp/dep-cache/glaze_v7_4_0/include/glaze/glaze.hpp"
+if MORPH_DEP_CACHE="$tmp/dep-cache" run_checker "$tmp/nonexistent-build" "$tmp/depcache.json" > "$tmp/2b.out" 2>&1; then
+    note "ok 2b: a file in the configured dependency cache passes"
+else
+    fail "2b: a file in the dependency cache was rejected"
+    cat "$tmp/2b.out" >&2
+fi
+
+# 2c. The load-bearing half of 2b. Admitting the dependency cache must not
+# admit *anything* outside the checkout, or this gate would have been widened
+# into uselessness -- which is the failure mode it was written to catch, turned
+# on itself. A foreign worktree must still fail while a cache is configured.
+write_export "$tmp/depcache-and-foreign.json" \
+    "${repo_root}/include/morph/core/bridge.hpp" \
+    "$tmp/dep-cache/glaze_v7_4_0/include/glaze/glaze.hpp" \
+    "/home/somebody/repo/morph-wt/999/examples/crm/src/models/account_model.cpp"
+if MORPH_DEP_CACHE="$tmp/dep-cache" run_checker "$tmp/nonexistent-build" \
+        "$tmp/depcache-and-foreign.json" > "$tmp/2c.out" 2>&1; then
+    fail "2c: with a dependency cache configured, a foreign worktree was accepted too"
+    cat "$tmp/2c.out" >&2
+elif grep -q "morph-wt/999" "$tmp/2c.out"; then
+    note "ok 2c: a foreign worktree still fails while the dependency cache is configured"
+else
+    fail "2c: rejected, but did not name the foreign path"
+    cat "$tmp/2c.out" >&2
 fi
 
 # 3. A sibling whose path shares the checkout's prefix as a string.
