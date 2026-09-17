@@ -389,7 +389,7 @@ struct Rational {
     /// @param whole            The integer value; stored as `whole/1`.
     /// @param wantedPrecision  Decimal precision; clamped to [0, kMaxDecimalPlaces].
     constexpr Rational(std::int64_t whole, DecimalPlaces wantedPrecision) noexcept
-        : numerator{whole}, decimalPlaces{detail::clampDecimalPlaces(wantedPrecision.value)} {}
+        : Rational{Numerator{whole}, Denominator{1}, wantedPrecision} {}
 
     /// @brief Constructs from explicit numerator/denominator, then canonicalises.
     ///
@@ -483,10 +483,13 @@ struct Rational {
     /// @return The rounded floating-point reading.
     [[nodiscard]] double toDouble(std::uint32_t requestedDecimalPlaces) const noexcept;
 
-    /// @brief Negates. @note Negating a Rational built from `INT64_MIN` overflows.
+    /// @brief Negates, clamping an `INT64_MIN` numerator to `INT64_MAX`.
     /// @return The value with the numerator's sign flipped.
     [[nodiscard]] constexpr Rational operator-() const noexcept {
-        return Rational{Numerator{-numerator}, Denominator{denominator}, decimalPlaces};
+        constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+        constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+        auto const negated = numerator == minValue ? maxValue : -numerator;
+        return Rational{Numerator{negated}, Denominator{denominator}, decimalPlaces};
     }
 
     /// @brief Multiplicative inverse.
@@ -496,7 +499,10 @@ struct Rational {
             return std::unexpected(RationalError::DivisionByZero);
         }
         if (numerator < 0) {
-            return Rational{Numerator{-denominator}, Denominator{-numerator}, decimalPlaces};
+            constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+            constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+            auto const reciprocalDenominator = numerator == minValue ? maxValue : -numerator;
+            return Rational{Numerator{-denominator}, Denominator{reciprocalDenominator}, decimalPlaces};
         }
         return Rational{Numerator{denominator}, Denominator{numerator}, decimalPlaces};
     }
@@ -828,14 +834,16 @@ private:
     /// @brief `operator*=`'s arithmetic, without the overflow check.
     /// @param rhs Value to multiply by.
     constexpr void mulAssignUnchecked(const Rational& rhs) noexcept {
-        auto const absoluteLeftNumerator = numerator < 0 ? -numerator : numerator;
-        auto const absoluteRightNumerator = rhs.numerator < 0 ? -rhs.numerator : rhs.numerator;
-        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, rhs.denominator);
-        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, denominator);
-        auto const reducedLeftNumerator = numerator / crossDivisorOne;
-        auto const reducedRightNumerator = rhs.numerator / crossDivisorTwo;
-        auto const reducedLeftDenominator = denominator / crossDivisorTwo;
-        auto const reducedRightDenominator = rhs.denominator / crossDivisorOne;
+        auto const absoluteLeftNumerator = detail::absU64(numerator);
+        auto const absoluteRightNumerator = detail::absU64(rhs.numerator);
+        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, static_cast<std::uint64_t>(rhs.denominator));
+        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, static_cast<std::uint64_t>(denominator));
+        auto const signedCrossDivisorOne = static_cast<std::int64_t>(crossDivisorOne);
+        auto const signedCrossDivisorTwo = static_cast<std::int64_t>(crossDivisorTwo);
+        auto const reducedLeftNumerator = numerator / signedCrossDivisorOne;
+        auto const reducedRightNumerator = rhs.numerator / signedCrossDivisorTwo;
+        auto const reducedLeftDenominator = denominator / signedCrossDivisorTwo;
+        auto const reducedRightDenominator = rhs.denominator / signedCrossDivisorOne;
         numerator = reducedLeftNumerator * reducedRightNumerator;
         denominator = reducedLeftDenominator * reducedRightDenominator;
         widenPrecisionTo(rhs.decimalPlaces);
@@ -893,15 +901,17 @@ public:
     /// @param rhs The factor.
     /// @return `true` if the product cannot be represented.
     [[nodiscard]] constexpr bool mulWouldOverflow(const Rational& rhs) const noexcept {
-        auto const absoluteLeftNumerator = numerator < 0 ? -numerator : numerator;
-        auto const absoluteRightNumerator = rhs.numerator < 0 ? -rhs.numerator : rhs.numerator;
-        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, rhs.denominator);
-        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, denominator);
+        auto const absoluteLeftNumerator = detail::absU64(numerator);
+        auto const absoluteRightNumerator = detail::absU64(rhs.numerator);
+        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, static_cast<std::uint64_t>(rhs.denominator));
+        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, static_cast<std::uint64_t>(denominator));
         if (crossDivisorOne == 0 || crossDivisorTwo == 0) {
             return false;  // a zero numerator: the product is zero
         }
-        return detail::mulOverflows(numerator / crossDivisorOne, rhs.numerator / crossDivisorTwo) ||
-               detail::mulOverflows(denominator / crossDivisorTwo, rhs.denominator / crossDivisorOne);
+        auto const signedCrossDivisorOne = static_cast<std::int64_t>(crossDivisorOne);
+        auto const signedCrossDivisorTwo = static_cast<std::int64_t>(crossDivisorTwo);
+        return detail::mulOverflows(numerator / signedCrossDivisorOne, rhs.numerator / signedCrossDivisorTwo) ||
+               detail::mulOverflows(denominator / signedCrossDivisorTwo, rhs.denominator / signedCrossDivisorOne);
     }
 
 private:
@@ -968,9 +978,14 @@ static_assert(std::is_standard_layout_v<Rational>);
 /// @param value Value to take the absolute value of.
 /// @return The non-negative value with the same magnitude.
 [[nodiscard]] constexpr Rational abs(const Rational& value) noexcept {
-    return value.numerator < 0
-               ? Rational{Numerator{-value.numerator}, Denominator{value.denominator}, value.decimalPlaces}
-               : value;
+    if (value.numerator >= 0) {
+        return value;
+    }
+    constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+    auto const magnitude = detail::absU64(value.numerator);
+    auto const clampedMagnitude = magnitude > static_cast<std::uint64_t>(maxValue) ? maxValue
+                                                                                   : static_cast<std::int64_t>(magnitude);
+    return Rational{Numerator{clampedMagnitude}, Denominator{value.denominator}, value.decimalPlaces};
 }
 
 /// @brief Rounds toward positive infinity.

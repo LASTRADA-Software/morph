@@ -177,37 +177,24 @@ result and `llround` maps `(-2^63 - 0.5, -2^63]` onto it. On x86's 80-bit
 a poisoned `INT64_MIN` numerator); where `long double == double` the same
 literal rounds past the bound and is rejected by the plain `2^63` check.
 
-**`INT64_MIN` negation hazards.** `INT64_MIN` (`-2^63`) has no positive
-counterpart in `int64`, so every place that negates a component is a latent UB
-site when that exact value reaches it:
+**`INT64_MIN` handling.** `INT64_MIN` (`-2^63`) has no positive counterpart
+in `int64`, so direct signed negation is undefined. The whole-integer
+constructor therefore delegates to the canonicalising constructor and clamps
+`INT64_MIN` to `-INT64_MAX`, matching the full constructor and wire path.
 
-- **unary `operator-`** — `Rational{Numerator{-numerator}, ...}`: negating an
-  `INT64_MIN` numerator overflows.
-- **`from`** — guards **only** `denominator == 0`; it does not screen
-  `INT64_MIN` components, so a hostile-but-nonzero `(INT64_MIN, …)` pair flows
-  straight into the canonicalising constructor.
-- **`reciprocal`** — negates the numerator in the `numerator < 0` branch;
-  `INT64_MIN` there overflows.
-- **Rendering** (`morph::units::detail::formatRationalDecimal`) — **not one of
-  these.** It takes the numerator's magnitude through `detail::absU64`, which
-  negates in unsigned arithmetic. Negating in `int64_t` there is UB that UBSan
-  catches, and it is reachable: the whole-integer
-  `Rational{value, DecimalPlaces{n}}` constructor does not canonicalise, so the
-  clamp never runs on that path, and `numerator` is public.
-- **`canonicalise`** — **not one of these either.** It clamps an `INT64_MIN`
-  numerator to `-INT64_MAX` (with an `error`-level log, `reportClamp`) *before*
-  any sign flip, and computes the gcd through `detail::absU64`, which negates in
-  unsigned arithmetic. Since it is the shared sink for every constructor and
-  operator, a value that reaches it is safe.
+The public `numerator` member can still be assigned `INT64_MIN` manually, so
+operations that may observe such a value defend independently: unary negation,
+`abs`, `reciprocal`, and multiplication overflow/cross-cancellation use either
+an explicit saturating branch or `detail::absU64`, which computes magnitude in
+unsigned arithmetic. These operations remain defined even for a manually
+poisoned value; where the exact magnitude is unrepresentable they clamp to the
+adjacent `INT64_MAX` magnitude and preserve the existing error/saturation
+policy.
 
-The wire codec (`setWire`) also defends independently: it maps an `INT64_MIN`
-`num`/`den` to `-INT64_MAX` *before* constructing, so untrusted input never
-reaches the trap value at all.
+The wire codec (`setWire`) likewise maps an `INT64_MIN` `num`/`den` to
+`-INT64_MAX` before constructing, so untrusted input never reaches a signed
+negation trap.
 
-The entry points that do **not** canonicalise are where the hazard remains — the
-whole-integer `Rational{value, DecimalPlaces{n}}` constructor retains its
-numerator verbatim, and `numerator` is a public member. A UB site reached that
-way is a confirmed, not a hypothetical, shape.
 
 ### Checked arithmetic
 
