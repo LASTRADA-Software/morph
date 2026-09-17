@@ -1061,8 +1061,8 @@ TEST_CASE("Forms::Rules::Unsatisfiable::MessageStillNamesTheNestedRuleNotTheWrap
     } catch (const morph::forms::UnsatisfiableFormError& error) {
         message = error.what();
     }
-    CHECK(message.find("CFRUnsatisfiableInsideAnd") != std::string::npos);
-    CHECK(message.find("exactlyOneOf") != std::string::npos);
+    CHECK(message.contains("CFRUnsatisfiableInsideAnd"));
+    CHECK(message.contains("exactlyOneOf"));
     CHECK(message.contains("required array: a, b. No submission"));
 }
 

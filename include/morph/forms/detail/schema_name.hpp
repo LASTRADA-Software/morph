@@ -111,22 +111,28 @@ inline constexpr auto choiceSchemaNameStorage = [] {
                                   ((1U + escapedPartWidth(DependsOn)) + ... + std::size_t{0});
 
     std::array<char, total> out{};
-    std::size_t at = 0;
-    auto append = [&out, &at](std::string_view part) {
+    std::size_t written = 0;
+    // Both lambdas index `out` with a running offset the size arithmetic above
+    // has already bounded, exactly as `detail::FixedString`'s own constructor
+    // does -- hence the same suppressions it carries.
+    auto append = [&out, &written](std::string_view part) {
         for (char const character : part) {
-            out[at] = character;
-            ++at;
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+            out[written] = character;
+            ++written;
         }
     };
     // Writes a template argument, doubling any `_` so the single-`_` joins
     // above stay unambiguous.
-    auto appendPart = [&out, &at](std::string_view part) {
+    auto appendPart = [&out, &written](std::string_view part) {
         for (char const character : part) {
-            out[at] = character;
-            ++at;
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+            out[written] = character;
+            ++written;
             if (character == '_') {
-                out[at] = character;
-                ++at;
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+                out[written] = character;
+                ++written;
             }
         }
     };
@@ -180,6 +186,7 @@ struct ShapeTag {
     /// @param text The characters to append.
     constexpr void append(std::string_view text) noexcept {
         for (char const character : text) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             characters[size] = character;
             ++size;
         }
@@ -190,13 +197,19 @@ struct ShapeTag {
     constexpr void appendDecimal(std::size_t value) noexcept {
         std::array<char, 20> digits{};
         std::size_t count = 0;
-        do {
+        while (value != 0) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             digits[count] = static_cast<char>('0' + static_cast<char>(value % 10U));
             ++count;
             value /= 10U;
-        } while (value != 0);
+        }
+        if (count == 0) {
+            digits.front() = '0';
+            count = 1;
+        }
         while (count > 0) {
             --count;
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             characters[size] = digits[count];
             ++size;
         }

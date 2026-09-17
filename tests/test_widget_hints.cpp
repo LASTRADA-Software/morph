@@ -180,14 +180,14 @@ struct WHRealFieldMetaAction {
 // double slider served as an int whose every legal value fails the type it
 // was handed under.
 struct WHMixedRangedAction {
-    Level count{};
-    Fraction ratio{};
+    Level count;
+    Fraction ratio;
 };
 
 // Two `Ranged` fields that differ only in their bounds.
 struct WHTwoIntRangedAction {
-    Level coarse{};
-    morph::forms::Ranged<0, 10, 1> fine{};
+    Level coarse;
+    morph::forms::Ranged<0, 10, 1> fine;
 };
 
 TEST_CASE("Forms::SchemaJson::DifferentlyTypedRangedFieldsKeepTheirOwnTypes", "[forms][widget-hints]") {

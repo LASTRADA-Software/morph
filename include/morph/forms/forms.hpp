@@ -1123,11 +1123,18 @@ namespace detail {
 /// @return A reference to the value the literal is compared against.
 template <typename V>
 [[nodiscard]] constexpr decltype(auto) equalsOperand(const V& fieldValue) noexcept {
+    // The parentheses are load-bearing, not redundant: with `decltype(auto)`,
+    // `return (e);` yields `decltype((e))`, which preserves an lvalue operand as
+    // a reference while still returning a prvalue one by value. `Choice` and
+    // `std::optional` dereference to a reference, `Ranged` to a prvalue, and
+    // both have to work — dropping the parentheses would copy the first, and
+    // binding the result to `const auto&` instead would dangle on the second.
     if constexpr (EngageableField<V>) {
         // Unevaluated in the concept below; `Equals::test` guards engagement.
-        // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access, readability-redundant-parentheses)
         return (*fieldValue);
     } else {
+        // NOLINTNEXTLINE(readability-redundant-parentheses)
         return (fieldValue);
     }
 }
@@ -2473,6 +2480,56 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
     return kind == ruleKindName(RuleKind::ExactlyOneOf) || kind == ruleKindName(RuleKind::MutuallyExclusive);
 }
 
+/// @brief One typed member of an emitted rule node, or `nullptr`.
+///
+/// Folds the find / end-compare / `get_if` triple into one call, which is what
+/// keeps `findUnsatisfiableConjunct` below down to the branching its own
+/// argument needs.
+/// @tparam T   Expected value type of the member.
+/// @param node The rule/condition node object.
+/// @param key  Wire name of the member to read.
+/// @return Pointer to the member's value, or `nullptr` when it is absent or
+///         holds another type.
+template <typename T>
+[[nodiscard]] inline const T* ruleNodeMember(const glz::generic_u64::object_t& node, std::string_view key) {
+    auto const* const entry = node.find(key);
+    return (entry == node.end()) ? nullptr : entry->second.template get_if<T>();
+}
+
+/// @brief The names in @p fields that @p requiredNames also demands, rendered
+///        as one comma-separated list — but only when there are **two or
+///        more**.
+///
+/// One required field inside a capping rule is satisfiable (engage that one,
+/// leave the rest empty), so fewer than two is reported as "no contradiction"
+/// rather than as an empty list.
+/// @param fields        The rule node's `fields` array.
+/// @param requiredNames Wire names of every member that landed in `required`.
+/// @return The offending names in declaration order, or `std::nullopt`.
+[[nodiscard]] inline std::optional<std::string> requiredFieldsNamedBy(
+    const glz::generic_u64::array_t& fields, const std::vector<std::string_view>& requiredNames) {
+    std::string offenders{};
+    std::size_t offenderCount = 0;
+    for (auto const& fieldNode : fields) {
+        auto const* fieldName = fieldNode.get_if<std::string>();
+        // `std::ranges::find`, not `std::ranges::contains`: the latter is C++23
+        // (P2302) and is absent from the libc++ the emscripten toolchain ships,
+        // so it broke all three WASM TUs that include this header while
+        // compiling fine under the libstdc++ the GCC leg uses. `ranges::find`
+        // is C++20 and available on every toolchain this project builds on.
+        if (fieldName == nullptr ||
+            std::ranges::find(requiredNames, std::string_view{*fieldName}) == requiredNames.end()) {
+            continue;
+        }
+        if (offenderCount > 0) {
+            offenders += ", ";
+        }
+        ++offenderCount;
+        offenders += *fieldName;
+    }
+    return (offenderCount >= 2) ? std::optional{std::move(offenders)} : std::nullopt;
+}
+
 /// @brief The first capping node in a **conjunction** of emitted rule nodes
 ///        that ranges over two or more fields `required` also demands.
 ///
@@ -2484,6 +2541,7 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
 /// @param requiredNames Wire names of every member that landed in `required`.
 /// @return The offending node's `kind` and its comma-separated offending field
 ///         names, or `std::nullopt` when the conjunction is satisfiable.
+// NOLINTNEXTLINE(misc-no-recursion) -- an `and` node's conditions are themselves a conjunction, so descending is the whole point
 [[nodiscard]] inline std::optional<std::pair<std::string, std::string>> findUnsatisfiableConjunct(
     const glz::generic_u64::array_t& nodes, const std::vector<std::string_view>& requiredNames) {
     for (auto const& entry : nodes) {
@@ -2491,20 +2549,15 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
         if (node == nullptr) {
             continue;
         }
-        auto const kindEntry = node->find("kind");
-        auto const* kind = (kindEntry == node->end()) ? nullptr : kindEntry->second.get_if<std::string>();
+        auto const* kind = ruleNodeMember<std::string>(*node, "kind");
         if (kind == nullptr) {
             continue;
         }
 
         if (*kind == ruleKindName(RuleKind::And)) {
-            auto const nestedEntry = node->find("conditions");
-            auto const* nested =
-                (nestedEntry == node->end()) ? nullptr : nestedEntry->second.get_if<glz::generic_u64::array_t>();
-            if (nested == nullptr) {
-                continue;
-            }
-            if (auto offender = findUnsatisfiableConjunct(*nested, requiredNames); offender.has_value()) {
+            auto const* nested = ruleNodeMember<glz::generic_u64::array_t>(*node, "conditions");
+            if (auto offender = (nested == nullptr) ? std::nullopt : findUnsatisfiableConjunct(*nested, requiredNames);
+                offender.has_value()) {
                 return offender;
             }
             continue;
@@ -2513,29 +2566,12 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
         if (!capsEngagedCount(*kind)) {
             continue;
         }
-        auto const fieldsEntry = node->find("fields");
-        auto const* fields =
-            (fieldsEntry == node->end()) ? nullptr : fieldsEntry->second.get_if<glz::generic_u64::array_t>();
+        auto const* fields = ruleNodeMember<glz::generic_u64::array_t>(*node, "fields");
         if (fields == nullptr) {
             continue;
         }
-
-        std::string offenders{};
-        std::size_t offenderCount = 0;
-        for (auto const& fieldNode : *fields) {
-            auto const* fieldName = fieldNode.get_if<std::string>();
-            if (fieldName == nullptr || std::find(requiredNames.begin(), requiredNames.end(),
-                                                  std::string_view{*fieldName}) == requiredNames.end()) {
-                continue;
-            }
-            if (offenderCount > 0) {
-                offenders += ", ";
-            }
-            ++offenderCount;
-            offenders += *fieldName;
-        }
-        if (offenderCount >= 2) {
-            return std::pair{*kind, offenders};
+        if (auto offenders = requiredFieldsNamedBy(*fields, requiredNames); offenders.has_value()) {
+            return std::pair{*kind, *std::move(offenders)};
         }
     }
     return std::nullopt;
