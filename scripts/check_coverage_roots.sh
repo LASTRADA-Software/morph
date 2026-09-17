@@ -78,6 +78,29 @@ readonly profdata="${build_dir}/merged.profdata"
 # symlink would report every file as foreign.
 readonly source_root="$(pwd -P)"
 
+# Third-party dependency sources are legitimately outside the checkout
+# (morph#552). `cmake/DepCache.cmake` points FetchContent at a shared cache so a
+# CI run clones once instead of a dozen times, and those trees then sit under
+# the runner's home rather than under `build/*/_deps`, where they used to be
+# only because FetchContent happened to put them there.
+#
+# They are dropped from the report either way -- coverage.sh filters to
+# `include/morph` and the example rungs -- so their absence is intended, not the
+# silence this gate exists to catch. What it is looking for is *morph's own*
+# sources arriving from a foreign worktree, and that hazard is untouched by
+# this: a foreign worktree is not the dependency cache.
+#
+# Resolved exactly as DepCache.cmake resolves it, so the two cannot drift into
+# disagreeing about where the cache is.
+if [ -n "${MORPH_DEP_CACHE:-}" ]; then
+    dep_cache_root="${MORPH_DEP_CACHE}"
+elif [ -n "${CI:-}" ] && [ -n "${HOME:-}" ]; then
+    dep_cache_root="${HOME}/.cache/morph-dep-cache"
+else
+    dep_cache_root=""
+fi
+readonly dep_cache_root
+
 if [ -n "$export_json_file" ]; then
     export_json="$(cat "$export_json_file")"
 else
@@ -139,7 +162,16 @@ printf '%s' "$export_json" | python3 -c '
 import json, os, sys
 
 source_root = os.path.realpath(sys.argv[1]) + os.sep
+dep_cache_arg = sys.argv[2] if len(sys.argv) > 2 else ""
+dep_cache_root = (os.path.realpath(dep_cache_arg) + os.sep) if dep_cache_arg else ""
 document = json.load(sys.stdin)
+
+def is_allowed(name):
+    if name.startswith(source_root):
+        return True
+    # Narrow on purpose: this admits the dependency cache and nothing else, so
+    # a source from any other foreign root still fails.
+    return bool(dep_cache_root) and name.startswith(dep_cache_root)
 
 filenames = [f["filename"] for export in document["data"] for f in export["files"]]
 if not filenames:
@@ -150,7 +182,7 @@ if not filenames:
     print("  to find, committed by the detector (morph#426).", file=sys.stderr)
     raise SystemExit(1)
 
-foreign = sorted({f for f in filenames if not f.startswith(source_root)})
+foreign = sorted({f for f in filenames if not is_allowed(f)})
 if foreign:
     print("check_coverage_roots: %d of %d files in the coverage mapping are not"
           % (len(foreign), len(filenames)), file=sys.stderr)
@@ -167,5 +199,10 @@ if foreign:
     print("  -DUSE_COMPILER_CACHE=OFF, or delete the build tree and rebuild.", file=sys.stderr)
     raise SystemExit(1)
 
-print("check_coverage_roots: %d files, all under the checkout." % len(filenames))
-' "$source_root"
+cached = sum(1 for f in filenames if not f.startswith(source_root))
+if cached:
+    print("check_coverage_roots: %d files, %d under the checkout and %d in the dependency cache."
+          % (len(filenames), len(filenames) - cached, cached))
+else:
+    print("check_coverage_roots: %d files, all under the checkout." % len(filenames))
+' "$source_root" "$dep_cache_root"
