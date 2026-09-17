@@ -141,6 +141,8 @@ set(MORPH_GLAZE_VERSION 7.4)
 find_package(glaze ${MORPH_GLAZE_VERSION} CONFIG QUIET)
 if(NOT glaze_FOUND)
     include(FetchContent)
+    include(cmake/DepCache.cmake)
+    morph_cache_dep(glaze https://github.com/stephenberry/glaze.git v7.4.0)
     FetchContent_Declare(
         glaze
         GIT_REPOSITORY https://github.com/stephenberry/glaze.git
@@ -550,6 +552,8 @@ if(MORPH_BUILD_TESTS)
     find_package(Catch2 CONFIG QUIET)
     if(NOT Catch2_FOUND)
         include(FetchContent)
+        include(cmake/DepCache.cmake)
+        morph_cache_dep(Catch2 https://github.com/catchorg/Catch2.git v3.8.1)
         FetchContent_Declare(
             Catch2
             GIT_REPOSITORY https://github.com/catchorg/Catch2.git

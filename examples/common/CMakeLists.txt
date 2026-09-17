@@ -130,6 +130,8 @@ set(LIGHTWEIGHT_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
 # the DLL export boundary (and its warnings) entirely instead of punching warning
 # holes through every consumer target.
 set(LIGHTWEIGHT_BUILD_SHARED    OFF CACHE BOOL "" FORCE)
+include(${CMAKE_SOURCE_DIR}/cmake/DepCache.cmake)
+morph_cache_dep(Lightweight https://github.com/LASTRADA-Software/Lightweight.git bbb972a78e1962b968a2c6ad93f7dade736eaa01)
 FetchContent_Declare(Lightweight
     GIT_REPOSITORY https://github.com/LASTRADA-Software/Lightweight.git
     # Pinned to master's tip commit, not the latest tag (v0.20260625.0) --

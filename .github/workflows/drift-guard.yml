@@ -62,6 +62,21 @@ jobs:
       - name: Assert UBSan halts instead of recovering
         run: bash scripts/check_sanitizer_can_fail.sh
 
+  dep-cache-selftest:
+    name: Dependency-cache self-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # A dependency cache that silently stops caching is indistinguishable
+      # from a working one -- the build still succeeds, it just clones again --
+      # so the four properties cmake/DepCache.cmake promises are asserted
+      # rather than assumed (morph#552). The first version of the helper used
+      # `CMakeLists.txt` as its validity marker, which a stylesheet repository
+      # does not have; this self-test is what caught it.
+      - name: Self-test the FetchContent dependency cache
+        run: bash scripts/test_dep_cache.sh
+
   prose-lint:
     name: Spec-citation, banned-terminology & CI-clang-pin lint
     runs-on: ubuntu-24.04
