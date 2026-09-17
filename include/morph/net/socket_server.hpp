@@ -349,7 +349,9 @@ private:
             conn->closed.store(true);
             return;
         }
-        ::morph::net::detail::WsFrameReader reader;
+        // Server role: RFC 6455 §5.1 requires a client to mask every frame it
+        // sends, so this reader must reject an unmasked one.
+        ::morph::net::detail::WsFrameReader reader{/*expectMasked=*/true};
         reader.feed(leftover);
         char buf[4096];
         for (;;) {
@@ -403,7 +405,7 @@ private:
                 return true;
             }
             if (frame->opcode == WsOpcode::kClose) {
-                sendControlFrame(conn, WsOpcode::kClose, "");
+                sendControlFrame(conn, WsOpcode::kClose, frame->payload);
                 conn->closed.store(true);
                 return false;
             }

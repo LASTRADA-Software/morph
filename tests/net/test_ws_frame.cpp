@@ -15,7 +15,7 @@ TEST_CASE("encodeWsFrame/WsFrameReader round-trip a small masked text frame", "[
     std::string payload = "hello";
     std::string wire = encodeWsFrame(WsOpcode::kText, payload, /*mask=*/true);
 
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(wire);
     auto frame = reader.tryExtractFrame();
     REQUIRE(frame.has_value());
@@ -27,7 +27,7 @@ TEST_CASE("encodeWsFrame/WsFrameReader round-trip an unmasked (server-side) fram
     std::string payload = R"({"kind":"ok","callId":7})";
     std::string wire = encodeWsFrame(WsOpcode::kText, payload, /*mask=*/false);
 
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/false};
     reader.feed(wire);
     auto frame = reader.tryExtractFrame();
     REQUIRE(frame.has_value());
@@ -38,7 +38,7 @@ TEST_CASE("encodeWsFrame/WsFrameReader round-trip a payload requiring the 16-bit
     std::string payload(70000, 'x');  // > 125 and > 65535? no: > 125, exercises the 126 marker
     std::string wire = encodeWsFrame(WsOpcode::kText, payload, /*mask=*/true);
 
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(wire);
     auto frame = reader.tryExtractFrame();
     REQUIRE(frame.has_value());
@@ -59,7 +59,7 @@ TEST_CASE("WsFrameReader withholds a frame whose 16-bit extended length header i
     std::string wire = encodeWsFrame(WsOpcode::kText, payload, /*mask=*/false);
     REQUIRE(static_cast<std::uint8_t>(wire[1]) == 126);  // sanity: confirms the 126 marker was used
 
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/false};
     reader.feed(wire.substr(0, 2));  // FIN/opcode byte + length-marker byte only
     REQUIRE_FALSE(reader.tryExtractFrame().has_value());
 
@@ -77,7 +77,7 @@ TEST_CASE("WsFrameReader withholds a frame whose 64-bit extended length header i
     std::string wire = encodeWsFrame(WsOpcode::kText, payload, /*mask=*/false);
     REQUIRE(static_cast<std::uint8_t>(wire[1]) == 127);  // sanity: confirms the 127 marker was used
 
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/false};
     reader.feed(wire.substr(0, 2));
     REQUIRE_FALSE(reader.tryExtractFrame().has_value());
 
@@ -91,7 +91,7 @@ TEST_CASE("WsFrameReader reassembles a frame delivered across multiple feed() ca
     std::string payload = "partial delivery";
     std::string wire = encodeWsFrame(WsOpcode::kText, payload, /*mask=*/true);
 
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(wire.substr(0, 3));
     REQUIRE_FALSE(reader.tryExtractFrame().has_value());
     reader.feed(wire.substr(3));
@@ -104,7 +104,7 @@ TEST_CASE("WsFrameReader extracts two frames fed back-to-back in one buffer", "[
     std::string wireA = encodeWsFrame(WsOpcode::kText, "first", true);
     std::string wireB = encodeWsFrame(WsOpcode::kText, "second", true);
 
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(wireA + wireB);
     auto frameA = reader.tryExtractFrame();
     auto frameB = reader.tryExtractFrame();
@@ -144,14 +144,14 @@ std::string fragmentFrame(WsOpcode opcode, const std::string& payload, bool fin)
 }  // namespace
 
 TEST_CASE("WsFrameReader withholds an incomplete fragmented message", "[net][frame]") {
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(fragmentFrame(WsOpcode::kText, "first half ", /*fin=*/false));
     // Not an error, just not a whole message yet.
     REQUIRE_FALSE(reader.tryExtractFrame().has_value());
 }
 
 TEST_CASE("WsFrameReader reassembles a fragmented text message", "[net][frame]") {
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(fragmentFrame(WsOpcode::kText, "one ", /*fin=*/false));
     reader.feed(fragmentFrame(WsOpcode::kContinuation, "two ", /*fin=*/false));
     reader.feed(fragmentFrame(WsOpcode::kContinuation, "three", /*fin=*/true));
@@ -165,7 +165,7 @@ TEST_CASE("WsFrameReader reassembles a fragmented text message", "[net][frame]")
 }
 
 TEST_CASE("WsFrameReader reassembles a message delivered in one buffer", "[net][frame]") {
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     std::string wire = fragmentFrame(WsOpcode::kText, "a", /*fin=*/false);
     wire += fragmentFrame(WsOpcode::kContinuation, "b", /*fin=*/false);
     wire += fragmentFrame(WsOpcode::kContinuation, "c", /*fin=*/true);
@@ -180,7 +180,7 @@ TEST_CASE("WsFrameReader passes control frames through mid-reassembly", "[net][f
     // The RFC explicitly allows a control frame between the fragments of a
     // data message; a ping arriving mid-message must be answerable without
     // corrupting the message being assembled.
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(fragmentFrame(WsOpcode::kText, "start ", /*fin=*/false));
     reader.feed(encodeWsFrame(WsOpcode::kPing, "hb", /*mask=*/true));
     reader.feed(fragmentFrame(WsOpcode::kContinuation, "end", /*fin=*/true));
@@ -195,20 +195,20 @@ TEST_CASE("WsFrameReader passes control frames through mid-reassembly", "[net][f
 }
 
 TEST_CASE("WsFrameReader rejects a continuation with no message in progress", "[net][frame]") {
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(fragmentFrame(WsOpcode::kContinuation, "orphan", /*fin=*/true));
     REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
 }
 
 TEST_CASE("WsFrameReader rejects a new data frame interrupting a fragmented message", "[net][frame]") {
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(fragmentFrame(WsOpcode::kText, "half", /*fin=*/false));
     reader.feed(encodeWsFrame(WsOpcode::kText, "interrupting", /*mask=*/true));
     REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
 }
 
 TEST_CASE("WsFrameReader rejects a fragmented control frame", "[net][frame]") {
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(fragmentFrame(WsOpcode::kPing, "nope", /*fin=*/false));
     REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
 }
@@ -223,7 +223,7 @@ TEST_CASE("WsFrameReader rejects a frame whose declared length exceeds kMaxEnvel
     for (int shift = 56; shift >= 0; shift -= 8) {
         header.push_back(static_cast<char>((bogusLen >> shift) & 0xFFu));
     }
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/false};
     reader.feed(header);
     REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
 }
@@ -239,7 +239,7 @@ TEST_CASE("WsFrameReader rejects a reassembled message whose cumulative size exc
     constexpr std::size_t chunkSize = std::size_t{3} * 1024 * 1024;  // 3 MiB per fragment
     std::string const chunk(chunkSize, 'x');
 
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(fragmentFrame(WsOpcode::kBinary, chunk, /*fin=*/false));
     REQUIRE_FALSE(reader.tryExtractFrame().has_value());  // 3 MiB so far
 
@@ -252,7 +252,7 @@ TEST_CASE("WsFrameReader rejects a reassembled message whose cumulative size exc
 }
 
 TEST_CASE("encodeWsFrame round-trips close/ping/pong opcodes", "[net][frame]") {
-    WsFrameReader reader;
+    WsFrameReader reader{/*expectMasked=*/true};
     reader.feed(encodeWsFrame(WsOpcode::kClose, "", true));
     auto closeFrame = reader.tryExtractFrame();
     REQUIRE(closeFrame.has_value());
@@ -263,4 +263,258 @@ TEST_CASE("encodeWsFrame round-trips close/ping/pong opcodes", "[net][frame]") {
     REQUIRE(pingFrame.has_value());
     REQUIRE(pingFrame->opcode == WsOpcode::kPing);
     REQUIRE(pingFrame->payload == "ping-data");
+}
+
+// ── RFC 6455 conformance: illegal frames a peer must not accept ────────────
+// morph#533 -- none of the following were rejected before this file's reader
+// grew a role and these checks.
+
+TEST_CASE("WsFrameReader (server role) rejects an unmasked frame from a client", "[net][frame]") {
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, "hi", /*mask=*/false));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader (client role) rejects a masked frame from a server", "[net][frame]") {
+    WsFrameReader reader{/*expectMasked=*/false};
+    reader.feed(encodeWsFrame(WsOpcode::kText, "hi", /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects RSV1 with no extension negotiated", "[net][frame]") {
+    std::string wire = encodeWsFrame(WsOpcode::kText, "hi", /*mask=*/true);
+    wire[0] = static_cast<char>(static_cast<std::uint8_t>(wire[0]) | 0x40U);
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(wire);
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects RSV2+RSV3 with no extension negotiated", "[net][frame]") {
+    std::string wire = encodeWsFrame(WsOpcode::kText, "hi", /*mask=*/true);
+    wire[0] = static_cast<char>(static_cast<std::uint8_t>(wire[0]) | 0x30U);
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(wire);
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a reserved non-control opcode", "[net][frame]") {
+    std::string wire = encodeWsFrame(WsOpcode::kText, "hi", /*mask=*/true);
+    wire[0] = static_cast<char>((static_cast<std::uint8_t>(wire[0]) & 0xF0U) | 0x3U);
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(wire);
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a reserved control opcode", "[net][frame]") {
+    std::string wire = encodeWsFrame(WsOpcode::kText, "hi", /*mask=*/true);
+    wire[0] = static_cast<char>((static_cast<std::uint8_t>(wire[0]) & 0xF0U) | 0xBU);
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(wire);
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a Ping payload over 125 bytes", "[net][frame]") {
+    std::string const payload(200, 'x');
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kPing, payload, /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a Close frame with a 1-byte payload", "[net][frame]") {
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, std::string(1, 'x'), /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects Close code 1005 (reserved, must not be sent)", "[net][frame]") {
+    std::string payload;
+    payload.push_back(static_cast<char>(1005 >> 8));
+    payload.push_back(static_cast<char>(1005 & 0xFF));
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader accepts Close code 1000 with a UTF-8 reason", "[net][frame]") {
+    std::string payload;
+    payload.push_back(static_cast<char>(1000 >> 8));
+    payload.push_back(static_cast<char>(1000 & 0xFF));
+    payload += "bye";
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    auto frame = reader.tryExtractFrame();
+    REQUIRE(frame.has_value());
+    REQUIRE(frame->payload == payload);
+}
+
+TEST_CASE("WsFrameReader accepts Close code 1008 (the 1007-1011 range)", "[net][frame]") {
+    std::string payload;
+    payload.push_back(static_cast<char>(1008 >> 8));
+    payload.push_back(static_cast<char>(1008 & 0xFF));
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    auto frame = reader.tryExtractFrame();
+    REQUIRE(frame.has_value());
+}
+
+TEST_CASE("WsFrameReader accepts Close code 3500 (the 3000-4999 range)", "[net][frame]") {
+    std::string payload;
+    payload.push_back(static_cast<char>(3500 >> 8));
+    payload.push_back(static_cast<char>(3500 & 0xFF));
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    auto frame = reader.tryExtractFrame();
+    REQUIRE(frame.has_value());
+}
+
+TEST_CASE("WsFrameReader rejects Close code 500 (below the valid range)", "[net][frame]") {
+    std::string payload;
+    payload.push_back(static_cast<char>(500 >> 8));
+    payload.push_back(static_cast<char>(500 & 0xFF));
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects Close code 5000 (above the valid range)", "[net][frame]") {
+    std::string payload;
+    payload.push_back(static_cast<char>(5000 >> 8));
+    payload.push_back(static_cast<char>(5000 & 0xFF));
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a non-minimal 64-bit length encoding", "[net][frame]") {
+    // FIN=1/text, unmasked, len-marker=127 (8-byte extended length) declaring
+    // a 2-byte payload -- legal encoders never emit this (2 fits the 7-bit
+    // field directly, and even the 126 marker would be non-minimal for it).
+    std::string header;
+    header.push_back(static_cast<char>(0x81));
+    header.push_back(static_cast<char>(127));
+    for (int i = 0; i < 7; ++i) {
+        header.push_back(static_cast<char>(0x00));
+    }
+    header.push_back(static_cast<char>(0x02));
+    header += "hi";
+    WsFrameReader reader{/*expectMasked=*/false};
+    reader.feed(header);
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader accepts a 2-byte UTF-8 sequence", "[net][frame]") {
+    std::string const eAcute = "\xC3\xA9";  // U+00E9 "é", 2 bytes
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, eAcute, /*mask=*/true));
+    auto frame = reader.tryExtractFrame();
+    REQUIRE(frame.has_value());
+    REQUIRE(frame->payload == eAcute);
+}
+
+TEST_CASE("WsFrameReader accepts a 4-byte UTF-8 sequence", "[net][frame]") {
+    std::string const emoji = "\xF0\x9F\x98\x80";  // U+1F600 grinning face, 4 bytes
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, emoji, /*mask=*/true));
+    auto frame = reader.tryExtractFrame();
+    REQUIRE(frame.has_value());
+    REQUIRE(frame->payload == emoji);
+}
+
+TEST_CASE("WsFrameReader rejects a 4-byte UTF-8 lead byte beyond the U+10FFFF range", "[net][frame]") {
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, "\xF5\x80\x80\x80", /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a codepoint past U+10FFFF encoded with a valid 4-byte lead", "[net][frame]") {
+    // 0xF4 0x90 0x80 0x80 decodes to U+110000 -- one past the Unicode max --
+    // even though 0xF4 itself is not rejected by the lead-byte range check.
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, "\xF4\x90\x80\x80", /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects an overlong 2-byte encoding", "[net][frame]") {
+    // 0xC0 0x80 encodes U+0000, which fits in a single byte -- overlong.
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, "\xC0\x80", /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a 3-byte encoding of a UTF-16 surrogate half", "[net][frame]") {
+    // 0xED 0xA0 0x80 decodes to U+D800, a surrogate half -- well-formed by the
+    // byte-pattern rules alone, but never a legal Unicode scalar value.
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, "\xED\xA0\x80", /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects an overlong 3-byte encoding", "[net][frame]") {
+    // 0xE0 0x80 0x80 encodes U+0000, which fits in a single byte -- overlong.
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, "\xE0\x80\x80", /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects invalid UTF-8 in the first fragment of a text message", "[net][frame]") {
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(fragmentFrame(WsOpcode::kText, "\xFF", /*fin=*/false));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a fragmented text message ending mid multi-byte sequence", "[net][frame]") {
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(fragmentFrame(WsOpcode::kText, "\xE2", /*fin=*/false));
+    REQUIRE_FALSE(reader.tryExtractFrame().has_value());
+    reader.feed(fragmentFrame(WsOpcode::kContinuation, "\x82", /*fin=*/true));  // still incomplete at FIN
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a non-minimal 16-bit length encoding", "[net][frame]") {
+    // FIN=1/text, unmasked, len-marker=126 declaring a 2-byte payload -- legal
+    // encoders never emit this (2 fits the 7-bit field directly).
+    std::string header;
+    header.push_back(static_cast<char>(0x81));
+    header.push_back(static_cast<char>(126));
+    header.push_back(static_cast<char>(0x00));
+    header.push_back(static_cast<char>(0x02));
+    header += "hi";
+    WsFrameReader reader{/*expectMasked=*/false};
+    reader.feed(header);
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a text frame with invalid UTF-8", "[net][frame]") {
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, "\xFF", /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader accepts a multi-byte UTF-8 sequence split across fragments", "[net][frame]") {
+    std::string const euroSign = "\xE2\x82\xAC";  // U+20AC, 3 bytes
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(fragmentFrame(WsOpcode::kText, euroSign.substr(0, 1), /*fin=*/false));
+    reader.feed(fragmentFrame(WsOpcode::kContinuation, euroSign.substr(1), /*fin=*/true));
+    auto const frame = requireFrame(reader);
+    CHECK(frame.payload == euroSign);
+}
+
+TEST_CASE("WsFrameReader rejects a UTF-8 sequence broken across fragments", "[net][frame]") {
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(fragmentFrame(WsOpcode::kText, "\xE2", /*fin=*/false));
+    REQUIRE_FALSE(reader.tryExtractFrame().has_value());
+    reader.feed(fragmentFrame(WsOpcode::kContinuation, "\x28\xAC", /*fin=*/true));  // 0x28 is not a continuation byte
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a text message ending mid multi-byte sequence", "[net][frame]") {
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kText, "\xE2\x82", /*mask=*/true));  // FIN=1, incomplete 3-byte sequence
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("encodeWsFrame draws a fresh mask key every call", "[net][frame]") {
+    std::string const wireA = encodeWsFrame(WsOpcode::kText, "same", /*mask=*/true);
+    std::string const wireB = encodeWsFrame(WsOpcode::kText, "same", /*mask=*/true);
+    CHECK(wireA.substr(2, 4) != wireB.substr(2, 4));  // bytes [2,6) are the mask key
 }

@@ -53,7 +53,9 @@ namespace {
 // test isolates SocketServer's correctness.
 class RawWsClient {
 public:
-    explicit RawWsClient(std::uint16_t port) {
+    // Reads frames sent by the server under test (a real SocketServer),
+    // which RFC 6455 §5.1 forbids from masking the frames it sends.
+    explicit RawWsClient(std::uint16_t port) : _reader(/*expectMasked=*/false) {
         _socket = morph::net::detail::TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
         morph::net::detail::ParsedWsUrl url{"127.0.0.1", port, "/"};
         std::string leftover = morph::net::detail::performClientHandshake(_socket, url);

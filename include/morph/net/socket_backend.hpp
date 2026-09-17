@@ -602,7 +602,7 @@ private:
             }
             if (frame->opcode == WsOpcode::kClose) {
                 try {
-                    sendFrame(WsOpcode::kClose, "");
+                    sendFrame(WsOpcode::kClose, frame->payload);
                 } catch (const std::exception&) {
                 }
                 return false;
@@ -624,7 +624,9 @@ private:
     }
 
     void readLoop(const std::string& leftover) {
-        ::morph::net::detail::WsFrameReader reader;
+        // Client role: RFC 6455 §5.1 forbids a server from masking the
+        // frames it sends, so this reader must reject a masked one.
+        ::morph::net::detail::WsFrameReader reader{/*expectMasked=*/false};
         reader.feed(leftover);
         char buf[4096];
         for (;;) {

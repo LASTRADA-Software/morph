@@ -143,7 +143,9 @@ struct SlowAuthorizer : morph::session::IAuthorizer {
 // (client) role against a real SocketServer.
 class FakeWsServer {
 public:
-    FakeWsServer() : _listener(morph::net::detail::TcpSocket::listen(0)) {}
+    // Reads frames sent by the client under test (a real SocketBackend),
+    // which RFC 6455 §5.1 requires to mask every frame it sends.
+    FakeWsServer() : _listener(morph::net::detail::TcpSocket::listen(0)), _reader(/*expectMasked=*/true) {}
 
     [[nodiscard]] std::uint16_t port() const { return _listener.boundPort(); }
 
