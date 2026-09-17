@@ -9,6 +9,10 @@ API surface).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`Rational` no longer invokes undefined behaviour on `INT64_MIN`.** The whole-integer constructor now canonicalises like the other constructors, and unary negation, `abs`, `reciprocal`, and multiplication cross-cancellation remain defined even if the public numerator is manually set to `INT64_MIN`. Unrepresentable magnitude is clamped to `INT64_MAX`, matching the existing saturation policy.
+
 ### Changed
 
 - **`morph::log` no longer takes over a consumer's `stderr` by default.**

@@ -359,6 +359,36 @@ TEST_CASE("An intermediate-only overflow saturates toward the true sign", "[rati
     CHECK((negLhs + negRhs).numerator == -kMax);
 }
 
+TEST_CASE("Whole-integer INT64_MIN construction is canonicalised", "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                 morph::log::LogLevel::error};
+
+    const Rational value{kMin, DecimalPlaces{2}};
+    CHECK(value.numerator == -kMax);
+    CHECK(value.denominator == 1);
+}
+
+TEST_CASE("Public INT64_MIN numerator operations stay defined", "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                 morph::log::LogLevel::error};
+
+    Rational raw{0, DecimalPlaces{2}};
+    raw.numerator = kMin;
+
+    CHECK((-raw).numerator == kMax);
+    CHECK(abs(raw).numerator == kMax);
+
+    const auto inverse = raw.reciprocal();
+    REQUIRE(inverse.has_value());
+    CHECK(inverse->numerator == -1);
+    CHECK(inverse->denominator == kMax);
+
+    CHECK((raw * whole(2)).numerator == -kMax);
+    const auto checked = checkedMul(raw, whole(2));
+    REQUIRE_FALSE(checked.has_value());
+    CHECK(checked.error() == RationalError::Overflow);
+}
+
 TEST_CASE("A numerator of INT64_MIN is clamped, not undefined", "[rational][checked][saturate]") {
     std::vector<std::string> logged;
     const morph::log::ScopedLoggerOverride capture{
