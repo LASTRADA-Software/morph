@@ -1379,9 +1379,13 @@ before sending — see
 Reconnect is configured by
 `SocketBackendConfig` (aliased `SocketBackend::Config`), with the same four
 fields and defaults as `QtWebSocketBackendConfig` (`reconnectEnabled`,
-`initialReconnectDelay`, `maxReconnectDelay`, `backoffMultiplier`) plus one new
-field, `connectTimeout` (default 5 s), bounding the initial/reconnect TCP
-connect attempt. `waitForConnected(timeout = 5000ms)` blocks the calling
+`initialReconnectDelay`, `maxReconnectDelay`, `backoffMultiplier`) plus two new
+fields: `connectTimeout` (default 5 s), bounding the initial/reconnect TCP
+connect attempt, and `handshakeTimeout` (default 10 s), bounding the
+handshake response read that follows a successful connect — applied as
+`SO_RCVTIMEO` for that read only, then cleared before the normal read loop,
+which is meant to block indefinitely waiting for the next frame.
+`waitForConnected(timeout = 5000ms)` blocks the calling
 thread on a condition variable until connected or the timeout elapses — the
 non-Qt equivalent of pumping the Qt event loop. The constructor takes a
 `ws://` URL string (`wss://` throws immediately — see Limitations) and starts
@@ -1774,6 +1778,8 @@ not a behavior change to the existing loopback-only default.
 | `maxReconnectDelay` | `std::chrono::milliseconds` | `30 s` |
 | `backoffMultiplier` | `double` | `2.0` |
 | `connectTimeout` | `std::chrono::milliseconds` | `5 s` |
+| `sendTimeout` | `std::chrono::milliseconds` | `30 s` |
+| `handshakeTimeout` | `std::chrono::milliseconds` | `10 s` |
 
 ### `SocketBackend` (namespace `morph::net`)
 
@@ -1944,17 +1950,17 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   by connection churn — acceptable for a reference transport (see the
   connection-scoping bullet above) but worth knowing before running a very
   long-lived `SocketServer` under heavy connection churn.
-- **`SocketBackend`'s destructor can block up to `Config::connectTimeout`.**
-  If destruction races an in-flight (re)connect attempt, the TCP connect phase
-  is bounded by `connectTimeout`, but the handshake read that follows a
-  successful TCP connect has no separate timeout in this reference
-  implementation — a peer that completes the TCP handshake but never speaks
-  (or never finishes) the WebSocket Upgrade leaves the I/O thread, and
-  therefore the destructor's join, waiting for the OS to notice. This is an
-  accepted, documented limitation of the reference implementation, not a bug
-  to route around: production code that needs a hard bound on teardown time
-  should not construct a `SocketBackend` against an untrusted or unreliable
-  peer without an external watchdog.
+- **`SocketBackend`'s destructor can block up to `Config::connectTimeout` plus
+  `Config::handshakeTimeout`.** If destruction races an in-flight (re)connect
+  attempt, the TCP connect phase is bounded by the former and the handshake
+  response read that follows a successful TCP connect is bounded by the
+  latter (`SO_RCVTIMEO` on the not-yet-published socket; morph#535 — a peer
+  that completes the TCP handshake but never speaks, or never finishes, the
+  WebSocket Upgrade used to leave the I/O thread, and therefore the
+  destructor's join, waiting forever). Neither bound is a hard real-time
+  guarantee — both are ordinary blocking-socket timeouts, subject to the same
+  scheduling slop as any other syscall — so production code with a genuine
+  hard deadline on teardown should still not depend on this alone.
 - **Graceful shutdown never preempts a running action.** `beginShutdown()`,
   `drainedWithin()`, and `closeGracefully()` only stop new work from arriving
   and wait for old work to finish; a model whose action runs longer than the

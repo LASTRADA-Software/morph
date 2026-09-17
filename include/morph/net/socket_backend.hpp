@@ -44,6 +44,21 @@ struct SocketBackendConfig {
     /// nothing able to release it (morph#506). Generous on purpose: it bounds a
     /// send making *no* progress, not a slow one. Zero disables it.
     std::chrono::milliseconds sendTimeout{30000};
+    /// @brief Bound on the handshake response read that follows a successful
+    /// TCP connect.
+    ///
+    /// Applied as `SO_RCVTIMEO` for the duration of the handshake read only
+    /// -- cleared once the handshake completes, since the normal read loop is
+    /// meant to block indefinitely waiting for the next frame. Without this,
+    /// a peer that accepts the TCP connection and then never writes (a
+    /// listener that never completes the WS upgrade -- a TCP load balancer
+    /// connecting lazily to its backend would do this) leaves the io thread
+    /// parked in a blocking `recv` with nothing to unblock it, which in turn
+    /// wedges `~SocketBackend` forever: the destructor's escape hatch only
+    /// reaches a socket already published to `_socket`, and that publish
+    /// happens only *after* the handshake (morph#535). Zero disables it
+    /// (the kernel default, block forever).
+    std::chrono::milliseconds handshakeTimeout{10000};
 };
 
 /// @brief `IBackend` implementation that communicates with a `RemoteServer`
@@ -87,11 +102,11 @@ public:
 
     /// @brief Shuts down the I/O thread and resolves any still-pending completions.
     ///
-    /// @note May block up to `Config::connectTimeout` if destruction races an
-    /// in-flight (re)connect attempt — the TCP connect phase is bounded by
-    /// that timeout, but the handshake read that follows a successful TCP
-    /// connect has no separate timeout of its own in this reference
-    /// implementation. See `docs/spec/core/backend.md`'s `morph::net` section.
+    /// @note May block up to `Config::connectTimeout` plus `Config::handshakeTimeout`
+    /// if destruction races an in-flight (re)connect attempt — the TCP
+    /// connect phase is bounded by the former, and the handshake response
+    /// read that follows a successful TCP connect is bounded by the latter.
+    /// See `docs/spec/core/backend.md`'s `morph::net` section.
     ~SocketBackend() override {
         _shuttingDown.store(true);
         // Under `_socketMtx`, and it has to be -- see morph#506, which proposed
@@ -658,7 +673,21 @@ private:
                     // _socketMtx by a peer that stopped reading (morph#506).
                     (void)socket.setSendTimeout(_cfg.sendTimeout);
                 }
+                if (_cfg.handshakeTimeout.count() > 0) {
+                    // Bounds the handshake response read, which otherwise has
+                    // no timeout of its own and can park this thread forever
+                    // against a peer that accepts and then stays silent
+                    // (morph#535) -- and this fd is not yet published to
+                    // `_socket`, so the destructor cannot reach it either.
+                    (void)socket.setRecvTimeout(_cfg.handshakeTimeout);
+                }
                 std::string leftover = ::morph::net::detail::performClientHandshake(socket, _url);
+                if (_cfg.handshakeTimeout.count() > 0) {
+                    // The normal read loop blocks indefinitely waiting for
+                    // the next frame by design; only the handshake read is
+                    // meant to be bounded.
+                    (void)socket.setRecvTimeout(std::chrono::milliseconds{0});
+                }
                 {
                     std::scoped_lock lock{_socketMtx};
                     _socket = std::move(socket);

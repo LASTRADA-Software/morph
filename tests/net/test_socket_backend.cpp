@@ -8,6 +8,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <functional>
+#include <future>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -749,6 +750,46 @@ TEST_CASE("SocketBackend: attachModel on a disconnected socket throws instead of
         backend.attachModel("SbEchoModel", nullptr, morph::backend::detail::InstanceIdentity{.primary = "k1"},
                             morph::exec::detail::ModelId{0}),
         Catch::Matchers::ContainsSubstring("attach failed"));
+}
+
+TEST_CASE("SocketBackend: ~SocketBackend does not hang against a peer that stalls the handshake",
+          "[net][socket_backend]") {
+    // Regression coverage for morph#535. A TCP listener need never call
+    // accept() for a connecting client's connect() to succeed -- the kernel
+    // completes the three-way handshake into the listen backlog on its own.
+    // That gives a peer that is connected at the TCP level but writes
+    // nothing, which used to leave the client's WS handshake read (no
+    // SO_RCVTIMEO of its own) blocked forever, and the fd was not yet
+    // published to `_socket` for the destructor's escape hatch to reach.
+    morph::net::detail::TcpSocket const listener = morph::net::detail::TcpSocket::listen(0);
+    std::uint16_t const port = listener.boundPort();
+
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+    cfg.handshakeTimeout = std::chrono::milliseconds{300};
+
+    auto backend = std::make_unique<morph::net::SocketBackend>(
+        "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg);
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});  // let the io thread's connect() land
+
+    std::promise<void> destroyed;
+    std::future<void> const destroyedFuture = destroyed.get_future();
+    // `backend` is moved into the thread rather than captured by reference:
+    // if the destructor never returns and this thread is detached below, the
+    // TEST_CASE's own `backend` must not still hold (and then destroy, at
+    // scope exit) the same object the detached thread is destroying --
+    // that would be a second, concurrent destructor call on it.
+    std::thread destroyer([owned = std::move(backend), &destroyed]() mutable {
+        owned.reset();
+        destroyed.set_value();
+    });
+    bool const finished = destroyedFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready;
+    if (finished) {
+        destroyer.join();
+    } else {
+        destroyer.detach();  // still stuck in the hung destructor; leaking beats hanging the whole suite
+    }
+    REQUIRE(finished);
 }
 
 TEST_CASE("morph::net::SocketBackend::notifyBackendChanged is a documented no-op", "[net][socket_backend]") {
