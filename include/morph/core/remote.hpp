@@ -336,28 +336,31 @@ private:
     ///
     /// Peeks at @p msg's `kind`/`modelId` — a cheap, best-effort decode, thrown
     /// away immediately either way — and, for an `execute` naming a `modelId`,
-    /// takes an execute-ordering ticket (see `_executeGate`'s own doc comment
-    /// on the class-private members, and
-    /// `morph::backend::detail::ExecuteOrderGate::take`) *before* posting to
-    /// `_pool`, so two same-model `execute`s
-    /// posted back-to-back always take their tickets in call order — the
-    /// same order the transport called `handle()` in, i.e. send order. If
-    /// this peek fails to decode at all, or isn't an `execute`, no ticket is
-    /// taken; `dispatchMessage` still does the real (only) decode moments
-    /// later on the pool thread and produces the canonical error for
-    /// genuinely malformed input — this peek only ever *adds* a ticket for a
-    /// well-formed `execute`, it never changes what gets sent to
-    /// `dispatchMessage` or how errors are reported.
+    /// takes an execute-ordering ticket and hands the dispatch work to `_pool`
+    /// in the *same* atomic step (`_executeGate`'s own doc comment on the
+    /// class-private members, and
+    /// `morph::backend::detail::ExecuteOrderGate::takeAndPost`), so two
+    /// same-model `execute`s posted back-to-back always reach the pool's queue
+    /// in ticket order — the same order the transport called `handle()` in,
+    /// i.e. send order — no matter how the calling threads are scheduled
+    /// relative to each other (morph#519: taking the ticket and enqueueing as
+    /// two separate, unlocked steps let two concurrent transport threads'
+    /// tickets and enqueue order diverge, which could park every pool worker
+    /// in `awaitTurn` permanently). If this peek fails to decode at all, or
+    /// isn't an `execute`, no ticket is taken; `dispatchMessage` still does the
+    /// real (only) decode moments later on the pool thread and produces the
+    /// canonical error for genuinely malformed input — this peek only ever
+    /// *adds* a ticket for a well-formed `execute`, it never changes what gets
+    /// sent to `dispatchMessage` or how errors are reported.
     /// @param msg   JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
     /// @param reply Callback invoked with the JSON-encoded reply envelope.
     /// @param cid   Connection scope; `0` means unscoped (see `handle()`'s own doc).
     void handleImpl(std::string msg, std::function<void(std::string)> reply, ConnectionId cid) {
         auto self = shared_from_this();
-        std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> ticket;
+        std::optional<::morph::exec::detail::ModelId> executeMid;
         try {
             if (auto peek = ::morph::wire::decode(msg); peek.kind == "execute" && peek.modelId != 0) {
-                ::morph::exec::detail::ModelId const mid{peek.modelId};
-                ticket.emplace(mid, _executeGate.take(mid));
+                executeMid = ::morph::exec::detail::ModelId{peek.modelId};
             }
         } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
             // Malformed input: no ticket taken (there is no well-formed
@@ -366,16 +369,27 @@ private:
             // duplicating that error path here would serve no purpose since
             // this peek's only job is deciding whether to take a ticket.
         }
-        // Owns the ticket for the window between taking it and successfully
-        // handing it to the pool: if `_pool.post` throws, the guard releases it
-        // on the way out instead of stranding it. It is disarmed only once the
-        // post has returned, at which point the posted task — which adopts the
-        // ticket into its own guard in `dispatchMessage` — is its owner.
-        ExecuteTicketGuard ticketGuard{_executeGate, ticket};
-        _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
-            self->dispatchMessage(msg, reply, cid, ticket);
-        });
-        ticketGuard.disarm();
+        // Moves msg/reply into its own captures exactly once, on whichever of
+        // the two calls below actually happens, and enqueues the one shared
+        // dispatch task -- ticketed or not.
+        auto doPost = [self, msg = std::move(msg), reply = std::move(reply),
+                       cid](::morph::backend::detail::ExecuteOrderGate::Ticket ticket) mutable {
+            self->_pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
+                self->dispatchMessage(msg, reply, cid, std::move(ticket));
+            });
+        };
+        if (executeMid) {
+            // Ticket and enqueue happen inside one call, under the gate's own
+            // lock: if `_pool.post` throws, `takeAndPost` releases the ticket
+            // itself before rethrowing (see its own doc comment) — no local
+            // `ExecuteTicketGuard` is needed here the way the old two-step
+            // take()-then-post() shape required one. `doPost` already matches
+            // `takeAndPost`'s callback signature, so it is passed straight
+            // through rather than behind a redundant forwarding lambda.
+            _executeGate.takeAndPost(*executeMid, doPost);
+        } else {
+            doPost({});
+        }
     }
 
 public:
@@ -966,10 +980,10 @@ private:
     // the rest of this frame — including `dispatchExecute`, the only branch that
     // does anything with it beyond releasing it. Every other `kind` ignores it;
     // `handleImpl` never takes one for a non-`execute` envelope in the first
-    // place, so it is always `std::nullopt` for those.
+    // place, so it is always the empty `Ticket` for those.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0,
-                         std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> executeTicket = {}) {
+                         ::morph::backend::detail::ExecuteOrderGate::Ticket executeTicket = {}) {
         // Adopted before anything that can fail, including the decode: from
         // here on every way out of this function — each early return below,
         // the outer catch, and any branch a later change adds — releases the
@@ -1672,11 +1686,15 @@ private:
     // fast-reject path exactly as fast as it always was.
     //
     // The gate orders only the *moment of the `_strand.post()` call itself*,
-    // not the pipeline before it: a ticket is handed out synchronously in
+    // not the pipeline before it: a ticket is handed out and the dispatch
+    // work is handed to `_pool` in one atomic step, synchronously in
     // `handleImpl` (called directly from `handle()`, which runs on
     // whatever single thread the transport calls it from -- in true send
-    // order, nothing async yet) for every `execute` with a known `modelId`,
-    // *before* posting to `_pool`. `dispatchExecute` waits for its ticket's
+    // order, nothing async yet) for every `execute` with a known `modelId`
+    // (see `ExecuteOrderGate::takeAndPost`, morph#519 -- taking the ticket
+    // and posting to `_pool` as two separate, unlocked steps let two
+    // concurrent transport threads' ticket order and enqueue order diverge).
+    // `dispatchExecute` waits for its ticket's
     // turn only immediately before the pre-existing `_strand.post(mid, ...)`
     // call, and releases the next ticket's turn either right after posting
     // (live model) or immediately on a "model not found"/other early-return
@@ -1697,19 +1715,26 @@ private:
     // Keyed by ModelId internally, not held forever: a model with no
     // outstanding tickets has no entry in the gate's map at all (erased once
     // its last ticket is released), so this never grows unbounded across the
-    // server's lifetime the way a per-model map with no cleanup would.
+    // server's lifetime the way a per-model map with no cleanup would. Under
+    // load this erase-and-recreate can happen while a same-model ticket is
+    // still in flight (its dispatch task enqueued but not yet reached by a
+    // pool worker), which is why `handleImpl`/`dispatchExecute` carry an
+    // `ExecuteOrderGate::Ticket` end to end rather than a bare `ModelId` --
+    // it is bound to the exact `Gate` it was issued from, so a fresh map
+    // lookup finding a newer generation can never redirect it.
     //
-    // The gate itself -- `take`/`awaitTurn`/`release`, the out-of-order-release
-    // handling that closed issue #449, and the "gate already gone" defensive
-    // branches for #348/#351 -- is extracted to
+    // The gate itself -- `take`/`takeAndPost`/`awaitTurn`/`release`, the
+    // out-of-order-release handling that closed issue #449, the atomic
+    // take-and-enqueue step that closed issue #519, and the "gate already
+    // gone" defensive branches for #348/#351 -- is extracted to
     // `morph::backend::detail::ExecuteOrderGate`
     // (`include/morph/core/detail/execute_order_gate.hpp`), which has its own
     // direct unit tests (`tests/test_execute_order_gate.cpp`). What stays here
-    // is purely the wiring: `handleImpl` calls `_executeGate.take(mid)`
-    // synchronously before posting to `_pool`; `dispatchExecute` calls
-    // `ticketGuard.awaitTurn()` immediately before `_strand.post(mid, ...)`;
-    // every exit path releases through `ExecuteTicketGuard`, explicitly or via
-    // its destructor.
+    // is purely the wiring: `handleImpl` calls `_executeGate.takeAndPost(mid,
+    // ...)`, which hands out the ticket and posts to `_pool` inside one
+    // critical section; `dispatchExecute` calls `ticketGuard.awaitTurn()`
+    // immediately before `_strand.post(mid, ...)`; every exit path releases
+    // through `ExecuteTicketGuard`, explicitly or via its destructor.
     ::morph::backend::detail::ExecuteOrderGate _executeGate;
     // mutable: health() is const and must still be able to lock this to read
     // _models.size() safely from any thread.

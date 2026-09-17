@@ -572,10 +572,11 @@ because `awaitTurn` waits with no deadline.
 **The rule is structural, not a convention.** A ticket is owned by an
 `ExecuteTicketGuard` (`morph::backend::detail`, alongside `ExecuteOrderGate` in
 `execute_order_gate.hpp`; `remote.hpp` keeps a `using` alias so call sites read
-unqualified) from the moment `take` returns: `handleImpl` holds one across the
-pool post, and
-`dispatchMessage` adopts the ticket into another for the whole of its own frame,
-`dispatchExecute` included. The guard releases on destruction, so *every* exit
+unqualified) from the moment a ticket is issued: `dispatchMessage` adopts the
+ticket into one for the whole of its own frame, `dispatchExecute` included.
+`handleImpl` no longer holds a separate guard across the pool post — morph#519
+folded the take and the post into one `takeAndPost` call, so there is no window
+between them for a guard to cover. The guard releases on destruction, so *every* exit
 path is covered — each explicit `return`, every exception, and any branch a
 later change adds. Two members opt out deliberately:
 
@@ -583,8 +584,12 @@ later change adds. Two members opt out deliberately:
   shutdown gate, and immediately after the successful `_strand.post`, so those
   paths free the gate *before* writing their reply instead of at end of scope;
   and
-- `disarm()`, used once, in `handleImpl`, where ownership is genuinely handed
-  on to the posted pool task.
+- `disarm()`, which hands ownership on rather than releasing. It has **no
+  production caller** since morph#519 replaced `handleImpl`'s take-then-post
+  pair with `takeAndPost`; it is retained as part of the guard's API and
+  exercised only by tests. Calling it without taking ownership elsewhere
+  discards the only handle to an outstanding ticket, which can then never be
+  released — the #348/#351 failure mode.
 
 It was a per-call-site convention until it had been missed twice — by the
 shutdown gate (issue #348) and by every exception unwinding out of
@@ -596,10 +601,36 @@ neither could recur through a hand-written release being forgotten again.
 map keyed by `ModelId` under a dedicated mutex. The entry is created on demand
 by the first ticket and **erased** once `nextToRun` catches up with
 `nextTicket` — a model with no in-flight `execute` leaves no trace, so the map
-does not grow across the server's lifetime. A waiter holds the gate by
-`shared_ptr` so a release that erases the entry mid-wait cannot pull it out
-from under it, and `awaitTurn` returns immediately if the entry is
-already gone.
+does not grow across the server's lifetime.
+
+A `Ticket` carries the `shared_ptr` to the exact gate it was issued from, so a
+drain-and-recreate of the map entry between issuing a ticket and awaiting its
+turn cannot redirect the wait onto a *different* gate's counters. The
+`ModelId`-keyed `awaitTurn` overload returns immediately when the entry is
+already gone; the `Ticket` overload cannot, since it holds its gate alive by
+construction — it instead returns as soon as `nextToRun` has reached **or
+passed** its number, which is what keeps a ticket released by its other owner
+from parking a worker forever.
+
+**One enqueue mutex, gate-wide.** `takeAndPost` holds an enqueue mutex from
+before it mints a ticket until after `postFn` returns, which is what makes the
+take and the enqueue atomic (morph#519). That mutex is **one per gate, not one
+per model**, and is acquired *before* the bookkeeping mutex, never the reverse.
+
+`postFn` is opaque: on a `ThreadPoolExecutor` it only enqueues, but on a
+synchronous executor it runs the whole dispatch chain inline, including any
+re-entrant `takeAndPost` that chain triggers. A per-model mutex therefore gave
+two threads two locks to take in opposite orders — one inside model 1's
+callback reaching for model 2, the other the mirror — and they deadlocked.
+One mutex cannot form a cycle with itself. It is recursive because the same
+thread can legitimately re-enter through a synchronous executor.
+
+The cost is stated rather than hidden: `takeAndPost` serialises across every
+model, and on a synchronous executor that serialises the dispatch those
+callbacks perform. It also means a caller that blocks *inside* `postFn` blocks
+every other `takeAndPost`, for every model — which is why a re-entrant
+same-model `awaitTurn` (a ticket waiting on one its own caller has not released
+yet) is a documented misuse rather than a supported pattern.
 
 **Releases are not ordered, and `nextToRun` must survive that.** `nextToRun`
 means *the lowest ticket that has not released yet* — which is exactly what

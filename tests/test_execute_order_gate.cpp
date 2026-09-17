@@ -25,10 +25,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <morph/core/detail/execute_order_gate.hpp>
-#include <optional>
 #include <thread>
-#include <utility>
 
 #include "test_support.hpp"
 
@@ -250,14 +249,55 @@ TEST_CASE(
     CHECK(gate.gateCount() == 0U);
 }
 
+// ── Ticket: immune to a drain-and-recreate of the map entry ────────────────
+
+TEST_CASE(
+    "ExecuteOrderGate: a stray release of an already-drained ticket does not disturb "
+    "a newer gate created for the same model afterwards",
+    "[remote][execute-order-gate][ticket]") {
+    // Threadless reproduction of the scenario `Ticket`'s own doc comment
+    // describes: a caller that (a duplicate delivery, or any other bug that
+    // violates the "release exactly once" contract) re-releases a ticket
+    // whose gate has already fully drained and been erased, *after* a
+    // brand-new gate has since been created for the same model. `staleTicket`
+    // still carries a `shared_ptr` to the OLD, detached `Gate` object -- this
+    // is what `release(const Ticket&)`'s identity check
+    // (`iter->second.get() == &gate` in the by-`Ticket` overload) exists to
+    // guard against: without it, the stray release would find *whatever is
+    // currently at* `_gates[mid]` -- the new, unrelated gate -- and could
+    // erase it (or otherwise misinterpret its state) even though it belongs
+    // to a completely different ticket epoch.
+    //
+    // This is precisely the class of bug the old by-`ModelId` API
+    // (`take`/`awaitTurn(mid, ticket)`/`release(mid, ticket)`) remains
+    // exposed to, since it always re-derives "the gate for mid" by a fresh
+    // map lookup -- see `Ticket`'s own doc comment.
+    ExecuteOrderGate gate;
+    ModelId const mid{1};
+
+    auto const staleTicket = gate.takeTicket(mid);  // First epoch's only ticket.
+    gate.release(staleTicket);                      // Fully drains it -- its gate is erased.
+    CHECK(gate.gateCount() == 0U);
+
+    auto const freshTicket = gate.takeTicket(mid);  // A brand-new gate for the same mid.
+    CHECK(gate.gateCount() == 1U);
+
+    // The stray, out-of-contract second release: bound to the first epoch's
+    // long-gone gate, not the current one.
+    gate.release(staleTicket);
+    CHECK(gate.gateCount() == 1U);  // The new epoch's gate is untouched -- still outstanding.
+
+    gate.release(freshTicket);
+    CHECK(gate.gateCount() == 0U);
+}
+
 // ── ExecuteTicketGuard ───────────────────────────────────────────────────────
 
 TEST_CASE("ExecuteTicketGuard: releases its ticket on destruction", "[remote][execute-order-gate][guard]") {
     ExecuteOrderGate gate;
     ModelId const mid{1};
     {
-        auto const ticket = gate.take(mid);
-        ExecuteTicketGuard guard{gate, std::make_pair(mid, ticket)};
+        ExecuteTicketGuard guard{gate, gate.takeTicket(mid)};
         CHECK(gate.gateCount() == 1U);
     }  // Destructor releases; nothing else does.
     CHECK(gate.gateCount() == 0U);
@@ -266,8 +306,7 @@ TEST_CASE("ExecuteTicketGuard: releases its ticket on destruction", "[remote][ex
 TEST_CASE("ExecuteTicketGuard: release() is explicit-then-idempotent", "[remote][execute-order-gate][guard]") {
     ExecuteOrderGate gate;
     ModelId const mid{1};
-    auto const ticket = gate.take(mid);
-    ExecuteTicketGuard guard{gate, std::make_pair(mid, ticket)};
+    ExecuteTicketGuard guard{gate, gate.takeTicket(mid)};
     guard.release();
     CHECK(gate.gateCount() == 0U);
     guard.release();  // Second call: no ticket held, must not double-release.
@@ -277,21 +316,21 @@ TEST_CASE("ExecuteTicketGuard: release() is explicit-then-idempotent", "[remote]
 TEST_CASE("ExecuteTicketGuard: disarm() gives up ownership without releasing", "[remote][execute-order-gate][guard]") {
     ExecuteOrderGate gate;
     ModelId const mid{1};
-    auto const ticket = gate.take(mid);
+    auto ticket = gate.takeTicket(mid);
     {
-        ExecuteTicketGuard guard{gate, std::make_pair(mid, ticket)};
+        ExecuteTicketGuard guard{gate, ticket};  // Guard holds its own copy.
         guard.disarm();
     }  // Destructor: ticket already disarmed, must not release it.
     CHECK(gate.gateCount() == 1U);
     // The caller that adopted ownership via disarm() is responsible for the
     // eventual release; simulate that here so the gate is left clean.
-    gate.release(mid, ticket);
+    gate.release(ticket);
     CHECK(gate.gateCount() == 0U);
 }
 
 TEST_CASE("ExecuteTicketGuard: constructed with no ticket is inert", "[remote][execute-order-gate][guard]") {
     ExecuteOrderGate gate;
-    ExecuteTicketGuard guard{gate, std::nullopt};
+    ExecuteTicketGuard guard{gate, {}};
     guard.awaitTurn();  // No-op: nothing to wait for.
     guard.release();    // No-op: nothing to release.
     CHECK(gate.gateCount() == 0U);
@@ -310,8 +349,7 @@ TEST_CASE("ExecuteTicketGuard: awaitTurn forwards to the gate for the held ticke
     ExecuteOrderGate gate;
     ModelId const mid{1};
     auto const t0 = gate.take(mid);
-    auto const t1 = gate.take(mid);
-    ExecuteTicketGuard guard{gate, std::make_pair(mid, t1)};
+    ExecuteTicketGuard guard{gate, gate.takeTicket(mid)};
 
     std::atomic<bool> t1Turn{false};
     std::thread waiter{[&] {
@@ -330,4 +368,134 @@ TEST_CASE("ExecuteTicketGuard: awaitTurn forwards to the gate for the held ticke
 
     guard.release();
     CHECK(gate.gateCount() == 0U);
+}
+
+// ── takeAndPost: same-thread re-entrancy and idempotent release ────────────
+
+TEST_CASE(
+    "ExecuteOrderGate: takeAndPost's postFn may re-enter takeAndPost for the same model, "
+    "on the same thread, without deadlocking",
+    "[remote][execute-order-gate]") {
+    // A synchronous (inline) executor runs postFn's whole dispatch chain
+    // before takeAndPost returns -- including a handler that synchronously
+    // issues another execute against the *same* model (the shape
+    // SimulatedRemoteBackend::execute() calling back into
+    // RemoteServer::handle() takes). Gate::enqueueMtx is a
+    // std::recursive_mutex specifically so this does not self-deadlock: the
+    // outer call still holds it when the inner one re-locks it, on the same
+    // thread.
+    ExecuteOrderGate gate;
+    ModelId const mid{1};
+    int reentryDepth = 0;
+    gate.takeAndPost(mid, [&](const ExecuteOrderGate::Ticket& outer) {
+        ++reentryDepth;
+        REQUIRE(reentryDepth == 1);
+        CHECK_FALSE(outer.empty());
+        // Would hang forever pre-fix (self-deadlock on a plain std::mutex).
+        gate.takeAndPost(mid, [&](const ExecuteOrderGate::Ticket& inner) {
+            CHECK_FALSE(inner.empty());
+            gate.release(inner);
+        });
+        gate.release(outer);
+    });
+    CHECK(gate.gateCount() == 0U);  // Both tickets released; gate drained.
+}
+
+TEST_CASE(
+    "ExecuteOrderGate: releasing the same Ticket twice is a safe no-op that cannot corrupt "
+    "out-of-order state",
+    "[remote][execute-order-gate]") {
+    // Regression for the class of bug where a Ticket reaches two independent
+    // owners (ExecuteTicketGuard, and takeAndPost's own exception path, when
+    // a non-std::exception throw escapes dispatchMessage's narrower catch in
+    // RemoteServer). Simulated here directly: release the same Ticket twice
+    // and confirm the second call is inert rather than inserting an
+    // already-passed ticket number into releasedOutOfOrder a second time --
+    // which would sit there as that set's permanent minimum and silently
+    // block every future out-of-order release for this gate (issue #449's
+    // own mechanism).
+    ExecuteOrderGate gate;
+    ModelId const mid{1};
+    auto t0 = gate.takeTicket(mid);
+    auto t1 = gate.takeTicket(mid);
+
+    gate.release(t1);  // Out of order: releases ticket 1 before ticket 0.
+    gate.release(t1);  // Double release of the identical ticket -- must be a no-op.
+
+    // If the double release above had corrupted releasedOutOfOrder, this
+    // final, correctly-ordered release would fail to fully drain the gate.
+    gate.release(t0);
+    CHECK(gate.gateCount() == 0U);
+}
+
+// ── Cross-model re-entrancy must not deadlock two threads (morph#519) ───────
+//
+// `takeAndPost` holds an enqueue mutex across `postFn`, and `postFn` is opaque:
+// on a `ThreadPoolExecutor` it only enqueues, but on a synchronous executor it
+// runs the whole dispatch chain inline -- including any re-entrant
+// `takeAndPost` that chain triggers. Synchronous executors are not
+// hypothetical here: `morph::testing::InlineExecutor` is used as
+// `RemoteServer`'s pool in tests/test_policy_hardening.cpp,
+// tests/test_register_authorization.cpp and tests/test_pinned_facts.cpp, and in
+// five of examples/concepts/.
+//
+// An earlier revision gave every `Gate` its own enqueue mutex. That handed two
+// threads two locks to take in opposite orders -- thread A inside model 1's
+// callback reaching for model 2, thread B the mirror -- and they deadlocked.
+// Measured: this exact case hung every run against the per-model version, and
+// completes against the gate-wide one. `master` could not exhibit it at all,
+// holding no lock across a caller callback, so it was a regression rather than
+// a pre-existing hazard.
+//
+// A gate-wide mutex cannot form a cycle with itself. Note what this test
+// deliberately does *not* do: require both threads to be inside `postFn` at
+// once. A gate-wide lock prevents that by design, so a barrier would deadlock
+// on itself and prove nothing about lock ordering.
+
+TEST_CASE("ExecuteOrderGate: two threads nesting takeAndPost across models do not deadlock",
+          "[execute-order-gate][concurrency]") {
+    // Owned by a unique_ptr and leaked on the hang path, like the gating
+    // fixtures in tests/test_remote_execute_ordering.cpp: the threads detached
+    // below go on reaching through the gate, so it has to outlive them, and a
+    // regression here must be a reported failure rather than a binary that
+    // hangs with no output.
+    auto ownedGate = std::make_unique<morph::backend::detail::ExecuteOrderGate>();
+    auto* const gate = ownedGate.get();
+    morph::exec::detail::ModelId const first{1};
+    morph::exec::detail::ModelId const second{2};
+
+    constexpr int kRounds = 200;  // enough to lose the race reliably, fast enough to be free
+    std::atomic<int> finished{0};
+
+    auto worker = [gate, &finished](morph::exec::detail::ModelId outer, morph::exec::detail::ModelId inner) {
+        for (int round = 0; round < kRounds; ++round) {
+            gate->takeAndPost(outer, [gate, inner](const morph::backend::detail::ExecuteOrderGate::Ticket&) {
+                gate->takeAndPost(inner, [](const morph::backend::detail::ExecuteOrderGate::Ticket&) {});
+            });
+        }
+        ++finished;
+    };
+
+    std::thread forward{[&worker, first, second] { worker(first, second); }};
+    std::thread reverse{[&worker, first, second] { worker(second, first); }};
+
+    const bool completed =
+        morph::testing::waitUntil([&finished] { return finished.load() == 2; }, std::chrono::milliseconds{5000});
+
+    if (!completed) {
+        // Deadlocked: both threads are parked forever on a lock the other
+        // holds. Leak them rather than join, so this reports as a failure --
+        // and leak the gate with them, since they still hold a pointer to it.
+        forward.detach();
+        reverse.detach();
+        // Assigned rather than `(void)ownedGate.release()`: bugprone-unused-return-value
+        // flags the discarded unique_ptr::release(), and a cast to void does not
+        // silence it.
+        [[maybe_unused]] auto* const leakedGate = ownedGate.release();
+    } else {
+        forward.join();
+        reverse.join();
+    }
+
+    REQUIRE(completed);
 }

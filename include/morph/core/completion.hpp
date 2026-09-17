@@ -44,11 +44,35 @@ struct CompletionState {
             if (ready) {
                 return;
             }
-            value = std::move(val);
-            ready = true;
             if (!onOk.empty()) {
+                // Copy from `val` -- and before anything below mutates state --
+                // rather than moving out of `value` after the fact: `value` is
+                // this state's own store, and a `then()` attached *after* this
+                // point (attachThen's `ready && value` branch) reads it again,
+                // so moving out of it left it engaged but moved-from, and a
+                // later attacher silently copied a husk (morph#520). Copying
+                // first, before `onOk` is drained or `value`/`ready` are set,
+                // gives this block the strong exception guarantee against a
+                // throwing copy constructor specifically: if it throws,
+                // nothing here has changed yet -- `onOk` still holds every
+                // handler and the state is still unready -- rather than a
+                // corrupted state that already looks settled with its
+                // handlers already lost.
+                //
+                // `onOk` is drained *last*, after `value`/`ready` are set, so
+                // the same guarantee covers a `T` whose *move* constructor can
+                // throw. Draining first (as an earlier revision did) meant a
+                // throwing `value = std::move(val)` unwound with `savedFns` --
+                // a local -- carrying every handler to its destructor while
+                // `onOk` was already empty: permanently unsettled, no handlers,
+                // and silent, because the destructor's orphan logger only fires
+                // when `error` is set. `std::move` on a vector is noexcept and
+                // `savedVal` is already an independent copy, so the reordering
+                // costs nothing.
+                auto savedVal = val;
+                value = std::move(val);
+                ready = true;
                 auto savedFns = std::move(onOk);
-                auto savedVal = std::move(*value);
                 callback = [savedFns = std::move(savedFns), savedVal = std::move(savedVal)]() mutable {
                     // Every handler but the last sees a copy (the value is only
                     // moved into the final invocation), so an earlier handler
@@ -73,6 +97,9 @@ struct CompletionState {
                         ::morph::log::logError("[completion] then handler threw; continuing with next handler");
                     }
                 };
+            } else {
+                value = std::move(val);
+                ready = true;
             }
         }
         if (callback != nullptr && cbExec != nullptr) {

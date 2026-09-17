@@ -102,19 +102,23 @@ not affect any other handler already stored).
 stored value differently, and the difference is observable:
 
 - *Set-after-attach* (`setValue` finds one or more already-registered `onOk`
-  handlers): every handler but the last is invoked with a **copy** of the
-  value; only the final handler in attachment order receives it **moved**
-  (`std::move(savedVal)`). After dispatch, `value` itself holds a moved-from
-  `T` only if a subsequent `attachThen()` re-attach reads it (see below) — the
-  in-flight closure's own copies are unaffected by that.
+  handlers): a local `savedVal` is **copied from `setValue`'s own parameter**
+  (`auto savedVal = val;`), *before* `value` is ever touched, and that local is
+  what the fan-out closure consumes — every handler but the last gets a copy of
+  it, only the final handler in attachment order receives it **moved**
+  (`std::move(savedVal)`). Either way, `value` itself — the state's own store —
+  is untouched by this: it is set separately, immediately after, by a plain
+  `value = std::move(val)`, so it always holds a genuine, intact `T` once
+  `ready` is true, never a moved-from husk (morph#520; see
+  [Failure modes](#failure-modes)).
 - *Attach-after-ready* (`attachThen` fires now against a settled value): the
   value is **copied** (`savedVal = *value`), leaving `value` intact.
 
 The fire-now copy is what makes a repeated `then()` on an already-settled value
-state fire again with the same result (see [Failure modes](#failure-modes)); a
-move there would hand the second handler a moved-from value. Errors have no such
-asymmetry — an `exception_ptr` is cheap to copy and is copied for every handler
-on both paths, so `error` is never emptied.
+state fire again with the same result — including one attached *after* the
+set-after-attach path above already ran, since `value` was never disturbed by
+it either. Errors have no such asymmetry — an `exception_ptr` is cheap to copy
+and is copied for every handler on both paths, so `error` is never emptied.
 
 `attachOnError` sets `onErrAttached = (cbExec != nullptr)` unconditionally on
 entry, before inspecting the state. So attaching an error handler on a
@@ -285,11 +289,12 @@ throw — they are silent by construction.
   settled result, a mismatched one is a no-op. A late `then()` fires with a
   *copy* of the value (the fire-now path copies; see
   [Shared state](#shared-state--completionstatet)), so the value is not
-  consumed by any fire-now dispatch. If the value was instead delivered via the
-  set-after-attach path (the *last* stored handler received it moved), a
-  subsequent `then()` attach still fires, but against the now moved-from
-  `value` — since `attachThen`'s fire-now path reads `*value` directly, not
-  from the (already-emptied) handler vector.
+  consumed by any fire-now dispatch. This holds regardless of which dispatch
+  path originally delivered the value: `value` is never moved out of `setValue`
+  (morph#520 — see [Shared state](#shared-state--completionstatet)'s "Copy vs.
+  move" bullet), so a `then()` attached after a set-after-attach dispatch fires
+  against the same genuine result the earlier handlers saw, not a moved-from
+  husk.
 
 ## Client-side execute deadline
 

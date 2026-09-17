@@ -18,6 +18,32 @@
 using SyncExecutor = morph::testing::InlineExecutor;
 using LogGuard = morph::log::ScopedLoggerOverride;
 
+namespace {
+
+/// A value whose *copy* constructor throws on demand. `setValue`'s first act on
+/// a state with handlers attached is `auto savedVal = val;` -- the copy
+/// morph#520 introduced -- so this is what exercises the strong exception
+/// guarantee documented there. The flag travels with the value rather than
+/// living in a global so two tests cannot arm each other.
+struct ThrowOnCopy {
+    int payload = 0;
+    bool explode = false;
+
+    ThrowOnCopy() = default;
+    ThrowOnCopy(int value, bool boom) : payload{value}, explode{boom} {}
+    ThrowOnCopy(const ThrowOnCopy& other) : payload{other.payload}, explode{other.explode} {
+        if (explode) {
+            throw std::runtime_error{"copy ctor blew up"};
+        }
+    }
+    ThrowOnCopy(ThrowOnCopy&&) noexcept = default;
+    ThrowOnCopy& operator=(const ThrowOnCopy&) = default;
+    ThrowOnCopy& operator=(ThrowOnCopy&&) noexcept = default;
+    ~ThrowOnCopy() = default;
+};
+
+}  // namespace
+
 TEST_CASE("Completion: multiple onError handlers all fire, in attachment order", "[completion][issue-59]") {
     SyncExecutor exec;
     auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
@@ -172,4 +198,78 @@ TEST_CASE("Completion: mismatched attach (onError on a value-ready state) is sti
 
     REQUIRE_FALSE(errFired1);
     REQUIRE_FALSE(errFired2);
+}
+
+// Regression coverage for morph#520 (part of the sweep tracked in #518, finding F2).
+// setValue() used to move out of its own `value` optional to build the settle-time
+// fan-out closure for handlers attached *before* settling, leaving `value` engaged
+// but holding a moved-from T. A then() attached *after* settling (attachThen's
+// `ready && value` branch) then copied that husk instead of the real value. The
+// value-path-before-settling and error-path-after-settling combinations already had
+// coverage above (and in the onError-after-ready case); this is the one combination
+// that did not: a value-path handler attached before settling, followed by a second
+// one attached after. A short int (as every other test in this file uses) would not
+// reveal the bug -- a moved-from int is still a well-defined int, often still 0 by
+// luck or unchanged by move -- so this uses a heap-allocating string long enough that
+// libstdc++'s SSO cannot mask a real move, matching the issue's own repro.
+TEST_CASE("Completion: a then() attached after settlement observes the same value as one attached before",
+          "[completion][issue-520]") {
+    SyncExecutor exec;
+    auto state = std::make_shared<morph::async::detail::CompletionState<std::string>>();
+    morph::async::Completion<std::string> comp{state, &exec};
+
+    const std::string original = "hello-world-long-enough-to-heap-allocate";
+
+    // Two pre-settle handlers, not one. With a single handler `savedFns.size()`
+    // is 1, so setValue's fan-out loop (`i + 1 < savedFns.size()`) never runs
+    // and only the `savedFns.back()(std::move(savedVal))` arm is exercised --
+    // yet the fan-out is exactly where `savedVal` is read repeatedly, and it is
+    // the arm a future refactor is most likely to break by moving out of
+    // `savedVal` early. The pre-existing [issue-59] multi-handler tests all use
+    // `int`, which cannot reveal a moved-from value.
+    std::string firstSeen;
+    std::string fanOutSeen;
+    comp.then([&](std::string v) { firstSeen = std::move(v); });   // attached BEFORE settling
+    comp.then([&](std::string v) { fanOutSeen = std::move(v); });  // ditto: forces the fan-out arm
+
+    state->setValue(original);
+
+    std::string secondSeen;
+    comp.then([&](std::string v) { secondSeen = std::move(v); });  // attached AFTER settling
+
+    REQUIRE(firstSeen == original);
+    REQUIRE(fanOutSeen == original);
+    REQUIRE(secondSeen == original);
+}
+
+TEST_CASE("Completion: a throwing T copy leaves the state unsettled with every handler intact",
+          "[completion][issue-520]") {
+    // The guarantee `setValue` documents: the copy is taken *before* `onOk` is
+    // drained or `value`/`ready` are set, so a throwing copy constructor must
+    // leave the state exactly as it was -- unready, with every handler still
+    // attached -- rather than half-settled with its handlers already lost.
+    SyncExecutor exec;
+    auto state = std::make_shared<morph::async::detail::CompletionState<ThrowOnCopy>>();
+    morph::async::Completion<ThrowOnCopy> comp{state, &exec};
+
+    int fired = 0;
+    // `const&` parameters: a by-value one would be an extra copy per handler
+    // that this test never reads, and `std::function<void(T)>` accepts either.
+    comp.then([&](const ThrowOnCopy&) { ++fired; });
+    comp.then([&](const ThrowOnCopy&) { ++fired; });
+
+    REQUIRE_THROWS_AS(state->setValue(ThrowOnCopy{7, true}), std::runtime_error);
+
+    CHECK_FALSE(state->ready);
+    CHECK_FALSE(state->value.has_value());
+    CHECK(state->onOk.size() == 2U);
+    CHECK(fired == 0);
+
+    // And the state is still usable afterwards: the failed settlement consumed
+    // nothing, so a later non-throwing one settles normally and both handlers
+    // -- the ones that survived the throw -- run.
+    state->setValue(ThrowOnCopy{9, false});
+
+    CHECK(state->ready);
+    CHECK(fired == 2);
 }
