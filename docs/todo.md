@@ -174,7 +174,7 @@ as the documented client-side path, `examples/qt_tls_client/` demonstrates
 pinned-cert acceptance and MITM rejection end to end, and
 `QtWebSocketServerConfig::bindAddress`/`allowPlaintextExposure` make
 `QtWebSocketServer::listen()` refuse a silent non-loopback plaintext bind
-unless explicitly overridden. See `spec/security.md#transport-security-the-qt-websocket-transport`
+unless explicitly overridden. See `spec/security.md#the-qt-websocket-transport-morphqt`
 and `spec/core/backend.md#qtwebsocketserver--server-side-websocket-transport`.
 
 ### A5 — Inject a vetted HMAC for production · P1 · shipped

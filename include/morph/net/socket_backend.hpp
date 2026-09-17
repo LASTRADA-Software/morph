@@ -44,6 +44,28 @@ struct SocketBackendConfig {
     /// nothing able to release it (morph#506). Generous on purpose: it bounds a
     /// send making *no* progress, not a slow one. Zero disables it.
     std::chrono::milliseconds sendTimeout{30000};
+    /// @brief Bound on the handshake response read that follows a successful
+    /// TCP connect.
+    ///
+    /// Applied as `SO_RCVTIMEO` for the duration of the handshake read only
+    /// -- cleared once the handshake completes, since the normal read loop is
+    /// meant to block indefinitely waiting for the next frame. Without this,
+    /// a peer that accepts the TCP connection and then never writes (a
+    /// listener that never completes the WS upgrade -- a TCP load balancer
+    /// connecting lazily to its backend would do this) leaves the io thread
+    /// parked in a blocking `recv` with nothing to unblock it, which in turn
+    /// wedges `~SocketBackend` forever: the destructor's escape hatch only
+    /// reaches a socket already published to `_socket`, and that publish
+    /// happens only *after* the handshake (morph#535). Zero disables it
+    /// (the kernel default, block forever).
+    ///
+    /// @warning `SO_RCVTIMEO` restarts on every `recv`, so this bounds each
+    /// individual read rather than the handshake as a whole. It closes the
+    /// "silent peer" hole it was added for; a peer that dribbles a byte just
+    /// inside each interval can still stretch the handshake to roughly this
+    /// value times `readHttpHeaderBlock`'s 64 KiB header cap before that cap
+    /// (not this timeout) ends it.
+    std::chrono::milliseconds handshakeTimeout{10000};
 };
 
 /// @brief `IBackend` implementation that communicates with a `RemoteServer`
@@ -87,11 +109,16 @@ public:
 
     /// @brief Shuts down the I/O thread and resolves any still-pending completions.
     ///
-    /// @note May block up to `Config::connectTimeout` if destruction races an
-    /// in-flight (re)connect attempt — the TCP connect phase is bounded by
-    /// that timeout, but the handshake read that follows a successful TCP
-    /// connect has no separate timeout of its own in this reference
-    /// implementation. See `docs/spec/core/backend.md`'s `morph::net` section.
+    /// @note May block if destruction races an in-flight (re)connect attempt:
+    /// the TCP connect phase is bounded by `Config::connectTimeout`, and the
+    /// handshake response read that follows it by `Config::handshakeTimeout`
+    /// — but the latter is `SO_RCVTIMEO`, which bounds each individual `recv`
+    /// rather than the handshake as a whole, so a peer that dribbles one
+    /// header byte per interval can stretch that phase to roughly
+    /// `handshakeTimeout` times the 64 KiB header cap. Against a peer that
+    /// simply stops writing (the case morph#535 is about) the bound is one
+    /// `handshakeTimeout`. See `docs/spec/core/backend.md`'s `morph::net`
+    /// section.
     ~SocketBackend() override {
         _shuttingDown.store(true);
         // Under `_socketMtx`, and it has to be -- see morph#506, which proposed
@@ -350,8 +377,11 @@ public:
         try {
             sendFrame(::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env));
         } catch (const std::exception&) {
-            // The write raced a disconnect; the io thread's disconnect
-            // handler drains _pending (including this entry) via cancelPending.
+            // Either the write raced an already-in-progress disconnect, or
+            // (morph#536) `sendFrame` itself just tore the connection down
+            // after a failed/partial send. Either way a disconnect is now
+            // underway, and the io thread's handler drains _pending
+            // (including this entry) via cancelPending.
         }
         return comp;
     }
@@ -406,7 +436,22 @@ private:
             throw std::runtime_error("SocketBackend::sendFrame: not connected");
         }
         std::string frame = ::morph::net::detail::encodeWsFrame(opcode, payload, /*mask=*/true);
-        _socket.sendAll(frame.data(), frame.size());
+        try {
+            _socket.sendAll(frame.data(), frame.size());
+        } catch (...) {
+            // `sendAll` can throw having already written part of the frame
+            // (e.g. `SO_SNDTIMEO` firing mid-send) -- the peer's frame stream
+            // is now desynchronised, and a subsequent send here would append
+            // a fresh frame into the middle of the truncated one (morph#536).
+            // Every caller of `sendFrame` reaches this one lock, so tearing
+            // the connection down *here* -- rather than in each of them --
+            // is enough to cover them all: `shutdownBoth()` unblocks the io
+            // thread's `recvSome`, which drives the normal disconnect path
+            // (`onDisconnected()` -> `cancelPending()`) instead of leaving
+            // the corrupted stream in apparent good standing.
+            _socket.shutdownBoth();
+            throw;
+        }
     }
 
     std::string sendSync(const std::string& payload) {
@@ -602,7 +647,7 @@ private:
             }
             if (frame->opcode == WsOpcode::kClose) {
                 try {
-                    sendFrame(WsOpcode::kClose, "");
+                    sendFrame(WsOpcode::kClose, frame->payload);
                 } catch (const std::exception&) {
                 }
                 return false;
@@ -624,7 +669,9 @@ private:
     }
 
     void readLoop(const std::string& leftover) {
-        ::morph::net::detail::WsFrameReader reader;
+        // Client role: RFC 6455 §5.1 forbids a server from masking the
+        // frames it sends, so this reader must reject a masked one.
+        ::morph::net::detail::WsFrameReader reader{/*expectMasked=*/false};
         reader.feed(leftover);
         char buf[4096];
         for (;;) {
@@ -656,7 +703,31 @@ private:
                     // _socketMtx by a peer that stopped reading (morph#506).
                     (void)socket.setSendTimeout(_cfg.sendTimeout);
                 }
+                if (_cfg.handshakeTimeout.count() > 0) {
+                    // Bounds the handshake response read, which otherwise has
+                    // no timeout of its own and can park this thread forever
+                    // against a peer that accepts and then stays silent
+                    // (morph#535) -- and this fd is not yet published to
+                    // `_socket`, so the destructor cannot reach it either.
+                    (void)socket.setRecvTimeout(_cfg.handshakeTimeout);
+                }
                 std::string leftover = ::morph::net::detail::performClientHandshake(socket, _url);
+                if (_cfg.handshakeTimeout.count() > 0 && !socket.setRecvTimeout(std::chrono::milliseconds{0})) {
+                    // The normal read loop blocks indefinitely waiting for
+                    // the next frame by design; only the handshake read is
+                    // meant to be bounded. Unlike *setting* the timeout,
+                    // failing to clear it is not something to shrug off: the
+                    // read loop would inherit it and `recvSome` would throw
+                    // `EAGAIN` after every `handshakeTimeout` of idleness,
+                    // turning a healthy connection into a permanent
+                    // disconnect/reconnect churn. Abandon the attempt instead.
+                    // Note this throws *before* `connectedOk`/`onConnected()`,
+                    // so it counts as a failed connect: a backend that has been
+                    // connected before retries under the ordinary backoff, and
+                    // one that has not falls under the "never reached the
+                    // server even once" fail-fast rule below and gives up.
+                    throw std::runtime_error("SocketBackend: could not clear the handshake read timeout");
+                }
                 {
                     std::scoped_lock lock{_socketMtx};
                     _socket = std::move(socket);

@@ -128,31 +128,31 @@
     },
     {
       "file": "include/morph/net/socket_server.hpp",
-      "line": 212,
+      "line": 224,
       "source": "if (closed.load() || !socket.valid()) {",
       "reason": "The `!socket.valid()` disjunct is unreachable by construction (net audit, `socket_server.hpp` finding #7). `ClientConnection::socket` is set once at construction and never moved from or reassigned anywhere in this file (`grep -n \"conn->socket\\|->socket\\.\"` finds only method calls on it, never an assignment or `std::move`). `sendText()` is only ever called while a `shared_ptr<ClientConnection>` keeps the connection alive, and the only place `TcpSocket::valid()` can become false is that socket's own destructor, which cannot run while such a `shared_ptr` is held. `closed.store(true)` (this same class's `close()` handling, `clientLoop`'s catches) is what every code path that could plausibly invalidate the socket sets first, so the `closed.load()` disjunct alone already accounts for every real teardown path this connection can take."
     },
     {
       "file": "include/morph/net/socket_server.hpp",
-      "line": 254,
+      "line": 267,
       "source": "if (!clientSocket) {",
       "reason": "Real, reachable race (`tryAccept()` returning nullopt because the pending connection went away before it was taken), but accepted as documented rather than forced with a flaky test after extensive attempts (net audit, `socket_server.hpp` finding #10). Three different techniques were tried: a single real `TcpSocket::connect()` immediately followed by an abortive (`SO_LINGER{1,0}`) close (0/150 hits); a burst of many such attempts to build backlog depth (still 0 hits); and a burst of bare non-blocking `::connect()`+abort attempts skipping `TcpSocket::connect()`'s `getaddrinfo()`/poll overhead (960 attempts across 15 bursts, still 0 hits, with most connections resetting before the TCP handshake progressed far enough to make the listener readable at all, rather than after). No way was found, from outside the process, to reliably land in the specific narrow window this branch requires on this machine. Reported as attempted-and-left-open rather than forcing something flakier."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 119,
+      "line": 146,
       "source": "if (_ioThread.joinable()) {",
       "reason": "Unreachable by construction (net audit, `socket_backend.hpp` extra finding #5). `_ioThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else in the file resets, joins, or detaches it, so at destructor time it is always joinable."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 131,
+      "line": 158,
       "source": "if (_handlerThread.joinable()) {",
-      "reason": "Unreachable by construction, same shape as `_ioThread`'s line 119 above (net audit, `socket_backend.hpp` extra finding #6). `_handlerThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else resets, joins, or detaches it, so at destructor time it is always joinable."
+      "reason": "Unreachable by construction, same shape as `_ioThread`'s entry above (net audit, `socket_backend.hpp` extra finding #6). `_handlerThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else resets, joins, or detaches it, so at destructor time it is always joinable."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 570,
+      "line": 615,
       "source": "default:",
       "reason": "Unreachable except via the adjacent `Error` case it deliberately shares a body with (net audit, `socket_backend.hpp` extra finding #7). `detail::ExecuteReplyKind` is a closed 3-value enum (`Value`/`Timeout`/`Error`), all three handled explicitly above this label; `default:` exists only to satisfy this project's `-Wswitch-default`, per the source's own inline comment directly below this line. Reaching it via any value other than through the `Error` case falling through would require an out-of-range `static_cast` producing a value outside the enum's domain -- undefined behavior, not a legitimate test target."
     }

@@ -401,6 +401,29 @@ public:
         return ::setsockopt(_fd, SOL_SOCKET, SO_SNDTIMEO, &timeoutVal, sizeof(timeoutVal)) == 0;
     }
 
+    /// @brief Bounds how long a single `::recv` (inside `recvSome()`) may block.
+    ///
+    /// Without this, a peer that completes the TCP handshake but never writes
+    /// a byte (e.g. a load balancer connecting lazily to its backend) parks
+    /// the caller in `recvSome` forever -- for `SocketBackend`'s client
+    /// handshake read specifically, that in turn wedges `~SocketBackend`,
+    /// since the destructor's escape hatch only reaches a socket already
+    /// published to `_socket` (morph#535).
+    ///
+    /// A timed-out `recv` makes `recvSome` throw (`EAGAIN`/`EWOULDBLOCK` is
+    /// not one of the errors it treats as an orderly close), so callers meant
+    /// to block indefinitely during normal operation must disable this again
+    /// (`timeout` of zero) once whatever bounded phase needed it is over.
+    ///
+    /// @param timeout Per-`recv` bound; zero to disable.
+    /// @return `true` if the option was applied.
+    [[nodiscard]] bool setRecvTimeout(std::chrono::milliseconds timeout) const noexcept {
+        timeval timeoutVal{};
+        timeoutVal.tv_sec = timeout.count() / 1000;
+        timeoutVal.tv_usec = (timeout.count() % 1000) * 1000;
+        return ::setsockopt(_fd, SOL_SOCKET, SO_RCVTIMEO, &timeoutVal, sizeof(timeoutVal)) == 0;
+    }
+
     /// @brief Shuts down both directions of the socket, unblocking a concurrent
     ///        `recvSome`/`sendAll` on another thread. Safe to call from any thread.
     ///

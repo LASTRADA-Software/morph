@@ -8,6 +8,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <functional>
+#include <future>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -143,7 +144,9 @@ struct SlowAuthorizer : morph::session::IAuthorizer {
 // (client) role against a real SocketServer.
 class FakeWsServer {
 public:
-    FakeWsServer() : _listener(morph::net::detail::TcpSocket::listen(0)) {}
+    // Reads frames sent by the client under test (a real SocketBackend),
+    // which RFC 6455 §5.1 requires to mask every frame it sends.
+    FakeWsServer() : _listener(morph::net::detail::TcpSocket::listen(0)), _reader(/*expectMasked=*/true) {}
 
     [[nodiscard]] std::uint16_t port() const { return _listener.boundPort(); }
 
@@ -196,6 +199,16 @@ public:
         l.l_linger = 0;
         ::setsockopt(_socket.nativeHandle(), SOL_SOCKET, SO_LINGER, &l, sizeof(l));
         _socket = morph::net::detail::TcpSocket{};
+    }
+
+    // Shrinks the receive buffer to make a subsequent large write from the
+    // peer fill the kernel's TCP window quickly. Combined with never calling
+    // recv() again, this reliably blocks the peer's `send()` -- for tests
+    // exercising `SO_SNDTIMEO` (morph#536) without needing a multi-megabyte
+    // payload or a multi-second wait.
+    void stopReadingWithTinyReceiveBuffer() {
+        int const tinyBuf = 2048;
+        ::setsockopt(_socket.nativeHandle(), SOL_SOCKET, SO_RCVBUF, &tinyBuf, sizeof(tinyBuf));
     }
 
 private:
@@ -749,6 +762,49 @@ TEST_CASE("SocketBackend: attachModel on a disconnected socket throws instead of
         Catch::Matchers::ContainsSubstring("attach failed"));
 }
 
+TEST_CASE("SocketBackend: ~SocketBackend does not hang against a peer that stalls the handshake",
+          "[net][socket_backend]") {
+    // Regression coverage for morph#535. A TCP listener need never call
+    // accept() for a connecting client's connect() to succeed -- the kernel
+    // completes the three-way handshake into the listen backlog on its own.
+    // That gives a peer that is connected at the TCP level but writes
+    // nothing, which used to leave the client's WS handshake read (no
+    // SO_RCVTIMEO of its own) blocked forever, and the fd was not yet
+    // published to `_socket` for the destructor's escape hatch to reach.
+    morph::net::detail::TcpSocket const listener = morph::net::detail::TcpSocket::listen(0);
+    std::uint16_t const port = listener.boundPort();
+
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+    cfg.handshakeTimeout = std::chrono::milliseconds{300};
+
+    auto backend = std::make_unique<morph::net::SocketBackend>(
+        "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg);
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});  // let the io thread's connect() land
+
+    // Both the backend and the promise are *owned* by the thread rather than
+    // captured by reference. The backend, because if the destructor never
+    // returns and this thread is detached below, the TEST_CASE's own `backend`
+    // must not still hold (and then destroy, at scope exit) the same object
+    // the detached thread is destroying -- that would be a second, concurrent
+    // destructor call on it. The promise, because on that same path the
+    // REQUIRE below throws and unwinds this scope, so a promise living here
+    // would be destroyed underneath the detached thread's `set_value()`.
+    auto destroyed = std::make_shared<std::promise<void>>();
+    std::future<void> const destroyedFuture = destroyed->get_future();
+    std::thread destroyer([owned = std::move(backend), destroyed]() mutable {
+        owned.reset();
+        destroyed->set_value();
+    });
+    bool const finished = destroyedFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready;
+    if (finished) {
+        destroyer.join();
+    } else {
+        destroyer.detach();  // still stuck in the hung destructor; leaking beats hanging the whole suite
+    }
+    REQUIRE(finished);
+}
+
 TEST_CASE("morph::net::SocketBackend::notifyBackendChanged is a documented no-op", "[net][socket_backend]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -955,6 +1011,37 @@ TEST_CASE("SocketBackend: execute resolves with an exception when the server's o
     spinUntil([&] { return gotError.load(); });
     REQUIRE(gotError.load());
     serverThread.join();
+}
+
+TEST_CASE("SocketBackend: a send blocked past sendTimeout tears the connection down instead of desyncing it",
+          "[net][socket_backend][fault-injection]") {
+    // Regression coverage for morph#536. `TcpSocket::sendAll` can throw
+    // having already written part of a frame -- `SO_SNDTIMEO` firing
+    // mid-send is exactly this, reachable whenever a peer stops reading. The
+    // old `sendFrame` swallowed that exception without marking the
+    // connection unusable, so a later frame would land in the middle of the
+    // truncated one instead of the connection being torn down. Reproduced by
+    // shrinking the peer's receive buffer and never draining it, so a large
+    // enough payload reliably blocks the client's `send()` until
+    // `sendTimeout` fires.
+    FakeWsServer fake;
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+    cfg.sendTimeout = std::chrono::milliseconds{300};
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
+    fake.acceptAndHandshake();
+    REQUIRE(backend.waitForConnected());
+    fake.stopReadingWithTinyReceiveBuffer();
+
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "SbEchoModel";
+    call.actionTypeId = "SbEchoAction";
+    std::string bigPayload(std::size_t{4} * 1024 * 1024, 'x');  // far past the shrunken receive buffer
+    call.serializeAction = [&] { return bigPayload; };
+    call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
+    (void)backend.execute(morph::exec::detail::ModelId{1}, std::move(call), nullptr);
+
+    REQUIRE(waitForDisconnect(backend));
 }
 
 TEST_CASE("SocketBackend: a malformed WebSocket frame from the server is treated as a disconnect",

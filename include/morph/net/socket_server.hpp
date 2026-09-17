@@ -207,6 +207,18 @@ private:
         /// thread handle. See `reapFinishedClients` (morph#498).
         std::atomic<bool> finished{false};
 
+        /// Writes one reply frame. A failure is never propagated to the caller
+        /// -- it is a `RemoteServer` completion callback, which has nowhere to
+        /// put it -- but it must still retire the connection, for the two
+        /// reasons `sendControlFrame()` gives: `sendAll` can throw having
+        /// already written part of the frame, leaving this connection's
+        /// outgoing stream desynchronised, and `closed` on its own gates only
+        /// *writes* -- `clientLoop()` is blocked in `recvSome()` and never
+        /// consults it, so without the `shutdownBoth()` the connection goes on
+        /// draining and dispatching whatever the peer already queued, into a
+        /// `RemoteServer` whose replies this function then silently drops
+        /// (morph#536: *any* caller observing a partial write marks the
+        /// connection unusable, and this is one of them).
         void sendText(const std::string& payload) {
             std::scoped_lock lock{writeMtx};
             if (closed.load() || !socket.valid()) {
@@ -218,6 +230,7 @@ private:
                 socket.sendAll(frame.data(), frame.size());
             } catch (const std::exception&) {
                 closed.store(true);
+                socket.shutdownBoth();
             }
         }
     };
@@ -349,7 +362,9 @@ private:
             conn->closed.store(true);
             return;
         }
-        ::morph::net::detail::WsFrameReader reader;
+        // Server role: RFC 6455 §5.1 requires a client to mask every frame it
+        // sends, so this reader must reject an unmasked one.
+        ::morph::net::detail::WsFrameReader reader{/*expectMasked=*/true};
         reader.feed(leftover);
         char buf[4096];
         for (;;) {
@@ -372,8 +387,22 @@ private:
     }
 
     /// Best-effort control-frame write (a Close echo or a Pong). Failure to
-    /// send one is never worth propagating: the connection is either already
-    /// going away or will be noticed as gone by the next read.
+    /// send one is never worth propagating to the caller -- but unlike a
+    /// clean disconnect, a *partial* send (e.g. a timed-out write) leaves
+    /// this connection's outgoing frame stream desynchronised without
+    /// closing it: the read side keeps working, so a future frame written
+    /// here would land in the middle of the truncated one. `closed` is
+    /// therefore set exactly as `sendText()`'s own catch does, so no later
+    /// write on this connection is attempted (morph#536).
+    ///
+    /// Marking it closed is not enough on its own, though: `closed` only gates
+    /// *writes*, and `clientLoop()` is blocked in `recvSome()` on a socket the
+    /// peer may well keep feeding. Left at that, the connection would go on
+    /// dispatching requests to `RemoteServer` whose replies `sendText()` then
+    /// silently drops, so the caller sees hangs rather than a disconnect.
+    /// `shutdownBoth()` is therefore what actually retires the connection --
+    /// it unblocks that read and lets the loop exit, mirroring what
+    /// `SocketBackend::sendFrame()` does on the client side.
     static void sendControlFrame(const std::shared_ptr<ClientConnection>& conn, ::morph::net::detail::WsOpcode opcode,
                                  std::string_view payload) {
         std::scoped_lock const lock{conn->writeMtx};
@@ -383,7 +412,9 @@ private:
         try {
             std::string const frame = ::morph::net::detail::encodeWsFrame(opcode, payload, /*mask=*/false);
             conn->socket.sendAll(frame.data(), frame.size());
-        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch) — see the doc comment above
+        } catch (const std::exception&) {
+            conn->closed.store(true);
+            conn->socket.shutdownBoth();
         }
     }
 
@@ -403,7 +434,7 @@ private:
                 return true;
             }
             if (frame->opcode == WsOpcode::kClose) {
-                sendControlFrame(conn, WsOpcode::kClose, "");
+                sendControlFrame(conn, WsOpcode::kClose, frame->payload);
                 conn->closed.store(true);
                 return false;
             }

@@ -1379,9 +1379,13 @@ before sending — see
 Reconnect is configured by
 `SocketBackendConfig` (aliased `SocketBackend::Config`), with the same four
 fields and defaults as `QtWebSocketBackendConfig` (`reconnectEnabled`,
-`initialReconnectDelay`, `maxReconnectDelay`, `backoffMultiplier`) plus one new
-field, `connectTimeout` (default 5 s), bounding the initial/reconnect TCP
-connect attempt. `waitForConnected(timeout = 5000ms)` blocks the calling
+`initialReconnectDelay`, `maxReconnectDelay`, `backoffMultiplier`) plus two new
+fields: `connectTimeout` (default 5 s), bounding the initial/reconnect TCP
+connect attempt, and `handshakeTimeout` (default 10 s), bounding the
+handshake response read that follows a successful connect — applied as
+`SO_RCVTIMEO` for that read only, then cleared before the normal read loop,
+which is meant to block indefinitely waiting for the next frame.
+`waitForConnected(timeout = 5000ms)` blocks the calling
 thread on a condition variable until connected or the timeout elapses — the
 non-Qt equivalent of pumping the Qt event loop. The constructor takes a
 `ws://` URL string (`wss://` throws immediately — see Limitations) and starts
@@ -1774,6 +1778,8 @@ not a behavior change to the existing loopback-only default.
 | `maxReconnectDelay` | `std::chrono::milliseconds` | `30 s` |
 | `backoffMultiplier` | `double` | `2.0` |
 | `connectTimeout` | `std::chrono::milliseconds` | `5 s` |
+| `sendTimeout` | `std::chrono::milliseconds` | `30 s` |
+| `handshakeTimeout` | `std::chrono::milliseconds` | `10 s` |
 
 ### `SocketBackend` (namespace `morph::net`)
 
@@ -1832,6 +1838,7 @@ not a behavior change to the existing loopback-only default.
 | `morph::net`'s I/O model | A dedicated I/O thread + `std::condition_variable`, instead of the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and — as a side effect — lets `SocketBackend` be driven safely from multiple threads (`QtWebSocketBackend` cannot be, since it is pinned to one event-loop thread). |
 | `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + base64 + HTTP Upgrade + frame codec), not a third-party library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency to keep morph's default build dependency-free, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |
 | `WsFrameReader` reassembles fragments | Accumulates continuation frames and returns only the completed message | Fragmentation is not an exotic case: a peer fragments whenever a message exceeds its outgoing frame size, and Qt's `QWebSocket` defaults that to 512 KiB. Rejecting fragments broke interop with the transport this project ships, for every payload past that size. Control frames interleaved between fragments pass through untouched, and the reassembled total is bounded by `wire::kMaxEnvelopeBytes` so a stream of tiny continuations cannot grow the buffer without limit. |
+| `WsFrameReader` rejects RFC 6455-illegal frames instead of tolerating them | Masking direction, RSV bits, opcode range, control-frame framing, Close status code, minimal length encoding and text-payload UTF-8 are all checked; a violation throws out of `tryExtractFrame()` and the call site drops the connection | The interop requirement above makes what the reader *refuses* part of the transport's contract rather than an implementation detail: ten classes of illegal frame used to be accepted, and a peer that sends one now gets disconnected (morph#533). The reader is given its role at construction (`expectMasked`) because §5.1 is directional — a server MUST reject an unmasked client frame and a client MUST reject a masked server frame, and that rule is the anti-cache-poisoning defence, not a formality. Text UTF-8 is validated incrementally, since a multi-byte sequence may straddle a fragment boundary. On the sending side the mask key is drawn per frame from a thread-local `std::random_device` rather than a thread-local `std::mt19937`, whose state a peer can reconstruct from 624 observed keys (§5.3); `random_device` has no reproducible state to recover, and holding it thread-local keeps the entropy source open instead of reacquiring it on every outbound message. |
 | `SocketBackend` runs reconnect handlers on a dedicated thread | Not inline from the I/O thread's connect path | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the I/O thread's read loop can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. |
 
 ## Lifetime annotations
@@ -1931,12 +1938,32 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
 - **`morph::net` has no TLS.** `SocketBackend`/`SocketServer` speak plaintext
   `ws://` only; `parseWsUrl` throws immediately on a `wss://` URL. A `wss://`
   variant needing a TLS library (e.g. OpenSSL) is future work.
-- **No fragmented WebSocket frames.** `WsFrameReader` throws on `FIN=0` or a
-  `CONTINUATION` opcode. This is not a practical limitation for morph's own
-  traffic — a `wire::Envelope` is always one JSON line, and the frame format's
-  64-bit extended-length field already covers up to `wire::kMaxEnvelopeBytes`
-  in a single frame — but a `SocketBackend`/`SocketServer` cannot talk to an
-  arbitrary third-party WebSocket peer that fragments its messages.
+- **`morph::net` never *sends* a fragmented message.** `encodeWsFrame` always
+  writes one complete `FIN=1` frame. Incoming fragments are reassembled (see
+  the design-decision table), so this is one-directional and not a practical
+  limitation for morph's own traffic — a `wire::Envelope` is always one JSON
+  line, and the frame format's 64-bit extended-length field already covers up
+  to `wire::kMaxEnvelopeBytes` in a single frame.
+- **A protocol violation drops the connection without sending a Close frame.**
+  `WsFrameReader` rejects a frame that is masked in the wrong direction (an
+  unmasked client→server frame, or a masked server→client one), has any RSV
+  bit set (no extension is ever negotiated), carries a reserved opcode
+  (`0x3`-`0x7`, `0xB`-`0xF`), is a control frame that is fragmented or longer
+  than 125 bytes, is a Close frame whose status code is not one the IANA
+  close-code registry allows on the wire (1000-1003, 1007-1014, 3000-4999 —
+  note 1012-1014 were registered after RFC 6455 §7.4.1's own table) or whose
+  reason phrase is not valid UTF-8, uses a non-minimal extended-length
+  encoding, or is a text message whose payload is not valid UTF-8. Each of those throws out
+  of `tryExtractFrame()`; `SocketBackend::drainFrames`/
+  `SocketServer::drainFrames` catch it, stop reading and tear the connection
+  down — **no `1002`/`1007`/`1009` Close frame is sent first**, so the peer
+  learns only that the connection went away, and neither side logs which check
+  failed. Sending the RFC status code needs the reader's error model to change
+  from throwing to `std::expected<..., WsProtocolError>` at both call sites;
+  that is separable work, deliberately not done in morph#533. A Close frame
+  *from* the peer is a different path and is not a violation: it is echoed back
+  carrying the peer's own status code (§5.5.1), where it used to be echoed
+  empty.
 - **`SocketServer` joins its per-connection threads at `close()`/destruction,
   not eagerly per-disconnect.** A client that disconnects naturally leaves its
   finished-but-unjoined thread handle in an internal list until the whole
@@ -1944,17 +1971,17 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   by connection churn — acceptable for a reference transport (see the
   connection-scoping bullet above) but worth knowing before running a very
   long-lived `SocketServer` under heavy connection churn.
-- **`SocketBackend`'s destructor can block up to `Config::connectTimeout`.**
-  If destruction races an in-flight (re)connect attempt, the TCP connect phase
-  is bounded by `connectTimeout`, but the handshake read that follows a
-  successful TCP connect has no separate timeout in this reference
-  implementation — a peer that completes the TCP handshake but never speaks
-  (or never finishes) the WebSocket Upgrade leaves the I/O thread, and
-  therefore the destructor's join, waiting for the OS to notice. This is an
-  accepted, documented limitation of the reference implementation, not a bug
-  to route around: production code that needs a hard bound on teardown time
-  should not construct a `SocketBackend` against an untrusted or unreliable
-  peer without an external watchdog.
+- **`SocketBackend`'s destructor can block up to `Config::connectTimeout` plus
+  `Config::handshakeTimeout`.** If destruction races an in-flight (re)connect
+  attempt, the TCP connect phase is bounded by the former and the handshake
+  response read that follows a successful TCP connect is bounded by the
+  latter (`SO_RCVTIMEO` on the not-yet-published socket; morph#535 — a peer
+  that completes the TCP handshake but never speaks, or never finishes, the
+  WebSocket Upgrade used to leave the I/O thread, and therefore the
+  destructor's join, waiting forever). Neither bound is a hard real-time
+  guarantee — both are ordinary blocking-socket timeouts, subject to the same
+  scheduling slop as any other syscall — so production code with a genuine
+  hard deadline on teardown should still not depend on this alone.
 - **Graceful shutdown never preempts a running action.** `beginShutdown()`,
   `drainedWithin()`, and `closeGracefully()` only stop new work from arriving
   and wait for old work to finish; a model whose action runs longer than the
