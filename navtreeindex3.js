@@ -1,5 +1,6 @@
 var NAVTREEINDEX3 =
 {
+"dc/d20/structmorph_1_1forms_1_1MutuallyExclusive.html#a09c1d26fc316d73b2005d2233dfea32d":[2,0,0,8,18,0],
 "dc/d20/structmorph_1_1forms_1_1MutuallyExclusive.html#a9e4b8101887c2e58d217c870d0df7418":[2,0,0,8,18,1],
 "dc/d20/structmorph_1_1forms_1_1MutuallyExclusive.html#ae7d1d4b2be55d421cef63eb62b779d42":[2,0,0,8,18,2],
 "dc/d3c/forms_2i18n_8hpp.html":[3,0,0,2,5],
@@ -248,6 +249,5 @@ var NAVTREEINDEX3 =
 "dir_f4f834d56fe0f61e6e55d2e865621a21.html":[3,0,0,2],
 "files.html":[3,0],
 "functions.html":[2,3,0],
-"functions.html":[2,3,0,0],
-"functions_b.html":[2,3,0,1]
+"functions.html":[2,3,0,0]
 };

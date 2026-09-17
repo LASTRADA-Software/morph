@@ -5,5 +5,6 @@ var structmorph_1_1net_1_1SocketBackendConfig =
     [ "maxReconnectDelay", "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a58367d4680072d3a300a3ea6c22e096c", null ],
     [ "backoffMultiplier", "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a86d877007461559a660f5e0183a76e75", null ],
     [ "connectTimeout", "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#acd8e19b0807613d9c4d494b407115e1e", null ],
-    [ "sendTimeout", "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a981e0b8e3f410980b8f22671c7f1f8ec", null ]
+    [ "sendTimeout", "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a981e0b8e3f410980b8f22671c7f1f8ec", null ],
+    [ "handshakeTimeout", "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a85f335e13eccd319bd13eb3d58fc3854", null ]
 ];
