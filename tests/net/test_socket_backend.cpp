@@ -201,6 +201,16 @@ public:
         _socket = morph::net::detail::TcpSocket{};
     }
 
+    // Shrinks the receive buffer to make a subsequent large write from the
+    // peer fill the kernel's TCP window quickly. Combined with never calling
+    // recv() again, this reliably blocks the peer's `send()` -- for tests
+    // exercising `SO_SNDTIMEO` (morph#536) without needing a multi-megabyte
+    // payload or a multi-second wait.
+    void stopReadingWithTinyReceiveBuffer() {
+        int const tinyBuf = 2048;
+        ::setsockopt(_socket.nativeHandle(), SOL_SOCKET, SO_RCVBUF, &tinyBuf, sizeof(tinyBuf));
+    }
+
 private:
     morph::net::detail::TcpSocket _listener;
     morph::net::detail::TcpSocket _socket;
@@ -998,6 +1008,37 @@ TEST_CASE("SocketBackend: execute resolves with an exception when the server's o
     spinUntil([&] { return gotError.load(); });
     REQUIRE(gotError.load());
     serverThread.join();
+}
+
+TEST_CASE("SocketBackend: a send blocked past sendTimeout tears the connection down instead of desyncing it",
+          "[net][socket_backend][fault-injection]") {
+    // Regression coverage for morph#536. `TcpSocket::sendAll` can throw
+    // having already written part of a frame -- `SO_SNDTIMEO` firing
+    // mid-send is exactly this, reachable whenever a peer stops reading. The
+    // old `sendFrame` swallowed that exception without marking the
+    // connection unusable, so a later frame would land in the middle of the
+    // truncated one instead of the connection being torn down. Reproduced by
+    // shrinking the peer's receive buffer and never draining it, so a large
+    // enough payload reliably blocks the client's `send()` until
+    // `sendTimeout` fires.
+    FakeWsServer fake;
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+    cfg.sendTimeout = std::chrono::milliseconds{300};
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
+    fake.acceptAndHandshake();
+    REQUIRE(backend.waitForConnected());
+    fake.stopReadingWithTinyReceiveBuffer();
+
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "SbEchoModel";
+    call.actionTypeId = "SbEchoAction";
+    std::string bigPayload(std::size_t{4} * 1024 * 1024, 'x');  // far past the shrunken receive buffer
+    call.serializeAction = [&] { return bigPayload; };
+    call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
+    (void)backend.execute(morph::exec::detail::ModelId{1}, std::move(call), nullptr);
+
+    REQUIRE(waitForDisconnect(backend));
 }
 
 TEST_CASE("SocketBackend: a malformed WebSocket frame from the server is treated as a disconnect",

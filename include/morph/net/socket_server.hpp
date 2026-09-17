@@ -374,8 +374,13 @@ private:
     }
 
     /// Best-effort control-frame write (a Close echo or a Pong). Failure to
-    /// send one is never worth propagating: the connection is either already
-    /// going away or will be noticed as gone by the next read.
+    /// send one is never worth propagating to the caller -- but unlike a
+    /// clean disconnect, a *partial* send (e.g. a timed-out write) leaves
+    /// this connection's outgoing frame stream desynchronised without
+    /// closing it: the read side keeps working, so a future frame written
+    /// here would land in the middle of the truncated one. `closed` is
+    /// therefore set exactly as `sendText()`'s own catch does, so no later
+    /// write on this connection is attempted (morph#536).
     static void sendControlFrame(const std::shared_ptr<ClientConnection>& conn, ::morph::net::detail::WsOpcode opcode,
                                  std::string_view payload) {
         std::scoped_lock const lock{conn->writeMtx};
@@ -385,7 +390,8 @@ private:
         try {
             std::string const frame = ::morph::net::detail::encodeWsFrame(opcode, payload, /*mask=*/false);
             conn->socket.sendAll(frame.data(), frame.size());
-        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch) — see the doc comment above
+        } catch (const std::exception&) {
+            conn->closed.store(true);
         }
     }
 

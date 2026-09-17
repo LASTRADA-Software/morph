@@ -365,8 +365,11 @@ public:
         try {
             sendFrame(::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env));
         } catch (const std::exception&) {
-            // The write raced a disconnect; the io thread's disconnect
-            // handler drains _pending (including this entry) via cancelPending.
+            // Either the write raced an already-in-progress disconnect, or
+            // (morph#536) `sendFrame` itself just tore the connection down
+            // after a failed/partial send. Either way a disconnect is now
+            // underway, and the io thread's handler drains _pending
+            // (including this entry) via cancelPending.
         }
         return comp;
     }
@@ -421,7 +424,22 @@ private:
             throw std::runtime_error("SocketBackend::sendFrame: not connected");
         }
         std::string frame = ::morph::net::detail::encodeWsFrame(opcode, payload, /*mask=*/true);
-        _socket.sendAll(frame.data(), frame.size());
+        try {
+            _socket.sendAll(frame.data(), frame.size());
+        } catch (...) {
+            // `sendAll` can throw having already written part of the frame
+            // (e.g. `SO_SNDTIMEO` firing mid-send) -- the peer's frame stream
+            // is now desynchronised, and a subsequent send here would append
+            // a fresh frame into the middle of the truncated one (morph#536).
+            // Every caller of `sendFrame` reaches this one lock, so tearing
+            // the connection down *here* -- rather than in each of them --
+            // is enough to cover them all: `shutdownBoth()` unblocks the io
+            // thread's `recvSome`, which drives the normal disconnect path
+            // (`onDisconnected()` -> `cancelPending()`) instead of leaving
+            // the corrupted stream in apparent good standing.
+            _socket.shutdownBoth();
+            throw;
+        }
     }
 
     std::string sendSync(const std::string& payload) {
