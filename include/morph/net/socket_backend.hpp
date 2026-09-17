@@ -720,8 +720,12 @@ private:
                     // read loop would inherit it and `recvSome` would throw
                     // `EAGAIN` after every `handshakeTimeout` of idleness,
                     // turning a healthy connection into a permanent
-                    // disconnect/reconnect churn. Abandon the attempt instead
-                    // and let the reconnect backoff retry.
+                    // disconnect/reconnect churn. Abandon the attempt instead.
+                    // Note this throws *before* `connectedOk`/`onConnected()`,
+                    // so it counts as a failed connect: a backend that has been
+                    // connected before retries under the ordinary backoff, and
+                    // one that has not falls under the "never reached the
+                    // server even once" fail-fast rule below and gives up.
                     throw std::runtime_error("SocketBackend: could not clear the handshake read timeout");
                 }
                 {

@@ -782,16 +782,19 @@ TEST_CASE("SocketBackend: ~SocketBackend does not hang against a peer that stall
         "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg);
     std::this_thread::sleep_for(std::chrono::milliseconds{100});  // let the io thread's connect() land
 
-    std::promise<void> destroyed;
-    std::future<void> const destroyedFuture = destroyed.get_future();
-    // `backend` is moved into the thread rather than captured by reference:
-    // if the destructor never returns and this thread is detached below, the
-    // TEST_CASE's own `backend` must not still hold (and then destroy, at
-    // scope exit) the same object the detached thread is destroying --
-    // that would be a second, concurrent destructor call on it.
-    std::thread destroyer([owned = std::move(backend), &destroyed]() mutable {
+    // Both the backend and the promise are *owned* by the thread rather than
+    // captured by reference. The backend, because if the destructor never
+    // returns and this thread is detached below, the TEST_CASE's own `backend`
+    // must not still hold (and then destroy, at scope exit) the same object
+    // the detached thread is destroying -- that would be a second, concurrent
+    // destructor call on it. The promise, because on that same path the
+    // REQUIRE below throws and unwinds this scope, so a promise living here
+    // would be destroyed underneath the detached thread's `set_value()`.
+    auto destroyed = std::make_shared<std::promise<void>>();
+    std::future<void> const destroyedFuture = destroyed->get_future();
+    std::thread destroyer([owned = std::move(backend), destroyed]() mutable {
         owned.reset();
-        destroyed.set_value();
+        destroyed->set_value();
     });
     bool const finished = destroyedFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready;
     if (finished) {
