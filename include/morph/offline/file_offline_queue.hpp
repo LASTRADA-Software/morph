@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -158,9 +159,33 @@ public:
     explicit FileOfflineQueue(std::filesystem::path path, ::morph::core::FileIoOps ioOps = {},
                               std::optional<std::size_t> maxDepth = std::nullopt)
         : _path{std::move(path)}, _io{std::move(ioOps)}, _maxDepth{maxDepth} {
+        // No constructor-time repairTornTail() here, deliberately.
+        //
+        // An earlier revision of morph#530 called it before load(), to heal an
+        // "interior merge from a doubled-up short write" that load() would
+        // otherwise reject. It cannot do that: repairTornTail only trims bytes
+        // after the final newline, and says so itself -- "Complete records,
+        // including a malformed *interior* line, are left exactly as they are."
+        // So it never fixed the case it was added for.
+        //
+        // It did break two things. It is the constructor's only file mutation
+        // that can run *before* load() throws, which costs morph#494's
+        // guarantee that a failed construction leaves the queue file
+        // byte-identical (a file with both a malformed interior line and a torn
+        // tail would come back truncated *and* throw). And it discards a
+        // complete final record whose only missing byte is the trailing newline
+        // -- which load() decodes perfectly well -- wiping the file outright
+        // when that is the only line.
+        //
+        // What actually prevents the doubled-up short write is the rollback in
+        // writeLine() below, which leaves no partial bytes for a later write to
+        // merge with; load()+compact() heal an ordinary torn tail as they always
+        // have. FileActionLog keeps its own long-standing call: that is
+        // pre-existing behaviour there, not something this change introduced.
         load();
         compact();
         _file = _io.fopen(_path.string(), "a");
+        ::morph::core::positionAtEnd(_file);
         if (_file == nullptr) {
             throw std::runtime_error("FileOfflineQueue: failed to open " + _path.string());
         }
@@ -313,12 +338,68 @@ private:
     /// than swallowed: a caller told an item was enqueued, or marked done, must
     /// not have that silently be untrue after a restart.
     void writeLine(const std::string& json) {
+        if (_tornTail) {
+            throw std::runtime_error(
+                "FileOfflineQueue: refusing to write to " + _path.string() +
+                " after a short write that could not be rolled back; reopen the queue to have it repaired");
+        }
         std::string line = json;
         line.push_back('\n');
+        long long const offsetBeforeWrite = ::morph::core::wideFtell(_file);
+        // The rollback below has to cover the *flush* too, not only a short
+        // fwrite. A queue record is a few hundred bytes -- far under BUFSIZ --
+        // so fwrite is a memcpy into the stdio buffer and returns the full
+        // count even on a full disk; the write(2) that actually fails happens
+        // inside syncFile's fflush. Wired to the short-write branch alone, an
+        // ENOSPC there threw with a truncated line already on disk, at exactly
+        // the offset the next writeLine resumes from and with no separating
+        // newline -- the identical merge morph#530 exists to prevent, and the
+        // *common* manifestation of a full disk rather than an exotic one.
+        auto const rollBackAndThrow = [&](const std::string& what) {
+            if (::morph::core::rollBackShortWrite(_io, _file, _path, offsetBeforeWrite) ==
+                ::morph::core::RollBack::torn) {
+                // The rollback could not truncate, so partial bytes may still be
+                // at the end of the file. `load()` tolerates that only while it
+                // is the *trailing* line; one more successful writeLine on this
+                // handle would concatenate onto it and push it into an interior
+                // position, where the merged line makes the next open throw a
+                // parse error and takes the entire backlog with it. Refusing
+                // every later write keeps the damage trailing and therefore
+                // recoverable -- the next open's compact() rewrites the file
+                // without it.
+                _tornTail = true;
+            }
+            throw std::runtime_error("FileOfflineQueue: " + what + " " + _path.string());
+        };
         if (_io.fwrite(line.data(), line.size(), _file) != line.size()) {
-            throw std::runtime_error("FileOfflineQueue: short write to " + _path.string());
+            // The file is opened "a" (append), so a short write's partial bytes
+            // sit right where the *next* writeLine would otherwise resume, with
+            // no separating newline -- merging into one line load() can only
+            // tolerate while it stays the trailing line, and stops being able
+            // to the moment a further write pushes it into an interior position
+            // (morph#530). Roll the file back to its pre-write length instead,
+            // so a failed write leaves no trace at all for the next one to
+            // merge with. Best-effort: this is already the failure path, and
+            // when the rollback's own flush cannot complete (the disk that made
+            // the write short is still full) it deliberately truncates nothing
+            // -- load()'s tolerance of a torn *trailing* line, plus the
+            // rewrite compact() performs on the next open, is what heals it
+            // then. See `rollBackShortWrite`'s own doc comment for why the
+            // flush has to succeed before anything is truncated, and why it
+            // resyncs `_file`'s stdio position afterwards.
+            rollBackAndThrow("short write to");
         }
-        syncFile(_file, _path.string());
+        if (_io.fflush(_file) != 0) {
+            rollBackAndThrow("failed to flush");
+        }
+        if (_io.fsync(_file) != 0) {
+            // fsync failing after a successful flush means the bytes are in the
+            // page cache but may not reach the platter. They are a *complete*
+            // record, so rolling back is still the right call: this mutation is
+            // documented as committed once it returns, and a caller told the
+            // enqueue failed must not find it replayed after a restart.
+            rollBackAndThrow("failed to fsync");
+        }
     }
 
     void syncFile(std::FILE* file, const std::string& what) const {
@@ -393,14 +474,54 @@ private:
         if (out == nullptr) {
             throw std::runtime_error("FileOfflineQueue: failed to open " + tmp + " for compaction");
         }
+
+        // Every exit below this point closes `out` and, unless the rename
+        // committed, removes `tmp`. Before this guard existed only the
+        // short-write branch cleaned up: `syncFile(out, tmp)` threw straight out
+        // of compact(), leaking the handle and orphaning the temp file. That is
+        // not a theoretical path -- the fault-injection test "a failing
+        // fflush() during construction-time compaction throws" drives it on
+        // every run, which had left 31 stray *.compact-tmp files in /tmp on the
+        // machine this was found on. The leaked handle would also block the
+        // unlink on Windows.
+        class TempFileGuard {
+        public:
+            TempFileGuard(std::FILE* file, std::string path) : _file{file}, _path{std::move(path)} {}
+
+            ~TempFileGuard() {
+                if (_file != nullptr) {
+                    // Unwinding already; there is nothing to report a close
+                    // failure to.
+                    // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory)
+                    std::fclose(_file);
+                }
+                if (!_committed) {
+                    std::error_code errorCode;
+                    std::filesystem::remove(_path, errorCode);
+                }
+            }
+
+            TempFileGuard(const TempFileGuard&) = delete;
+            TempFileGuard& operator=(const TempFileGuard&) = delete;
+            TempFileGuard(TempFileGuard&&) = delete;
+            TempFileGuard& operator=(TempFileGuard&&) = delete;
+
+            /// @brief Hands the handle back to the caller, which closes it.
+            void releaseHandle() noexcept { _file = nullptr; }
+            /// @brief Marks the temp file as renamed away, so it is not removed.
+            void commit() noexcept { _committed = true; }
+
+        private:
+            std::FILE* _file;
+            std::string _path;
+            bool _committed = false;
+        };
+        TempFileGuard guard{out, tmp};
+
         auto writeRecord = [&](const detail::FileQueueRecord& record) {
             std::string outLine = detail::toJson(record);
             outLine.push_back('\n');
             if (_io.fwrite(outLine.data(), outLine.size(), out) != outLine.size()) {
-                // Closing on the way out of a throw; nothing to report a
-                // close failure to.
-                // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory)
-                std::fclose(out);
                 throw std::runtime_error("FileOfflineQueue: short write during compaction of " + _path.string());
             }
         };
@@ -438,12 +559,36 @@ private:
         syncFile(out, tmp);
         // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory) — the data is already fsynced above
         std::fclose(out);
+        guard.releaseHandle();  // closed here; the rename needs the handle gone on Windows
         std::filesystem::rename(tmp, _path);
+        guard.commit();  // `tmp` no longer exists under that name
+        // The rename is a directory mutation, not a file-content one -- fsync
+        // on `out` above made the compacted *data* durable, but not the
+        // directory entry that now names it `_path` instead of the tmp name
+        // (morph#532). Surfaced rather than swallowed, same as every other
+        // fsync failure in this class; safe to throw here, since compact()
+        // always runs before `_file` is opened -- nothing left dangling.
+        auto const dirSync = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path()));
+        if (dirSync == ::morph::core::DirectorySync::failed) {
+            throw std::runtime_error("FileOfflineQueue: failed to fsync directory after compacting " + _path.string());
+        }
+        if (dirSync == ::morph::core::DirectorySync::unsupported) {
+            ::morph::log::logWarn(
+                "FileOfflineQueue: cannot fsync the directory containing {}; the queue's contents are still fsynced, "
+                "but its directory entry is only as durable as this filesystem makes it",
+                _path.string());
+        }
     }
 
     std::filesystem::path _path;
     ::morph::core::FileIoOps _io;
     std::FILE* _file = nullptr;
+    // Set when a failed write could not be rolled back, so a partial record may
+    // still sit at the end of `_path`. Every later write on this object is
+    // refused, which is what keeps that partial record the trailing line -- the
+    // only position `load()` can heal it from. Cleared by construction, since
+    // the constructor's compact() rewrites the file without it.
+    bool _tornTail = false;
     mutable std::mutex _mtx;
     std::map<uint64_t, QueueItem> _items;
     uint64_t _nextId{0};

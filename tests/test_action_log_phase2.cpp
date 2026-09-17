@@ -5,10 +5,12 @@
 // RemoteServer::LogProvider mechanism that closes phase 1's "remote identity"
 // gap. (Phase 3, a Kafka-shaped sink, was dropped for now.)
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_exception.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <cerrno>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +19,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/file_io_ops.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
@@ -643,6 +646,58 @@ TEST_CASE("FileActionLog::append: a short fwrite() throws and does not record th
     REQUIRE(log2.entries().size() == 1);
 }
 
+TEST_CASE("FileActionLog::append: a short write does not merge with the next successful append (morph#530)",
+          "[action_log][phase2][file][fault-injection]") {
+    // Regression for morph#530. The single-write case above (fwrite always
+    // short) never exercises the actual defect: append() used to throw on a
+    // short write without rolling the file back, and the handle is
+    // append-mode, so a *subsequent* successful append concatenated directly
+    // onto the truncated JSON with no separating newline -- merging two
+    // records into one line. This drives the real sequence: one durable
+    // append, one short-written append, one more durable append -- and
+    // confirms the log reopens with exactly the two durable rows, not a
+    // merged, unparseable one.
+    TempFile const tmp{"file_fault_append_short_write_merge"};
+    auto shouldFail = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.fwrite = [shouldFail](const void* buffer, std::size_t size, std::FILE* file) {
+        if (!*shouldFail) {
+            return std::fwrite(buffer, 1, size, file);
+        }
+        // A real short write still lands *some* bytes on disk -- just fewer
+        // than requested. Actually writing size - 1 of them (not merely
+        // reporting size - 1 while writing nothing) is what lets this test
+        // reach the real defect: a truncated line sitting in the file for the
+        // next append to merge with.
+        return std::fwrite(buffer, 1, size - 1, file);
+    };
+
+    {
+        FileActionLog log{tmp.path, ioOps};
+        auto first = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+        first.idempotencyKey = "row-1";
+        log.append(first);
+        log.flush();
+
+        auto second = makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20");
+        second.idempotencyKey = "row-2";
+        *shouldFail = true;
+        REQUIRE_THROWS_AS(log.append(second), std::runtime_error);
+        *shouldFail = false;
+
+        auto third = makeEntry("P2_Model", "acct-3", "P2_Deposit", "{}", "30");
+        third.idempotencyKey = "row-3";
+        log.append(third);
+        log.flush();
+    }  // Close before reopening.
+
+    FileActionLog reopened{tmp.path, ioOps};
+    auto entries = reopened.entries();
+    REQUIRE(entries.size() == 2);
+    CHECK(entries[0].idempotencyKey == "row-1");
+    CHECK(entries[1].idempotencyKey == "row-3");
+}
+
 TEST_CASE("FileActionLog::flush: a failing fflush() throws and forgets the unflushed idempotencyKeys",
           "[action_log][phase2][file][fault-injection]") {
     TempFile const tmp{"file_fault_flush_fflush"};
@@ -723,6 +778,127 @@ TEST_CASE("FileActionLog::rotate: a failing pre-rotation fsync() throws before a
 
     REQUIRE_FALSE(std::filesystem::exists(sealed.path));
     *shouldFail = false;
+    log.flush();
+    REQUIRE(log.entries().size() == 1);
+}
+
+// ── Directory fsync (morph#532) ──────────────────────────────────────────
+//
+// `fsync` on a file makes its *data* durable but not a new directory entry
+// or a rename -- the constructor's first `fopen("a")` can create the file,
+// and `rotate()` performs two directory mutations (the seal rename and a
+// fresh active-file creation). `FileIoOps::syncPath` closes that gap; these
+// confirm it is actually called at each site, with the right directory, and
+// that a failure there is surfaced rather than swallowed.
+
+TEST_CASE("FileActionLog: construction syncs the containing directory after creating the file (morph#532)",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const tmp{"file_fault_construct_syncpath"};
+    std::vector<std::filesystem::path> syncedPaths;
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [&syncedPaths](const std::filesystem::path& dir) {
+        syncedPaths.push_back(dir);
+        return 0;
+    };
+
+    FileActionLog log{tmp.path, ioOps};
+
+    REQUIRE(syncedPaths.size() == 1);
+    CHECK(syncedPaths[0] == tmp.path.parent_path());
+}
+
+TEST_CASE("FileActionLog: an unsupported directory fsync warns instead of throwing (morph#532)",
+          "[action_log][phase2][file][fault-injection]") {
+    // A directory fsync needs a *read* handle on the directory, strictly
+    // stronger than writing a file inside it: on a mode-0300 spool directory --
+    // an ordinary hardened layout, and what a write-without-read
+    // SELinux/AppArmor policy produces -- fopen(path, "a") succeeds while
+    // open(dir, O_RDONLY|O_DIRECTORY) returns EACCES. Several FUSE, WSL and
+    // overlay mounts likewise return EINVAL/ENOSYS/ENOTSUP. None of those is a
+    // durability *failure*, and refusing to open over one would make this class
+    // unconstructible where it had worked for years.
+    TempFile const tmp{"file_fault_construct_syncpath_unsupported"};
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return EACCES; };
+
+    // Constructs, warns, and works -- the entries still round-trip, which is
+    // the half that would actually be lost if this threw.
+    {
+        FileActionLog log{tmp.path, ioOps};
+        log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+        log.flush();
+        CHECK(log.entries().size() == 1);
+    }
+
+    REQUIRE_FALSE(warnings.empty());
+    CHECK(warnings[0].contains("cannot fsync the directory"));
+}
+
+TEST_CASE("FileActionLog: a failing directory fsync during construction throws and leaks no file handle",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const tmp{"file_fault_construct_syncpath_fails"};
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return -1; };
+
+    REQUIRE_THROWS_AS(FileActionLog(tmp.path, ioOps), std::runtime_error);
+
+    // The failed construction must not have left the file handle open --
+    // a fresh, real-I/O open of the same path must succeed cleanly.
+    morph::core::FileIoOps const realOps;
+    FileActionLog reopened{tmp.path, realOps};
+    reopened.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    reopened.flush();
+    REQUIRE(reopened.entries().size() == 1);
+}
+
+TEST_CASE("FileActionLog::rotate: syncs both the seal rename's and the reopen's directory (morph#532)",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const active{"file_fault_rotate_syncpath_active"};
+    TempFile const sealed{"file_fault_rotate_syncpath_sealed"};
+    std::vector<std::filesystem::path> syncedPaths;
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [&syncedPaths](const std::filesystem::path& dir) {
+        syncedPaths.push_back(dir);
+        return 0;
+    };
+
+    FileActionLog log{active.path, ioOps};
+    syncedPaths.clear();  // drop the construction-time sync; this test is about rotate()'s own
+    log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    log.rotate(sealed.path);
+
+    // active.path and sealed.path share a parent (both under temp_directory_path()),
+    // so rotate()'s "only sync twice if the directories differ" branch collapses
+    // to one sync -- confirmed here rather than asserted away.
+    REQUIRE(syncedPaths.size() == 1);
+    CHECK(syncedPaths[0] == active.path.parent_path());
+}
+
+TEST_CASE("FileActionLog::rotate: a failing directory fsync throws after the rename and reopen already succeeded",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const active{"file_fault_rotate_syncpath_fails_active"};
+    TempFile const sealed{"file_fault_rotate_syncpath_fails_sealed"};
+    auto shouldFail = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [shouldFail](const std::filesystem::path&) { return *shouldFail ? -1 : 0; };
+
+    FileActionLog log{active.path, ioOps};  // construction's own sync must succeed
+    *shouldFail = true;
+    log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    REQUIRE_THROWS_AS(log.rotate(sealed.path), std::runtime_error);
+
+    // The rename and reopen both actually succeeded before the sync failure
+    // was surfaced -- rotate() does not undo real progress just because the
+    // trailing durability step could not be confirmed.
+    REQUIRE(std::filesystem::exists(sealed.path));
+    log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20"));
     log.flush();
     REQUIRE(log.entries().size() == 1);
 }
@@ -893,3 +1069,81 @@ TEST_CASE("FileActionLog: an unreadable journal is left intact, not truncated as
     REQUIRE(reopened.entries().size() == 3);
 }
 #endif  // _WIN32
+
+// ── The torn-tail latch and rotate()'s unsupported-directory warning ────────
+
+TEST_CASE("FileActionLog::append: a rollback that cannot truncate refuses every later append",
+          "[action_log][phase2][file][fault-injection]") {
+    // `rollBackShortWrite` truncates nothing when its own flush fails -- the
+    // disk that made the write short is still full -- so partial bytes stay at
+    // the end of the file. `repairTornTail()` heals that at the next
+    // construction, but only while it is the *trailing* line. One more
+    // successful append on this same handle would concatenate onto it and move
+    // the damage to an interior position, which nothing heals. So the log
+    // latches the failure and refuses, keeping the file in the one shape the
+    // next open can repair.
+    TempFile const tmp{"file_fault_append_torn_tail"};
+    auto shortWrite = std::make_shared<bool>(false);
+    auto failFlush = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.fwrite = [shortWrite](const void* buffer, std::size_t size, std::FILE* file) {
+        return *shortWrite ? std::fwrite(buffer, 1, size / 2, file) : std::fwrite(buffer, 1, size, file);
+    };
+    ioOps.fflush = [failFlush](std::FILE* file) { return *failFlush ? -1 : std::fflush(file); };
+
+    FileActionLog log{tmp.path, ioOps};
+    auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+
+    *shortWrite = true;
+    *failFlush = true;
+    REQUIRE_THROWS_AS(log.append(entry), std::runtime_error);
+
+    // Space is available again, but this handle is finished: appending now
+    // would merge onto the partial record and brick the file.
+    *shortWrite = false;
+    *failFlush = false;
+    REQUIRE_THROWS_MATCHES(log.append(entry), std::runtime_error,
+                           Catch::Matchers::MessageMatches(Catch::Matchers::ContainsSubstring("refusing to append")));
+}
+
+TEST_CASE("FileActionLog::rotate: an unsupported directory fsync warns for each parent rather than throwing",
+          "[action_log][phase2][file][fault-injection]") {
+    // EACCES from a directory fsync is `unsupported`, not `failed`: a mode-0300
+    // spool directory, or a write-without-read policy, produces exactly this
+    // while ordinary appends keep working. The constructor already warns and
+    // continues; rotate() must do the same for both directories it mutates
+    // rather than staying silent about a rotation whose directory entries are
+    // not guaranteed durable.
+    auto const sealedDir = std::filesystem::temp_directory_path() / "morph_test_rotate_unsupported_seal";
+    std::filesystem::remove_all(sealedDir);
+    std::filesystem::create_directories(sealedDir);
+    TempFile const active{"file_rotate_unsupported_dirsync"};
+
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return EACCES; };
+
+    FileActionLog log{active.path, ioOps};
+    auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+    log.append(entry);
+    log.flush();
+
+    // A *different* directory for the sealed segment, so both parents are
+    // classified rather than only the active one.
+    auto const sealed = sealedDir / "sealed.ndjson";
+    REQUIRE_NOTHROW(log.rotate(sealed));
+
+    auto const rotateWarnings = std::ranges::count_if(
+        warnings, [](const std::string& msg) { return msg.contains("FileActionLog::rotate: cannot fsync"); });
+    INFO("one warning per distinct unsupported parent: the active path's and the sealed path's");
+    CHECK(rotateWarnings == 2);
+    CHECK(std::filesystem::exists(sealed));
+
+    std::filesystem::remove_all(sealedDir);
+}

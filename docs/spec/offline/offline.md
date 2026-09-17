@@ -371,7 +371,65 @@ just id 1), restart again, and the next `enqueue()` reissued id 2, the id of a
 completed and acknowledged item. Mutations also raise rather than swallow I/O
 failures: a short write or a failed `fflush`/`fsync` throws, since every
 mutation is documented as a committed transaction by the time the call returns.
-They are also ordered **durable-first**: `markDone()` appends the tombstone
+
+A **failed write is rolled back before it throws** (morph#530). The file is
+opened `"a"`, so a partial line's bytes sit exactly where the next `writeLine`
+would resume, with no separating newline — the two merge into a single line that
+`load()` tolerates only while it remains the *trailing* one, and stops
+tolerating the moment a further append pushes it into an interior position,
+where a malformed line is genuine corruption and is rethrown.
+
+The rollback is wired to **all three** failure points, not only the short
+`fwrite`. A queue record is a few hundred bytes, far under `BUFSIZ`, so `fwrite`
+is a `memcpy` into the stdio buffer and returns the full count even on a full
+disk; the `write(2)` that actually fails happens inside the following `fflush`.
+Wired to the short-write branch alone, the rollback never ran for the *common*
+manifestation of `ENOSPC`. `writeLine` records the offset before writing and
+rolls back on a short `fwrite`, a failed `fflush`, or a failed `fsync` alike —
+the last of those because a mutation is documented as committed once the call
+returns, so a caller told the enqueue failed must not find it replayed after a
+restart.
+
+`morph::core::rollBackShortWrite` flushes before it truncates and truncates
+nothing if that flush fails; it also clamps to the file's real size, so it can
+only ever shrink. `docs/spec/core/file_io_ops.md` has the full reasoning —
+briefly, `ftell` on a buffered stream runs ahead of the on-disk size, and
+`resize_file` **grows** a file when asked for an offset beyond its end, so a
+naive rollback padded the queue with NUL bytes instead of trimming it.
+
+**A rollback that could not truncate ends the handle's life.** `writeLine`
+latches `rollBackShortWrite`'s `RollBack::torn` result and throws from every
+subsequent call, naming the reason and pointing at a reopen. Without that latch
+the partial record is still at the end of the file, and the *next* successful
+enqueue concatenates onto it with no separating newline — moving the damage out
+of the trailing position `load()` tolerates and into an interior one that makes
+the next open throw a parse error, taking the whole backlog with it. Refusing
+later writes keeps the torn record trailing, which is exactly the shape the next
+open's `load()` skips and `compact()` rewrites away. See
+[file_io_ops.md](../core/file_io_ops.md), "Rolling back a short write".
+
+**No constructor-time `repairTornTail`.** An earlier revision of morph#530 ran
+it before `load()`, to heal "an interior merge from a doubled-up short write".
+It cannot do that — it only trims bytes after the final newline, and says so
+itself — so it never fixed the case it was added for. It did cost two things:
+it is the constructor's only file mutation that can run *before* `load()`
+throws, which breaks morph#494's guarantee that a failed construction leaves the
+file byte-identical, and it discards a complete final record whose only missing
+byte is the trailing newline, wiping the file outright when that is the only
+line. What prevents the doubled-up short write is the rollback above; `load()` +
+`compact()` heal an ordinary torn tail as they always have. `FileActionLog`
+keeps its own long-standing call — pre-existing behaviour there, not something
+morph#530 introduced.
+
+`compact()` additionally fsyncs the **containing directory** after its
+`rename()` (morph#532): the fsync on the temporary file makes the compacted
+*data* durable and says nothing about the directory entry that now names it
+`_path`. A directory fsync the platform or mount cannot perform is logged at
+`warn` and construction continues; only a genuine I/O failure throws. See
+`docs/spec/journal/journal.md`, "Directory durability", for why that split
+exists and which cases fall on each side.
+
+Mutations are also ordered **durable-first**: `markDone()` appends the tombstone
 before erasing from `_items`, and `setAttempts()` writes before updating memory.
 The reverse order meant a throwing append left the item gone from memory with no
 tombstone on disk, so this process never replayed it and a restart resurrected
@@ -434,6 +492,73 @@ existing row's id; empty keys are exempt and are never deduplicated, matching
 and `markDone()` loses nothing; every write is its own committed statement
 under `PRAGMA journal_mode=WAL`. All operations serialise on an internal
 mutex, so the queue is safe to share between the write and drain/replay paths.
+
+**Durability settings, set once at construction** (morph#532), in this order —
+the order is load-bearing:
+
+| Order | Pragma | Value | Why |
+|---|---|---|---|
+| 1 | `busy_timeout` | `busyTimeout` ctor param, default 5000 ms | Must come **first**: converting a database to WAL needs an exclusive lock, so `journal_mode=WAL` is itself a `SQLITE_BUSY` candidate. Set last, as an earlier revision did, the multi-opener case it was added for failed exactly as before (measured: 12 ms to throw "database is locked" with no timeout, a full 1001 ms wait with a 1000 ms timeout set first). |
+| 2 | `synchronous` | `Synchronous` ctor param, default `normal` | Before `journal_mode`, and unconditional: SQLite's rollback-journal default is already `FULL`, and it is WAL that lowers it to `NORMAL`. Setting it first means the level holds whether or not WAL takes. |
+| 3 | `journal_mode` | `WAL` | Read back and **warned about**, not enforced. |
+
+`synchronous` defaults to `NORMAL`, which is SQLite's own recommendation under
+WAL and can lose only the most recent commits — something this queue's
+at-least-once delivery plus `idempotencyKey` dedup already absorb. `FULL` is
+available (`Synchronous::full`) and costs roughly **18x per mutation**
+(measured: ~0.08 ms to ~1.44 ms, NVMe/btrfs, SQLite 3.53.4). Every mutation here
+is its own commit and `SyncWorker::relay()` calls `markDone`/`setAttempts` once
+per drained item, so a 200-item drain goes from ~16 ms to ~290 ms — all of it
+under this class's mutex, where it also blocks the producer's `enqueue()`.
+
+The `journal_mode` read-back exists because `sqlite3_exec` discards the row a
+`PRAGMA` returns, so a **silent fallback** would otherwise go unnoticed: WAL
+needs shared memory, which `:memory:` and the temp/`""` spellings do not have
+(they report `memory`) and which NFS, CIFS/SMB and some overlay, 9p and Docker
+mounts do not provide (they report `delete`). Construction re-reads the pragma
+through a prepared statement and **logs a warning** if it is not `wal`;
+`journalMode()` exposes what it got.
+
+It deliberately does **not** throw. None of those modes is less durable than WAL
+once `synchronous` is set above — and an earlier revision that did throw made
+the queue unconstructible on an NFS home directory, which `examples/kanban`'s
+`enableOfflineQueue()` reaches with a user-supplied path.
+
+`busy_timeout` buys a wait, not a guarantee: this class's own mutex makes
+`SQLITE_BUSY` unreachable for a single instance, so the timeout matters only
+when something else has the database open — and the wait then happens *under
+that mutex*, blocking every other caller of the instance, a Qt GUI thread
+included. Pass `std::chrono::milliseconds{0}` to restore fail-fast.
+
+Construction also **fsyncs the containing directory** once, after
+`sqlite3_open()` and every schema statement succeed. `sqlite3_open()` creates
+`_path` (and, once WAL took, its `-wal`/`-shm` siblings) if absent; SQLite's own
+fsyncs cover those files' *contents*, never the directory entries naming them.
+Same split as the file-backed queues: unsupported warns, a genuine failure
+throws. The optional third `morph::core::FileIoOps` parameter exists to reach
+that branch from a test and is used for `syncPath` **only** — every other SQLite
+interaction goes through the C API directly.
+
+*Which* directory is asked of SQLite, via `sqlite3_db_filename(db, "main")`,
+rather than derived from the constructor's `path`. `:memory:`, `""` and the
+`file::memory:` URI spellings open no file at all and have an empty
+`parent_path()`, which `FileIoOps::syncPath` resolves to `"."` — so deriving it
+from `path` fsynced the *process's current working directory* and reported the
+result as this queue's: a warning naming a database that is not on disk wherever
+a directory fsync is unsupported, and a refusal to construct an in-memory queue
+at all wherever that fsync genuinely fails. `sqlite3_db_filename` reports an
+empty name for exactly those spellings, so an empty result means "no backing
+file, nothing to sync" and the step is skipped.
+
+**A NUL byte inside a payload or idempotency key survives a round trip**
+(morph#531). `payload` and `idempotencyKey` are opaque strings whose
+serialisation the caller owns, so an embedded NUL is legitimate. Both halves
+previously truncated at the first one: `sqlite3_bind_text` was called with
+length `-1`, telling SQLite to measure to the first NUL, and the read side
+constructed a `std::string` from the bare `const char*`. Writes now pass an
+explicit `value.size()` (throwing if it exceeds `INT_MAX`, which the `int`
+parameter cannot represent) and reads use `sqlite3_column_bytes()` for the
+stored length.
 
 ## Ownership: who enqueues
 

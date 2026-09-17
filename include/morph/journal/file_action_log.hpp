@@ -77,7 +77,7 @@ public:
         // throws -- from this very constructor, leaving the journal permanently
         // unopenable. FileOfflineQueue heals the same damage in compact(); this
         // is FileActionLog's equivalent.
-        repairTornTail();
+        ::morph::core::repairTornTail(_io, _path, "FileActionLog");
 
         // Rebuild the idempotencyKey dedup set from whatever is already durably on
         // disk, so a re-relayed outbox row is recognised even after this process
@@ -101,8 +101,34 @@ public:
             }
         }
         _file = _io.fopen(_path.string(), "a");
+        ::morph::core::positionAtEnd(_file);
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog: failed to open " + _path.string());
+        }
+        // "a" mode creates the file if it did not already exist -- a fresh
+        // directory entry that `_file`'s own later fsyncs never make durable
+        // (morph#532). Unconditional: harmless when the file already existed,
+        // since syncing an unchanged directory is a cheap no-op: a failure
+        // here is surfaced rather than swallowed, the same discipline
+        // `flush()`/`rotate()` already apply to the file-content fsync.
+        // `_file` is closed first -- this constructor never completes, so
+        // ~FileActionLog() never runs to close what fopen() already opened.
+        // A directory fsync needs a *read* handle on the directory, a strictly
+        // stronger permission than writing a file inside it, and several mounts
+        // cannot do it at all -- see classifyDirectorySync(). Neither is a
+        // durability failure, and neither is worth refusing to open over.
+        auto const dirSync = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path()));
+        if (dirSync == ::morph::core::DirectorySync::failed) {
+            // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory) — about to rethrow, nothing to report a close failure to
+            std::fclose(_file);
+            _file = nullptr;
+            throw std::runtime_error("FileActionLog: failed to fsync directory after creating " + _path.string());
+        }
+        if (dirSync == ::morph::core::DirectorySync::unsupported) {
+            ::morph::log::logWarn(
+                "FileActionLog: cannot fsync the directory containing {}; the log's contents are still fsynced, but "
+                "its directory entry is only as durable as this filesystem makes it",
+                _path.string());
         }
     }
 
@@ -142,6 +168,11 @@ public:
     void append(LogEntry entry) override {
         std::scoped_lock const lock{_mtx};
         requireOpen("append");
+        if (_tornTail) {
+            throw std::runtime_error("FileActionLog::append: refusing to append to " + _path.string() +
+                                     " after a short write that could not be rolled back; reopen the log to have it "
+                                     "repaired");
+        }
         if (!entry.idempotencyKey.empty() && (_seenIdempotencyKeys.contains(entry.idempotencyKey) ||
                                               _unflushedIdempotencyKeys.contains(entry.idempotencyKey))) {
             return;  // already recorded; a re-relayed duplicate is a safe no-op
@@ -149,7 +180,32 @@ public:
         entry.seq = ++_nextSeq;
         auto line = toJson(entry);
         line.push_back('\n');
+        long long const offsetBeforeWrite = ::morph::core::wideFtell(_file);
         if (_io.fwrite(line.data(), line.size(), _file) != line.size()) {
+            // See FileOfflineQueue::writeLine's identical comment (morph#530):
+            // "a"-mode means a short write's partial bytes sit exactly where the
+            // next append() would resume, merging into one line repairTornTail()
+            // can only heal at construction, before this can happen. Roll the
+            // file back to its pre-write length instead, so the failed write
+            // leaves nothing for a later append to merge with. Best-effort --
+            // already the failure path. See `rollBackShortWrite()`'s own docs
+            // for why it also resyncs `_file`'s stdio position, not just the
+            // on-disk length: without that, a second consecutive short write
+            // (e.g. `OutboxRelay::relay()` retrying `append()` on this same
+            // long-lived sink while disk space stays exhausted) would roll back
+            // to a stale offset and pad the file with NUL bytes instead of
+            // truncating it.
+            if (::morph::core::rollBackShortWrite(_io, _file, _path, offsetBeforeWrite) ==
+                ::morph::core::RollBack::torn) {
+                // The rollback could not truncate, so partial bytes may remain at
+                // the end of the file. `repairTornTail()` heals that at the next
+                // construction, but only while it is still the *trailing* line --
+                // one more successful append on this handle would concatenate
+                // onto it and move the damage into an interior position, which
+                // nothing heals. Refuse every later append instead, so the file
+                // stays in the one shape the next open can repair.
+                _tornTail = true;
+            }
             throw std::runtime_error("FileActionLog::append: short write to " + _path.string());
         }
         if (!entry.idempotencyKey.empty()) {
@@ -295,8 +351,8 @@ public:
             _seenIdempotencyKeys.insert(key);
         }
         _unflushedIdempotencyKeys.clear();
-        // NOLINTNEXTLINE(cert-err33-c) — the data is already fsynced above
-        std::fclose(_file);
+        // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory)
+        std::fclose(_file);  // the data is already fsynced above
         _file = nullptr;
 
         std::error_code renameError;
@@ -306,7 +362,39 @@ public:
         // success this creates a fresh empty file; on failure it reopens the
         // same pre-rotation file (still holding every prior entry), so a
         // failed rotation never leaves the log unusable.
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) — mirrors std::fopen's own raw-owning-pointer return; closed in the destructor
         _file = _io.fopen(_path.string(), "a");
+        ::morph::core::positionAtEnd(_file);
+
+        // Two directory mutations just happened -- the seal rename and, on
+        // success, a brand-new active file -- and neither is durable until
+        // its directory entry is fsynced (morph#532). Run regardless of what
+        // failed above, so a rotation that is about to throw still leaves
+        // whatever succeeded as durable as it can be made; the failure is
+        // surfaced below rather than swallowed, same as the pre-rotation
+        // fsync above.
+        // `unsupported` is not a failure here either -- same reasoning as the
+        // constructor's own directory fsync -- but it is not silent either:
+        // the contract is that it warns, so an operator knows the rotated
+        // names are only as durable as the filesystem makes them. Collapsing
+        // the tri-state to a bool here used to drop that warning on the floor
+        // for both directories, leaving `rotate()` quieter than the
+        // construction path that documents the same classification.
+        auto const classifyAndWarn = [this](const std::filesystem::path& dir) {
+            auto const outcome = ::morph::core::classifyDirectorySync(_io.syncPath(dir));
+            if (outcome == ::morph::core::DirectorySync::unsupported) {
+                ::morph::log::logWarn(
+                    "FileActionLog::rotate: cannot fsync the directory {}; the log's contents are still fsynced, but "
+                    "the rotated directory entries are only as durable as this filesystem makes them",
+                    dir.string());
+            }
+            return outcome;
+        };
+        bool const dirSyncFailed = classifyAndWarn(_path.parent_path()) == ::morph::core::DirectorySync::failed;
+        bool const sealedDirSyncFailed =
+            sealedPath.parent_path() != _path.parent_path() &&
+            classifyAndWarn(sealedPath.parent_path()) == ::morph::core::DirectorySync::failed;
+
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog::rotate: failed to reopen " + _path.string() + " after " +
                                      (renameError ? "a failed" : "a successful") + " rename to " +
@@ -315,6 +403,10 @@ public:
         if (renameError) {
             throw std::runtime_error("FileActionLog::rotate: failed to rename " + _path.string() + " to " +
                                      sealedPath.string() + ": " + renameError.message());
+        }
+        if (dirSyncFailed || sealedDirSyncFailed) {
+            throw std::runtime_error("FileActionLog::rotate: failed to fsync the directory after rotating " +
+                                     _path.string() + " to " + sealedPath.string());
         }
     }
 
@@ -329,72 +421,14 @@ private:
         }
     }
 
-    /// Truncates any bytes following the last newline in the file.
-    ///
-    /// A crash between `append()`'s `fwrite` and the next `flush()` can leave a
-    /// partial record at the end. Because every complete record is written
-    /// newline-terminated in a single `fwrite`, whatever follows the final
-    /// newline is by construction an incomplete record and never a whole one —
-    /// which makes discarding it safe: it can only remove bytes that no reader
-    /// could ever have decoded. Complete records, including a malformed
-    /// *interior* line, are left exactly as they are; diagnosing those stays
-    /// `entries()`' job.
-    void repairTornTail() const {
-        std::error_code errorCode;
-        auto const size = std::filesystem::file_size(_path, errorCode);
-        if (errorCode || size == 0) {
-            return;  // absent or empty: nothing to repair
-        }
-        if (!_io.canOpenForRead(_path)) {
-            return;
-        }
-        std::ifstream input{_path, std::ios::binary};
-        if (!input) {
-            // The probe above said readable and this open still failed (a
-            // permission change or fd exhaustion landing in between). Falling
-            // through would scan nothing, leave `intactEnd` at 0, and truncate
-            // the whole journal as if it were one torn record -- so bail
-            // instead. The safety argument below holds only for bytes this
-            // function actually read.
-            ::morph::log::logWarn("FileActionLog: could not read " + _path.string() +
-                                  " to check for a torn trailing record; leaving it untouched");
-            return;
-        }
-        std::uintmax_t intactEnd = 0;
-        std::uintmax_t offset = 0;
-        std::string line;
-        while (std::getline(input, line)) {
-            offset += line.size();
-            if (input.eof()) {
-                break;  // no trailing newline: this line is the torn remainder
-            }
-            ++offset;  // the '\n' getline consumed
-            intactEnd = offset;
-        }
-        if (input.bad()) {
-            // Terminated by an I/O error rather than by end-of-file, so
-            // everything past `intactEnd` is unread rather than established to
-            // be torn. Truncating here would discard complete, fsynced records.
-            ::morph::log::logWarn("FileActionLog: read error while checking " + _path.string() +
-                                  " for a torn trailing record; leaving it untouched");
-            return;
-        }
-        if (intactEnd == size) {
-            return;
-        }
-        _io.resizeFile(_path, intactEnd, errorCode);
-        if (errorCode) {
-            ::morph::log::logWarn("FileActionLog: could not truncate torn trailing record in " + _path.string() +
-                                  ": " + errorCode.message());
-            return;
-        }
-        ::morph::log::logWarn("FileActionLog: discarded " + std::to_string(size - intactEnd) +
-                              " byte(s) of a torn trailing record in " + _path.string());
-    }
-
     std::filesystem::path _path;
     ::morph::core::FileIoOps _io;
     std::FILE* _file = nullptr;
+    // Set when a failed write could not be rolled back, so a partial record may
+    // still sit at the end of `_path`. Every later append is refused, which is
+    // what keeps that partial record the trailing line -- the only position
+    // `repairTornTail()` can heal it from at the next construction.
+    bool _tornTail = false;
     mutable std::mutex _mtx;
     uint64_t _nextSeq{0};
     /// Keys confirmed durable by a successful `flush()`.

@@ -191,4 +191,83 @@ inline void checkIdempotencyKeyContractAcrossReopen(const std::string& name, Key
     }
 }
 
+/// @brief Asserts an implementation round-trips a NUL-bearing payload and
+///        idempotency key intact, rather than truncating at the first `\0`
+///        (morph#531).
+///
+/// `QueueItem::payload` is documented as an opaque string whose serialisation
+/// format is the caller's choice (JSON, binary-hex, plain text, ...), so a
+/// backend that measures a C string by scanning for a NUL silently corrupts
+/// any payload or key containing one -- and two keys that differ only after
+/// their shared NUL prefix collapse to the same dedup token, discarding one
+/// enqueue as a false "duplicate".
+///
+/// @param name Implementation name, reported on failure.
+/// @param make Factory producing a fresh, empty queue.
+/// @param reopen Factory reopening the **same** store, for a durable
+///        implementation. Optional, because `InMemoryOfflineQueue` has nothing
+///        to reopen — but load-bearing for the ones that do: `enqueue()` writes
+///        the record *and* keeps the item in an in-memory map, and `drain()`
+///        serves that map, so without a reopen this check compares the values
+///        it just handed to `enqueue` against themselves and never executes the
+///        on-disk encoder or decoder at all. That encoder is exactly what
+///        morph#531 is about for the file backend: with no reopen, deleting
+///        `escape_control_characters` from `FileOfflineQueue`'s write options
+///        leaves this check green.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) — `make` and `reopen` are the same type by nature; for the durable backends they are deliberately the *same* factory, so a swap is a no-op rather than a hazard
+inline void checkNulPayloadRoundTrip(const std::string& name, const QueueFactory& make,
+                                     const QueueFactory& reopen = {}) {
+    INFO("implementation under test: " << name);
+
+    std::string const payload{"A\0B", 3};
+    std::string const keyA{
+        "k\0"
+        "1",
+        3};
+    std::string const keyB{
+        "k\0"
+        "2",
+        3};
+
+    auto queue = make();
+    auto const firstId = queue->enqueue(payload, keyA);
+    auto const secondId = queue->enqueue(payload, keyB);
+
+    INFO("keys differing only after a shared NUL prefix must not collapse to one dedup token");
+    CHECK(firstId != secondId);
+    CHECK(queue->size() == 2);
+
+    auto const firstItem = detail::itemById(*queue, firstId);
+    auto const secondItem = detail::itemById(*queue, secondId);
+    REQUIRE(firstItem.has_value());
+    REQUIRE(secondItem.has_value());
+    INFO("a NUL inside the payload or key must survive the round trip, not truncate at the first byte");
+    CHECK(firstItem->payload == payload);
+    CHECK(firstItem->idempotencyKey == keyA);
+    CHECK(secondItem->payload == payload);
+    CHECK(secondItem->idempotencyKey == keyB);
+
+    if (!reopen) {
+        return;  // nothing persisted; the in-memory check above is the whole contract
+    }
+
+    // The half that actually exercises the serialiser. Everything above came
+    // back out of the in-memory map `enqueue()` populated; only a reopen forces
+    // the values to make the round trip through the stored representation.
+    queue.reset();  // close the store before reopening it (Windows)
+    auto reopened = reopen();
+
+    INFO("both NUL-bearing records must survive a reopen, decoded from the stored representation");
+    REQUIRE(reopened->size() == 2);
+
+    auto const firstAfter = detail::itemById(*reopened, firstId);
+    auto const secondAfter = detail::itemById(*reopened, secondId);
+    REQUIRE(firstAfter.has_value());
+    REQUIRE(secondAfter.has_value());
+    CHECK(firstAfter->payload == payload);
+    CHECK(firstAfter->idempotencyKey == keyA);
+    CHECK(secondAfter->payload == payload);
+    CHECK(secondAfter->idempotencyKey == keyB);
+}
+
 }  // namespace morph::test

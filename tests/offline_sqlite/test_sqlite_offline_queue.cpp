@@ -5,18 +5,23 @@
 #include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <cerrno>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <morph/core/file_io_ops.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/observability.hpp>
 #include <morph/offline/sqlite_offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../offline_queue_conformance.hpp"
+#include "../test_support.hpp"
 
 namespace {
 
@@ -291,6 +296,15 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: the idempotency-key contract surv
     removeDbFiles(dbPath);
 }
 
+TEST_CASE("morph::offline::SqliteOfflineQueue: a NUL-bearing payload and key round-trip intact (morph#531)",
+          "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    auto const open = [&dbPath] { return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath); };
+    morph::test::checkNulPayloadRoundTrip("SqliteOfflineQueue", open, open);
+    removeDbFiles(dbPath);
+}
+
 // ── setIdempotencyKey on a conflicting key (morph#249) ───────────────────────
 //
 // The protected hook is reached only through the *base* default
@@ -432,7 +446,15 @@ TEST_CASE(
     // instance's own write-statement step() return SQLITE_BUSY.
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
-    morph::offline::SqliteOfflineQueue queue{dbPath};
+    // busyTimeout 0 -- this case is about SQLITE_BUSY *surfacing*, and the
+    // default 5s timeout would make it surface five seconds later while still
+    // passing, turning a sub-millisecond assertion into a stall that says
+    // nothing more than this one does.
+    morph::offline::SqliteOfflineQueue queue{dbPath,
+                                             std::nullopt,
+                                             {},
+                                             morph::offline::SqliteOfflineQueue::Synchronous::normal,
+                                             std::chrono::milliseconds{0}};
     (void)queue.enqueue("seed");
 
     sqlite3* second = nullptr;
@@ -497,5 +519,292 @@ TEST_CASE(
     }
     REQUIRE(enqueueThrew);
 
+    removeDbFiles(dbPath);
+}
+
+// ── Durability PRAGMAs (morph#532) ───────────────────────────────────────
+//
+// journal_mode=WAL, synchronous=FULL, and busy_timeout are all set at
+// construction. journal_mode is a persistent property of the database file
+// itself (unlike the other two, which are per-connection), so it is the one
+// that can be read back from a fresh connection after the original closes;
+// it is also the one construction verifies for itself, since a filesystem
+// without shared-memory support silently falls back to `delete` mode
+// instead of erroring.
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: journal_mode=WAL persists and is verified at construction (morph#532)",
+          "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath};
+        (void)queue.enqueue("payload");
+    }  // closed -- journal_mode lives in the file's own header, not the connection
+
+    sqlite3* raw = nullptr;
+    REQUIRE(sqlite3_open(dbPath.string().c_str(), &raw) == SQLITE_OK);
+    sqlite3_stmt* stmt = nullptr;
+    REQUIRE(sqlite3_prepare_v2(raw, "PRAGMA journal_mode;", -1, &stmt, nullptr) == SQLITE_OK);
+    REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
+    // sqlite3_column_text returns `const unsigned char*`; reading it as text
+    // has no other spelling.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    std::string const mode{reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))};
+    CHECK(mode == "wal");
+    sqlite3_finalize(stmt);
+    sqlite3_close(raw);
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: a journal_mode that is not WAL warns and keeps working (morph#532)",
+          "[sqlite]") {
+    // An in-memory database always reports journal_mode "memory" regardless of
+    // what is requested -- SQLite's own documented behavior (WAL needs shared
+    // memory a `:memory:` database does not have), not a fault injected here.
+    // It stands in for the real cases: NFS, CIFS/SMB, and some overlay/9p
+    // mounts, which report "delete".
+    //
+    // The read-back must still happen -- that is what makes the fallback
+    // visible instead of silent -- but it must not refuse the database. None of
+    // these modes is less durable than WAL once `PRAGMA synchronous` is set
+    // (SQLite's rollback-journal default is already FULL; it is WAL that lowers
+    // it), and throwing here meant an app whose data directory sits on NFS
+    // could not construct its queue at all.
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+
+    std::optional<morph::offline::SqliteOfflineQueue> queue;
+    REQUIRE_NOTHROW(queue.emplace(std::filesystem::path{":memory:"}));
+
+    CHECK(queue->journalMode() == "memory");
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings[0].contains("journal_mode=WAL did not take"));
+    CHECK(warnings[0].contains("memory"));
+
+    // Load-bearing: the queue is not merely constructible, it works.
+    auto const id = queue->enqueue("payload");
+    CHECK(queue->drain().size() == 1);
+    queue->markDone(id);
+    CHECK(queue->drain().empty());
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: a WAL database reports journalMode() == \"wal\" (morph#532)",
+          "[sqlite]") {
+    // The other side of the case above: on an ordinary filesystem the read-back
+    // must report `wal`, and must emit no warning. Without this, the warn path
+    // above could pass while WAL silently never took anywhere.
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    std::vector<std::string> warnings;
+    {
+        morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+            if (level == morph::log::LogLevel::warn) {
+                warnings.emplace_back(msg);
+            }
+        }};
+        morph::offline::SqliteOfflineQueue const queue{dbPath};
+        CHECK(queue.journalMode() == "wal");
+    }
+    CHECK(warnings.empty());
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE(
+    "morph::offline::SqliteOfflineQueue: PRAGMA busy_timeout lets a write wait out a transient lock instead of "
+    "failing immediately (morph#532)",
+    "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    morph::offline::SqliteOfflineQueue queue{dbPath};
+    (void)queue.enqueue("seed");  // ensure the WAL files exist before a second connection opens
+
+    // A second, independent connection holding the write lock is the only
+    // way SQLITE_BUSY becomes reachable from `queue`'s own connection at
+    // all -- this class's internal mutex already serialises every call
+    // *within* this process, so nothing short of another connection
+    // entirely can contend with it.
+    //
+    // Closed through a guard rather than a bare call at the end: every
+    // assertion below is a Catch2 macro that throws on failure, and an early
+    // unwind would otherwise leak the connection and leave the database locked
+    // for whatever runs next.
+    sqlite3* second = nullptr;
+    REQUIRE(sqlite3_open(dbPath.string().c_str(), &second) == SQLITE_OK);
+    auto const closeSecond = std::unique_ptr<sqlite3, decltype(&sqlite3_close)>{second, &sqlite3_close};
+    char* err = nullptr;
+    REQUIRE(sqlite3_exec(second, "BEGIN IMMEDIATE;", nullptr, nullptr, &err) == SQLITE_OK);
+
+    std::atomic<bool> enqueueSucceeded{false};
+    std::atomic<bool> enqueueThrew{false};
+    std::atomic<bool> writerEntered{false};
+    // jthread, not thread: a REQUIRE below throws on failure, and unwinding
+    // past a still-joinable std::thread calls std::terminate -- which would
+    // abort the whole binary and lose every later test case rather than report
+    // the assertion that failed. catch(...) for the same reason: anything
+    // escaping a thread function terminates, and this one is not limited to
+    // throwing SqliteOfflineQueueError.
+    std::jthread writer{[&] {
+        writerEntered = true;
+        try {
+            (void)queue.enqueue("blocked-until-lock-released");
+            enqueueSucceeded = true;
+        } catch (...) {
+            enqueueThrew = true;  // what a zero/absent busy_timeout would produce instead
+        }
+    }};
+
+    // Wait for the writer to be inside enqueue() and blocked on the lock,
+    // rather than sleeping a fixed 200ms and hoping. On a loaded runner the
+    // fixed sleep could elapse before the writer reached sqlite3_step, so the
+    // COMMIT released a lock nobody was waiting on and the test passed without
+    // ever proving the busy handler ran.
+    REQUIRE(morph::testing::waitUntil([&] { return writerEntered.load(); }));
+    // `writerEntered` is published *before* the enqueue() call, so on its own it
+    // proves only that the thread started -- not that it reached sqlite3_step
+    // and found the lock held. Checking the two result flags right here would
+    // therefore pass trivially, and keep passing with the busy_timeout PRAGMA
+    // removed, which is the whole thing this test exists to pin.
+    //
+    // Requiring the call to still be *pending* after a bounded window is what
+    // closes that: with no busy_timeout, sqlite3_step returns SQLITE_BUSY as
+    // soon as it sees the lock, so `enqueueThrew` would flip well inside this
+    // window and fail the assertion. The window is far below the 5s timeout
+    // under test, so a correctly configured queue is still blocked when it
+    // elapses.
+    CHECK_FALSE(morph::testing::waitUntil([&] { return enqueueSucceeded.load() || enqueueThrew.load(); },
+                                          std::chrono::milliseconds{500}));
+
+    REQUIRE(sqlite3_exec(second, "COMMIT;", nullptr, nullptr, &err) == SQLITE_OK);
+    writer.join();
+
+    CHECK(enqueueSucceeded.load());
+    CHECK_FALSE(enqueueThrew.load());
+    removeDbFiles(dbPath);
+}
+
+// ── Directory fsync (morph#532) ──────────────────────────────────────────
+//
+// `sqlite3_open()` creates `dbPath` (and, once journal_mode=WAL took, its
+// "-wal"/"-shm" siblings) on first use -- a fresh directory entry that
+// SQLite's own internal fsyncs of the *file's* contents never make durable.
+// These confirm `FileIoOps::syncPath` is actually called once construction's
+// schema setup succeeds, with the right directory, and that a failure there
+// is surfaced rather than swallowed -- mirroring the equivalent
+// `FileActionLog`/`FileOfflineQueue` tests in test_action_log_phase2.cpp /
+// test_file_offline_queue.cpp.
+
+TEST_CASE(
+    "morph::offline::SqliteOfflineQueue: construction syncs the containing directory after creating the file "
+    "(morph#532)",
+    "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    std::vector<std::filesystem::path> syncedPaths;
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [&syncedPaths](const std::filesystem::path& dir) {
+        syncedPaths.push_back(dir);
+        return 0;
+    };
+
+    // Scoped so the connection (and its -wal/-shm siblings) is closed before
+    // removeDbFiles() unlinks them -- the same open-handle-vs-unlink ordering
+    // that made the FileOfflineQueue twin of this test fail on Windows. This
+    // suite is Linux-only today, where the unlink would succeed regardless;
+    // scoped anyway so it does not become a Windows failure the day it is not.
+    {
+        morph::offline::SqliteOfflineQueue const queue{dbPath, std::nullopt, ioOps};
+    }
+
+    REQUIRE(syncedPaths.size() == 1);
+    CHECK(syncedPaths[0] == dbPath.parent_path());
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: an unsupported directory fsync warns instead of throwing (morph#532)",
+          "[sqlite]") {
+    // Same split as the file-backed queues: a directory fsync this platform or
+    // mount cannot perform is a durability *ceiling*, not a failure, and must
+    // not stop the database opening. kanban's enableOfflineQueue() builds one
+    // of these from a user-supplied path, so throwing here would mean a data
+    // directory on NFS could not open the app at all.
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride const guard{[&warnings](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return EACCES; };
+
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath, std::nullopt, ioOps};
+        auto const id = queue.enqueue("payload");
+        CHECK(queue.drain().size() == 1);
+        queue.markDone(id);
+        CHECK(queue.drain().empty());
+    }
+
+    REQUIRE_FALSE(warnings.empty());
+    CHECK(warnings[0].contains("cannot fsync the directory"));
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: Synchronous selects the level SQLite actually applies (morph#532)",
+          "[sqlite]") {
+    // `full` is opt-in because it costs ~18x per mutation, and every mutation
+    // here is its own commit -- so the parameter only earns its place if it
+    // actually reaches SQLite. Asserted against the level read back from the
+    // queue's own connection, not against the argument that was passed in.
+    //
+    // SQLite's numeric levels: 0 OFF, 1 NORMAL, 2 FULL, 3 EXTRA.
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+
+    {
+        morph::offline::SqliteOfflineQueue queue{
+            dbPath, std::nullopt, {}, morph::offline::SqliteOfflineQueue::Synchronous::full};
+        CHECK(queue.synchronousLevel() == 2);
+        // A working queue, not merely a constructible one.
+        auto const id = queue.enqueue("durable-payload");
+        CHECK(queue.drain().size() == 1);
+        queue.markDone(id);
+        CHECK(queue.drain().empty());
+    }
+
+    // The default, and the other side of the assertion: without it, a
+    // read-back that always reported FULL would pass the check above.
+    {
+        morph::offline::SqliteOfflineQueue const queue{dbPath};
+        CHECK(queue.synchronousLevel() == 1);
+    }
+
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE(
+    "morph::offline::SqliteOfflineQueue: a failing directory fsync during construction throws and leaks no "
+    "connection (morph#532)",
+    "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    morph::core::FileIoOps ioOps;
+    ioOps.syncPath = [](const std::filesystem::path&) { return -1; };
+
+    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(dbPath, std::nullopt, ioOps),
+                      morph::offline::SqliteOfflineQueueError);
+
+    // The failed construction must not have left the connection open -- a
+    // fresh, real-I/O open of the same path must succeed cleanly.
+    morph::offline::SqliteOfflineQueue reopened{dbPath};
+    (void)reopened.enqueue("payload");
+    REQUIRE(reopened.size() == 1);
     removeDbFiles(dbPath);
 }

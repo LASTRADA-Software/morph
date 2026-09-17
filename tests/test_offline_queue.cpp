@@ -288,3 +288,9 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: IOfflineQueue idempotency-key c
     morph::test::checkIdempotencyKeyContract("InMemoryOfflineQueue", morph::test::KeyDedup::never,
                                              [] { return std::make_unique<morph::offline::InMemoryOfflineQueue>(); });
 }
+
+TEST_CASE("morph::offline::InMemoryOfflineQueue: a NUL-bearing payload and key round-trip intact (morph#531)",
+          "[offline_queue]") {
+    morph::test::checkNulPayloadRoundTrip("InMemoryOfflineQueue",
+                                          [] { return std::make_unique<morph::offline::InMemoryOfflineQueue>(); });
+}

@@ -450,9 +450,11 @@ Two operations on the *shipped file implementation* — not on this interface �
 do change what a subsequent `entries()` returns, and neither is an exception to
 the append-only rule so much as a boundary of it:
 `FileActionLog::`[`rotate()`](#rotation-and-retention), which seals the active
-file and reopens an empty one, and `FileActionLog`'s private
-`repairTornTail()`, which discards a truncated trailing record and runs only
-from that class's constructor. An `IActionLog` implementation over another sink
+file and reopens an empty one, and `morph::core::repairTornTail()`, which
+discards a truncated trailing record and runs only from this class's
+constructor. It was private to `FileActionLog` until morph#530 lifted it into
+`core/file_io_ops.hpp` so the logic has one home; `FileOfflineQueue`
+deliberately does not call it (see `docs/spec/offline/offline.md`). An `IActionLog` implementation over another sink
 owes neither.
 
 | Method | Signature | Purpose |
@@ -483,11 +485,15 @@ immediately after `flush()` returns cannot lose data.
 Open (creating if necessary) via `FileActionLog(std::filesystem::path, morph::core::FileIoOps = {})`.
 The second parameter is a test-only fault-injection seam (`morph/core/
 file_io_ops.hpp`) — the raw `fwrite`/`fflush`/`fsync`/`fopen`/file-open/
-`resize_file` calls this class makes, as an injectable strategy defaulting to
-the real syscalls, letting a test force the failure branches that otherwise
-need a real OS-level I/O error to reach. A normal caller never passes one.
-Throws `std::runtime_error` if the file cannot be opened. Closes the file in
-the destructor. Copy and move are deleted.
+`resize_file`/`syncPath` calls this class makes, as an injectable strategy
+defaulting to the real syscalls, letting a test force the failure branches that
+otherwise need a real OS-level I/O error to reach. A normal caller never passes
+one. Throws `std::runtime_error` if the file cannot be opened, or if the
+containing directory's fsync fails for a reason that is a genuine I/O failure
+(morph#532) — a directory fsync the platform or mount simply cannot perform
+warns and continues instead; see
+[Directory durability](#directory-durability). Closes the file in the
+destructor. Copy and move are deleted.
 
 **Process-local `seq`.** `seq` is assigned fresh per process instance — it does
 not resume from the highest `seq` already on disk. Entries remain correctly
@@ -535,18 +541,63 @@ surfaced to the caller.
 **I/O failures are raised, never swallowed.** `append()` throws on a short
 write; `flush()` throws if either `fflush` or the `fsync`/`_commit` fails;
 `rotate()` throws if its pre-rotation flush fails, before anything is closed or
-renamed. `IActionLog::flush()` returns `void`, so throwing is the only channel
-available — and callers depend on it: `OutboxRelay::relay()` calls
+renamed. `rotate()` also throws *after* a fully successful rename and reopen if
+either affected directory's fsync fails for a genuine I/O reason (morph#532):
+the entries are all present and the rotation did happen, but the directory
+entries naming them are not yet durable, and this class's contract is that an
+unreported I/O failure is the one thing it never does. An unsupported directory
+fsync is not such a failure and does not throw — see
+[Directory durability](#directory-durability). `IActionLog::flush()` returns
+`void`, so throwing is the only channel available — and callers depend on it: `OutboxRelay::relay()` calls
 `markRelayed()` immediately after `flush()`, and a silently-failed flush would
 record rows as relayed in the model's own store while nothing reached the
 durable sink, dropping them from the outbox *and* from the log with no error
 anywhere.
+
+### Directory durability
+
+Creating or renaming a file is a **directory** mutation. An `fsync` on the file
+itself makes its *contents* durable and says nothing about the directory entry
+that names it, so a crash can leave a fully-fsynced file that no longer appears
+in its directory. morph#532 closed that gap: `FileActionLog` fsyncs the
+containing directory after its constructor creates the file, and after
+`rotate()`'s rename and reopen.
+
+It is a **ceiling, not a guarantee**, and this spec says so rather than leaving
+it to be discovered:
+
+- **Windows.** `FileIoOps::syncPath` is a documented no-op there;
+  `FlushFileBuffers`'s semantics for a directory handle differ enough from POSIX
+  `fsync` that faking it would be misleading.
+- **Permissions.** A directory fsync needs a *read* handle on the directory,
+  which is strictly stronger than writing a file inside it. On a mode-0300 spool
+  directory — an ordinary hardened layout, and what a write-without-read
+  SELinux/AppArmor policy produces — `fopen(path, "a")` succeeds while
+  `open(dir, O_RDONLY|O_DIRECTORY)` fails `EACCES`.
+- **Filesystems.** Several mounts do not implement it: sshfs, gvfs, Docker
+  Desktop's gRPC-FUSE, WSL drvfs/9p under `/mnt/c`, and some overlay and network
+  filesystems return `EINVAL`/`ENOSYS`/`ENOTSUP`.
+
+None of those is a durability *failure*, and refusing to open over one would
+make three long-working classes unconstructible on ordinary layouts. So
+`morph::core::classifyDirectorySync()` splits a nonzero `syncPath` result into
+`unsupported` — logged at `warn`, construction continues — and `failed` (`EIO`
+and anything unrecognised), which still throws. `syncPath` returns the `errno`
+rather than a bare `-1` precisely so that distinction can be made.
 
 **Dedup keys follow durability.** An entry's `idempotencyKey` is only recorded
 as *seen* once a `flush()` confirms it reached the disk; keys written since the
 last successful flush are held separately and discarded if that flush fails, so
 a retry writes them again instead of being deduplicated away. A duplicated audit
 row is recoverable; a dropped one is not.
+
+**`rotate()` warns on `unsupported` too.** Both directory fsyncs it performs —
+the active path's, and the sealed path's when it lands in a different directory
+— run through the same classification as the constructor's, and each distinct
+`unsupported` parent is logged at `warn`. An earlier revision collapsed the
+tri-state to a bool and tested only for `failed`, which left `rotate()` silent
+on exactly the state the contract above says must be surfaced, so an operator
+saw the warning at construction and nothing at every rotation afterwards.
 
 **After a failed `rotate()` reopen.** If `rotate()` renames successfully but
 cannot reopen the active path, it throws with no file open. `append()`,
@@ -1146,7 +1197,7 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 |---|---|---|
 | `LogEntry` is a plain aggregate | **No `glz::meta`** | Same automatic reflection `BRIDGE_REGISTER_ACTION` uses; no manual schema maintenance. |
 | Error path sharing | **`detail::throwOnGlazeError` for both `toJson`/`fromJson`** | `fromJson`'s failure is easy to test (malformed input); `toJson`'s is structurally unreachable for `LogEntry`. Routing both through one non-template function means the same compiled branch covers both, so `toJson`'s error path is exercised by `fromJson`'s tests. |
-| No entry-level deletion | **Append-only, no per-entry deletion API** | Permanent audit trail — unlike `IOfflineQueue` whose `markDone()` deletes retried items. `FileActionLog`'s `rotate()` and private `repairTornTail()` operate on the file, not on entries, and are not part of `IActionLog`. |
+| No entry-level deletion | **Append-only, no per-entry deletion API** | Permanent audit trail — unlike `IOfflineQueue` whose `markDone()` deletes retried items. `FileActionLog`'s `rotate()` and `morph::core::repairTornTail()` (shared file-I/O infrastructure, called here at construction; see `docs/spec/core/file_io_ops.md`) operate on the file, not on entries, and are not part of `IActionLog`. `FileOfflineQueue` deliberately does *not* call it — see [offline.md](../offline/offline.md), "No constructor-time `repairTornTail`". |
 | Default log is a function-local static | **`detail::defaultActionLogState()` returns a `pair<mutex, shared_ptr>`** | Safe regardless of translation-unit init order, unlike a namespace-scope global. |
 | `SessionLog::checkpoint` advances the watermark *before* forwarding | **At-most-once / forward-only** | A checkpoint is a forward-only commit point, not a transaction to retry: the watermark advances first, so a throwing durable sink drops that batch permanently. (`IOfflineQueue`'s retry semantics do *not* carry over — the shared shape is superficial.) |
 | Checkpoint watermark is a committed-`seq` threshold, not an `_all` index | **Track committed state by entry identity** | `seq` is assigned once and never reused, so it stays a valid commit marker even as coalescing forwards fewer entries than it consumes and as `undoLast()` pops tail entries. A raw index into the mutable `_all` vector cannot: it silently shifts meaning when entries are removed, which is the root of the undo/coalescing incoherence this replaces. |
