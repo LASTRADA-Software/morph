@@ -101,9 +101,12 @@ struct glz::meta<morph::forms::Multiline> {
 template <auto Min, auto Max, auto Step>
 struct glz::meta<morph::forms::Ranged<Min, Max, Step>> {
     static constexpr auto value = &morph::forms::Ranged<Min, Max, Step>::value;
-    static constexpr std::string_view name = "Ranged";
+    static constexpr std::string_view name = morph::forms::detail::rangedSchemaName<decltype(Min)>;
 };
 ```
+
+(`Ranged`'s name varies with its payload type rather than being one fixed
+string — see [Schema representation](#schema-representation) for why.)
 
 `Multiline` therefore serialises as a plain JSON string; `Ranged` as
 `decltype(Min) | null`. Neither the widget preference nor (for `Ranged`) the
@@ -120,22 +123,41 @@ out via `optionalFields`.
 
 ## Schema representation
 
-Like `Choice`, the `glz::meta` specialisation sets one fixed `name` for
-*every* instantiation — `"Multiline"` has no template parameters so this is
-moot for it, but `Ranged<Min, Max, Step>` sets `name = "Ranged"` regardless of
-`Min`/`Max`/`Step`. glaze therefore collapses every `Ranged<...>`
-instantiation in an action to the **same** `$defs/Ranged` entry, describing
-only the common shape (a nullable `decltype(Min)`) — exactly the consequence
-[choice.md](choice.md#schema-representation) documents for `Choice`. The
-collision is equally benign here: a field's own bounds live in its
-**property-level** `x-min` / `x-max` / `x-step`, not in the shared `$defs`
-entry, so a renderer reading the property node (not the `$def`) never depends
-on `$defs/Ranged` to tell two differently-bounded `Ranged` fields apart. The
-same caveat as `Choice` applies: when `decltype(Min)` differs across `Ranged`
-fields in one action (an `int` slider and a `double` slider, say), the single
-`$defs/Ranged` payload type cannot be correct for both; renderers that submit
-the raw nullable value observe no problem, since the wire value is validated
-by the action, not by the schema.
+`Multiline` has no template parameters, so its `glz::meta` name is the fixed
+`"Multiline"`. `Ranged<Min, Max, Step>` composes its name from the **payload
+type**:
+
+```
+Ranged_<tag>          tag = "bool", or c|f|i|u followed by the width in bits
+```
+
+so `Ranged<0, 100, 5>` keys `$defs/Ranged_i32` and `Ranged<0.5, 2.5, 0.5>` keys
+`$defs/Ranged_f64`. The tag is derived from `sizeof` and the standard type
+traits — never from a compiler's own spelling of the type, for the reason
+[choice.md](choice.md#schema-representation) gives. `c` marks the character
+types (`char` and friends), which glaze writes as a JSON *string*: `char` and
+`std::int8_t` are both signed and both 8 bits wide, so without that distinction
+they would share an entry that describes only one of them.
+
+**The payload type is the whole of what the entry describes**, which is why it
+is the whole of what the name carries. A `Ranged` definition is the schema of
+`std::optional<decltype(Min)>`; the field's own bounds are emitted as
+**property-level** `x-min` / `x-max` / `x-step` and never reach the `$def`. So
+two differently-*bounded* `int` sliders share one entry — their entries are
+identical, and that is what `$defs` is for — while an `int` slider and a
+`double` slider get one each.
+
+They have to. glaze populates a `$defs` entry only once, so while every
+instantiation shared the single name `"Ranged"`, the second one was skipped and
+`$ref`ed the first one's definition: a `Ranged<0.0, 1.0, 0.1>` next to a
+`Ranged<0, 100>` was served as `{"type":["integer","null"], "minimum":
+-2147483648, …}` while its property correctly carried `"x-step": 0.1` — every
+legal value of the double slider failing the type it was handed under. That was
+morph#543, the same defect [choice.md](choice.md#schema-representation)
+describes for `Choice`.
+
+Because these keys are part of the emitted document, changing this composition
+is a wire-shape change for any client that resolves `$ref` targets by name.
 
 ## Widget override: `fieldMetadata`
 

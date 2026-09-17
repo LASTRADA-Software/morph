@@ -27,6 +27,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "detail/schema_name.hpp"
+
 namespace morph::forms {
 
 /// @brief A string field edited as a multi-line text area.
@@ -129,11 +131,20 @@ struct glz::meta<morph::forms::Multiline> {
 
 /// @brief On the wire a Ranged is its nullable underlying value — the slider
 ///        bounds live in the C++ type and the generated schema only.
+///
+/// `name` carries the payload type, because that is the whole of what the
+/// `$defs` entry describes — the bounds are emitted as property-level
+/// `x-min`/`x-max`/`x-step` and never reach the definition. With one shared
+/// `"Ranged"` name, a `double` slider and an `int` slider in the same action
+/// collapsed into a single entry whose type was wrong for one of them
+/// (morph#543); two `Ranged` fields of the *same* payload type still share one
+/// entry, because their entries are identical. See
+/// `forms/detail/schema_name.hpp`.
 /// @tparam Min  Inclusive lower bound.
 /// @tparam Max  Inclusive upper bound.
 /// @tparam Step Track increment.
 template <auto Min, auto Max, auto Step>
 struct glz::meta<morph::forms::Ranged<Min, Max, Step>> {
     static constexpr auto value = &morph::forms::Ranged<Min, Max, Step>::value;
-    static constexpr std::string_view name = "Ranged";
+    static constexpr std::string_view name = morph::forms::detail::rangedSchemaName<decltype(Min)>;
 };

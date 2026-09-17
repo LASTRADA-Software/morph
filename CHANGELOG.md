@@ -157,6 +157,22 @@ API surface).
 
 ### Fixed
 
+- **Two `Choice` (or `Ranged`) fields of different payload types in one action
+  collapsed into a single `$defs` entry, and the renderer drew the wrong
+  control.** Every `Choice<...>` instantiation was named `"Choice"` and every
+  `Ranged<...>` `"Ranged"`, and glaze populates a `$defs` entry only once — so
+  the second distinct instantiation was skipped and `$ref`ed the first one's
+  definition. An `int64_t` picklist beside a `bool` one was described as a
+  boolean, and `DynamicForm.qml` resolves the `$ref` and draws a checkbox for
+  `"boolean"`; a `Ranged<0.0, 1.0, 0.1>` beside a `Ranged<0, 100>` was served
+  as an integer, so every legal value of the double slider failed the type it
+  was handed under. Both names are now composed per instantiation from
+  arguments spelled in morph's own sources — never from `glz::name_v`, whose
+  compiler-derived fallback would make the key differ between builds. **This
+  changes `$defs` keys**, so it is a wire-shape change for any client that
+  resolves `$ref` targets by name; the previous shape was a wrong schema rather
+  than a compatible one. See `docs/spec/forms/choice.md` and
+  `docs/spec/forms/widget_hints.md`, "Schema representation".
 - **Sockets `morph::net::SocketServer` accepted were left non-blocking on
   macOS/BSD, failing every WebSocket handshake.** A regression from the
   accept-loop wakeup work below: since that change `listen()` puts the
