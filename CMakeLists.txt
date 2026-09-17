@@ -244,6 +244,16 @@ target_sources(morph
 # without adding them to what is standalone-compiled;
 # INTERFACE_HEADER_SETS_TO_VERIFY, which otherwise defaults to *every*
 # interface header set, keeps the verification list exactly as it was.
+#
+# Adding a detail/ header here is easy to forget, and forgetting is silent:
+# `cmake --install` still exits 0, and the drift guard above skips detail/ by
+# design. That is how morph#540 shipped -- `forms/detail/session_common.hpp`
+# was added with morph#515 and never listed, so an installed
+# `morph/forms/app.hpp`, `flows.hpp` and `sections.hpp` could not be compiled
+# at all. What catches it now is not vigilance here but
+# scripts/check_install_export.sh, whose consumer TU includes every installed
+# *public* header generated from the prefix: a public header that needs an
+# uninstalled detail/ header fails to compile there, whatever this list says.
 target_sources(morph
     INTERFACE
     FILE_SET morph_detail_headers TYPE HEADERS
@@ -254,6 +264,7 @@ target_sources(morph
         include/morph/core/detail/execute_order_gate.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
+        include/morph/forms/detail/session_common.hpp
 )
 set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)
 

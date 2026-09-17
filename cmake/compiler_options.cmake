@@ -473,12 +473,30 @@ function(morph_verify_warning_flags)
         "${_morph_target_count} target(s)")
 endfunction()
 
+# `-fno-sanitize-recover=undefined` is load-bearing, not tuning (morph#541).
+# UndefinedBehaviorSanitizer *recovers* by default: it prints the diagnostic
+# and lets the program carry on to exit 0, so a job that judges a run by its
+# exit status reports success over a build full of undefined behaviour.
+# Measured: a TU constructing `Rational{INT64_MIN, DecimalPlaces{2}}` printed
+# three `runtime error: negation of -9223372036854775808` lines on the
+# `clang-ubsan` leg and exited 0 -- which is how morph#537's defect survived a
+# sanitizer job that was green throughout.
+#
+# It belongs here rather than in a per-job `UBSAN_OPTIONS=halt_on_error=1`
+# because the asan arm is `-fsanitize=address,undefined` and so carries
+# recovering UBSan too: one place, both legs, and no job can forget it.
+# AddressSanitizer already halts on its own findings, so only the UB half
+# needs saying. `tsan` carries no UB checks and is left alone.
+#
+# scripts/check_sanitizer_can_fail.sh drives this function and asserts the
+# behaviour end to end, so a flag that stops reaching the compile line is
+# caught rather than assumed.
 function(apply_sanitizers target mode)
     if(mode STREQUAL "asan")
         target_compile_options(${target} PRIVATE
-            -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+            -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g)
         target_link_options(${target} PRIVATE
-            -fsanitize=address,undefined)
+            -fsanitize=address,undefined -fno-sanitize-recover=undefined)
     elseif(mode STREQUAL "tsan")
         target_compile_options(${target} PRIVATE
             -fsanitize=thread -fno-omit-frame-pointer -g)
@@ -486,9 +504,9 @@ function(apply_sanitizers target mode)
             -fsanitize=thread)
     elseif(mode STREQUAL "ubsan")
         target_compile_options(${target} PRIVATE
-            -fsanitize=undefined -fno-omit-frame-pointer -g)
+            -fsanitize=undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g)
         target_link_options(${target} PRIVATE
-            -fsanitize=undefined)
+            -fsanitize=undefined -fno-sanitize-recover=undefined)
     endif()
 endfunction()
 
