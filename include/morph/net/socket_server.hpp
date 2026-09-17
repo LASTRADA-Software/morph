@@ -207,6 +207,18 @@ private:
         /// thread handle. See `reapFinishedClients` (morph#498).
         std::atomic<bool> finished{false};
 
+        /// Writes one reply frame. A failure is never propagated to the caller
+        /// -- it is a `RemoteServer` completion callback, which has nowhere to
+        /// put it -- but it must still retire the connection, for the two
+        /// reasons `sendControlFrame()` gives: `sendAll` can throw having
+        /// already written part of the frame, leaving this connection's
+        /// outgoing stream desynchronised, and `closed` on its own gates only
+        /// *writes* -- `clientLoop()` is blocked in `recvSome()` and never
+        /// consults it, so without the `shutdownBoth()` the connection goes on
+        /// draining and dispatching whatever the peer already queued, into a
+        /// `RemoteServer` whose replies this function then silently drops
+        /// (morph#536: *any* caller observing a partial write marks the
+        /// connection unusable, and this is one of them).
         void sendText(const std::string& payload) {
             std::scoped_lock lock{writeMtx};
             if (closed.load() || !socket.valid()) {
@@ -218,6 +230,7 @@ private:
                 socket.sendAll(frame.data(), frame.size());
             } catch (const std::exception&) {
                 closed.store(true);
+                socket.shutdownBoth();
             }
         }
     };
