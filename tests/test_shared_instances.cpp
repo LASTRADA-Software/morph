@@ -1259,18 +1259,17 @@ TEST_CASE("the server releases a freshly created shared instance whose first act
 }
 
 TEST_CASE("deregistering a poisoned instance evicted from the directory tears it down cleanly", "[shared-instances]") {
-    // `attachExistingLocked`'s poisoned-instance eviction (remote.hpp,
-    // `_directory.erase(found); _sharedKeyOf.erase(mid);`) removes `mid`'s
-    // `_sharedKeyOf` entry without touching its `_attachCount` entry, which is
-    // still 1 from the instance's original creation. Nothing has released the
-    // original attachment yet at that point, so the poisoned instance is left
-    // alive but no longer discoverable via the directory. A later release of
-    // that same instance must therefore find it in `_attachCount` but *not*
-    // in `_sharedKeyOf` -- `releaseInstanceLocked`'s
-    // `if (auto keyIter = _sharedKeyOf.find(mid); keyIter != _sharedKeyOf.end())`
-    // `false` arm, confirmed via fresh `llvm-cov show --show-branches=count`
-    // output to be a genuine, permanently-zero-hit gap ([True: 54, False: 0]
-    // across the whole suite) before this test existed.
+    // `InstanceDirectory::attach`'s poisoned-instance eviction clears `mid`'s
+    // `sharedKey` and unfiles its directory key, without touching its
+    // `attachCount`, which is still 1 from the instance's original creation.
+    // Nothing has released the original attachment yet at that point, so the
+    // poisoned instance is left alive but no longer discoverable via the
+    // directory. A later release of that same instance must therefore decrement
+    // a live attach count while finding no `sharedKey` to unfile -- the
+    // `if (inst.sharedKey)` `false` arm of `InstanceDirectory::release`,
+    // confirmed via fresh `llvm-cov show --show-branches=count` output to be a
+    // genuine, permanently-zero-hit gap ([True: 54, False: 0] across the whole
+    // suite) before this test existed.
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
@@ -1289,10 +1288,10 @@ TEST_CASE("deregistering a poisoned instance evicted from the directory tears it
     REQUIRE(failWaiter.await());
     REQUIRE(failWaiter.env.kind == "err");
 
-    // Evicts `reg.modelId` from `_directory`/`_sharedKeyOf` (it is poisoned)
-    // and lands on a fresh instance under the same key. `reg.modelId` is
-    // still alive -- and still attached (`_attachCount[reg.modelId] == 1`) --
-    // it is simply no longer reachable through the directory.
+    // Evicts `reg.modelId` from the directory (it is poisoned) and lands on a
+    // fresh instance under the same key. `reg.modelId` is still alive -- and
+    // still attached (its record's `attachCount` is 1) -- it is simply no
+    // longer reachable through the directory.
     auto second = morph::wire::decode(
         server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
     REQUIRE(second.kind == "ok");
@@ -1331,4 +1330,131 @@ TEST_CASE("deregistering a poisoned instance evicted from the directory tears it
     server->handle(morph::wire::encode(okExec), std::ref(okWaiter));
     REQUIRE(okWaiter.await());
     REQUIRE(okWaiter.env.kind == "ok");
+}
+
+// ── morph#523: the directory must learn a first action's outcome before any
+// ── host code can attach to its key ──────────────────────────────────────────
+//
+// `docs/spec/core/shared_instances.md`'s Failure modes section: an instance
+// whose first action failed "must not be handed to a *new* attacher". The
+// window in which it could be is the gap between the outcome being known and
+// the directory being told, and the framework itself hands control to host code
+// inside that gap -- `endSpan`, the metric sink and the `Completion`'s own
+// callbacks all run on the way out of a dispatch, and any of them may attach.
+//
+// The metric sink is the earliest of those and so pins the whole gap: a sink
+// that attaches on `executeErrors` is running at the instant the first action is
+// known to have failed. It must already be too late to be handed the failed
+// instance.
+TEST_CASE("an attach racing a failed first action out of the dispatch is not handed the failed instance",
+          "[shared-instances][backend]") {
+    morph::observe::ScopedObserveOverride const guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::InlineExecutor callbackExec;
+    morph::backend::LocalBackend backend{pool};
+    auto factory = [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); };
+
+    auto const first = backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "1"});
+
+    std::atomic<std::uint64_t> attached{0};
+    std::atomic<bool> reentered{false};
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        // `registerModelShared` below emits `registerCount` into this same
+        // sink; the latch keeps that re-entry from recursing.
+        if (evt.metric != morph::observe::Metric::executeErrors || reentered.exchange(true)) {
+            return;
+        }
+        attached.store(
+            backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "1"}).v);
+    });
+
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "SHI_CounterModel";
+    call.actionTypeId = "SHI_HydrateFail";
+    call.localOp = [](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> {
+        throw std::runtime_error("hydration failed");
+    };
+    std::atomic<bool> errored{false};
+    backend.execute(first, std::move(call), &callbackExec).onError([&](const std::exception_ptr&) {
+        errored.store(true);
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return errored.load(); }));
+
+    REQUIRE(reentered.load());
+    REQUIRE(attached.load() != 0U);
+    REQUIRE(attached.load() != first.v);
+}
+
+// The per-type index `listInstances` is served from must shrink as well as
+// grow: a type whose last shared instance has been released must report no
+// keys, not a stale one.
+TEST_CASE("releasing the last shared instance of a type empties its listInstances", "[shared-instances][backend]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+    auto factory = [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); };
+
+    auto const mid = backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "1"});
+    auto const alsoMid = backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "1"});
+    REQUIRE(alsoMid == mid);
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"1"});
+
+    // A second key of the same type, so releasing one leaves the type's bucket
+    // populated rather than removed -- the index has to shrink by one entry, not
+    // be dropped wholesale.
+    auto const other = backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "2"});
+    REQUIRE(other != mid);
+    REQUIRE(backend.listInstances("SHI_CounterModel").size() == 2);
+    backend.deregisterModel(other);
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"1"});
+
+    // Two attachments on `mid`, so the first release keeps its key listed.
+    backend.deregisterModel(mid);
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"1"});
+    backend.deregisterModel(mid);
+    REQUIRE(backend.listInstances("SHI_CounterModel").empty());
+}
+
+
+// morph#523: `InstanceDirectory::promote` drops any hydration state the
+// instance still carries. The only instance that reaches it carrying one is a
+// shared instance whose first action failed and which a later attach has since
+// evicted -- poisoned, but anonymous again, and so eligible for promotion. If
+// the poison came along, the host's own `assignPrimary` would be undone by the
+// very next attach to the key it just assigned.
+TEST_CASE("promoting an evicted poisoned instance clears the poison it was evicted for",
+          "[shared-instances][backend]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::InlineExecutor callbackExec;
+    morph::backend::LocalBackend backend{pool};
+    auto factory = [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); };
+
+    auto const first = backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "A"});
+
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "SHI_CounterModel";
+    call.actionTypeId = "SHI_HydrateFail";
+    call.localOp = [](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> {
+        throw std::runtime_error("hydration failed");
+    };
+    std::atomic<bool> errored{false};
+    backend.execute(first, std::move(call), &callbackExec).onError([&](const std::exception_ptr&) {
+        errored.store(true);
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return errored.load(); }));
+
+    // A second attacher evicts it from "A". It stays live -- its creator never
+    // released it -- but it no longer holds a key.
+    auto const replacement =
+        backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "A"});
+    REQUIRE(replacement != first);
+
+    // The host files that still-live instance under a key of its own choosing.
+    backend.assignPrimary(first, "SHI_CounterModel", "B");
+    REQUIRE(backend.listInstances("SHI_CounterModel").size() == 2);
+
+    // The assignment has to stick: attaching to "B" joins `first`, rather than
+    // evicting it again over a failure that belonged to the key it no longer has.
+    auto const joined = backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "B"});
+    REQUIRE(joined == first);
+    REQUIRE(backend.listInstances("SHI_CounterModel").size() == 2);
 }
