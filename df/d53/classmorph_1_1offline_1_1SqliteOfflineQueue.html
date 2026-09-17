@@ -135,20 +135,31 @@ Inheritance diagram for morph::offline::SqliteOfflineQueue:</div>
   </map>
 </div></div>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-types" class="groupheader"><a id="pub-types" name="pub-types"></a>
+Public Types</h2></td></tr>
+<tr class="memitem:ac68ad977c09782cdd23d3072b0389542" id="r_ac68ad977c09782cdd23d3072b0389542"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#ac68ad977c09782cdd23d3072b0389542">Synchronous</a> : std::uint8_t { <a class="el" href="#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555">normal</a>
+, <a class="el" href="#ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0">full</a>
+ }</td></tr>
+<tr class="memdesc:ac68ad977c09782cdd23d3072b0389542"><td class="mdescLeft">&#160;</td><td class="mdescRight">How hard each committed statement is pushed onto the platter.  <a href="#ac68ad977c09782cdd23d3072b0389542">More...</a><br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:abc451fbe9de29b202afe66293b668fc5" id="r_abc451fbe9de29b202afe66293b668fc5"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#abc451fbe9de29b202afe66293b668fc5">SqliteOfflineQueue</a> (std::filesystem::path path, std::optional&lt; std::size_t &gt; maxDepth=std::nullopt)</td></tr>
-<tr class="memdesc:abc451fbe9de29b202afe66293b668fc5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens (or creates) the queue database at <code class="param">path</code>, creating the schema if it does not already exist.  <br /></td></tr>
+<tr class="memitem:a567cf64f346792ca897d326b55b21685" id="r_a567cf64f346792ca897d326b55b21685"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#a567cf64f346792ca897d326b55b21685">synchronousLevel</a> () const noexcept</td></tr>
+<tr class="memdesc:a567cf64f346792ca897d326b55b21685"><td class="mdescLeft">&#160;</td><td class="mdescRight">SQLite's numeric <span class="tt">PRAGMA synchronous</span> level for this connection, as read back at construction.  <br /></td></tr>
+<tr class="memitem:acf2c06305a38052b962b7fdd6d66b901" id="r_acf2c06305a38052b962b7fdd6d66b901"><td class="memItemLeft">const std::string &amp;&#160;</td><td class="memItemRight"><a class="el" href="#acf2c06305a38052b962b7fdd6d66b901">journalMode</a> () const noexcept</td></tr>
+<tr class="memdesc:acf2c06305a38052b962b7fdd6d66b901"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">journal_mode</span> this database actually ended up in.  <br /></td></tr>
+<tr class="memitem:a7cacb4aae20ff8f48a80f6277d4d159e" id="r_a7cacb4aae20ff8f48a80f6277d4d159e"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a7cacb4aae20ff8f48a80f6277d4d159e">SqliteOfflineQueue</a> (std::filesystem::path path, std::optional&lt; std::size_t &gt; maxDepth=std::nullopt, <a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html">::morph::core::FileIoOps</a> ioOps={}, <a class="el" href="#ac68ad977c09782cdd23d3072b0389542">Synchronous</a> synchronous=<a class="el" href="#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555">Synchronous::normal</a>, std::chrono::milliseconds busyTimeout=std::chrono::milliseconds{<a class="el" href="#a6fb30c6097f183febd73b4809415c40c">kBusyTimeoutMillis</a>})</td></tr>
+<tr class="memdesc:a7cacb4aae20ff8f48a80f6277d4d159e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens (or creates) the queue database at <code class="param">path</code>, creating the schema if it does not already exist.  <br /></td></tr>
 <tr class="memitem:aa793d4340bf8da09261b51613389ca4b" id="r_aa793d4340bf8da09261b51613389ca4b"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#aa793d4340bf8da09261b51613389ca4b">~SqliteOfflineQueue</a> () override</td></tr>
 <tr class="memdesc:aa793d4340bf8da09261b51613389ca4b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the underlying SQLite connection.  <br /></td></tr>
 <tr class="memitem:ac6f8b21871f330fb28f16739269e14db" id="r_ac6f8b21871f330fb28f16739269e14db"><td class="memItemLeft"><a id="ac6f8b21871f330fb28f16739269e14db" name="ac6f8b21871f330fb28f16739269e14db"></a>
 &#160;</td><td class="memItemRight"><b>SqliteOfflineQueue</b> (const SqliteOfflineQueue &amp;)=delete</td></tr>
 <tr class="memitem:a57e37afd4cb22f3651774b757e95622d" id="r_a57e37afd4cb22f3651774b757e95622d"><td class="memItemLeft"><a id="a57e37afd4cb22f3651774b757e95622d" name="a57e37afd4cb22f3651774b757e95622d"></a>
-<a class="el" href="#abc451fbe9de29b202afe66293b668fc5">SqliteOfflineQueue</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#abc451fbe9de29b202afe66293b668fc5">SqliteOfflineQueue</a> &amp;)=delete</td></tr>
+<a class="el" href="#a7cacb4aae20ff8f48a80f6277d4d159e">SqliteOfflineQueue</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#a7cacb4aae20ff8f48a80f6277d4d159e">SqliteOfflineQueue</a> &amp;)=delete</td></tr>
 <tr class="memitem:a97a488640d722c172c415f718833cde5" id="r_a97a488640d722c172c415f718833cde5"><td class="memItemLeft"><a id="a97a488640d722c172c415f718833cde5" name="a97a488640d722c172c415f718833cde5"></a>
 &#160;</td><td class="memItemRight"><b>SqliteOfflineQueue</b> (SqliteOfflineQueue &amp;&amp;)=delete</td></tr>
 <tr class="memitem:afda00da55fcd0f5f8d762b0f499b4309" id="r_afda00da55fcd0f5f8d762b0f499b4309"><td class="memItemLeft"><a id="afda00da55fcd0f5f8d762b0f499b4309" name="afda00da55fcd0f5f8d762b0f499b4309"></a>
-<a class="el" href="#abc451fbe9de29b202afe66293b668fc5">SqliteOfflineQueue</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#abc451fbe9de29b202afe66293b668fc5">SqliteOfflineQueue</a> &amp;&amp;)=delete</td></tr>
+<a class="el" href="#a7cacb4aae20ff8f48a80f6277d4d159e">SqliteOfflineQueue</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a7cacb4aae20ff8f48a80f6277d4d159e">SqliteOfflineQueue</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a88bbf14621e61b7a11c6d390b80922e2" id="r_a88bbf14621e61b7a11c6d390b80922e2"><td class="memItemLeft">uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2">enqueue</a> (std::string payload) override</td></tr>
 <tr class="memdesc:a88bbf14621e61b7a11c6d390b80922e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Inserts <code class="param">payload</code> with an empty idempotency key.  <br /></td></tr>
 <tr class="memitem:aa3342ce935ef2cae8b2c7390c00d9175" id="r_aa3342ce935ef2cae8b2c7390c00d9175"><td class="memItemLeft">uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#aa3342ce935ef2cae8b2c7390c00d9175">enqueue</a> (std::string payload, std::string idempotencyKey) override</td></tr>
@@ -163,6 +174,11 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a6ba81485a0911150f8aa9919869fa67c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of pending rows. Thread-safe.  <br /></td></tr>
 <tr class="memitem:a502fb36fc3b6d06d0b71562886764d70" id="r_a502fb36fc3b6d06d0b71562886764d70"><td class="memItemLeft">std::optional&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a502fb36fc3b6d06d0b71562886764d70">maxDepth</a> () const override</td></tr>
 <tr class="memdesc:a502fb36fc3b6d06d0b71562886764d70"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the configured maximum depth, or <span class="tt">std::nullopt</span> if unbounded.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-static-attribs" class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
+Static Public Attributes</h2></td></tr>
+<tr class="memitem:a6fb30c6097f183febd73b4809415c40c" id="r_a6fb30c6097f183febd73b4809415c40c"><td class="memItemLeft">static constexpr int&#160;</td><td class="memItemRight"><a class="el" href="#a6fb30c6097f183febd73b4809415c40c">kBusyTimeoutMillis</a> = 5000</td></tr>
+<tr class="memdesc:a6fb30c6097f183febd73b4809415c40c"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">PRAGMA busy_timeout</span> set at construction (morph#532): how long a statement blocks on <span class="tt">SQLITE_BUSY</span> before giving up, in milliseconds.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
@@ -184,13 +200,46 @@ Protected Member Functions</h2></td></tr>
 </div><!-- fragment --><p><span class="tt">id</span> is <span class="tt">AUTOINCREMENT</span>, so ids are never reused and a re-opened queue re-presents each row under its <b>stored</b> id — stable across restarts. <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84" title="Stable identifier assigned at enqueue time.">QueueItem::id</a></span> remains queue-local (per <span class="tt">docs/spec/offline/offline.md</span>); cross-restart identity is carried by <span class="tt">idempotencyKey</span>, not <span class="tt">id</span>.</p>
 <p>The partial unique index gives insert-time dedup for a non-empty <span class="tt">idempotencyKey</span>: a re-enqueue of the same key is a no-op that returns the existing row's id (<span class="tt">INSERT ... ON CONFLICT ... DO NOTHING</span>, then a lookup on a no-op conflict). Empty keys (the default) are exempt, so keyless items behave exactly as <span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="Thread-safe in-memory implementation of IOfflineQueue.">InMemoryOfflineQueue</a></span> does — never deduplicated.</p>
 <dl class="section user"><dt>Crash safety</dt><dd><span class="tt"><a class="el" href="#a7d84c59b8a7487daff9ae3d10b8ae868" title="Returns all pending rows in ascending-id (enqueue) order.">drain()</a></span> never deletes, so a crash between <span class="tt"><a class="el" href="#a7d84c59b8a7487daff9ae3d10b8ae868" title="Returns all pending rows in ascending-id (enqueue) order.">drain()</a></span> and <span class="tt"><a class="el" href="#af7af4a3bd277014c911b0e3d4652a398" title="Deletes the row identified by itemId. No-op if absent.">markDone()</a></span> loses nothing. Each write (<span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key.">enqueue</a></span>, <span class="tt"><a class="el" href="#af7af4a3bd277014c911b0e3d4652a398" title="Deletes the row identified by itemId. No-op if absent.">markDone</a></span>, <span class="tt"><a class="el" href="#a85ca32148c89705c70d9f1ac6d4fca91" title="Persists an updated attempt count for itemId. No-op if absent.">setAttempts</a></span>, <span class="tt"><a class="el" href="#a158cd872caa3d353fd4a7a04e0327b5c" title="Stamps an idempotency key onto an already-inserted row. No-op if itemId is absent....">setIdempotencyKey</a></span>) is its own committed statement; <span class="tt">PRAGMA
-    journal_mode=WAL</span> (set once, at construction) gives the durability.</dd></dl>
+    journal_mode=WAL</span> and <span class="tt">PRAGMA synchronous=FULL</span> (both set once, at construction, and <span class="tt">journal_mode</span> read back and verified rather than trusted &ndash; some filesystems, e.g. NFS, silently fall back to <span class="tt">delete</span> mode) give the durability. <span class="tt">PRAGMA busy_timeout</span> is also set at construction: this class's own mutex makes <span class="tt">SQLITE_BUSY</span> unreachable for a single instance, but the class documents no single-opener restriction. Construction also fsyncs the containing directory once, after <span class="tt">sqlite3_open()</span> and every schema-setup <span class="tt">PRAGMA</span>/<span class="tt">CREATE</span> succeed, closing the same fresh-file-creation directory-durability gap <span class="tt">FileIoOps::syncPath</span> closes for <span class="tt">FileActionLog</span>/<span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span>.</dd></dl>
 <dl class="section user"><dt>Thread safety</dt><dd>All operations serialise on an internal mutex around the connection, so this is safe to share between the application's enqueue-on-failure write path and <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>'s drain/replay read path. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
-</div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="abc451fbe9de29b202afe66293b668fc5" name="abc451fbe9de29b202afe66293b668fc5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#abc451fbe9de29b202afe66293b668fc5">&#9670;&#160;</a></span>SqliteOfflineQueue()</h2>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+</div><a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Member Enumeration Documentation</h2>
+<a id="ac68ad977c09782cdd23d3072b0389542" name="ac68ad977c09782cdd23d3072b0389542"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac68ad977c09782cdd23d3072b0389542">&#9670;&#160;</a></span>Synchronous</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#ac68ad977c09782cdd23d3072b0389542">morph::offline::SqliteOfflineQueue::Synchronous</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How hard each committed statement is pushed onto the platter. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555" name="ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555"></a>normal&#160;</td><td class="fielddoc"><p><span class="tt">PRAGMA synchronous=NORMAL</span> — the default, and SQLite's own recommendation under WAL. A crash or power loss can lose the most recent commits, which this queue's at-least-once delivery plus <span class="tt">idempotencyKey</span> dedup already absorb. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0" name="ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0"></a>full&#160;</td><td class="fielddoc"><p><span class="tt">PRAGMA synchronous=FULL</span> — fsync on every committed statement. Measured ~18x slower per mutation (~0.08ms to ~1.44ms on NVMe/btrfs, sqlite 3.53.4), and every mutation here is its own commit, so a 200-item <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> drain goes from ~16ms to ~290ms — all of it under this class's mutex, where it blocks the producer's <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key.">enqueue()</a></span> too. Opt in when losing the last few commits is genuinely unacceptable. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
+<a id="a7cacb4aae20ff8f48a80f6277d4d159e" name="a7cacb4aae20ff8f48a80f6277d4d159e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7cacb4aae20ff8f48a80f6277d4d159e">&#9670;&#160;</a></span>SqliteOfflineQueue()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -206,7 +255,22 @@ Protected Member Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::optional&lt; std::size_t &gt;</td>          <td class="paramname"><span class="paramname"><em>maxDepth</em></span><span class="paramdefsep"> = </span><span class="paramdefval">std::nullopt</span>&#160;)</td>
+          <td class="paramtype">std::optional&lt; std::size_t &gt;</td>          <td class="paramname"><span class="paramname"><em>maxDepth</em></span><span class="paramdefsep"> = </span><span class="paramdefval">std::nullopt</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html">::morph::core::FileIoOps</a></td>          <td class="paramname"><span class="paramname"><em>ioOps</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#ac68ad977c09782cdd23d3072b0389542">Synchronous</a></td>          <td class="paramname"><span class="paramname"><em>synchronous</em></span><span class="paramdefsep"> = </span><span class="paramdefval"><a class="el" href="#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555">Synchronous::normal</a></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::chrono::milliseconds</td>          <td class="paramname"><span class="paramname"><em>busyTimeout</em></span><span class="paramdefsep"> = </span><span class="paramdefval">std::chrono::milliseconds{<a class="el" href="#a6fb30c6097f183febd73b4809415c40c">kBusyTimeoutMillis</a>}</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -221,17 +285,20 @@ Protected Member Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">path</td><td>SQLite database file. </td></tr>
     <tr><td class="paramname">maxDepth</td><td>Maximum number of pending rows <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key.">enqueue()</a></span> will admit before throwing <span class="tt"><a class="el" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html" title="Thrown by enqueue() when the queue is at its configured maxDepth().">OfflineQueueFullError</a></span>; <span class="tt">std::nullopt</span> (the default) means unbounded. Not persisted in the database itself — a per-construction parameter, so a reopen must pass it again to keep the same cap enforced. </td></tr>
+    <tr><td class="paramname">ioOps</td><td>Injectable directory-fsync primitive (<span class="tt">FileIoOps::syncPath</span> only &ndash; the rest of this class talks to SQLite directly, never through <span class="tt">FileIoOps</span>); defaults to the real syscall. Test-only seam, mirroring <span class="tt">FileActionLog</span>/<span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span>'s own <span class="tt">FileIoOps</span> parameter, for forcing the directory-fsync failure branch below without needing a real OS-level failure. </td></tr>
+    <tr><td class="paramname">synchronous</td><td><span class="tt">PRAGMA synchronous</span> level; see <span class="tt"><a class="el" href="#ac68ad977c09782cdd23d3072b0389542" title="How hard each committed statement is pushed onto the platter.">Synchronous</a></span>. Defaults to <span class="tt">normal</span>. </td></tr>
+    <tr><td class="paramname">busyTimeout</td><td>How long a statement waits out a lock another connection holds before returning <span class="tt">SQLITE_BUSY</span>. Defaults to <span class="tt"><a class="el" href="#a6fb30c6097f183febd73b4809415c40c" title="PRAGMA busy_timeout set at construction (morph#532): how long a statement blocks on SQLITE_BUSY befor...">kBusyTimeoutMillis</a></span>. This class's own mutex makes <span class="tt">SQLITE_BUSY</span> unreachable for a single instance, so the timeout only matters when something else has the database open — but when it does, the wait happens under that mutex and blocks every other caller of this instance, a Qt GUI thread included. Pass <span class="tt">0</span> to restore fail-fast. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
-    <tr><td class="paramname">SqliteOfflineQueueError</td><td>if the database cannot be opened or the schema cannot be created. </td></tr>
+    <tr><td class="paramname">SqliteOfflineQueueError</td><td>if the database cannot be opened, the schema cannot be created, or the containing directory cannot be fsynced after <span class="tt">sqlite3_open()</span> creates a brand-new file. A <span class="tt">journal_mode</span> that does not end up as <span class="tt">wal</span> is <b>warned about, not thrown</b> — see the constructor body. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00184">184</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -260,11 +327,71 @@ Protected Member Functions</h2></td></tr>
 
 <p>Closes the underlying SQLite connection. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="a567cf64f346792ca897d326b55b21685" name="a567cf64f346792ca897d326b55b21685"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a567cf64f346792ca897d326b55b21685">&#9670;&#160;</a></span>synchronousLevel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::offline::SqliteOfflineQueue::synchronousLevel </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>SQLite's numeric <span class="tt">PRAGMA synchronous</span> level for this connection, as read back at construction. </p>
+<p><span class="tt">0</span> OFF, <span class="tt">1</span> NORMAL, <span class="tt">2</span> FULL, <span class="tt">3</span> EXTRA. Reported rather than inferred from the constructor argument: the argument is what was asked for, this is what SQLite confirmed. </p><dl class="section return"><dt>Returns</dt><dd>The level in force on this queue's own connection. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="acf2c06305a38052b962b7fdd6d66b901" name="acf2c06305a38052b962b7fdd6d66b901"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acf2c06305a38052b962b7fdd6d66b901">&#9670;&#160;</a></span>journalMode()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const std::string &amp; morph::offline::SqliteOfflineQueue::journalMode </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The <span class="tt">journal_mode</span> this database actually ended up in. </p>
+<p>Normally <span class="tt">"wal"</span>. A filesystem without the shared-memory support WAL needs reports <span class="tt">"delete"</span>; <span class="tt">:memory:</span> and the temp spellings report <span class="tt">"memory"</span>. Construction warns rather than throws on anything but <span class="tt">"wal"</span> (durability is carried by <span class="tt">PRAGMA synchronous</span>), so this is how a caller that cares can tell which mode it got. </p><dl class="section return"><dt>Returns</dt><dd>The mode string as SQLite reported it at construction. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a88bbf14621e61b7a11c6d390b80922e2" name="a88bbf14621e61b7a11c6d390b80922e2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a88bbf14621e61b7a11c6d390b80922e2">&#9670;&#160;</a></span>enqueue() <span class="overload">[1/2]</span></h2>
 
@@ -305,7 +432,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00164">164</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -354,7 +481,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00188">188</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00366">366</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -386,7 +513,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ad11f945b889e1f6d582a6bbd4fdfeaa5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00426">426</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -423,7 +550,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a1399eda29916d144d93c728f1e0d06e5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00279">279</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00457">457</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -465,7 +592,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -497,7 +624,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ac534551aa850902cd9b8fd45e134ade3">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00299">299</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00477">477</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -529,7 +656,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a5fd0dc329f73f72e5d64689c5956058d">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -571,7 +698,34 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ab3e24454f2625fcd447f76d9ed0fd820">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00316">316</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00494">494</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
+<a id="a6fb30c6097f183febd73b4809415c40c" name="a6fb30c6097f183febd73b4809415c40c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6fb30c6097f183febd73b4809415c40c">&#9670;&#160;</a></span>kBusyTimeoutMillis</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::offline::SqliteOfflineQueue::kBusyTimeoutMillis = 5000</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><span class="tt">PRAGMA busy_timeout</span> set at construction (morph#532): how long a statement blocks on <span class="tt">SQLITE_BUSY</span> before giving up, in milliseconds. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>

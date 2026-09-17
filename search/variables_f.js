@@ -9,5 +9,6 @@ var searchData=
   ['shouldcontinue_6',['shouldContinue',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a0fdab8abff2392967b5da3565f3eea76',1,'morph::offline::ReconnectCoordinator::Deps']]],
   ['sink_7',['sink',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#ae687340d723cfe17f30f8443ce5b2570',1,'morph::journal::OutboxRelay']]],
   ['sleep_8',['sleep',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a5a256ea38f2a9cb7adef0aaf8bc17cf1',1,'morph::offline::ReconnectCoordinator::Deps']]],
-  ['successful_9',['successful',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc',1,'morph::offline::SyncResult']]]
+  ['successful_9',['successful',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc',1,'morph::offline::SyncResult']]],
+  ['syncpath_10',['syncPath',['../db/d00/structmorph_1_1core_1_1FileIoOps.html#a8f449d6b2bb7b518b9a528d5e66ed691',1,'morph::core::FileIoOps']]]
 ];

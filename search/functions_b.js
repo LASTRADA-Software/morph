@@ -1,13 +1,12 @@
 var searchData=
 [
-  ['makebinding_0',['makeBinding',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a6f6ce0f93ff2ad46b30a72fa196fef42',1,'morph::bridge::BridgeHandler']]],
-  ['makesettleable_1',['makeSettleable',['../dd/de7/classmorph_1_1async_1_1Completion.html#a84a09a2d546cb0983d1eca68b4fc97de',1,'morph::async::Completion']]],
-  ['markdone_2',['markDone',['../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a4be4a6a891c066c4c0af7e902f101739',1,'morph::offline::FileOfflineQueue::markDone()'],['../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a1399eda29916d144d93c728f1e0d06e5',1,'morph::offline::IOfflineQueue::markDone()'],['../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#acf32c7e9f21fcd15b45be6cc41ea1c4a',1,'morph::offline::InMemoryOfflineQueue::markDone()'],['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#af7af4a3bd277014c911b0e3d4652a398',1,'morph::offline::SqliteOfflineQueue::markDone()']]],
-  ['max_3',['max',['../d7/d6d/structmorph_1_1forms_1_1Ranged.html#a5c79f1290a2f396989adeed5713aa9d4',1,'morph::forms::Ranged']]],
-  ['maxdepth_4',['maxDepth',['../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a1fdfff80a8b535fb2c19621d6cf13d4e',1,'morph::offline::FileOfflineQueue::maxDepth()'],['../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a5fd0dc329f73f72e5d64689c5956058d',1,'morph::offline::IOfflineQueue::maxDepth()'],['../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#af3f1c800c9e4e8030dc28ffc0fc3cdf3',1,'morph::offline::InMemoryOfflineQueue::maxDepth()'],['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70',1,'morph::offline::SqliteOfflineQueue::maxDepth()']]],
-  ['min_5',['min',['../d7/d6d/structmorph_1_1forms_1_1Ranged.html#a0758ab10c616de5bc33435b339bd098c',1,'morph::forms::Ranged']]],
-  ['mulassignchecked_6',['mulAssignChecked',['../d2/d5c/structmorph_1_1math_1_1Rational.html#adadc2f3ea8383373abbf421f1ab4aa1f',1,'morph::math::Rational']]],
-  ['multiline_7',['Multiline',['../dc/df3/structmorph_1_1forms_1_1Multiline.html#ad2af0c8222944dccf67672ec77074c83',1,'morph::forms::Multiline::Multiline() noexcept=default'],['../dc/df3/structmorph_1_1forms_1_1Multiline.html#a893d5a3579ada47949d44ec5f0ecc5de',1,'morph::forms::Multiline::Multiline(std::string text) noexcept(std::is_nothrow_move_constructible_v&lt; std::string &gt;)']]],
-  ['mulwouldoverflow_8',['mulWouldOverflow',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a5271c12d684226846877348e90f27318',1,'morph::math::Rational']]],
-  ['mutuallyexclusive_9',['mutuallyExclusive',['../d4/d11/forms_8hpp.html#a818f041020043b4ec157170a31fd2f00',1,'morph::forms']]]
+  ['label_0',['label',['../dc/d5e/structmorph_1_1app_1_1MenuEntry.html#a81b902d84a643280fcf785ca409e6f08',1,'morph::app::MenuEntry']]],
+  ['labelfield_1',['labelField',['../df/d65/structmorph_1_1forms_1_1Choice.html#a528c381bb32241fb08706c765ff7a02b',1,'morph::forms::Choice']]],
+  ['less_2',['less',['../d4/d11/forms_8hpp.html#a449e48891b5dcea8373cbc7260764d1f',1,'morph::forms']]],
+  ['lessorequal_3',['lessOrEqual',['../d4/d11/forms_8hpp.html#a3b463dfb56e6e10944b80814522f0b55',1,'morph::forms']]],
+  ['listen_4',['listen',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a301440fb07aa2382ab0fffae6798db3a',1,'morph::net::SocketServer::listen()'],['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a60f2df58f77a6986c07463cd4bbbf13b',1,'morph::qt::QtWebSocketServer::listen()']]],
+  ['listinstances_5',['listInstances',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a0d367f26beb3b5575100ff14775c7e76',1,'morph::backend::LocalBackend::listInstances()'],['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ac4b30b19f91a79a0b6cf640b6cc01165',1,'morph::backend::SimulatedRemoteBackend::listInstances()'],['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#aa8b1294c215041aadde4f2345237c074',1,'morph::net::SocketBackend::listInstances()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a68b32a73162878f79091c4ebbd808084',1,'morph::qt::QtWebSocketBackend::listInstances()']]],
+  ['listinstancesof_6',['listInstancesOf',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7bc25d126522f0419addd7fe0bda46c5',1,'morph::bridge::Bridge']]],
+  ['localbackend_7',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a1bbaff0063b89c293f427e07da9f1424',1,'morph::backend::LocalBackend']]],
+  ['lookup_8',['lookup',['../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html#a91612627509fdc050129b853af9b8f3a',1,'morph::offline::IReplayLedger']]]
 ];

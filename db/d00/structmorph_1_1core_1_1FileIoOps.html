@@ -140,13 +140,15 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a33824bd6e2788f345740debb6af70480"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reports whether <code class="param">path</code> can be opened for reading right now. Stands in for <span class="tt">std::ifstream{path}</span>'s own open-succeeded check (<span class="tt">repairTornTail()</span>'s <span class="tt">if (!input)</span>) — a fault-injection test has no way to make a <em>real</em> <span class="tt">std::ifstream</span> construction fail without actually breaking the filesystem, so this predicate is consulted first; the real default performs the real open <span class="tt">std::ifstream</span> itself would.  <br /></td></tr>
 <tr class="memitem:a3c5a72a799fadf837c40a17b87da6fd4" id="r_a3c5a72a799fadf837c40a17b87da6fd4"><td class="memItemLeft">std::function&lt; void(const std::filesystem::path &amp;path, std::uintmax_t newSize, std::error_code &amp;errorCode)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3c5a72a799fadf837c40a17b87da6fd4">resizeFile</a></td></tr>
 <tr class="memdesc:a3c5a72a799fadf837c40a17b87da6fd4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Truncates/extends <code class="param">path</code> to <code class="param">newSize</code> bytes. Mirrors <span class="tt">std::filesystem::resize_file</span>.  <br /></td></tr>
+<tr class="memitem:a8f449d6b2bb7b518b9a528d5e66ed691" id="r_a8f449d6b2bb7b518b9a528d5e66ed691"><td class="memItemLeft">std::function&lt; int(const std::filesystem::path &amp;dir)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f449d6b2bb7b518b9a528d5e66ed691">syncPath</a></td></tr>
+<tr class="memdesc:a8f449d6b2bb7b518b9a528d5e66ed691"><td class="mdescLeft">&#160;</td><td class="mdescRight">Commits a directory's own metadata (new/renamed entries within it) to durable storage. <span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span> on a <em>file</em> makes only that file's data durable &ndash; not the directory entry that names it, so a fresh file's creation or a rename can vanish on power loss even after the file's own contents were fsynced (morph#532). POSIX: <span class="tt">open(dir, O_RDONLY|O_DIRECTORY)</span> + <span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span> + <span class="tt">close</span>. A no-op on Windows, documented as such rather than faked &ndash; <span class="tt">FlushFileBuffers</span>'s semantics for a directory handle differ enough from POSIX <span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span> that pretending otherwise would be misleading, and this seam's Windows story is already file-<span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span>-only.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The raw file-I/O primitives <span class="tt"><a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html" title="Append-only, newline-delimited-JSON IActionLog backed by a local file.">morph::journal::FileActionLog</a></span> and <span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">morph::offline::FileOfflineQueue</a></span> both call, as an injectable strategy. Every member defaults to the real syscall/stdlib call it stands in for, so a default-constructed <span class="tt"><a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html" title="The raw file-I/O primitives morph::journal::FileActionLog and morph::offline::FileOfflineQueue both c...">FileIoOps</a></span> is byte-for-byte what both classes called directly before this seam existed — no behavior change for a normal caller. </p>
 <dl class="section user"><dt>Why this exists</dt><dd>Both classes have several branch arms that only run when a real OS-level file-I/O call fails partway through an otherwise-successful operation (disk full, fd closed underneath, a permission change racing an exact window). None of those are reachable from a portable unit test without this seam — see <span class="tt">LASTRADA-Software/morph#97</span>, which requested exactly this for <span class="tt">FileActionLog</span>; <span class="tt">FileOfflineQueue</span> has the identical gap. A test constructs a <span class="tt"><a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html" title="The raw file-I/O primitives morph::journal::FileActionLog and morph::offline::FileOfflineQueue both c...">FileIoOps</a></span> whose relevant member fails on demand (or on the Nth call, or forever) and passes it to the class under test; every other member stays at its real default, so the rest of the class's I/O behaves normally around the one injected failure.</dd></dl>
 <dl class="section user"><dt>Thread safety</dt><dd><span class="tt"><a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html" title="The raw file-I/O primitives morph::journal::FileActionLog and morph::offline::FileOfflineQueue both c...">FileIoOps</a></span> itself is a plain value type with no shared state — copying or moving one has ordinary value semantics. Whether the <em>callbacks</em> themselves are safe to call from multiple threads concurrently is up to whatever a test installs; the real default callbacks are exactly the real syscalls, which already have their own well-defined thread-safety. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a71d292fdf71d8d58a6595e239475e122" name="a71d292fdf71d8d58a6595e239475e122"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a71d292fdf71d8d58a6595e239475e122">&#9670;&#160;</a></span>fwrite</h2>
@@ -165,7 +167,7 @@ Public Attributes</h2></td></tr>
 <p>Writes <code class="param">size</code> bytes from <code class="param">buffer</code> to <code class="param">file</code>. Mirrors <span class="tt">std::fwrite</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The number of bytes actually written; short of <code class="param">size</code> on failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
@@ -184,7 +186,7 @@ Public Attributes</h2></td></tr>
 <p>Flushes <code class="param">file's</code> stdio buffer. Mirrors <span class="tt">std::fflush</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">0</span> on success, nonzero on failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +212,7 @@ Public Attributes</h2></td></tr>
 <p>Commits <code class="param">file's</code> contents to durable storage. POSIX <span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span> / Windows <span class="tt">_commit</span>, resolved from <code class="param">file</code> via <span class="tt">fileno</span>/<span class="tt">_fileno</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">0</span> on success, nonzero on failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
@@ -234,7 +236,7 @@ Public Attributes</h2></td></tr>
 <p>Opens <code class="param">path</code> in mode <code class="param">mode</code>. Mirrors <span class="tt">std::fopen</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The open file, or <span class="tt">nullptr</span> on failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
@@ -256,7 +258,7 @@ Public Attributes</h2></td></tr>
 <p>Reports whether <code class="param">path</code> can be opened for reading right now. Stands in for <span class="tt">std::ifstream{path}</span>'s own open-succeeded check (<span class="tt">repairTornTail()</span>'s <span class="tt">if (!input)</span>) — a fault-injection test has no way to make a <em>real</em> <span class="tt">std::ifstream</span> construction fail without actually breaking the filesystem, so this predicate is consulted first; the real default performs the real open <span class="tt">std::ifstream</span> itself would. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <code class="param">path</code> is currently readable. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>
@@ -285,7 +287,57 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8f449d6b2bb7b518b9a528d5e66ed691" name="a8f449d6b2bb7b518b9a528d5e66ed691"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8f449d6b2bb7b518b9a528d5e66ed691">&#9670;&#160;</a></span>syncPath</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;int(const std::filesystem::path&amp; dir)&gt; morph::core::FileIoOps::syncPath</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<b>Initial value:</b><div class="fragment"><div class="line">                       = [](<span class="keyword">const</span> std::filesystem::path&amp; dir) {</div>
+<div class="line"> </div>
+<div class="line"> </div>
+<div class="line"> </div>
+<div class="line"> </div>
+<div class="line">    std::filesystem::path <span class="keyword">const</span> resolved = dir.empty() ? std::filesystem::path{<span class="stringliteral">&quot;.&quot;</span>} : dir;</div>
+<div class="line">    </div>
+<div class="line">    </div>
+<div class="line">    </div>
+<div class="line">    </div>
+<div class="line">    </div>
+<div class="line">    </div>
+<div class="line">    <span class="keywordtype">int</span> <span class="keyword">const</span> dirFd = retryOnEintr([&amp;resolved] {</div>
+<div class="line">        </div>
+<div class="line">        return ::open(resolved.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);</div>
+<div class="line">    });</div>
+<div class="line">    <span class="keywordflow">if</span> (dirFd &lt; 0) {</div>
+<div class="line">        <span class="keywordflow">return</span> errno;</div>
+<div class="line">    }</div>
+<div class="line">    <span class="keywordtype">int</span> <span class="keyword">const</span> result = retryOnEintr([dirFd] { return ::fsync(dirFd); });</div>
+<div class="line">    <span class="keywordtype">int</span> <span class="keyword">const</span> failure = result == 0 ? 0 : errno;</div>
+<div class="line">    ::close(dirFd);</div>
+<div class="line">    <span class="keywordflow">return</span> failure;</div>
+<div class="line"> </div>
+<div class="line">}</div>
+</div><!-- fragment -->
+<p>Commits a directory's own metadata (new/renamed entries within it) to durable storage. <span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span> on a <em>file</em> makes only that file's data durable &ndash; not the directory entry that names it, so a fresh file's creation or a rename can vanish on power loss even after the file's own contents were fsynced (morph#532). POSIX: <span class="tt">open(dir, O_RDONLY|O_DIRECTORY)</span> + <span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span> + <span class="tt">close</span>. A no-op on Windows, documented as such rather than faked &ndash; <span class="tt">FlushFileBuffers</span>'s semantics for a directory handle differ enough from POSIX <span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span> that pretending otherwise would be misleading, and this seam's Windows story is already file-<span class="tt"><a class="el" href="#a01347b2c0c868ddc4cc1b042d02d71b9" title="Commits file&#39;s contents to durable storage. POSIX fsync / Windows _commit, resolved from file via fil...">fsync</a></span>-only. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">dir</td><td>Directory whose entries were just mutated. A <span class="tt">path::parent_path()</span> of a bare relative filename (e.g. <span class="tt">"queue.ndjson"</span>, with no directory component) is the <em>empty</em> path, not <span class="tt">"."</span> &ndash; treated here as the current directory, the same resolution the shell and every POSIX call already give an empty path's implicit caller, so a relative, directory-less <code class="param">path</code> still gets its containing directory synced instead of failing <span class="tt">open()</span> with <span class="tt">ENOENT</span> on every call site that derives <code class="param">dir</code> from <span class="tt">parent_path()</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">0</span> on success, otherwise the <span class="tt">errno</span> that caused the failure. Returning the code rather than a bare <span class="tt">-1</span> is what lets <span class="tt">classifyDirectorySync()</span> tell "this platform cannot do it" from "this platform tried and failed", which the call sites treat very differently. A custom (test) sink is free to return any nonzero value; anything it does not recognise counts as a real failure. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d3/d58/file__io__ops_8hpp_source.html">file_io_ops.hpp</a>.</p>
 
 </div>
 </div>

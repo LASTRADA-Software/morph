@@ -1,19 +1,14 @@
 var searchData=
 [
-  ['waitforconnected_0',['waitForConnected',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a870c4edbdf1b6d0e9bfdceab0eeba2ac',1,'morph::net::SocketBackend::waitForConnected()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a72f35dfcfcfb007b05d14185d8ed2f2f',1,'morph::qt::QtWebSocketBackend::waitForConnected()']]],
-  ['whenbound_1',['whenBound',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a8fadc389b6e62034cbb02c642c0076d8',1,'morph::bridge::Bridge::whenBound()'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ad28c2d2bf1f14ac08f51340fb7f3f07c',1,'morph::bridge::BridgeHandler::whenBound()']]],
-  ['widget_2',['widget',['../dc/df3/structmorph_1_1forms_1_1Multiline.html#a3325ab8ce49bd941d5e1f5f5606d6a87',1,'morph::forms::Multiline::widget()'],['../d7/d6d/structmorph_1_1forms_1_1Ranged.html#aab4c85d9cd74b6e892887e724576ddae',1,'morph::forms::Ranged::widget()']]],
-  ['wireclampscope_3',['WireClampScope',['../d3/d68/classmorph_1_1math_1_1WireClampScope.html#aa5b2591743ee0e3f174346b0aadb97c2',1,'morph::math::WireClampScope']]],
-  ['withdecimalplaces_4',['withDecimalPlaces',['../d5/dda/structmorph_1_1units_1_1Quantity.html#ad7d272b726f815feba425a6c56ecafea',1,'morph::units::Quantity']]],
-  ['withhidden_5',['withHidden',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a0c5ed2b5c559cea9f71bde47f1e8f4f3',1,'morph::forms::FieldMeta']]],
-  ['withindeclaredbounds_6',['withinDeclaredBounds',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a64cf21ec870fa8929edf4942421666f4',1,'morph::units::Quantity']]],
-  ['withmaximum_7',['withMaximum',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a7daa7140f2f62f2eaee2fb2076b124a0',1,'morph::forms::FieldMeta']]],
-  ['withminimum_8',['withMinimum',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a4b85c9cd37a578ba3a55f4c788ce8575',1,'morph::forms::FieldMeta']]],
-  ['withmultipleof_9',['withMultipleOf',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a7b48a4b73994d8dd7d8a44b57af51109',1,'morph::forms::FieldMeta']]],
-  ['withplaceholder_10',['withPlaceholder',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a6054a51698263cc9944bc66a85d21c87',1,'morph::forms::FieldMeta']]],
-  ['withreadonly_11',['withReadOnly',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#ac75e9b025e5ca52e31aa9d997d55e832',1,'morph::forms::FieldMeta']]],
-  ['withslot_12',['withSlot',['../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d',1,'morph::forms::i18n']]],
-  ['wizardschemajson_13',['wizardSchemaJson',['../d0/d67/flows_8hpp.html#a5b60bfc400ec89a16c70701b2b2a0a27',1,'morph::flows']]],
-  ['wizardsteptitlekey_14',['wizardStepTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea',1,'morph::forms::i18n']]],
-  ['wizardtitlekey_15',['wizardTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d',1,'morph::forms::i18n']]]
+  ['validate_0',['validate',['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0327fd527eda13c6fb49a67985adc34f',1,'morph::math::Rational::Wire']]],
+  ['validationerror_1',['ValidationError',['../d7/d1a/structmorph_1_1model_1_1ValidationError.html#a5d3ab41ea96c68f40e3637cedbd92874',1,'morph::model::ValidationError']]],
+  ['value_2',['value',['../d5/dda/structmorph_1_1units_1_1Quantity.html#ac9ca2c6ed3aa728d47967c4b02135fee',1,'morph::units::Quantity']]],
+  ['value_5for_3',['value_or',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a30ae1b871898af3e6ff7c204c9cd2834',1,'morph::units::Quantity']]],
+  ['valuefield_4',['valueField',['../df/d65/structmorph_1_1forms_1_1Choice.html#a9ff13d4d8a8b4920b9c3374a2a35d477',1,'morph::forms::Choice']]],
+  ['verify_5',['verify',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#a79024fe3418bc13e73d4ce6aeec3a492',1,'morph::session::TokenVerifier']]],
+  ['view_6',['view',['../df/d52/structmorph_1_1detail_1_1FixedString.html#aca5e4e24c878f8399dd3c86759549d77',1,'morph::detail::FixedString']]],
+  ['viewids_7',['viewIds',['../db/d4f/classmorph_1_1views_1_1ViewRegistry.html#a1f9bd5ae1bf3f03177b847f9a17273ee',1,'morph::views::ViewRegistry']]],
+  ['viewschemajson_8',['viewSchemaJson',['../de/d49/views_8hpp.html#ae72992cc14431422228e8e34421d2625',1,'morph::views']]],
+  ['violationkindname_9',['violationKindName',['../da/d45/instance__constraints_8hpp.html#a1a6727cc4384d50047f43d1b37caad9b',1,'morph::forms']]],
+  ['visiblewhen_10',['visibleWhen',['../d4/d11/forms_8hpp.html#a67b71512a5559a99f0ef3c7ec9ed2c52',1,'morph::forms']]]
 ];
