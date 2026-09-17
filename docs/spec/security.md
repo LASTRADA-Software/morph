@@ -610,9 +610,10 @@ transport above is not a matter of degree:
 - **Frame-level input validation is strict.** `WsFrameReader` enforces RFC
   6455's masking rule in both directions, rejects RSV bits, reserved opcodes,
   oversized or fragmented control frames, invalid Close status codes,
-  non-minimal length encodings and invalid UTF-8 in text messages, and the
-  outgoing mask key is drawn from `std::random_device` per frame. A frame that
-  fails any of these drops the connection (without a Close status code — see
+  non-minimal length encodings, and invalid UTF-8 in text messages and Close
+  reasons, and the outgoing mask key is drawn per frame from a thread-local
+  `std::random_device`. A frame that fails any of these drops the connection
+  (without a Close status code — see
   [backend.md](core/backend.md#limitations)). This is the one area where the
   two transports are comparable; it is also the only one.
 

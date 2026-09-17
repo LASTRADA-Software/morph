@@ -381,6 +381,15 @@ private:
     /// here would land in the middle of the truncated one. `closed` is
     /// therefore set exactly as `sendText()`'s own catch does, so no later
     /// write on this connection is attempted (morph#536).
+    ///
+    /// Marking it closed is not enough on its own, though: `closed` only gates
+    /// *writes*, and `clientLoop()` is blocked in `recvSome()` on a socket the
+    /// peer may well keep feeding. Left at that, the connection would go on
+    /// dispatching requests to `RemoteServer` whose replies `sendText()` then
+    /// silently drops, so the caller sees hangs rather than a disconnect.
+    /// `shutdownBoth()` is therefore what actually retires the connection --
+    /// it unblocks that read and lets the loop exit, mirroring what
+    /// `SocketBackend::sendFrame()` does on the client side.
     static void sendControlFrame(const std::shared_ptr<ClientConnection>& conn, ::morph::net::detail::WsOpcode opcode,
                                  std::string_view payload) {
         std::scoped_lock const lock{conn->writeMtx};
@@ -392,6 +401,7 @@ private:
             conn->socket.sendAll(frame.data(), frame.size());
         } catch (const std::exception&) {
             conn->closed.store(true);
+            conn->socket.shutdownBoth();
         }
     }
 

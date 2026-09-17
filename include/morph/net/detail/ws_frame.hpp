@@ -38,27 +38,37 @@ namespace ws_frame_impl {
 // RFC 6455 §5.3 requires the mask key be unpredictable. A `std::mt19937`
 // seeded once per thread is fully reconstructible from 624 observed 32-bit
 // outputs, and a server that terminates many connections on one thread hands
-// an attacker exactly that many keys. `std::random_device` is sampled fresh
-// per frame instead -- its cost is negligible next to the frame's own copy.
+// an attacker exactly that many keys. `std::random_device` is used instead:
+// it has no reproducible internal state to recover, so a peer learns nothing
+// about the next key from any number of observed ones.
+//
+// It is held `thread_local` rather than constructed per frame: construction
+// is what acquires the entropy source (on libstdc++ without RDRAND/RDSEED,
+// an `open()` of `/dev/urandom`), so a fresh object per frame would add an
+// open/read/close round trip to *every* outbound message on the hot send
+// path. A `thread_local` costs nothing in unpredictability -- `operator()`
+// draws fresh entropy on each call regardless -- and one 32-bit draw already
+// carries all four mask bytes.
 inline std::array<std::uint8_t, 4> randomMaskKey() {
-    std::random_device entropy;
-    std::uniform_int_distribution<int> dist{0, 255};
-    std::array<std::uint8_t, 4> key{};
-    for (auto& keyByte : key) {
-        keyByte = static_cast<std::uint8_t>(dist(entropy));
-    }
-    return key;
+    static thread_local std::random_device entropy;
+    auto const bits = static_cast<std::uint32_t>(entropy());
+    return std::array<std::uint8_t, 4>{static_cast<std::uint8_t>(bits >> 24U), static_cast<std::uint8_t>(bits >> 16U),
+                                       static_cast<std::uint8_t>(bits >> 8U), static_cast<std::uint8_t>(bits)};
 }
 
 /// @brief RFC 6455 §7.4.1 status codes a Close frame is allowed to carry.
 /// 1004, 1005, 1006 and 1015 are explicitly reserved and MUST NOT appear on
-/// the wire; 1012-1014 and everything past 1011 up to 2999 were never
-/// assigned; 3000-4999 are reserved for libraries/frameworks and private use.
+/// the wire. 1000-1003 and 1007-1014 are assigned in the IANA WebSocket Close
+/// Code Number Registry (1012 Service Restart, 1013 Try Again Later and 1014
+/// Bad Gateway were registered after RFC 6455 shipped, and a proxy in front of
+/// a real server does send them -- rejecting them would drop a legitimate
+/// peer). 1015-2999 is unassigned registry space no endpoint may invent a code
+/// in; 3000-4999 is reserved for libraries/frameworks and private use.
 inline bool isValidCloseCode(std::uint16_t code) {
     if (code >= 1000 && code <= 1003) {
         return true;
     }
-    if (code >= 1007 && code <= 1011) {
+    if (code >= 1007 && code <= 1014) {
         return true;
     }
     return code >= 3000 && code <= 4999;
@@ -418,13 +428,23 @@ private:
     }
 
     static void validateClosePayload(const std::string& payload) {
+        if (payload.empty()) {
+            return;  // a Close with no body is legal and carries no status code
+        }
         bool const validClosePayload =
-            payload.empty() ||
-            (payload.size() >= 2 &&
-             ws_frame_impl::isValidCloseCode(static_cast<std::uint16_t>(
-                 (static_cast<std::uint8_t>(payload.at(0)) << 8) | static_cast<std::uint8_t>(payload.at(1)))));
+            payload.size() >= 2 &&
+            ws_frame_impl::isValidCloseCode(static_cast<std::uint16_t>(
+                (static_cast<std::uint8_t>(payload.at(0)) << 8) | static_cast<std::uint8_t>(payload.at(1))));
         if (!validClosePayload) {
             throw std::runtime_error("WsFrameReader: close frame carries an invalid status code");
+        }
+        // RFC 6455 §5.5.1: whatever follows the two status-code bytes is a
+        // human-readable reason that MUST be valid UTF-8, exactly as a Text
+        // message's payload must be. A Close body is never fragmented (control
+        // frames always carry FIN=1), so one self-contained pass suffices.
+        ws_frame_impl::Utf8Validator reasonUtf8;
+        if (!reasonUtf8.feed(std::string_view{payload}.substr(2)) || !reasonUtf8.complete()) {
+            throw std::runtime_error("WsFrameReader: close frame reason is not valid UTF-8");
         }
     }
 

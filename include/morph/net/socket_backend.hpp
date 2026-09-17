@@ -58,6 +58,13 @@ struct SocketBackendConfig {
     /// reaches a socket already published to `_socket`, and that publish
     /// happens only *after* the handshake (morph#535). Zero disables it
     /// (the kernel default, block forever).
+    ///
+    /// @warning `SO_RCVTIMEO` restarts on every `recv`, so this bounds each
+    /// individual read rather than the handshake as a whole. It closes the
+    /// "silent peer" hole it was added for; a peer that dribbles a byte just
+    /// inside each interval can still stretch the handshake to roughly this
+    /// value times `readHttpHeaderBlock`'s 64 KiB header cap before that cap
+    /// (not this timeout) ends it.
     std::chrono::milliseconds handshakeTimeout{10000};
 };
 
@@ -102,11 +109,16 @@ public:
 
     /// @brief Shuts down the I/O thread and resolves any still-pending completions.
     ///
-    /// @note May block up to `Config::connectTimeout` plus `Config::handshakeTimeout`
-    /// if destruction races an in-flight (re)connect attempt — the TCP
-    /// connect phase is bounded by the former, and the handshake response
-    /// read that follows a successful TCP connect is bounded by the latter.
-    /// See `docs/spec/core/backend.md`'s `morph::net` section.
+    /// @note May block if destruction races an in-flight (re)connect attempt:
+    /// the TCP connect phase is bounded by `Config::connectTimeout`, and the
+    /// handshake response read that follows it by `Config::handshakeTimeout`
+    /// — but the latter is `SO_RCVTIMEO`, which bounds each individual `recv`
+    /// rather than the handshake as a whole, so a peer that dribbles one
+    /// header byte per interval can stretch that phase to roughly
+    /// `handshakeTimeout` times the 64 KiB header cap. Against a peer that
+    /// simply stops writing (the case morph#535 is about) the bound is one
+    /// `handshakeTimeout`. See `docs/spec/core/backend.md`'s `morph::net`
+    /// section.
     ~SocketBackend() override {
         _shuttingDown.store(true);
         // Under `_socketMtx`, and it has to be -- see morph#506, which proposed
@@ -700,11 +712,17 @@ private:
                     (void)socket.setRecvTimeout(_cfg.handshakeTimeout);
                 }
                 std::string leftover = ::morph::net::detail::performClientHandshake(socket, _url);
-                if (_cfg.handshakeTimeout.count() > 0) {
+                if (_cfg.handshakeTimeout.count() > 0 && !socket.setRecvTimeout(std::chrono::milliseconds{0})) {
                     // The normal read loop blocks indefinitely waiting for
                     // the next frame by design; only the handshake read is
-                    // meant to be bounded.
-                    (void)socket.setRecvTimeout(std::chrono::milliseconds{0});
+                    // meant to be bounded. Unlike *setting* the timeout,
+                    // failing to clear it is not something to shrug off: the
+                    // read loop would inherit it and `recvSome` would throw
+                    // `EAGAIN` after every `handshakeTimeout` of idleness,
+                    // turning a healthy connection into a permanent
+                    // disconnect/reconnect churn. Abandon the attempt instead
+                    // and let the reconnect backoff retry.
+                    throw std::runtime_error("SocketBackend: could not clear the handshake read timeout");
                 }
                 {
                     std::scoped_lock lock{_socketMtx};

@@ -357,6 +357,41 @@ TEST_CASE("WsFrameReader accepts Close code 1008 (the 1007-1011 range)", "[net][
     REQUIRE(frame.has_value());
 }
 
+TEST_CASE("WsFrameReader accepts Close code 1013 (registered after RFC 6455 shipped)", "[net][frame]") {
+    // 1012 Service Restart, 1013 Try Again Later and 1014 Bad Gateway were
+    // added to the IANA close-code registry after RFC 6455's own §7.4.1 table;
+    // a proxy fronting a real server does send them, so rejecting them would
+    // drop a legitimate peer.
+    std::string payload;
+    payload.push_back(static_cast<char>(1013 >> 8));
+    payload.push_back(static_cast<char>(1013 & 0xFF));
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    auto frame = reader.tryExtractFrame();
+    REQUIRE(frame.has_value());
+}
+
+TEST_CASE("WsFrameReader rejects Close code 1015 (reserved, must not be sent)", "[net][frame]") {
+    std::string payload;
+    payload.push_back(static_cast<char>(1015 >> 8));
+    payload.push_back(static_cast<char>(1015 & 0xFF));
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a Close frame whose reason is not valid UTF-8", "[net][frame]") {
+    // RFC 6455 §5.5.1: the bytes after the status code are a reason phrase and
+    // must be valid UTF-8, exactly as a Text payload must be.
+    std::string payload;
+    payload.push_back(static_cast<char>(1000 >> 8));
+    payload.push_back(static_cast<char>(1000 & 0xFF));
+    payload += "\xC3";  // a 2-byte lead with no continuation byte
+    WsFrameReader reader{/*expectMasked=*/true};
+    reader.feed(encodeWsFrame(WsOpcode::kClose, payload, /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
 TEST_CASE("WsFrameReader accepts Close code 3500 (the 3000-4999 range)", "[net][frame]") {
     std::string payload;
     payload.push_back(static_cast<char>(3500 >> 8));
