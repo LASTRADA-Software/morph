@@ -1,8 +1,13 @@
 name: Spec sync
 
 # Enforces that a change to a header sub-domain (include/morph/<sub>/**) is
-# accompanied by a change to the matching design-spec folder (docs/spec/<sub>/**),
-# so the specs cannot silently drift behind the code they describe.
+# accompanied by a change to the docs that document that sub-domain, so the
+# specs cannot silently drift behind the code they describe.
+#
+# Most sub-domains mirror their folder (docs/spec/<sub>/**); morph::net and
+# morph::render do not have one and name the files that document them instead.
+# The mapping, and the requirement that every sub-domain be either mapped or
+# explicitly exempt, are in scripts/check_spec_sync.sh (morph#560).
 #
 # The gate is skipped when the PR carries the label "no docs update" — a visible,
 # reviewable opt-out for changes that genuinely need no spec update.
@@ -78,29 +83,13 @@ jobs:
           echo "$changed"
           echo "───────────────────"
 
-          # Sub-domains that have a mirrored spec folder. include/morph/detail/**
-          # and include/morph/qt/** have no specs and are intentionally exempt.
-          subdomains="core journal offline session forms util"
-
-          missing=""
-          for sub in $subdomains; do
-            if echo "$changed" | grep -qE "^include/morph/$sub/"; then
-              if ! echo "$changed" | grep -qE "^docs/spec/$sub/"; then
-                missing="$missing $sub"
-              fi
-            fi
-          done
-
-          if [ -n "$missing" ]; then
-            echo ""
-            echo "::error::Header changes without a matching spec update in:$missing"
-            for sub in $missing; do
-              echo "  - include/morph/$sub/** changed but docs/spec/$sub/** did not."
-            done
-            echo ""
-            echo "Update the design spec(s) for the affected sub-domain(s), or add the"
-            echo "label 'no docs update' to this PR if no spec change is warranted."
-            exit 1
-          fi
-
-          echo "Spec sync OK: every touched header sub-domain has a matching spec change."
+          # The rule itself lives in scripts/check_spec_sync.sh, driven by the
+          # list of changed paths. It used to be an inline word list here --
+          # `subdomains="core journal offline session forms util"` -- which
+          # left include/morph/net/** and include/morph/render/** silently
+          # exempt, so no change to the reference transport could make this
+          # gate red (morph#560). A rule in a script can be run against a list
+          # of paths, which is what lets scripts/test_check_spec_sync.sh drive
+          # it against the commits it must reject rather than asserting it
+          # works.
+          printf '%s\n' "$changed" | bash scripts/check_spec_sync.sh

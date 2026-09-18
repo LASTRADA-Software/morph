@@ -81,7 +81,14 @@ jobs:
     name: Spec-citation, banned-terminology & CI-clang-pin lint
     runs-on: ubuntu-24.04
     steps:
+      # fetch-depth: 0 for the spec-sync self-test at the end of this job:
+      # morph#560's two acceptance cases are named commits (9445bc04 and
+      # a72787ed), and under the default depth-1 checkout the self-test skips
+      # them rather than running them -- which would leave the one case that
+      # reproduces the reported defect never actually exercised in CI.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Same terms as rung-filter-lint below, and ci.yml's deprecation-lint and
       # test-type-name-lint: a lint gate nobody tests reports green whether or
@@ -133,6 +140,19 @@ jobs:
       # live break. Self-tested first, for the usual reason.
       - name: Self-test the Catch2 test-name checker
         run: bash scripts/test_check_catch_test_names.sh
+
+      # ── The header <-> spec sync gate's own rule (#560) ──────────────────
+      # The gate runs in .github/workflows/spec-sync.yml, on a pull_request
+      # merge ref; its *rule* is scripts/check_spec_sync.sh, and a rule that is
+      # only ever exercised on the event it gates is one nobody has seen go
+      # red. It had not: include/morph/net/** was missing from its sub-domain
+      # list, so an interop-visible WebSocket behaviour change shipped with no
+      # documentation past a green tick (9445bc04). This drives the rule
+      # against that commit and against the one that documented it, plus every
+      # rejection and acceptance it claims -- here, where it costs a few
+      # seconds and no compilation.
+      - name: Self-test the header/spec sync gate
+        run: bash scripts/test_check_spec_sync.sh
 
       - name: Check every test name selects itself as a Catch2 filter
         run: bash scripts/check_catch_test_names.sh
