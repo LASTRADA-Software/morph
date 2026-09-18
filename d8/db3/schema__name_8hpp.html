@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: Member List</title>
+<title>morph: morph/forms/detail/schema_name.hpp File Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/db3/schema__name_8hpp.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,25 +117,45 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d3c/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::forms::LessOrEqual&lt; V, A &gt; Member List</div></div>
+  <div class="headertitle"><div class="title">schema_name.hpp File Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>This is the complete list of members for <a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a>, including all inherited members.</p>
-<table class="directory">
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a084adeeea56239e82aa7b9edf6bd950f">emitNode</a>() const</td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a1590c1af8c162f72090532d52444861d">isCondition</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6dd7144a97063a1c76e830fe7d5f0caa">isPresentation</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6660a32cd67b0facb730ebe5ad86573f">kind</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a01f26177e78f76ad81ee1795ef799cf5">lhs</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6171e62ba9b89a9bd05d88be115d2efc">rhs</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#aa9867f8e5e49e1853d6ccb75c481aa5d">test</a>(const A &amp;action) const noexcept</td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-</table></div><!-- contents -->
+<p>Compile-time <span class="tt">$defs</span> keys for the forms layer's field wrappers.  
+<a href="#details">More...</a></p>
+<div class="textblock"><code>#include &lt;array&gt;</code><br />
+<code>#include &lt;concepts&gt;</code><br />
+<code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;string_view&gt;</code><br />
+<code>#include &lt;type_traits&gt;</code><br />
+<code>#include &quot;<a class="el" href="../../d7/d7f/fixed__string_8hpp_source.html">../../detail/fixed_string.hpp</a>&quot;</code><br />
+</div>
+<p><a href="../../d8/db3/schema__name_8hpp_source.html">Go to the source code of this file.</a></p>
+<a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
+<div class="textblock"><p>Compile-time <span class="tt">$defs</span> keys for the forms layer's field wrappers. </p>
+<p>glaze keys a schema's <span class="tt">$defs</span> block by <span class="tt">glz::name_v&lt;T&gt;</span> and populates each entry <b>once</b>: <span class="tt">auto&amp; def = defs[name_v&lt;val_t&gt;]; if (!def.type) { … }</span>. A <span class="tt">glz::meta::name</span> that is the same string for two instantiations therefore makes the second one silently <span class="tt">$ref</span> the first one's definition, and a renderer that resolves the <span class="tt">$ref</span> reads the wrong payload type (morph#543).</p>
+<p>This header is the single place the forms layer composes those keys, so the rule that keeps them apart is stated once rather than once per wrapper.</p>
+<p>Two rules shape what goes into a key:</p>
+<ul>
+<li><b>Nothing compiler-derived.</b> <span class="tt">glz::name_v</span> falls back to a <span class="tt">__PRETTY_FUNCTION__</span>/<span class="tt">__FUNCSIG__</span>-derived spelling that differs between compilers, and a <span class="tt">$defs</span> key that changed with the compiler would make a schema unreadable by a peer build — the same reason <span class="tt"><a class="el" href="../../dc/d50/payload__schema_8hpp.html" title="Structural fingerprint of an action payload&#39;s JSON shape.">core/payload_schema.hpp</a></span> refuses it for the payload fingerprint. Keys here are built only from template arguments spelled in these sources.</li>
+<li><b>Discriminate exactly what the definition's <em>content</em> depends on.</b> Two instantiations whose <span class="tt">$defs</span> entries would be byte-identical <em>should</em> share one entry; that is what <span class="tt">$defs</span> is for. Splitting them would only bloat the document. So a key carries the parameters the entry's shape varies with, and nothing else. </li>
+</ul>
+
+<p class="definition">Definition in file <a class="el" href="../../d8/db3/schema__name_8hpp_source.html">schema_name.hpp</a>.</p>
+</div></div><!-- contents -->
 </div><!-- doc-content -->
+<div id="page-nav" class="page-nav-panel">
+<div id="page-nav-resize-handle"></div>
+<div id="page-nav-tree">
+<div id="page-nav-contents">
+</div><!-- page-nav-contents -->
+</div><!-- page-nav-tree -->
+</div><!-- page-nav -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>forms</b></li><li class="navelem"><b>detail</b></li><li class="navelem"><a href="../../d8/db3/schema__name_8hpp.html">schema_name.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

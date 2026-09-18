@@ -143,7 +143,7 @@ Public Attributes</h2></td></tr>
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-attribs" class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:a5381eb933277486d031892e4b13a87cf" id="r_a5381eb933277486d031892e4b13a87cf"><td class="memItemLeft">static constexpr detail::RuleKind&#160;</td><td class="memItemRight"><a class="el" href="#a5381eb933277486d031892e4b13a87cf">kind</a> = detail::RuleKind::ReadonlyWhen</td></tr>
-<tr class="memdesc:a5381eb933277486d031892e4b13a87cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wire <span class="tt">"<a class="el" href="#a5381eb933277486d031892e4b13a87cf" title="The wire &quot;kind&quot; this rule emits: &quot;readonlyWhen&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#aa922ec8a89fa26a2d057e24584865b2d" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a>"</span>.  <br /></td></tr>
+<tr class="memdesc:a5381eb933277486d031892e4b13a87cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wire <span class="tt">"<a class="el" href="#a5381eb933277486d031892e4b13a87cf" title="The wire &quot;kind&quot; this rule emits: &quot;readonlyWhen&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#ae4b80c0eb9efb8f3ffeb75c8a0e48f98" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a>"</span>.  <br /></td></tr>
 <tr class="memitem:a3ea56d6a93a5cefb490c1443eb457934" id="r_a3ea56d6a93a5cefb490c1443eb457934"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a3ea56d6a93a5cefb490c1443eb457934">isPresentation</a> = true</td></tr>
 <tr class="memdesc:a3ea56d6a93a5cefb490c1443eb457934"><td class="mdescLeft">&#160;</td><td class="mdescRight">Presentation rule: never participates in the gate.  <br /></td></tr>
 </table>
@@ -154,12 +154,12 @@ struct morph::forms::ReadonlyWhen&lt; V, A, Cond &gt;</div><p>Presentation rule:
   <table class="tparams">
     <tr><td class="paramname">V</td><td>Field member type. </td></tr>
     <tr><td class="paramname">A</td><td>Action type the field belongs to. </td></tr>
-    <tr><td class="paramname">Cond</td><td>Condition node type. </td></tr>
+    <tr><td class="paramname">Cond</td><td><a class="el" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html" title="Concept: Cond may be used as a nested condition — inside an andOf/orOf/notOf tree,...">Condition</a> node type. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01432">1432</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01558">1558</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a37151aa78b35381d28c20eb3fa7fc35e" name="a37151aa78b35381d28c20eb3fa7fc35e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a37151aa78b35381d28c20eb3fa7fc35e">&#9670;&#160;</a></span>test()</h2>
@@ -195,7 +195,7 @@ template&lt;typename V, typename A, typename Cond&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span>, unconditionally. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01448">1448</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01574">1574</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -225,9 +225,9 @@ template&lt;typename V, typename A, typename Cond&gt; </div>
 </div><div class="memdoc">
 
 <p>Emits this rule's <span class="tt">x-rules</span> JSON node. </p>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">{"<a class="el" href="#a5381eb933277486d031892e4b13a87cf" title="The wire &quot;kind&quot; this rule emits: &quot;readonlyWhen&quot;.">kind</a>":"<a class="el" href="../../d4/d11/forms_8hpp.html#aa922ec8a89fa26a2d057e24584865b2d" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a>","fields":["&lt;wire name&gt;"],"<a class="el" href="#a497db261e3d7cee88cac15d081aae468" title="The condition that, when true, makes field read-only.">when</a>":{...}}</span>. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">{"<a class="el" href="#a5381eb933277486d031892e4b13a87cf" title="The wire &quot;kind&quot; this rule emits: &quot;readonlyWhen&quot;.">kind</a>":"<a class="el" href="../../d4/d11/forms_8hpp.html#ae4b80c0eb9efb8f3ffeb75c8a0e48f98" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a>","fields":["&lt;wire name&gt;"],"<a class="el" href="#a497db261e3d7cee88cac15d081aae468" title="The condition that, when true, makes field read-only.">when</a>":{...}}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01455">1455</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01581">1581</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -248,7 +248,7 @@ template&lt;typename V, typename A, typename Cond&gt; </div>
 
 <p>Pointer to the member whose editability this rule controls. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01434">1434</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01560">1560</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -268,7 +268,7 @@ template&lt;typename V, typename A, typename Cond&gt; </div>
 
 <p>The condition that, when true, makes <span class="tt"><a class="el" href="#a56849ede5f29a1a4dbf25104987171e7" title="Pointer to the member whose editability this rule controls.">field</a></span> read-only. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01436">1436</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01562">1562</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,9 +294,9 @@ template&lt;typename V, typename A, typename Cond&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>The wire <span class="tt">"<a class="el" href="#a5381eb933277486d031892e4b13a87cf" title="The wire &quot;kind&quot; this rule emits: &quot;readonlyWhen&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#aa922ec8a89fa26a2d057e24584865b2d" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a>"</span>. </p>
+<p>The wire <span class="tt">"<a class="el" href="#a5381eb933277486d031892e4b13a87cf" title="The wire &quot;kind&quot; this rule emits: &quot;readonlyWhen&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#ae4b80c0eb9efb8f3ffeb75c8a0e48f98" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a>"</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01438">1438</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01564">1564</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -324,7 +324,7 @@ template&lt;typename V, typename A, typename Cond&gt; </div>
 
 <p>Presentation rule: never participates in the gate. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01440">1440</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01566">1566</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

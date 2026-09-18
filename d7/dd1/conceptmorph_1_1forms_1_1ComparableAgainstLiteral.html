@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: Member List</title>
+<title>morph: morph::forms::ComparableAgainstLiteral Concept Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,25 +117,33 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d3c/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::forms::LessOrEqual&lt; V, A &gt; Member List</div></div>
+  <div class="headertitle"><div class="title">morph::forms::ComparableAgainstLiteral Concept Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>This is the complete list of members for <a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a>, including all inherited members.</p>
-<table class="directory">
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a084adeeea56239e82aa7b9edf6bd950f">emitNode</a>() const</td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a1590c1af8c162f72090532d52444861d">isCondition</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6dd7144a97063a1c76e830fe7d5f0caa">isPresentation</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6660a32cd67b0facb730ebe5ad86573f">kind</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a01f26177e78f76ad81ee1795ef799cf5">lhs</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6171e62ba9b89a9bd05d88be115d2efc">rhs</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#aa9867f8e5e49e1853d6ccb75c481aa5d">test</a>(const A &amp;action) const noexcept</td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-</table></div><!-- contents -->
+<p>Constraint: a field of type <code class="param">V</code> can be compared against a literal of type <code class="param">L</code> at all.  
+<a href="#details">More...</a></p>
+
+<p><code>#include &lt;<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>&gt;</code></p>
+<h2 id="header-conceptdef" class="groupheader">Concept definition</h2>
+<div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> V, <span class="keyword">typename</span> L&gt;</div>
+<div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html">ComparableAgainstLiteral</a> = <span class="keyword">requires</span>(<span class="keyword">const</span> V&amp; fieldValue, <span class="keyword">const</span> L&amp; literal) {</div>
+<div class="line">    { detail::equalsOperand(fieldValue) == literal } -&gt; std::convertible_to&lt;bool&gt;;</div>
+<div class="line">}</div>
+<div class="ttc" id="aconceptmorph_1_1forms_1_1ComparableAgainstLiteral_html"><div class="ttname"><a href="../../d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html">morph::forms::ComparableAgainstLiteral</a></div><div class="ttdoc">Constraint: a field of type V can be compared against a literal of type L at all.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l01156">forms.hpp:1156</a></div></div>
+</div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
+<div class="textblock"><p>Constraint: a field of type <code class="param">V</code> can be compared against a literal of type <code class="param">L</code> at all. </p>
+<p>Checked at the <span class="tt">equals(...)</span> call site rather than left to fail inside <span class="tt">Equals::test</span>. <span class="tt">equals(&amp;A::someQuantity, "URGENT")</span> produced 83 lines whose first error was <span class="tt">no match for 'operator=='</span> deep inside this header, with no mention of <span class="tt">equals</span> and nothing pointing at the caller's own <span class="tt">formRules</span>.</p>
+<p>(<code class="param">V</code> is the field member type and <code class="param">L</code> the literal type. Neither is documented with a parameter-doc command: on a concept that is an error under -Weverything -Werror &ndash; see the note on <span class="tt">Condition</span> above.) </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01156">1156</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+</div></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>forms</b></li><li class="navelem"><a href="../../d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html">ComparableAgainstLiteral</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

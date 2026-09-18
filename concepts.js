@@ -4,7 +4,9 @@ var concepts =
       [ "forms", null, [
         [ "EmptyCapableField", "d7/df7/conceptmorph_1_1forms_1_1EmptyCapableField.html", null ],
         [ "EngageableField", "d7/db5/conceptmorph_1_1forms_1_1EngageableField.html", null ],
+        [ "Condition", "dd/dab/conceptmorph_1_1forms_1_1Condition.html", null ],
         [ "RuleLiteral", "db/d8c/conceptmorph_1_1forms_1_1RuleLiteral.html", null ],
+        [ "ComparableAgainstLiteral", "d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html", null ],
         [ "HasFormRules", "d5/d32/conceptmorph_1_1forms_1_1HasFormRules.html", null ],
         [ "HasExplicitSubmit", "d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html", null ]
       ] ],

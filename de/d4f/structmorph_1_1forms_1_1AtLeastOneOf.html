@@ -142,6 +142,8 @@ Public Attributes</h2></td></tr>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:a3dc84230b88208b5e27d74ee65764165" id="r_a3dc84230b88208b5e27d74ee65764165"><td class="memItemLeft">static constexpr detail::RuleKind&#160;</td><td class="memItemRight"><a class="el" href="#a3dc84230b88208b5e27d74ee65764165">kind</a> = detail::RuleKind::AtLeastOneOf</td></tr>
 <tr class="memdesc:a3dc84230b88208b5e27d74ee65764165"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wire <span class="tt">"<a class="el" href="#a3dc84230b88208b5e27d74ee65764165" title="The wire &quot;kind&quot; this rule emits: &quot;atLeastOneOf&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#a12e5ed5f38f22a7940d4230b76c30f51" title="Builds an AtLeastOneOf&lt;A, Vs...&gt; rule over fields.">atLeastOneOf</a>"</span>.  <br /></td></tr>
+<tr class="memitem:a126151a530e268da5029d8d5f237bf32" id="r_a126151a530e268da5029d8d5f237bf32"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a126151a530e268da5029d8d5f237bf32">isCondition</a> = true</td></tr>
+<tr class="memdesc:a126151a530e268da5029d8d5f237bf32"><td class="mdescLeft">&#160;</td><td class="mdescRight">Usable as a nested condition: this node's <span class="tt"><a class="el" href="#adf2fee4942ef48d4b9a996f047bca59c" title="Evaluates the rule against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to.  <br /></td></tr>
 <tr class="memitem:a228339e2edf89f0c7a0463fdde308ff6" id="r_a228339e2edf89f0c7a0463fdde308ff6"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a228339e2edf89f0c7a0463fdde308ff6">isPresentation</a> = false</td></tr>
 <tr class="memdesc:a228339e2edf89f0c7a0463fdde308ff6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Validation rule (not presentation): participates in the gate.  <br /></td></tr>
 </table>
@@ -156,7 +158,7 @@ struct morph::forms::AtLeastOneOf&lt; A, Vs &gt;</div><p>Rule: at least one of t
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01281">1281</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01398">1398</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="adf2fee4942ef48d4b9a996f047bca59c" name="adf2fee4942ef48d4b9a996f047bca59c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#adf2fee4942ef48d4b9a996f047bca59c">&#9670;&#160;</a></span>test()</h2>
@@ -192,7 +194,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when at least one listed field is engaged. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01292">1292</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01413">1413</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,7 +226,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 <p>Emits this rule's <span class="tt">x-rules</span> JSON node. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">{"<a class="el" href="#a3dc84230b88208b5e27d74ee65764165" title="The wire &quot;kind&quot; this rule emits: &quot;atLeastOneOf&quot;.">kind</a>":"<a class="el" href="../../d4/d11/forms_8hpp.html#a12e5ed5f38f22a7940d4230b76c30f51" title="Builds an AtLeastOneOf&lt;A, Vs...&gt; rule over fields.">atLeastOneOf</a>","<a class="el" href="#adfa3df7e74a1b32d83599660c1800621" title="Pointers to the member fields this rule ranges over.">fields</a>":["&lt;wire name&gt;", ...]}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01301">1301</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01422">1422</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,7 +247,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 
 <p>Pointers to the member fields this rule ranges over. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01283">1283</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01400">1400</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +275,35 @@ template&lt;typename A, typename... Vs&gt; </div>
 
 <p>The wire <span class="tt">"<a class="el" href="#a3dc84230b88208b5e27d74ee65764165" title="The wire &quot;kind&quot; this rule emits: &quot;atLeastOneOf&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#a12e5ed5f38f22a7940d4230b76c30f51" title="Builds an AtLeastOneOf&lt;A, Vs...&gt; rule over fields.">atLeastOneOf</a>"</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01285">1285</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01402">1402</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a126151a530e268da5029d8d5f237bf32" name="a126151a530e268da5029d8d5f237bf32"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a126151a530e268da5029d8d5f237bf32">&#9670;&#160;</a></span>isCondition</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename A, typename... Vs&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool <a class="el" href="../../de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html">morph::forms::AtLeastOneOf</a>&lt; A, Vs &gt;::isCondition = true</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Usable as a nested condition: this node's <span class="tt"><a class="el" href="#adf2fee4942ef48d4b9a996f047bca59c" title="Evaluates the rule against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01406">1406</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -301,7 +331,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 
 <p>Validation rule (not presentation): participates in the gate. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01287">1287</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01408">1408</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d6b/structm
 </div><!--header-->
 <div class="contents">
 
-<p>Condition: <span class="tt"><a class="el" href="#a7d3b7f247ffd6af0898586f1d6403b70" title="Pointer to the member this condition inspects.">field</a></span> is engaged (has a value). One of the closed condition kinds a <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a926f5a6cf58c2fa6fae3d1be7276eee6" title="Builds a RequiredWhen&lt;V, A, Cond&gt; rule: field becomes required exactly when when holds.">requiredWhen</a></span> / <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a67b71512a5559a99f0ef3c7ec9ed2c52" title="Builds a VisibleWhen&lt;V, A, Cond&gt; presentation rule: field is shown only while when holds.">visibleWhen</a></span> / <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#aa922ec8a89fa26a2d057e24584865b2d" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a></span> rule's <span class="tt">when</span> clause accepts.  
+<p><a class="el" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html" title="Concept: Cond may be used as a nested condition — inside an andOf/orOf/notOf tree,...">Condition</a>: <span class="tt"><a class="el" href="#a7d3b7f247ffd6af0898586f1d6403b70" title="Pointer to the member this condition inspects.">field</a></span> is engaged (has a value). One of the closed condition kinds a <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a47ff330bcc91279ef1943b194d1ca643" title="Builds a RequiredWhen&lt;V, A, Cond&gt; rule: field becomes required exactly when when holds.">requiredWhen</a></span> / <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a70452f0c1618273f2b12f28b77387052" title="Builds a VisibleWhen&lt;V, A, Cond&gt; presentation rule: field is shown only while when holds.">visibleWhen</a></span> / <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#ae4b80c0eb9efb8f3ffeb75c8a0e48f98" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a></span> rule's <span class="tt">when</span> clause accepts.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>&gt;</code></p>
@@ -142,10 +142,12 @@ Public Attributes</h2></td></tr>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:a81cead6995057efa1aa1136fbc2c3070" id="r_a81cead6995057efa1aa1136fbc2c3070"><td class="memItemLeft">static constexpr detail::RuleKind&#160;</td><td class="memItemRight"><a class="el" href="#a81cead6995057efa1aa1136fbc2c3070">kind</a> = detail::RuleKind::Engaged</td></tr>
 <tr class="memdesc:a81cead6995057efa1aa1136fbc2c3070"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wire <span class="tt">"<a class="el" href="#a81cead6995057efa1aa1136fbc2c3070" title="The wire &quot;kind&quot; this condition emits: &quot;engaged&quot;.">kind</a>"</span> this condition emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#a07dfc279ee79367cee103d743a21b940" title="Builds an Engaged&lt;V, A&gt; condition testing whether field is engaged.">engaged</a>"</span>.  <br /></td></tr>
+<tr class="memitem:a7234038465ccc22e8c28776df8b13dea" id="r_a7234038465ccc22e8c28776df8b13dea"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a7234038465ccc22e8c28776df8b13dea">isCondition</a> = true</td></tr>
+<tr class="memdesc:a7234038465ccc22e8c28776df8b13dea"><td class="mdescLeft">&#160;</td><td class="mdescRight">Usable as a nested condition: this node's <span class="tt"><a class="el" href="#ad3e2a54e0b12d080f57a8d8bda93e633" title="Evaluates the condition against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename V, typename A&gt;<br />
-struct morph::forms::Engaged&lt; V, A &gt;</div><p>Condition: <span class="tt"><a class="el" href="#a7d3b7f247ffd6af0898586f1d6403b70" title="Pointer to the member this condition inspects.">field</a></span> is engaged (has a value). One of the closed condition kinds a <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a926f5a6cf58c2fa6fae3d1be7276eee6" title="Builds a RequiredWhen&lt;V, A, Cond&gt; rule: field becomes required exactly when when holds.">requiredWhen</a></span> / <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a67b71512a5559a99f0ef3c7ec9ed2c52" title="Builds a VisibleWhen&lt;V, A, Cond&gt; presentation rule: field is shown only while when holds.">visibleWhen</a></span> / <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#aa922ec8a89fa26a2d057e24584865b2d" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a></span> rule's <span class="tt">when</span> clause accepts. </p>
+struct morph::forms::Engaged&lt; V, A &gt;</div><p><a class="el" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html" title="Concept: Cond may be used as a nested condition — inside an andOf/orOf/notOf tree,...">Condition</a>: <span class="tt"><a class="el" href="#a7d3b7f247ffd6af0898586f1d6403b70" title="Pointer to the member this condition inspects.">field</a></span> is engaged (has a value). One of the closed condition kinds a <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a47ff330bcc91279ef1943b194d1ca643" title="Builds a RequiredWhen&lt;V, A, Cond&gt; rule: field becomes required exactly when when holds.">requiredWhen</a></span> / <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a70452f0c1618273f2b12f28b77387052" title="Builds a VisibleWhen&lt;V, A, Cond&gt; presentation rule: field is shown only while when holds.">visibleWhen</a></span> / <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#ae4b80c0eb9efb8f3ffeb75c8a0e48f98" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a></span> rule's <span class="tt">when</span> clause accepts. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">V</td><td>Field member type (must satisfy <span class="tt"><a class="el" href="../../d7/db5/conceptmorph_1_1forms_1_1EngageableField.html" title="Broader than EmptyCapableField: also covers a plain std::optional&lt;T&gt; member (e.g. std::optional&lt;std::...">EngageableField</a></span>). </td></tr>
@@ -154,7 +156,7 @@ struct morph::forms::Engaged&lt; V, A &gt;</div><p>Condition: <span class="tt"><
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00745">745</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00785">785</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="ad3e2a54e0b12d080f57a8d8bda93e633" name="ad3e2a54e0b12d080f57a8d8bda93e633"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad3e2a54e0b12d080f57a8d8bda93e633">&#9670;&#160;</a></span>test()</h2>
@@ -190,7 +192,7 @@ template&lt;typename V, typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when the field is engaged. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00754">754</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00798">798</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -222,7 +224,7 @@ template&lt;typename V, typename A&gt; </div>
 <p>Emits this condition's <span class="tt">x-rules</span> JSON node. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">{"<a class="el" href="#a81cead6995057efa1aa1136fbc2c3070" title="The wire &quot;kind&quot; this condition emits: &quot;engaged&quot;.">kind</a>":"<a class="el" href="../../d4/d11/forms_8hpp.html#a07dfc279ee79367cee103d743a21b940" title="Builds an Engaged&lt;V, A&gt; condition testing whether field is engaged.">engaged</a>","fields":["&lt;wire name&gt;"]}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00758">758</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00802">802</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -243,7 +245,7 @@ template&lt;typename V, typename A&gt; </div>
 
 <p>Pointer to the member this condition inspects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00747">747</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00787">787</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +273,35 @@ template&lt;typename V, typename A&gt; </div>
 
 <p>The wire <span class="tt">"<a class="el" href="#a81cead6995057efa1aa1136fbc2c3070" title="The wire &quot;kind&quot; this condition emits: &quot;engaged&quot;.">kind</a>"</span> this condition emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#a07dfc279ee79367cee103d743a21b940" title="Builds an Engaged&lt;V, A&gt; condition testing whether field is engaged.">engaged</a>"</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00749">749</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00789">789</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7234038465ccc22e8c28776df8b13dea" name="a7234038465ccc22e8c28776df8b13dea"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7234038465ccc22e8c28776df8b13dea">&#9670;&#160;</a></span>isCondition</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename V, typename A&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool <a class="el" href="../../dd/d6b/structmorph_1_1forms_1_1Engaged.html">morph::forms::Engaged</a>&lt; V, A &gt;::isCondition = true</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Usable as a nested condition: this node's <span class="tt"><a class="el" href="#ad3e2a54e0b12d080f57a8d8bda93e633" title="Evaluates the condition against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00793">793</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

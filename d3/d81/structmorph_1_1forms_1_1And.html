@@ -142,6 +142,8 @@ Public Attributes</h2></td></tr>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:a215054fdd3d63747ee7d281bb2a3eb64" id="r_a215054fdd3d63747ee7d281bb2a3eb64"><td class="memItemLeft">static constexpr detail::RuleKind&#160;</td><td class="memItemRight"><a class="el" href="#a215054fdd3d63747ee7d281bb2a3eb64">kind</a> = detail::RuleKind::And</td></tr>
 <tr class="memdesc:a215054fdd3d63747ee7d281bb2a3eb64"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wire <span class="tt">"<a class="el" href="#a215054fdd3d63747ee7d281bb2a3eb64" title="The wire &quot;kind&quot; this node emits: &quot;and&quot;.">kind</a>"</span> this node emits: <span class="tt">"and"</span>.  <br /></td></tr>
+<tr class="memitem:a0f8aa6a06f0f0a09973110df3f5ce3fc" id="r_a0f8aa6a06f0f0a09973110df3f5ce3fc"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a0f8aa6a06f0f0a09973110df3f5ce3fc">isCondition</a> = true</td></tr>
+<tr class="memdesc:a0f8aa6a06f0f0a09973110df3f5ce3fc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Usable as a nested condition: this node's <span class="tt"><a class="el" href="#a881c5cf02619807bf50dfe4e7095ff01" title="Evaluates the condition against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to.  <br /></td></tr>
 <tr class="memitem:a7af377df9d0d1c3009ee88c0935563d0" id="r_a7af377df9d0d1c3009ee88c0935563d0"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a7af377df9d0d1c3009ee88c0935563d0">isPresentation</a> = false</td></tr>
 <tr class="memdesc:a7af377df9d0d1c3009ee88c0935563d0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Validation rule (not presentation): participates in the gate when used as a top-level <span class="tt">formRules</span> entry.  <br /></td></tr>
 </table>
@@ -156,7 +158,7 @@ struct morph::forms::And&lt; A, Conds &gt;</div><p>Compound condition: all of <s
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01489">1489</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01616">1616</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a881c5cf02619807bf50dfe4e7095ff01" name="a881c5cf02619807bf50dfe4e7095ff01"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a881c5cf02619807bf50dfe4e7095ff01">&#9670;&#160;</a></span>test()</h2>
@@ -192,7 +194,7 @@ template&lt;typename A, typename... Conds&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when every nested condition holds. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01501">1501</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01632">1632</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,7 +226,7 @@ template&lt;typename A, typename... Conds&gt; </div>
 <p>Emits this condition's <span class="tt">x-rules</span> JSON node. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">{"<a class="el" href="#a215054fdd3d63747ee7d281bb2a3eb64" title="The wire &quot;kind&quot; this node emits: &quot;and&quot;.">kind</a>":"and","<a class="el" href="#a15e3bf2b2182853288b2eb0290e0e6ec" title="The nested conditions, in declaration order.">conditions</a>":[{...}, ...]}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01507">1507</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01638">1638</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,7 +247,7 @@ template&lt;typename A, typename... Conds&gt; </div>
 
 <p>The nested conditions, in declaration order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01491">1491</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01618">1618</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +275,35 @@ template&lt;typename A, typename... Conds&gt; </div>
 
 <p>The wire <span class="tt">"<a class="el" href="#a215054fdd3d63747ee7d281bb2a3eb64" title="The wire &quot;kind&quot; this node emits: &quot;and&quot;.">kind</a>"</span> this node emits: <span class="tt">"and"</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01493">1493</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01620">1620</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0f8aa6a06f0f0a09973110df3f5ce3fc" name="a0f8aa6a06f0f0a09973110df3f5ce3fc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0f8aa6a06f0f0a09973110df3f5ce3fc">&#9670;&#160;</a></span>isCondition</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename A, typename... Conds&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool <a class="el" href="../../d3/d81/structmorph_1_1forms_1_1And.html">morph::forms::And</a>&lt; A, Conds &gt;::isCondition = true</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Usable as a nested condition: this node's <span class="tt"><a class="el" href="#a881c5cf02619807bf50dfe4e7095ff01" title="Evaluates the condition against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01624">1624</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -301,7 +331,7 @@ template&lt;typename A, typename... Conds&gt; </div>
 
 <p>Validation rule (not presentation): participates in the gate when used as a top-level <span class="tt">formRules</span> entry. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01496">1496</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01627">1627</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

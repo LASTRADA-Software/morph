@@ -142,6 +142,8 @@ Public Attributes</h2></td></tr>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:af31d65d7464a342d621f09a1da31f78f" id="r_af31d65d7464a342d621f09a1da31f78f"><td class="memItemLeft">static constexpr detail::RuleKind&#160;</td><td class="memItemRight"><a class="el" href="#af31d65d7464a342d621f09a1da31f78f">kind</a> = detail::RuleKind::ExactlyOneOf</td></tr>
 <tr class="memdesc:af31d65d7464a342d621f09a1da31f78f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wire <span class="tt">"<a class="el" href="#af31d65d7464a342d621f09a1da31f78f" title="The wire &quot;kind&quot; this rule emits: &quot;exactlyOneOf&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#ad4cad9c649a70967d28e838b9b47bd1a" title="Builds an ExactlyOneOf&lt;A, Vs...&gt; rule over fields.">exactlyOneOf</a>"</span>.  <br /></td></tr>
+<tr class="memitem:ab72f93e70cc47a1038beec7267771350" id="r_ab72f93e70cc47a1038beec7267771350"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#ab72f93e70cc47a1038beec7267771350">isCondition</a> = true</td></tr>
+<tr class="memdesc:ab72f93e70cc47a1038beec7267771350"><td class="mdescLeft">&#160;</td><td class="mdescRight">Usable as a nested condition: this node's <span class="tt"><a class="el" href="#a954183f712854caeaec91b0a9a1621e2" title="Evaluates the rule against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to.  <br /></td></tr>
 <tr class="memitem:a188633d47b2c0fa52219d203e71e4acb" id="r_a188633d47b2c0fa52219d203e71e4acb"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a188633d47b2c0fa52219d203e71e4acb">isPresentation</a> = false</td></tr>
 <tr class="memdesc:a188633d47b2c0fa52219d203e71e4acb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Validation rule (not presentation): participates in the gate.  <br /></td></tr>
 </table>
@@ -156,7 +158,7 @@ struct morph::forms::ExactlyOneOf&lt; A, Vs &gt;</div><p>Rule: exactly one of th
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01234">1234</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01347">1347</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a954183f712854caeaec91b0a9a1621e2" name="a954183f712854caeaec91b0a9a1621e2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a954183f712854caeaec91b0a9a1621e2">&#9670;&#160;</a></span>test()</h2>
@@ -192,7 +194,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when exactly one listed field is engaged. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01245">1245</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01362">1362</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,7 +226,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 <p>Emits this rule's <span class="tt">x-rules</span> JSON node. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">{"<a class="el" href="#af31d65d7464a342d621f09a1da31f78f" title="The wire &quot;kind&quot; this rule emits: &quot;exactlyOneOf&quot;.">kind</a>":"<a class="el" href="../../d4/d11/forms_8hpp.html#ad4cad9c649a70967d28e838b9b47bd1a" title="Builds an ExactlyOneOf&lt;A, Vs...&gt; rule over fields.">exactlyOneOf</a>","<a class="el" href="#ad4cf3bc8bca99e72cbefc45f5e81262c" title="Pointers to the member fields this rule ranges over.">fields</a>":["&lt;wire name&gt;", ...]}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01254">1254</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01371">1371</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,7 +247,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 
 <p>Pointers to the member fields this rule ranges over. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01236">1236</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01349">1349</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +275,35 @@ template&lt;typename A, typename... Vs&gt; </div>
 
 <p>The wire <span class="tt">"<a class="el" href="#af31d65d7464a342d621f09a1da31f78f" title="The wire &quot;kind&quot; this rule emits: &quot;exactlyOneOf&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#ad4cad9c649a70967d28e838b9b47bd1a" title="Builds an ExactlyOneOf&lt;A, Vs...&gt; rule over fields.">exactlyOneOf</a>"</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01238">1238</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01351">1351</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab72f93e70cc47a1038beec7267771350" name="ab72f93e70cc47a1038beec7267771350"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab72f93e70cc47a1038beec7267771350">&#9670;&#160;</a></span>isCondition</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename A, typename... Vs&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool <a class="el" href="../../d9/d06/structmorph_1_1forms_1_1ExactlyOneOf.html">morph::forms::ExactlyOneOf</a>&lt; A, Vs &gt;::isCondition = true</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Usable as a nested condition: this node's <span class="tt"><a class="el" href="#a954183f712854caeaec91b0a9a1621e2" title="Evaluates the rule against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01355">1355</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -301,7 +331,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 
 <p>Validation rule (not presentation): participates in the gate. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01240">1240</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01357">1357</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

@@ -33,7 +33,7 @@ var searchData=
   ['or_30',['Or',['../d4/d8d/structmorph_1_1forms_1_1Or.html',1,'morph::forms']]],
   ['ordered_20coalescing_20identity_20aware_20execution_20history_31',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
   ['ordered_20replayable_20action_20log_32',['&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log',['../index.html#journal--ordered-replayable-action-log',1,'']]],
-  ['orof_33',['orOf',['../d4/d11/forms_8hpp.html#a335404d53a53c252e86326b3250c0acf',1,'morph::forms']]],
+  ['orof_33',['orOf',['../d4/d11/forms_8hpp.html#a8a31ef684c979a22443d711ef94ac6b7',1,'morph::forms']]],
   ['orphan_20log_34',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
   ['outboxrelay_35',['OutboxRelay',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html',1,'morph::journal']]],
   ['outboxrelayresult_36',['OutboxRelayResult',['../d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html',1,'morph::journal']]],

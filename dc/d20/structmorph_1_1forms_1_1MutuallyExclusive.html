@@ -142,6 +142,8 @@ Public Attributes</h2></td></tr>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:a418adc6970d84d2fabb8017102012d0a" id="r_a418adc6970d84d2fabb8017102012d0a"><td class="memItemLeft">static constexpr detail::RuleKind&#160;</td><td class="memItemRight"><a class="el" href="#a418adc6970d84d2fabb8017102012d0a">kind</a> = detail::RuleKind::MutuallyExclusive</td></tr>
 <tr class="memdesc:a418adc6970d84d2fabb8017102012d0a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wire <span class="tt">"<a class="el" href="#a418adc6970d84d2fabb8017102012d0a" title="The wire &quot;kind&quot; this rule emits: &quot;mutuallyExclusive&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#a818f041020043b4ec157170a31fd2f00" title="Builds a MutuallyExclusive&lt;A, Vs...&gt; rule over fields.">mutuallyExclusive</a>"</span>.  <br /></td></tr>
+<tr class="memitem:a27cdbbe5f56a77f8a52b184b9db516c9" id="r_a27cdbbe5f56a77f8a52b184b9db516c9"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a27cdbbe5f56a77f8a52b184b9db516c9">isCondition</a> = true</td></tr>
+<tr class="memdesc:a27cdbbe5f56a77f8a52b184b9db516c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Usable as a nested condition: this node's <span class="tt"><a class="el" href="#a09c1d26fc316d73b2005d2233dfea32d" title="Evaluates the rule against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to.  <br /></td></tr>
 <tr class="memitem:aa1ba729a4247e4952c26d960bb5a4277" id="r_aa1ba729a4247e4952c26d960bb5a4277"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#aa1ba729a4247e4952c26d960bb5a4277">isPresentation</a> = false</td></tr>
 <tr class="memdesc:aa1ba729a4247e4952c26d960bb5a4277"><td class="mdescLeft">&#160;</td><td class="mdescRight">Validation rule (not presentation): participates in the gate.  <br /></td></tr>
 </table>
@@ -156,7 +158,7 @@ struct morph::forms::MutuallyExclusive&lt; A, Vs &gt;</div><p>Rule: at most one 
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01328">1328</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01449">1449</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a09c1d26fc316d73b2005d2233dfea32d" name="a09c1d26fc316d73b2005d2233dfea32d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a09c1d26fc316d73b2005d2233dfea32d">&#9670;&#160;</a></span>test()</h2>
@@ -192,7 +194,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when at most one listed field is engaged. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01339">1339</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01464">1464</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,7 +226,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 <p>Emits this rule's <span class="tt">x-rules</span> JSON node. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">{"<a class="el" href="#a418adc6970d84d2fabb8017102012d0a" title="The wire &quot;kind&quot; this rule emits: &quot;mutuallyExclusive&quot;.">kind</a>":"<a class="el" href="../../d4/d11/forms_8hpp.html#a818f041020043b4ec157170a31fd2f00" title="Builds a MutuallyExclusive&lt;A, Vs...&gt; rule over fields.">mutuallyExclusive</a>","<a class="el" href="#ae7d1d4b2be55d421cef63eb62b779d42" title="Pointers to the member fields this rule ranges over.">fields</a>":["&lt;wire name&gt;", ...]}</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01348">1348</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01473">1473</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,7 +247,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 
 <p>Pointers to the member fields this rule ranges over. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01330">1330</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01451">1451</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +275,35 @@ template&lt;typename A, typename... Vs&gt; </div>
 
 <p>The wire <span class="tt">"<a class="el" href="#a418adc6970d84d2fabb8017102012d0a" title="The wire &quot;kind&quot; this rule emits: &quot;mutuallyExclusive&quot;.">kind</a>"</span> this rule emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#a818f041020043b4ec157170a31fd2f00" title="Builds a MutuallyExclusive&lt;A, Vs...&gt; rule over fields.">mutuallyExclusive</a>"</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01332">1332</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01453">1453</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a27cdbbe5f56a77f8a52b184b9db516c9" name="a27cdbbe5f56a77f8a52b184b9db516c9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a27cdbbe5f56a77f8a52b184b9db516c9">&#9670;&#160;</a></span>isCondition</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename A, typename... Vs&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool <a class="el" href="../../dc/d20/structmorph_1_1forms_1_1MutuallyExclusive.html">morph::forms::MutuallyExclusive</a>&lt; A, Vs &gt;::isCondition = true</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Usable as a nested condition: this node's <span class="tt"><a class="el" href="#a09c1d26fc316d73b2005d2233dfea32d" title="Evaluates the rule against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01457">1457</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -301,7 +331,7 @@ template&lt;typename A, typename... Vs&gt; </div>
 
 <p>Validation rule (not presentation): participates in the gate. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01334">1334</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01459">1459</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

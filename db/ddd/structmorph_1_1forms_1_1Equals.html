@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/ddd/structm
 </div><!--header-->
 <div class="contents">
 
-<p>Condition: <span class="tt"><a class="el" href="#a60cf658ef5d3904ad1a45d21b2e38ed5" title="Pointer to the member this condition inspects.">field</a></span>'s engaged value equals <code class="param">literal</code>. An unengaged field is <b>not</b> vacuously satisfied here (unlike the comparison kinds) — a field with no value cannot equal anything, so <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#af335b5ed1382b0fadaba29722cdd67c7" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a></span> returns <span class="tt">false</span> while the field is unengaged.  
+<p><a class="el" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html" title="Concept: Cond may be used as a nested condition — inside an andOf/orOf/notOf tree,...">Condition</a>: <span class="tt"><a class="el" href="#a60cf658ef5d3904ad1a45d21b2e38ed5" title="Pointer to the member this condition inspects.">field</a></span>'s engaged value equals <code class="param">literal</code>. An unengaged field is <b>not</b> vacuously satisfied here (unlike the comparison kinds) — a field with no value cannot equal anything, so <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a7f5f0377a75336f0e17da1aeb721c04b" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a></span> returns <span class="tt">false</span> while the field is unengaged.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>&gt;</code></p>
@@ -143,11 +143,13 @@ Public Attributes</h2></td></tr>
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-attribs" class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:ae04c464303aae7e5ea5d41d41b58f633" id="r_ae04c464303aae7e5ea5d41d41b58f633"><td class="memItemLeft">static constexpr detail::RuleKind&#160;</td><td class="memItemRight"><a class="el" href="#ae04c464303aae7e5ea5d41d41b58f633">kind</a> = detail::RuleKind::Equals</td></tr>
-<tr class="memdesc:ae04c464303aae7e5ea5d41d41b58f633"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wire <span class="tt">"<a class="el" href="#ae04c464303aae7e5ea5d41d41b58f633" title="The wire &quot;kind&quot; this condition emits: &quot;equals&quot;.">kind</a>"</span> this condition emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#af335b5ed1382b0fadaba29722cdd67c7" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a>"</span>.  <br /></td></tr>
+<tr class="memdesc:ae04c464303aae7e5ea5d41d41b58f633"><td class="mdescLeft">&#160;</td><td class="mdescRight">The wire <span class="tt">"<a class="el" href="#ae04c464303aae7e5ea5d41d41b58f633" title="The wire &quot;kind&quot; this condition emits: &quot;equals&quot;.">kind</a>"</span> this condition emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#a7f5f0377a75336f0e17da1aeb721c04b" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a>"</span>.  <br /></td></tr>
+<tr class="memitem:acc6ee29dc3612c19f7cf9afb40f3ac08" id="r_acc6ee29dc3612c19f7cf9afb40f3ac08"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#acc6ee29dc3612c19f7cf9afb40f3ac08">isCondition</a> = true</td></tr>
+<tr class="memdesc:acc6ee29dc3612c19f7cf9afb40f3ac08"><td class="mdescLeft">&#160;</td><td class="mdescRight">Usable as a nested condition: this node's <span class="tt"><a class="el" href="#a6caaff4cf97be230cfd48f99e17e5198" title="Evaluates the condition against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename V, typename A, typename L&gt;<br />
-struct morph::forms::Equals&lt; V, A, L &gt;</div><p>Condition: <span class="tt"><a class="el" href="#a60cf658ef5d3904ad1a45d21b2e38ed5" title="Pointer to the member this condition inspects.">field</a></span>'s engaged value equals <code class="param">literal</code>. An unengaged field is <b>not</b> vacuously satisfied here (unlike the comparison kinds) — a field with no value cannot equal anything, so <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#af335b5ed1382b0fadaba29722cdd67c7" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a></span> returns <span class="tt">false</span> while the field is unengaged. </p>
+struct morph::forms::Equals&lt; V, A, L &gt;</div><p><a class="el" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html" title="Concept: Cond may be used as a nested condition — inside an andOf/orOf/notOf tree,...">Condition</a>: <span class="tt"><a class="el" href="#a60cf658ef5d3904ad1a45d21b2e38ed5" title="Pointer to the member this condition inspects.">field</a></span>'s engaged value equals <code class="param">literal</code>. An unengaged field is <b>not</b> vacuously satisfied here (unlike the comparison kinds) — a field with no value cannot equal anything, so <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a7f5f0377a75336f0e17da1aeb721c04b" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a></span> returns <span class="tt">false</span> while the field is unengaged. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">V</td><td>Field member type. </td></tr>
@@ -157,7 +159,7 @@ struct morph::forms::Equals&lt; V, A, L &gt;</div><p>Condition: <span class="tt"
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01074">1074</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01181">1181</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a6caaff4cf97be230cfd48f99e17e5198" name="a6caaff4cf97be230cfd48f99e17e5198"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6caaff4cf97be230cfd48f99e17e5198">&#9670;&#160;</a></span>test()</h2>
@@ -193,7 +195,7 @@ template&lt;typename V, typename A, typename L&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when the field is engaged (or has no empty state) and its value equals <span class="tt"><a class="el" href="#ad3431947648dd14029af6a1c9e8d480c" title="The literal to compare the field&#39;s engaged value against.">literal</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01086">1086</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01197">1197</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -223,9 +225,9 @@ template&lt;typename V, typename A, typename L&gt; </div>
 </div><div class="memdoc">
 
 <p>Emits this condition's <span class="tt">x-rules</span> JSON node. </p>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">{"<a class="el" href="#ae04c464303aae7e5ea5d41d41b58f633" title="The wire &quot;kind&quot; this condition emits: &quot;equals&quot;.">kind</a>":"<a class="el" href="../../d4/d11/forms_8hpp.html#af335b5ed1382b0fadaba29722cdd67c7" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a>","fields":["&lt;wire name&gt;"],"value":...}</span>, where <span class="tt">value</span> is <span class="tt">{"num":...,"den":...}</span> for a <span class="tt">Rational</span> literal and the bare scalar otherwise. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">{"<a class="el" href="#ae04c464303aae7e5ea5d41d41b58f633" title="The wire &quot;kind&quot; this condition emits: &quot;equals&quot;.">kind</a>":"<a class="el" href="../../d4/d11/forms_8hpp.html#a7f5f0377a75336f0e17da1aeb721c04b" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a>","fields":["&lt;wire name&gt;"],"value":...}</span>, where <span class="tt">value</span> is <span class="tt">{"num":...,"den":...}</span> for a <span class="tt">Rational</span> literal and the bare scalar otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01102">1102</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01213">1213</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -246,7 +248,7 @@ template&lt;typename V, typename A, typename L&gt; </div>
 
 <p>Pointer to the member this condition inspects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01076">1076</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01183">1183</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -266,7 +268,7 @@ template&lt;typename V, typename A, typename L&gt; </div>
 
 <p>The literal to compare the field's engaged value against. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01078">1078</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01185">1185</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -292,9 +294,37 @@ template&lt;typename V, typename A, typename L&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>The wire <span class="tt">"<a class="el" href="#ae04c464303aae7e5ea5d41d41b58f633" title="The wire &quot;kind&quot; this condition emits: &quot;equals&quot;.">kind</a>"</span> this condition emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#af335b5ed1382b0fadaba29722cdd67c7" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a>"</span>. </p>
+<p>The wire <span class="tt">"<a class="el" href="#ae04c464303aae7e5ea5d41d41b58f633" title="The wire &quot;kind&quot; this condition emits: &quot;equals&quot;.">kind</a>"</span> this condition emits: <span class="tt">"<a class="el" href="../../d4/d11/forms_8hpp.html#a7f5f0377a75336f0e17da1aeb721c04b" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a>"</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01080">1080</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01187">1187</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="acc6ee29dc3612c19f7cf9afb40f3ac08" name="acc6ee29dc3612c19f7cf9afb40f3ac08"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acc6ee29dc3612c19f7cf9afb40f3ac08">&#9670;&#160;</a></span>isCondition</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename V, typename A, typename L&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool <a class="el" href="../../db/ddd/structmorph_1_1forms_1_1Equals.html">morph::forms::Equals</a>&lt; V, A, L &gt;::isCondition = true</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Usable as a nested condition: this node's <span class="tt"><a class="el" href="#a6caaff4cf97be230cfd48f99e17e5198" title="Evaluates the condition against action.">test()</a></span> is a function of the action, so composing it into an <span class="tt">and</span>/<span class="tt">or</span>/<span class="tt">not</span> tree changes what that tree evaluates to. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01191">1191</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

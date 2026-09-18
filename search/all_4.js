@@ -16,7 +16,7 @@ var searchData=
   ['entries_13',['entries',['../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda',1,'morph::journal::IActionLog::entries()'],['../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html#aa0f4b5543fa43c475f6974451f99250d',1,'morph::journal::InMemoryActionLog::entries()'],['../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#aee38ac14807005f7ba0e194d884b6cc3',1,'morph::journal::FileActionLog::entries()'],['../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b',1,'morph::journal::SessionLog::entries()']]],
   ['envelope_14',['Envelope',['../d5/d77/structmorph_1_1wire_1_1Envelope.html',1,'morph::wire']]],
   ['equals_15',['Equals',['../db/ddd/structmorph_1_1forms_1_1Equals.html',1,'morph::forms']]],
-  ['equals_16',['equals',['../d4/d11/forms_8hpp.html#af335b5ed1382b0fadaba29722cdd67c7',1,'morph::forms::equals(V A::*field, L literal)'],['../d4/d11/forms_8hpp.html#adb22ab3bb90df7ecf4d544456b017a78',1,'morph::forms::equals(V A::*field, const char(&amp;literal)[N])']]],
+  ['equals_16',['equals',['../d4/d11/forms_8hpp.html#a7f5f0377a75336f0e17da1aeb721c04b',1,'morph::forms::equals(V A::*field, L literal)'],['../d4/d11/forms_8hpp.html#a9ccb0426c5378d88206b35ac296f571a',1,'morph::forms::equals(V A::*field, const char(&amp;literal)[N])']]],
   ['equation_17',['equation',['../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73',1,'morph::units::Quantity']]],
   ['erasure_18',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
   ['error_19',['error',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a646cb97e461dcd84d20260cecab748a8',1,'morph::journal::LogEntry']]],

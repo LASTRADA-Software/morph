@@ -155,9 +155,9 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AFieldMeta" id="r_morph_3A_3Aforms_3A_3AFieldMeta"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">morph::forms::FieldMeta</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only, hidden, <span class="tt"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> (docs/spec/forms/forms.md, "Field metadata").  <a href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AEngaged_3C_20V_2C_20A_20_3E" id="r_morph_3A_3Aforms_3A_3AEngaged_3C_20V_2C_20A_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dd/d6b/structmorph_1_1forms_1_1Engaged.html">morph::forms::Engaged&lt; V, A &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Condition: <span class="tt"><a class="el" href="../../dd/d6b/structmorph_1_1forms_1_1Engaged.html#a7d3b7f247ffd6af0898586f1d6403b70" title="Pointer to the member this condition inspects.">field</a></span> is engaged (has a value). One of the closed condition kinds a <span class="tt"><a class="el" href="#a926f5a6cf58c2fa6fae3d1be7276eee6" title="Builds a RequiredWhen&lt;V, A, Cond&gt; rule: field becomes required exactly when when holds.">requiredWhen</a></span> / <span class="tt"><a class="el" href="#a67b71512a5559a99f0ef3c7ec9ed2c52" title="Builds a VisibleWhen&lt;V, A, Cond&gt; presentation rule: field is shown only while when holds.">visibleWhen</a></span> / <span class="tt"><a class="el" href="#aa922ec8a89fa26a2d057e24584865b2d" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a></span> rule's <span class="tt">when</span> clause accepts.  <a href="../../dd/d6b/structmorph_1_1forms_1_1Engaged.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html" title="Concept: Cond may be used as a nested condition — inside an andOf/orOf/notOf tree,...">Condition</a>: <span class="tt"><a class="el" href="../../dd/d6b/structmorph_1_1forms_1_1Engaged.html#a7d3b7f247ffd6af0898586f1d6403b70" title="Pointer to the member this condition inspects.">field</a></span> is engaged (has a value). One of the closed condition kinds a <span class="tt"><a class="el" href="#a47ff330bcc91279ef1943b194d1ca643" title="Builds a RequiredWhen&lt;V, A, Cond&gt; rule: field becomes required exactly when when holds.">requiredWhen</a></span> / <span class="tt"><a class="el" href="#a70452f0c1618273f2b12f28b77387052" title="Builds a VisibleWhen&lt;V, A, Cond&gt; presentation rule: field is shown only while when holds.">visibleWhen</a></span> / <span class="tt"><a class="el" href="#ae4b80c0eb9efb8f3ffeb75c8a0e48f98" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a></span> rule's <span class="tt">when</span> clause accepts.  <a href="../../dd/d6b/structmorph_1_1forms_1_1Engaged.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3ANotEngaged_3C_20V_2C_20A_20_3E" id="r_morph_3A_3Aforms_3A_3ANotEngaged_3C_20V_2C_20A_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d86/structmorph_1_1forms_1_1NotEngaged.html">morph::forms::NotEngaged&lt; V, A &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Condition: <span class="tt"><a class="el" href="../../d9/d86/structmorph_1_1forms_1_1NotEngaged.html#a0caf3ebf6292b8912251ce17c475ae08" title="Pointer to the member this condition inspects.">field</a></span> is <b>not</b> engaged. The complement of <span class="tt"><a class="el" href="#a07dfc279ee79367cee103d743a21b940" title="Builds an Engaged&lt;V, A&gt; condition testing whether field is engaged.">engaged</a></span>.  <a href="../../d9/d86/structmorph_1_1forms_1_1NotEngaged.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html" title="Concept: Cond may be used as a nested condition — inside an andOf/orOf/notOf tree,...">Condition</a>: <span class="tt"><a class="el" href="../../d9/d86/structmorph_1_1forms_1_1NotEngaged.html#a0caf3ebf6292b8912251ce17c475ae08" title="Pointer to the member this condition inspects.">field</a></span> is <b>not</b> engaged. The complement of <span class="tt"><a class="el" href="#a07dfc279ee79367cee103d743a21b940" title="Builds an Engaged&lt;V, A&gt; condition testing whether field is engaged.">engaged</a></span>.  <a href="../../d9/d86/structmorph_1_1forms_1_1NotEngaged.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AGreater_3C_20V_2C_20A_20_3E" id="r_morph_3A_3Aforms_3A_3AGreater_3C_20V_2C_20A_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d59/structmorph_1_1forms_1_1Greater.html">morph::forms::Greater&lt; V, A &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rule/condition: <span class="tt">*lhs &gt; *rhs</span> when both operands are engaged; vacuously satisfied when either is unengaged (a form still being filled in must not fail this comparison prematurely — see forms.md). Compares the operands' <b>engaged values</b> (<span class="tt">operator*()</span>) directly — e.g. the underlying <span class="tt"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html" title="Exact rational number with a runtime decimal-precision tag.">math::Rational</a></span> for <span class="tt">Quantity</span>, or <span class="tt">DateTime</span> for <span class="tt">Timestamp</span> — never the field type's own (possibly throwing, for <span class="tt">Quantity</span>) <span class="tt">operator&lt;=&gt;</span>.  <a href="../../d1/d59/structmorph_1_1forms_1_1Greater.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AGreaterOrEqual_3C_20V_2C_20A_20_3E" id="r_morph_3A_3Aforms_3A_3AGreaterOrEqual_3C_20V_2C_20A_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/df3/structmorph_1_1forms_1_1GreaterOrEqual.html">morph::forms::GreaterOrEqual&lt; V, A &gt;</a></td></tr>
@@ -167,7 +167,7 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3ALessOrEqual_3C_20V_2C_20A_20_3E" id="r_morph_3A_3Aforms_3A_3ALessOrEqual_3C_20V_2C_20A_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rule/condition: <span class="tt">*lhs &lt;= *rhs</span> when both operands are engaged; vacuously satisfied when either is unengaged. See <span class="tt"><a class="el" href="../../d1/d59/structmorph_1_1forms_1_1Greater.html" title="Rule/condition: *lhs &gt; *rhs when both operands are engaged; vacuously satisfied when either is unenga...">Greater</a></span> for the exact-value / vacuous-operand rationale.  <a href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AEquals_3C_20V_2C_20A_2C_20L_20_3E" id="r_morph_3A_3Aforms_3A_3AEquals_3C_20V_2C_20A_2C_20L_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/ddd/structmorph_1_1forms_1_1Equals.html">morph::forms::Equals&lt; V, A, L &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Condition: <span class="tt"><a class="el" href="../../db/ddd/structmorph_1_1forms_1_1Equals.html#a60cf658ef5d3904ad1a45d21b2e38ed5" title="Pointer to the member this condition inspects.">field</a></span>'s engaged value equals <code class="param">literal</code>. An unengaged field is <b>not</b> vacuously satisfied here (unlike the comparison kinds) — a field with no value cannot equal anything, so <span class="tt"><a class="el" href="#af335b5ed1382b0fadaba29722cdd67c7" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a></span> returns <span class="tt">false</span> while the field is unengaged.  <a href="../../db/ddd/structmorph_1_1forms_1_1Equals.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html" title="Concept: Cond may be used as a nested condition — inside an andOf/orOf/notOf tree,...">Condition</a>: <span class="tt"><a class="el" href="../../db/ddd/structmorph_1_1forms_1_1Equals.html#a60cf658ef5d3904ad1a45d21b2e38ed5" title="Pointer to the member this condition inspects.">field</a></span>'s engaged value equals <code class="param">literal</code>. An unengaged field is <b>not</b> vacuously satisfied here (unlike the comparison kinds) — a field with no value cannot equal anything, so <span class="tt"><a class="el" href="#a7f5f0377a75336f0e17da1aeb721c04b" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a></span> returns <span class="tt">false</span> while the field is unengaged.  <a href="../../db/ddd/structmorph_1_1forms_1_1Equals.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3ARequiredWhen_3C_20V_2C_20A_2C_20Cond_20_3E" id="r_morph_3A_3Aforms_3A_3ARequiredWhen_3C_20V_2C_20A_2C_20Cond_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/da7/structmorph_1_1forms_1_1RequiredWhen.html">morph::forms::RequiredWhen&lt; V, A, Cond &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rule: <span class="tt"><a class="el" href="../../d6/da7/structmorph_1_1forms_1_1RequiredWhen.html#a6a9d011a636bb3a8ac4f2e78ffb229ab" title="Pointer to the member this rule may require.">field</a></span> must be engaged whenever <code class="param">Cond</code> holds; vacuously satisfied (not required) while the condition does not hold.  <a href="../../d6/da7/structmorph_1_1forms_1_1RequiredWhen.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AExactlyOneOf_3C_20A_2C_20Vs_20_3E" id="r_morph_3A_3Aforms_3A_3AExactlyOneOf_3C_20A_2C_20Vs_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d06/structmorph_1_1forms_1_1ExactlyOneOf.html">morph::forms::ExactlyOneOf&lt; A, Vs &gt;</a></td></tr>
@@ -199,8 +199,12 @@ Concepts</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Concept: a field type with an internal empty state (<span class="tt">Quantity</span>, <span class="tt">Choice</span>, <span class="tt">Timestamp</span>, or any user type exposing <span class="tt">hasValue()</span>). <br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AEngageableField" id="r_morph_3A_3Aforms_3A_3AEngageableField"><td class="memItemLeft">concept &#160;</td><td class="memItemRight"><a class="el" href="../../d7/db5/conceptmorph_1_1forms_1_1EngageableField.html">morph::forms::EngageableField</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Broader than <span class="tt">EmptyCapableField</span>: also covers a plain <span class="tt">std::optional&lt;T&gt;</span> member (e.g. <span class="tt">std::optional&lt;std::string&gt; email</span>), which does <b>not</b> satisfy <span class="tt">EmptyCapableField</span> — it exposes <span class="tt">has_value()</span>, not <span class="tt">hasValue()</span> (see forms.md's <span class="tt">allRequiredEngaged</span> "two exclusions" note). The cross-field rule vocabulary's engagement checks (<span class="tt">engaged</span>, <span class="tt">notEngaged</span>, <span class="tt">requiredWhen</span>, and the membership rules <span class="tt">exactlyOneOf</span>/<span class="tt">atLeastOneOf</span>/<span class="tt">mutuallyExclusive</span>) accept either kind of field, since docs/spec/forms/forms.md's worked example ranges an <span class="tt">exactlyOneOf</span> over two plain <span class="tt">std::optional&lt;std::string&gt;</span> fields. <br /></td></tr>
+<tr class="memitem:morph_3A_3Aforms_3A_3ACondition" id="r_morph_3A_3Aforms_3A_3ACondition"><td class="memItemLeft">concept &#160;</td><td class="memItemRight"><a class="el" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html">morph::forms::Condition</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Concept: <code class="param">Cond</code> may be used as a <b>nested condition</b> — inside an <span class="tt">andOf</span>/<span class="tt">orOf</span>/<span class="tt">notOf</span> tree, or as the <span class="tt">when</span> clause of a <span class="tt">requiredWhen</span> / <span class="tt">visibleWhen</span> / <span class="tt">readonlyWhen</span> rule. <br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3ARuleLiteral" id="r_morph_3A_3Aforms_3A_3ARuleLiteral"><td class="memItemLeft">concept &#160;</td><td class="memItemRight"><a class="el" href="../../db/d8c/conceptmorph_1_1forms_1_1RuleLiteral.html">morph::forms::RuleLiteral</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constraint: literal types <span class="tt">equals(...)</span> accepts — the closed, JSON-representable scalar set a field can hold. Restricting the literal type keeps <span class="tt">equals</span> losslessly serialisable into <span class="tt">x-rules</span>'s <span class="tt">value</span> key (see forms.md): a numeric literal is always the exact <span class="tt">math::Rational</span>, never a <span class="tt">double</span>. <br /></td></tr>
+<tr class="memitem:morph_3A_3Aforms_3A_3AComparableAgainstLiteral" id="r_morph_3A_3Aforms_3A_3AComparableAgainstLiteral"><td class="memItemLeft">concept &#160;</td><td class="memItemRight"><a class="el" href="../../d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html">morph::forms::ComparableAgainstLiteral</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constraint: a field of type <code class="param">V</code> can be compared against a literal of type <code class="param">L</code> at all. <br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AHasFormRules" id="r_morph_3A_3Aforms_3A_3AHasFormRules"><td class="memItemLeft">concept &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d32/conceptmorph_1_1forms_1_1HasFormRules.html">morph::forms::HasFormRules</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Concept: action <span class="tt">A</span> declares a <span class="tt">static constexpr</span> <span class="tt">formRules</span> member (a <span class="tt">RuleList&lt;...&gt;</span>). Mirrors <span class="tt">detail::HasOptionalFields</span>. <br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AHasExplicitSubmit" id="r_morph_3A_3Aforms_3A_3AHasExplicitSubmit"><td class="memItemLeft">concept &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html">morph::forms::HasExplicitSubmit</a></td></tr>
@@ -233,16 +237,18 @@ requires detail::ComparableField&lt;V&gt;</td></tr>
 requires detail::ComparableField&lt;V&gt;</td></tr>
 <tr class="memitem:a3b463dfb56e6e10944b80814522f0b55 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a3b463dfb56e6e10944b80814522f0b55">morph::forms::lessOrEqual</a> (V A::*lhs, V A::*rhs)</td></tr>
 <tr class="memdesc:a3b463dfb56e6e10944b80814522f0b55"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html" title="Rule/condition: *lhs &lt;= *rhs when both operands are engaged; vacuously satisfied when either is uneng...">LessOrEqual</a>&lt;V, A&gt;</span> rule/condition: <span class="tt">*lhs &lt;= *rhs</span>.  <br /></td></tr>
-<tr class="memitem:af335b5ed1382b0fadaba29722cdd67c7" id="r_af335b5ed1382b0fadaba29722cdd67c7"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, RuleLiteral L&gt; </td></tr>
-<tr class="memitem:af335b5ed1382b0fadaba29722cdd67c7 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#af335b5ed1382b0fadaba29722cdd67c7">morph::forms::equals</a> (V A::*field, L literal)</td></tr>
-<tr class="memdesc:af335b5ed1382b0fadaba29722cdd67c7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds an <span class="tt"><a class="el" href="../../db/ddd/structmorph_1_1forms_1_1Equals.html" title="Condition: field&#39;s engaged value equals literal. An unengaged field is not vacuously satisfied here (...">Equals</a>&lt;V, A, L&gt;</span> condition: <span class="tt">field</span>'s engaged value equals <code class="param">literal</code>.  <br /></td></tr>
-<tr class="memitem:adb22ab3bb90df7ecf4d544456b017a78" id="r_adb22ab3bb90df7ecf4d544456b017a78"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, std::size_t N&gt; </td></tr>
-<tr class="memitem:adb22ab3bb90df7ecf4d544456b017a78 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#adb22ab3bb90df7ecf4d544456b017a78">morph::forms::equals</a> (V A::*field, const char(&amp;literal)[N])</td></tr>
-<tr class="memdesc:adb22ab3bb90df7ecf4d544456b017a78"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#af335b5ed1382b0fadaba29722cdd67c7" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a></span> overload for a string-literal argument (<span class="tt"><a class="el" href="#af335b5ed1382b0fadaba29722cdd67c7" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a>(&amp;A::code, "X")</span>), so callers do not have to spell <span class="tt">std::string{"X"}</span> explicitly.  <br /></td></tr>
-<tr class="memitem:a926f5a6cf58c2fa6fae3d1be7276eee6" id="r_a926f5a6cf58c2fa6fae3d1be7276eee6"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, typename Cond&gt; <br />
-requires EngageableField&lt;V&gt;</td></tr>
-<tr class="memitem:a926f5a6cf58c2fa6fae3d1be7276eee6 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a926f5a6cf58c2fa6fae3d1be7276eee6">morph::forms::requiredWhen</a> (V A::*field, Cond when)</td></tr>
-<tr class="memdesc:a926f5a6cf58c2fa6fae3d1be7276eee6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../d6/da7/structmorph_1_1forms_1_1RequiredWhen.html" title="Rule: field must be engaged whenever Cond holds; vacuously satisfied (not required) while the conditi...">RequiredWhen</a>&lt;V, A, Cond&gt;</span> rule: <code class="param">field</code> becomes required exactly when <code class="param">when</code> holds.  <br /></td></tr>
+<tr class="memitem:a7f5f0377a75336f0e17da1aeb721c04b" id="r_a7f5f0377a75336f0e17da1aeb721c04b"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, RuleLiteral L&gt; <br />
+requires ComparableAgainstLiteral&lt;V, L&gt;</td></tr>
+<tr class="memitem:a7f5f0377a75336f0e17da1aeb721c04b template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a7f5f0377a75336f0e17da1aeb721c04b">morph::forms::equals</a> (V A::*field, L literal)</td></tr>
+<tr class="memdesc:a7f5f0377a75336f0e17da1aeb721c04b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds an <span class="tt"><a class="el" href="../../db/ddd/structmorph_1_1forms_1_1Equals.html" title="Condition: field&#39;s engaged value equals literal. An unengaged field is not vacuously satisfied here (...">Equals</a>&lt;V, A, L&gt;</span> condition: <span class="tt">field</span>'s engaged value equals <code class="param">literal</code>.  <br /></td></tr>
+<tr class="memitem:a9ccb0426c5378d88206b35ac296f571a" id="r_a9ccb0426c5378d88206b35ac296f571a"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, std::size_t N&gt; <br />
+requires ComparableAgainstLiteral&lt;V, detail::LiteralString&lt;N&gt;&gt;</td></tr>
+<tr class="memitem:a9ccb0426c5378d88206b35ac296f571a template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a9ccb0426c5378d88206b35ac296f571a">morph::forms::equals</a> (V A::*field, const char(&amp;literal)[N])</td></tr>
+<tr class="memdesc:a9ccb0426c5378d88206b35ac296f571a"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#a7f5f0377a75336f0e17da1aeb721c04b" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a></span> overload for a string-literal argument (<span class="tt"><a class="el" href="#a7f5f0377a75336f0e17da1aeb721c04b" title="Builds an Equals&lt;V, A, L&gt; condition: field&#39;s engaged value equals literal.">equals</a>(&amp;A::code, "X")</span>), so callers do not have to spell <span class="tt">std::string{"X"}</span> explicitly.  <br /></td></tr>
+<tr class="memitem:a47ff330bcc91279ef1943b194d1ca643" id="r_a47ff330bcc91279ef1943b194d1ca643"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, Condition Cond&gt; <br />
+requires EngageableField&lt;V&gt; &amp;&amp; std::same_as&lt;detail::ConditionActionType&lt;Cond&gt;, A&gt;</td></tr>
+<tr class="memitem:a47ff330bcc91279ef1943b194d1ca643 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a47ff330bcc91279ef1943b194d1ca643">morph::forms::requiredWhen</a> (V A::*field, Cond when)</td></tr>
+<tr class="memdesc:a47ff330bcc91279ef1943b194d1ca643"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../d6/da7/structmorph_1_1forms_1_1RequiredWhen.html" title="Rule: field must be engaged whenever Cond holds; vacuously satisfied (not required) while the conditi...">RequiredWhen</a>&lt;V, A, Cond&gt;</span> rule: <code class="param">field</code> becomes required exactly when <code class="param">when</code> holds.  <br /></td></tr>
 <tr class="memitem:ad4cad9c649a70967d28e838b9b47bd1a" id="r_ad4cad9c649a70967d28e838b9b47bd1a"><td class="memTemplParams" colspan="2">template&lt;typename A, typename... Vs&gt; <br />
 requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</td></tr>
 <tr class="memitem:ad4cad9c649a70967d28e838b9b47bd1a template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#ad4cad9c649a70967d28e838b9b47bd1a">morph::forms::exactlyOneOf</a> (Vs A::*... fields)</td></tr>
@@ -255,19 +261,23 @@ requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</td></tr>
 requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</td></tr>
 <tr class="memitem:a818f041020043b4ec157170a31fd2f00 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a818f041020043b4ec157170a31fd2f00">morph::forms::mutuallyExclusive</a> (Vs A::*... fields)</td></tr>
 <tr class="memdesc:a818f041020043b4ec157170a31fd2f00"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../dc/d20/structmorph_1_1forms_1_1MutuallyExclusive.html" title="Rule: at most one of the listed fields is engaged.">MutuallyExclusive</a>&lt;A, Vs...&gt;</span> rule over <code class="param">fields</code>.  <br /></td></tr>
-<tr class="memitem:a67b71512a5559a99f0ef3c7ec9ed2c52" id="r_a67b71512a5559a99f0ef3c7ec9ed2c52"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, typename Cond&gt; </td></tr>
-<tr class="memitem:a67b71512a5559a99f0ef3c7ec9ed2c52 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a67b71512a5559a99f0ef3c7ec9ed2c52">morph::forms::visibleWhen</a> (V A::*field, Cond when)</td></tr>
-<tr class="memdesc:a67b71512a5559a99f0ef3c7ec9ed2c52"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../d8/d10/structmorph_1_1forms_1_1VisibleWhen.html" title="Presentation rule: the listed field is shown only while Cond holds. Never gates allRulesSatisfied — w...">VisibleWhen</a>&lt;V, A, Cond&gt;</span> presentation rule: <code class="param">field</code> is shown only while <code class="param">when</code> holds.  <br /></td></tr>
-<tr class="memitem:aa922ec8a89fa26a2d057e24584865b2d" id="r_aa922ec8a89fa26a2d057e24584865b2d"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, typename Cond&gt; </td></tr>
-<tr class="memitem:aa922ec8a89fa26a2d057e24584865b2d template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#aa922ec8a89fa26a2d057e24584865b2d">morph::forms::readonlyWhen</a> (V A::*field, Cond when)</td></tr>
-<tr class="memdesc:aa922ec8a89fa26a2d057e24584865b2d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../dd/d29/structmorph_1_1forms_1_1ReadonlyWhen.html" title="Presentation rule: the listed field is editable only while Cond does not hold (the field is read-only...">ReadonlyWhen</a>&lt;V, A, Cond&gt;</span> presentation rule: <code class="param">field</code> is editable only while <code class="param">when</code> does <b>not</b> hold.  <br /></td></tr>
-<tr class="memitem:a10403dccb6dcf19d7ae55c53f56949aa" id="r_a10403dccb6dcf19d7ae55c53f56949aa"><td class="memTemplParams" colspan="2">template&lt;typename Cond0, typename... Conds&gt; </td></tr>
-<tr class="memitem:a10403dccb6dcf19d7ae55c53f56949aa template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a10403dccb6dcf19d7ae55c53f56949aa">morph::forms::andOf</a> (Cond0 condition0, Conds... conditions)</td></tr>
-<tr class="memdesc:a10403dccb6dcf19d7ae55c53f56949aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds an <span class="tt"><a class="el" href="../../d3/d81/structmorph_1_1forms_1_1And.html" title="Compound condition: all of Conds... hold. Nests to any depth — each Cond may itself be a leaf (Engage...">And</a>&lt;A, Conds...&gt;</span> condition: every listed condition must hold.  <br /></td></tr>
-<tr class="memitem:a335404d53a53c252e86326b3250c0acf" id="r_a335404d53a53c252e86326b3250c0acf"><td class="memTemplParams" colspan="2">template&lt;typename Cond0, typename... Conds&gt; </td></tr>
-<tr class="memitem:a335404d53a53c252e86326b3250c0acf template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a335404d53a53c252e86326b3250c0acf">morph::forms::orOf</a> (Cond0 condition0, Conds... conditions)</td></tr>
-<tr class="memdesc:a335404d53a53c252e86326b3250c0acf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds an <span class="tt"><a class="el" href="../../d4/d8d/structmorph_1_1forms_1_1Or.html" title="Compound condition: at least one of Conds... holds. Nests to any depth, and is usable directly as a t...">Or</a>&lt;A, Conds...&gt;</span> condition: at least one listed condition must hold.  <br /></td></tr>
-<tr class="memitem:a77304d9ae165ca738ee00c42ce53c652" id="r_a77304d9ae165ca738ee00c42ce53c652"><td class="memTemplParams" colspan="2">template&lt;typename Cond&gt; </td></tr>
+<tr class="memitem:a70452f0c1618273f2b12f28b77387052" id="r_a70452f0c1618273f2b12f28b77387052"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, Condition Cond&gt; <br />
+requires std::same_as&lt;detail::ConditionActionType&lt;Cond&gt;, A&gt;</td></tr>
+<tr class="memitem:a70452f0c1618273f2b12f28b77387052 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a70452f0c1618273f2b12f28b77387052">morph::forms::visibleWhen</a> (V A::*field, Cond when)</td></tr>
+<tr class="memdesc:a70452f0c1618273f2b12f28b77387052"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../d8/d10/structmorph_1_1forms_1_1VisibleWhen.html" title="Presentation rule: the listed field is shown only while Cond holds. Never gates allRulesSatisfied — w...">VisibleWhen</a>&lt;V, A, Cond&gt;</span> presentation rule: <code class="param">field</code> is shown only while <code class="param">when</code> holds.  <br /></td></tr>
+<tr class="memitem:ae4b80c0eb9efb8f3ffeb75c8a0e48f98" id="r_ae4b80c0eb9efb8f3ffeb75c8a0e48f98"><td class="memTemplParams" colspan="2">template&lt;typename V, typename A, Condition Cond&gt; <br />
+requires std::same_as&lt;detail::ConditionActionType&lt;Cond&gt;, A&gt;</td></tr>
+<tr class="memitem:ae4b80c0eb9efb8f3ffeb75c8a0e48f98 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#ae4b80c0eb9efb8f3ffeb75c8a0e48f98">morph::forms::readonlyWhen</a> (V A::*field, Cond when)</td></tr>
+<tr class="memdesc:ae4b80c0eb9efb8f3ffeb75c8a0e48f98"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../dd/d29/structmorph_1_1forms_1_1ReadonlyWhen.html" title="Presentation rule: the listed field is editable only while Cond does not hold (the field is read-only...">ReadonlyWhen</a>&lt;V, A, Cond&gt;</span> presentation rule: <code class="param">field</code> is editable only while <code class="param">when</code> does <b>not</b> hold.  <br /></td></tr>
+<tr class="memitem:a0f81c7413c158bee01921c40bd354a3c" id="r_a0f81c7413c158bee01921c40bd354a3c"><td class="memTemplParams" colspan="2">template&lt;Condition Cond0, Condition... Conds&gt; <br />
+requires (std::same_as&lt;detail::ConditionActionType&lt;Cond0&gt;, detail::ConditionActionType&lt;Conds&gt;&gt; &amp;&amp; ...)</td></tr>
+<tr class="memitem:a0f81c7413c158bee01921c40bd354a3c template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a0f81c7413c158bee01921c40bd354a3c">morph::forms::andOf</a> (Cond0 condition0, Conds... conditions)</td></tr>
+<tr class="memdesc:a0f81c7413c158bee01921c40bd354a3c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds an <span class="tt"><a class="el" href="../../d3/d81/structmorph_1_1forms_1_1And.html" title="Compound condition: all of Conds... hold. Nests to any depth — each Cond may itself be a leaf (Engage...">And</a>&lt;A, Conds...&gt;</span> condition: every listed condition must hold.  <br /></td></tr>
+<tr class="memitem:a8a31ef684c979a22443d711ef94ac6b7" id="r_a8a31ef684c979a22443d711ef94ac6b7"><td class="memTemplParams" colspan="2">template&lt;Condition Cond0, Condition... Conds&gt; <br />
+requires (std::same_as&lt;detail::ConditionActionType&lt;Cond0&gt;, detail::ConditionActionType&lt;Conds&gt;&gt; &amp;&amp; ...)</td></tr>
+<tr class="memitem:a8a31ef684c979a22443d711ef94ac6b7 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a8a31ef684c979a22443d711ef94ac6b7">morph::forms::orOf</a> (Cond0 condition0, Conds... conditions)</td></tr>
+<tr class="memdesc:a8a31ef684c979a22443d711ef94ac6b7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds an <span class="tt"><a class="el" href="../../d4/d8d/structmorph_1_1forms_1_1Or.html" title="Compound condition: at least one of Conds... holds. Nests to any depth, and is usable directly as a t...">Or</a>&lt;A, Conds...&gt;</span> condition: at least one listed condition must hold.  <br /></td></tr>
+<tr class="memitem:a77304d9ae165ca738ee00c42ce53c652" id="r_a77304d9ae165ca738ee00c42ce53c652"><td class="memTemplParams" colspan="2">template&lt;Condition Cond&gt; </td></tr>
 <tr class="memitem:a77304d9ae165ca738ee00c42ce53c652 template"><td class="memItemLeft">constexpr auto&#160;</td><td class="memItemRight"><a class="el" href="#a77304d9ae165ca738ee00c42ce53c652">morph::forms::notOf</a> (Cond condition)</td></tr>
 <tr class="memdesc:a77304d9ae165ca738ee00c42ce53c652"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../d1/db1/structmorph_1_1forms_1_1Not.html" title="Compound condition: the nested condition does not hold. Nests to any depth, and is usable directly as...">Not</a>&lt;A, Cond&gt;</span> condition: negates <code class="param">condition</code>.  <br /></td></tr>
 <tr class="memitem:a358de01c6c16cb34980b10c4f2a5f007" id="r_a358de01c6c16cb34980b10c4f2a5f007"><td class="memTemplParams" colspan="2">template&lt;typename... Rules&gt; </td></tr>
@@ -275,7 +285,7 @@ requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</td></tr>
 <tr class="memdesc:a358de01c6c16cb34980b10c4f2a5f007"><td class="mdescLeft">&#160;</td><td class="mdescRight">Composes <code class="param">rules</code> into the <span class="tt"><a class="el" href="../../d3/d8b/structmorph_1_1forms_1_1RuleList.html" title="Composed list of an action&#39;s declared cross-field rules — the value of A::formRules....">RuleList</a></span> an action assigns to its <span class="tt">static constexpr formRules</span> member.  <br /></td></tr>
 <tr class="memitem:ab963bfbc90c50cc1cbfe03ea21bdba4e" id="r_ab963bfbc90c50cc1cbfe03ea21bdba4e"><td class="memTemplParams" colspan="2">template&lt;typename A&gt; </td></tr>
 <tr class="memitem:ab963bfbc90c50cc1cbfe03ea21bdba4e template"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#ab963bfbc90c50cc1cbfe03ea21bdba4e">morph::forms::allRulesSatisfied</a> (const A &amp;action) noexcept</td></tr>
-<tr class="memdesc:ab963bfbc90c50cc1cbfe03ea21bdba4e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether every <b>validation</b> rule in <span class="tt">A::formRules</span> holds for <code class="param">action</code>. Presentation rules (<span class="tt"><a class="el" href="#a67b71512a5559a99f0ef3c7ec9ed2c52" title="Builds a VisibleWhen&lt;V, A, Cond&gt; presentation rule: field is shown only while when holds.">visibleWhen</a></span> / <span class="tt"><a class="el" href="#aa922ec8a89fa26a2d057e24584865b2d" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a></span>) are skipped — they can never fail this check. Returns <span class="tt">true</span> unconditionally for an action with no <span class="tt">formRules</span> (safe to call from every action's <span class="tt">validate()</span> regardless of whether it declares rules).  <br /></td></tr>
+<tr class="memdesc:ab963bfbc90c50cc1cbfe03ea21bdba4e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether every <b>validation</b> rule in <span class="tt">A::formRules</span> holds for <code class="param">action</code>. Presentation rules (<span class="tt"><a class="el" href="#a70452f0c1618273f2b12f28b77387052" title="Builds a VisibleWhen&lt;V, A, Cond&gt; presentation rule: field is shown only while when holds.">visibleWhen</a></span> / <span class="tt"><a class="el" href="#ae4b80c0eb9efb8f3ffeb75c8a0e48f98" title="Builds a ReadonlyWhen&lt;V, A, Cond&gt; presentation rule: field is editable only while when does not hold.">readonlyWhen</a></span>) are skipped — they can never fail this check. Returns <span class="tt">true</span> unconditionally for an action with no <span class="tt">formRules</span> (safe to call from every action's <span class="tt">validate()</span> regardless of whether it declares rules).  <br /></td></tr>
 <tr class="memitem:a04c972217f11f853d00b73780cb78f2f" id="r_a04c972217f11f853d00b73780cb78f2f"><td class="memTemplParams" colspan="2">template&lt;auto Dst, auto... Inputs, typename Fn&gt; </td></tr>
 <tr class="memitem:a04c972217f11f853d00b73780cb78f2f template"><td class="memItemLeft">consteval auto&#160;</td><td class="memItemRight"><a class="el" href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed</a> (Fn fn) noexcept</td></tr>
 <tr class="memdesc:a04c972217f11f853d00b73780cb78f2f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds one computed-field declaration binding a destination member to its declared input members and a pure derivation function.  <br /></td></tr>
@@ -343,7 +353,7 @@ cycle-guarded)", and <span class="tt">detail::annotateNestedAggregateRef</span>.
 <div class="line">    <span class="keyword">static</span> <span class="keyword">constexpr</span> std::array optionalFields{std::string_view{<span class="stringliteral">&quot;moisture&quot;</span>}};</div>
 <div class="line">    [[nodiscard]] <span class="keywordtype">bool</span> validate()<span class="keyword"> const </span>{ <span class="keywordflow">return</span> <a class="code hl_function" href="#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a>(*<span class="keyword">this</span>); }</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02916">forms.hpp:2916</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l03158">forms.hpp:3158</a></div></div>
 </div><!-- fragment --></dd></dl>
 <dl class="section user"><dt>Declaring computed fields</dt><dd>A derived, read-only field is declared with a <span class="tt">static constexpr</span> map from a destination member to its declared input members and a pure derivation: <div class="fragment"><div class="line"><span class="keyword">struct </span>LineItem {</div>
 <div class="line">    Quantity&lt;Units, 2&gt; qty;</div>
@@ -357,8 +367,8 @@ cycle-guarded)", and <span class="tt">detail::annotateNestedAggregateRef</span>.
 <div class="line">        <a class="code hl_function" href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed&lt;&amp;LineItem::total, &amp;LineItem::qty, &amp;LineItem::price&gt;</a>(</div>
 <div class="line">            [](<span class="keyword">const</span> <span class="keyword">auto</span>&amp; s) { <span class="keywordflow">return</span> s.qty * s.price; }));</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a04c972217f11f853d00b73780cb78f2f"><div class="ttname"><a href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed</a></div><div class="ttdeci">consteval auto computed(Fn fn) noexcept</div><div class="ttdoc">Builds one computed-field declaration binding a destination member to its declared input members and ...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02702">forms.hpp:2702</a></div></div>
-<div class="ttc" id="aforms_8hpp_html_a0d45e4d3d8a0f1f02298bdbe65d417ed"><div class="ttname"><a href="#a0d45e4d3d8a0f1f02298bdbe65d417ed">morph::forms::computeList</a></div><div class="ttdeci">consteval auto computeList(Fields... fields) noexcept</div><div class="ttdoc">Builds a ComputeList from one or more computed(...) declarations.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02715">forms.hpp:2715</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a04c972217f11f853d00b73780cb78f2f"><div class="ttname"><a href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed</a></div><div class="ttdeci">consteval auto computed(Fn fn) noexcept</div><div class="ttdoc">Builds one computed-field declaration binding a destination member to its declared input members and ...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02944">forms.hpp:2944</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a0d45e4d3d8a0f1f02298bdbe65d417ed"><div class="ttname"><a href="#a0d45e4d3d8a0f1f02298bdbe65d417ed">morph::forms::computeList</a></div><div class="ttdeci">consteval auto computeList(Fields... fields) noexcept</div><div class="ttdoc">Builds a ComputeList from one or more computed(...) declarations.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02957">forms.hpp:2957</a></div></div>
 </div><!-- fragment --> <span class="tt">schemaJson&lt;A&gt;()</span> then emits <span class="tt">x-computed</span>/<span class="tt">x-readonly</span> on <span class="tt">total</span> and excludes it from <span class="tt">required</span>; <span class="tt">recomputeAll&lt;A&gt;(action)</span> is the single evaluator the reactive <span class="tt">set&lt;&gt;</span> path and every dispatch path call to overwrite it authoritatively &ndash; see <span class="tt">bridge.md</span>/<span class="tt">registry.md</span>.</dd></dl>
 <dl class="section user"><dt>Readiness helper</dt><dd><span class="tt">allRequiredEngaged(action)</span> returns <span class="tt">true</span> when every <em>required</em> empty-capable member (<span class="tt">Quantity</span>, <span class="tt">Choice</span>, <span class="tt">Timestamp</span> — anything with a <span class="tt">hasValue()</span>) is engaged. Wire it up as the action's <span class="tt">validate()</span> (the existing <span class="tt">ActionValidator</span> machinery picks that method up automatically) so the same declaration drives the schema's <span class="tt">required</span> array, the client-side submit gate, and the fielded-action readiness check. Non-quantity members are not checked — a plain <span class="tt">int64_t</span> cannot express "not filled in"; use a <span class="tt">Quantity</span> (or a custom <span class="tt">validate()</span>) when that distinction matters. </dd></dl>
 
@@ -406,7 +416,7 @@ requires EngageableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00776">776</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00820">820</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -452,7 +462,7 @@ requires EngageableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00816">816</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00864">864</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -503,7 +513,7 @@ requires detail::ComparableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule/condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00875">875</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00927">927</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -554,7 +564,7 @@ requires detail::ComparableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule/condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00930">930</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00986">986</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -605,7 +615,7 @@ requires detail::ComparableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule/condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00985">985</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01045">1045</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -656,17 +666,18 @@ requires detail::ComparableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule/condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01040">1040</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01104">1104</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
-<a id="af335b5ed1382b0fadaba29722cdd67c7" name="af335b5ed1382b0fadaba29722cdd67c7"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af335b5ed1382b0fadaba29722cdd67c7">&#9670;&#160;</a></span>equals() <span class="overload">[1/2]</span></h2>
+<a id="a7f5f0377a75336f0e17da1aeb721c04b" name="a7f5f0377a75336f0e17da1aeb721c04b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7f5f0377a75336f0e17da1aeb721c04b">&#9670;&#160;</a></span>equals() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename V, typename A, RuleLiteral L&gt; </div>
+template&lt;typename V, typename A, RuleLiteral L&gt; <br />
+requires ComparableAgainstLiteral&lt;V, L&gt;</div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -707,17 +718,18 @@ template&lt;typename V, typename A, RuleLiteral L&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01148">1148</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01260">1260</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
-<a id="adb22ab3bb90df7ecf4d544456b017a78" name="adb22ab3bb90df7ecf4d544456b017a78"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#adb22ab3bb90df7ecf4d544456b017a78">&#9670;&#160;</a></span>equals() <span class="overload">[2/2]</span></h2>
+<a id="a9ccb0426c5378d88206b35ac296f571a" name="a9ccb0426c5378d88206b35ac296f571a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9ccb0426c5378d88206b35ac296f571a">&#9670;&#160;</a></span>equals() <span class="overload">[2/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename V, typename A, std::size_t N&gt; </div>
+template&lt;typename V, typename A, std::size_t N&gt; <br />
+requires ComparableAgainstLiteral&lt;V, detail::LiteralString&lt;N&gt;&gt;</div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -759,18 +771,18 @@ template&lt;typename V, typename A, std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The condition node, with the literal stored inline. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01171">1171</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01284">1284</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a926f5a6cf58c2fa6fae3d1be7276eee6" name="a926f5a6cf58c2fa6fae3d1be7276eee6"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a926f5a6cf58c2fa6fae3d1be7276eee6">&#9670;&#160;</a></span>requiredWhen()</h2>
+<a id="a47ff330bcc91279ef1943b194d1ca643" name="a47ff330bcc91279ef1943b194d1ca643"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a47ff330bcc91279ef1943b194d1ca643">&#9670;&#160;</a></span>requiredWhen()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename V, typename A, typename Cond&gt; <br />
-requires EngageableField&lt;V&gt;</div>
+template&lt;typename V, typename A, Condition Cond&gt; <br />
+requires EngageableField&lt;V&gt; &amp;&amp; std::same_as&lt;detail::ConditionActionType&lt;Cond&gt;, A&gt;</div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -811,7 +823,7 @@ requires EngageableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01225">1225</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01338">1338</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -857,7 +869,7 @@ requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01272">1272</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01389">1389</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -903,7 +915,7 @@ requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01319">1319</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01440">1440</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -949,17 +961,18 @@ requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01366">1366</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01491">1491</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a67b71512a5559a99f0ef3c7ec9ed2c52" name="a67b71512a5559a99f0ef3c7ec9ed2c52"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a67b71512a5559a99f0ef3c7ec9ed2c52">&#9670;&#160;</a></span>visibleWhen()</h2>
+<a id="a70452f0c1618273f2b12f28b77387052" name="a70452f0c1618273f2b12f28b77387052"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a70452f0c1618273f2b12f28b77387052">&#9670;&#160;</a></span>visibleWhen()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename V, typename A, typename Cond&gt; </div>
+template&lt;typename V, typename A, Condition Cond&gt; <br />
+requires std::same_as&lt;detail::ConditionActionType&lt;Cond&gt;, A&gt;</div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -1000,17 +1013,18 @@ template&lt;typename V, typename A, typename Cond&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01421">1421</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01547">1547</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
-<a id="aa922ec8a89fa26a2d057e24584865b2d" name="aa922ec8a89fa26a2d057e24584865b2d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa922ec8a89fa26a2d057e24584865b2d">&#9670;&#160;</a></span>readonlyWhen()</h2>
+<a id="ae4b80c0eb9efb8f3ffeb75c8a0e48f98" name="ae4b80c0eb9efb8f3ffeb75c8a0e48f98"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae4b80c0eb9efb8f3ffeb75c8a0e48f98">&#9670;&#160;</a></span>readonlyWhen()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename V, typename A, typename Cond&gt; </div>
+template&lt;typename V, typename A, Condition Cond&gt; <br />
+requires std::same_as&lt;detail::ConditionActionType&lt;Cond&gt;, A&gt;</div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -1051,17 +1065,18 @@ template&lt;typename V, typename A, typename Cond&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01475">1475</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01602">1602</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a10403dccb6dcf19d7ae55c53f56949aa" name="a10403dccb6dcf19d7ae55c53f56949aa"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a10403dccb6dcf19d7ae55c53f56949aa">&#9670;&#160;</a></span>andOf()</h2>
+<a id="a0f81c7413c158bee01921c40bd354a3c" name="a0f81c7413c158bee01921c40bd354a3c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0f81c7413c158bee01921c40bd354a3c">&#9670;&#160;</a></span>andOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Cond0, typename... Conds&gt; </div>
+template&lt;Condition Cond0, Condition... Conds&gt; <br />
+requires (std::same_as&lt;detail::ConditionActionType&lt;Cond0&gt;, detail::ConditionActionType&lt;Conds&gt;&gt; &amp;&amp; ...)</div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -1099,19 +1114,21 @@ template&lt;typename Cond0, typename... Conds&gt; </div>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The compound condition node. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The compound condition node.</dd></dl>
+<p>The action type is recovered from <span class="tt">Cond0</span> alone, so every other operand is required to agree with it here rather than failing deep inside <span class="tt">std::tuple</span>'s instantiation: <span class="tt">andOf(engaged(&amp;C::x), engaged(&amp;B::y))</span> produced 153 lines whose first error was inside <span class="tt">&lt;type_traits&gt;</span> and which named the caller's own <span class="tt">formRules</span> line only near the end. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01526">1526</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01664">1664</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a335404d53a53c252e86326b3250c0acf" name="a335404d53a53c252e86326b3250c0acf"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a335404d53a53c252e86326b3250c0acf">&#9670;&#160;</a></span>orOf()</h2>
+<a id="a8a31ef684c979a22443d711ef94ac6b7" name="a8a31ef684c979a22443d711ef94ac6b7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8a31ef684c979a22443d711ef94ac6b7">&#9670;&#160;</a></span>orOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Cond0, typename... Conds&gt; </div>
+template&lt;Condition Cond0, Condition... Conds&gt; <br />
+requires (std::same_as&lt;detail::ConditionActionType&lt;Cond0&gt;, detail::ConditionActionType&lt;Conds&gt;&gt; &amp;&amp; ...)</div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -1149,9 +1166,9 @@ template&lt;typename Cond0, typename... Conds&gt; </div>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The compound condition node. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The compound condition node. Constrained exactly as <span class="tt">andOf</span> is, and for the same reasons. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01574">1574</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01719">1719</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1161,7 +1178,7 @@ template&lt;typename Cond0, typename... Conds&gt; </div>
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Cond&gt; </div>
+template&lt;Condition Cond&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -1195,7 +1212,7 @@ template&lt;typename Cond&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The compound condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01615">1615</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01765">1765</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1239,7 +1256,7 @@ template&lt;typename... Rules&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The composed <span class="tt">RuleList&lt;Rules...&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01636">1636</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01786">1786</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1283,7 +1300,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when every validation rule holds (or there are none). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01696">1696</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01846">1846</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1332,7 +1349,7 @@ template&lt;auto Dst, auto... Inputs, typename Fn&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">detail::ComputedField&lt;Dst, Fn, Inputs...&gt;</span> value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02702">2702</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02944">2944</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1376,7 +1393,7 @@ template&lt;typename... Fields&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">detail::ComputeList&lt;Fields...&gt;</span> value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02715">2715</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02957">2957</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1419,7 +1436,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02733">2733</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02975">2975</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1464,7 +1481,7 @@ template&lt;auto MemberPtr&gt; </div>
 <div class="line">    <a class="code hl_function" href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe&lt;&amp;RecordMeasurement::sampleId&gt;</a>(<span class="stringliteral">&quot;Sample&quot;</span>, <span class="stringliteral">&quot;Which logged sample…&quot;</span>),</div>
 <div class="line">    <a class="code hl_function" href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe&lt;&amp;RecordMeasurement::moisture&gt;</a>().withReadOnly(),</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a3b81894e5b0752e560c4d21726af2731"><div class="ttname"><a href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe</a></div><div class="ttdeci">FieldMeta describe(std::string_view label={}, std::string_view help={}) noexcept</div><div class="ttdoc">Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02773">forms.hpp:2773</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a3b81894e5b0752e560c4d21726af2731"><div class="ttname"><a href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe</a></div><div class="ttdeci">FieldMeta describe(std::string_view label={}, std::string_view help={}) noexcept</div><div class="ttdoc">Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l03015">forms.hpp:3015</a></div></div>
 </div><!-- fragment --> The plain <span class="tt">FieldMeta{.field = "sampleId", ...}</span> literal form has no such restriction and stays a single in-class <span class="tt">static constexpr</span> array. </dd></dl>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
@@ -1481,7 +1498,7 @@ template&lt;auto MemberPtr&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">FieldMeta</span> naming <code class="param">MemberPtr's</code> wire key, with <code class="param">label</code> and <code class="param">help</code> set. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02773">2773</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03015">3015</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1525,7 +1542,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02803">2803</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03045">3045</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1569,7 +1586,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wire name of the first out-of-bounds <span class="tt">Quantity</span> member encountered (in declaration order), or <span class="tt">std::nullopt</span> when every <span class="tt">Quantity</span> member is within its declared bounds (or the unit declares none). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02865">2865</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03107">3107</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1618,7 +1635,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02897">2897</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03139">3139</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1662,7 +1679,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when no required empty-capable field is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02916">2916</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03158">3158</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1708,7 +1725,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when no declared bound is violated, and trivially <span class="tt">true</span> for an action that declares no <span class="tt">fieldMetadata</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02961">2961</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03203">3203</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1758,7 +1775,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03021">3021</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03263">3263</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1786,7 +1803,7 @@ template&lt;typename A&gt; </div>
 <p>The largest N such that <em>every</em> integer in <span class="tt">[0, N]</span> is exactly representable as an IEEE-754 double: 2^53. </p>
 <p>Not "the largest value a double holds exactly" — 2^60 is exact too. What stops at 2^53 is the <em>contiguous</em> range: past it, consecutive integers start sharing a representation, so an integer bound above it cannot be relied on to survive <span class="tt">JSON.parse</span> intact and needs an exact companion the renderer can read instead. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01061">1061</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01168">1168</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1812,7 +1829,7 @@ template&lt;typename A&gt; </div>
 
 <p>Signed spelling of <span class="tt">kExactDoubleLimit</span>, for the negative bound. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01064">1064</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01171">1171</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

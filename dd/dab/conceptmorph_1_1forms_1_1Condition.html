@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: Member List</title>
+<title>morph: morph::forms::Condition Concept Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/dab/conceptmorph_1_1forms_1_1Condition.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,25 +117,35 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d3c/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::forms::LessOrEqual&lt; V, A &gt; Member List</div></div>
+  <div class="headertitle"><div class="title">morph::forms::Condition Concept Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>This is the complete list of members for <a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a>, including all inherited members.</p>
-<table class="directory">
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a084adeeea56239e82aa7b9edf6bd950f">emitNode</a>() const</td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a1590c1af8c162f72090532d52444861d">isCondition</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6dd7144a97063a1c76e830fe7d5f0caa">isPresentation</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6660a32cd67b0facb730ebe5ad86573f">kind</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a01f26177e78f76ad81ee1795ef799cf5">lhs</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6171e62ba9b89a9bd05d88be115d2efc">rhs</a></td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#aa9867f8e5e49e1853d6ccb75c481aa5d">test</a>(const A &amp;action) const noexcept</td><td class="entry"><a class="el" href="../../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html">morph::forms::LessOrEqual&lt; V, A &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-</table></div><!-- contents -->
+<p>Concept: <code class="param">Cond</code> may be used as a <b>nested condition</b> — inside an <span class="tt">andOf</span>/<span class="tt">orOf</span>/<span class="tt">notOf</span> tree, or as the <span class="tt">when</span> clause of a <span class="tt">requiredWhen</span> / <span class="tt">visibleWhen</span> / <span class="tt">readonlyWhen</span> rule.  
+<a href="#details">More...</a></p>
+
+<p><code>#include &lt;<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>&gt;</code></p>
+<h2 id="header-conceptdef" class="groupheader">Concept definition</h2>
+<div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> Cond&gt;</div>
+<div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html">Condition</a> = <span class="keyword">requires</span> {</div>
+<div class="line">    { Cond::isCondition } -&gt; std::convertible_to&lt;bool&gt;;</div>
+<div class="line">} &amp;&amp; Cond::isCondition</div>
+<div class="ttc" id="aconceptmorph_1_1forms_1_1Condition_html"><div class="ttname"><a href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html">morph::forms::Condition</a></div><div class="ttdoc">Concept: Cond may be used as a nested condition — inside an andOf/orOf/notOf tree,...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00775">forms.hpp:775</a></div></div>
+</div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
+<div class="textblock"><p>Concept: <code class="param">Cond</code> may be used as a <b>nested condition</b> — inside an <span class="tt">andOf</span>/<span class="tt">orOf</span>/<span class="tt">notOf</span> tree, or as the <span class="tt">when</span> clause of a <span class="tt">requiredWhen</span> / <span class="tt">visibleWhen</span> / <span class="tt">readonlyWhen</span> rule. </p>
+<p>Every rule and condition node in this header exposes the same shape (<span class="tt">kind</span>, <span class="tt">test(const A&amp;) const noexcept</span>, <span class="tt">emitNode()</span>), which is what makes them substitutable — and what made "has a `test()`" a useless admission test. <span class="tt">VisibleWhen::test()</span> and <span class="tt">ReadonlyWhen::test()</span> return <span class="tt">true</span> <em>unconditionally, by design</em>: they are presentation rules and never gate submission, so a renderer reads their <span class="tt">when</span> clause rather than calling them. Nested as a condition, such a node therefore contributes a constant and can never influence the tree it sits in — <span class="tt">andOf(visibleWhen(…), c)</span> silently collapses to <span class="tt">c</span>, having compiled and looking like it says something. <span class="tt">RequiredWhen</span> is excluded for the neighbouring reason: it is a rule <em>about</em> a condition, not a condition, and nesting one emits a <span class="tt">"requiredWhen"</span> node in a <span class="tt">when</span> position that no renderer's condition vocabulary has a case for.</p>
+<p>So the marker is declared explicitly by the nodes whose <span class="tt">test()</span> is a function of the action, rather than inferred from <span class="tt">isPresentation</span> — which would admit <span class="tt">RequiredWhen</span> — or from the presence of <span class="tt">test()</span>, which admits everything. Adding a node to the condition vocabulary is one line on the node itself.</p>
+<p>The membership rules (<span class="tt">exactlyOneOf</span> / <span class="tt">atLeastOneOf</span> / <span class="tt">mutuallyExclusive</span>) <em>are</em> conditions by this rule: their <span class="tt">test()</span> really does range over the action. A renderer that does not recognise them nested treats them as "cannot evaluate" and defers to the server, which is the sanctioned fallback (forms.md, "Renderer fallback") rather than a disagreement.</p>
+<p>(<span class="tt">Cond</span> is the candidate node type. It is deliberately not documented with a parameter-doc command: -Wdocumentation does not consider a concept a template declaration, so such a command here is an error under -Weverything -Werror, which is how the WASM ladder builds. <span class="tt">HasFormRules</span> and <span class="tt">HasExplicitSubmit</span> below omit it for the same reason.) </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00775">775</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+</div></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>forms</b></li><li class="navelem"><a href="../../dd/dab/conceptmorph_1_1forms_1_1Condition.html">Condition</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>
