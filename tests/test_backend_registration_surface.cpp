@@ -186,14 +186,31 @@ struct DeferredBackend : RecordingBackend {
     }
 };
 
-/// @brief A backend whose synchronous registration fails.
+/// @brief A backend whose synchronous control calls fail.
 struct ThrowingBackend : RecordingBackend {
     ModelId registerModelWithContext(const std::string& /*typeId*/,
                                      std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
                                      std::string_view /*contextKey*/) override {
         throw std::runtime_error{"register refused"};
     }
+
+    void assignPrimary(ModelId /*mid*/, const std::string& /*typeId*/, std::string_view /*primary*/) override {
+        throw std::runtime_error{"promote refused"};
+    }
 };
+
+/// @brief Collects the message a rejected `Completion` carries.
+/// @return A handler suitable for `onErrorDetached`.
+auto captureError(std::string& message, std::atomic<bool>& done) {
+    return [&message, &done](const std::exception_ptr& exc) {
+        try {
+            std::rethrow_exception(exc);
+        } catch (const std::exception& err) {
+            message = err.what();
+        }
+        done.store(true);
+    };
+}
 
 std::unique_ptr<morph::model::detail::IModelHolder> makeHolder() {
     return morph::model::detail::ModelFactory::create<RegistrationSurfaceModel>();
@@ -267,27 +284,62 @@ TEST_CASE("morph::backend::IBackend: bindModel's default routes each request sha
     }
 }
 
-TEST_CASE("morph::backend::IBackend: a failing bind rejects the completion instead of throwing at the call site",
-          "[backend][registration-surface]") {
+TEST_CASE(
+    "morph::backend::IBackend: a failing control call rejects the completion instead of throwing at the call "
+    "site",
+    "[backend][registration-surface]") {
     ThrowingBackend backend;
     morph::exec::MainThreadExecutor callerExec;
 
     std::string message;
     std::atomic<bool> done{false};
-    auto completion = backend.bindModel(
-        BindRequest{.typeId = std::string{kTypeId}, .factory = makeHolder, .contextKey = {}, .primary = {}},
-        callerExec);
-    completion.onErrorDetached([&](const std::exception_ptr& exc) {
-        try {
-            std::rethrow_exception(exc);
-        } catch (const std::exception& err) {
-            message = err.what();
-        }
-        done.store(true);
-    });
 
-    REQUIRE(drainUntil(callerExec, done));
-    REQUIRE(message == "register refused");
+    SECTION("bind") {
+        auto completion = backend.bindModel(
+            BindRequest{.typeId = std::string{kTypeId}, .factory = makeHolder, .contextKey = {}, .primary = {}},
+            callerExec);
+        completion.onErrorDetached(captureError(message, done));
+        REQUIRE(drainUntil(callerExec, done));
+        REQUIRE(message == "register refused");
+    }
+
+    SECTION("promote") {
+        auto completion = backend.promoteModel(
+            PromoteRequest{.mid = ModelId{3}, .typeId = std::string{kTypeId}, .primary = "k"}, callerExec);
+        completion.onErrorDetached(captureError(message, done));
+        REQUIRE(drainUntil(callerExec, done));
+        REQUIRE(message == "promote refused");
+    }
+}
+
+TEST_CASE(
+    "morph::backend::SynchronousBackendAdapter: a failure inside the wrapped backend reaches the caller's "
+    "executor as a rejection",
+    "[backend][registration-surface]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::exec::MainThreadExecutor callerExec;
+    auto throwing = std::make_shared<ThrowingBackend>();
+    SynchronousBackendAdapter adapter{throwing, pool};
+
+    std::string message;
+    std::atomic<bool> done{false};
+
+    SECTION("bind") {
+        auto completion = adapter.bindModel(
+            BindRequest{.typeId = std::string{kTypeId}, .factory = makeHolder, .contextKey = {}, .primary = {}},
+            callerExec);
+        completion.onErrorDetached(captureError(message, done));
+        REQUIRE(drainUntil(callerExec, done));
+        REQUIRE(message == "register refused");
+    }
+
+    SECTION("promote") {
+        auto completion = adapter.promoteModel(
+            PromoteRequest{.mid = ModelId{3}, .typeId = std::string{kTypeId}, .primary = "k"}, callerExec);
+        completion.onErrorDetached(captureError(message, done));
+        REQUIRE(drainUntil(callerExec, done));
+        REQUIRE(message == "promote refused");
+    }
 }
 
 // ── The threading contract, as a property of the signature ───────────────────
