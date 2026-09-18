@@ -49,6 +49,7 @@
 
 #include "../attributes.hpp"
 #include "../detail/fixed_string.hpp"
+#include "detail/schema_name.hpp"
 
 namespace morph::forms {
 
@@ -155,9 +156,17 @@ inline constexpr bool isChoice = detail::IsChoice<std::remove_cvref_t<T>>::value
 
 /// @brief On the wire a Choice is its nullable underlying value — the options
 ///        metadata lives in the C++ type and in generated schemas only.
+///
+/// `name` is composed per instantiation rather than being the literal
+/// `"Choice"`: glaze keys `$defs` by it and fills each entry only once, so one
+/// shared name made the second `Choice` in an action `$ref` the first one's
+/// definition and be described with the wrong payload type (morph#543). See
+/// `forms/detail/schema_name.hpp` for how the key is built and why it is not
+/// derived from `glz::name_v`.
 template <typename T, morph::forms::FixedString OptionsAction, morph::forms::FixedString ValueField,
           morph::forms::FixedString LabelField, morph::forms::FixedString... DependsOn>
 struct glz::meta<morph::forms::Choice<T, OptionsAction, ValueField, LabelField, DependsOn...>> {
     static constexpr auto value = &morph::forms::Choice<T, OptionsAction, ValueField, LabelField, DependsOn...>::value;
-    static constexpr std::string_view name = "Choice";
+    static constexpr std::string_view name =
+        morph::forms::detail::choiceSchemaName<OptionsAction, ValueField, LabelField, DependsOn...>;
 };

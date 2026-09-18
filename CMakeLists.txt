@@ -267,6 +267,7 @@ target_sources(morph
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
         include/morph/forms/detail/session_common.hpp
+        include/morph/forms/detail/schema_name.hpp
 )
 set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)
 

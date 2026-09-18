@@ -872,6 +872,213 @@ TEST_CASE("Forms::Rules::And::VariadicAcceptsMoreThanTwoConditions", "[forms][ru
 }
 
 // ---------------------------------------------------------------------------
+// The condition vocabulary is closed, and a wrapper does not open it (#544).
+//
+// `andOf`/`orOf`/`notOf` and the three `when`-bearing rules used to admit any
+// node exposing `test(const A&) const noexcept`, which every rule node does.
+// `VisibleWhen::test()` and `ReadonlyWhen::test()` return `true`
+// unconditionally *by design* -- so nested as a condition they contribute a
+// constant and can never influence the tree they sit in, while looking exactly
+// like a condition that says something.
+// ---------------------------------------------------------------------------
+
+struct CFRConditionMarkerForm {
+    CFRMoney promo;
+    CFRMoney discount;
+};
+
+namespace {
+
+using CFRMarkerEngaged = decltype(morph::forms::engaged(&CFRConditionMarkerForm::promo));
+using CFRMarkerVisible = decltype(morph::forms::visibleWhen(&CFRConditionMarkerForm::discount,
+                                                            morph::forms::engaged(&CFRConditionMarkerForm::promo)));
+using CFRMarkerReadonly = decltype(morph::forms::readonlyWhen(&CFRConditionMarkerForm::discount,
+                                                              morph::forms::engaged(&CFRConditionMarkerForm::promo)));
+using CFRMarkerRequired = decltype(morph::forms::requiredWhen(&CFRConditionMarkerForm::discount,
+                                                              morph::forms::engaged(&CFRConditionMarkerForm::promo)));
+
+// The vocabulary, spelled out: everything whose `test()` is a function of the
+// action is a condition...
+static_assert(morph::forms::Condition<CFRMarkerEngaged>);
+static_assert(morph::forms::Condition<decltype(morph::forms::notEngaged(&CFRConditionMarkerForm::promo))>);
+static_assert(morph::forms::Condition<decltype(morph::forms::equals(&CFRConditionMarkerForm::promo,
+                                                                    Rational{5, DecimalPlaces{2}}))>);
+static_assert(morph::forms::Condition<decltype(morph::forms::greater(&CFRConditionMarkerForm::promo,
+                                                                     &CFRConditionMarkerForm::discount))>);
+static_assert(morph::forms::Condition<decltype(morph::forms::exactlyOneOf(&CFRConditionMarkerForm::promo,
+                                                                          &CFRConditionMarkerForm::discount))>);
+static_assert(
+    morph::forms::Condition<decltype(morph::forms::notOf(morph::forms::engaged(&CFRConditionMarkerForm::promo)))>);
+
+// ...and the three rules that merely *carry* a condition are not.
+static_assert(!morph::forms::Condition<CFRMarkerVisible>);
+static_assert(!morph::forms::Condition<CFRMarkerReadonly>);
+static_assert(!morph::forms::Condition<CFRMarkerRequired>);
+
+// "Does this call compile?" has to be asked through a template parameter. A
+// `requires`-expression whose operand names no template parameter is not in an
+// immediate context, so an ill-formed call inside it is a hard error rather
+// than an unsatisfied requirement -- `static_assert(!requires { f(x); })` then
+// fails to compile instead of passing.
+template <typename... Conds>
+concept CFRAndComposable = requires(Conds... conds) { morph::forms::andOf(conds...); };
+
+template <typename... Conds>
+concept CFROrComposable = requires(Conds... conds) { morph::forms::orOf(conds...); };
+
+template <typename Cond>
+concept CFRNotComposable = requires(Cond cond) { morph::forms::notOf(cond); };
+
+template <auto Field, typename Cond>
+concept CFRRequiredWhenComposable = requires(Cond cond) { morph::forms::requiredWhen(Field, cond); };
+
+template <auto Field, typename Cond>
+concept CFRVisibleWhenComposable = requires(Cond cond) { morph::forms::visibleWhen(Field, cond); };
+
+template <auto Field, typename Cond>
+concept CFRReadonlyWhenComposable = requires(Cond cond) { morph::forms::readonlyWhen(Field, cond); };
+
+template <auto Field>
+concept CFREqualsStringLiteralComposable = requires { morph::forms::equals(Field, "URGENT"); };
+
+// The marker is enforced at every position a condition is accepted. Each of
+// these compiled before #544, and each emitted a node no renderer's condition
+// vocabulary has a case for.
+static_assert(!CFRAndComposable<CFRMarkerVisible, CFRMarkerEngaged>);
+static_assert(!CFROrComposable<CFRMarkerEngaged, CFRMarkerReadonly>);
+static_assert(!CFRNotComposable<CFRMarkerRequired>);
+static_assert(!CFRRequiredWhenComposable<&CFRConditionMarkerForm::discount, CFRMarkerVisible>);
+static_assert(!CFRVisibleWhenComposable<&CFRConditionMarkerForm::discount, CFRMarkerReadonly>);
+static_assert(!CFRReadonlyWhenComposable<&CFRConditionMarkerForm::discount, CFRMarkerVisible>);
+
+// The legitimate spellings still compile, so the constraint is not merely
+// rejecting everything.
+static_assert(CFRAndComposable<CFRMarkerEngaged, CFRMarkerEngaged>);
+static_assert(CFROrComposable<CFRMarkerEngaged, CFRMarkerEngaged>);
+static_assert(CFRNotComposable<CFRMarkerEngaged>);
+static_assert(CFRRequiredWhenComposable<&CFRConditionMarkerForm::discount, CFRMarkerEngaged>);
+static_assert(CFRVisibleWhenComposable<&CFRConditionMarkerForm::discount, CFRMarkerEngaged>);
+static_assert(CFRReadonlyWhenComposable<&CFRConditionMarkerForm::discount, CFRMarkerEngaged>);
+
+}  // namespace
+
+// Two diagnostics the same constraints buy, both previously deep-template
+// failures inside <type_traits> or this header rather than errors at the call
+// site: a compound over two *different* action types (the action type is
+// recovered from the first operand and was never checked against the rest),
+// and a literal the field cannot be compared against at all.
+struct CFRDiagnosticsOtherForm {
+    CFRMoney other;
+};
+
+namespace {
+
+using CFROtherEngaged = decltype(morph::forms::engaged(&CFRDiagnosticsOtherForm::other));
+
+static_assert(!CFRAndComposable<CFRMarkerEngaged, CFROtherEngaged>);
+static_assert(!CFROrComposable<CFRMarkerEngaged, CFROtherEngaged>);
+static_assert(!CFRRequiredWhenComposable<&CFRConditionMarkerForm::discount, CFROtherEngaged>);
+static_assert(!CFREqualsStringLiteralComposable<&CFRConditionMarkerForm::promo>);
+
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// Unsatisfiability detection reaches inside a compound node (#544 part a).
+//
+// The top-level `x-rules` array is a conjunction -- `allRulesSatisfied` folds
+// it with `&&` -- and so is an `and` node's `conditions`, so a contradiction in
+// either is a contradiction of the whole. `or` and `not` are different in kind
+// and must NOT be descended; the fixtures below pin both directions.
+// ---------------------------------------------------------------------------
+
+/// The contradiction of CFRUnsatisfiableExactlyOne wrapped in one `andOf`.
+/// `required` is [a, b, c] while the rule caps a+b at exactly one, so
+/// `allRequiredEngaged && allRulesSatisfied` can never both hold.
+struct CFRUnsatisfiableInsideAnd {
+    CFRMoney a;
+    CFRMoney b;
+    CFRMoney c;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::andOf(morph::forms::exactlyOneOf(&CFRUnsatisfiableInsideAnd::a, &CFRUnsatisfiableInsideAnd::b),
+                            morph::forms::engaged(&CFRUnsatisfiableInsideAnd::c)));
+};
+
+/// A conjunction of conjunctions is one conjunction: the descent recurses.
+struct CFRUnsatisfiableInsideNestedAnd {
+    CFRMoney a;
+    CFRMoney b;
+    CFRMoney c;
+
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::andOf(
+        morph::forms::engaged(&CFRUnsatisfiableInsideNestedAnd::c),
+        morph::forms::andOf(
+            morph::forms::mutuallyExclusive(&CFRUnsatisfiableInsideNestedAnd::a, &CFRUnsatisfiableInsideNestedAnd::b),
+            morph::forms::engaged(&CFRUnsatisfiableInsideNestedAnd::c))));
+};
+
+/// Satisfiable: engaging both `a` and `b` -- exactly what `required` demands --
+/// makes `exactlyOneOf` false, so its negation holds. Rejecting this would be
+/// a hard build failure on a form that works.
+struct CFRCappingUnderNotIsSatisfiable {
+    CFRMoney a;
+    CFRMoney b;
+
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::notOf(
+        morph::forms::exactlyOneOf(&CFRCappingUnderNotIsSatisfiable::a, &CFRCappingUnderNotIsSatisfiable::b)));
+};
+
+/// Satisfiable: a contradictory operand of an `or` only makes that branch
+/// dead, and the other branch still satisfies the rule.
+struct CFRCappingUnderOrIsSatisfiable {
+    CFRMoney a;
+    CFRMoney b;
+    CFRMoney c;
+
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::orOf(
+        morph::forms::exactlyOneOf(&CFRCappingUnderOrIsSatisfiable::a, &CFRCappingUnderOrIsSatisfiable::b),
+        morph::forms::engaged(&CFRCappingUnderOrIsSatisfiable::c)));
+};
+
+TEST_CASE("Forms::Rules::Unsatisfiable::CappingRuleWrappedInAndOfStillThrows", "[forms][rules][unsatisfiable]") {
+    // The same contradiction as CFRUnsatisfiableExactlyOne, one `andOf` deep.
+    // It shipped silently before #544, because the check skipped any node with
+    // no `fields` key and `and` emits `conditions` instead.
+    CHECK_THROWS_AS(morph::forms::schemaJson<CFRUnsatisfiableInsideAnd>(), morph::forms::UnsatisfiableFormError);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::CappingRuleNestedTwoAndsDeepStillThrows", "[forms][rules][unsatisfiable]") {
+    CHECK_THROWS_AS(morph::forms::schemaJson<CFRUnsatisfiableInsideNestedAnd>(), morph::forms::UnsatisfiableFormError);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::MessageStillNamesTheNestedRuleNotTheWrapper",
+          "[forms][rules][unsatisfiable]") {
+    // The diagnostic has to name the node that is actually contradictory --
+    // "and" would send the reader to the wrapper rather than to the rule.
+    std::string message{};
+    try {
+        static_cast<void>(morph::forms::schemaJson<CFRUnsatisfiableInsideAnd>());
+    } catch (const morph::forms::UnsatisfiableFormError& error) {
+        message = error.what();
+    }
+    CHECK(message.contains("CFRUnsatisfiableInsideAnd"));
+    CHECK(message.contains("exactlyOneOf"));
+    CHECK(message.contains("required array: a, b. No submission"));
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::CappingRuleUnderNotIsNotRejected", "[forms][rules][unsatisfiable]") {
+    // False-positive guard: `not` inverts the contradiction into a requirement
+    // `required` already satisfies, so descending through it would break a
+    // working form at build time.
+    CHECK_NOTHROW(static_cast<void>(morph::forms::schemaJson<CFRCappingUnderNotIsSatisfiable>()));
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::CappingRuleUnderOrIsNotRejected", "[forms][rules][unsatisfiable]") {
+    // False-positive guard: the sibling branch still satisfies the rule.
+    CHECK_NOTHROW(static_cast<void>(morph::forms::schemaJson<CFRCappingUnderOrIsSatisfiable>()));
+}
+
+// ---------------------------------------------------------------------------
 // Presentation rules: visibleWhen / readonlyWhen (never gate the submit check).
 // ---------------------------------------------------------------------------
 
