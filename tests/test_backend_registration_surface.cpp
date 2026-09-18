@@ -100,16 +100,75 @@ struct RecordingBackend : IBackend {
         calls.emplace_back("assignPrimary:" + std::to_string(mid.v) + ":" + std::string{primary});
     }
 
-    void deregisterModel(ModelId /*mid*/) override {}
+    // The four legacy `*Async` twins return `true` here — the opposite of
+    // `IBackend`'s default — so that a forwarding assertion cannot pass
+    // vacuously: if `SynchronousBackendAdapter` stopped forwarding one, the
+    // inherited default would answer `false` and the test would fail.
+    bool registerModelAsync(const std::string& /*typeId*/,
+                            std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
+                            std::string_view contextKey, std::function<void(ModelId)> /*onRegistered*/,
+                            std::function<void(const std::string&)> /*onError*/) override {
+        calls.emplace_back("registerModelAsync:" + std::string{contextKey});
+        return true;
+    }
 
-    morph::async::Completion<std::shared_ptr<void>> execute(ModelId /*mid*/,
-                                                            morph::backend::detail::ActionCall /*call*/,
+    // NOLINTBEGIN(performance-unnecessary-value-param) — the overridden signatures take these by value.
+    bool registerModelSharedAsync(const std::string& /*typeId*/,
+                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
+                                  InstanceIdentity identity, std::function<void(ModelId)> /*onRegistered*/,
+                                  std::function<void(const std::string&)> /*onError*/) override {
+        calls.emplace_back("registerModelSharedAsync:" + std::string{identity.primary});
+        return true;
+    }
+
+    bool attachModelAsync(const std::string& /*typeId*/,
+                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
+                          InstanceIdentity identity, ModelId current, std::function<void(ModelId)> /*onRegistered*/,
+                          std::function<void(const std::string&)> /*onError*/) override {
+        calls.emplace_back("attachModelAsync:" + std::string{identity.primary} + ":" + std::to_string(current.v));
+        return true;
+    }
+    // NOLINTEND(performance-unnecessary-value-param)
+
+    bool assignPrimaryAsync(ModelId mid, const std::string& /*typeId*/, std::string_view primary,
+                            std::function<void(ModelId)> /*onRegistered*/,
+                            std::function<void(const std::string&)> /*onError*/) override {
+        calls.emplace_back("assignPrimaryAsync:" + std::to_string(mid.v) + ":" + std::string{primary});
+        return true;
+    }
+
+    std::vector<std::string> listInstances(const std::string& /*typeId*/) override {
+        calls.emplace_back("listInstances");
+        return {"listed"};
+    }
+
+    void deregisterModel(ModelId mid) override { calls.emplace_back("deregisterModel:" + std::to_string(mid.v)); }
+
+    morph::async::Completion<std::shared_ptr<void>> execute(ModelId mid, morph::backend::detail::ActionCall /*call*/,
                                                             morph::exec::IExecutor* /*cbExec*/) override {
+        calls.emplace_back("execute:" + std::to_string(mid.v));
         return {};
     }
 
-    void notifyBackendChanged() override {}
-    void cancelPending(const std::exception_ptr& /*exc*/) override {}
+    void notifyBackendChanged() override { calls.emplace_back("notifyBackendChanged"); }
+
+    void cancelPending(const std::exception_ptr& /*exc*/) override { calls.emplace_back("cancelPending"); }
+
+    void setReconnectHandler(const std::function<void()>& /*handler*/) override {
+        calls.emplace_back("setReconnectHandler");
+    }
+
+    void setConnectHandler(const std::function<void()>& /*handler*/) override {
+        calls.emplace_back("setConnectHandler");
+    }
+
+    void setDisconnectHandler(const std::function<void()>& /*handler*/) override {
+        calls.emplace_back("setDisconnectHandler");
+    }
+
+    void setSession(morph::session::Context session) override {
+        calls.emplace_back("setSession:" + session.principal);
+    }
 };
 
 /// @brief A backend whose registration genuinely never blocks — the shape
@@ -427,15 +486,34 @@ TEST_CASE(
             ModelId{3});
     REQUIRE(adapter.attachModel(std::string{kTypeId}, makeHolder, {.contextKey = "ck", .primary = "pk"}, ModelId{5}) ==
             ModelId{4});
-    // The legacy `*Async` twins are forwarded, not swallowed: a wrapped backend
-    // that has a non-blocking path keeps it.
-    REQUIRE_FALSE(adapter.registerModelAsync(std::string{kTypeId}, makeHolder, "ck", nullptr, nullptr));
-    REQUIRE_FALSE(adapter.registerModelSharedAsync(std::string{kTypeId}, makeHolder, {}, nullptr, nullptr));
-    REQUIRE_FALSE(adapter.attachModelAsync(std::string{kTypeId}, makeHolder, {}, ModelId{}, nullptr, nullptr));
-    REQUIRE_FALSE(adapter.assignPrimaryAsync(ModelId{1}, std::string{kTypeId}, "pk", nullptr, nullptr));
-    adapter.assignPrimary(ModelId{6}, std::string{kTypeId}, "pk");
 
-    REQUIRE(recording->calls == std::vector<std::string>{"registerModel", "registerModelWithContext:ck",
-                                                         "registerModelShared:pk", "attachModel:pk:5",
-                                                         "assignPrimary:6:pk"});
+    // The legacy `*Async` twins are forwarded, not swallowed: a wrapped backend
+    // that has a non-blocking path keeps it. `RecordingBackend` answers `true`
+    // where `IBackend`'s default answers `false`, so each of these would fail if
+    // the adapter stopped overriding the verb and inherited that default.
+    REQUIRE(adapter.registerModelAsync(std::string{kTypeId}, makeHolder, "ck", nullptr, nullptr));
+    REQUIRE(adapter.registerModelSharedAsync(std::string{kTypeId}, makeHolder, {.contextKey = "ck", .primary = "pk"},
+                                             nullptr, nullptr));
+    REQUIRE(adapter.attachModelAsync(std::string{kTypeId}, makeHolder, {.contextKey = "ck", .primary = "pk"},
+                                     ModelId{5}, nullptr, nullptr));
+    REQUIRE(adapter.assignPrimaryAsync(ModelId{1}, std::string{kTypeId}, "pk", nullptr, nullptr));
+
+    adapter.assignPrimary(ModelId{6}, std::string{kTypeId}, "pk");
+    REQUIRE(adapter.listInstances(std::string{kTypeId}) == std::vector<std::string>{"listed"});
+    adapter.deregisterModel(ModelId{7});
+    (void)adapter.execute(ModelId{8}, morph::backend::detail::ActionCall{}, nullptr);
+    adapter.notifyBackendChanged();
+    adapter.cancelPending(std::make_exception_ptr(std::runtime_error{"cancelled"}));
+    adapter.setReconnectHandler(nullptr);
+    adapter.setConnectHandler(nullptr);
+    adapter.setDisconnectHandler(nullptr);
+    adapter.setSession(morph::session::Context{.principal = "pal"});
+
+    REQUIRE(recording->calls ==
+            std::vector<std::string>{"registerModel", "registerModelWithContext:ck", "registerModelShared:pk",
+                                     "attachModel:pk:5", "registerModelAsync:ck", "registerModelSharedAsync:pk",
+                                     "attachModelAsync:pk:5", "assignPrimaryAsync:1:pk", "assignPrimary:6:pk",
+                                     "listInstances", "deregisterModel:7", "execute:8", "notifyBackendChanged",
+                                     "cancelPending", "setReconnectHandler", "setConnectHandler",
+                                     "setDisconnectHandler", "setSession:pal"});
 }
