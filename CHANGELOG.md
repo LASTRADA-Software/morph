@@ -194,6 +194,36 @@ API surface).
   resolves `$ref` targets by name; the previous shape was a wrong schema rather
   than a compatible one. See `docs/spec/forms/choice.md` and
   `docs/spec/forms/widget_hints.md`, "Schema representation".
+- **A shared instance whose first action failed could still be handed to a
+  second attacher.** `docs/spec/core/shared_instances.md` promises it cannot be:
+  a keyed instance created by an `AllowShared` handler whose hydrating first
+  action fails must be evicted rather than shared. Both backends recorded that
+  outcome too late to keep the promise. `LocalBackend` moved two independent
+  atomics, so an attacher landing between them saw a not-poisoned instance whose
+  first action had already failed; and both backends recorded it only *after*
+  the trace sink's `endSpan`, the metric sink and the reply or `Completion`
+  callback had run — every one of which is host code free to attach to the same
+  key. Hydration now settles the instant the outcome is known, ahead of all of
+  them, as a single compare-exchange on one atomic cell. Both backends also now
+  keep their live instances in one `detail::InstanceDirectory` — one record per
+  instance instead of the six and eight parallel `ModelId`-keyed maps they kept
+  in lockstep by convention — so the register-or-attach logic, the eviction and
+  the promotion exist once rather than once per backend.
+
+- **`assignPrimary` could re-key an instance evicted from a key as poisoned.**
+  Eviction unfiles the instance but does not make it anonymous: it was created
+  for its original key and told so once, permanently, through
+  `IModelHolder::attachIdentity`, and the action log is attached under that key
+  too. Promoting it onto a second key therefore handed every later attacher a
+  model that still identified itself as the first entity — and, since the
+  poison came with it, the very next attach to the new key evicted it again and
+  silently created a duplicate under a key the host had just assigned by hand.
+  Promotion now applies only to an instance that has *never* held a key; the
+  rest is a silent no-op like `assignPrimary`'s other declined cases, so the
+  poisoned instance stays unshareable and the key stays free for a healthy one,
+  exactly as `docs/spec/core/shared_instances.md`'s Failure modes section
+  describes.
+
 - **Sockets `morph::net::SocketServer` accepted were left non-blocking on
   macOS/BSD, failing every WebSocket handshake.** A regression from the
   accept-loop wakeup work below: since that change `listen()` puts the

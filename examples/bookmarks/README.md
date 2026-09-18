@@ -220,9 +220,11 @@ resolve in writing:
   The original plan was framework-`shared` instances "keyed by principal,"
   with ownership enforced through `authorizeInstance`; that design does not
   work. `RemoteServer::acquireSharedInstance()`
-  (`include/morph/core/remote.hpp`) records every shared instance as
-  `_owners[fresh] = std::string{};  // shared instances are ownerless, by
-  design`, and its own doc comment says why: a shared instance's owner is
+  (`include/morph/core/remote.hpp`) files every shared instance with
+  `_instances.insertShared(fresh, std::move(holder), std::move(dirKey))`,
+  leaving that call's `owner` argument defaulted to empty — "shared
+  instances are ownerless, by design", as the comment on it says. Its own
+  doc comment says why: a shared instance's owner is
   *always* recorded empty, specifically so `authorizeInstance`'s
   `ownerPrincipal == ctx.principal` check does not reject the second,
   third, ... client who attaches to it. That makes the ownership check a
@@ -230,8 +232,8 @@ resolve in writing:
   ownership needs. The mechanism that actually records a real owner is *plain*
   (non-shared) registration: the `register` branch of
   `RemoteServer::dispatchMessage()` stamps
-  `_owners[mid] = std::move(env.session.principal)` from the verified,
-  authenticated caller.
+  `_instances.insertPrivate(mid, std::move(holder), std::move(env.session.principal))`
+  from the verified, authenticated caller.
   So `BookmarkModel`/`TagModel` are registered plain, exactly like
   `pastebin::PasteModel` — each client's own `register` call gets its own
   fresh instance, and `authorizeInstance` genuinely denies a different

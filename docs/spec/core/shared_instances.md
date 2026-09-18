@@ -251,8 +251,8 @@ other's state", which read as a promise of propagation the framework does not
 make.
 
 **The directory is per-process, and that is load-bearing for the claim above.**
-`_directory`, `_models`, `_owners`, `_attachCount`, `_connectionScopes` and
-`_nextId` are ordinary non-static members of a single `RemoteServer` object.
+`_instances` (a `detail::InstanceDirectory`), `_connectionScopes` and `_nextId`
+are ordinary non-static members of a single `RemoteServer` object.
 There is no membership protocol, no shared store, and no placement layer, so
 **two `RemoteServer` processes behind one logical endpoint have independent,
 non-communicating directories**: a client attaching to key 42 on server A and a
@@ -263,16 +263,26 @@ not deduplicated across processes. A deployment that needs one instance per key
 across replicas has to provide that itself, by routing every key to a fixed
 process.
 
-The directory maps `(modelTypeId, primaryKey) → ModelId`, held under the same
-`_regMtx` that guards `_models`/`_owners`, so directory membership can never
-desync from instance existence — the same invariant the connection-scope map
-already maintains ([backend.md](backend.md), "Connection scopes").
+The directory maps `(modelTypeId, primaryKey) → ModelId`, and it is an index
+over the very record that owns the instance rather than a map beside it: one
+`detail::Instance` per live model carries its holder, its recorded owner
+principal, its attach count, its directory key and its hydration state together,
+so directory membership cannot desync from instance existence. The whole
+structure is guarded by `_regMtx` — `InstanceDirectory` is deliberately
+caller-locked, because the `maxLiveModels` admission check and the
+connection-scope update in the same critical section must not be able to
+straddle a directory change ([backend.md](backend.md), "Connection scopes").
+
+`listInstances` is served from a per-type index inside the directory rather than
+by scanning it, so enumerating one model type does not cost the size of every
+other type put together.
 
 Only instances created by an `AllowShared` handler are entered. A plain
 handler's instance is invisible to the directory and unreachable by key.
 
 In local mode (`LocalBackend`) the directory lives in the backend rather than
-the server, with identical semantics. The call site is unchanged between the
+the server, with identical semantics — and it is the *same* `InstanceDirectory`
+type, not a second implementation of it. The call site is unchanged between the
 two, as morph requires everywhere.
 
 ## Enumerating live instances
@@ -319,12 +329,17 @@ established means an older peer ignores what it does not understand.
   without losing state: an action that creates its own entity runs on a
   not-yet-keyed instance, and only the reply carries the generated key, so the
   instance the action ran on is promoted rather than abandoned for a fresh
-  one. Promotion only ever applies to a still-anonymous instance: the
-  existing holder of a key always wins (promoting onto a taken key is a
-  silent no-op, never a displacement), and an instance that already holds a
+  one. Promotion only ever applies to an instance that has **never** held a
+  key: the existing holder of a key always wins (promoting onto a taken key is
+  a silent no-op, never a displacement), and an instance that already holds a
   *different* real key is left exactly where it is (also a silent no-op) —
   instances never change key, so `assign` never reaches for one still in use
-  elsewhere.
+  elsewhere. "Never held a key" is deliberately stronger than "holds no key
+  right now": an instance evicted from its key as poisoned (see
+  [Failure modes](#failure-modes)) is unfiled but not anonymous — it was
+  created for that key and told so once, permanently, via
+  `IModelHolder::attachIdentity` — so `assign` leaves it alone too rather than
+  handing later attachers a model that identifies itself as a different entity.
 - **A new `instances` request.** Takes a model type id, replies with the live
   primary keys for it. Subject to `authorize` like any other request; see below.
 
@@ -549,14 +564,23 @@ strictly reduces pressure on it.
   attacher in that half-hydrated state, so its very first action's outcome is
   tracked: if it fails, the instance is marked and evicted from the directory
   **the next time anyone else attaches to that key** — not immediately. The
+  marking happens *before* anything that could attach gets to run: hydration is
+  settled the moment the outcome is known, ahead of the trace sink's `endSpan`,
+  ahead of the metric sink and ahead of the reply or `Completion` callback, each
+  of which is host code free to attach to that key. It is one atomic cell moved
+  by one compare-exchange, so a reader can never land between "the first action
+  has settled" and "…and it failed". The
   instance itself is not destroyed; it stays alive (and still counts against
   `LimitPolicy::maxLiveModels`) until whoever created it releases it
   normally, the same as any other instance. The handler that hit the failure
   does not self-heal: its primary is already set to the poisoned key, so
   retrying the same keyed action re-points nowhere (`attachHandler`'s
   no-op-on-same-primary guard skips the backend entirely) — it keeps its
-  broken instance until it releases and re-attaches from scratch. A
-  *different* handler attaching to the same key afterward is unaffected and
+  broken instance until it releases and re-attaches from scratch. Nor can it
+  be re-keyed out of the problem: `assign` refuses an instance that was ever
+  filed under a key, evicted or not, so promoting the poisoned instance onto a
+  second key is a silent no-op and that key stays free for a healthy instance.
+  A *different* handler attaching to the same key afterward is unaffected and
   gets a fresh instance.
 - **`instances()` raced against `attach`.** Documented as inherent: the snapshot
   is stale on arrival. An `attach` to a key from a stale list is not an error —

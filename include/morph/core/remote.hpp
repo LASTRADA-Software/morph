@@ -420,7 +420,7 @@ public:
     /// outright, so a later `execute` against its id replies
     /// `err "model not found"`; a *shared* instance another connection is still
     /// attached to survives, and an `execute` against it still succeeds — see
-    /// `releaseInstanceLocked`'s early return.
+    /// `InstanceDirectory::release`'s `retained` outcome.
     ///
     /// Idempotent: `cid == 0`, an unknown `cid`, or a `cid` already closed is a
     /// no-op. Deliberately does **not** consult `IAuthorizer` — this is the
@@ -537,7 +537,7 @@ public:
         std::size_t liveModels = 0;
         {
             std::scoped_lock const lock{_regMtx};
-            liveModels = _models.size();
+            liveModels = _instances.size();
         }
         return HealthStatus{
             .ready = _ready.load(std::memory_order_relaxed),
@@ -622,9 +622,6 @@ public:
     }
 
 private:
-    /// @brief Directory key: the `(model type id, primary)` pair an instance is filed under.
-    using DirectoryKey = std::pair<std::string, std::string>;
-
     /// @brief Authenticates @p env's session and makes the verified identity
     ///        authoritative on it.
     ///
@@ -659,31 +656,13 @@ private:
 
     /// @brief Releases one reference to @p mid, destroying it at zero. Caller holds `_regMtx`.
     ///
-    /// A private instance has no `_attachCount` entry and is erased outright —
+    /// A private instance carries no attachments and is erased outright —
     /// byte-for-byte the pre-sharing behaviour. A shared instance is erased, and
     /// removed from the directory, only when its last attachment goes away, so
     /// one client's `deregister` or dropped connection never tears an instance
     /// out from under another client still using it.
     /// @param mid Instance to release.
-    /// @return `true` if this call destroyed the instance.
-    bool releaseInstanceLocked(::morph::exec::detail::ModelId mid) {
-        if (auto refIter = _attachCount.find(mid); refIter != _attachCount.end()) {
-            refIter->second -= 1;
-            if (refIter->second > 0) {
-                return false;
-            }
-            _attachCount.erase(refIter);
-            if (auto keyIter = _sharedKeyOf.find(mid); keyIter != _sharedKeyOf.end()) {
-                _directory.erase(keyIter->second);
-                _sharedKeyOf.erase(keyIter);
-            }
-        }
-        _models.erase(mid);
-        _owners.erase(mid);
-        _firstActionPending.erase(mid);
-        _poisoned.erase(mid);
-        return true;
-    }
+    void releaseInstanceLocked(::morph::exec::detail::ModelId mid) { (void)_instances.release(mid); }
 
     /// @brief Drops one of @p cid's references to @p mid, then releases the instance.
     ///        Caller holds `_regMtx`.
@@ -752,24 +731,18 @@ private:
     /// @param reply  Reply sink; invoked only when this returns `true`.
     /// @param cid    Connection scope, or `0` for unscoped.
     /// @return `true` if an entry existed and @p reply was invoked; `false` to keep going.
-    bool attachExistingLocked(const DirectoryKey& dirKey, const ::morph::wire::Envelope& env,
+    bool attachExistingLocked(const detail::DirectoryKey& dirKey, const ::morph::wire::Envelope& env,
                               const std::function<void(std::string)>& reply, ConnectionId cid) {
-        auto found = _directory.find(dirKey);
-        if (found == _directory.end()) {
+        // `nullopt` covers both a plain directory miss and an instance whose
+        // first action failed: `InstanceDirectory::attach` evicts the latter and
+        // reports it as a miss, so the caller falls through to creating a fresh
+        // instance either way. The evicted instance stays live and is torn down
+        // normally by whoever created it.
+        auto const attached = _instances.attach(dirKey);
+        if (!attached) {
             return false;
         }
-        auto const mid = found->second;
-        if (_poisoned.contains(mid)) {
-            // This instance's first action already failed; it must not be
-            // handed to a new attacher. Evict it from the directory -- its
-            // own eventual release still tears it down normally -- and report
-            // a miss so the caller falls through to creating a fresh
-            // instance.
-            _directory.erase(found);
-            _sharedKeyOf.erase(mid);
-            return false;
-        }
-        _attachCount[mid] += 1;
+        auto const mid = *attached;
         if (!noteScopeAttachLocked(mid, cid)) {
             releaseInstanceLocked(mid);
             reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
@@ -808,7 +781,7 @@ private:
     void acquireSharedInstance(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply,
                                ConnectionId cid, ::morph::exec::detail::ModelId releaseCurrent) {
         LimitPolicy const limits = snapshotLimits();
-        DirectoryKey dirKey{env.typeId, env.primary};
+        detail::DirectoryKey dirKey{env.typeId, env.primary};
         {
             std::scoped_lock const lock{_regMtx};
             if (attachExistingLocked(dirKey, env, reply, cid)) {
@@ -856,7 +829,7 @@ private:
             if (releaseCurrent.v != 0U) {
                 releaseScopedLocked(releaseCurrent, cid);
             }
-            if (limits.maxLiveModels != 0 && _models.size() >= limits.maxLiveModels) {
+            if (limits.maxLiveModels != 0 && _instances.size() >= limits.maxLiveModels) {
                 reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
                 return;
             }
@@ -864,12 +837,11 @@ private:
                 reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
                 return;
             }
-            _models[fresh] = std::move(holder);
-            _owners[fresh] = std::string{};  // shared instances are ownerless, by design
-            _directory.emplace(dirKey, fresh);
-            _sharedKeyOf.emplace(fresh, std::move(dirKey));
-            _attachCount[fresh] = 1;
-            _firstActionPending.insert(fresh);
+            // Filed with one attachment, an empty owner (shared instances are
+            // ownerless, by design -- see this function's doc comment) and its
+            // hydration pending, so the first action's outcome decides whether a
+            // second client may ever be handed it.
+            _instances.insertShared(fresh, std::move(holder), std::move(dirKey));
         }
         reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, fresh.v)));
     }
@@ -880,24 +852,22 @@ private:
     /// instance already holds is a silent no-op rather than a displacement.
     /// Symmetrically, an instance that already holds a *different* real key is
     /// left exactly where it is — also a silent no-op — since instances never
-    /// change key (docs/spec/core/shared_instances.md); only a still-anonymous
-    /// `mid` (no existing `_sharedKeyOf` entry) can ever be promoted.
+    /// change key (docs/spec/core/shared_instances.md); only a `mid` that has
+    /// never held a directory key can ever be promoted. That last part matters
+    /// here in particular: this server hands every keyed instance its own key
+    /// once, at construction, through `_registry.create(typeId, primary)` ->
+    /// `IModelHolder::attachIdentity`, and never updates it — so an instance
+    /// evicted from its key as poisoned stays ineligible even though the
+    /// directory no longer files it anywhere.
     /// @param env Decoded request; uses `typeId`, `primary`, `modelId`.
     void applyAssignLocked(const ::morph::wire::Envelope& env) {
-        ::morph::exec::detail::ModelId const mid{env.modelId};
-        if (env.primary.empty() || !_models.contains(mid)) {
+        if (env.primary.empty()) {
             return;
         }
-        DirectoryKey dirKey{env.typeId, env.primary};
-        if (_directory.contains(dirKey)) {
-            return;
-        }
-        if (_sharedKeyOf.contains(mid)) {
-            return;
-        }
-        _directory.emplace(dirKey, mid);
-        _sharedKeyOf.emplace(mid, std::move(dirKey));
-        _attachCount.try_emplace(mid, 1);
+        // A no-op unless the instance is live, has never held a directory key,
+        // and the key is free -- `InstanceDirectory::promote` holds the guards.
+        (void)_instances.promote(::morph::exec::detail::ModelId{env.modelId},
+                                 detail::DirectoryKey{env.typeId, env.primary});
     }
 
     /// @brief Names the fields `(modelType, actionType)`'s served schema marks
@@ -950,11 +920,7 @@ private:
         std::vector<std::string> keys;
         {
             std::scoped_lock const lock{_regMtx};
-            for (const auto& [dirKey, mid] : _directory) {
-                if (dirKey.first == env.typeId) {
-                    keys.push_back(dirKey.second);
-                }
-            }
+            keys = _instances.keysOfType(env.typeId);
         }
         std::string body;
         (void)glz::write_json(keys, body);
@@ -1073,7 +1039,7 @@ private:
                 // cap under the insert lock, where it can tell the two apart.
                 if (limits.maxLiveModels != 0 && (!env.shared || env.primary.empty())) {
                     std::scoped_lock const lock{_regMtx};
-                    if (_models.size() >= limits.maxLiveModels) {
+                    if (_instances.size() >= limits.maxLiveModels) {
                         reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
                         return;
                     }
@@ -1126,12 +1092,12 @@ private:
                     // proceeded to insert -- overshooting maxLiveModels by up to
                     // the worker pool's width. Only a check that cannot be
                     // separated from its insert actually bounds anything.
-                    if (limits.maxLiveModels != 0 && _models.size() >= limits.maxLiveModels) {
+                    if (limits.maxLiveModels != 0 && _instances.size() >= limits.maxLiveModels) {
                         overLiveModelCap = true;
                     }
                     // A non-zero cid attributes the new instance to that
-                    // connection's scope, next to _models/_owners under the
-                    // same lock so scope membership can never desync from
+                    // connection's scope, next to the instance directory under
+                    // the same lock so scope membership can never desync from
                     // instance existence. cid == 0 (the unscoped default)
                     // records nothing, matching today's behavior byte-for-byte.
                     //
@@ -1156,8 +1122,10 @@ private:
                         }
                     }
                     if (!overLiveModelCap && !scopeAlreadyClosed) {
-                        _models[mid] = std::move(holder);
-                        _owners[mid] = std::move(env.session.principal);
+                        // Private: no directory key, no sharing, no hydration
+                        // tracking. The owner is the principal stamped above,
+                        // never the client's raw claim.
+                        _instances.insertPrivate(mid, std::move(holder), std::move(env.session.principal));
                     }
                 }
                 if (overLiveModelCap) {
@@ -1248,9 +1216,8 @@ private:
                 bool known = false;
                 {
                     std::scoped_lock const lock{_regMtx};
-                    auto iter = _owners.find(mid);
-                    if (iter != _owners.end()) {
-                        owner = iter->second;
+                    if (const auto* inst = _instances.find(mid)) {
+                        owner = inst->owner;
                         known = true;
                     }
                 }
@@ -1356,17 +1323,19 @@ private:
         stampVerifiedPrincipal(env);
         ::morph::exec::detail::ModelId const mid{env.modelId};
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
+        std::shared_ptr<detail::HydrationState> hydration;
         std::string owner;
         bool known = false;
         {
             std::scoped_lock const lock{_regMtx};
-            auto iter = _models.find(mid);
-            if (iter != _models.end()) {
-                holder = iter->second;
-                if (auto ownerIter = _owners.find(mid); ownerIter != _owners.end()) {
-                    owner = ownerIter->second;
-                    known = true;
-                }
+            // One lookup for the holder, its recorded owner and its hydration
+            // state together: they are fields of one record now, not entries in
+            // three maps kept in lockstep by convention.
+            if (const auto* inst = _instances.find(mid)) {
+                holder = inst->holder;
+                hydration = inst->hydration;
+                owner = inst->owner;
+                known = true;
             }
         }
         if (!holder) {
@@ -1558,8 +1527,8 @@ private:
         // was what let a rejection skip past this wait's ticket and park it
         // here for good (issue #449).
         ticketGuard.awaitTurn();
-        _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), complete, timeoutHandle]() mutable {
-            ::morph::exec::detail::ModelId const targetMid{env.modelId};
+        _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), hydration = std::move(hydration),
+                           complete, timeoutHandle]() mutable {
             auto const start = std::chrono::steady_clock::now();
             auto const spanId =
                 ::morph::observe::detail::beginSpan(env.session.requestId, env.modelType, env.actionType);
@@ -1588,16 +1557,21 @@ private:
                         self->_timeoutScheduler->cancel(timeoutHandle);
                     }
                 }
+                // Settle hydration before `endSpan`, before the metrics and
+                // before `complete` -- each hands control to host code that is
+                // free to attach to this instance's key, and an attacher
+                // reaching the directory while the outcome is known but
+                // unrecorded is handed an instance whose first action has
+                // already failed. See shared_instances.md's Failure modes.
+                if (hydration) {
+                    hydration->settle(true);
+                }
                 ::morph::observe::detail::endSpan(spanId, true);
                 auto const elapsedMs =
                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
                 std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
                     {{"modelType", env.modelType}, {"actionType", env.actionType}}};
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
-                {
-                    std::scoped_lock const lock{self->_regMtx};
-                    self->_firstActionPending.erase(targetMid);
-                }
                 complete(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
                 {
@@ -1606,6 +1580,11 @@ private:
                         self->_timeoutScheduler->cancel(timeoutHandle);
                     }
                 }
+                // Settled before `endSpan` for the reason given in the success
+                // branch above.
+                if (hydration) {
+                    hydration->settle(false);
+                }
                 ::morph::observe::detail::endSpan(spanId, false);
                 auto const elapsedMs =
                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
@@ -1613,14 +1592,6 @@ private:
                     {{"modelType", env.modelType}, {"actionType", env.actionType}}};
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
-                {
-                    std::scoped_lock const lock{self->_regMtx};
-                    if (auto iter = self->_firstActionPending.find(targetMid);
-                        iter != self->_firstActionPending.end()) {
-                        self->_firstActionPending.erase(iter);
-                        self->_poisoned.insert(targetMid);
-                    }
-                }
                 complete(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
             }
         });
@@ -1737,19 +1708,26 @@ private:
     // through `ExecuteTicketGuard`, explicitly or via its destructor.
     ::morph::backend::detail::ExecuteOrderGate _executeGate;
     // mutable: health() is const and must still be able to lock this to read
-    // _models.size() safely from any thread.
+    // the live instance count safely from any thread.
     mutable std::mutex _regMtx;
-    std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>,
-                       ::morph::exec::detail::ModelIdHash>
-        _models;
-    // Owner principal recorded per instance at register time, consulted by
-    // IAuthorizer::authorizeInstance on execute/deregister. Guarded by _regMtx
-    // (same lock as _models); empty string means "no recorded owner".
-    std::unordered_map<::morph::exec::detail::ModelId, std::string, ::morph::exec::detail::ModelIdHash> _owners;
+    // Every live instance, private and shared alike, plus the shared-instance
+    // directory over them — holder, owner principal, attach count, directory key
+    // and hydration state as one record per instance rather than seven parallel
+    // ModelId-keyed containers held in lockstep by convention (morph#523), and
+    // the same type LocalBackend owns rather than a second implementation of it.
+    // Guarded by `_regMtx`; `InstanceDirectory` is caller-locked by design,
+    // because the admission checks and connection-scope updates in the same
+    // critical sections must not be able to straddle a directory change.
+    //
+    // `HydrationState` is the one part with synchronisation of its own: it is
+    // settled from `dispatchExecute`'s strand task, which holds no lock, and is
+    // reached there through a `shared_ptr` captured at dispatch time rather than
+    // by looking the instance up again.
+    detail::InstanceDirectory _instances;
     // Connection-scope bookkeeping (opt-in; see openConnection/closeConnection
     // and the scoped handle(msg, reply, cid) overload). Guarded by _regMtx —
-    // the same lock as _models/_owners — so scope membership can never desync
-    // from instance existence.
+    // the same lock as the instance directory — so scope membership can never
+    // desync from instance existence.
     // Value is a *count* per instance, not a set: one connection may attach the
     // same shared instance from two handlers, and closing the connection must
     // release both references or the instance leaks. A private instance always
@@ -1757,29 +1735,6 @@ private:
     std::unordered_map<ConnectionId, std::unordered_map<::morph::exec::detail::ModelId, std::size_t,
                                                         ::morph::exec::detail::ModelIdHash>>
         _connectionScopes;
-    // Shared-instance directory: (typeId, primary) -> ModelId, its reverse, and
-    // the cross-connection attach count. Guarded by _regMtx alongside
-    // _models/_owners so directory membership can never desync from instance
-    // existence. Only instances registered with `shared` set and a non-empty
-    // primary appear; a private instance has no entry in any of the three.
-    std::unordered_map<DirectoryKey, ::morph::exec::detail::ModelId, ::morph::model::detail::PairKeyHash> _directory;
-    std::unordered_map<::morph::exec::detail::ModelId, DirectoryKey, ::morph::exec::detail::ModelIdHash> _sharedKeyOf;
-    std::unordered_map<::morph::exec::detail::ModelId, std::size_t, ::morph::exec::detail::ModelIdHash> _attachCount;
-    // First-action hydration tracking for freshly-created shared instances
-    // (docs/spec/core/shared_instances.md's Failure modes: a failed first
-    // action on a freshly created shared instance must not be left in the
-    // directory in a half-hydrated state). `_firstActionPending` holds a mid
-    // while its very first execute hasn't settled yet; `_poisoned` holds a
-    // mid whose first action failed. Consulted lazily by
-    // attachExistingLocked, which evicts and falls through to creating a
-    // fresh instance instead of handing a poisoned one to a new attacher.
-    // Guarded by `_regMtx` alongside `_models`/`_directory`. `dispatchExecute`'s
-    // strand task safely mutates these directly via its own `self =
-    // shared_from_this()` capture (this class's documented heap-allocation
-    // contract), unlike LocalBackend's strand task, which must never touch
-    // raw `this`.
-    std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash> _firstActionPending;
-    std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash> _poisoned;
     std::atomic<uint64_t> _nextId{0};
     std::atomic<uint64_t> _nextConnectionId{0};
     std::atomic<std::uint32_t> _minVersion{::morph::wire::kProtocolVersion};
@@ -1988,7 +1943,7 @@ public:
         // the same in-process `RemoteServer` this backend was constructed
         // against, and `handleInstances` (this file, above) only ever builds
         // `reply.body` via `glz::write_json` of a `std::vector<std::string>`
-        // populated straight from `_directory`'s own keys -- themselves just
+        // populated straight from the instance directory's own keys -- themselves
         // `env.primary` values that already round-tripped through a
         // successful envelope decode, so they are valid UTF-8 by
         // construction. There is no path through `SimulatedRemoteBackend` +
