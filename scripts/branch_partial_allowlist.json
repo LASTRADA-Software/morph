@@ -80,7 +80,7 @@
     },
     {
       "file": "include/morph/core/backend.hpp",
-      "line": 736,
+      "line": 739,
       "source": "if (const auto* inst = _instances.find(modelId)) {",
       "reason": "Unreachable by construction given the `_changeAware`/`_instances` invariant (core audit finding BK2). `_changeAware` is an index over the instance directory: an id enters it in `createHolder` (this file, when the holder answers `isBackendChangeAware()`) in the same `_regMtx`-held critical section that files the instance, and leaves it in `deregisterModel` only when `InstanceDirectory::release` reports the instance actually destroyed. `notifyBackendChanged()` (this function) holds the same `_regMtx` while walking `_changeAware` and looking each id up at this line, so every id it walks is still live -- the null arm cannot occur without a code change that breaks that subset invariant. Formerly keyed on `_models`, the map morph#523 replaced with the directory; the invariant and its reason are unchanged."
     },
@@ -92,7 +92,7 @@
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1411,
+      "line": 1416,
       "source": "if (_inFlightExecutes.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {",
       "reason": "Real but requires genuine thread contention to trigger -- accepted as documented rather than closed with a flaky test (core audit finding RM11). The false arm (the CAS lost the race and must retry) needs two threads to genuinely collide on the same atomic increment at the same instant; it is a real, reachable hazard the retry loop correctly handles, not dead code, but inherently non-deterministic to trigger from a test without exact thread-timing control. Same disposition class as `strand.hpp`'s ST1 above, and as core audit finding O1 (`observability.hpp`'s `endSpan`), whose entry left this file once a coverage run showed its arm taken: a stress test with many concurrent `execute()` calls against a tight `maxInFlightExecutes` limit would probably eventually hit it, but flakily."
     },
@@ -110,7 +110,7 @@
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1489,
+      "line": 1494,
       "source": "if (_timeoutScheduler) {",
       "reason": "Unreachable by construction, mirrors `bridge.hpp`'s B6 (core audit finding RM10). `setLimitPolicy` (this file) is the only writer of both `_limits.executeTimeout` and `_timeoutScheduler`: `_limits = policy; if (_limits.executeTimeout.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_unique<...>(); }`, both under `_limitsMtx` -- the same lock this line's enclosing block holds. Nothing anywhere nulls `_timeoutScheduler` afterward, so `dispatchExecute`'s `limits.executeTimeout.count() > 0` guard (this line's enclosing `if`, a few lines above) already guarantees `_timeoutScheduler` is non-null whenever this line runs."
     },
