@@ -11,6 +11,31 @@ API surface).
 
 ### Changed
 
+- **`Completion<T>` has a stated value-handling contract, and `T` no longer has
+  to be copyable.** `std::move_constructible<T>` is now the whole type
+  requirement; copyability became a *per-handler* obligation, diagnosed where
+  the handler is written. A handler taking `const T&` costs **zero** copies, one
+  taking `T` by value costs **exactly one**, and neither number depends on how
+  many handlers are attached or on which side of the settle they attached.
+  Measured with a copy-counting `T`, the budget was **N + 2M** (N handlers
+  attached before settling, M after) and is now **one per by-value handler**:
+  three `const T&` handlers before a settle plus three after went from 9 copies
+  to 0. Mechanically, `onOk` is erased as
+  `std::vector<std::function<void(const T&)>>` and `CompletionState<T>` derives
+  from `std::enable_shared_from_this`, so both dispatch closures read the stored
+  value in place instead of carrying a copy. `Completion<std::unique_ptr<int>>`
+  now instantiates and fans out; `IExecutor::post` is unchanged, because the
+  closure captures a `shared_ptr` rather than the value.
+
+  **Public signature change**: `then()`, `thenDetached()` and their gated
+  overloads take `std::function<void(const T&)>` rather than
+  `std::function<void(T)>`. Source-compatible for lambdas taking `const T&`,
+  `T` by value or `auto` by value, and for existing `std::function<void(T)>`
+  objects — all 312 `.then(` call sites in the tree compile unchanged. A handler
+  taking `T&` or `T&&` would not; none exists. Pre-1.0, per
+  `docs/spec/VERSIONING.md`. See `docs/spec/core/completion.md`,
+  "Value-handling contract", and morph#553.
+
 - **`morph::log` no longer takes over a consumer's `stderr` by default.**
   `LogState::minLevel` defaults to `LogLevel::warn` instead of
   `LogLevel::debug`, so linking morph no longer emits its dispatch tracing
@@ -156,6 +181,16 @@ API surface).
   `docs/spec/VERSIONING.md`.
 
 ### Fixed
+
+- **The `RemoteServer` throughput benchmark wrote into a destroyed stack
+  frame.** `tests/test_server_limits.cpp`'s reply counter was a stack local of
+  the `BENCHMARK` body captured by reference into callbacks that run on pool
+  workers; the body's 1 s deadline let it return with replies still in flight,
+  and Catch2's next sample then constructed a fresh counter over the same stack
+  slot. ThreadSanitizer reported two data races, both frames in this test — a
+  false signal that reads as a race inside `RemoteServer`. The counter is now a
+  `shared_ptr<std::atomic<int>>` the callbacks co-own; the deadline stays as a
+  benchmark timeout rather than a correctness device. Test-only. See morph#565.
 
 - **Both of the cross-field rule vocabulary's safety checks were bypassed by
   wrapping a rule in one combinator.** Unsatisfiability detection stopped at
