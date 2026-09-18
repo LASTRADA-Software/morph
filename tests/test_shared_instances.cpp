@@ -677,10 +677,13 @@ TEST_CASE("assignPrimary promotes an anonymous instance and ignores unusable inp
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
 }
 
-// backend.hpp BK1: listInstances's `dirKey.first == typeId` filter had never
-// been driven with two distinct registered types sharing `_directory` --
-// every prior listInstances call in this suite only ever populated the
-// directory with one type, so the walk never had to actually discriminate.
+// `listInstances` had never been driven with two distinct registered types in
+// the directory at once -- every prior call in this suite populated it with one
+// type, so nothing ever had to discriminate. The mechanism it discriminates
+// *with* has since changed: the walk over `_directory` filtering on
+// `dirKey.first == typeId` is gone, and `InstanceDirectory::keysOfType` now
+// serves the answer from a per-type index. The property under test is the same
+// one either way, which is why this test survived the change unaltered.
 TEST_CASE("listInstances filters by type when the directory holds more than one",
           "[shared-instances][coverage][backend]") {
     morph::exec::ThreadPoolExecutor pool{2};
@@ -695,9 +698,8 @@ TEST_CASE("listInstances filters by type when the directory holds more than one"
     (void)counterMid;
     (void)awareMid;
 
-    // Both types now occupy `_directory`. The walk must step past the
-    // other type's entry (the `false` arm of `dirKey.first == typeId`)
-    // before -- or without -- matching its own.
+    // Both types now occupy the directory, so each answer has to exclude the
+    // other type's key rather than returning everything live.
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"counter-1"});
     REQUIRE(backend.listInstances("SHI_AwareModel") == std::vector<std::string>{"aware-1"});
 }
@@ -1352,7 +1354,6 @@ TEST_CASE("deregistering a poisoned instance evicted from the directory tears it
 // `endSpan` would sail through.
 TEST_CASE("an attach racing a failed first action out of the dispatch is not handed the failed instance",
           "[shared-instances][backend]") {
-    morph::observe::ScopedObserveOverride const guard;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::InlineExecutor callbackExec;
     morph::backend::LocalBackend backend{pool};
@@ -1362,6 +1363,13 @@ TEST_CASE("an attach racing a failed first action out of the dispatch is not han
 
     std::atomic<std::uint64_t> attached{0};
     std::atomic<bool> reentered{false};
+    // Declared *after* everything the sink below captures by reference, so it
+    // uninstalls the sink before any of them is destroyed. Declared first — as
+    // the rest of this suite does, where the sinks touch nothing local — it
+    // would uninstall last, and a strand task still draining inside
+    // `~ThreadPoolExecutor` could reach `endSpan` -> this lambda -> an
+    // already-destroyed `backend`.
+    morph::observe::ScopedObserveOverride const guard;
     morph::observe::setTraceSink(
         // `beginSpan` has to return a non-zero id: `endSpan` treats `0` as the
         // "tracing was off" sentinel and returns without calling the sink.
@@ -1428,7 +1436,6 @@ TEST_CASE("releasing the last shared instance of a type empties its listInstance
 // before anything that can attach gets to run.
 TEST_CASE("the server does not hand out an instance between its first action failing and the directory learning of it",
           "[shared-instances][remote]") {
-    morph::observe::ScopedObserveOverride const guard;
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
@@ -1440,7 +1447,9 @@ TEST_CASE("the server does not hand out an instance between its first action fai
     std::atomic<bool> reentered{false};
     // `endSpan`, not the metric sink, for the reason spelled out on the local
     // test above: it is the earlier of the two hand-offs, so it is the one that
-    // pins the whole window.
+    // pins the whole window. The guard is declared last, also as above, so the
+    // sink is uninstalled before anything it captures is destroyed.
+    morph::observe::ScopedObserveOverride const guard;
     morph::observe::setTraceSink(
         {.beginSpan = [](std::string_view, std::string_view, std::string_view) { return morph::observe::SpanId{1}; },
          .endSpan =
