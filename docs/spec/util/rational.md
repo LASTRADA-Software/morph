@@ -93,8 +93,8 @@ the canonical `(numerator, denominator)` pair and ignores `decimalPlaces`.
 |---|---|---|
 | `operator+`, `operator-`, `operator*` (plain `Rational` × `Rational`) | `Rational` | `noexcept`, return a bare `Rational` — no error channel. This means *representable* results never fail; it does **not** mean the operation cannot go wrong. Reduced int64 cross-terms exceeding ~2^63 **saturate** at `±INT64_MAX/1` and log at `error`; the result is clamped and inexact, and the return type does not say so (see [Overflow & value-range envelope](#overflow--value-range-envelope)). Reduce-before-multiply (Knuth 4.5.1) to extend safe int64 range. Cross-cancellation before multiplication. |
 | `operator/`, `dividedBy` (plain `Rational` ÷ `Rational`) | `expected<Rational, RationalError>` | `DivisionByZero` when divisor's numerator is zero — and **that is the only error it reports.** Implemented by multiplying `*this` by the reciprocal (`den/num`, sign carried onto the numerator), so it **also propagates `max` precision**, and so it **saturates on overflow exactly like `operator*`**: an out-of-envelope quotient clamps to `±INT64_MAX/1`, logs at `error`, and is still returned as a *successful* `expected`. Use `checkedDiv` to have that reported. |
-| `operator-` (unary) | `Rational` | Negates numerator. Precision preserved. **Negating `INT64_MIN` overflows.** |
-| `reciprocal` | `expected<Rational, RationalError>` | Multiplicative inverse. `DivisionByZero` when the value is zero. **Precision is the operand's own `decimalPlaces`, not `max`** (it is a unary operation with no second operand to widen against). |
+| `operator-` (unary) | `Rational` | Negates numerator. Precision preserved. A hand-poisoned `INT64_MIN` numerator **clamps** to `INT64_MAX` rather than overflowing. |
+| `reciprocal` | `expected<Rational, RationalError>` | Multiplicative inverse. `DivisionByZero` when the value is zero. **Precision is the operand's own `decimalPlaces`, not `max`** (it is a unary operation with no second operand to widen against). The inverted pair goes through the canonicalising constructor, which carries the sign and clamps a hand-poisoned `INT64_MIN` component; nothing is negated here. |
 | `operator+=`, `-=`, `*=` (in-place) | `Rational&` | Mutate `*this`, widen precision to `max`, canonicalise. |
 
 ## Overflow & value-range envelope
@@ -253,7 +253,11 @@ there is no valid answer to inspect.
 `checkedMul` checks the *cross-cancelled* factors `operator*` actually
 multiplies, not the raw operands: cross-cancelling is what keeps most products
 in range, so checking beforehand would reject pairs that multiply perfectly
-well (`INT64_MAX/2 * 2/1` reduces to `INT64_MAX/1`).
+well (`INT64_MAX/2 * 2/1` reduces to `INT64_MAX/1`). A reduced product of
+exactly `INT64_MIN` counts as an overflow even though it fits an `int64_t`:
+`canonicalise` clamps such a component to `-INT64_MAX`, so reporting success
+would hand back a value canonicalisation has already changed. `(-2^62) * 2` is
+the shortest case, and needs no poisoned operand.
 
 `checkedDiv` is the division member of the family, and it exists because
 division was the one operation with no exact-or-nothing form: `dividedBy`
@@ -262,6 +266,16 @@ checked the result was told a clamped quotient had succeeded (morph#206). It is
 `checkedMul` against `rhs.reciprocal()` — the same operand pair `dividedBy`
 forms internally — and it folds both failure modes into the one channel:
 `DivisionByZero` propagated from `reciprocal`, `Overflow` from `checkedMul`.
+It also reports `Overflow` for a divisor carrying a hand-poisoned `INT64_MIN`
+component, *before* forming the reciprocal: that component's `2^63` magnitude
+has no `int64` counterpart, so `reciprocal` returns a clamped value that is not
+the divisor's inverse, and the product of it would be an inexact success. This
+is conservative rather than exact — `2 / (INT64_MIN/1)` has the representable
+exact quotient `-1/2^62` — and deliberately so: reaching it would require
+carrying the unsigned magnitude through the cross-cancellation rather than going
+through `reciprocal`, which would let `checkedDiv` accept quotients `dividedBy`
+still saturates, breaking the one-set-of-predicates property below. No value the
+type can construct is affected.
 `dividedBy` itself is unchanged and still saturates: `Quantity` already folds a
 failed division to `nullopt` (`docs/spec/error_handling.md`), and making `/` the
 sole operation that refuses to saturate would impose "overflow is fatal" on
@@ -478,7 +492,7 @@ through `setWire`.
 | `checkedAdd(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact sum, or `Overflow`. |
 | `checkedSub(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact difference, or `Overflow`. |
 | `checkedMul(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact product, or `Overflow`. |
-| `checkedDiv(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact quotient, or `DivisionByZero`, or `Overflow`. `checkedMul` against `b.reciprocal()`; the form `dividedBy`/`operator/` do not provide, since those saturate and report success. |
+| `checkedDiv(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact quotient, or `DivisionByZero`, or `Overflow` (including when `b` carries a poisoned `INT64_MIN` component, whose reciprocal is not representable). `checkedMul` against `b.reciprocal()`; the form `dividedBy`/`operator/` do not provide, since those saturate and report success. |
 | `setWire(Wire)` | `void noexcept` — rebuilds through the canonicalising constructor, clamping what it cannot represent and counting the clamp. |
 | `Wire::validate()` | `constexpr bool noexcept` — whether these raw values decode without being clamped. |
 | `WireClampScope` | Scoped observer: how many `Rational` values were clamped while decoding. |
@@ -522,7 +536,7 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
 | Rounding mode is a parameter, defaulting to half away from zero | **`RoundingMode{HalfAwayFromZero, HalfEven}`, `HalfAwayFromZero` default** | A mode had to become visible once rounding became a *storage* operation rather than an implementation detail of display. The default follows morph's own formatter rather than the standards' `HALF_EVEN`, because the point of rounding on the dispatch path is that the stored value equals the displayed one; a `HalfEven` default would break that for every tie until the formatter learned the same mode. |
 | No `checkedRound` | **`roundToDecimalPlaces` saturates and logs** | Consistent with `+`/`-`/`*`/`/`: the `checked*` family covers the operations a caller is likely to drive with unbounded inputs. Rounding a value already representable at the target scale — the overwhelmingly common case, and every integer — takes a fast path that cannot overflow at all. |
 | 128-bit cross-product comparison | **`detail::mulU64`** | Exact ordering over the full int64 range without overflow. Uses `unsigned __int128` when available (GCC/Clang), portable 32-bit limb decomposition on MSVC. |
-| Negation limitation | **`INT64_MIN` overflows** | Documented limitation. The wire codec clamps `INT64_MIN` components away for untrusted input. |
+| `INT64_MIN` is not a component | **Clamped to `-INT64_MAX`, with an `error` log** | `-INT64_MIN` is not representable, so canonicalising it is undefined. Every constructor canonicalises, so no constructed value carries it; the members are public, so the operations that could still observe one clamp instead of negating. The wire codec clamps it independently for untrusted input. |
 | `fromFloat` not `constexpr` | **Uses `std::llround` / `std::isfinite`** | These standard library functions are not `constexpr`. The `fromFloat` overloads are `inline` out-of-class, `noexcept` but not `constexpr`. |
 
 ## Payload shape tag

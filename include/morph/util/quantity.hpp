@@ -96,10 +96,11 @@ namespace detail {
     // invariant guarantees denominator > 0, so only the numerator carries sign.
     bool const negative = value.numerator < 0;
     // Negate in unsigned arithmetic: `-INT64_MIN` is undefined as a signed
-    // operation, and INT64_MIN reaches here through the whole-integer
-    // `Rational{value, DecimalPlaces{n}}` constructor, which does not
-    // canonicalise (and `numerator` is public). `absU64` is the shared helper
-    // that gets this right -- see morph#496.
+    // operation. Every Rational constructor now canonicalises, so no
+    // constructed value carries INT64_MIN -- but `numerator` is a public
+    // member, so a caller can still assign one, and a formatter must stay
+    // defined for whatever it is handed. `absU64` is the shared helper that
+    // gets this right -- see morph#496 and morph#537.
     auto const num = ::morph::math::detail::absU64(value.numerator);
     auto const den = static_cast<std::uint64_t>(value.denominator);
     auto const places = static_cast<std::uint32_t>(value.decimalPlaces.value);

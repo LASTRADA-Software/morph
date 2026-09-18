@@ -86,9 +86,14 @@
 /// constructor, so a non-canonical payload (`1234/100`) or a hostile one
 /// (`den == 0`, out-of-range `dp`) always lands as a valid, reduced value.
 ///
-/// @note Negating a `Rational` built from `INT64_MIN` overflows; avoid that
-///       extreme value in code (the wire codec clamps it away for untrusted
-///       input).
+/// @note `INT64_MIN` is never a canonical component. It has no positive
+///       counterpart in `int64`, so `canonicalise` -- which every constructor
+///       runs, including the whole-integer one -- clamps such a component to
+///       `-INT64_MAX` and logs at `error`. The members are public, so a caller
+///       can still assign `INT64_MIN` by hand; the operations that may observe
+///       one (unary `-`, `abs`, `reciprocal`, multiplication and its overflow
+///       predicate) stay defined and clamp its magnitude rather than negating
+///       it. The wire codec clamps it independently for untrusted input.
 /// @note Comparison is exact over the full int64 range (128-bit cross
 ///       products). Arithmetic, however, has the usual fixed-width envelope:
 ///       `+`, `-`, `*` overflow int64 when reduced cross terms exceed ~2^63
@@ -386,6 +391,10 @@ struct Rational {
     constexpr Rational() noexcept = default;
 
     /// @brief Constructs from a whole integer at the given precision.
+    ///
+    /// Delegates to the canonicalising constructor, so this path applies the
+    /// same clamps as every other: an `INT64_MIN` @p whole is stored as
+    /// `-INT64_MAX/1` with an `error` log rather than kept verbatim.
     /// @param whole            The integer value; stored as `whole/1`.
     /// @param wantedPrecision  Decimal precision; clamped to [0, kMaxDecimalPlaces].
     constexpr Rational(std::int64_t whole, DecimalPlaces wantedPrecision) noexcept
@@ -493,16 +502,21 @@ struct Rational {
     }
 
     /// @brief Multiplicative inverse.
+    ///
+    /// The inverted pair is handed straight to the canonicalising constructor
+    /// rather than sign-corrected here: `canonicalise` already moves a negative
+    /// denominator's sign onto the numerator, and it clamps an `INT64_MIN`
+    /// component (with an `error` log) *before* the flip. Negating either
+    /// component here instead would be undefined for a hand-poisoned
+    /// `INT64_MIN` in that position -- which is how this function reached
+    /// `-denominator` unguarded.
+    ///
+    /// A poisoned component therefore yields a clamped, inexact inverse. That
+    /// is the type's saturation policy, and `checkedDiv` declines to absorb it.
     /// @return `denominator/numerator`, or `unexpected(DivisionByZero)` if zero.
     [[nodiscard]] constexpr std::expected<Rational, RationalError> reciprocal() const noexcept {
         if (numerator == 0) {
             return std::unexpected(RationalError::DivisionByZero);
-        }
-        if (numerator < 0) {
-            constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
-            constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
-            auto const reciprocalDenominator = numerator == minValue ? maxValue : -numerator;
-            return Rational{Numerator{-denominator}, Denominator{reciprocalDenominator}, decimalPlaces};
         }
         return Rational{Numerator{denominator}, Denominator{numerator}, decimalPlaces};
     }
@@ -836,8 +850,8 @@ private:
     constexpr void mulAssignUnchecked(const Rational& rhs) noexcept {
         auto const absoluteLeftNumerator = detail::absU64(numerator);
         auto const absoluteRightNumerator = detail::absU64(rhs.numerator);
-        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, static_cast<std::uint64_t>(rhs.denominator));
-        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, static_cast<std::uint64_t>(denominator));
+        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, detail::absU64(rhs.denominator));
+        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, detail::absU64(denominator));
         auto const signedCrossDivisorOne = static_cast<std::int64_t>(crossDivisorOne);
         auto const signedCrossDivisorTwo = static_cast<std::int64_t>(crossDivisorTwo);
         auto const reducedLeftNumerator = numerator / signedCrossDivisorOne;
@@ -898,20 +912,38 @@ public:
     /// Checks the cross-cancelled factors `operator*=` actually multiplies:
     /// cross-cancelling is what keeps most products in range, so checking the
     /// raw operands would reject pairs that multiply perfectly well.
+    ///
+    /// "Representable" is stricter than "fits an `int64_t`": `INT64_MIN` fits
+    /// and is still not a canonical component, because `canonicalise` clamps
+    /// it to `-INT64_MAX`. A product landing exactly there is reported here as
+    /// an overflow, so `checkedMul` cannot return a success that
+    /// canonicalisation has already altered -- `(-2^62) * 2` is the shortest
+    /// example, and needs no poisoned operand at all.
     /// @param rhs The factor.
     /// @return `true` if the product cannot be represented.
     [[nodiscard]] constexpr bool mulWouldOverflow(const Rational& rhs) const noexcept {
         auto const absoluteLeftNumerator = detail::absU64(numerator);
         auto const absoluteRightNumerator = detail::absU64(rhs.numerator);
-        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, static_cast<std::uint64_t>(rhs.denominator));
-        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, static_cast<std::uint64_t>(denominator));
+        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, detail::absU64(rhs.denominator));
+        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, detail::absU64(denominator));
         if (crossDivisorOne == 0 || crossDivisorTwo == 0) {
             return false;  // a zero numerator: the product is zero
         }
         auto const signedCrossDivisorOne = static_cast<std::int64_t>(crossDivisorOne);
         auto const signedCrossDivisorTwo = static_cast<std::int64_t>(crossDivisorTwo);
-        return detail::mulOverflows(numerator / signedCrossDivisorOne, rhs.numerator / signedCrossDivisorTwo) ||
-               detail::mulOverflows(denominator / signedCrossDivisorTwo, rhs.denominator / signedCrossDivisorOne);
+        auto const reducedLeftNumerator = numerator / signedCrossDivisorOne;
+        auto const reducedRightNumerator = rhs.numerator / signedCrossDivisorTwo;
+        auto const reducedLeftDenominator = denominator / signedCrossDivisorTwo;
+        auto const reducedRightDenominator = rhs.denominator / signedCrossDivisorOne;
+        if (detail::mulOverflows(reducedLeftNumerator, reducedRightNumerator) ||
+            detail::mulOverflows(reducedLeftDenominator, reducedRightDenominator)) {
+            return true;
+        }
+        // Forming the products is safe now, and only now: the checks above
+        // have just proved neither overflows.
+        constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+        return reducedLeftNumerator * reducedRightNumerator == minValue ||
+               reducedLeftDenominator * reducedRightDenominator == minValue;
     }
 
 private:
@@ -1165,13 +1197,40 @@ static_assert(std::is_standard_layout_v<Rational>);
 /// predicate the operator uses. The operators and the checked forms therefore
 /// cannot disagree about which quotients fit.
 ///
+/// A divisor carrying a hand-poisoned `INT64_MIN` component is reported as
+/// `Overflow` before the reciprocal is formed. `reciprocal()` has to clamp such
+/// a component's `2^63` magnitude to `INT64_MAX`, so the reciprocal it returns
+/// is not the divisor's inverse, and multiplying by it would produce an
+/// *inexact* value this function would otherwise hand back as a success. This
+/// is the conservative side of the contract rather than the exact one: for some
+/// dividends -- `2 / (INT64_MIN/1)`, whose exact quotient is `-1/2^62` -- the
+/// answer is representable even though the reciprocal is not, and reaching it
+/// would mean carrying the unsigned magnitude through the cross-cancellation
+/// instead of going through `reciprocal()` at all. That would make `checkedDiv`
+/// accept quotients `dividedBy` still saturates, which is the one thing the
+/// paragraph above promises it will not do. It costs nothing for any value the
+/// type can actually produce: every constructor canonicalises, so `INT64_MIN`
+/// only ever reaches a component by direct assignment.
+///
 /// @param lhs Dividend.
 /// @param rhs Divisor.
 /// @return The exact quotient; `unexpected(RationalError::DivisionByZero)` if
 ///         @p rhs is zero; `unexpected(RationalError::Overflow)` if the
-///         quotient is not representable.
+///         quotient, or the divisor's reciprocal, is not representable.
 [[nodiscard]] constexpr std::expected<Rational, RationalError> checkedDiv(const Rational& lhs,
                                                                           const Rational& rhs) noexcept {
+    // The zero divisor is reported ahead of everything else, as it is by
+    // `reciprocal()` itself.
+    if (rhs.numerator == 0) {
+        return std::unexpected(RationalError::DivisionByZero);
+    }
+    // A poisoned component makes `reciprocal()` clamp, so what it returns is
+    // not this divisor's inverse and the product below would be inexact.
+    // Decline rather than hand an inexact value back as a success.
+    constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+    if (rhs.numerator == minValue || rhs.denominator == minValue) {
+        return std::unexpected(RationalError::Overflow);
+    }
     auto const divisorReciprocal = rhs.reciprocal();
     if (!divisorReciprocal.has_value()) {
         return std::unexpected(divisorReciprocal.error());
