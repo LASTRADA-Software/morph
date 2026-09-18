@@ -1,5 +1,6 @@
 var NAVTREEINDEX2 =
 {
+"d7/d6d/structmorph_1_1forms_1_1Ranged.html":[2,0,0,8,23],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html#a607e1d136db6d51bc20fd60259179ada":[2,0,0,8,23,4],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html#a67fe3e060b0f6774a83d913a16dce50e":[2,0,0,8,23,1],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html#a85688330d2b644abfe49ca96fd7359c7":[2,0,0,8,23,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX2 =
 "dc/d11/structmorph_1_1app_1_1WizardScreen.html":[2,0,0,0,2],
 "dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html":[2,0,0,9,8],
 "dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html#a1165e54df5387ce30972222227a67c71":[2,0,0,9,8,2],
-"dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html#a554f4b39d861af89bcbcffaf2a5f0aa7":[2,0,0,9,8,0],
-"dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html#a9999146cf4c8c65f3f80b757d0d547d8":[2,0,0,9,8,1]
+"dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html#a554f4b39d861af89bcbcffaf2a5f0aa7":[2,0,0,9,8,0]
 };

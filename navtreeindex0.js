@@ -47,8 +47,8 @@ var NAVTREEINDEX0 =
 "d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ac534551aa850902cd9b8fd45e134ade3":[2,0,0,15,4,4],
 "d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ad11f945b889e1f6d582a6bbd4fdfeaa5":[2,0,0,15,4,2],
 "d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40":[2,0,0,15,4,1],
-"d0/dd4/subscription__registry_8hpp.html":[3,0,0,0,0,2],
-"d0/dd4/subscription__registry_8hpp_source.html":[3,0,0,0,0,2],
+"d0/dd4/subscription__registry_8hpp.html":[3,0,0,0,0,3],
+"d0/dd4/subscription__registry_8hpp_source.html":[3,0,0,0,0,3],
 "d0/ddc/classmorph_1_1bridge_1_1Bridge.html":[2,0,0,3,1],
 "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a22e009f482dd20475ab4baa1e7a1cb3f":[2,0,0,3,1,9],
 "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a34fd4c7cc73e25a431fd4b9a87dee739":[2,0,0,3,1,6],
@@ -141,6 +141,7 @@ var NAVTREEINDEX0 =
 "d1/db1/structmorph_1_1forms_1_1Not.html#a1a4c2c921011d531f3c7302e003aa33d":[2,0,0,8,19,0],
 "d1/db1/structmorph_1_1forms_1_1Not.html#a7409d22528b67bd7846147caf43de5f3":[2,0,0,8,19,1],
 "d1/db1/structmorph_1_1forms_1_1Not.html#ae8b00489d6f6461ada9217306ae73bb8":[2,0,0,8,19,2],
+"d1/dbc/instance__directory_8hpp_source.html":[3,0,0,0,0,1],
 "d1/dd8/model__key_8hpp.html":[3,0,0,0,9],
 "d1/dd8/model__key_8hpp.html#a28cbd851334147678a680d1057cadcd3":[3,0,0,0,9,6],
 "d1/dd8/model__key_8hpp.html#a510036b6edf43c7f7a692d7c527175b5":[3,0,0,0,9,9],
@@ -248,6 +249,5 @@ var NAVTREEINDEX0 =
 "d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html":[1,0,0,6],
 "d3/deb/conceptmorph_1_1units_1_1Convertible.html":[1,0,2,5],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html":[2,0,0,16,2],
-"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0d712428fa45193506db2c03b41793aa":[2,0,0,16,2,1],
-"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a286541f7d30275b6004f8a5dcd999b7f":[2,0,0,16,2,20]
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0d712428fa45193506db2c03b41793aa":[2,0,0,16,2,1]
 };
