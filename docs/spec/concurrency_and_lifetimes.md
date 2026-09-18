@@ -313,6 +313,16 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   thread would reopen morph#486's use-after-free, and that is a contract break
   rather than a latent race to be rediscovered.
 
+  A structural alternative now exists alongside these four hooks and is what
+  replaces them: `IBackend::bindModel`/`promoteModel` take the executor the
+  continuation is delivered on as an argument, so the delivery thread is chosen
+  by the caller — which knows what its own teardown looks like — instead of by
+  the backend, which does not. That does not by itself close the window above;
+  it relocates the decision from a documented obligation on fifteen
+  implementors to a value one call site produces. Nothing in `Bridge` uses it
+  yet. See [core/backend.md](core/backend.md#the-structural-registration-surface--bindmodel-and-promotemodel)
+  and morph#522.
+
 `switchBackend()` and `whenBound()` were audited for the same shape and do not
 have it. Both are ordinary synchronous member functions called by the bridge's
 owner, not liveness-gated callbacks: neither takes a `CallbackToken`, and
