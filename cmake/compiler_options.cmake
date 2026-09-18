@@ -507,6 +507,20 @@ function(apply_sanitizers target mode)
             -fsanitize=undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g)
         target_link_options(${target} PRIVATE
             -fsanitize=undefined -fno-sanitize-recover=undefined)
+    else()
+        # No silent fall-through (morph#541). Without this arm, -DAF_SANITIZER=msan,
+        # =ASAN or a typo produced a *fully uninstrumented* build that configured,
+        # compiled and ran the entire suite green -- a sanitizer job reporting
+        # success having sanitized nothing, which is the failure mode this
+        # repository has hit most often. A configure-time error is the only place
+        # the mistake is still cheap: by build time every binary looks normal, and
+        # scripts/check_sanitizer_instrumentation.sh is the only thing that would
+        # notice, and only on the legs that run it.
+        message(FATAL_ERROR
+            "morph: apply_sanitizers(${target}): unknown sanitizer mode '${mode}'. "
+            "AF_SANITIZER must be one of: asan, tsan, ubsan (lower case). An "
+            "unrecognised value would otherwise leave this target uninstrumented "
+            "while the job that asked for a sanitizer reported success.")
     endif()
 endfunction()
 
