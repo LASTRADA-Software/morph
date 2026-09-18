@@ -189,16 +189,30 @@ TEST_CASE("benchmark: in-process execute round-trip", "[!benchmark][remote]") {
     BENCHMARK("RemoteServer round-trip (echo, 5 bytes)") {
         std::atomic<uint64_t> next{0};
         constexpr int n = 32;
-        std::atomic<int> done{0};
+        // Heap-allocated and co-owned by every reply callback, not a stack
+        // local captured by reference (morph#565). The wait below is bounded,
+        // so the body can and does return with replies still in flight; a
+        // stack-local counter is destroyed at that point and the straggler's
+        // `fetch_add` writes into a dead frame. Catch2 then re-enters this body
+        // for the next sample and constructs a fresh counter over the same
+        // stack slot, which is the write ThreadSanitizer reported racing
+        // against the late increment (2 data races, both frames in this test).
+        //
+        // The deadline stays: it is a benchmark timeout, not a correctness
+        // device. Its job is to keep a wedged server from turning a slow
+        // result into a hang; with the counter kept alive independently it no
+        // longer has to be right about anything, which is what lengthening it
+        // could never achieve.
+        auto done = std::make_shared<std::atomic<int>>(0);
         for (int i = 0; i < n; ++i) {
             req.callId = ++next;
             server->handle(morph::wire::encode(req),
-                           [&done](const std::string&) { done.fetch_add(1, std::memory_order_relaxed); });
+                           [done](const std::string&) { done->fetch_add(1, std::memory_order_relaxed); });
         }
         auto deadline = std::chrono::steady_clock::now() + 1s;
-        while (done.load() < n && std::chrono::steady_clock::now() < deadline) {
+        while (done->load() < n && std::chrono::steady_clock::now() < deadline) {
             std::this_thread::yield();
         }
-        return done.load();
+        return done->load();
     };
 }
