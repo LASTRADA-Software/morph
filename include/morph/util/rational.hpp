@@ -983,8 +983,8 @@ static_assert(std::is_standard_layout_v<Rational>);
     }
     constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
     auto const magnitude = detail::absU64(value.numerator);
-    auto const clampedMagnitude = magnitude > static_cast<std::uint64_t>(maxValue) ? maxValue
-                                                                                   : static_cast<std::int64_t>(magnitude);
+    auto const clampedMagnitude =
+        magnitude > static_cast<std::uint64_t>(maxValue) ? maxValue : static_cast<std::int64_t>(magnitude);
     return Rational{Numerator{clampedMagnitude}, Denominator{value.denominator}, value.decimalPlaces};
 }
 
