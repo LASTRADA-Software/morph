@@ -162,8 +162,13 @@ fi
 # A mapping target that was renamed away. The gate would otherwise demand a
 # change to a path no correct pull request can produce -- which is exactly what
 # adding the bare word `net` to the old list would have done.
+#
+# The new name deliberately sits outside docs/spec/: spelling a
+# docs/spec/<something>.md path that does not exist would be caught by
+# check_spec_citations.sh's own dangling-reference scan, which reads this file
+# like any other.
 make_skeleton "${scratch}/renamed"
-mv "${scratch}/renamed/docs/spec/core/backend.md" "${scratch}/renamed/docs/spec/core/transport.md"
+mv "${scratch}/renamed/docs/spec/core/backend.md" "${scratch}/renamed/docs/renamed-away.md"
 rm -f "${scratch}/renamed/docs/spec/security.md"
 expect_rejected_in_tree "a mapping whose doc targets have all been renamed away" \
     "${scratch}/renamed" "README.md" \

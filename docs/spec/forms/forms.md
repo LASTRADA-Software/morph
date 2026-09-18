@@ -510,6 +510,12 @@ output is unchanged: no `x-layout`, `x-group`, `x-section`, or `x-colspan` key
 is emitted, and a renderer lays every field out exactly as it always has
 (flat, `x-order` order).
 
+`groupKindName(GroupKind)` (`forms/layout.hpp`) is the one place the three
+enumerators are spelled for the wire — `"section"`, `"tab"`, `"accordion"`, in
+`x-layout.groups[].kind`. It is also the downgrade path: an out-of-range value
+names itself `"section"`, matching the renderer's documented fallback for a
+group kind it does not implement.
+
 ```cpp
 // morph::forms::FieldGroup / FieldSpan / GroupKind — forms/layout.hpp.
 enum class GroupKind { Section, Tab, Accordion };
@@ -746,6 +752,12 @@ is **opt-in**, exactly like `formLayout`, `fieldSpans`, and `formRules`: an
 action that says nothing keeps the auto-submit default and its generated schema
 is byte-for-byte unchanged, so adding the emitter changed no shipped schema.
 Declaring `explicitSubmit = false` is the same statement as not declaring it.
+
+The detection is the `HasExplicitSubmit<A>` concept — `true` when `A` declares
+an `explicitSubmit` member convertible to `bool`, the same shape as
+`HasFormRules<A>`. It answers only *whether the member is declared*; the
+emitter reads its value afterwards, which is why `= false` and declaring
+nothing produce the same schema.
 
 Deriving the flag instead — from some "does this action mutate" predicate — is
 deliberately **not** done. No such predicate exists in `forms.hpp`, and adding
@@ -1224,7 +1236,16 @@ case:
 `actionTypeId` is `ActionTraits<A>::typeId()`; `wireField` is the member's
 reflected wire key (the same name `mergeSchemaExtras` iterates via
 `forEachNamedMember`); group/rule/step/menu indexes are the 0-based position
-in their respective schema arrays. None of these keys are written into the
+in their respective schema arrays.
+
+The field key is assembled from three named pieces rather than formatted in
+one place, and a renderer reproducing this scheme in another language needs
+all three: `fieldKeyStem(actionTypeId, wireField)` builds the
+`<actionTypeId>.<wireField>` stem, `fieldSlotName(FieldSlot)` spells the slot
+suffix (`"label"`, `"help"`, `"placeholder"`), and `withSlot(stem, slot)`
+joins them with a `.`. `fieldKey()` is `withSlot(fieldKeyStem(...), slot)` and
+`explicitFieldKey()` is `withSlot(i18nKeyOverride, slot)` — which is why an
+override replaces the stem and nothing else. None of these keys are written into the
 schema — a renderer derives them itself from data it already has (the schema
 plus the `actionType` label it is rendering under), so declaring nothing
 changes zero bytes of any schema.
@@ -1413,21 +1434,30 @@ the client and the server evaluate identically from the same serialized form.
 
 ### The rule and condition kinds
 
-| Factory | Meaning | `x-rules` `kind` | Also valid as a condition? |
-|---|---|---|---|
-| `requiredWhen(field, cond)` | `field` must be engaged when `cond` holds. | `"requiredWhen"` | no (only ranges over conditions itself) |
-| `greater(a, b)` / `greaterOrEqual(a, b)` | `*a > *b` / `*a >= *b`. | `"greater"` / `"greaterOrEqual"` | yes |
-| `less(a, b)` / `lessOrEqual(a, b)` | `*a < *b` / `*a <= *b`. | `"less"` / `"lessOrEqual"` | yes |
-| `exactlyOneOf(f1, f2, ...)` | Exactly one listed field is engaged. | `"exactlyOneOf"` | no |
-| `atLeastOneOf(f1, f2, ...)` | At least one listed field is engaged. | `"atLeastOneOf"` | no |
-| `mutuallyExclusive(f1, f2, ...)` | At most one listed field is engaged. | `"mutuallyExclusive"` | no |
-| `visibleWhen(field, cond)` | **Presentation:** `field` is shown only while `cond` holds. | `"visibleWhen"` | no |
-| `readonlyWhen(field, cond)` | **Presentation:** `field` is editable only while `cond` does **not** hold. | `"readonlyWhen"` | no |
-| `engaged(field)` / `notEngaged(field)` | `field` is / is not engaged. | `"engaged"` / `"notEngaged"` | yes (condition-only) |
-| `equals(field, literal)` | `field`'s engaged value equals `literal`. | `"equals"` | yes (condition-only) |
-| `andOf(cond1, cond2, ...)` | Every listed condition holds (boolean AND). | `"and"` | yes — also usable directly as a top-level rule |
-| `orOf(cond1, cond2, ...)` | At least one listed condition holds (boolean OR). | `"or"` | yes — also usable directly as a top-level rule |
-| `notOf(cond)` | The nested condition does **not** hold (boolean NOT). | `"not"` | yes — also usable directly as a top-level rule |
+Every row names all three spellings of the same kind: the factory a C++ author
+calls, the `kind` string the schema carries, and the `RuleKind` enumerator the
+framework switches on. They are listed together because a reader emitting JSON
+and a reader writing C++ read the same table, and the C++ capitalisation is not
+derivable from the wire spelling by any rule stated anywhere.
+`scripts/check_spec_citations.sh` (check 6) reads `ruleKindName()`'s switch and
+requires each enumerator and its wire spelling to appear in one row here, so a
+kind added to the enum cannot reach the wire undocumented.
+
+| Factory | Meaning | `x-rules` `kind` | `RuleKind` enumerator | Also valid as a condition? |
+|---|---|---|---|---|
+| `requiredWhen(field, cond)` | `field` must be engaged when `cond` holds. | `"requiredWhen"` | `RuleKind::RequiredWhen` | no (only ranges over conditions itself) |
+| `greater(a, b)` / `greaterOrEqual(a, b)` | `*a > *b` / `*a >= *b`. | `"greater"` / `"greaterOrEqual"` | `RuleKind::Greater` / `RuleKind::GreaterOrEqual` | yes |
+| `less(a, b)` / `lessOrEqual(a, b)` | `*a < *b` / `*a <= *b`. | `"less"` / `"lessOrEqual"` | `RuleKind::Less` / `RuleKind::LessOrEqual` | yes |
+| `exactlyOneOf(f1, f2, ...)` | Exactly one listed field is engaged. | `"exactlyOneOf"` | `RuleKind::ExactlyOneOf` | no |
+| `atLeastOneOf(f1, f2, ...)` | At least one listed field is engaged. | `"atLeastOneOf"` | `RuleKind::AtLeastOneOf` | no |
+| `mutuallyExclusive(f1, f2, ...)` | At most one listed field is engaged. | `"mutuallyExclusive"` | `RuleKind::MutuallyExclusive` | no |
+| `visibleWhen(field, cond)` | **Presentation:** `field` is shown only while `cond` holds. | `"visibleWhen"` | `RuleKind::VisibleWhen` | no |
+| `readonlyWhen(field, cond)` | **Presentation:** `field` is editable only while `cond` does **not** hold. | `"readonlyWhen"` | `RuleKind::ReadonlyWhen` | no |
+| `engaged(field)` / `notEngaged(field)` | `field` is / is not engaged. | `"engaged"` / `"notEngaged"` | `RuleKind::Engaged` / `RuleKind::NotEngaged` | yes (condition-only) |
+| `equals(field, literal)` | `field`'s engaged value equals `literal`. | `"equals"` | `RuleKind::Equals` | yes (condition-only) |
+| `andOf(cond1, cond2, ...)` | Every listed condition holds (boolean AND). | `"and"` | `RuleKind::And` | yes — also usable directly as a top-level rule |
+| `orOf(cond1, cond2, ...)` | At least one listed condition holds (boolean OR). | `"or"` | `RuleKind::Or` | yes — also usable directly as a top-level rule |
+| `notOf(cond)` | The nested condition does **not** hold (boolean NOT). | `"not"` | `RuleKind::Not` | yes — also usable directly as a top-level rule |
 
 `engaged`/`notEngaged`/`requiredWhen`/the membership rules accept any
 `EngageableField` — an `EmptyCapableField` (`Quantity`/`Choice`/`Timestamp`) or
@@ -2065,6 +2095,7 @@ for the exhaustive tables and design rationale.
 | `EngageableField<T>` | concept | `EmptyCapableField<T>` or `std::optional<...>` — the broader "has an empty state" test the rule vocabulary uses. |
 | `Condition<Cond>` | concept | `true` when `Cond` declares `static constexpr bool isCondition = true` — the admission test for a nested condition. `VisibleWhen`/`ReadonlyWhen`/`RequiredWhen` deliberately do not declare it; see [What may be a condition](#what-may-be-a-condition--the-condition-concept). |
 | `ComparableAgainstLiteral<V, L>` | concept | `true` when a field of type `V` can be compared against a literal of type `L` at all. Constrains both `equals` overloads, so an incomparable pairing is an error at the call site. |
+| `RuleLiteral<L>` | concept | The closed set of literal types `equals` accepts: `std::int64_t`, `bool`, `std::string`, `math::Rational`, and a `FixedString` captured inline. It is what makes a literal serialise losslessly into `x-rules`; a type outside it is rejected at the call site rather than at schema-emission time. |
 | `RuleList<Rules...>` | class template | Holds an action's declared rules, in declaration order. Built by `ruleList(...)`; never constructed directly. |
 | `ruleList(rules...)` | function template | Composes rule/condition nodes into the `RuleList` an action assigns to `formRules`. |
 | `HasFormRules<A>` | concept | `true` when `A` declares a `static constexpr formRules` member. |
