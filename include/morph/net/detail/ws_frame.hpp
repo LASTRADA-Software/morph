@@ -51,7 +51,7 @@ namespace ws_frame_impl {
 // carries all four mask bytes.
 inline std::array<std::uint8_t, 4> randomMaskKey() {
     static thread_local std::random_device entropy;
-    auto const bits = static_cast<std::uint32_t>(entropy());
+    std::random_device::result_type const bits = entropy();
     return std::array<std::uint8_t, 4>{static_cast<std::uint8_t>(bits >> 24U), static_cast<std::uint8_t>(bits >> 16U),
                                        static_cast<std::uint8_t>(bits >> 8U), static_cast<std::uint8_t>(bits)};
 }
