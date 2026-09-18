@@ -852,15 +852,20 @@ private:
     /// instance already holds is a silent no-op rather than a displacement.
     /// Symmetrically, an instance that already holds a *different* real key is
     /// left exactly where it is — also a silent no-op — since instances never
-    /// change key (docs/spec/core/shared_instances.md); only a still-anonymous
-    /// `mid` (one with no directory key of its own yet) can ever be promoted.
+    /// change key (docs/spec/core/shared_instances.md); only a `mid` that has
+    /// never held a directory key can ever be promoted. That last part matters
+    /// here in particular: this server hands every keyed instance its own key
+    /// once, at construction, through `_registry.create(typeId, primary)` ->
+    /// `IModelHolder::attachIdentity`, and never updates it — so an instance
+    /// evicted from its key as poisoned stays ineligible even though the
+    /// directory no longer files it anywhere.
     /// @param env Decoded request; uses `typeId`, `primary`, `modelId`.
     void applyAssignLocked(const ::morph::wire::Envelope& env) {
         if (env.primary.empty()) {
             return;
         }
-        // A no-op unless the instance is live and still anonymous and the key is
-        // free -- `InstanceDirectory::promote` holds all three guards.
+        // A no-op unless the instance is live, has never held a directory key,
+        // and the key is free -- `InstanceDirectory::promote` holds the guards.
         (void)_instances.promote(::morph::exec::detail::ModelId{env.modelId},
                                  detail::DirectoryKey{env.typeId, env.primary});
     }

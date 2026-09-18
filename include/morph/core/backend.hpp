@@ -345,12 +345,15 @@ struct IBackend {
     /// ran on is given the generated key in place.
     ///
     /// A no-op when @p primary is empty, when @p mid is not live, when another
-    /// instance already holds that key, or when @p mid itself already holds a
-    /// *different* real key. The existing holder of a key always wins (a
-    /// promotion can never silently displace a directory entry other handlers
-    /// are attached to), and an already-keyed instance never changes key (a
-    /// promotion can never silently move one out from under handlers already
-    /// attached to it) — only a still-anonymous instance can ever be promoted.
+    /// instance already holds that key, when @p mid itself already holds a
+    /// *different* real key, or when @p mid was *created* for a key — even one
+    /// it has since been evicted from as poisoned. The existing holder of a key
+    /// always wins (a promotion can never silently displace a directory entry
+    /// other handlers are attached to), and an instance that was ever keyed
+    /// never changes key (a promotion can never silently move one out from
+    /// under handlers already attached to it, nor hand later attachers a model
+    /// that still identifies itself as the entity it was built for) — only an
+    /// instance that has never held a key can be promoted.
     ///
     /// @param mid     Live instance to promote.
     /// @param typeId  Model type id — the directory's first key component.
@@ -668,9 +671,9 @@ public:
             return;
         }
         std::scoped_lock const lock{_regMtx};
-        // A no-op unless `mid` is live and still anonymous and the key is free —
-        // `InstanceDirectory::promote` holds all three guards and the reasons
-        // for them.
+        // A no-op unless `mid` is live, has never held a directory key, and the
+        // key is free — `InstanceDirectory::promote` holds all the guards and
+        // the reasons for them.
         (void)_instances.promote(mid, detail::DirectoryKey{typeId, std::string{primary}});
     }
 

@@ -210,6 +210,20 @@ API surface).
   in lockstep by convention — so the register-or-attach logic, the eviction and
   the promotion exist once rather than once per backend.
 
+- **`assignPrimary` could re-key an instance evicted from a key as poisoned.**
+  Eviction unfiles the instance but does not make it anonymous: it was created
+  for its original key and told so once, permanently, through
+  `IModelHolder::attachIdentity`, and the action log is attached under that key
+  too. Promoting it onto a second key therefore handed every later attacher a
+  model that still identified itself as the first entity — and, since the
+  poison came with it, the very next attach to the new key evicted it again and
+  silently created a duplicate under a key the host had just assigned by hand.
+  Promotion now applies only to an instance that has *never* held a key; the
+  rest is a silent no-op like `assignPrimary`'s other declined cases, so the
+  poisoned instance stays unshareable and the key stays free for a healthy one,
+  exactly as `docs/spec/core/shared_instances.md`'s Failure modes section
+  describes.
+
 - **Sockets `morph::net::SocketServer` accepted were left non-blocking on
   macOS/BSD, failing every WebSocket handshake.** A regression from the
   accept-loop wakeup work below: since that change `listen()` puts the

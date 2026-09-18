@@ -329,12 +329,17 @@ established means an older peer ignores what it does not understand.
   without losing state: an action that creates its own entity runs on a
   not-yet-keyed instance, and only the reply carries the generated key, so the
   instance the action ran on is promoted rather than abandoned for a fresh
-  one. Promotion only ever applies to a still-anonymous instance: the
-  existing holder of a key always wins (promoting onto a taken key is a
-  silent no-op, never a displacement), and an instance that already holds a
+  one. Promotion only ever applies to an instance that has **never** held a
+  key: the existing holder of a key always wins (promoting onto a taken key is
+  a silent no-op, never a displacement), and an instance that already holds a
   *different* real key is left exactly where it is (also a silent no-op) —
   instances never change key, so `assign` never reaches for one still in use
-  elsewhere.
+  elsewhere. "Never held a key" is deliberately stronger than "holds no key
+  right now": an instance evicted from its key as poisoned (see
+  [Failure modes](#failure-modes)) is unfiled but not anonymous — it was
+  created for that key and told so once, permanently, via
+  `IModelHolder::attachIdentity` — so `assign` leaves it alone too rather than
+  handing later attachers a model that identifies itself as a different entity.
 - **A new `instances` request.** Takes a model type id, replies with the live
   primary keys for it. Subject to `authorize` like any other request; see below.
 
@@ -571,8 +576,11 @@ strictly reduces pressure on it.
   does not self-heal: its primary is already set to the poisoned key, so
   retrying the same keyed action re-points nowhere (`attachHandler`'s
   no-op-on-same-primary guard skips the backend entirely) — it keeps its
-  broken instance until it releases and re-attaches from scratch. A
-  *different* handler attaching to the same key afterward is unaffected and
+  broken instance until it releases and re-attaches from scratch. Nor can it
+  be re-keyed out of the problem: `assign` refuses an instance that was ever
+  filed under a key, evicted or not, so promoting the poisoned instance onto a
+  second key is a silent no-op and that key stays free for a healthy instance.
+  A *different* handler attaching to the same key afterward is unaffected and
   gets a fresh instance.
 - **`instances()` raced against `attach`.** Documented as inherent: the snapshot
   is stale on arrival. An `attach` to a key from a stale list is not an error —

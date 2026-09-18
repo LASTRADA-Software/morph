@@ -1339,13 +1339,17 @@ TEST_CASE("deregistering a poisoned instance evicted from the directory tears it
 // whose first action failed "must not be handed to a *new* attacher". The
 // window in which it could be is the gap between the outcome being known and
 // the directory being told, and the framework itself hands control to host code
-// inside that gap -- `endSpan`, the metric sink and the `Completion`'s own
-// callbacks all run on the way out of a dispatch, and any of them may attach.
+// inside that gap -- the trace sink's `endSpan`, the metric sink and the
+// `Completion`'s own callbacks all run on the way out of a dispatch, and any of
+// them may attach.
 //
-// The metric sink is the earliest of those and so pins the whole gap: a sink
-// that attaches on `executeErrors` is running at the instant the first action is
-// known to have failed. It must already be too late to be handed the failed
-// instance.
+// `endSpan` is the *earliest* of the three (`backend.hpp`: `settle` then
+// `endSpan` then `emitMetric` then the completion; `remote.hpp` in both its
+// success and error branches likewise), so a trace sink that attaches from
+// `endSpan(id, ok == false)` pins the whole gap. Attaching from the metric sink
+// instead would leave the first stretch of it -- the one between settling and
+// `endSpan` -- unpinned, and a regression that moved settling to just after
+// `endSpan` would sail through.
 TEST_CASE("an attach racing a failed first action out of the dispatch is not handed the failed instance",
           "[shared-instances][backend]") {
     morph::observe::ScopedObserveOverride const guard;
@@ -1358,14 +1362,20 @@ TEST_CASE("an attach racing a failed first action out of the dispatch is not han
 
     std::atomic<std::uint64_t> attached{0};
     std::atomic<bool> reentered{false};
-    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
-        // `registerModelShared` below emits `registerCount` into this same
-        // sink; the latch keeps that re-entry from recursing.
-        if (evt.metric != morph::observe::Metric::executeErrors || reentered.exchange(true)) {
-            return;
-        }
-        attached.store(backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "1"}).v);
-    });
+    morph::observe::setTraceSink(
+        // `beginSpan` has to return a non-zero id: `endSpan` treats `0` as the
+        // "tracing was off" sentinel and returns without calling the sink.
+        {.beginSpan = [](std::string_view, std::string_view, std::string_view) { return morph::observe::SpanId{1}; },
+         .endSpan =
+             [&](morph::observe::SpanId, bool ok) {
+                 // The latch keeps any later span from re-entering; only the first
+                 // action's outcome is the one under test.
+                 if (ok || reentered.exchange(true)) {
+                     return;
+                 }
+                 attached.store(
+                     backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "1"}).v);
+             }});
 
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SHI_CounterModel";
@@ -1428,16 +1438,22 @@ TEST_CASE("the server does not hand out an instance between its first action fai
 
     std::atomic<std::uint64_t> attached{0};
     std::atomic<bool> reentered{false};
-    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
-        if (evt.metric != morph::observe::Metric::executeErrors || reentered.exchange(true)) {
-            return;
-        }
-        auto second = morph::wire::decode(
-            server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
-        if (second.kind == "ok") {
-            attached.store(second.modelId);
-        }
-    });
+    // `endSpan`, not the metric sink, for the reason spelled out on the local
+    // test above: it is the earlier of the two hand-offs, so it is the one that
+    // pins the whole window.
+    morph::observe::setTraceSink(
+        {.beginSpan = [](std::string_view, std::string_view, std::string_view) { return morph::observe::SpanId{1}; },
+         .endSpan =
+             [&](morph::observe::SpanId, bool ok) {
+                 if (ok || reentered.exchange(true)) {
+                     return;
+                 }
+                 auto second = morph::wire::decode(server->handleInline(
+                     morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
+                 if (second.kind == "ok") {
+                     attached.store(second.modelId);
+                 }
+             }});
 
     morph::wire::Envelope failExec;
     failExec.kind = "execute";
@@ -1455,13 +1471,22 @@ TEST_CASE("the server does not hand out an instance between its first action fai
     REQUIRE(attached.load() != reg.modelId);
 }
 
-// morph#523: `InstanceDirectory::promote` drops any hydration state the
-// instance still carries. The only instance that reaches it carrying one is a
-// shared instance whose first action failed and which a later attach has since
-// evicted -- poisoned, but anonymous again, and so eligible for promotion. If
-// the poison came along, the host's own `assignPrimary` would be undone by the
-// very next attach to the key it just assigned.
-TEST_CASE("promoting an evicted poisoned instance clears the poison it was evicted for",
+// morph#523: an instance that was *created* for a directory key can never be
+// promoted onto a second one, and "created for a key" outlives being filed
+// under it. `InstanceDirectory::attach` clears the `sharedKey` of an instance it
+// evicts as poisoned, so from the directory's side an evicted instance looks
+// anonymous -- but it was told its own key once, permanently, at construction
+// (`ModelRegistryFactory::create(typeId, primary)` ->
+// `IModelHolder::attachIdentity`, plus the action log's `contextKey`), and
+// nothing updates that afterwards. Re-filing it under "B" would hand every later
+// attacher to "B" a model that still identifies itself as "A", which is the
+// re-keying `docs/spec/core/shared_instances.md` ("Re-pointing, not re-keying")
+// forbids; and carrying its poison along instead would make the very next attach
+// to "B" evict it again and silently create a duplicate under the key the host
+// had just assigned by hand. Refusing the promotion outright is what the spec's
+// Failure modes section already asks for: the handler that hit the failure keeps
+// its broken instance, and the key stays free for a healthy one.
+TEST_CASE("an instance evicted from its key as poisoned is never re-keyed by assignPrimary",
           "[shared-instances][backend]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::InlineExecutor callbackExec;
@@ -1488,13 +1513,23 @@ TEST_CASE("promoting an evicted poisoned instance clears the poison it was evict
         backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "A"});
     REQUIRE(replacement != first);
 
-    // The host files that still-live instance under a key of its own choosing.
+    // The host tries to file that still-live instance under a key of its own
+    // choosing. It must be a silent no-op, like every other case `assignPrimary`
+    // declines: the directory still lists only the replacement under "A".
     backend.assignPrimary(first, "SHI_CounterModel", "B");
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"A"});
+
+    // "B" was therefore left free, and attaching to it creates a healthy
+    // instance rather than joining the poisoned one.
+    auto const joined = backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "B"});
+    REQUIRE(joined != first);
+    REQUIRE(joined != replacement);
     REQUIRE(backend.listInstances("SHI_CounterModel").size() == 2);
 
-    // The assignment has to stick: attaching to "B" joins `first`, rather than
-    // evicting it again over a failure that belonged to the key it no longer has.
-    auto const joined = backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "B"});
-    REQUIRE(joined == first);
+    // And it is a *single* instance under "B": had the promotion gone through
+    // carrying the poison, this second attach would have evicted `joined`'s
+    // predecessor and created a duplicate instead of joining it.
+    auto const rejoined = backend.registerModelShared("SHI_CounterModel", factory, {.contextKey = {}, .primary = "B"});
+    REQUIRE(rejoined == joined);
     REQUIRE(backend.listInstances("SHI_CounterModel").size() == 2);
 }

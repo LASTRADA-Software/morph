@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -122,6 +121,11 @@ struct Instance {
     /// private instance has nothing to hydrate, and an instance promoted into
     /// the directory by `promote()` has already run the action that produced its
     /// key, so neither can be poisoned.
+    ///
+    /// It therefore doubles as the permanent mark of "this instance was created
+    /// for a directory key", which outlives `sharedKey` — `attach()` clears that
+    /// on eviction, `hydration` survives — and is what makes an evicted instance
+    /// ineligible for `promote()`. See `promote()` for why that matters.
     std::shared_ptr<HydrationState> hydration;
 };
 
@@ -229,30 +233,49 @@ public:
     /// an instance that already holds a real key never changes it — both are
     /// silent no-ops, because instances never mutate their own identity.
     ///
-    /// A promoted instance gets no `HydrationState`: the action that produced
-    /// its key has already succeeded, so there is nothing left to poison.
+    /// Only an instance that has **never** held a key can be promoted, and that
+    /// is a stronger test than "has no key right now". `attach()` clears the
+    /// `sharedKey` of an instance it evicts as poisoned, so an evicted instance
+    /// looks anonymous from the directory's side — but it was created *for* its
+    /// original key and told so once, permanently: `RemoteServer` builds its
+    /// holder through `ModelRegistryFactory::create(typeId, primary)`, which
+    /// calls `IModelHolder::attachIdentity(primary)`, and attaches the action
+    /// log under that same key. Nothing updates either afterwards, so re-filing
+    /// such an instance under a second key would hand every later attacher a
+    /// model that still identifies itself as the first one — the re-keying
+    /// `docs/spec/core/shared_instances.md` ("Re-pointing, not re-keying")
+    /// forbids outright. A non-null `hydration` is exactly the mark of
+    /// "created for a directory key", so it is what disqualifies the record.
+    ///
+    /// Its own Failure modes section already says what happens instead: the
+    /// handler that hit the failed first action "does not self-heal… it keeps
+    /// its broken instance until it releases and re-attaches from scratch".
+    /// The promotion is a silent no-op like the other three, the instance stays
+    /// anonymous and unshareable, and the key the host asked for is left free
+    /// for the next attacher to create a healthy instance under.
+    ///
+    /// A promoted instance therefore never carries a `HydrationState`: the
+    /// action that produced its key has already succeeded, so there is nothing
+    /// left to poison.
     /// @param mid Live instance to promote.
     /// @param key Directory key to file it under.
     /// @return `true` if the promotion happened.
     bool promote(::morph::exec::detail::ModelId mid, DirectoryKey key) {
         auto instIter = _instances.find(mid);
-        if (instIter == _instances.end() || _byKey.contains(key) || instIter->second.sharedKey.has_value()) {
+        if (instIter == _instances.end() || _byKey.contains(key)) {
+            return false;
+        }
+        Instance& inst = instIter->second;
+        if (inst.sharedKey.has_value() || inst.hydration) {
             return false;
         }
         indexKey(key, mid);
-        Instance& inst = instIter->second;
         inst.sharedKey = std::move(key);
-        // A still-private instance is now referenced by the directory and needs
-        // the reference count that goes with it. One it already had is left
-        // alone: promotion adds no attachment of its own.
-        inst.attachCount = std::max<std::size_t>(inst.attachCount, 1);
-        // Dropped, not merely absent: the only instance that reaches here
-        // already carrying one is a shared instance whose first action failed
-        // and which `attach()` has since evicted (poisoned, but anonymous again).
-        // Leaving that state attached to the new key would make the very next
-        // `attach()` evict this instance a second time and silently create a
-        // duplicate under a key the host just assigned by hand.
-        inst.hydration.reset();
+        // The instance was private until now — `insertPrivate` is the only way
+        // in for a record with no `hydration`, and it files one with no
+        // attachments at all. The directory now references it, so it gets the
+        // one attachment that reference stands for.
+        inst.attachCount = 1;
         return true;
     }
 

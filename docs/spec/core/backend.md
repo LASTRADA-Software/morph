@@ -261,7 +261,8 @@ optional non-blocking counterpart, `assignPrimaryAsync`, preferred by
 `assignPrimary` when a backend returns `false`. Its `onRegistered` echoes the
 `ModelId` back for symmetry with `registerModelAsync`'s callback shape, and
 fires for the no-op cases `assignPrimary` documents (empty primary, dead `mid`,
-key already taken, `mid` already keyed differently) — those are not backend
+key already taken, `mid` already keyed differently, `mid` created for a key it
+has since been evicted from) — those are not backend
 failures, so they resolve `onRegistered` exactly as the synchronous path
 returns normally for them. `onError` is for a genuine backend or transport
 failure only.
