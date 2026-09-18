@@ -34,6 +34,16 @@ qt_add_qml_module(morph_forms_module
 target_link_libraries(morph_forms_module PUBLIC morph::morph Qt6::Quick Qt6::Qml)
 target_compile_features(morph_forms_module PUBLIC cxx_std_23)
 
+# The shipped renderer's own compiled code (I18nCatalog) and the two suites
+# below were never sanitizer-instrumented (morph#542): both suites are ctest
+# cases, so a sanitizer preset with -DMORPH_BUILD_FORMS_QML=ON ran them and
+# learned nothing. Same static-library caveat as morph_qt_impl in the root
+# CMakeLists.txt -- every consumer here (the QML plugin, both test
+# executables) is instrumented on the same preset.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_forms_module ${AF_SANITIZER})
+endif()
+
 # Qt Quick Test suite for the shipped renderer's own logic (schema parsing,
 # exact digit arithmetic, unit conversion, readiness) -- independent of any
 # app/demo. Later tasks add more tst_*.qml files here; -input (below) picks
@@ -49,6 +59,10 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
 
     qt_add_executable(morph_forms_qml_tests tests/tst_main.cpp)
     target_link_libraries(morph_forms_qml_tests PRIVATE morph_forms_moduleplugin Qt6::QuickTest)
+
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_forms_qml_tests ${AF_SANITIZER})
+    endif()
 
     # The shared x-rules corpus (morph#176) has two readers: this suite and
     # tests/test_forms_rule_corpus.cpp. Both are pointed at the one file from
@@ -87,5 +101,9 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
     qt_add_executable(morph_forms_controller_core_tests tests/test_forms_controller_core.cpp)
     target_link_libraries(morph_forms_controller_core_tests PRIVATE morph::qt_forms Catch2::Catch2
                                                                    morph_test_log_level)
+
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_forms_controller_core_tests ${AF_SANITIZER})
+    endif()
     add_test(NAME forms_controller_core COMMAND morph_forms_controller_core_tests)
 endif()

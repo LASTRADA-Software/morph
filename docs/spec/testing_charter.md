@@ -67,6 +67,8 @@ floor means anything.
 | AddressSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-asan`), `ladder-sanitizers` | The CI job (nonzero exit on any diagnostic) |
 | UndefinedBehaviorSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-ubsan`), `ladder-sanitizers` | The CI job |
 | ThreadSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-tsan`), `kanban-tsan` | The CI job |
+| A sanitizer leg can fail at all | `scripts/check_sanitizer_can_fail.sh` | `drift-guard` | The check: real undefined behaviour compiled with `apply_sanitizers()`'s own flags must make the process exit non-zero, and an unknown `AF_SANITIZER` must fail the configure (morph#541) |
+| Every sanitized binary is really sanitized | `scripts/check_sanitizer_instrumentation.sh` | `linux-sanitizers`, `ladder-sanitizers`, `kanban-tsan` | The check: every binary `ctest` will run on a sanitizer leg must carry that sanitizer's runtime symbols (morph#542) |
 | Valgrind (memcheck) | Runtime instrumentation | `valgrind` CI job | The CI job |
 | Long-running / soak | `tests/soak/` | Local / on demand (`-DMORPH_BUILD_LOAD_TESTS=ON`; not a CI leg — see `docs/spec/testing_strategy.md`) | Those tests' own assertions over many cycles |
 | Compile-time contract checks | `tests/compile_checks/` | Every configure that reaches `tests/CMakeLists.txt` | `FATAL_ERROR` at configure time |

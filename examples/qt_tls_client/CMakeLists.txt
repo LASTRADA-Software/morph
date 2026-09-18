@@ -12,6 +12,15 @@ target_link_libraries(morph_qt_tls_example PRIVATE morph_qt_impl)
 apply_warnings(morph_qt_tls_example)
 apply_bigobj(morph_qt_tls_example)
 
+# This example is a ctest case (`qt_tls_example_runs`, below), so on a
+# sanitizer preset it is a suite the job runs -- and, until morph#542, one it
+# ran uninstrumented. It also links morph_qt_impl, which is instrumented on
+# those presets; a consumer that is not would fail to link against it, the way
+# morph_test_main's comment in the root CMakeLists.txt records.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_qt_tls_example ${AF_SANITIZER})
+endif()
+
 target_compile_definitions(morph_qt_tls_example PRIVATE
     QT_TLS_EXAMPLE_CERTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/certs"
 )

@@ -802,6 +802,15 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: cmake --build --preset clang-tsan
 
+      # The same assertion linux-sanitizers and ladder-sanitizers make, for the
+      # same reason (morph#542): this job's whole claim is that kanban's stress
+      # test ran under ThreadSanitizer, and an uninstrumented binary makes that
+      # claim while proving nothing. Keyed on `__tsan_`, not `__asan_` — an
+      # ASan-only assertion on a TSan leg is itself a control that measures
+      # nothing.
+      - name: Every ctest binary is instrumented
+        run: bash scripts/check_sanitizer_instrumentation.sh build/clang-tsan tsan
+
       # Every ladder ctest case only ever carries the "ladder"/"ladder-<rung>"
       # labels morph_add_rung() applies (cmake/morph_add_rung.cmake) — Catch2's
       # own tags ([kanban][stress][tsan]) are never translated into ctest
@@ -814,6 +823,14 @@ jobs:
       - name: Test (kanban's TSan-tagged stress test only)
         env:
           QT_QPA_PLATFORM: offscreen
+          # The suppression file linux-sanitizers' Test step already passes,
+          # missing here (morph#542). Both entries are libstdc++ refcounts for
+          # a shared exception, decremented inside an uninstrumented
+          # libstdc++.so.6 (morph#476); the evidence is in cmake/tsan.supp.
+          # Without it this leg is a coin toss on a false positive that the
+          # other TSan leg already knows is one — and the failure mode of a
+          # known false positive is that the next real one is waved past.
+          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp
         run: ctest --preset clang-tsan -L ladder-kanban -R ThreadSanitizer --output-on-failure
 
   # ── Linux: Qt WebSocket backend build + tests ─────────────────────────
@@ -1502,26 +1519,19 @@ jobs:
       # checked". That is not hypothetical — before the AF_SANITIZER blocks
       # landed in cmake/morph_add_rung.cmake and examples/common/CMakeLists.txt,
       # -DAF_SANITIZER=asan instrumented morph_tests and nothing under
-      # examples/. Assert the instrumentation is really there before trusting
-      # a green run.
-      - name: Verify rung binaries are actually instrumented
+      # examples/.
+      #
+      # This used to be a hand-rolled `nm | grep __asan_` over
+      # `examples/*/ladder_*_tests` alone, which is the same shape of blind
+      # spot one level up: it asserted the instrumentation of the binaries
+      # someone thought to name, and this job also builds tests/qt,
+      # examples/qt_tls_client and examples/concepts, none of which the glob
+      # reaches (morph#542). The shared script walks what ctest will actually
+      # run instead of a pattern, so a suite added tomorrow is covered by
+      # having been added.
+      - name: Every ctest binary is instrumented
         if: steps.filter.outputs.run == 'true'
-        run: |
-          set -euo pipefail
-          missing=0
-          for exe in build/clang-asan/examples/*/ladder_*_tests; do
-            [ -x "$exe" ] || continue
-            if nm -C "$exe" 2>/dev/null | grep -q "__asan_"; then
-              echo "instrumented: $exe"
-            else
-              echo "NOT INSTRUMENTED: $exe" >&2
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::ladder test binaries were built without ASan instrumentation" >&2
-            exit 1
-          fi
+        run: bash scripts/check_sanitizer_instrumentation.sh build/clang-asan asan
 
       # detect_leaks=0: LeakSanitizer reports allocations the Qt platform
       # plugins and QML engine intentionally keep for process lifetime, which
@@ -1535,6 +1545,36 @@ jobs:
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: ctest --preset clang-asan -L ladder -LE stress --output-on-failure
+
+      # The Qt transport suites, which no sanitizer leg ran. They were not even
+      # instrumented until morph#542, and instrumenting a suite nothing runs
+      # would swap one vacuous control for another: this is the only leg that
+      # builds Qt under a sanitizer, so if these run anywhere it is here.
+      # linux-sanitizers deliberately keeps Qt out of its matrix (see its
+      # Configure comment), and kanban-tsan runs exactly one named stress test.
+      #
+      # Measured before adding this step, on clang 22 with these same options:
+      # all 67 cases across tests/qt, tests/net_qt_interop and
+      # qt_tls_example_runs pass clean under -fsanitize=address,undefined. This
+      # job's configure leaves MORPH_BUILD_NET off, so the filter below selects
+      # the 57 that exist here -- tests/qt plus the TLS example.
+      #
+      # `--no-tests=error` because `-R` over test names is exactly the filter
+      # that goes stale silently: a renamed TEST_CASE would otherwise leave
+      # ctest reporting success having run nothing (morph#466 is the same trap
+      # one level down).
+      - name: Test (the Qt transport suites, which no sanitizer leg ran)
+        if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
+          # detect_leaks=0 for the reason the ladder step above gives: Qt's
+          # platform plugins and QML engine keep allocations for process
+          # lifetime. The memory-error and UB checks stay fully on.
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          ctest --preset clang-asan --no-tests=error --output-on-failure \
+            -R 'morph::qt::|qt_tls_example_runs'
 
   # ── Linux: every optional feature enabled at once ─────────────────────
   # Every MORPH_BUILD_* option below is off by default, and until this job

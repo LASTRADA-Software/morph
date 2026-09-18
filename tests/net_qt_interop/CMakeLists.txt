@@ -19,6 +19,13 @@ if(AF_COVERAGE)
     apply_coverage(morph_net_qt_interop_tests)
 endif()
 
+# Likewise missing entirely (morph#542). This suite drives morph::net -- raw
+# sockets, an I/O thread and a hand-rolled frame reader -- against Qt's
+# transport, which is the part of the tree a sanitizer has most to say about.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_net_qt_interop_tests ${AF_SANITIZER})
+endif()
+
 include(Catch)
 
 get_target_property(_qt_core_dll Qt6::Core IMPORTED_LOCATION)

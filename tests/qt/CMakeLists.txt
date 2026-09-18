@@ -10,6 +10,17 @@ add_executable(qt_test_client qt_test_client_main.cpp qt_test_models.hpp)
 target_link_libraries(qt_test_client PRIVATE morph_qt_impl)
 apply_warnings(qt_test_client)
 
+# AF_SANITIZER, for the same reason these two carry apply_coverage(): the
+# include/morph/qt code exercised across the process boundary only runs *here*,
+# in the spawned child, so a sanitizer applied to the parent alone watches the
+# half of the conversation that is not being tested (morph#542). An instrumented
+# child reports on its own stderr and exits non-zero, which the parent's
+# process-exit assertions already surface.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(qt_test_server ${AF_SANITIZER})
+    apply_sanitizers(qt_test_client ${AF_SANITIZER})
+endif()
+
 # TEST although neither is a ctest case: they are the other end of the
 # process-separation tests above, so the include/morph/qt code exercised across
 # that OS boundary only exists in *these* two binaries' coverage mapping. An
@@ -50,6 +61,14 @@ apply_warnings(morph_qt_tests)
 # uploaded report (morph#403).
 if(AF_COVERAGE)
     apply_coverage(morph_qt_tests)
+endif()
+
+# Was missing for the same reason and with the same consequence as the coverage
+# block above: morph is header-only, so this target compiled its own
+# uninstrumented copy of every include/morph/qt header while a job named for a
+# sanitizer ran the suite and learned nothing from it (morph#542).
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_qt_tests ${AF_SANITIZER})
 endif()
 
 # Make sure the helpers exist before the test binary tries to spawn them.

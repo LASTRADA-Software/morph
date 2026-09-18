@@ -187,6 +187,14 @@ counter, `/proc/self/status`, and locally-owned atomic call counters), so
 their pass/fail signal never depends on how (or whether) a host application
 has wired up observability.
 
+Both `morph_soak` and `morph_bench` are sanitizer-instrumented when
+`AF_SANITIZER` is set (morph#542). They are opt-in, so no default sanitizer leg
+pays for them; the reason to instrument them rather than exempt them is that
+churn over thousands of cycles is exactly the shape of test whose finding is a
+leak or a race and not a failed assertion. Under a sanitizer preset the
+benchmark's published numbers are not comparable with an ordinary run's and are
+not meant to be — there it is a correctness run over the dispatch path.
+
 ## Load / latency benchmark (`tests/bench/`)
 
 Built only under `-DMORPH_BUILD_LOAD_TESTS=ON` alongside the soak tests (same
