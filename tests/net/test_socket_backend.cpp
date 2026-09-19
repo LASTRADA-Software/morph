@@ -16,12 +16,14 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/net/detail/tcp_socket.hpp>
 #include <morph/net/detail/ws_frame.hpp>
 #include <morph/net/detail/ws_handshake.hpp>
 #include <morph/net/socket_backend.hpp>
 #include <morph/net/socket_server.hpp>
 #include <morph/session/session.hpp>
+#include <mutex>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -2123,4 +2125,112 @@ TEST_CASE("SocketBackend: a reconnect handler can re-bind through the structural
 
     // The transport is unharmed: the synchronous channel was never involved.
     CHECK(fixture.backend->registerModel("SbEchoModel", nullptr).v != 0U);
+}
+
+// ── contextKey on a private registration (morph#587) ─────────────────────────
+//
+// `RemoteServer::attachLogIfConfigured` (core/remote.hpp) returns *without
+// consulting its `LogProvider` at all* when the envelope's `contextKey` is
+// empty, so dropping the key on the way out is not "a log missing its entity
+// key" -- the instance is never journalled. Both of this backend's
+// private-registration edges therefore have to put the key on the wire: the
+// native `bindModel` path and the blocking `registerModelWithContext`. The
+// shared/attach shapes always carried it.
+//
+// Mutation check (AGENTS.md, "would this check still pass if the feature did
+// nothing"): every assertion below is on the provider having been consulted
+// with the key, or on the resulting journal entry's `entityKey` -- never on the
+// registration merely succeeding, which it did before the fix too. Measured:
+// with `makeRegister(request.typeId)` restored at the `bindModel` call site the
+// first section fails on `requestedFor`, and with
+// `registerModelWithContext`'s override removed the second fails the same way.
+TEST_CASE("SocketBackend: a private registration carries contextKey to the server's log provider",
+          "[net][socket_backend][registration-surface][action_log]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    // The provider runs on the server's own strand, the assertions on this
+    // thread; the mutex is what makes that handoff a data race TSan will not
+    // flag rather than one it will.
+    std::mutex providerMtx;
+    std::vector<std::string> requestedFor;
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    server->setLogProvider([&](std::string_view modelType, std::string_view contextKey) {
+        std::scoped_lock const lock{providerMtx};
+        requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
+        return log;
+    });
+
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    // Declared before `backend` so it outlives it -- see the ordering note on
+    // the first registration-surface test above.
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
+    REQUIRE(backend.waitForConnected());
+
+    SECTION("through the native bindModel path, and the attached log journals under that key") {
+        morph::exec::detail::ModelId bound{};
+        std::atomic<bool> done{false};
+        backend
+            .bindModel(morph::backend::detail::BindRequest{.typeId = "SbEchoModel",
+                                                           .factory = nullptr,
+                                                           .contextKey = "acct-587",
+                                                           .primary = {},
+                                                           .current = {}},
+                       callerExec)
+            .thenDetached([&](morph::exec::detail::ModelId mid) {
+                bound = mid;
+                done.store(true);
+            });
+        REQUIRE(drainUntil(callerExec, done));
+        REQUIRE(bound.v != 0U);
+        {
+            std::scoped_lock const lock{providerMtx};
+            CHECK(requestedFor == std::vector<std::string>{"SbEchoModel:acct-587"});
+        }
+
+        // …and the log the provider handed over is really attached to that
+        // instance: an action executed against it lands in the journal under
+        // the same key. Hand-built `ActionCall` for the reason the
+        // attachModel test above gives.
+        morph::backend::detail::ActionCall call{
+            .modelTypeId = "SbEchoModel",
+            .actionTypeId = "SbEchoAction",
+            .serializeAction = [] { return std::string{R"({"value":7})"}; },
+            .deserializeResult =
+                [](std::string_view body) {
+                    return std::static_pointer_cast<void>(std::make_shared<std::string>(body));
+                },
+            .localOp = nullptr,
+            .session = {},
+        };
+        morph::exec::ThreadPoolExecutor cbPool{1};
+        std::atomic<bool> settled{false};
+        backend.execute(bound, std::move(call), &cbPool)
+            .then([&](const std::shared_ptr<void>&) { settled.store(true); })
+            .onError([&](const std::exception_ptr&) { settled.store(true); });
+        spinUntil([&] { return settled.load(); });
+        REQUIRE(settled.load());
+
+        auto entries = log->entries();
+        REQUIRE(entries.size() == 1);
+        CHECK(entries[0].entityKey == "acct-587");
+        CHECK(entries[0].actionType == "SbEchoAction");
+    }
+
+    SECTION("through the blocking registerModelWithContext path") {
+        auto const mid = backend.registerModelWithContext("SbEchoModel", nullptr, "acct-blocking");
+        REQUIRE(mid.v != 0U);
+        std::scoped_lock const lock{providerMtx};
+        CHECK(requestedFor == std::vector<std::string>{"SbEchoModel:acct-blocking"});
+    }
+
+    SECTION("while plain registerModel still sends no key, so the provider is not consulted") {
+        auto const mid = backend.registerModel("SbEchoModel", nullptr);
+        REQUIRE(mid.v != 0U);
+        std::scoped_lock const lock{providerMtx};
+        CHECK(requestedFor.empty());
+    }
 }

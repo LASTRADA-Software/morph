@@ -183,25 +183,42 @@ public:
     /// is outstanding throws immediately rather than queuing. The factory
     /// argument is ignored — model construction is delegated to the server.
     /// @param typeId  String type-id of the model to register.
+    /// @param factory Ignored — the server constructs via its own registry.
     /// @return `ModelId` assigned by the server.
     /// @throws std::runtime_error if the server replies with an error, the
     ///         socket is not connected, or a synchronous call is already in flight.
     ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId,
-        std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/) override {
-        auto env = ::morph::wire::makeRegister(typeId);
+        std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override {
+        return registerModelWithContext(typeId, std::move(factory), {});
+    }
+
+    /// @brief Sends a `register` message carrying @p contextKey and blocks for the reply.
+    ///
+    /// `IBackend::registerModelWithContext`'s default drops @p contextKey, which
+    /// is right for `LocalBackend` — the caller's own factory closure already
+    /// captures the identity — but wrong for a backend whose instances live on
+    /// the far side of a wire protocol: the server constructs the holder itself,
+    /// so `contextKey` is the *only* channel by which the instance's identity
+    /// reaches it. `RemoteServer::attachLogIfConfigured` returns without
+    /// consulting its `LogProvider` at all when the envelope's `contextKey` is
+    /// empty, so dropping it here does not merely lose an entity key — it leaves
+    /// the instance unjournalled (morph#587). `SimulatedRemoteBackend` overrides
+    /// this for the same reason; the two must not disagree.
+    ///
+    /// Same synchronous-call constraint as `registerModel`. The factory argument
+    /// is ignored — model construction is delegated to the server.
+    /// @param typeId     String type-id of the model to register.
+    /// @param contextKey Stable identity of the new instance; empty if none.
+    /// @return `ModelId` assigned by the server.
+    /// @throws std::runtime_error if the server replies with an error, the
+    ///         socket is not connected, or a synchronous call is already in flight.
+    ::morph::exec::detail::ModelId registerModelWithContext(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
+        std::string_view contextKey) override {
+        auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
         env.session = currentSession();
-        std::string replyJson;
-        try {
-            replyJson = sendSync(::morph::wire::encode(env));
-        } catch (const std::exception& exc) {
-            throw std::runtime_error(std::string{"register failed: "} + exc.what());
-        }
-        auto reply = ::morph::wire::decode(replyJson);
-        if (reply.kind == "ok") {
-            return ::morph::exec::detail::ModelId{reply.modelId};
-        }
-        throw std::runtime_error("register failed: " + reply.message);
+        return sendControlForId(env, "register");
     }
 
     /// @brief Sends a shared (register-or-attach) `register` and blocks for the reply.
@@ -310,12 +327,8 @@ public:
             deregisterModel(request.current);
         }
         if (request.primary.empty()) {
-            // `contextKey` is dropped here because the blocking path drops it:
-            // `IBackend::registerModelWithContext`'s default forwards to
-            // `registerModel` and discards it, and this backend does not
-            // override it. Keeping the native path bit-for-bit identical
-            // matters more than changing that here; it is filed separately.
-            return sendControlAsync(::morph::wire::makeRegister(request.typeId), "register", std::nullopt, cbExec);
+            return sendControlAsync(::morph::wire::makeRegister(request.typeId, request.contextKey), "register",
+                                    std::nullopt, cbExec);
         }
         if (request.current.v != 0U) {
             return sendControlAsync(
