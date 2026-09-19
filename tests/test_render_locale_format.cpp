@@ -178,3 +178,80 @@ TEST_CASE("normalizeLocaleNumber: the loose shapes stay accepted, in step with t
     REQUIRE(morph::render::normalizeLocaleNumber("5.", ".", ",") == "5.");
     REQUIRE(morph::render::normalizeLocaleNumber(".", ".", ",") == ".");
 }
+
+// ── morph#574: a group separator is validated, not stripped ──────────────────
+//
+// Before this, every occurrence of the group separator was dropped
+// unconditionally, so a de-DE user typing the US form "1.5" into a price field
+// submitted 15 -- a valid-looking number, ten times too large, with no
+// diagnostic anywhere. The suite above has 18 cases and not one of them was
+// cross-locale: every single-locale case passes with the stripping or with the
+// validation, which is exactly the check that would still pass if the feature
+// did nothing.
+
+TEST_CASE("normalizeLocaleNumber: the decimal separator of another locale is rejected, not absorbed",
+          "[render][locale][morph574]") {
+    // THE case. de-DE locale, US-style decimal typed: this returned "15".
+    CHECK(normalizeLocaleNumber("1.5", ",", ".") == std::nullopt);
+    CHECK(normalizeLocaleNumber("1.50", ",", ".") == std::nullopt);
+    CHECK(normalizeLocaleNumber("1.2.3.4", ",", ".") == std::nullopt);
+
+    // The mirror image: en-US locale, EU-style decimal typed. Returned "15".
+    CHECK(normalizeLocaleNumber("1,5", ".", ",") == std::nullopt);
+
+    // And with a multi-byte group separator, where the same mistake is a
+    // narrow no-break space away from a well-formed entry.
+    CHECK(normalizeLocaleNumber(std::string{"1"} + std::string{kNarrowNbsp} + "5", ",", kNarrowNbsp) == std::nullopt);
+}
+
+TEST_CASE("normalizeLocaleNumber: equal decimal and group separators are rejected rather than guessed",
+          "[render][locale][morph574]") {
+    // One string in both roles has no defensible reading, and the old code
+    // silently ate the decimal: this returned "15".
+    CHECK(normalizeLocaleNumber("1.5", ".", ".") == std::nullopt);
+    // Not even the shapes that would be unambiguous if you squinted: the
+    // rejection is on the configuration, not on the text.
+    CHECK(normalizeLocaleNumber("1.050", ".", ".") == std::nullopt);
+    CHECK(normalizeLocaleNumber("1", ".", ".") == std::nullopt);
+    // Control: an empty group separator is "this locale does not group", which
+    // is a different statement and stays legal.
+    CHECK(normalizeLocaleNumber("1.5", ".", "") == "1.5");
+}
+
+TEST_CASE("normalizeLocaleNumber: a group separator must sit on a group boundary", "[render][locale][morph574]") {
+    // Preceded by one to three digits...
+    CHECK(normalizeLocaleNumber("1.050", "", ".") == "1050");
+    CHECK(normalizeLocaleNumber("12.050", "", ".") == "12050");
+    CHECK(normalizeLocaleNumber("123.050", "", ".") == "123050");
+    CHECK(normalizeLocaleNumber("1234.050", "", ".") == std::nullopt);
+    CHECK(normalizeLocaleNumber(".050", "", ".") == std::nullopt);
+
+    // ...followed by exactly three, at every group and at the end of the
+    // integer part.
+    CHECK(normalizeLocaleNumber("1.05", "", ".") == std::nullopt);
+    CHECK(normalizeLocaleNumber("1.0500", "", ".") == std::nullopt);
+    CHECK(normalizeLocaleNumber("1.050.", "", ".") == std::nullopt);
+    CHECK(normalizeLocaleNumber("1.000.00", "", ".") == std::nullopt);
+    CHECK(normalizeLocaleNumber("1.000.000", "", ".") == "1000000");
+
+    // ...and never after the decimal separator.
+    CHECK(normalizeLocaleNumber("1,050.25", ",", ".") == std::nullopt);
+    CHECK(normalizeLocaleNumber("1.000,250.25", ",", ".") == std::nullopt);
+}
+
+TEST_CASE("normalizeLocaleNumber: every well-formed locale entry still normalises", "[render][locale][morph574]") {
+    // The validation must not cost a single legitimate entry -- this is the
+    // half of the change that the rejection cases cannot show.
+    CHECK(normalizeLocaleNumber("1.050,25", ",", ".") == "1050.25");
+    CHECK(normalizeLocaleNumber("-1.050,25", ",", ".") == "-1050.25");
+    CHECK(normalizeLocaleNumber("1.000.000,25", ",", ".") == "1000000.25");
+    CHECK(normalizeLocaleNumber("1050,25", ",", ".") == "1050.25");   // ungrouped
+    CHECK(normalizeLocaleNumber("1,050.25", ".", ",") == "1050.25");  // en-US
+    CHECK(normalizeLocaleNumber(std::string{"1"} + std::string{kNarrowNbsp} + "050,25", ",", kNarrowNbsp) ==
+          "1050.25");  // fr-FR
+
+    // A grouped entry round-trips through the display direction unchanged.
+    auto const canonical = normalizeLocaleNumber("1.000.000,25", ",", ".");
+    REQUIRE(canonical.has_value());
+    CHECK(formatCanonicalNumber(*canonical, ",", ".") == "1.000.000,25");
+}

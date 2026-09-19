@@ -807,32 +807,68 @@ Frame {
     // The payload's exact digit routines below stay entirely locale-free —
     // this is the one control-edge conversion step, applied once per entry.
 
+    // Grouping is *validated*, not stripped (morph#574). A group separator is
+    // only dropped where one can legally be -- preceded by one to three digits,
+    // followed by exactly three more, never after the decimal separator.
+    // Stripping it unconditionally, which both this function and its C++ twin
+    // used to do, turns a de-DE user's US-style "1.5" into 15: a valid number,
+    // ten times too large, that nothing downstream can recognise as wrong.
+    // Verified against the C++ side on the same inputs before and after; the
+    // two edges agreed on every wrong answer and now agree on every rejection.
     function normalizeLocaleNumber(text, decimalSeparator, groupSeparator) {
-        let stripped = ""
-        for (let i = 0; i < text.length; ++i) {
-            if (groupSeparator !== "" && text[i] === groupSeparator)
-                continue
-            stripped += text[i]
-        }
+        // One string cannot play both roles: there is no reading of "1.5" this
+        // function could defend, so it reports rather than guesses.
+        if (groupSeparator !== "" && groupSeparator === decimalSeparator)
+            return null
+
+        const groupSize = 3
         let canonical = ""
         let sawDecimal = false
-        for (let i = 0; i < stripped.length; ++i) {
-            const ch = stripped[i]
-            if (ch === decimalSeparator) {
+        let sawAnyOutput = false
+        let digitsInGroup = 0
+        let sawGroup = false
+        for (let i = 0; i < text.length; ++i) {
+            const ch = text[i]
+            if (groupSeparator !== "" && ch === groupSeparator) {
+                if (sawDecimal)
+                    return null          // grouping belongs to the integer part only
+                // The first group is one to three digits; every later one is
+                // exactly three.
+                const wellPlaced = sawGroup ? digitsInGroup === groupSize
+                                            : (digitsInGroup >= 1 && digitsInGroup <= groupSize)
+                if (!wellPlaced)
+                    return null
+                sawGroup = true
+                digitsInGroup = 0
+                continue
+            }
+            if (decimalSeparator !== "" && ch === decimalSeparator) {
                 if (sawDecimal)
                     return null
+                if (sawGroup && digitsInGroup !== groupSize)
+                    return null          // the last group is short: "1.5" in de-DE
                 sawDecimal = true
                 canonical += "."
-            } else if (ch === "-") {
-                if (i !== 0)
+                // The decimal point is output, so a sign straight after it is
+                // not leading (morph#497).
+                sawAnyOutput = true
+                continue
+            }
+            if (ch === "-") {
+                if (sawAnyOutput)
                     return null
                 canonical += ch
             } else if (ch >= "0" && ch <= "9") {
                 canonical += ch
+                ++digitsInGroup
             } else {
                 return null
             }
+            sawAnyOutput = true
         }
+        // A grouped integer part has to end on a group boundary too.
+        if (sawGroup && !sawDecimal && digitsInGroup !== groupSize)
+            return null
         if (canonical === "" || canonical === "-")
             return null
         return canonical

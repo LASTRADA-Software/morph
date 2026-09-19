@@ -33,7 +33,7 @@ namespace morph::render {
 /// @brief Converts a locale-formatted numeric string to canonical
 ///        (`-?[0-9]+(\.[0-9]+)?`) text.
 ///
-/// Strips every occurrence of @p groupSeparator, then replaces every
+/// Drops @p groupSeparator where it is correctly placed, and replaces every
 /// occurrence of @p decimalSeparator with `.`. Passing `decimalSeparator ==
 /// "."` and an empty @p groupSeparator is the identity transform (the
 /// locale-free behavior). Malformed input (a second decimal separator, a
@@ -42,6 +42,25 @@ namespace morph::render {
 /// decimal point counts as output, so a sign placed straight after the separator
 /// ("`,-5`" in a de-DE locale) is rejected -- matching the QML mirror in
 /// `src/qt/forms/qml/DynamicForm.qml`, which has always rejected it (morph#497).
+///
+/// @par Grouping is validated, not stripped (morph#574)
+/// A group separator is only dropped where a group separator can legally be:
+/// preceded by one to three digits, followed by exactly three more, and never
+/// after the decimal separator. Anything else is malformed and reported as
+/// such. Stripping unconditionally instead is a wrong *value*, not a rejected
+/// one: a de-DE user typing the US form `"1.5"` into a price field submitted
+/// `15`, and nothing downstream could tell -- the result is a perfectly valid
+/// number, ten times too large. `"1.50"` gave `150`, `"1.2.3.4"` gave `1234`,
+/// and the en-US mirror image `"1,5"` gave `15`.
+///
+/// @par The two separators must differ
+/// When @p groupSeparator is non-empty and equal to @p decimalSeparator the
+/// entry is rejected: with one string in both roles there is no reading of
+/// `"1.5"` the function could defend. This is a caller (locale-configuration)
+/// error rather than a user one, but it is reported through the return value
+/// like any other malformed entry, deliberately not through an assertion --
+/// an assertion would make the two build configurations behave differently at
+/// a control edge, and would be untestable in the one where it fires.
 ///
 /// The result is `.`-decimal and digit-only, but is **not** narrowed to
 /// `-?[0-9]+(\.[0-9]+)?`: a bare "`.`", a leading "`.5`" and a trailing "`5.`"
@@ -61,20 +80,44 @@ namespace morph::render {
 [[nodiscard]] inline std::optional<std::string> normalizeLocaleNumber(std::string_view text,
                                                                       std::string_view decimalSeparator,
                                                                       std::string_view groupSeparator) {
+    if (!groupSeparator.empty() && groupSeparator == decimalSeparator) {
+        return std::nullopt;  // one string cannot play both roles: see above
+    }
+
     std::string canonical;
     canonical.reserve(text.size());
     bool sawDecimal = false;
     bool sawAnyOutput = false;
+    // Grouping state: how many digits since the last group separator (or since
+    // the start), and whether any group separator has been seen at all.
+    std::size_t digitsInGroup = 0;
+    bool sawGroup = false;
+    constexpr std::size_t kGroupSize = 3;
 
     for (std::size_t i = 0; i < text.size();) {
         const std::string_view rest = text.substr(i);
         if (!groupSeparator.empty() && rest.starts_with(groupSeparator)) {
+            if (sawDecimal) {
+                return std::nullopt;  // grouping belongs to the integer part only
+            }
+            // The first group is one to three digits ("1.050", "12.050",
+            // "123.050"); every later one is exactly three.
+            bool const wellPlaced =
+                sawGroup ? digitsInGroup == kGroupSize : (digitsInGroup >= 1 && digitsInGroup <= kGroupSize);
+            if (!wellPlaced) {
+                return std::nullopt;  // not a group boundary: malformed
+            }
+            sawGroup = true;
+            digitsInGroup = 0;
             i += groupSeparator.size();
-            continue;  // grouping is display-only; never accepted back on entry
+            continue;  // grouping is display-only; never carried into the output
         }
         if (!decimalSeparator.empty() && rest.starts_with(decimalSeparator)) {
             if (sawDecimal) {
                 return std::nullopt;  // a second decimal separator: malformed
+            }
+            if (sawGroup && digitsInGroup != kGroupSize) {
+                return std::nullopt;  // the last group is short: "1.5" in de-DE
             }
             sawDecimal = true;
             canonical += '.';
@@ -99,11 +142,18 @@ namespace morph::render {
             canonical += chr;
         } else if (chr >= '0' && chr <= '9') {
             canonical += chr;
+            ++digitsInGroup;
         } else {
             return std::nullopt;  // any other character is malformed
         }
         sawAnyOutput = true;
         ++i;
+    }
+
+    // A grouped integer part has to end on a group boundary too: "1.05" and
+    // "1.050." are as malformed as "1.5" is.
+    if (sawGroup && !sawDecimal && digitsInGroup != kGroupSize) {
+        return std::nullopt;
     }
 
     if (canonical.empty() || canonical == "-") {

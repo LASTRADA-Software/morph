@@ -388,11 +388,13 @@ data; the submit→poll job idiom.
   unit at `dp=0` and the type system carries it natively. Named test: a
   JPY leg stores and displays as a true integer, with no `x-rules` gate
   required.
-- **Locale entry**: in de-DE the group separator is "." and the shipped
-  normalizer strips it anywhere — typing `1.5` submits **15**, a silent 10×
-  money error. Pin the behavior, fix (positional grouping validation or
-  reject), and mirror the vectors through `normalizeLocaleNumber` (D5).
-  Related: result *display* in the shipped forms renderer goes through
+- **Locale entry** — *fixed, morph#574*: in de-DE the group separator is "."
+  and the shipped normalizer stripped it anywhere, so typing `1.5` submitted
+  **15**, a silent 10× money error. `normalizeLocaleNumber` and its QML mirror
+  now validate group placement (one to three digits before, exactly three
+  after, never past the decimal separator) and report a malformed entry
+  instead; `"1.050,25"` still normalises. Remaining from this item:
+  result *display* in the shipped forms renderer goes through
   `double` division — balances beyond 2^53 drift on readback while the
   payload is exact. This rung's own views do not: every money label binds
   text the bridge pre-rendered through `ledger::formatMoney`, which is exact

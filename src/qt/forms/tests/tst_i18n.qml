@@ -137,6 +137,32 @@ Item {
             compare(localeForm.previewLine, '{"mass":{"num":1050250,"den":1000,"dp":3}}')
         }
 
+        // morph#574. The de-DE locale groups with "." and this form's user
+        // typed the US decimal form. Stripping the group separator
+        // unconditionally -- which this mirror did, byte for byte in step with
+        // its C++ twin -- submitted 1.5 as 15: a valid payload, ten times too
+        // large, with nothing downstream able to tell. The field is now
+        // reported malformed, which is what the user can act on.
+        function test_foreignDecimalSeparatorIsRejectedNotAbsorbed() {
+            localeForm.setFieldValue("mass", "1.5")
+            verify(!localeForm.ready)
+            compare(localeForm.previewLine, "")
+
+            localeForm.setFieldValue("mass", "1.50")
+            verify(!localeForm.ready)
+
+            // A group separator off a group boundary is malformed wherever it
+            // sits, not only at the end.
+            localeForm.setFieldValue("mass", "1234.050,25")
+            verify(!localeForm.ready)
+
+            // Control: the well-formed entry still goes through, so the
+            // rejection above is about placement and not about "." at all.
+            localeForm.setFieldValue("mass", "1.050,25")
+            verify(localeForm.ready)
+            compare(localeForm.previewLine, '{"mass":{"num":1050250,"den":1000,"dp":3}}')
+        }
+
         function test_zonedTimestampRoundTripsToUtc() {
             zonedForm.setFieldValue("when", "2026-07-05T16:30:00")  // 16:30 in UTC+2
             verify(zonedForm.ready)
