@@ -534,10 +534,20 @@ private:
 
 // A backend with no async registration path at all (registerModelSharedAsync
 // defaults to `return false`, so ensureBoundAsync always falls back to the
-// synchronous path), whose synchronous registerModelShared throws --
-// exercises ensureBoundAsync's own synchronous-fallback `catch (...)`
-// (Task 15a finding B2), the ensureBoundAsync counterpart of
-// attachHandlerAsync's identical-shaped fallback catch.
+// blocking path), whose synchronous register throws -- exercises
+// ensureBoundAsync's own fallback failure path (Task 15a finding B2), the
+// ensureBoundAsync counterpart of attachHandlerAsync's identical-shaped one.
+//
+// Both verbs throw, not just registerModelShared. `ensureBoundAsync` asks for an
+// *anonymous* instance -- `registerModelShared` with an empty `primary` -- and
+// `IBackend::registerModelShared` documents that case as degrading to
+// `registerModelWithContext`; every backend in the tree implements the degrade
+// as its first statement. Since morph#568 the fallback goes through
+// `IBackend::bindModel`, whose `BindRequest` names that shape directly
+// (`primary` empty, `current` zero) and therefore reaches
+// `registerModelWithContext`, so a double that threw only from
+// `registerModelShared` would quietly stop failing and this test would pass by
+// registering successfully instead of by surfacing a throw.
 class ThrowingSyncRegisterSharedBackend : public morph::backend::detail::IBackend {
 public:
     morph::exec::detail::ModelId registerModel(
@@ -552,6 +562,12 @@ public:
     }
     void notifyBackendChanged() override {}
     void cancelPending(const std::exception_ptr&) override {}
+
+    morph::exec::detail::ModelId registerModelWithContext(
+        const std::string&, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()>,
+        std::string_view) override {
+        throw std::runtime_error("registerModelShared failed synchronously");
+    }
 
     morph::exec::detail::ModelId registerModelShared(
         const std::string&, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()>,
@@ -1862,13 +1878,15 @@ TEST_CASE(
     "(Task 15a finding B2)",
     "[bridge][registration][issue26]") {
     // Distinct from the test above: ThrowingDispatchBackend's throw comes from
-    // the ASYNC dispatch entry point itself (registerModelSharedAsync), before
-    // any fallback is even considered. ThrowingSyncRegisterSharedBackend
+    // the legacy ASYNC dispatch entry point itself (registerModelSharedAsync),
+    // before any fallback is even considered, and is caught by
+    // ensureBoundAsync's `catch (...)`. ThrowingSyncRegisterSharedBackend
     // instead offers no async path at all (registerModelSharedAsync's default
-    // `return false`), so ensureBoundAsync falls through to running the
-    // synchronous registerModelShared body under the same lock -- and that
-    // synchronous call is what throws here, exercising the fallback's own
-    // `catch (...)` (bridge.hpp's ensureBoundAsync, ~line 751).
+    // `return false`), so ensureBoundAsync falls through to `bindModel`, whose
+    // default runs the blocking register from inside the call. That throw is
+    // turned into a rejection by `IBackend::bindModel` rather than propagating
+    // -- one failure channel, the returned `Completion` -- and must still reach
+    // @p onDone, with the original exception rather than a stringified one.
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "AR_Model";
     binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARModel>(); };
