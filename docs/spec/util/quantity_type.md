@@ -257,10 +257,11 @@ in-code references to one are references to `std::formatter<Quantity>`.
 
 `formatRationalDecimal` takes the numerator's magnitude through
 `math::detail::absU64`, in unsigned arithmetic. It negated in `int64_t` until
-morph#496, which is undefined for `INT64_MIN` — reachable because the
-whole-integer `Rational{value, DecimalPlaces{n}}` constructor does not
-canonicalise, so the clamp that would otherwise remove the trap value never
-ran.
+morph#496, which is undefined for `INT64_MIN`. Since morph#537 every `Rational`
+constructor canonicalises — including the whole-integer
+`Rational{value, DecimalPlaces{n}}` one — so no *constructed* value carries the
+trap value. `numerator` is still a public member, so one can be assigned
+directly, and the formatter stays defined for that.
 
 **The decimal form.** `formatRationalDecimal` renders the exact `Rational` as a
 fixed decimal at its **runtime `DecimalPlaces`** and then trims trailing zeros

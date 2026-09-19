@@ -155,12 +155,11 @@ TEST_CASE("checkedSub mirrors checkedAdd", "[rational][checked]") {
     REQUIRE(ok.has_value());
     CHECK(*ok == whole(2));
 
-    // kMin + 1 (== -INT64_MAX), not kMin: constructing a Rational whose
-    // numerator is INT64_MIN is itself undefined behaviour -- canonicalise()
-    // negates the numerator unguarded, and -INT64_MIN is not representable.
-    // setWire guards that case on the wire path; the public constructor does
-    // not. Tracked separately; this test stays inside the representable range
-    // so it measures checkedSub rather than that.
+    // kMin + 1 (== -INT64_MAX), not kMin: `whole(kMin)` does not construct a
+    // Rational holding INT64_MIN. canonicalise() clamps such a numerator to
+    // -INT64_MAX and logs at error (morph#537), so passing kMin here would
+    // measure that clamp -- and the clamp's log -- rather than checkedSub.
+    // This test stays inside the representable range on purpose.
     //
     // -INT64_MAX - 2 is the first difference that genuinely does not fit
     // (-INT64_MAX - 1 is exactly INT64_MIN, which still does).
@@ -357,6 +356,163 @@ TEST_CASE("An intermediate-only overflow saturates toward the true sign", "[rati
     const Rational negLhs{Numerator{-1}, Denominator{kMax}, DecimalPlaces{2}};
     const Rational negRhs{Numerator{-1}, Denominator{kMax - 1}, DecimalPlaces{2}};
     CHECK((negLhs + negRhs).numerator == -kMax);
+}
+
+TEST_CASE("Whole-integer INT64_MIN construction is canonicalised", "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                 morph::log::LogLevel::error};
+
+    const Rational value{kMin, DecimalPlaces{2}};
+    CHECK(value.numerator == -kMax);
+    CHECK(value.denominator == 1);
+}
+
+TEST_CASE("Public INT64_MIN numerator operations stay defined", "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                 morph::log::LogLevel::error};
+
+    Rational raw{0, DecimalPlaces{2}};
+    raw.numerator = kMin;
+
+    CHECK((-raw).numerator == kMax);
+    CHECK(abs(raw).numerator == kMax);
+
+    const auto inverse = raw.reciprocal();
+    REQUIRE(inverse.has_value());
+    CHECK(inverse->numerator == -1);
+    CHECK(inverse->denominator == kMax);
+
+    CHECK((raw * whole(2)).numerator == -kMax);
+    const auto checked = checkedMul(raw, whole(2));
+    REQUIRE_FALSE(checked.has_value());
+    CHECK(checked.error() == RationalError::Overflow);
+}
+
+// Cross-cancellation takes both gcd operands as *magnitudes*. Reinterpreting a
+// negative denominator as uint64_t instead yields 2^64 - |d|, whose gcd with
+// the other numerator is a different number -- and one that need not divide the
+// denominator at all, so the reduction truncates and the value changes.
+// 1/-4 * 3/1 is the shortest witness: gcd(3, 4) == 1, but
+// gcd(3, 2^64 - 4) == 3, which divides 3 and not -4. A negative denominator is
+// a poisoned state for the same reason an INT64_MIN numerator is -- the members
+// are public -- and master handled it correctly, so this guards a regression
+// rather than a gap.
+TEST_CASE("Multiplication cross-cancels on magnitudes, not a reinterpreted denominator",
+          "[rational][checked][saturate]") {
+    Rational poisoned{0, DecimalPlaces{2}};
+    poisoned.numerator = 1;
+    poisoned.denominator = -4;
+
+    const auto product = poisoned * whole(3);
+    CHECK(product.numerator == -3);
+    CHECK(product.denominator == 4);
+
+    const auto checked = checkedMul(poisoned, whole(3));
+    REQUIRE(checked.has_value());
+    CHECK(checked->numerator == -3);
+    CHECK(checked->denominator == 4);
+}
+
+// reciprocal() used to negate `denominator` directly, which is the very UB this
+// change exists to remove -- just in the other component. The value here is
+// -1/-2^63, a hair above zero, so its inverse is 2^63 and clamps to INT64_MAX.
+// A signed negation wraps to INT64_MIN instead and lands on -INT64_MAX: the
+// wrong sign, not merely the wrong magnitude.
+TEST_CASE("reciprocal is defined for a poisoned INT64_MIN denominator", "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                 morph::log::LogLevel::error};
+
+    Rational raw{0, DecimalPlaces{2}};
+    raw.numerator = -1;
+    raw.denominator = kMin;
+
+    const auto inverse = raw.reciprocal();
+    REQUIRE(inverse.has_value());
+    CHECK(inverse->numerator == kMax);
+    CHECK(inverse->denominator == 1);
+}
+
+// compareForSaturation asks `*this <=> -rhs`, so an overflowing addition puts
+// the poisoned operand through unary negation. Under a signed negation that
+// wraps to INT64_MIN the comparison inverts and the sum saturates toward
+// +INT64_MAX -- the opposite end from the true sum.
+TEST_CASE("An overflowing addition with a poisoned addend saturates toward the true sign",
+          "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                 morph::log::LogLevel::error};
+
+    Rational raw{0, DecimalPlaces{2}};
+    raw.numerator = kMin;
+
+    const auto sum = whole(-1) + raw;
+    CHECK(sum.numerator == -kMax);
+    CHECK(sum.denominator == 1);
+}
+
+// checkedMul promises exact-or-nothing, and INT64_MIN is not an exactness this
+// type can keep: canonicalise() clamps such a component to -INT64_MAX. The
+// numerator case needs no poisoned operand at all -- (-2^62) * 2 is two
+// ordinary canonical values whose product is exactly INT64_MIN.
+TEST_CASE("checkedMul reports a reduced product of exactly INT64_MIN as overflow", "[rational][checked]") {
+    constexpr auto halfMin = kMin / 2;  // -2^62, perfectly representable
+
+    const auto numeratorSide = checkedMul(whole(halfMin), whole(2));
+    REQUIRE_FALSE(numeratorSide.has_value());
+    CHECK(numeratorSide.error() == RationalError::Overflow);
+
+    // The denominator side of the same rule. A negative denominator is a
+    // poisoned state, so this one has to be built by hand.
+    Rational poisoned{0, DecimalPlaces{2}};
+    poisoned.numerator = 1;
+    poisoned.denominator = halfMin;
+    const Rational half{Numerator{1}, Denominator{2}, DecimalPlaces{2}};
+
+    const auto denominatorSide = checkedMul(poisoned, half);
+    REQUIRE_FALSE(denominatorSide.has_value());
+    CHECK(denominatorSide.error() == RationalError::Overflow);
+}
+
+TEST_CASE("checkedMul reports a poisoned INT64_MIN numerator times one as overflow", "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                 morph::log::LogLevel::error};
+
+    Rational raw{0, DecimalPlaces{2}};
+    raw.numerator = kMin;
+
+    // mulOverflows(INT64_MIN, 1) is correctly false -- the product fits an
+    // int64_t. It is canonicalisation that changes it afterwards, which is why
+    // the predicate has to know about representability and not just width.
+    const auto product = checkedMul(raw, whole(1));
+    REQUIRE_FALSE(product.has_value());
+    CHECK(product.error() == RationalError::Overflow);
+}
+
+// reciprocal() has to clamp a poisoned component's 2^63 magnitude, so the value
+// it returns is not the divisor's inverse and multiplying by it is inexact.
+// checkedDiv is the exact-or-nothing form, so it declines instead of handing
+// that back as a success. Deliberately conservative: 2 / (INT64_MIN/1) has the
+// representable exact quotient -1/2^62. See checkedDiv's own doc comment.
+TEST_CASE("checkedDiv declines a divisor whose reciprocal is not representable", "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                 morph::log::LogLevel::error};
+
+    Rational poisonedNumerator{0, DecimalPlaces{2}};
+    poisonedNumerator.numerator = kMin;
+    const auto byNumerator = checkedDiv(whole(2), poisonedNumerator);
+    REQUIRE_FALSE(byNumerator.has_value());
+    CHECK(byNumerator.error() == RationalError::Overflow);
+
+    Rational poisonedDenominator{0, DecimalPlaces{2}};
+    poisonedDenominator.numerator = -1;
+    poisonedDenominator.denominator = kMin;
+    const auto byDenominator = checkedDiv(whole(2), poisonedDenominator);
+    REQUIRE_FALSE(byDenominator.has_value());
+    CHECK(byDenominator.error() == RationalError::Overflow);
+
+    // Still reports the zero divisor ahead of everything else.
+    const auto byZero = checkedDiv(whole(2), whole(0));
+    REQUIRE_FALSE(byZero.has_value());
+    CHECK(byZero.error() == RationalError::DivisionByZero);
 }
 
 TEST_CASE("A numerator of INT64_MIN is clamped, not undefined", "[rational][checked][saturate]") {
