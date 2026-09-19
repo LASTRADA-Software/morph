@@ -566,7 +566,7 @@ struct ASTNode {
     /// The compiler-generated destructor releases that chain recursively —
     /// `~shared_ptr` -> `~ASTNode` -> `~shared_ptr` -> ... — one stack frame
     /// per node, and a long enough chain runs the stack out. Measured
-    /// (morph#574, clang 20, `-O0`, 8 MiB stack): a 21,000-node chain
+    /// (morph#574, clang 22, `-O0`, 8 MiB stack): a 21,000-node chain
     /// segfaults on destruction, while an optimised build survives 200,000
     /// because clang turns the same chain into a loop. "Crashes in Debug,
     /// survives in Release" is the worst signature a defect can have, so the

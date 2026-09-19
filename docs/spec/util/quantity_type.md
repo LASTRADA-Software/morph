@@ -463,12 +463,25 @@ the stack, so none of the walks is recursive:
   recursive call would: render-or-descend-left, take-left-descend-right,
   combine.
 
-Measured (morph#574, clang 20 and clang 22, `-O0`, 8 MiB stack): before this,
-destroying a 21,000-node chain segfaulted and `equation()` segfaulted inside
-`renderSymbolic` at 25,000 nodes. The destruction case *survived* 200,000 nodes
-at `-O2`, because clang rewrites that particular chain into a loop — "crashes in
-Debug, survives in Release" — which is precisely why the flattening is a
-specified property of the type rather than something left to the optimiser.
+Measured against the recursive code (morph#574, 8 MiB stack, clang 22.1.8 and
+gcc 16.2.1):
+
+| walk | build | last depth that returned | first that segfaulted |
+|---|---|---|---|
+| destruction | clang `-O0` | 20,800 | 21,000 |
+| destruction | clang `-O2` | 200,000 | — none found |
+| `equation()` | clang `-O0` | 24,000 | 25,000 |
+| `equation()` | clang `-O2` | 50,000 | 60,000 |
+| `equation()` | gcc `-O2` | — | 40,000 |
+
+Two things follow, and both are why the flattening is a specified property of
+the type rather than something left to the optimiser. Destruction *had no
+failing depth at all* under `-O2`, because clang rewrites that particular
+`shared_ptr` chain into a loop — so the defect crashed in Debug and survived in
+Release, the worst signature a defect can have. `equation()`, whose frames hold
+live `Rendered` strings across the call, could not be rewritten that way:
+optimisation only moved its limit, and gcc's limit was lower than clang's
+unoptimised one.
 
 **Nodes are immutable once built.** No operation ever mutates an existing
 `ASTNode` — arithmetic, conversion, and `named()` each allocate a *new* node

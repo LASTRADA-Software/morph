@@ -254,12 +254,13 @@ struct EquationRenderer {
     /// The walk is an explicit stack rather than recursion because the
     /// derivation of a running total (`total = total + x` in a loop) is a
     /// linear chain one node deep per iteration, and a recursive walk of it
-    /// runs the stack out: measured (morph#574, clang 20, `-O0`, 8 MiB stack)
-    /// `equation()` segfaulted inside the old recursive `renderSymbolic` at a
-    /// 25,000-node chain and returned normally at 24,000. Unlike the operand
-    /// destructor chain, no optimiser rewrite hides this one — the frames hold
-    /// live `Rendered` strings across the call — so the depth limit was real in
-    /// every build.
+    /// runs the stack out. Measured on the recursive code (morph#574, 8 MiB
+    /// stack): `equation()` returned at 24,000 nodes and segfaulted inside
+    /// `renderSymbolic` at 25,000 under clang `-O0`, returned at 50,000 and
+    /// segfaulted at 60,000 under clang `-O2`, and segfaulted already at
+    /// 40,000 under gcc `-O2`. Optimisation only moved the limit: unlike the
+    /// operand destructor chain, this recursion cannot be rewritten into a
+    /// loop, because the frames hold live `Rendered` strings across the call.
     ///
     /// Each frame resumes where its recursive twin would have: stage 0 renders
     /// the node or descends left, stage 1 takes the left result and descends
