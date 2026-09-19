@@ -43,6 +43,7 @@ and react to backend changes.
 - [`QtWebSocketBackend` — client-side WebSocket transport](#qtwebsocketbackend--client-side-websocket-transport)
 - [`QtWebSocketServer` — server-side WebSocket transport](#qtwebsocketserver--server-side-websocket-transport)
 - [`SocketBackend` / `SocketServer` — raw-socket WebSocket transport](#socketbackend--socketserver--raw-socket-websocket-transport)
+  - [The structural registration surface, natively](#the-structural-registration-surface-natively)
 - [Lifetime & ownership](#lifetime--ownership)
 - [Failure modes](#failure-modes)
 - [Thread context](#thread-context)
@@ -410,11 +411,13 @@ morph::backend::SynchronousBackendAdapter adapter{local, pool};
 
 It is what makes morph#522's steps 2–5 migrations rather than rewrites: every
 backend that stays blocking — `LocalBackend`, `SimulatedRemoteBackend`, and
-eleven test doubles, plus `SocketBackend` if morph#569 decides a wrapper is
-right for it — reaches the new surface without being edited. The one backend
-that has a real non-blocking path, `QtWebSocketBackend`, deliberately does not
-use this: morph#568 moves it across natively, because wrapping it would
-reintroduce the blocking this exists to route around.
+eleven test doubles — reaches the new surface without being edited. Two
+backends deliberately do not use it, for the same reason in two different
+shapes: `QtWebSocketBackend` (morph#568) and `SocketBackend` (morph#569) both
+have a genuinely non-blocking path of their own, and wrapping either would
+reintroduce the blocking this exists to route around. `SocketBackend`'s case is
+set out under [The structural registration surface,
+natively](#the-structural-registration-surface-natively).
 
 - **It does not make blocking non-blocking.** The wrapped backend still blocks.
   What changes is which thread pays: the blocking call runs on the adapter's
@@ -430,11 +433,17 @@ reintroduce the blocking this exists to route around.
   the executor must still be running tasks when the adapter is destroyed — the
   same rule as `StrandExecutor`'s own `base`.
 - **A control call issued from a reconnect handler runs on the strand**, never
-  on the wrapped backend's transport thread. Whether that settles
-  `SocketBackend`'s documented reconnect-handler deadlock hazard (see the
-  "runs reconnect handlers on a dedicated thread" row under [Design
-  decisions](#design-decisions)) is morph#569's question; this page does not
-  claim it does.
+  on the wrapped backend's transport thread — *provided the handler issues it
+  through `bindModel`/`promoteModel`*. That proviso is load-bearing, and it is
+  why the adapter does **not** settle `SocketBackend`'s documented
+  reconnect-handler deadlock hazard (see the "runs reconnect handlers on a
+  dedicated thread" row under [Design decisions](#design-decisions)): the
+  adapter forwards `setReconnectHandler` to the wrapped backend unchanged, and
+  `Bridge::installReconnectHandler`'s handler calls the *blocking*
+  `registerModelShared`/`registerModelWithContext`, which the adapter also
+  forwards unchanged. A wrapped `SocketBackend` would therefore run its
+  reconnect control calls exactly where it runs them today. See morph#569's
+  answer under [`SocketBackend`](#socketbackend--socketserver--raw-socket-websocket-transport).
 
 ### Backends with a genuinely non-blocking path
 
@@ -443,17 +452,19 @@ the `Completion` when its reply arrives. There is no `bool`, no fallback verb
 and no inline-completion special case to declare: settling the `Completion`
 inside the dispatch call and settling it a second later from a transport thread
 are the same code at the call site, because delivery goes through `cbExec`
-either way. That is the shape morph#568 moves `QtWebSocketBackend` onto.
+either way. That is the shape morph#568 moves `QtWebSocketBackend` onto, and
+the shape morph#569 moves `SocketBackend` onto.
 
 ### Migration status
 
-Nothing in the tree uses this surface yet. `Bridge` still calls the five
-synchronous verbs and prefers the four `*Async` twins, every existing
-implementor still compiles unchanged, and the default `bindModel`/`promoteModel`
-implementations route to exactly the legacy verb each request shape names — so a
-backend that has overridden nothing behaves identically through either surface.
-The four twins are removed, and the prose threading contract retired, in
-morph#571.
+No *caller* uses this surface yet. `Bridge` still calls the five synchronous
+verbs and prefers the four `*Async` twins, every existing implementor still
+compiles unchanged, and the default `bindModel`/`promoteModel` implementations
+route to exactly the legacy verb each request shape names — so a backend that
+has overridden nothing behaves identically through either surface. On the
+implementor side, `SocketBackend` overrides both natively (morph#569) without
+changing any of its legacy verbs. The four twins are removed, and the prose
+threading contract retired, in morph#571.
 
 ## Error types
 
@@ -1501,6 +1512,76 @@ throws is caught and logged, so the next reconnect still finds the thread
 waiting. `QtWebSocketBackend` has no equivalent need — its `sendSync` runs a
 nested `QEventLoop` that keeps pumping the socket.
 
+### The structural registration surface, natively
+
+`SocketBackend` overrides `bindModel`/`promoteModel` itself rather than being
+wrapped in [`SynchronousBackendAdapter`](#synchronousbackendadapter--a-blocking-backend-on-the-new-surface).
+It had overridden none of the four `*Async` verbs, so the wrapper was the
+expected route; three findings decided against it (morph#569).
+
+1. **The transport already has the machinery.** The I/O thread demultiplexes
+   replies by `callId` for `execute`, and `RemoteServer` echoes `callId` on
+   every control reply it sends — `register`, `registerShared`, `attach` and
+   `assign` all answer with `makeOk(env.callId, {}, mid)`. A control call is
+   therefore the same shape as an execute, and the native path needs no
+   protocol change, no server change and no new thread. It is a second
+   `PendingCallTable`, sharing `_pending`'s `callId` counter so an id can never
+   be ambiguous between the two.
+2. **A wrapper would keep every bind inside `sendSync`'s one-call token.**
+   `sendSync` admits exactly one synchronous control call across the whole
+   backend and throws `"a synchronous call is already in flight (reentrant
+   use)"` on a second. The adapter's strand serialises binds against *each
+   other*, but `listInstances` and the legacy `registerModel` are not on that
+   strand, and this backend is explicitly documented as safe to drive from
+   several threads at once. The native path takes no token at all.
+3. **The adapter's reconnect property does not apply here** — see the answer
+   below, which is the question morph#569 was opened to settle.
+
+What does **not** change: `registerModel`, `registerModelShared`, `attachModel`
+and `assignPrimary` still use `sendSync` with `callId == 0`, so every caller
+morph#570/#571 has yet to migrate behaves exactly as before, and nothing on the
+wire changes for them. `cancelPending` now sweeps both tables, so a disconnect
+rejects an in-flight bind with `DisconnectedError` instead of stranding it —
+the asynchronous counterpart of `sendSync` waking on `!_connected`.
+
+**What the new surface does to the reconnect-handler deadlock hazard.** The
+hazard is that a control call parks on `_syncCv` waiting for a reply only the
+I/O thread's read loop can deliver, so running one *on* that thread blocks the
+thread that would satisfy it. Stated precisely, in three parts:
+
+- **Through the adapter it would be untouched.** Not relocated — untouched. The
+  adapter forwards `setReconnectHandler` to the wrapped backend, so the handler
+  still runs wherever `SocketBackend` chooses to run it, and
+  `Bridge::installReconnectHandler`'s handler calls the blocking verbs, which
+  the adapter also forwards unchanged. Nothing about that path would have gone
+  near the strand.
+- **Natively, a bind cannot have the hazard at all.** `bindModel` never enters
+  `sendSync`, never waits on `_syncCv`, and returns before the reply exists, so
+  there is no wait for any thread to block — including the I/O thread itself.
+  That is structural, not a mitigation: it follows from the signature returning
+  a `Completion` rather than a `ModelId`, and it holds whichever thread issues
+  the call.
+- **The hazard is nevertheless still present in the backend, and the dedicated
+  handler thread is still load-bearing.** The blocking verbs still park on
+  `_syncCv`, and `Bridge`'s reconnect handler still calls them. A hazard-free
+  route now exists; the hazardous one has not been removed or moved. Only when
+  morph#570 puts `Bridge::installReconnectHandler` on `bindModel` does the
+  hazard become unreachable from the reconnect path, and only then is dropping
+  the handler thread a question worth asking.
+
+None of this touches morph#486. The surface adds no lock and knows nothing
+about a caller's teardown; it moves the choice of delivery thread from the
+implementor to the caller, exactly as
+[How the threading contract becomes structural](#how-the-threading-contract-becomes-structural)
+says and no further.
+
+`tests/net/test_socket_backend.cpp` pins the property the argument rests on
+rather than only its result: a bind is accepted and settles *while a legacy
+synchronous call is still parked on `_syncCv`* — which a blocking bind cannot
+be, because it fails there with the reentrant-use error — and four binds are in
+flight simultaneously, matched by `callId`, with the replies delivered back to
+front.
+
 **Threading — the one deliberate difference from the Qt transport.**
 `QtWebSocketBackend` is pinned to the Qt event loop and uses a nested
 `QEventLoop` for its synchronous `registerModel`; `SocketBackend` instead owns
@@ -1785,7 +1866,10 @@ thread instead of the Qt thread:
 
 Unlike `QtWebSocketBackend`, `SocketBackend`'s `execute`/`registerModel`/
 `deregisterModel` may themselves be called from any thread — there is no
-single owning event-loop thread to violate. `morph::net::SocketServer`
+single owning event-loop thread to violate. `bindModel`/`promoteModel` are
+likewise callable from any thread, including the I/O thread itself: they park
+on nothing, and their continuations run on the caller's `cbExec` rather than on
+the I/O thread that settles them. `morph::net::SocketServer`
 receives frames on its own per-connection thread, hands them to
 `RemoteServer::handle` (server pool / model strand, as above), and writes the
 reply back on whichever thread produces it (serialized per connection by a
@@ -1979,11 +2063,13 @@ not a behavior change to the existing loopback-only default.
 | `explicit SocketBackend(serverUrl, cfg = Config{})` | Parses `serverUrl` (`ws://` only — throws immediately on `wss://`) and starts the I/O thread, which connects asynchronously. |
 | `waitForConnected(timeout = 5000ms)` | Blocks the calling thread on a condition variable until connected or the timeout elapses; returns the current connected state. The backend must outlive the call — destroying it while a thread is parked here is undefined, and there is no cancel (see Lifetime & ownership). |
 | `registerModel(typeId, factory)` | Synchronous via a parked condition variable; `factory` ignored. Throws on `err` reply or disconnect. Thread-safe, but only one such call may be in flight at a time. |
+| `bindModel(request, cbExec)` | Native override of the structural surface. Sends the envelope `request`'s shape names with a non-zero `callId` and returns immediately; the I/O thread settles the `Completion` when the reply arrives, delivered on `cbExec`. Never enters `sendSync`, so it takes no synchronous-call token and any number may be in flight. Rejects with `DisconnectedError` when the socket is down or drops first, or with `std::runtime_error{"<verb> failed: <server message>"}`. |
+| `promoteModel(request, cbExec)` | The `assign` counterpart of `bindModel`, on the same path; resolves with `request.mid` echoed back. An empty `primary` or a zero `mid` resolves without sending, matching `assignPrimary`'s guards. |
 | `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses so its unawaited `ok` cannot be handed to a parked synchronous control call (issue #454; the `QtWebSocketBackend` precedent is issue #65). Needs no pending-id bookkeeping of its own: `dispatchIncomingEnvelope` already drops a non-zero `callId` that is absent from `_pending`. |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. Thread-safe; supports concurrent in-flight calls from multiple threads. |
 | `notifyBackendChanged()` | No-op. |
-| `cancelPending(exc)` | Drains the pending map, delivers `exc` to each state. |
-| `setReconnectHandler(handler)` | Stores the handler; invoked on the I/O thread after every *subsequent* connect. `nullptr` clears. |
+| `cancelPending(exc)` | Drains **both** pending maps — the `execute` calls and the `bindModel`/`promoteModel` control calls — and delivers `exc` to each state. |
+| `setReconnectHandler(handler)` | Stores the handler; invoked on the **dedicated handler thread**, not the I/O thread, after every *subsequent* connect — see "Reconnect handlers run on their own thread" above. `nullptr` clears. |
 
 ### `SocketServerConfig` (`morph::net::SocketServer::Config`)
 
@@ -2034,7 +2120,8 @@ not a behavior change to the existing loopback-only default.
 | One `bindModel` instead of three acquire verbs | Behaviour selected by `BindRequest`'s shape (`primary` empty?, `current` zero?) | The three verbs already degrade into each other exactly along those two fields, so naming them separately stated the same distinction three times — and tripled it again for the `*Async` twins. The default implementation still routes each shape to the legacy verb it names, so a backend that overrides only some of the three is unaffected. |
 | `SynchronousBackendAdapter` is a decorator, not a base class or a CRTP mixin | Wraps `shared_ptr<IBackend>` and forwards every verb | It must work on `LocalBackend` and eleven test doubles *without modifying them*, which rules out anything they would have to derive from. Cost is one forwarding method per unchanged verb; benefit is that morph#522's remaining four steps are migrations rather than rewrites. |
 | The adapter's blocking executor is required, not defaulted | Constructor parameter with no default; null `inner` throws | "Where does the blocking happen" is the only question the class exists to answer. An adapter that silently ran the call inline when handed nothing would block on some configurations and not others — contract by configuration, which is the thing being removed. |
-| `SocketBackend` runs reconnect handlers on a dedicated thread | Not inline from the I/O thread's connect path | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the I/O thread's read loop can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. |
+| `SocketBackend` runs reconnect handlers on a dedicated thread | Not inline from the I/O thread's connect path | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the I/O thread's read loop can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. Still load-bearing after morph#569: `bindModel` cannot deadlock this way, but the blocking verbs still can and `Bridge`'s reconnect handler still calls them. |
+| `SocketBackend` implements `bindModel`/`promoteModel` natively | Not wrapped in `SynchronousBackendAdapter`, although it overrides none of the four `*Async` verbs | The I/O thread already demultiplexes replies by `callId` for `execute` and `RemoteServer` echoes `callId` on every control reply, so the non-blocking path costs a second `PendingCallTable` and no protocol change. Wrapping instead would park a thread per bind for a round trip this transport need not park for, and would keep every bind inside `sendSync`'s one-synchronous-call token — which `listInstances` and the legacy `registerModel` share, and which is the one global restriction on a backend otherwise documented as drivable from several threads at once. The adapter's reconnect-handler property, the other reason to consider it, does not apply: it forwards `setReconnectHandler` and the blocking verbs straight through, so a wrapped `SocketBackend` would run reconnect control calls exactly where it does today. |
 
 ## Lifetime annotations
 

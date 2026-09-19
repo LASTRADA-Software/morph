@@ -22,6 +22,7 @@
 #include <morph/net/socket_backend.hpp>
 #include <morph/net/socket_server.hpp>
 #include <morph/session/session.hpp>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -1686,4 +1687,440 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no 
         // Same port-reuse pause as the sibling disconnect tests.
         std::this_thread::sleep_for(std::chrono::milliseconds{50});
     }
+}
+
+// ── The structural registration surface (morph#569) ──────────────────────────
+//
+// `SocketBackend` overrides `bindModel`/`promoteModel` natively rather than
+// being wrapped in `SynchronousBackendAdapter`. The property that decides that
+// choice, and that the deadlock argument in docs/spec/core/backend.md rests on,
+// is that a native control call never enters `sendSync`: it goes out on the
+// same callId-multiplexed path `execute` uses and is settled by the I/O
+// thread's read loop. The tests below pin that property, not just the
+// functional result.
+
+namespace {
+
+// Drains `exec` on the calling thread until `done`, or gives up. The caller's
+// executor is a MainThreadExecutor precisely so that "the continuation ran"
+// and "the caller pumped it" are separable events.
+bool drainUntil(morph::exec::MainThreadExecutor& exec, const std::atomic<bool>& done, int maxIterations = 500) {
+    for (int i = 0; i < maxIterations && !done.load(); ++i) {
+        if (!exec.runOnce()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{5});
+        }
+    }
+    return done.load();
+}
+
+morph::backend::detail::BindRequest privateBind(std::string typeId) {
+    return morph::backend::detail::BindRequest{
+        .typeId = std::move(typeId), .factory = nullptr, .contextKey = {}, .primary = {}, .current = {}};
+}
+
+}  // namespace
+
+TEST_CASE(
+    "SocketBackend: bindModel reaches the server for each BindRequest shape and settles on the caller's executor",
+    "[net][socket_backend][registration-surface]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    // Declared before `backend`, so it is destroyed *after* it: `~SocketBackend`
+    // joins the I/O thread, which can call `post()` on this executor right up
+    // until that join completes. With the reverse order, TSan caught the I/O
+    // thread still running -- and still able to call `post()` -- while this
+    // executor's own destructor was tearing down its condition variable on the
+    // main thread (morph#586, data race in pthread_cond_destroy).
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
+    REQUIRE(backend.waitForConnected());
+
+    morph::exec::detail::ModelId bound{};
+    std::atomic<bool> done{false};
+    auto observe = [&](morph::exec::detail::ModelId mid) {
+        bound = mid;
+        done.store(true);
+    };
+
+    SECTION("empty primary, no current instance -> a private instance") {
+        backend.bindModel(privateBind("SbEchoModel"), callerExec).thenDetached(observe);
+        REQUIRE(drainUntil(callerExec, done));
+        CHECK(bound.v != 0U);
+    }
+
+    SECTION("non-empty primary -> the server's register-or-attach directory") {
+        auto first = morph::exec::detail::ModelId{};
+        std::atomic<bool> firstDone{false};
+        backend
+            .bindModel(morph::backend::detail::BindRequest{.typeId = "SbCounterModel",
+                                                           .factory = nullptr,
+                                                           .contextKey = {},
+                                                           .primary = "shared-key",
+                                                           .current = {}},
+                       callerExec)
+            .thenDetached([&](morph::exec::detail::ModelId mid) {
+                first = mid;
+                firstDone.store(true);
+            });
+        REQUIRE(drainUntil(callerExec, firstDone));
+        REQUIRE(first.v != 0U);
+
+        // A second bind on the same key reaches the same live instance.
+        backend
+            .bindModel(morph::backend::detail::BindRequest{.typeId = "SbCounterModel",
+                                                           .factory = nullptr,
+                                                           .contextKey = {},
+                                                           .primary = "shared-key",
+                                                           .current = {}},
+                       callerExec)
+            .thenDetached(observe);
+        REQUIRE(drainUntil(callerExec, done));
+        CHECK(bound == first);
+    }
+
+    SECTION("non-empty primary plus a current instance -> a re-point") {
+        auto current = backend.registerModel("SbCounterModel", nullptr);
+        REQUIRE(current.v != 0U);
+        backend
+            .bindModel(morph::backend::detail::BindRequest{.typeId = "SbCounterModel",
+                                                           .factory = nullptr,
+                                                           .contextKey = {},
+                                                           .primary = "repoint-key",
+                                                           .current = current},
+                       callerExec)
+            .thenDetached(observe);
+        REQUIRE(drainUntil(callerExec, done));
+        CHECK(bound.v != 0U);
+    }
+
+    SECTION("promoteModel files a live instance and echoes its id back") {
+        auto mid = backend.registerModel("SbCounterModel", nullptr);
+        REQUIRE(mid.v != 0U);
+        backend
+            .promoteModel(
+                morph::backend::detail::PromoteRequest{.mid = mid, .typeId = "SbCounterModel", .primary = "promoted"},
+                callerExec)
+            .thenDetached(observe);
+        REQUIRE(drainUntil(callerExec, done));
+        CHECK(bound == mid);
+        CHECK(backend.listInstances("SbCounterModel") == std::vector<std::string>{"promoted"});
+    }
+
+    SECTION("promoteModel's local guards resolve without touching the wire") {
+        backend
+            .promoteModel(
+                morph::backend::detail::PromoteRequest{
+                    .mid = morph::exec::detail::ModelId{7}, .typeId = "SbCounterModel", .primary = {}},
+                callerExec)
+            .thenDetached(observe);
+        REQUIRE(drainUntil(callerExec, done));
+        CHECK(bound == morph::exec::detail::ModelId{7});
+    }
+}
+
+TEST_CASE("SocketBackend: a bindModel continuation does not run until the caller's executor is pumped",
+          "[net][socket_backend][registration-surface]") {
+    // The whole point of the surface: the delivery thread is the caller's
+    // argument, not the backend's choice. The backend settles from its I/O
+    // thread; nothing may run on the caller's side until the caller pumps.
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    // Declared before `backend` -- see the identical comment on the first
+    // TEST_CASE in this file that needed it (morph#586, data race).
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
+    REQUIRE(backend.waitForConnected());
+
+    std::atomic<bool> ran{false};
+    std::thread::id ranOn{};
+    auto completion = backend.bindModel(privateBind("SbEchoModel"), callerExec);
+    completion.thenDetached([&](morph::exec::detail::ModelId) {
+        ranOn = std::this_thread::get_id();
+        ran.store(true);
+    });
+
+    // Give the round trip more than enough time to complete on the io thread.
+    std::this_thread::sleep_for(std::chrono::milliseconds{200});
+    CHECK_FALSE(ran.load());
+
+    REQUIRE(drainUntil(callerExec, ran));
+    CHECK(ranOn == std::this_thread::get_id());
+}
+
+// The Catch2 assertion macros, not branching logic, push this over the
+// cognitive-complexity threshold -- as in the sibling fault-injection cases.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("SocketBackend: a bind settles while the synchronous control channel is still parked",
+          "[net][socket_backend][registration-surface]") {
+    // This is the evidence behind morph#569's choice of a native override over
+    // `SynchronousBackendAdapter`, and behind the deadlock claim in
+    // docs/spec/core/backend.md.
+    //
+    // The documented reconnect hazard is that a control call parks on `_syncCv`
+    // waiting for a reply only the I/O thread's read loop can deliver -- so
+    // running one on that thread wedges the transport. A control call that
+    // never parks cannot have that hazard, whichever thread issues it. Two
+    // observable consequences prove it does not park:
+    //
+    //   1. It is accepted while `sendSync`'s single-call token is held by
+    //      someone else. A blocking bind (the default `bindModel`, or one
+    //      routed through a wrapper's strand) would instead come back with
+    //      `"a synchronous call is already in flight (reentrant use)"`.
+    //   2. Its reply is delivered, and its `Completion` settles, while that
+    //      other call is *still* parked -- so the bind's settlement does not
+    //      depend on the synchronous channel draining first.
+    //
+    // Mutation check: removing `SocketBackend::bindModel` (falling back to the
+    // default blocking implementation) makes this fail on assertion 1.
+    FakeWsServer fake;
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+
+    // Declared before `backend` -- see the identical comment on the first
+    // TEST_CASE in this file that needed it (morph#586, data race).
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
+    fake.acceptAndHandshake();
+    REQUIRE(backend.waitForConnected());
+
+    // Park a legacy synchronous control call: it holds the sendSync token and
+    // waits on `_syncCv` for a `callId == 0` reply that is deliberately not
+    // sent until the very end of this test.
+    std::atomic<bool> syncReturned{false};
+    std::string syncOutcome;
+    std::thread syncThread{[&] {
+        try {
+            (void)backend.registerModel("SbEchoModel", nullptr);
+            syncOutcome = "returned";
+        } catch (const std::exception& exc) {
+            // Recorded rather than swallowed: how the parked call ended is not
+            // what this test asserts, but it is what explains a failure below.
+            syncOutcome = exc.what();
+        }
+        syncReturned.store(true);
+    }};
+    auto syncEnv = fake.receiveEnvelope();
+    REQUIRE(syncEnv.kind == "register");
+    REQUIRE(syncEnv.callId == 0U);  // the synchronous channel's sentinel
+
+    // (1) The bind is accepted with the token held.
+    morph::exec::detail::ModelId bound{};
+    std::string error;
+    std::atomic<bool> done{false};
+    auto completion = backend.bindModel(privateBind("SbEchoModel"), callerExec);
+    completion
+        .thenDetached([&](morph::exec::detail::ModelId mid) {
+            bound = mid;
+            done.store(true);
+        })
+        .onErrorDetached([&](const std::exception_ptr& exc) {
+            try {
+                std::rethrow_exception(exc);
+            } catch (const std::exception& err) {
+                error = err.what();
+            }
+            done.store(true);
+        });
+
+    // Nothing can settle this bind yet: its reply is only sent below. A
+    // *blocking* bind, by contrast, has already failed by this point with
+    // sendSync's reentrant-use error, so pumping the caller's executor here is
+    // what turns the mutation into an immediate, readable failure rather than
+    // a hang on the `receiveEnvelope` that follows.
+    for (int i = 0; i < 20; ++i) {
+        (void)callerExec.runOnce();
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+    bool const accepted = !done.load();
+    if (!accepted) {
+        // Release the parked call and join before failing, so the diagnosis is
+        // the message below rather than a terminate() on an unjoined thread.
+        fake.sendFrame(morph::net::detail::WsOpcode::kText, morph::wire::encode(morph::wire::makeOk(0, {}, 7)));
+        syncThread.join();
+    }
+    INFO("the bind was rejected instead of accepted: " << error);
+    REQUIRE(accepted);
+
+    auto bindEnv = fake.receiveEnvelope();
+    REQUIRE(bindEnv.kind == "register");
+    REQUIRE(bindEnv.callId != 0U);  // multiplexed, not the synchronous sentinel
+
+    // (2) Answering only the bind settles it, with the sync call still parked.
+    fake.sendFrame(morph::net::detail::WsOpcode::kText,
+                   morph::wire::encode(morph::wire::makeOk(bindEnv.callId, {}, 4242)));
+    REQUIRE(drainUntil(callerExec, done));
+    CHECK(error.empty());
+    CHECK(bound == morph::exec::detail::ModelId{4242});
+    CHECK_FALSE(syncReturned.load());
+
+    // Release the parked call so the thread can be joined.
+    fake.sendFrame(morph::net::detail::WsOpcode::kText, morph::wire::encode(morph::wire::makeOk(0, {}, 7)));
+    syncThread.join();
+    CHECK(syncOutcome == "returned");
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("SocketBackend: several binds are in flight at once and are matched by callId with replies out of order",
+          "[net][socket_backend][registration-surface]") {
+    // The corollary of "a bind never parks": several are outstanding at once.
+    // Under the default blocking `bindModel` the first call here would never
+    // return (its reply is only sent after all four have been issued), so this
+    // test fails by hanging if the native override is removed.
+    FakeWsServer fake;
+    morph::net::SocketBackend::Config cfg;
+    cfg.reconnectEnabled = false;
+
+    // Declared before `backend` -- see the identical comment on the first
+    // TEST_CASE in this file that needed it (morph#586, data race).
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
+    fake.acceptAndHandshake();
+    REQUIRE(backend.waitForConnected());
+
+    constexpr int kBinds = 4;
+    std::vector<morph::async::Completion<morph::exec::detail::ModelId>> completions;
+    std::vector<morph::exec::detail::ModelId> bound(kBinds);
+    std::atomic<int> settled{0};
+    for (int i = 0; i < kBinds; ++i) {
+        completions.push_back(backend.bindModel(privateBind("SbEchoModel"), callerExec));
+        completions.back().thenDetached([&, i](morph::exec::detail::ModelId mid) {
+            bound[static_cast<std::size_t>(i)] = mid;
+            settled.fetch_add(1);
+        });
+    }
+
+    std::vector<std::uint64_t> callIds;
+    for (int i = 0; i < kBinds; ++i) {
+        auto env = fake.receiveEnvelope();
+        REQUIRE(env.callId != 0U);
+        callIds.push_back(env.callId);
+    }
+    REQUIRE(std::set<std::uint64_t>(callIds.begin(), callIds.end()).size() == kBinds);
+
+    // Answered back to front: the reply router, not arrival order, decides
+    // which Completion each id settles.
+    for (int i = kBinds - 1; i >= 0; --i) {
+        fake.sendFrame(morph::net::detail::WsOpcode::kText,
+                       morph::wire::encode(morph::wire::makeOk(callIds[static_cast<std::size_t>(i)], {},
+                                                               static_cast<std::uint64_t>(100 + i))));
+    }
+
+    std::atomic<bool> allDone{false};
+    for (int i = 0; i < 500 && !allDone.load(); ++i) {
+        if (!callerExec.runOnce()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{5});
+        }
+        allDone.store(settled.load() == kBinds);
+    }
+    REQUIRE(allDone.load());
+    for (int i = 0; i < kBinds; ++i) {
+        CHECK(bound[static_cast<std::size_t>(i)] == morph::exec::detail::ModelId{static_cast<std::uint64_t>(100 + i)});
+    }
+}
+
+TEST_CASE("SocketBackend: a bind on a dropped connection is rejected rather than left unsettled",
+          "[net][socket_backend][registration-surface]") {
+    morph::exec::MainThreadExecutor callerExec;
+    std::string error;
+    std::atomic<bool> done{false};
+    auto capture = [&](const std::exception_ptr& exc) {
+        try {
+            std::rethrow_exception(exc);
+        } catch (const std::exception& err) {
+            error = err.what();
+        }
+        done.store(true);
+    };
+
+    SECTION("issued while already disconnected") {
+        morph::net::SocketBackend::Config cfg;
+        cfg.reconnectEnabled = false;
+        cfg.connectTimeout = std::chrono::milliseconds{200};
+        morph::net::SocketBackend backend{"ws://127.0.0.1:1", cfg};  // nothing listens there
+        REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{300}));
+        backend.bindModel(privateBind("SbEchoModel"), callerExec).onErrorDetached(capture);
+        REQUIRE(drainUntil(callerExec, done));
+        CHECK_THAT(error, Catch::Matchers::ContainsSubstring("disconnected"));
+    }
+
+    SECTION("dropped while in flight") {
+        auto fake = std::make_unique<FakeWsServer>();
+        morph::net::SocketBackend::Config cfg;
+        cfg.reconnectEnabled = false;
+        morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake->port())),
+                                          cfg};
+        fake->acceptAndHandshake();
+        REQUIRE(backend.waitForConnected());
+
+        backend.bindModel(privateBind("SbEchoModel"), callerExec).onErrorDetached(capture);
+        REQUIRE(fake->receiveEnvelope().callId != 0U);
+        fake.reset();  // the peer goes away without ever replying
+        REQUIRE(drainUntil(callerExec, done));
+        CHECK_THAT(error, Catch::Matchers::ContainsSubstring("disconnected"));
+    }
+}
+
+TEST_CASE("SocketBackend: a bind rejected by the server surfaces the server's own message",
+          "[net][socket_backend][registration-surface]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto authz = std::make_shared<DenyAllAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, authz);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    // Declared before `backend` -- see the identical comment on the first
+    // TEST_CASE in this file that needed it (morph#586, data race).
+    morph::exec::MainThreadExecutor callerExec;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
+    REQUIRE(backend.waitForConnected());
+
+    std::string error;
+    std::atomic<bool> done{false};
+    backend.bindModel(privateBind("SbEchoModel"), callerExec).onErrorDetached([&](const std::exception_ptr& exc) {
+        try {
+            std::rethrow_exception(exc);
+        } catch (const std::exception& err) {
+            error = err.what();
+        }
+        done.store(true);
+    });
+    REQUIRE(drainUntil(callerExec, done));
+    // Same "<verb> failed: <server message>" wording the blocking verbs use.
+    CHECK_THAT(error, Catch::Matchers::ContainsSubstring("register failed: unauthorized"));
+}
+
+TEST_CASE("SocketBackend: a reconnect handler can re-bind through the structural surface without waiting",
+          "[net][socket_backend][disconnect][registration-surface]") {
+    // The shape a reconnect handler takes once its caller is on the structural
+    // surface (morph#570): issue the bind, attach a continuation, return. The
+    // handler parks on nothing, so it has no reply to wait for and cannot hold
+    // up whichever thread runs it.
+    //
+    // Note what this test does *not* claim: it does not show the dedicated
+    // handler thread has become unnecessary. `Bridge`'s reconnect handler still
+    // calls the blocking verbs, and that is what keeps the thread load-bearing
+    // -- see docs/spec/core/backend.md.
+    ReconnectFixture fixture;
+    morph::exec::ThreadPoolExecutor callerPool{1};
+    std::atomic<bool> handlerRan{false};
+    std::atomic<bool> reboundOk{false};
+
+    fixture.bounce([&] {
+        handlerRan.store(true);
+        fixture.backend->bindModel(privateBind("SbEchoModel"), callerPool)
+            .thenDetached([&](morph::exec::detail::ModelId mid) { reboundOk.store(mid.v != 0U); });
+    });
+
+    spinUntil([&] { return reboundOk.load(); }, 500);
+    CHECK(handlerRan.load());
+    CHECK(reboundOk.load());
+
+    // The transport is unharmed: the synchronous channel was never involved.
+    CHECK(fixture.backend->registerModel("SbEchoModel", nullptr).v != 0U);
 }
