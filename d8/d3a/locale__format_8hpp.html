@@ -132,6 +132,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d3a/locale_
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:aae03a37827071172d1d9397d0323c224" id="r_aae03a37827071172d1d9397d0323c224"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aae03a37827071172d1d9397d0323c224">morph::render::detail::groupingIsWellPlaced</a> (std::string_view text, std::string_view decimalSeparator, std::string_view groupSeparator)</td></tr>
+<tr class="memdesc:aae03a37827071172d1d9397d0323c224"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether every group separator in <code class="param">text</code> sits where a group separator can legally sit.  <br /></td></tr>
 <tr class="memitem:a5447aae2448f6a892fe4a0202c224942" id="r_a5447aae2448f6a892fe4a0202c224942"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5447aae2448f6a892fe4a0202c224942">morph::render::normalizeLocaleNumber</a> (std::string_view text, std::string_view decimalSeparator, std::string_view groupSeparator)</td></tr>
 <tr class="memdesc:a5447aae2448f6a892fe4a0202c224942"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts a locale-formatted numeric string to canonical (<span class="tt">-?[0-9]+(\.[0-9]+)?</span>) text.  <br /></td></tr>
 <tr class="memitem:a8a5e641c416e175501d315d722c97b0b" id="r_a8a5e641c416e175501d315d722c97b0b"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a8a5e641c416e175501d315d722c97b0b">morph::render::formatCanonicalNumber</a> (std::string_view canonicalText, std::string_view decimalSeparator, std::string_view groupSeparator)</td></tr>
@@ -144,6 +146,55 @@ Functions</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="aae03a37827071172d1d9397d0323c224" name="aae03a37827071172d1d9397d0323c224"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aae03a37827071172d1d9397d0323c224">&#9670;&#160;</a></span>groupingIsWellPlaced()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::render::detail::groupingIsWellPlaced </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>decimalSeparator</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>groupSeparator</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether every group separator in <code class="param">text</code> sits where a group separator can legally sit. </p>
+<p>The rule, in one place so it can be read on its own: a group separator is preceded by one to three digits (the first group), or by exactly three (every later one); it is followed by exactly three more digits, at each group and at the end of the integer part; and it never appears after the decimal separator. A locale with no grouping (<code class="param">groupSeparator</code> empty) has nothing to place, so it trivially passes.</p>
+<p>This is a pass of its own rather than extra state inside the normalising scan below: "the grouping is well placed" and "the digits convert" are two separate statements about the entry, and reading them as one made neither clear.</p>
+<p>Characters this function does not recognise are simply not digits — the normalising scan is what rejects them, and it rejects them whatever this pass concludes. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The locale-formatted entry. </td></tr>
+    <tr><td class="paramname">decimalSeparator</td><td>The locale's decimal-point string; may be empty. </td></tr>
+    <tr><td class="paramname">groupSeparator</td><td>The locale's digit-grouping string; empty means the locale does not group. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when the grouping is well placed (or absent). </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a5447aae2448f6a892fe4a0202c224942" name="a5447aae2448f6a892fe4a0202c224942"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5447aae2448f6a892fe4a0202c224942">&#9670;&#160;</a></span>normalizeLocaleNumber()</h2>
 
@@ -177,8 +228,10 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Converts a locale-formatted numeric string to canonical (<span class="tt">-?[0-9]+(\.[0-9]+)?</span>) text. </p>
-<p>Strips every occurrence of <code class="param">groupSeparator</code>, then replaces every occurrence of <code class="param">decimalSeparator</code> with <span class="tt">.</span>. Passing <span class="tt">decimalSeparator ==
+<p>Drops <code class="param">groupSeparator</code> where it is correctly placed, and replaces every occurrence of <code class="param">decimalSeparator</code> with <span class="tt">.</span>. Passing <span class="tt">decimalSeparator ==
 "."</span> and an empty <code class="param">groupSeparator</code> is the identity transform (the locale-free behavior). Malformed input (a second decimal separator, a sign anywhere but the leading position of the <em>output</em>, or any character that is not a digit) yields <span class="tt">std::nullopt</span> rather than a best-effort guess. The decimal point counts as output, so a sign placed straight after the separator ("`,-5`" in a de-DE locale) is rejected &ndash; matching the QML mirror in <span class="tt">src/qt/forms/qml/DynamicForm.qml</span>, which has always rejected it (morph#497).</p>
+<dl class="section user"><dt>Grouping is validated, not stripped (morph#574)</dt><dd>A group separator is only dropped where a group separator can legally be: preceded by one to three digits, followed by exactly three more, and never after the decimal separator. Anything else is malformed and reported as such. Stripping unconditionally instead is a wrong <em>value</em>, not a rejected one: a de-DE user typing the US form <span class="tt">"1.5"</span> into a price field submitted <span class="tt">15</span>, and nothing downstream could tell &ndash; the result is a perfectly valid number, ten times too large. <span class="tt">"1.50"</span> gave <span class="tt">150</span>, <span class="tt">"1.2.3.4"</span> gave <span class="tt">1234</span>, and the en-US mirror image <span class="tt">"1,5"</span> gave <span class="tt">15</span>.</dd></dl>
+<dl class="section user"><dt>The two separators must differ</dt><dd>When <code class="param">groupSeparator</code> is non-empty and equal to <code class="param">decimalSeparator</code> the entry is rejected: with one string in both roles there is no reading of <span class="tt">"1.5"</span> the function could defend. This is a caller (locale-configuration) error rather than a user one, but it is reported through the return value like any other malformed entry, deliberately not through an assertion &ndash; an assertion would make the two build configurations behave differently at a control edge, and would be untestable in the one where it fires.</dd></dl>
 <p>The result is <span class="tt">.</span>-decimal and digit-only, but is <b>not</b> narrowed to <span class="tt">-?[0-9]+(\.[0-9]+)?</span>: a bare "`.`", a leading "`.5`" and a trailing "`5.`" are passed through, exactly as that same QML mirror passes them. Tightening one side alone would put the two control edges back out of step, so the shape is documented here rather than changed.</p>
 <p>Separators are matched as whole strings, so a multi-byte one (e.g. U+202F) works; matching them before the per-byte digit scan is what keeps their continuation bytes from being mistaken for stray non-digit characters.</p>
 <dl class="params"><dt>Parameters</dt><dd>
@@ -191,7 +244,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The canonical <span class="tt">.</span>-decimal text, or <span class="tt">std::nullopt</span> when malformed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
@@ -238,7 +291,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The locale-formatted display text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
