@@ -30,10 +30,80 @@
 
 namespace morph::render {
 
+namespace detail {
+
+/// @brief Whether every group separator in @p text sits where a group
+///        separator can legally sit.
+///
+/// The rule, in one place so it can be read on its own: a group separator is
+/// preceded by one to three digits (the first group), or by exactly three
+/// (every later one); it is followed by exactly three more digits, at each
+/// group and at the end of the integer part; and it never appears after the
+/// decimal separator. A locale with no grouping (@p groupSeparator empty) has
+/// nothing to place, so it trivially passes.
+///
+/// This is a pass of its own rather than extra state inside the normalising
+/// scan below: "the grouping is well placed" and "the digits convert" are two
+/// separate statements about the entry, and reading them as one made neither
+/// clear.
+///
+/// Characters this function does not recognise are simply not digits — the
+/// normalising scan is what rejects them, and it rejects them whatever this
+/// pass concludes.
+/// @param text             The locale-formatted entry.
+/// @param decimalSeparator The locale's decimal-point string; may be empty.
+/// @param groupSeparator   The locale's digit-grouping string; empty means the
+///                         locale does not group.
+/// @return `true` when the grouping is well placed (or absent).
+[[nodiscard]] inline bool groupingIsWellPlaced(std::string_view text, std::string_view decimalSeparator,
+                                               std::string_view groupSeparator) {
+    if (groupSeparator.empty()) {
+        return true;
+    }
+    constexpr std::size_t kGroupSize = 3;
+    std::size_t digits = 0;
+    bool sawGroup = false;
+    bool sawDecimal = false;
+
+    for (std::size_t i = 0; i < text.size();) {
+        const std::string_view rest = text.substr(i);
+        if (rest.starts_with(groupSeparator)) {
+            bool const opensAGroup = sawGroup ? digits == kGroupSize : (digits >= 1 && digits <= kGroupSize);
+            if (sawDecimal || !opensAGroup) {
+                return false;
+            }
+            sawGroup = true;
+            digits = 0;
+            i += groupSeparator.size();
+            continue;
+        }
+        if (!decimalSeparator.empty() && rest.starts_with(decimalSeparator)) {
+            if (sawGroup && digits != kGroupSize) {
+                return false;  // the last group of the integer part is short
+            }
+            sawDecimal = true;
+            digits = 0;
+            i += decimalSeparator.size();
+            continue;
+        }
+        // i is bounded by the loop condition.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        char const chr = text[i];
+        digits = (chr >= '0' && chr <= '9') ? digits + 1 : 0;
+        ++i;
+    }
+
+    // An ungrouped fractional part ends the number, so the trailing check only
+    // applies when the integer part was the last thing scanned.
+    return !sawGroup || sawDecimal || digits == kGroupSize;
+}
+
+}  // namespace detail
+
 /// @brief Converts a locale-formatted numeric string to canonical
 ///        (`-?[0-9]+(\.[0-9]+)?`) text.
 ///
-/// Strips every occurrence of @p groupSeparator, then replaces every
+/// Drops @p groupSeparator where it is correctly placed, and replaces every
 /// occurrence of @p decimalSeparator with `.`. Passing `decimalSeparator ==
 /// "."` and an empty @p groupSeparator is the identity transform (the
 /// locale-free behavior). Malformed input (a second decimal separator, a
@@ -42,6 +112,25 @@ namespace morph::render {
 /// decimal point counts as output, so a sign placed straight after the separator
 /// ("`,-5`" in a de-DE locale) is rejected -- matching the QML mirror in
 /// `src/qt/forms/qml/DynamicForm.qml`, which has always rejected it (morph#497).
+///
+/// @par Grouping is validated, not stripped (morph#574)
+/// A group separator is only dropped where a group separator can legally be:
+/// preceded by one to three digits, followed by exactly three more, and never
+/// after the decimal separator. Anything else is malformed and reported as
+/// such. Stripping unconditionally instead is a wrong *value*, not a rejected
+/// one: a de-DE user typing the US form `"1.5"` into a price field submitted
+/// `15`, and nothing downstream could tell -- the result is a perfectly valid
+/// number, ten times too large. `"1.50"` gave `150`, `"1.2.3.4"` gave `1234`,
+/// and the en-US mirror image `"1,5"` gave `15`.
+///
+/// @par The two separators must differ
+/// When @p groupSeparator is non-empty and equal to @p decimalSeparator the
+/// entry is rejected: with one string in both roles there is no reading of
+/// `"1.5"` the function could defend. This is a caller (locale-configuration)
+/// error rather than a user one, but it is reported through the return value
+/// like any other malformed entry, deliberately not through an assertion --
+/// an assertion would make the two build configurations behave differently at
+/// a control edge, and would be untestable in the one where it fires.
 ///
 /// The result is `.`-decimal and digit-only, but is **not** narrowed to
 /// `-?[0-9]+(\.[0-9]+)?`: a bare "`.`", a leading "`.5`" and a trailing "`5.`"
@@ -61,6 +150,13 @@ namespace morph::render {
 [[nodiscard]] inline std::optional<std::string> normalizeLocaleNumber(std::string_view text,
                                                                       std::string_view decimalSeparator,
                                                                       std::string_view groupSeparator) {
+    if (!groupSeparator.empty() && groupSeparator == decimalSeparator) {
+        return std::nullopt;  // one string cannot play both roles: see above
+    }
+    if (!detail::groupingIsWellPlaced(text, decimalSeparator, groupSeparator)) {
+        return std::nullopt;  // a separator off a group boundary: see above
+    }
+
     std::string canonical;
     canonical.reserve(text.size());
     bool sawDecimal = false;
@@ -69,8 +165,10 @@ namespace morph::render {
     for (std::size_t i = 0; i < text.size();) {
         const std::string_view rest = text.substr(i);
         if (!groupSeparator.empty() && rest.starts_with(groupSeparator)) {
+            // Placement was settled above, so by here the separator is display
+            // only and is never carried into the output.
             i += groupSeparator.size();
-            continue;  // grouping is display-only; never accepted back on entry
+            continue;
         }
         if (!decimalSeparator.empty() && rest.starts_with(decimalSeparator)) {
             if (sawDecimal) {

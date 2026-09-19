@@ -35,6 +35,15 @@
 
 /// @brief Build-wide provenance toggle. Default on; define to `0` to compile
 ///        the derivation DAG out (no `ASTNode` allocations).
+///
+/// The default is `1` deliberately: the toggle changes observable behaviour,
+/// not just cost — with it `0`, `equation()` collapses to the bare value and
+/// `named()` discards the name — so a build that never set it must not have
+/// that output emptied underneath it. The cost is real and measured, though:
+/// a 200,000-iteration running total took 54,056 KB and 0.034 s with
+/// provenance against 12,236 KB and 0.006 s without (morph#574, clang 22,
+/// `-O2`). **A bulk path that never calls `equation()` should set this to `0`.**
+/// See `docs/spec/util/quantity_type.md`, *Limitations*.
 #ifndef MORPH_QUANTITY_PROVENANCE
 #define MORPH_QUANTITY_PROVENANCE 1
 #endif
@@ -531,6 +540,66 @@ struct ASTNode {
 
     /// @brief Right operand's derivation (shared); null for unary/scalar steps.
     std::shared_ptr<ASTNode> right;
+
+    /// @brief Default-constructs an empty node.
+    ASTNode() = default;
+
+    /// @brief Copies a node (the children stay shared).
+    ASTNode(const ASTNode&) = default;
+
+    /// @brief Copy-assigns a node (the children stay shared).
+    /// @return `*this`.
+    ASTNode& operator=(const ASTNode&) = default;
+
+    /// @brief Moves a node, leaving the source's children null.
+    ASTNode(ASTNode&&) = default;
+
+    /// @brief Move-assigns a node, leaving the source's children null.
+    /// @return `*this`.
+    ASTNode& operator=(ASTNode&&) = default;
+
+    /// @brief Releases the sub-derivation **iteratively**, so chain depth
+    ///        cannot overflow the stack.
+    ///
+    /// The running-total pattern (`total = total + x` in a loop) builds a
+    /// derivation that is a linear chain down `left`, one node per iteration.
+    /// The compiler-generated destructor releases that chain recursively —
+    /// `~shared_ptr` -> `~ASTNode` -> `~shared_ptr` -> ... — one stack frame
+    /// per node, and a long enough chain runs the stack out. Measured
+    /// (morph#574, clang 22, `-O0`, 8 MiB stack): a 21,000-node chain
+    /// segfaults on destruction, while an optimised build survives 200,000
+    /// because clang turns the same chain into a loop. "Crashes in Debug,
+    /// survives in Release" is the worst signature a defect can have, so the
+    /// flattening is written down here rather than left to the optimiser.
+    ///
+    /// Children are detached into a local worklist and released one at a time.
+    /// A node is only unlinked when this pop holds its last reference; when it
+    /// does not, dropping the handle cannot destroy it and its children stay
+    /// where they are. Every `~ASTNode` reached from the loop therefore runs
+    /// with both children already null, so it cannot recurse.
+    ~ASTNode() {
+        std::vector<std::shared_ptr<ASTNode>> pending;
+        if (left) {
+            pending.push_back(std::move(left));
+        }
+        if (right) {
+            pending.push_back(std::move(right));
+        }
+        while (!pending.empty()) {
+            std::shared_ptr<ASTNode> const node = std::move(pending.back());
+            pending.pop_back();
+            if (node.use_count() == 1) {
+                if (node->left) {
+                    pending.push_back(std::move(node->left));
+                }
+                if (node->right) {
+                    pending.push_back(std::move(node->right));
+                }
+            }
+            // `node` goes out of scope here: either it was not the last owner
+            // (nothing happens) or it was, and its children are already null.
+        }
+    }
 };
 
 /// @brief The per-`Quantity` handle onto the root of its derivation.

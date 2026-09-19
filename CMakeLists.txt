@@ -238,14 +238,20 @@ target_sources(morph
 )
 
 # The detail/ headers that public headers include. They are not public surface
-# and are deliberately outside the verified set -- quantity_equation.hpp is
-# included from partway down quantity.hpp and is not self-contained, so
-# VERIFY_INTERFACE_HEADER_SETS would fail on it -- but they must still ship,
-# or an installed morph/util/quantity.hpp cannot find fixed_string.hpp and the
-# install compiles nowhere (morph#232). A second FILE_SET gets them installed
-# without adding them to what is standalone-compiled;
+# and are deliberately outside the verified set -- standalone compilation is a
+# promise made about morph's public headers, and a detail/ header is free to be
+# a fragment included partway down the one that owns it -- but they must still
+# ship, or an installed morph/util/quantity.hpp cannot find fixed_string.hpp
+# and the install compiles nowhere (morph#232). A second FILE_SET gets them
+# installed without adding them to what is standalone-compiled;
 # INTERFACE_HEADER_SETS_TO_VERIFY, which otherwise defaults to *every*
 # interface header set, keeps the verification list exactly as it was.
+#
+# As it happens every detail/ header compiles standalone today (morph#574 made
+# the last one that did not, quantity_equation.hpp, self-contained). That is a
+# convenience, not the rule this exclusion encodes, which is why
+# scripts/test_check_install_export.sh plants its own broken header rather than
+# leaning on one of these staying broken.
 #
 # Adding a detail/ header here is easy to forget, and forgetting is silent:
 # `cmake --install` still exits 0, and the drift guard above skips detail/ by

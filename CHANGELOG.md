@@ -157,6 +157,36 @@ API surface).
 
 ### Fixed
 
+- **A locale-formatted entry could submit ten times what the user typed.**
+  `morph::render::normalizeLocaleNumber` dropped every occurrence of the group
+  separator unconditionally, with no check on placement, so a de-DE user typing
+  the US form `"1.5"` into a price field submitted `15` — a perfectly valid
+  number that nothing downstream could recognise as wrong. `"1.50"` gave `150`,
+  `"1.2.3.4"` gave `1234`, the en-US mirror image `"1,5"` gave `15`, and two
+  equal separators silently ate the decimal. A group separator is now dropped
+  only where one can legally be — preceded by one to three digits, followed by
+  exactly three, never after the decimal separator — and everything else is
+  reported as malformed; equal separators are rejected outright. Every
+  well-formed entry (`"1.050,25"`, `"1.000.000,25"`, an ungrouped `"1050,25"`,
+  fr-FR's U+202F grouping) normalises exactly as before. The JavaScript mirror
+  in `src/qt/forms/qml/DynamicForm.qml` produced byte-identical wrong answers
+  and carries the identical validation now. See `docs/spec/forms/forms.md`,
+  "Locale data formatting"; morph#574.
+- **A deep `Quantity` derivation overflowed the stack.** A running total
+  (`total = total + one` in a loop) records one `ASTNode` per iteration chained
+  through `left`, and every walk over that chain was recursive: destroying a
+  21,000-node chain segfaulted at `-O0` while surviving 200,000 at `-O2`, where
+  clang rewrites the release into a loop, and `equation()` segfaulted at 25,000
+  nodes at every optimisation level. `~ASTNode` now releases the chain through
+  a local worklist and all four `equation()` traversals run over an explicit
+  stack, with the symbolic and substituted renderings unified into one stack
+  machine; `equation()` output is unchanged. `MORPH_QUANTITY_PROVENANCE` keeps
+  its default of `1` — the measured cost is real (54,056 KB and 0.034 s against
+  12,236 KB and 0.006 s for a 200,000-iteration total) but the toggle changes
+  observable behaviour, not just cost, so a bulk path that never calls
+  `equation()` should set it to `0` rather than have it flipped underneath every
+  build that did not. See `docs/spec/util/quantity_type.md`, *Provenance* and
+  *Limitations*; morph#574.
 - **Both of the cross-field rule vocabulary's safety checks were bypassed by
   wrapping a rule in one combinator.** Unsatisfiability detection stopped at
   the first compound node, because it skipped any node without a `fields` key

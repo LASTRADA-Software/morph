@@ -1333,6 +1333,33 @@ Display formatting is the renderer's duty; the wire stays canonical:
   single byte that never matched, so a perfectly valid `"1 050,25"` typed by a
   French user normalised to `std::nullopt` and the control reported it
   malformed. An empty view means "this locale has no such separator".
+
+  **Grouping is validated, never merely stripped.** A group separator is
+  dropped only where a group separator can legally be: preceded by one to three
+  digits, followed by exactly three more, and never after the decimal
+  separator. `"1.050,25"`, `"1.000.000,25"` and an ungrouped `"1050,25"` all
+  normalise; `"1.5"`, `"1.50"`, `"1.05"` and `"1.2.3.4"` in a de-DE locale are
+  malformed, and so is the en-US mirror image `"1,5"`. This is not
+  strictness for its own sake: dropping every occurrence unconditionally, as
+  both control edges used to, turns a de-DE user's US-style `"1.5"` into `15` —
+  a perfectly valid number, ten times too large, that no downstream check can
+  recognise as wrong, so the user is charged ten times with no diagnostic
+  anywhere (morph#574). The field's job at this edge is to report a fact to the
+  layer that owns the policy, not to produce a number at any price.
+
+  **The two separators must differ.** A non-empty `groupSeparator` equal to
+  `decimalSeparator` is rejected like any other malformed entry — with one
+  string in both roles there is no reading of `"1.5"` the function could
+  defend, and the old code silently ate the decimal. It is reported through the
+  return value rather than an assertion, deliberately: an assertion would make
+  a control edge behave differently in Debug and Release, and would be
+  untestable in the configuration where it fires.
+
+  **Both edges, or neither.** `src/qt/forms/qml/DynamicForm.qml` carries a
+  JavaScript mirror of this function, and a divergence between them is a
+  divergence in what the product accepts. The mirror produced byte-identical
+  wrong answers on all of the cases above and carries byte-identical
+  validation now; changing one without the other is the defect, not the fix.
 - **Timestamps.** The wire value is strict UTC ISO-8601
   ([datetime.md](../util/datetime.md)); a renderer displays and edits in the
   user's zone by shifting a `morph::time::DateTime` with its existing
