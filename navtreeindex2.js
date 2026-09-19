@@ -1,5 +1,6 @@
 var NAVTREEINDEX2 =
 {
+"d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html#aefb0097d261175dbb3107c9df35c3482":[2,0,0,22,3,0],
 "d7/d54/structmorph_1_1util_1_1detail_1_1IsTagged.html":[2,0,0,20,0,0],
 "d7/d6b/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1DateTime_01_4.html":[2,0,0,12,8],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html":[2,0,0,8,23],
@@ -248,6 +249,5 @@ var NAVTREEINDEX2 =
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8d947c7f41ebffae2073c9e3d32dc3bb":[2,0,0,15,6,2],
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#ac4251df7c4776d6cd0c68f4751952d45":[2,0,0,15,6,6],
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#adff798ad5c1b3aa6c49d4a2b5e5f3c1b":[2,0,0,15,6,4],
-"dc/d11/structmorph_1_1app_1_1WizardScreen.html":[2,0,0,0,2],
-"dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html":[2,0,0,9,8]
+"dc/d11/structmorph_1_1app_1_1WizardScreen.html":[2,0,0,0,2]
 };
