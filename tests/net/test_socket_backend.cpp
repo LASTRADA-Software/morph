@@ -1727,10 +1727,17 @@ TEST_CASE(
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
+
+    // Declared before `backend`, so it is destroyed *after* it: `~SocketBackend`
+    // joins the I/O thread, which can call `post()` on this executor right up
+    // until that join completes. With the reverse order, TSan caught the I/O
+    // thread still running -- and still able to call `post()` -- while this
+    // executor's own destructor was tearing down its condition variable on the
+    // main thread (morph#586, data race in pthread_cond_destroy).
+    morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
     REQUIRE(backend.waitForConnected());
 
-    morph::exec::MainThreadExecutor callerExec;
     morph::exec::detail::ModelId bound{};
     std::atomic<bool> done{false};
     auto observe = [&](morph::exec::detail::ModelId mid) {
@@ -1823,10 +1830,13 @@ TEST_CASE("SocketBackend: a bindModel continuation does not run until the caller
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
+
+    // Declared before `backend` -- see the identical comment on the first
+    // TEST_CASE in this file that needed it (morph#586, data race).
+    morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
     REQUIRE(backend.waitForConnected());
 
-    morph::exec::MainThreadExecutor callerExec;
     std::atomic<bool> ran{false};
     std::thread::id ranOn{};
     auto completion = backend.bindModel(privateBind("SbEchoModel"), callerExec);
@@ -1871,6 +1881,10 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
     FakeWsServer fake;
     morph::net::SocketBackend::Config cfg;
     cfg.reconnectEnabled = false;
+
+    // Declared before `backend` -- see the identical comment on the first
+    // TEST_CASE in this file that needed it (morph#586, data race).
+    morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
     fake.acceptAndHandshake();
     REQUIRE(backend.waitForConnected());
@@ -1896,7 +1910,6 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
     REQUIRE(syncEnv.callId == 0U);  // the synchronous channel's sentinel
 
     // (1) The bind is accepted with the token held.
-    morph::exec::MainThreadExecutor callerExec;
     morph::exec::detail::ModelId bound{};
     std::string error;
     std::atomic<bool> done{false};
@@ -1962,12 +1975,15 @@ TEST_CASE("SocketBackend: several binds are in flight at once and are matched by
     FakeWsServer fake;
     morph::net::SocketBackend::Config cfg;
     cfg.reconnectEnabled = false;
+
+    // Declared before `backend` -- see the identical comment on the first
+    // TEST_CASE in this file that needed it (morph#586, data race).
+    morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
     fake.acceptAndHandshake();
     REQUIRE(backend.waitForConnected());
 
     constexpr int kBinds = 4;
-    morph::exec::MainThreadExecutor callerExec;
     std::vector<morph::async::Completion<morph::exec::detail::ModelId>> completions;
     std::vector<morph::exec::detail::ModelId> bound(kBinds);
     std::atomic<int> settled{0};
@@ -2057,10 +2073,13 @@ TEST_CASE("SocketBackend: a bind rejected by the server surfaces the server's ow
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, authz);
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
+
+    // Declared before `backend` -- see the identical comment on the first
+    // TEST_CASE in this file that needed it (morph#586, data race).
+    morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
     REQUIRE(backend.waitForConnected());
 
-    morph::exec::MainThreadExecutor callerExec;
     std::string error;
     std::atomic<bool> done{false};
     backend.bindModel(privateBind("SbEchoModel"), callerExec).onErrorDetached([&](const std::exception_ptr& exc) {
