@@ -586,7 +586,7 @@ struct ASTNode {
             pending.push_back(std::move(right));
         }
         while (!pending.empty()) {
-            std::shared_ptr<ASTNode> node = std::move(pending.back());
+            std::shared_ptr<ASTNode> const node = std::move(pending.back());
             pending.pop_back();
             if (node.use_count() == 1) {
                 if (node->left) {

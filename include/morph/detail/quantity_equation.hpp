@@ -20,6 +20,14 @@
 #include <vector>
 
 #include "../attributes.hpp"
+// Included back deliberately, and not circular: `util/quantity.hpp` includes
+// this file at the very end, `#pragma once` makes the inner visit a no-op, and
+// nothing in that header past the include point needs anything defined here.
+// It is what makes this file self-contained, which matters because a tool that
+// opens a header on its own -- clang-tidy analysing a changed header, an IDE,
+// include-what-you-use -- otherwise sees `unknown type name 'ASTNode'` on
+// every line and reports a cascade of findings about code that compiles fine.
+#include "../util/quantity.hpp"
 #include "../util/rational.hpp"
 
 namespace morph::units::detail {
@@ -166,7 +174,7 @@ struct EquationRenderer {
     /// @param expandRoot Whether to expand @p root itself (rather than label it).
     void assignLabels(const ASTNode* root, bool expandRoot) {
         std::vector<LabelFrame> pending;
-        pending.push_back(LabelFrame{root, expandRoot});
+        pending.push_back(LabelFrame{.node = root, .expandThis = expandRoot});
         while (!pending.empty()) {
             LabelFrame const frame = pending.back();
             pending.pop_back();
@@ -184,10 +192,10 @@ struct EquationRenderer {
                 continue;
             }
             if (node->right) {
-                pending.push_back(LabelFrame{node->right.get(), false});
+                pending.push_back(LabelFrame{.node = node->right.get(), .expandThis = false});
             }
             if (node->left) {
-                pending.push_back(LabelFrame{node->left.get(), false});
+                pending.push_back(LabelFrame{.node = node->left.get(), .expandThis = false});
             }
         }
     }
@@ -203,7 +211,7 @@ struct EquationRenderer {
         bool const rightNeedsParens =
             (right.precedence < precedence) || (right.precedence == precedence && (op == "-" || op == "/"));
         std::string const rightText = rightNeedsParens ? "(" + right.text + ")" : right.text;
-        return Rendered{leftText + " " + op + " " + rightText, precedence};
+        return Rendered{.text = leftText + " " + op + " " + rightText, .precedence = precedence};
     }
 
     /// @brief Renders a unary-negation subexpression.
@@ -211,7 +219,7 @@ struct EquationRenderer {
     /// @return The combined rendering.
     [[nodiscard]] static Rendered combineUnary(const Rendered& operand) {
         std::string const text = (operand.precedence <= 1) ? "-(" + operand.text + ")" : "-" + operand.text;
-        return Rendered{text, 3};
+        return Rendered{.text = text, .precedence = 3};
     }
 
     /// @brief The rendering of a node that stops the walk — a name, a `cK`
@@ -224,19 +232,19 @@ struct EquationRenderer {
     [[nodiscard]] std::optional<Rendered> atomRendering(const ASTNode* node, bool expandThis, RenderMode mode) const {
         if (mode == RenderMode::symbolic) {
             if (node->name.has_value()) {
-                return Rendered{"\"" + *node->name + "\"", 100};
+                return Rendered{.text = "\"" + *node->name + "\"", .precedence = 100};
             }
             if (!expandThis && isPlaceholder(node)) {
-                return Rendered{"c" + std::to_string(labelIndex.at(node)), 100};
+                return Rendered{.text = "c" + std::to_string(labelIndex.at(node)), .precedence = 100};
             }
         } else if (!expandThis && (node->name.has_value() || isPlaceholder(node))) {
-            return Rendered{formatOptional(nodeValue(*node)), 100};
+            return Rendered{.text = formatOptional(nodeValue(*node)), .precedence = 100};
         }
         if (isLeafNode(*node)) {
-            return Rendered{formatOptional(node->current.lhs), 100};
+            return Rendered{.text = formatOptional(node->current.lhs), .precedence = 100};
         }
         if (isConversionNode(*node)) {
-            return Rendered{formatOptional(node->current.result), 100};
+            return Rendered{.text = formatOptional(node->current.result), .precedence = 100};
         }
         return std::nullopt;
     }
@@ -263,7 +271,7 @@ struct EquationRenderer {
     /// @return The rendering of @p root.
     [[nodiscard]] Rendered render(const ASTNode* root, bool expandRoot, RenderMode mode) const {
         std::vector<RenderFrame> stack;
-        stack.push_back(RenderFrame{root, expandRoot, 0, Rendered{}});
+        stack.push_back(RenderFrame{.node = root, .expandThis = expandRoot});
         Rendered finished;
         while (!stack.empty()) {
             RenderFrame& top = stack.back();
@@ -276,14 +284,17 @@ struct EquationRenderer {
                 top.stage = 1;
                 if (top.node->left) {
                     const ASTNode* child = top.node->left.get();
-                    stack.push_back(RenderFrame{child, false, 0, Rendered{}});
+                    stack.push_back(RenderFrame{.node = child, .expandThis = false});
                     continue;
                 }
-                finished = Rendered{formatOptional(top.node->current.lhs), 100};
+                finished = Rendered{.text = formatOptional(top.node->current.lhs), .precedence = 100};
                 continue;
             }
             if (top.stage == 1) {
                 top.left = std::move(finished);
+                // Put the slot back into a known state rather than leaving it
+                // moved-from: it is read again below, on the pop that follows.
+                finished = Rendered{};
                 bool const hasRight = top.node->right || top.node->current.rhs.has_value();
                 if (!hasRight) {
                     finished = combineUnary(top.left);
@@ -293,10 +304,10 @@ struct EquationRenderer {
                 top.stage = 2;
                 if (top.node->right) {
                     const ASTNode* child = top.node->right.get();
-                    stack.push_back(RenderFrame{child, false, 0, Rendered{}});
+                    stack.push_back(RenderFrame{.node = child, .expandThis = false});
                     continue;
                 }
-                finished = Rendered{formatOptional(top.node->current.rhs), 100};
+                finished = Rendered{.text = formatOptional(top.node->current.rhs), .precedence = 100};
                 continue;
             }
             finished = combine(top.node->current.operation, top.left, finished);
