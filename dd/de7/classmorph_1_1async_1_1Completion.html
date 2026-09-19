@@ -147,20 +147,20 @@ Public Member Functions</h2></td></tr>
 &#160;</td><td class="memItemRight"><b>Completion</b> (const Completion &amp;)=delete</td></tr>
 <tr class="memitem:a4e56d69d35aaf938501a367ccc5255fa" id="r_a4e56d69d35aaf938501a367ccc5255fa"><td class="memItemLeft"><a id="a4e56d69d35aaf938501a367ccc5255fa" name="a4e56d69d35aaf938501a367ccc5255fa"></a>
 <a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;)=delete</td></tr>
-<tr class="memitem:a60f4fe2dac5ce113b346c73b9f7fce03" id="r_a60f4fe2dac5ce113b346c73b9f7fce03"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a60f4fe2dac5ce113b346c73b9f7fce03">then</a> (std::function&lt; void(T)&gt; handler)</td></tr>
-<tr class="memdesc:a60f4fe2dac5ce113b346c73b9f7fce03"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a success callback.  <br /></td></tr>
+<tr class="memitem:a1f7255483840e4f83c5d26403b62a68e" id="r_a1f7255483840e4f83c5d26403b62a68e"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e">then</a> (std::function&lt; void(const T &amp;)&gt; handler)</td></tr>
+<tr class="memdesc:a1f7255483840e4f83c5d26403b62a68e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a success callback.  <br /></td></tr>
 <tr class="memitem:a3becd6006babdc54444b20d0b5b074a8" id="r_a3becd6006babdc54444b20d0b5b074a8"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8">onError</a> (std::function&lt; void(std::exception_ptr)&gt; handler)</td></tr>
 <tr class="memdesc:a3becd6006babdc54444b20d0b5b074a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers an error callback.  <br /></td></tr>
-<tr class="memitem:a92b46a7ae3fba3ecbd05412138ed30dc" id="r_a92b46a7ae3fba3ecbd05412138ed30dc"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a92b46a7ae3fba3ecbd05412138ed30dc">then</a> (const <a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html">CallbackScope</a> &amp;scope, std::function&lt; void(T)&gt; handler)</td></tr>
-<tr class="memdesc:a92b46a7ae3fba3ecbd05412138ed30dc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a success callback gated on <code class="param">scope's</code> lifetime and stop state.  <br /></td></tr>
-<tr class="memitem:a122d8c8dc787dea6b448bfde63568ff3" id="r_a122d8c8dc787dea6b448bfde63568ff3"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a122d8c8dc787dea6b448bfde63568ff3">then</a> (<a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html">CallbackToken</a> token, std::function&lt; void(T)&gt; handler)</td></tr>
-<tr class="memdesc:a122d8c8dc787dea6b448bfde63568ff3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a success callback gated on an already-issued <code class="param">token</code>.  <br /></td></tr>
+<tr class="memitem:a4fe2aa8ea327bc5e5ab0973a6f633f3b" id="r_a4fe2aa8ea327bc5e5ab0973a6f633f3b"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a4fe2aa8ea327bc5e5ab0973a6f633f3b">then</a> (const <a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html">CallbackScope</a> &amp;scope, std::function&lt; void(const T &amp;)&gt; handler)</td></tr>
+<tr class="memdesc:a4fe2aa8ea327bc5e5ab0973a6f633f3b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a success callback gated on <code class="param">scope's</code> lifetime and stop state.  <br /></td></tr>
+<tr class="memitem:a0e20abbe3904cf846428d9554c809d9b" id="r_a0e20abbe3904cf846428d9554c809d9b"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a0e20abbe3904cf846428d9554c809d9b">then</a> (<a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html">CallbackToken</a> token, std::function&lt; void(const T &amp;)&gt; handler)</td></tr>
+<tr class="memdesc:a0e20abbe3904cf846428d9554c809d9b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a success callback gated on an already-issued <code class="param">token</code>.  <br /></td></tr>
 <tr class="memitem:a7c1ab7666e05476653bcbfa1f3b40079" id="r_a7c1ab7666e05476653bcbfa1f3b40079"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a7c1ab7666e05476653bcbfa1f3b40079">onError</a> (const <a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html">CallbackScope</a> &amp;scope, std::function&lt; void(std::exception_ptr)&gt; handler)</td></tr>
 <tr class="memdesc:a7c1ab7666e05476653bcbfa1f3b40079"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers an error callback gated on <code class="param">scope's</code> lifetime and stop state.  <br /></td></tr>
 <tr class="memitem:af748b7227c5c0c9a4ad674a06dad2187" id="r_af748b7227c5c0c9a4ad674a06dad2187"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#af748b7227c5c0c9a4ad674a06dad2187">onError</a> (<a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html">CallbackToken</a> token, std::function&lt; void(std::exception_ptr)&gt; handler)</td></tr>
 <tr class="memdesc:af748b7227c5c0c9a4ad674a06dad2187"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers an error callback gated on an already-issued <code class="param">token</code>.  <br /></td></tr>
-<tr class="memitem:a7e1945d72b3e6cc24fc7d3725f138975" id="r_a7e1945d72b3e6cc24fc7d3725f138975"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a7e1945d72b3e6cc24fc7d3725f138975">thenDetached</a> (std::function&lt; void(T)&gt; handler)</td></tr>
-<tr class="memdesc:a7e1945d72b3e6cc24fc7d3725f138975"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a success callback whose lifetime is deliberately unmanaged.  <br /></td></tr>
+<tr class="memitem:a27fcb0841f4763225331bd5405ed94c9" id="r_a27fcb0841f4763225331bd5405ed94c9"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a27fcb0841f4763225331bd5405ed94c9">thenDetached</a> (std::function&lt; void(const T &amp;)&gt; handler)</td></tr>
+<tr class="memdesc:a27fcb0841f4763225331bd5405ed94c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a success callback whose lifetime is deliberately unmanaged.  <br /></td></tr>
 <tr class="memitem:adb478319b8a269982c2d4dc2e2a1fb2b" id="r_adb478319b8a269982c2d4dc2e2a1fb2b"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#adb478319b8a269982c2d4dc2e2a1fb2b">onErrorDetached</a> (std::function&lt; void(std::exception_ptr)&gt; handler)</td></tr>
 <tr class="memdesc:adb478319b8a269982c2d4dc2e2a1fb2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers an error callback whose lifetime is deliberately unmanaged.  <br /></td></tr>
 <tr class="memitem:a49bb64dd60ef3d17baf9a36e7b5f1481" id="r_a49bb64dd60ef3d17baf9a36e7b5f1481"><td class="memItemLeft">std::shared_ptr&lt; detail::CompletionState&lt; T &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a49bb64dd60ef3d17baf9a36e7b5f1481">state</a> () const</td></tr>
@@ -175,17 +175,23 @@ Static Public Member Functions</h2></td></tr>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename T&gt;<br />
 class morph::async::Completion&lt; T &gt;</div><p>Move-only handle representing the eventual result of an asynchronous operation. </p>
 <p>Callbacks are posted to the <span class="tt">IExecutor</span> supplied at construction time, so they always run on the intended thread (e.g. the GUI thread).</p>
-<dl class="section user"><dt>Thread safety</dt><dd><span class="tt"><a class="el" href="#a60f4fe2dac5ce113b346c73b9f7fce03" title="Registers a success callback.">then()</a></span> and <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> may be called from any thread. The registered callbacks are invoked via the executor, never directly from the producing thread.</dd></dl>
+<dl class="section user"><dt>Thread safety</dt><dd><span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then()</a></span> and <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> may be called from any thread. The registered callbacks are invoked via the executor, never directly from the producing thread.</dd></dl>
 <dl class="section user"><dt>Orphan detection</dt><dd>If a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span> is destroyed before an <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> handler is attached and the operation has already failed, the exception is logged as an orphan error.</dd></dl>
-<dl class="section user"><dt>Lifetime and stop gating</dt><dd>Because delivery always goes through an executor, the receiver can be destroyed — or simply lose interest — before the handler runs. Pass a <span class="tt"><a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html" title="Owned lifetime-and-stop gate for asynchronous callbacks — a data member, not a base class.">morph::async::CallbackScope</a></span> (or one of its <span class="tt"><a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html" title="Weak, copyable observer of a CallbackScope — the half a callback captures.">CallbackToken</a></span>s) as the first argument to <span class="tt"><a class="el" href="#a60f4fe2dac5ce113b346c73b9f7fce03" title="Registers a success callback.">then()</a></span> / <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> and the handler is refused unless the scope is still alive and un-stopped at delivery time. <span class="tt"><a class="el" href="#a7e1945d72b3e6cc24fc7d3725f138975" title="Registers a success callback whose lifetime is deliberately unmanaged.">thenDetached()</a></span> / <span class="tt"><a class="el" href="#adb478319b8a269982c2d4dc2e2a1fb2b" title="Registers an error callback whose lifetime is deliberately unmanaged.">onErrorDetached()</a></span> are the same ungated attachments as <span class="tt">then(fn)</span> / <span class="tt">onError(fn)</span>, spelled so a deliberately unmanaged callback says so. See <span class="tt"><a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a></span> and docs/spec/core/callback_scope.md.</dd></dl>
+<dl class="section user"><dt>Lifetime and stop gating</dt><dd>Because delivery always goes through an executor, the receiver can be destroyed — or simply lose interest — before the handler runs. Pass a <span class="tt"><a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html" title="Owned lifetime-and-stop gate for asynchronous callbacks — a data member, not a base class.">morph::async::CallbackScope</a></span> (or one of its <span class="tt"><a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html" title="Weak, copyable observer of a CallbackScope — the half a callback captures.">CallbackToken</a></span>s) as the first argument to <span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then()</a></span> / <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> and the handler is refused unless the scope is still alive and un-stopped at delivery time. <span class="tt"><a class="el" href="#a27fcb0841f4763225331bd5405ed94c9" title="Registers a success callback whose lifetime is deliberately unmanaged.">thenDetached()</a></span> / <span class="tt"><a class="el" href="#adb478319b8a269982c2d4dc2e2a1fb2b" title="Registers an error callback whose lifetime is deliberately unmanaged.">onErrorDetached()</a></span> are the same ungated attachments as <span class="tt">then(fn)</span> / <span class="tt">onError(fn)</span>, spelled so a deliberately unmanaged callback says so. See <span class="tt"><a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a></span> and docs/spec/core/callback_scope.md.</dd></dl>
+<dl class="section user"><dt>Value-handling contract</dt><dd><span class="tt">T</span> need only be <b>move-constructible</b>; that is the whole type requirement. Copyability is a <em>per-handler</em> obligation, reported where the handler is written rather than imposed on the whole instantiation:<ul>
+<li>a handler taking <span class="tt">const T&amp;</span> costs <b>zero</b> copies;</li>
+<li>a handler taking <span class="tt">T</span> by value costs <b>exactly one</b>, at its own parameter binding, and requires <span class="tt">T</span> to be copyable.</li>
+</ul>
+</dd></dl>
+<p>The budget does not depend on how many handlers are attached, nor on whether they attached before or after the completion settled. The value is <b>observed, never consumed</b>: no handler can move out of the stored value, so a <span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then()</a></span> attached after settling still sees the genuine result. A handler that wants to consume takes <span class="tt">T</span> by value and moves out of its own copy. See docs/spec/core/completion.md, "Value-handling contract".</p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
-    <tr><td class="paramname">T</td><td>Type of the success value. </td></tr>
+    <tr><td class="paramname">T</td><td>Type of the success value. Must be move-constructible. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac7fe8818f9e79746106a776255a9a47d" name="ac7fe8818f9e79746106a776255a9a47d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac7fe8818f9e79746106a776255a9a47d">&#9670;&#160;</a></span>Completion()</h2>
@@ -225,7 +231,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00303">303</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -260,8 +266,8 @@ template&lt;typename T&gt; </div>
 
 </div>
 </div>
-<a id="a60f4fe2dac5ce113b346c73b9f7fce03" name="a60f4fe2dac5ce113b346c73b9f7fce03"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a60f4fe2dac5ce113b346c73b9f7fce03">&#9670;&#160;</a></span>then() <span class="overload">[1/3]</span></h2>
+<a id="a1f7255483840e4f83c5d26403b62a68e" name="a1f7255483840e4f83c5d26403b62a68e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1f7255483840e4f83c5d26403b62a68e">&#9670;&#160;</a></span>then() <span class="overload">[1/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -274,7 +280,7 @@ template&lt;typename T&gt; </div>
         <tr>
           <td class="memname"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp; <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">morph::async::Completion</a>&lt; T &gt;::then </td>
           <td>(</td>
-          <td class="paramtype">std::function&lt; void(T)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
+          <td class="paramtype">std::function&lt; void(const T &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -289,13 +295,13 @@ template&lt;typename T&gt; </div>
 <p><code class="param">handler</code> is posted to the executor with the result value when the operation completes successfully. If the operation has already completed, the callback is posted immediately.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">handler</td><td>Callable receiving the result by value. </td></tr>
+    <tr><td class="paramname">handler</td><td>Callable receiving the result. Take <span class="tt">const T&amp;</span> to observe it for free; take <span class="tt">T</span> by value to get your own copy, at the cost of exactly one copy. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00283">283</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00328">328</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -334,12 +340,12 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00299">299</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00344">344</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a92b46a7ae3fba3ecbd05412138ed30dc" name="a92b46a7ae3fba3ecbd05412138ed30dc"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a92b46a7ae3fba3ecbd05412138ed30dc">&#9670;&#160;</a></span>then() <span class="overload">[2/3]</span></h2>
+<a id="a4fe2aa8ea327bc5e5ab0973a6f633f3b" name="a4fe2aa8ea327bc5e5ab0973a6f633f3b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4fe2aa8ea327bc5e5ab0973a6f633f3b">&#9670;&#160;</a></span>then() <span class="overload">[2/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -357,7 +363,7 @@ template&lt;typename T&gt; </div>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::function&lt; void(T)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span>&#160;)</td>
+          <td class="paramtype">std::function&lt; void(const T &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -373,18 +379,18 @@ template&lt;typename T&gt; </div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">scope</td><td>Receiver-owned gate. Only a token for its <em>current</em> generation is captured, so a later <span class="tt">reset()</span> retires this attachment. </td></tr>
-    <tr><td class="paramname">handler</td><td>Callable receiving the result by value. </td></tr>
+    <tr><td class="paramname">handler</td><td>Callable receiving the result. Take <span class="tt">const T&amp;</span> to observe it for free; take <span class="tt">T</span> by value to get your own copy, at the cost of exactly one copy. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00323">323</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a122d8c8dc787dea6b448bfde63568ff3" name="a122d8c8dc787dea6b448bfde63568ff3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a122d8c8dc787dea6b448bfde63568ff3">&#9670;&#160;</a></span>then() <span class="overload">[3/3]</span></h2>
+<a id="a0e20abbe3904cf846428d9554c809d9b" name="a0e20abbe3904cf846428d9554c809d9b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0e20abbe3904cf846428d9554c809d9b">&#9670;&#160;</a></span>then() <span class="overload">[3/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -402,7 +408,7 @@ template&lt;typename T&gt; </div>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::function&lt; void(T)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span>&#160;)</td>
+          <td class="paramtype">std::function&lt; void(const T &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -413,17 +419,17 @@ template&lt;typename T&gt; </div>
 </div><div class="memdoc">
 
 <p>Registers a success callback gated on an already-issued <code class="param">token</code>. </p>
-<p>The token-taking form of <span class="tt"><a class="el" href="#a60f4fe2dac5ce113b346c73b9f7fce03" title="Registers a success callback.">then</a>(const <a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html" title="Owned lifetime-and-stop gate for asynchronous callbacks — a data member, not a base class.">CallbackScope</a>&amp;, handler)</span>, for callers that hold a token rather than the scope itself (a helper that was handed one, or code that captured a token before dispatching).</p>
+<p>The token-taking form of <span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then</a>(const <a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html" title="Owned lifetime-and-stop gate for asynchronous callbacks — a data member, not a base class.">CallbackScope</a>&amp;, handler)</span>, for callers that hold a token rather than the scope itself (a helper that was handed one, or code that captured a token before dispatching).</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">token</td><td>Gate observing some receiver's <span class="tt"><a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html" title="Owned lifetime-and-stop gate for asynchronous callbacks — a data member, not a base class.">CallbackScope</a></span>. A default-constructed token suppresses unconditionally. </td></tr>
-    <tr><td class="paramname">handler</td><td>Callable receiving the result by value. </td></tr>
+    <tr><td class="paramname">handler</td><td>Callable receiving the result. Take <span class="tt">const T&amp;</span> to observe it for free; take <span class="tt">T</span> by value to get your own copy, at the cost of exactly one copy. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00385">385</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -468,7 +474,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00403">403</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -512,12 +518,12 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00370">370</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a7e1945d72b3e6cc24fc7d3725f138975" name="a7e1945d72b3e6cc24fc7d3725f138975"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7e1945d72b3e6cc24fc7d3725f138975">&#9670;&#160;</a></span>thenDetached()</h2>
+<a id="a27fcb0841f4763225331bd5405ed94c9" name="a27fcb0841f4763225331bd5405ed94c9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a27fcb0841f4763225331bd5405ed94c9">&#9670;&#160;</a></span>thenDetached()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -530,7 +536,7 @@ template&lt;typename T&gt; </div>
         <tr>
           <td class="memname"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp; <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">morph::async::Completion</a>&lt; T &gt;::thenDetached </td>
           <td>(</td>
-          <td class="paramtype">std::function&lt; void(T)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
+          <td class="paramtype">std::function&lt; void(const T &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -545,13 +551,13 @@ template&lt;typename T&gt; </div>
 <p>Exactly <span class="tt">then(handler)</span>, spelled so that "no scope gates this" is a statement the author made on purpose and a reviewer can grep for. Use it when the handler genuinely owns everything it touches — it captures only values, or a <span class="tt">shared_ptr</span> it keeps alive itself.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">handler</td><td>Callable receiving the result by value. </td></tr>
+    <tr><td class="paramname">handler</td><td>Callable receiving the result. Take <span class="tt">const T&amp;</span> to observe it for free; take <span class="tt">T</span> by value to get your own copy, at the cost of exactly one copy. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00384">384</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00432">432</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -581,7 +587,7 @@ template&lt;typename T&gt; </div>
 </div><div class="memdoc">
 
 <p>Registers an error callback whose lifetime is deliberately unmanaged. </p>
-<p>The <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError</a></span> counterpart of <span class="tt"><a class="el" href="#a7e1945d72b3e6cc24fc7d3725f138975" title="Registers a success callback whose lifetime is deliberately unmanaged.">thenDetached()</a></span>.</p>
+<p>The <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError</a></span> counterpart of <span class="tt"><a class="el" href="#a27fcb0841f4763225331bd5405ed94c9" title="Registers a success callback whose lifetime is deliberately unmanaged.">thenDetached()</a></span>.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handler</td><td>Callable receiving the exception pointer. </td></tr>
@@ -590,7 +596,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00443">443</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -622,7 +628,7 @@ template&lt;typename T&gt; </div>
 <p>Returns the underlying shared state (for advanced / internal use). </p>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the completion state, or <span class="tt">nullptr</span> for empty completions. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00399">399</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00449">449</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -653,7 +659,7 @@ template&lt;typename T&gt; </div>
 
 <p>Constructs a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span>/<span class="tt"><a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a>&lt;T&gt;</span> pair sharing one settleable state. </p>
 <p>The public "settleable promise" seam (issue #55): lets a caller — typically test code — construct a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span> it can resolve or reject on demand, without a full <span class="tt">Bridge</span>/<span class="tt">IBackend</span> round trip and without reaching into <span class="tt">morph::async::detail::CompletionState&lt;T&gt;</span>. Everything <span class="tt">Completion(state,
-executor)</span> already provided by hand is available through this factory instead: the returned <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span> is exactly what <span class="tt"><a class="el" href="#a60f4fe2dac5ce113b346c73b9f7fce03" title="Registers a success callback.">then()</a></span>/<span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> observe; the returned <span class="tt"><a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a></span> is exactly what settles it. </p><dl class="params"><dt>Parameters</dt><dd>
+executor)</span> already provided by hand is available through this factory instead: the returned <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span> is exactly what <span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then()</a></span>/<span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> observe; the returned <span class="tt"><a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a></span> is exactly what settles it. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">execPtr</td><td>Executor callbacks are posted on; <span class="tt">nullptr</span> for a write-only completion (see the two-argument constructor). </td></tr>
   </table>
@@ -661,7 +667,7 @@ executor)</span> already provided by hand is available through this factory inst
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">{<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;, <a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a>}</span> pair sharing one <span class="tt">CompletionState&lt;T&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00471">471</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00521">521</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
