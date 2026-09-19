@@ -734,7 +734,7 @@ TEST_CASE("A 100000-node provenance chain is destroyed without overflowing the s
 }
 
 TEST_CASE("equation() walks a 70000-node provenance chain without overflowing the stack",
-          "[quantity][provenance][equation][morph574]") {
+          "[quantity][provenance][equation][morph574][slow]") {
     Euro const total = runningTotal(kDeepEquationNodes);
 
     auto const lines = total.equation();
