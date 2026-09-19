@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Usage: bash scripts/test_check_spec_citations.sh
 #
-# Self-test for the two gates in scripts/check_spec_citations.sh that were
-# themselves added to close a citation family nothing could fail for: the
+# Self-test for the checks in scripts/check_spec_citations.sh that were
+# themselves added to close a family nothing could fail for: the
 # section-citation check (check 5, morph#316), which keeps a citation naming a
 # *section* of a markdown file pointing at a section that is really there, and
-# pointing at an entry that still exists and is named by its slug.
+# the forms key-vocabulary check (check 6, morph#554), which keeps
+# docs/spec/forms/'s renderer-contract tables listing every schema key,
+# document key and rule kind the headers actually emit.
 #
 # A lint gate nobody tests reports green whether or not it still detects
 # anything -- and this gate exists precisely because the surrounding script had
@@ -176,6 +178,56 @@ expect_caught "the section-citation scan's own file glob going stale" \
     break_section_scan \
     'section-citation check only scanned 0 cited sections'
 
+# ── Each drift the forms key-vocabulary check claims to catch (check 6) ──────
+#
+# Same argument as check 4's, on the other spec third parties implement
+# against: docs/spec/forms/ is the renderer contract for a DSL, and morph's own
+# Qt/QML renderer reads the same headers the schema generator does, so nothing
+# in the product can observe the spec falling behind the key vocabulary
+# (morph#554). Each category is mutated on its own, since a lumped check would
+# let one of them go blind behind the others.
+
+expect_caught "a documented x-* key losing its row in the spec" \
+    "edit docs/spec/forms/forms.md -e '/^| \`x-placeholder\`/d'" \
+    'schema key `x-placeholder` is emitted by include/morph/forms/** but is not a row'
+
+expect_caught "a new x-* key reaching the schema with no row in the spec" \
+    "printf '%s\n' '// emits \"x-undocumentedKey\" onto the property node' >> include/morph/forms/forms.hpp" \
+    'schema key `x-undocumentedKey` is emitted by include/morph/forms/** but is not a row'
+
+expect_caught "a document key losing its row in the spec" \
+    "edit docs/spec/forms/workflows_navigation.md -e '/^| \`w-steps\`/d'" \
+    'document key `w-steps` is emitted by include/morph/forms/** but is not a row'
+
+# The asymmetry the check exists to keep closed: the wire spelling alone is not
+# documentation for a C++ author, who cannot derive `AtLeastOneOf` from
+# `atLeastOneOf` by any rule this spec states.
+expect_caught "a rule kind row naming its wire spelling but not its C++ enumerator" \
+    "edit docs/spec/forms/forms.md -e 's/\`RuleKind::AtLeastOneOf\`//'" \
+    'rule kind `"atLeastOneOf"` (RuleKind::AtLeastOneOf) is not a table row'
+
+# A kind added to the enum, and so to the wire, with nothing said about it.
+expect_caught "a new rule kind added to ruleKindName() with no row in the spec" \
+    "edit include/morph/forms/forms.hpp -e 's|        case RuleKind::Engaged:\$|        case RuleKind::Sideways:\n            return \"sideways\";\n        case RuleKind::Engaged:|'" \
+    'rule kind `"sideways"` (RuleKind::Sideways) is not a table row'
+
+# Vacuity guards, one per category: a scan that stopped matching would leave
+# the category verifying nothing while the other two carried the check green --
+# which is precisely the failure check 4's per-category floors were added for.
+break_x_key_scan() {
+    edit "$checker" -e 's/"x-\[A-Za-z0-9\]+"/"NO_SUCH_KEY_PREFIX-[A-Za-z0-9]+"/'
+}
+expect_caught "the x-* key scan matching nothing" \
+    break_x_key_scan \
+    'parsed 0 x-keys'
+
+break_rule_kind_scan() {
+    edit "$checker" -e 's/ruleKindName\\(RuleKind kind\\)/noSuchFunctionName(RuleKind kind)/'
+}
+expect_caught "the rule-kind scan matching nothing" \
+    break_rule_kind_scan \
+    '0 rule kinds'
+
 # ── The false positives it must not manufacture ──────────────────────────────
 # Headings across this tree carry an appended qualifier that citations of them
 # routinely drop -- `## Foo — bar` and `## Foo (bar)` are both cited as "Foo".
@@ -194,4 +246,4 @@ if [ "$failures" -ne 0 ]; then
     exit 1
 fi
 
-printf '\nscripts/check_spec_citations.sh detects every section-citation drift it claims to.\n'
+printf '\nscripts/check_spec_citations.sh detects every section-citation and forms-vocabulary drift it claims to.\n'

@@ -8,5 +8,14 @@ target_include_directories(morph_bench PRIVATE ${CMAKE_SOURCE_DIR}/tests)
 target_compile_definitions(morph_bench PRIVATE BENCH_ARTIFACT_DIR="${CMAKE_CURRENT_BINARY_DIR}")
 apply_warnings(morph_bench)
 
+# Instrumented under the same deliberate decision as tests/soak (morph#542).
+# The numbers a sanitized benchmark reports are not comparable with an
+# unsanitized one and are not meant to be: on a sanitizer preset this target is
+# a correctness run over the dispatch path, and the throughput figures it
+# publishes come from the ordinary presets.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_bench ${AF_SANITIZER})
+endif()
+
 include(Catch)
 catch_discover_tests(morph_bench DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 60 LABELS "bench")

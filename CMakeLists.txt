@@ -682,6 +682,25 @@ if(MORPH_BUILD_QT)
     target_link_libraries(morph_qt_impl PUBLIC morph_qt)
     set_target_properties(morph_qt_impl PROPERTIES AUTOMOC ON)
 
+    # The Qt WebSocket server and backend are the only *compiled* translation
+    # units in morph's own transport: everything else a Qt test exercises is
+    # header-only and so gets instrumented with the test target. Left out, a
+    # sanitizer leg watched every caller of this code and none of the code
+    # (morph#542).
+    #
+    # Safe here, unlike morph_test_main above, because every consumer of this
+    # archive is itself instrumented on a sanitizer preset -- the ladder
+    # targets, examples/common, examples/bank, tests/qt,
+    # tests/net_qt_interop and examples/qt_tls_client all carry an
+    # AF_SANITIZER block. apply_sanitizers()'s link options are PRIVATE and do
+    # not propagate out of a static library, so a consumer that did not would
+    # fail to link with `__asan_init` undefined rather than quietly lose its
+    # instrumentation. (The WASM spike links it too and is never built with
+    # AF_SANITIZER defined -- Emscripten has no such preset here.)
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_qt_impl ${AF_SANITIZER})
+    endif()
+
     if(MORPH_BUILD_TESTS)
         add_subdirectory(tests/qt)
     endif()

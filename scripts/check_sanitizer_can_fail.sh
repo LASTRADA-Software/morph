@@ -88,4 +88,32 @@ for mode in ubsan asan; do
     fi
 done
 
+# ── An unrecognised mode must fail the configure, not the sanitizing ─────────
+#
+# apply_sanitizers() used to be `if asan / elseif tsan / elseif ubsan / endif`
+# with no else arm, so `-DAF_SANITIZER=msan`, `=ASAN` or a typo produced a
+# fully uninstrumented build that configured, compiled and ran the whole suite
+# green (morph#541). That is the same "a leg that cannot fail" defect as a
+# recovering UBSan, arriving through a different door: the job asks for a
+# sanitizer, gets none, and reports success.
+#
+# Checked here rather than by reading the CMake, for this script's own stated
+# reason: what has to hold is behavioural.
+bad_build="${work}/build-badmode"
+if cmake -S "${work}" -B "${bad_build}" \
+        -DCMAKE_BUILD_TYPE=Debug \
+        -DMORPH_COMPILER_OPTIONS="${repo_root}/cmake/compiler_options.cmake" \
+        -DMORPH_SANITIZER_MODE="msan" > "${bad_build}.configure.log" 2>&1; then
+    echo "::error::check_sanitizer_can_fail: apply_sanitizers() accepted the unknown mode 'msan' and configured anyway -- that build would run the whole suite with no instrumentation at all and report success"
+    status=1
+else
+    if grep -q "unknown sanitizer mode" "${bad_build}.configure.log"; then
+        echo "check_sanitizer_can_fail: an unknown sanitizer mode fails the configure."
+    else
+        echo "::error::check_sanitizer_can_fail: the unknown-mode probe failed to configure, but not with apply_sanitizers()'s own diagnostic -- see ${bad_build}.configure.log"
+        cat "${bad_build}.configure.log"
+        status=1
+    fi
+fi
+
 exit "${status}"

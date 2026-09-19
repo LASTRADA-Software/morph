@@ -2,7 +2,7 @@
 # Usage: bash scripts/check_spec_citations.sh
 #
 # Prose-vs-manifest lint for the spec <-> code drift guard (see
-# docs/spec/pinned_facts.toml and tests/test_pinned_facts.cpp). Two checks:
+# docs/spec/pinned_facts.toml and tests/test_pinned_facts.cpp). Six checks:
 #
 #   1. Citation check: every pinned fact must still be *mentioned* in the
 #      spec markdown file that documents it, so a spec cannot silently stop
@@ -27,6 +27,11 @@
 #      there. Check 3 stops at the path, so a citation could point a reader at
 #      a heading that was renamed or never written and still lint green
 #      (morph#316).
+#   6. forms key-vocabulary completeness: every `x-*` schema key, every
+#      `w-*`/`app-*` document key and every rule/condition kind the
+#      include/morph/forms/** headers emit must be a row in a
+#      docs/spec/forms/*.md table -- the same argument as check 4, on the other
+#      spec third-party implementers read as exhaustive (morph#554).
 #
 # This is a prose lint, not a value check: it does not parse
 # docs/spec/pinned_facts.toml or re-derive expected values (that is
@@ -358,6 +363,92 @@ else
     echo "Section-citation check: ${sections_checked} cited sections scanned."
 fi
 
+# ---------------------------------------------------------------------------
+# 6. forms DSL key-vocabulary completeness
+# ---------------------------------------------------------------------------
+# morph::forms is a domain-specific language: a renderer that is not morph's own
+# implements it from docs/spec/forms/, whose key table introduces itself as
+# "Renderer contract: the schema key vocabulary". That claim is exactly the one
+# docs/spec/core/wire.md made before morph#233 -- and morph's own Qt/QML
+# renderer reads the same headers the schema generator does, so it cannot
+# observe the *spec* disagreeing with them either. Only a check that reads both
+# can (morph#554).
+#
+# Neither existing gate can see completeness. spec-sync.yml requires that
+# *some* file under docs/spec/forms/ changed alongside include/morph/forms/**,
+# which a typo fix satisfies; checks 1-3 above work outward from
+# docs/spec/pinned_facts.toml, and a key nobody pinned is a key nobody checks.
+#
+# Three categories, each with its own floor for the reason check 4's comment
+# records: a lumped total lets one category parse to nothing while the others
+# carry it over the line.
+forms_hpp="include/morph/forms/forms.hpp"
+x_key_count=0
+doc_key_count=0
+rule_kind_count=0
+
+forms_spec_files=(docs/spec/forms/*.md)
+
+if [ ! -f "$forms_hpp" ] || [ ! -f "${forms_spec_files[0]}" ]; then
+    echo "::error::forms key check: expected $forms_hpp and docs/spec/forms/*.md to exist"
+    fail=1
+else
+    # A table row for a key is `| \`x-key\` | ... |`. A key that is merely
+    # *mentioned* in prose is not documented as part of the vocabulary: the
+    # table is what a third-party renderer implements from.
+    for key in $(grep -rhoE '"x-[A-Za-z0-9]+"' include/morph/forms/ | tr -d '"' | sort -u); do
+        x_key_count=$((x_key_count + 1))
+        grep -qE "^\| *\`${key}\`" "${forms_spec_files[@]}" || {
+            echo "::error file=docs/spec/forms/forms.md::schema key \`${key}\` is emitted by include/morph/forms/** but is not a row in any docs/spec/forms/ key table"
+            fail=1
+        }
+    done
+
+    # The document-level keys a workflow/app schema carries, same rule.
+    for key in $(grep -rhoE '"(w|app)-[A-Za-z0-9]+"' include/morph/forms/ | tr -d '"' | sort -u); do
+        doc_key_count=$((doc_key_count + 1))
+        grep -qE "^\| *\`${key}\`" "${forms_spec_files[@]}" || {
+            echo "::error file=docs/spec/forms/forms.md::document key \`${key}\` is emitted by include/morph/forms/** but is not a row in any docs/spec/forms/ key table"
+            fail=1
+        }
+    done
+
+    # Rule/condition kinds, read off ruleKindName()'s switch -- the one place
+    # that maps a C++ enumerator to the wire spelling, so neither half can be
+    # invented here. The row must carry *both*: the wire spelling a JSON author
+    # emits and the C++ enumerator a C++ author writes. Requiring both is what
+    # closes the asymmetry morph#554 measured, where every membership and
+    # comparison construct appeared in the spec only under its JSON key
+    # spelling and a C++ reader had to guess the capitalisation.
+    while read -r enumerator kind; do
+        [ -n "$enumerator" ] || continue
+        rule_kind_count=$((rule_kind_count + 1))
+        if ! grep -E '^\|' docs/spec/forms/forms.md \
+             | grep -F "\`\"${kind}\"\`" \
+             | grep -qF "RuleKind::${enumerator}"; then
+            echo "::error file=docs/spec/forms/forms.md::rule kind \`\"${kind}\"\` (RuleKind::${enumerator}) is not a table row naming both its wire spelling and its C++ enumerator"
+            fail=1
+        fi
+    done < <(
+        awk '/ruleKindName\(RuleKind kind\)/, /^}/' "$forms_hpp" | awk '
+            match($0, /case RuleKind::[A-Za-z]+:/) {
+                enumerator = substr($0, RSTART + 15, RLENGTH - 16)
+                next
+            }
+            enumerator != "" && match($0, /return "[A-Za-z]+";/) {
+                print enumerator, substr($0, RSTART + 8, RLENGTH - 10)
+                enumerator = ""
+            }'
+    )
+
+    if [ "$x_key_count" -lt 25 ] || [ "$doc_key_count" -lt 5 ] || [ "$rule_kind_count" -lt 16 ]; then
+        echo "::error::forms key check parsed ${x_key_count} x-keys (>=25), ${doc_key_count} document keys (>=5), ${rule_kind_count} rule kinds (>=16) -- a category came up short, so the check would pass while ignoring it"
+        fail=1
+    else
+        echo "forms key check: ${x_key_count} schema keys, ${doc_key_count} document keys, ${rule_kind_count} rule kinds all documented."
+    fi
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo ""
     echo "Prose lint failed. Either restore the missing citation or remove the"
@@ -367,4 +458,4 @@ if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "Prose lint OK: every pinned fact is still cited; no banned terminology found; every cited path resolves; every cited section exists."
+echo "Prose lint OK: every pinned fact is still cited; no banned terminology found; every cited path resolves; every cited section exists; every forms key and rule kind is documented."
