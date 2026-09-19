@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <concepts>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -21,8 +22,29 @@ namespace morph::async {
 namespace detail {
 
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
+//
+// `enable_shared_from_this` is load-bearing, not decoration: the dispatch
+// closures below capture a `shared_ptr` to this state and read the settled
+// value *in place* instead of carrying a copy of it. That is what makes the
+// copy budget independent of how many handlers are attached, and what lets `T`
+// be move-only -- the closure stores a refcounted handle, so it stays
+// copy-constructible and `IExecutor::post`'s `std::function<void()>` is
+// untouched. Every `CompletionState<T>` in the tree is created by
+// `std::make_shared` (`Completion<T>::makeSettleable`, `Bridge`, the backends),
+// which is the precondition `shared_from_this()` needs.
+//
+// Reading `value` outside `mtx` from those closures is safe because `value` is
+// write-once: both `setValue` and `setException` return early when `ready`, and
+// nothing else ever assigns it. The store happens under the lock before the
+// closure is handed to the executor, and the executor's own queue provides the
+// happens-before edge to the thread that runs it.
 template <typename T>
-struct CompletionState {
+struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
+    static_assert(std::move_constructible<T>,
+                  "morph::async::Completion<T> requires only that T be move-constructible. Copyability is a "
+                  "per-handler obligation: a handler taking `const T&` imposes nothing, a handler taking `T` by "
+                  "value requires T to be copyable and is diagnosed where that handler is written.");
+
     std::mutex mtx;
     std::optional<T> value;
     std::exception_ptr error;
@@ -32,7 +54,15 @@ struct CompletionState {
     // silently discarding them. Dispatch invokes all of them, in attachment
     // order, from a single posted closure. See docs/spec/core/completion.md,
     // "Failure modes" / fan-out.
-    std::vector<std::function<void(T)>> onOk;
+    //
+    // Erased as `void(const T&)`, not `void(T)`. One erased type accepts every
+    // handler spelling a caller already writes -- `[](const T&)`, `[](T)`, a
+    // `std::function<void(T)>` object -- because each is invocable with
+    // `const T&`. A handler that wants its own value gets exactly one copy, at
+    // its own parameter binding, where the reader of that call site can see it;
+    // a handler that only observes pays nothing. Erasing as `void(T)` charged
+    // every handler a copy whether or not it wanted one (morph#553).
+    std::vector<std::function<void(const T&)>> onOk;
     std::vector<std::function<void(std::exception_ptr)>> onErr;
     bool onErrAttached = false;
     ::morph::exec::IExecutor* cbExec = nullptr;
@@ -44,62 +74,56 @@ struct CompletionState {
             if (ready) {
                 return;
             }
+            // Store first, drain `onOk` last. `value` is this state's own
+            // store and is never moved out of: a `then()` attached *after*
+            // this point (attachThen's `ready && value` branch) reads it
+            // again, and moving out of it left it engaged but moved-from so a
+            // later attacher silently observed a husk (morph#520). The value
+            // is observed, never consumed -- structurally, now that no
+            // dispatch path can take it.
+            //
+            // The ordering is what gives this block the strong exception
+            // guarantee for a `T` whose *move* constructor can throw: nothing
+            // has changed when the store below runs, and `optional::emplace`
+            // leaves the optional disengaged if the construction throws, so an
+            // escape leaves `onOk` holding every handler and the state unready
+            // rather than a state that already looks settled with its handlers
+            // already lost. Draining first (as an earlier revision did) meant
+            // a throwing store unwound with `savedFns` -- a local -- carrying
+            // every handler to its destructor: permanently unsettled, no
+            // handlers, and silent, because the destructor's orphan logger
+            // only fires when `error` is set. `std::move` on a vector is
+            // noexcept, so the ordering costs nothing.
+            //
+            // `emplace`, not `value = std::move(val)`: assigning through
+            // `std::optional` requires `T` to be move-*assignable* as well as
+            // move-constructible, which would quietly make the `static_assert`
+            // above a lie for a `T` with a deleted assignment operator.
+            // `value` is guaranteed disengaged here -- it is written only on
+            // this line, and the `ready` guard above makes this line run once.
+            value.emplace(std::move(val));
+            ready = true;
             if (!onOk.empty()) {
-                // Copy from `val` -- and before anything below mutates state --
-                // rather than moving out of `value` after the fact: `value` is
-                // this state's own store, and a `then()` attached *after* this
-                // point (attachThen's `ready && value` branch) reads it again,
-                // so moving out of it left it engaged but moved-from, and a
-                // later attacher silently copied a husk (morph#520). Copying
-                // first, before `onOk` is drained or `value`/`ready` are set,
-                // gives this block the strong exception guarantee against a
-                // throwing copy constructor specifically: if it throws,
-                // nothing here has changed yet -- `onOk` still holds every
-                // handler and the state is still unready -- rather than a
-                // corrupted state that already looks settled with its
-                // handlers already lost.
-                //
-                // `onOk` is drained *last*, after `value`/`ready` are set, so
-                // the same guarantee covers a `T` whose *move* constructor can
-                // throw. Draining first (as an earlier revision did) meant a
-                // throwing `value = std::move(val)` unwound with `savedFns` --
-                // a local -- carrying every handler to its destructor while
-                // `onOk` was already empty: permanently unsettled, no handlers,
-                // and silent, because the destructor's orphan logger only fires
-                // when `error` is set. `std::move` on a vector is noexcept and
-                // `savedVal` is already an independent copy, so the reordering
-                // costs nothing.
-                auto savedVal = val;
-                value = std::move(val);
-                ready = true;
                 auto savedFns = std::move(onOk);
-                callback = [savedFns = std::move(savedFns), savedVal = std::move(savedVal)]() mutable {
-                    // Every handler but the last sees a copy (the value is only
-                    // moved into the final invocation), so an earlier handler
-                    // cannot leave the value moved-from for a later one. Each
-                    // handler is isolated in its own try/catch so one throwing
-                    // handler cannot prevent its siblings from running --
-                    // fan-out means every attached handler gets its turn,
-                    // independent of whether an earlier one misbehaves. An
-                    // escaping exception here would otherwise unwind the whole
-                    // posted closure and silently skip every handler after the
-                    // one that threw.
-                    for (std::size_t i = 0; i + 1 < savedFns.size(); ++i) {
+                callback = [self = this->shared_from_this(), savedFns = std::move(savedFns)]() {
+                    // Every handler reads the one stored value in place; none
+                    // can move out of it, so no handler can leave a husk for
+                    // its siblings or for a later attacher, and the count of
+                    // handlers costs nothing in copies. Each handler is
+                    // isolated in its own try/catch so one throwing handler
+                    // cannot prevent its siblings from running -- fan-out means
+                    // every attached handler gets its turn, independent of
+                    // whether an earlier one misbehaves. An escaping exception
+                    // here would otherwise unwind the whole posted closure and
+                    // silently skip every handler after the one that threw.
+                    for (const auto& fn : savedFns) {
                         try {
-                            savedFns[i](savedVal);
+                            fn(*self->value);
                         } catch (...) {
                             ::morph::log::logError("[completion] then handler threw; continuing with next handler");
                         }
                     }
-                    try {
-                        savedFns.back()(std::move(savedVal));
-                    } catch (...) {
-                        ::morph::log::logError("[completion] then handler threw; continuing with next handler");
-                    }
                 };
-            } else {
-                value = std::move(val);
-                ready = true;
             }
         }
         if (callback != nullptr && cbExec != nullptr) {
@@ -162,13 +186,18 @@ struct CompletionState {
             cbExec->post(std::move(callback));
         }
     }
-    void attachThen(std::function<void(T)> handler) {
+    void attachThen(std::function<void(const T&)> handler) {
         std::function<void()> fireNow;
         {
             std::scoped_lock const lock{mtx};
             if (ready && value) {
-                auto savedVal = *value;
-                fireNow = [handler = std::move(handler), savedVal]() mutable { handler(std::move(savedVal)); };
+                // Keep the state alive and read `value` in place rather than
+                // snapshotting it. The old shape copied `*value` into
+                // `savedVal` and then captured `savedVal` *by copy* before
+                // moving it into the handler -- two copies where the handler
+                // asked for at most one, and the reason a late attacher cost
+                // 2 copies rather than 1 (morph#553).
+                fireNow = [self = this->shared_from_this(), handler = std::move(handler)]() { handler(*self->value); };
             } else if (!ready) {
                 onOk.push_back(std::move(handler));
             }
@@ -243,7 +272,22 @@ struct CompletionState {
 /// `onError(fn)`, spelled so a deliberately unmanaged callback says so.
 /// See `callback_scope.hpp` and docs/spec/core/callback_scope.md.
 ///
-/// @tparam T Type of the success value.
+/// @par Value-handling contract
+/// `T` need only be **move-constructible**; that is the whole type requirement.
+/// Copyability is a *per-handler* obligation, reported where the handler is
+/// written rather than imposed on the whole instantiation:
+/// - a handler taking `const T&` costs **zero** copies;
+/// - a handler taking `T` by value costs **exactly one**, at its own parameter
+///   binding, and requires `T` to be copyable.
+///
+/// The budget does not depend on how many handlers are attached, nor on whether
+/// they attached before or after the completion settled. The value is
+/// **observed, never consumed**: no handler can move out of the stored value, so
+/// a `then()` attached after settling still sees the genuine result. A handler
+/// that wants to consume takes `T` by value and moves out of its own copy.
+/// See docs/spec/core/completion.md, "Value-handling contract".
+///
+/// @tparam T Type of the success value. Must be move-constructible.
 template <typename T>
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class Completion {
@@ -277,10 +321,11 @@ public:
     /// operation completes successfully. If the operation has already completed,
     /// the callback is posted immediately.
     ///
-    /// @param handler Callable receiving the result by value.
+    /// @param handler Callable receiving the result. Take `const T&` to observe it for free;
+    ///                take `T` by value to get your own copy, at the cost of exactly one copy.
     /// @return `*this` for chaining — a reference into this `Completion`, valid
     ///         only for as long as it is.
-    Completion& then(std::function<void(T)> handler) MORPH_LIFETIMEBOUND {
+    Completion& then(std::function<void(const T&)> handler) MORPH_LIFETIMEBOUND {
         if (_state != nullptr) {
             _state->attachThen(std::move(handler));
         }
@@ -317,10 +362,11 @@ public:
     /// @param scope   Receiver-owned gate. Only a token for its *current*
     ///                generation is captured, so a later `reset()` retires this
     ///                attachment.
-    /// @param handler Callable receiving the result by value.
+    /// @param handler Callable receiving the result. Take `const T&` to observe it for free;
+    ///                take `T` by value to get your own copy, at the cost of exactly one copy.
     /// @return `*this` for chaining — a reference into this `Completion`, valid
     ///         only for as long as it is.
-    Completion& then(const CallbackScope& scope, std::function<void(T)> handler) MORPH_LIFETIMEBOUND {
+    Completion& then(const CallbackScope& scope, std::function<void(const T&)> handler) MORPH_LIFETIMEBOUND {
         return then(scope.token(), std::move(handler));
     }
 
@@ -332,11 +378,12 @@ public:
     ///
     /// @param token   Gate observing some receiver's `CallbackScope`. A
     ///                default-constructed token suppresses unconditionally.
-    /// @param handler Callable receiving the result by value.
+    /// @param handler Callable receiving the result. Take `const T&` to observe it for free;
+    ///                take `T` by value to get your own copy, at the cost of exactly one copy.
     /// @return `*this` for chaining — a reference into this `Completion`, valid
     ///         only for as long as it is.
-    Completion& then(CallbackToken token, std::function<void(T)> handler) MORPH_LIFETIMEBOUND {
-        return then(std::function<void(T)>{token.guard(std::move(handler))});
+    Completion& then(CallbackToken token, std::function<void(const T&)> handler) MORPH_LIFETIMEBOUND {
+        return then(std::function<void(const T&)>{token.guard(std::move(handler))});
     }
 
     /// @brief Registers an error callback gated on @p scope's lifetime and stop state.
@@ -378,10 +425,13 @@ public:
     /// when the handler genuinely owns everything it touches — it captures only
     /// values, or a `shared_ptr` it keeps alive itself.
     ///
-    /// @param handler Callable receiving the result by value.
+    /// @param handler Callable receiving the result. Take `const T&` to observe it for free;
+    ///                take `T` by value to get your own copy, at the cost of exactly one copy.
     /// @return `*this` for chaining — a reference into this `Completion`, valid
     ///         only for as long as it is.
-    Completion& thenDetached(std::function<void(T)> handler) MORPH_LIFETIMEBOUND { return then(std::move(handler)); }
+    Completion& thenDetached(std::function<void(const T&)> handler) MORPH_LIFETIMEBOUND {
+        return then(std::move(handler));
+    }
 
     /// @brief Registers an error callback whose lifetime is deliberately unmanaged.
     ///
