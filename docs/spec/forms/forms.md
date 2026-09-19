@@ -1334,6 +1334,52 @@ Display formatting is the renderer's duty; the wire stays canonical:
   French user normalised to `std::nullopt` and the control reported it
   malformed. An empty view means "this locale has no such separator".
 
+  **So is the negative sign** (morph#583). The same argument applies to the
+  sign, and was missing here: both functions take a fourth
+  `std::string_view negativeSign = "-"`, matched and emitted as a whole string
+  the way the separators are. Of the 711 locales `QLocale::matchingLocales`
+  reports under Qt 6.11.2, 77 spell it as something other than a bare ASCII
+  `'-'`:
+
+  | `negativeSign` | locales | e.g. |
+  | --- | ---: | --- |
+  | U+002D | 634 | `C` |
+  | U+061C U+002D | 24 | `ar_EG` |
+  | U+200E U+002D | 9 | `ar_DZ` |
+  | U+200E U+002D U+200E | 17 | `az_IR` |
+  | U+200E U+2212 | 2 | `fa_IR` |
+  | U+200F U+002D | 2 | `ckb_IQ` |
+  | U+2212 | 23 | `eu_ES` |
+
+  Matched as the literal byte `'-'`, none of the 77 round-tripped: the display
+  direction emitted a sign the entry direction then rejected, so the pair was
+  not inverse for any of them. Note `ar_DZ`, whose sign *is* the ordinary
+  hyphen — it failed on the U+200E in front of it, so this was never only "the
+  U+2212 locales", and a wider `char` would not have fixed it. Whole-string
+  matching is what covers the 2–3 code point bidi forms, which is why the sign
+  is typed like the separators rather than widened.
+
+  **ASCII `'-'` stays accepted whatever the locale.** A bare `'-'` is taken in
+  the leading position *in addition to* `negativeSign`. U+2212 and the bidi
+  marks are on no keyboard, so matching only the locale's own spelling would
+  reject the sign the user can actually type and leave them no way to enter a
+  negative number at all. This is not the kind of guess the grouping rule
+  forbids: that rule is about producing a wrong *value*, and a hyphen in a
+  numeric entry has no second reading. The canonical output always spells the
+  sign `'-'`, whatever the input spelled it.
+
+  **An empty `negativeSign` means the ASCII default, not "no sign".** Unlike a
+  group separator there is no locale without a negative sign, so empty cannot
+  mean absence — and on the display edge it must not, because a sign that
+  formatted to nothing would turn `-5` into `5`: a valid number of the wrong
+  sign, which is the morph#574 failure mode rather than a rejection.
+
+  The renderer passes the locale's own sign: `DynamicForm.qml` already binds
+  `qtLocale: Qt.locale(displayLocale)` and forwards
+  `qtLocale.decimalPoint`/`qtLocale.groupSeparator`, and now forwards
+  `qtLocale.negativeSign` from the same object at all three call sites. The
+  parameter is defaulted, so a caller that passes three arguments is unchanged.
+
   **Grouping is validated, never merely stripped.** A group separator is
   dropped only where a group separator can legally be: preceded by one to three
   digits, followed by exactly three more, and never after the decimal
@@ -1360,6 +1406,9 @@ Display formatting is the renderer's duty; the wire stays canonical:
   divergence in what the product accepts. The mirror produced byte-identical
   wrong answers on all of the cases above and carries byte-identical
   validation now; changing one without the other is the defect, not the fix.
+  The mirror compares one UTF-16 code unit at a time, so the whole-string sign
+  match is spelled `text.startsWith(sign, i)` there rather than `ch === sign` —
+  a one-unit comparison could not match the 2–3 code point forms at all.
 - **Timestamps.** The wire value is strict UTC ISO-8601
   ([datetime.md](../util/datetime.md)); a renderer displays and edits in the
   user's zone by shifting a `morph::time::DateTime` with its existing

@@ -263,3 +263,132 @@ TEST_CASE("normalizeLocaleNumber: every well-formed locale entry still normalise
     REQUIRE(canonical.has_value());
     CHECK(formatCanonicalNumber(*canonical, ",", ".") == "1.000.000,25");
 }
+
+// ──── morph#583: the negative sign is locale data, and is not always one byte ────
+//
+// Of the 711 locales Qt 6.11.2 reports through QLocale::matchingLocales, 77
+// spell the negative sign as something other than a bare ASCII '-':
+//
+//   U+002D                 634   e.g. C
+//   U+061C U+002D           24   e.g. ar_EG
+//   U+200E U+002D            9   e.g. ar_DZ
+//   U+200E U+002D U+200E    17   e.g. az_IR
+//   U+200E U+2212            2   e.g. fa_IR
+//   U+200F U+002D            2   e.g. ckb_IQ
+//   U+2212                  23   e.g. eu_ES
+//
+// Matched as the literal byte '-', none of the 77 round-tripped: the display
+// direction emitted a sign the entry direction then rejected.
+namespace {
+// Five of the sign spellings the table above enumerates, by the locale that
+// reports each. Spelled out as `constexpr std::string_view` rather than built
+// by concatenating the marks above: a namespace-scope `std::string` allocates
+// during static initialisation, which `bugprone-throwing-static-initialization`
+// flags, and these need no dynamic initialisation at all.
+constexpr std::string_view kSignEuEs = "\xE2\x88\x92";               // eu_ES: U+2212
+constexpr std::string_view kSignFaIr = "\xE2\x80\x8E\xE2\x88\x92";   // fa_IR: U+200E U+2212
+constexpr std::string_view kSignArDz = "\xE2\x80\x8E-";              // ar_DZ: U+200E U+002D
+constexpr std::string_view kSignAzIr = "\xE2\x80\x8E-\xE2\x80\x8E";  // az_IR: U+200E U+002D U+200E
+constexpr std::string_view kSignArEg = "\xD8\x9C-";                  // ar_EG: U+061C U+002D
+
+// The entry a user of that locale would have typed. A named helper because
+// `kSign... + "5"` no longer compiles once the constants are views, and
+// `std::string{sign} + digits` at twenty call sites reads worse than this does.
+[[nodiscard]] std::string entry(std::string_view sign, std::string_view digits) {
+    return std::string{sign} + std::string{digits};
+}
+}  // namespace
+
+TEST_CASE("normalizeLocaleNumber: a locale whose sign is U+2212 can be entered", "[render][locale][morph583]") {
+    // The spellings really are multi-byte: a `char` parameter could carry none
+    // of them, which is the whole reason the sign is a view.
+    REQUIRE(kSignEuEs.size() == 3);
+    REQUIRE(kSignAzIr.size() == 7);
+
+    // eu_ES: the bare U+2212 of the issue title.
+    CHECK(normalizeLocaleNumber(entry(kSignEuEs, "5"), ".", "", kSignEuEs) == "-5");
+    CHECK(normalizeLocaleNumber(entry(kSignEuEs, "1050,25"), ",", ".", kSignEuEs) == "-1050.25");
+
+    // The control for the defect: with the sign left at its ASCII default, the
+    // same entry is still rejected -- that default is the whole of today's
+    // behaviour.
+    CHECK(normalizeLocaleNumber(entry(kSignEuEs, "5"), ".", "") == std::nullopt);
+}
+
+TEST_CASE("normalizeLocaleNumber: a bidi-prefixed sign is matched as a whole string", "[render][locale][morph583]") {
+    // Two and three code points respectively. A one-unit comparison cannot
+    // match either, which is why both edges compare the whole string.
+    CHECK(normalizeLocaleNumber(entry(kSignFaIr, "5"), ".", "", kSignFaIr) == "-5");  // fa_IR
+    CHECK(normalizeLocaleNumber(entry(kSignAzIr, "5"), ".", "", kSignAzIr) == "-5");  // az_IR, 3 code points
+    CHECK(normalizeLocaleNumber(entry(kSignArEg, "5"), ".", "", kSignArEg) == "-5");  // ar_EG, U+061C prefix
+
+    // Same controls: rejected today, for each shape.
+    CHECK(normalizeLocaleNumber(entry(kSignFaIr, "5"), ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber(entry(kSignAzIr, "5"), ".", "") == std::nullopt);
+}
+
+TEST_CASE("normalizeLocaleNumber: ar_DZ fails today even though its sign is the ASCII hyphen",
+          "[render][locale][morph583]") {
+    // The case that shows this is not "the U+2212 locales": ar_DZ's sign *is*
+    // '-', prefixed by U+200E. The stray prefix byte is what the per-byte scan
+    // rejects, so matching the hyphen byte-wise never helped it.
+    CHECK(normalizeLocaleNumber(entry(kSignArDz, "5"), ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber(entry(kSignArDz, "5"), ".", "", kSignArDz) == "-5");
+}
+
+TEST_CASE("normalizeLocaleNumber: the ASCII hyphen stays accepted in every locale", "[render][locale][morph583]") {
+    // U+2212 and the bidi marks are on no keyboard. Matching only the locale's
+    // own spelling would reject the sign the user can actually type and leave
+    // them no way to enter a negative number at all.
+    CHECK(normalizeLocaleNumber("-5", ".", "", kSignEuEs) == "-5");
+    CHECK(normalizeLocaleNumber("-5", ".", "", kSignFaIr) == "-5");
+    // And the plain ASCII locale is untouched -- the default parameter means no
+    // existing caller changed behaviour.
+    CHECK(normalizeLocaleNumber("-5", ".", "") == "-5");
+    CHECK(normalizeLocaleNumber("-1.050,25", ",", ".") == "-1050.25");
+}
+
+TEST_CASE("normalizeLocaleNumber: a locale sign is still rejected off the leading position",
+          "[render][locale][morph583]") {
+    // The morph#497 rule is about the *output*, so it has to hold for a
+    // multi-byte sign exactly as it does for '-'.
+    CHECK(normalizeLocaleNumber("1" + entry(kSignEuEs, "2"), ".", "", kSignEuEs) == std::nullopt);
+    CHECK(normalizeLocaleNumber("," + entry(kSignEuEs, "5"), ",", ".", kSignEuEs) == std::nullopt);
+    // A sign and nothing else is not a number, whatever its spelling.
+    CHECK(normalizeLocaleNumber(kSignEuEs, ".", "", kSignEuEs) == std::nullopt);
+    CHECK(normalizeLocaleNumber(kSignAzIr, ".", "", kSignAzIr) == std::nullopt);
+}
+
+TEST_CASE("formatCanonicalNumber: the display edge emits the locale's sign", "[render][locale][morph583]") {
+    // Before this, the sign was a hardcoded '-' whatever the locale -- so even
+    // a caller that knew its locale's sign could not ask for it.
+    CHECK(formatCanonicalNumber("-1050.25", ",", ".", kSignEuEs) == entry(kSignEuEs, "1.050,25"));
+    CHECK(formatCanonicalNumber("-5", ".", "", kSignFaIr) == entry(kSignFaIr, "5"));
+    // A positive is untouched: the sign string is only ever emitted for a
+    // negative, so a locale-specific sign cannot leak into a positive display.
+    CHECK(formatCanonicalNumber("1050.25", ",", ".", kSignEuEs) == "1.050,25");
+    CHECK(formatCanonicalNumber("-1050.25", ",", ".") == "-1.050,25");
+}
+
+TEST_CASE("locale_format: the pair is inverse for every measured sign spelling", "[render][locale][morph583]") {
+    // The property the issue is actually about: whatever the display edge
+    // emits, the entry edge takes back to the identical canonical text.
+    for (auto const& sign : {kSignEuEs, kSignFaIr, kSignArDz, kSignAzIr, kSignArEg}) {
+        INFO("sign = " << sign);
+        auto const display = formatCanonicalNumber("-1050.25", ",", ".", sign);
+        CHECK(display == entry(sign, "1.050,25"));
+        CHECK(normalizeLocaleNumber(display, ",", ".", sign) == "-1050.25");
+    }
+}
+
+TEST_CASE("locale_format: an empty negative sign reads as '-', not as 'no sign'", "[render][locale][morph583]") {
+    // Unlike a group separator, there is no locale without a negative sign, so
+    // empty cannot mean absence. On the display edge it would be a silently
+    // wrong value: -5 formatted to "5" is a valid number of the wrong sign,
+    // which is the morph#574 failure mode, not a rejection.
+    CHECK(formatCanonicalNumber("-5", ".", "", "") == "-5");
+    CHECK(normalizeLocaleNumber("-5", ".", "", "") == "-5");
+    // And an empty needle must not match at every index: a scan that treated it
+    // as a separator would never advance.
+    CHECK(normalizeLocaleNumber("123", ".", "", "") == "123");
+}

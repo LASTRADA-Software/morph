@@ -815,12 +815,24 @@ Frame {
     // ten times too large, that nothing downstream can recognise as wrong.
     // Verified against the C++ side on the same inputs before and after; the
     // two edges agreed on every wrong answer and now agree on every rejection.
-    function normalizeLocaleNumber(text, decimalSeparator, groupSeparator) {
+    // The negative sign is matched as a whole string, not as one code unit
+    // (morph#583). 77 of the 711 locales Qt 6.11.2 knows spell it as something
+    // other than a bare ASCII "-": 23 use U+2212, and 54 prefix it with a bidi
+    // control mark (U+061C, U+200E, U+200F), making it two or three code units
+    // -- ar_DZ does so even though its sign *is* the ordinary hyphen. `ch ===
+    // "-"` matched none of them, and formatCanonicalNumber emitted a sign this
+    // function then rejected. A bare "-" stays accepted alongside the locale's
+    // own spelling: U+2212 and the bidi marks are on no keyboard, so matching
+    // only the locale spelling would leave those users no way to type a
+    // negative number at all. An omitted or empty negativeSign reads as "-",
+    // not as "no sign" -- there is no locale without one.
+    function normalizeLocaleNumber(text, decimalSeparator, groupSeparator, negativeSign) {
         // One string cannot play both roles: there is no reading of "1.5" this
         // function could defend, so it reports rather than guesses.
         if (groupSeparator !== "" && groupSeparator === decimalSeparator)
             return null
 
+        const sign = negativeSign ? negativeSign : "-"
         const groupSize = 3
         let canonical = ""
         let sawDecimal = false
@@ -854,6 +866,14 @@ Frame {
                 sawAnyOutput = true
                 continue
             }
+            if (text.startsWith(sign, i)) {
+                if (sawAnyOutput)
+                    return null
+                canonical += "-"     // the canonical spelling, whatever the locale's is
+                sawAnyOutput = true
+                i += sign.length - 1 // the loop's ++i consumes the last unit
+                continue
+            }
             if (ch === "-") {
                 if (sawAnyOutput)
                     return null
@@ -874,7 +894,10 @@ Frame {
         return canonical
     }
 
-    function formatCanonicalNumber(text, decimalSeparator, groupSeparator) {
+    function formatCanonicalNumber(text, decimalSeparator, groupSeparator, negativeSign) {
+        // Empty reads as "-", not as "no sign": formatting a negative to no
+        // sign at all would be a silently wrong value, not a rejected one.
+        const sign = negativeSign ? negativeSign : "-"
         const neg = text.startsWith("-")
         const magnitude = neg ? text.slice(1) : text
         const dot = magnitude.indexOf(".")
@@ -886,7 +909,7 @@ Frame {
                 grouped += groupSeparator
             grouped += wholePart[i]
         }
-        return (neg ? "-" : "") + grouped + (fracPart !== "" ? decimalSeparator + fracPart : "")
+        return (neg ? sign : "") + grouped + (fracPart !== "" ? decimalSeparator + fracPart : "")
     }
 
     // --- zoned Timestamp entry --------------------------------------------
@@ -1045,7 +1068,8 @@ Frame {
             return utcIso === null ? null : JSON.stringify(utcIso)
         }
         if (f.isQuantity) {
-            const canonicalText = normalizeLocaleNumber(text, qtLocale.decimalPoint, qtLocale.groupSeparator)
+            const canonicalText = normalizeLocaleNumber(text, qtLocale.decimalPoint, qtLocale.groupSeparator,
+                                                        qtLocale.negativeSign)
             if (canonicalText === null || !/^-?\d+(\.\d+)?$/.test(canonicalText))
                 return null
             const unit = f.unitOptions[opt(fieldUnits[f.name], 0)]
@@ -1721,12 +1745,14 @@ Frame {
                         form.fieldUnits[name] = currentIndex
                         if (entry.text.trim() !== "") {
                             const canonicalText = form.normalizeLocaleNumber(
-                                    entry.text.trim(), form.qtLocale.decimalPoint, form.qtLocale.groupSeparator)
+                                    entry.text.trim(), form.qtLocale.decimalPoint, form.qtLocale.groupSeparator,
+                                    form.qtLocale.negativeSign)
                             const converted = canonicalText !== null
                                     ? form.convertText(canonicalText, fromUnit, toUnit) : ""
                             entry.text = converted !== ""
                                     ? form.formatCanonicalNumber(
-                                          converted, form.qtLocale.decimalPoint, form.qtLocale.groupSeparator)
+                                          converted, form.qtLocale.decimalPoint, form.qtLocale.groupSeparator,
+                                          form.qtLocale.negativeSign)
                                     : ""
                         } else {
                             form.revalidate()

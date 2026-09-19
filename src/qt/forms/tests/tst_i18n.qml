@@ -78,6 +78,25 @@ Item {
         })
     }
 
+    // morph#583. eu_ES spells its negative sign U+2212 MINUS SIGN, not the
+    // ASCII hyphen -- one of 77 locales in Qt 6.11.2 whose sign is not a bare
+    // "-". Its separators are de-DE's, so the only thing under test here is the
+    // sign.
+    DynamicForm {
+        id: signForm
+        actionType: "Probe"
+        controller: null
+        displayLocale: "eu_ES"
+        schema: ({
+            "properties": {
+                "mass": { "$ref": "#/$defs/q", "x-order": 0, "x-decimalPlaces": 3,
+                          "ExtUnits": { "unitAscii": "kg", "unitUnicode": "kg" } }
+            },
+            "$defs": { "q": { "type": ["object", "null"] } },
+            "required": ["mass"]
+        })
+    }
+
     DynamicForm {
         id: zonedForm
         actionType: "Probe"
@@ -161,6 +180,93 @@ Item {
             localeForm.setFieldValue("mass", "1.050,25")
             verify(localeForm.ready)
             compare(localeForm.previewLine, '{"mass":{"num":1050250,"den":1000,"dp":3}}')
+        }
+
+        // ── morph#583: the negative sign is locale data too ──────────────
+        //
+        // The premise, measured rather than assumed. If Qt's CLDR data ever
+        // stops reporting U+2212 for eu_ES, this fails first and says so,
+        // rather than the tests below failing for a reason that looks like a
+        // regression in the renderer.
+        function test_qtReportsANonAsciiSignForThisLocale() {
+            compare(Qt.locale("eu_ES").negativeSign, "\u2212")
+            compare(Qt.locale("eu_ES").decimalPoint, ",")
+            compare(Qt.locale("eu_ES").groupSeparator, ".")
+            compare(Qt.locale("de").negativeSign, "-")  // the control locale, unchanged
+        }
+
+        // The defect: the display edge emitted "−5" and the entry edge, which
+        // compared one code unit against "-", rejected it. The pair was not
+        // inverse for any of the 77 locales.
+        function test_localeNegativeSignIsAccepted() {
+            signForm.setFieldValue("mass", "\u22125")
+            verify(signForm.ready)
+            compare(signForm.previewLine, '{"mass":{"num":-5000,"den":1000,"dp":3}}')
+
+            signForm.setFieldValue("mass", "\u22121.050,25")
+            verify(signForm.ready)
+            compare(signForm.previewLine, '{"mass":{"num":-1050250,"den":1000,"dp":3}}')
+        }
+
+        // U+2212 is on no keyboard. Matching only the locale's own spelling
+        // would reject the sign the user can actually type, which is a wall
+        // with no way round it rather than a fix.
+        function test_asciiHyphenStaysAcceptedInANonAsciiSignLocale() {
+            signForm.setFieldValue("mass", "-5")
+            verify(signForm.ready)
+            compare(signForm.previewLine, '{"mass":{"num":-5000,"den":1000,"dp":3}}')
+        }
+
+        // A bidi-control-prefixed sign is two or three UTF-16 units, so a
+        // one-unit comparison cannot match it at all -- ar_DZ included, whose
+        // sign *is* the ASCII hyphen behind a U+200E. Driven through the mirror
+        // directly: these locales' own separators are Arabic-Indic, which is a
+        // separate gap (morph#591), so the sign is isolated here.
+        function test_bidiPrefixedSignIsMatchedAsAWholeString() {
+            compare(signForm.normalizeLocaleNumber("\u200E\u22125", ".", "", "\u200E\u2212"), "-5")  // fa_IR
+            compare(signForm.normalizeLocaleNumber("\u200E-\u200E5", ".", "", "\u200E-\u200E"), "-5")  // az_IR
+            compare(signForm.normalizeLocaleNumber("\u200E-5", ".", "", "\u200E-"), "-5")  // ar_DZ
+            compare(signForm.normalizeLocaleNumber("\u061C-5", ".", "", "\u061C-"), "-5")  // ar_EG
+
+            // Controls: rejected with the sign left at its ASCII default, which
+            // is exactly what the renderer passed before this change.
+            compare(signForm.normalizeLocaleNumber("\u200E\u22125", ".", ""), null)
+            compare(signForm.normalizeLocaleNumber("\u200E-5", ".", ""), null)
+            compare(signForm.normalizeLocaleNumber("\u22125", ".", ""), null)
+        }
+
+        // The C++ edge (tests/test_render_locale_format.cpp, [morph583]) pins
+        // the identical table; a divergence between the two is a divergence in
+        // what the product accepts.
+        function test_displayEdgeEmitsTheLocaleSignAndEntryTakesItBack() {
+            const signs = ["\u2212", "\u200E\u2212", "\u200E-", "\u200E-\u200E", "\u061C-"]
+            for (let i = 0; i < signs.length; ++i) {
+                const display = signForm.formatCanonicalNumber("-1050.25", ",", ".", signs[i])
+                compare(display, signs[i] + "1.050,25")
+                compare(signForm.normalizeLocaleNumber(display, ",", ".", signs[i]), "-1050.25")
+            }
+            // A positive never carries the sign, and the ASCII default is
+            // unchanged for every existing caller.
+            compare(signForm.formatCanonicalNumber("1050.25", ",", ".", "\u2212"), "1.050,25")
+            compare(signForm.formatCanonicalNumber("-1050.25", ",", "."), "-1.050,25")
+        }
+
+        // Unlike a group separator, no locale is without a negative sign, so an
+        // omitted or empty one reads as "-" rather than as absence: formatting
+        // -5 to "5" would be a silently wrong value, which is the morph#574
+        // failure mode rather than a rejection.
+        function test_anEmptySignReadsAsTheAsciiDefault() {
+            compare(signForm.formatCanonicalNumber("-5", ".", "", ""), "-5")
+            compare(signForm.normalizeLocaleNumber("-5", ".", "", ""), "-5")
+            compare(signForm.normalizeLocaleNumber("123", ".", "", ""), "123")
+        }
+
+        // The morph#497 rule is about the *output*, so it has to hold for a
+        // multi-unit sign exactly as it does for "-".
+        function test_aLocaleSignIsStillRejectedOffTheLeadingPosition() {
+            compare(signForm.normalizeLocaleNumber("1\u22122", ".", "", "\u2212"), null)
+            compare(signForm.normalizeLocaleNumber(",\u22125", ",", ".", "\u2212"), null)
+            compare(signForm.normalizeLocaleNumber("\u2212", ".", "", "\u2212"), null)
         }
 
         function test_zonedTimestampRoundTripsToUtc() {
