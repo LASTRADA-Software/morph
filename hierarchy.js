@@ -12,6 +12,7 @@ var hierarchy =
     [ "morph::backend::detail::IBackend", null, [
       [ "morph::backend::LocalBackend", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html", null ],
       [ "morph::backend::SimulatedRemoteBackend", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html", null ],
+      [ "morph::backend::SynchronousBackendAdapter", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html", null ],
       [ "morph::net::SocketBackend", "d5/d98/classmorph_1_1net_1_1SocketBackend.html", null ],
       [ "morph::qt::QtWebSocketBackend", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html", null ]
     ] ],

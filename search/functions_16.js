@@ -15,5 +15,6 @@ var searchData=
   ['withslot_12',['withSlot',['../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d',1,'morph::forms::i18n']]],
   ['wizardschemajson_13',['wizardSchemaJson',['../d0/d67/flows_8hpp.html#a5b60bfc400ec89a16c70701b2b2a0a27',1,'morph::flows']]],
   ['wizardsteptitlekey_14',['wizardStepTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea',1,'morph::forms::i18n']]],
-  ['wizardtitlekey_15',['wizardTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d',1,'morph::forms::i18n']]]
+  ['wizardtitlekey_15',['wizardTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d',1,'morph::forms::i18n']]],
+  ['wrapped_16',['wrapped',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0',1,'morph::backend::SynchronousBackendAdapter']]]
 ];

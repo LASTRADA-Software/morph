@@ -30,9 +30,10 @@ var searchData=
   ['probefunction_27',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]],
   ['probeinterval_28',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
   ['promise_29',['Promise',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html',1,'morph::async::Completion&lt; T &gt;::Promise'],['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ab4bacd758d6d1b79b345260a76f4dd8b',1,'morph::async::Completion::Promise::Promise()']]],
-  ['propagation_30',['Error propagation',['../index.html#error-propagation',1,'']]],
-  ['protocol_31',['Wire protocol',['../index.html#wire-protocol',1,'']]],
-  ['protocolrange_32',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
-  ['protocolversion_33',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
-  ['publishresult_34',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
+  ['promotemodel_30',['promoteModel',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435',1,'morph::backend::SynchronousBackendAdapter']]],
+  ['propagation_31',['Error propagation',['../index.html#error-propagation',1,'']]],
+  ['protocol_32',['Wire protocol',['../index.html#wire-protocol',1,'']]],
+  ['protocolrange_33',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
+  ['protocolversion_34',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
+  ['publishresult_35',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
 ];

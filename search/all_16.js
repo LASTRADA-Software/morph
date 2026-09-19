@@ -27,6 +27,7 @@ var searchData=
   ['wizardsteptitlekey_24',['wizardStepTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea',1,'morph::forms::i18n']]],
   ['wizardtitlekey_25',['wizardTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d',1,'morph::forms::i18n']]],
   ['wizardtraits_26',['WizardTraits',['../de/d61/structmorph_1_1flows_1_1WizardTraits.html',1,'morph::flows']]],
-  ['wrappedmodelkey_27',['WrappedModelKey',['../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html',1,'morph::model']]],
-  ['writeenvelope_28',['writeEnvelope',['../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html#aefb0097d261175dbb3107c9df35c3482',1,'morph::wire::WireCodecOps']]]
+  ['wrapped_27',['wrapped',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0',1,'morph::backend::SynchronousBackendAdapter']]],
+  ['wrappedmodelkey_28',['WrappedModelKey',['../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html',1,'morph::model']]],
+  ['writeenvelope_29',['writeEnvelope',['../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html#aefb0097d261175dbb3107c9df35c3482',1,'morph::wire::WireCodecOps']]]
 ];

@@ -22,6 +22,7 @@ var searchData=
   ['socketserverconfig_19',['SocketServerConfig',['../d4/db0/structmorph_1_1net_1_1SocketServerConfig.html',1,'morph::net']]],
   ['sqliteofflinequeue_20',['SqliteOfflineQueue',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html',1,'morph::offline']]],
   ['sqliteofflinequeueerror_21',['SqliteOfflineQueueError',['../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html',1,'morph::offline']]],
-  ['syncresult_22',['SyncResult',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html',1,'morph::offline']]],
-  ['syncworker_23',['SyncWorker',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html',1,'morph::offline']]]
+  ['synchronousbackendadapter_22',['SynchronousBackendAdapter',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html',1,'morph::backend']]],
+  ['syncresult_23',['SyncResult',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html',1,'morph::offline']]],
+  ['syncworker_24',['SyncWorker',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html',1,'morph::offline']]]
 ];

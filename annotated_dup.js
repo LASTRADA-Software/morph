@@ -23,6 +23,7 @@ var annotated_dup =
         [ "LocalBackend", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html", "d8/dfd/classmorph_1_1backend_1_1LocalBackend" ],
         [ "RemoteServer", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html", "d4/dc1/classmorph_1_1backend_1_1RemoteServer" ],
         [ "SimulatedRemoteBackend", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend" ],
+        [ "SynchronousBackendAdapter", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter" ],
         [ "TimeoutError", "d5/d80/structmorph_1_1backend_1_1TimeoutError.html", "d5/d80/structmorph_1_1backend_1_1TimeoutError" ]
       ] ],
       [ "bridge", null, [

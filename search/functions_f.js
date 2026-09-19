@@ -9,5 +9,6 @@ var searchData=
   ['post_6',['post',['../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5',1,'morph::exec::IExecutor::post()'],['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#afead0a3262f89b24d880c22c416911d6',1,'morph::exec::ThreadPoolExecutor::post()'],['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a75c70e9c83fbda739ad5f3d93a820e85',1,'morph::exec::MainThreadExecutor::post()'],['../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f',1,'morph::qt::QtExecutor::post()']]],
   ['primary_7',['primary',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a9b5b501777040b73d91d80815a824cd0',1,'morph::bridge::BridgeHandler']]],
   ['promise_8',['Promise',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ab4bacd758d6d1b79b345260a76f4dd8b',1,'morph::async::Completion::Promise']]],
-  ['publishresult_9',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
+  ['promotemodel_9',['promoteModel',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435',1,'morph::backend::SynchronousBackendAdapter']]],
+  ['publishresult_10',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
 ];
