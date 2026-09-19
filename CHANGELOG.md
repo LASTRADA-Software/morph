@@ -182,6 +182,25 @@ API surface).
 
 ### Fixed
 
+- **A model registered privately over `morph::net` was not journalled at all.**
+  `morph::net::SocketBackend` left `IBackend::registerModelWithContext`
+  unoverridden, so its default dropped the `contextKey`, and the native
+  `bindModel` path added in morph#586 dropped it again by omission at the
+  `wire::makeRegister` call site. Because `RemoteServer::attachLogIfConfigured`
+  returns *without consulting its `LogProvider`* when the envelope's
+  `contextKey` is empty, the effect was not a log entry missing its entity
+  key — no log was attached, so the instance produced no audit record at all,
+  while the same registration over `SimulatedRemoteBackend` produced one. It
+  failed open. `SocketBackend` now overrides `registerModelWithContext` and
+  passes `request.contextKey` to `makeRegister` on the `bindModel` private
+  branch, so both edges carry the key; the empty-`primary` degrades of
+  `registerModelShared`/`attachModel`, which route through
+  `registerModelWithContext`, are fixed with them. The shared and attach shapes
+  already carried it and are unchanged. Reproduced end-to-end over a real
+  socket in `tests/net/test_socket_backend.cpp`, which asserts the provider was
+  consulted with the key and that the attached log records the action under it.
+  See morph#587.
+
 - **A locale-formatted entry could submit ten times what the user typed.**
   `morph::render::normalizeLocaleNumber` dropped every occurrence of the group
   separator unconditionally, with no check on placement, so a de-DE user typing
