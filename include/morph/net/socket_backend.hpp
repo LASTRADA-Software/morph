@@ -506,7 +506,9 @@ public:
     }
 
     /// @brief Installs the handler invoked after each *subsequent* successful (re)connect.
-    /// @param handler Callable invoked on the I/O thread. Pass `nullptr` to clear.
+    /// @param handler Callable invoked on this backend's dedicated handler
+    ///                thread — deliberately not the I/O thread, see
+    ///                `onConnected`. Pass `nullptr` to clear.
     void setReconnectHandler(const std::function<void()>& handler) override {
         std::scoped_lock lock{_reconnectHandlerMtx};
         _reconnectHandler = handler;

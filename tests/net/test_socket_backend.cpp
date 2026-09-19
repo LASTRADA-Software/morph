@@ -1910,8 +1910,26 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
             done.store(true);
         });
 
+    // Nothing can settle this bind yet: its reply is only sent below. A
+    // *blocking* bind, by contrast, has already failed by this point with
+    // sendSync's reentrant-use error, so pumping the caller's executor here is
+    // what turns the mutation into an immediate, readable failure rather than
+    // a hang on the `receiveEnvelope` that follows.
+    for (int i = 0; i < 20; ++i) {
+        (void)callerExec.runOnce();
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+    bool const accepted = !done.load();
+    if (!accepted) {
+        // Release the parked call and join before failing, so the diagnosis is
+        // the message below rather than a terminate() on an unjoined thread.
+        fake.sendFrame(morph::net::detail::WsOpcode::kText, morph::wire::encode(morph::wire::makeOk(0, {}, 7)));
+        syncThread.join();
+    }
+    INFO("the bind was rejected instead of accepted: " << error);
+    REQUIRE(accepted);
+
     auto bindEnv = fake.receiveEnvelope();
-    CHECK(error.empty());
     REQUIRE(bindEnv.kind == "register");
     REQUIRE(bindEnv.callId != 0U);  // multiplexed, not the synchronous sentinel
 
@@ -1929,7 +1947,7 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("SocketBackend: several binds are in flight at once and are matched by callId, replies out of order",
+TEST_CASE("SocketBackend: several binds are in flight at once and are matched by callId with replies out of order",
           "[net][socket_backend][registration-surface]") {
     // The corollary of "a bind never parks": several are outstanding at once.
     // Under the default blocking `bindModel` the first call here would never
