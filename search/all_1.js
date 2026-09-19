@@ -22,7 +22,7 @@ var searchData=
   ['bindentry_19',['BindEntry',['../d9/dea/structmorph_1_1views_1_1BindEntry.html',1,'morph::views']]],
   ['binding_20',['binding',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a24d6eae36421f68e51d54b24f6d2d087',1,'morph::bridge::BridgeHandler']]],
   ['bindingprimary_21',['bindingPrimary',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac2b6aa45af15dd71a4d513edf1f9ddd6',1,'morph::bridge::Bridge']]],
-  ['bindmodel_22',['bindModel',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#ac65e916ae8ff43ddcc165f42492960fc',1,'morph::backend::SynchronousBackendAdapter']]],
+  ['bindmodel_22',['bindModel',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#ac65e916ae8ff43ddcc165f42492960fc',1,'morph::backend::SynchronousBackendAdapter::bindModel()'],['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a23344886fdc9f1679083d4f88be1a7e3',1,'morph::net::SocketBackend::bindModel()']]],
   ['binds_23',['binds',['../d8/d94/structmorph_1_1flows_1_1WizardStep.html#a98d4a48c599245638cb6886b2033f800',1,'morph::flows::WizardStep::binds'],['../dc/df1/structmorph_1_1forms_1_1Section.html#a301aff5bc7f6a659928a6792f9c43fee',1,'morph::forms::Section::binds']]],
   ['block_24',['&lt;span class=&quot;tt&quot;&gt;NetworkMonitor&lt;/span&gt; callbacks must not block',['../index.html#networkmonitor-callbacks-must-not-block',1,'']]],
   ['body_25',['body',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326',1,'morph::wire::Envelope']]],

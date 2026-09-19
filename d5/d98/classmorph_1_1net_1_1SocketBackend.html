@@ -153,6 +153,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a95b27b580383fd5fe72786a420b10e68"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends an <span class="tt">attach</span> and blocks for the reply, re-pointing from <code class="param">current</code>.  <br /></td></tr>
 <tr class="memitem:a4e873f2e34acf90020418052004dc563" id="r_a4e873f2e34acf90020418052004dc563"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4e873f2e34acf90020418052004dc563">assignPrimary</a> (::morph::exec::detail::ModelId mid, const std::string &amp;typeId, std::string_view primary) override</td></tr>
 <tr class="memdesc:a4e873f2e34acf90020418052004dc563"><td class="mdescLeft">&#160;</td><td class="mdescRight">Files a live server-side instance under <code class="param">primary</code>.  <br /></td></tr>
+<tr class="memitem:a23344886fdc9f1679083d4f88be1a7e3" id="r_a23344886fdc9f1679083d4f88be1a7e3"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;::morph::exec::detail::ModelId &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3">bindModel</a> (::morph::backend::detail::BindRequest request, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;cbExec) override</td></tr>
+<tr class="memdesc:a23344886fdc9f1679083d4f88be1a7e3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Acquires a model instance without blocking the calling thread.  <br /></td></tr>
+<tr class="memitem:a39d4848c41081eb7d3c7d8d05e67b04b" id="r_a39d4848c41081eb7d3c7d8d05e67b04b"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;::morph::exec::detail::ModelId &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a39d4848c41081eb7d3c7d8d05e67b04b">promoteModel</a> (::morph::backend::detail::PromoteRequest request, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;cbExec) override</td></tr>
+<tr class="memdesc:a39d4848c41081eb7d3c7d8d05e67b04b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Files an already-live server-side instance under a key, without blocking the calling thread.  <br /></td></tr>
 <tr class="memitem:aa8b1294c215041aadde4f2345237c074" id="r_aa8b1294c215041aadde4f2345237c074"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa8b1294c215041aadde4f2345237c074">listInstances</a> (const std::string &amp;typeId) override</td></tr>
 <tr class="memdesc:aa8b1294c215041aadde4f2345237c074"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks the server for the live shared primary keys of <code class="param">typeId</code>.  <br /></td></tr>
 <tr class="memitem:ac24914155bba1992eb56f3bf9a50a06d" id="r_ac24914155bba1992eb56f3bf9a50a06d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac24914155bba1992eb56f3bf9a50a06d">deregisterModel</a> (::morph::exec::detail::ModelId mid) override</td></tr>
@@ -164,7 +168,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:ae8e21983e5044036264ad910f43e40b6" id="r_ae8e21983e5044036264ad910f43e40b6"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae8e21983e5044036264ad910f43e40b6">notifyBackendChanged</a> () override</td></tr>
 <tr class="memdesc:ae8e21983e5044036264ad910f43e40b6"><td class="mdescLeft">&#160;</td><td class="mdescRight">No-op — this backend holds no local model objects.  <br /></td></tr>
 <tr class="memitem:a0d389a1f727cd538d2366d620eb304d5" id="r_a0d389a1f727cd538d2366d620eb304d5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a0d389a1f727cd538d2366d620eb304d5">cancelPending</a> (const std::exception_ptr &amp;exc) override</td></tr>
-<tr class="memdesc:a0d389a1f727cd538d2366d620eb304d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves every pending execute call's <span class="tt">Completion</span> with <code class="param">exc</code>.  <br /></td></tr>
+<tr class="memdesc:a0d389a1f727cd538d2366d620eb304d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves every pending call's <span class="tt">Completion</span> with <code class="param">exc</code>.  <br /></td></tr>
 <tr class="memitem:aa8a172135062fa70ed06f285279a356c" id="r_aa8a172135062fa70ed06f285279a356c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa8a172135062fa70ed06f285279a356c">setReconnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
 <tr class="memdesc:aa8a172135062fa70ed06f285279a356c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler invoked after each <em>subsequent</em> successful (re)connect.  <br /></td></tr>
 <tr class="memitem:a80e37124e8a3792b6b07541f64d0e690" id="r_a80e37124e8a3792b6b07541f64d0e690"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a80e37124e8a3792b6b07541f64d0e690">setSession</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session) override</td></tr>
@@ -514,6 +518,91 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a23344886fdc9f1679083d4f88be1a7e3" name="a23344886fdc9f1679083d4f88be1a7e3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a23344886fdc9f1679083d4f88be1a7e3">&#9670;&#160;</a></span>bindModel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;::morph::exec::detail::ModelId &gt; morph::net::SocketBackend::bindModel </td>
+          <td>(</td>
+          <td class="paramtype">::morph::backend::detail::BindRequest</td>          <td class="paramname"><span class="paramname"><em>request</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Acquires a model instance without blocking the calling thread. </p>
+<p>Sends the control envelope <code class="param">request's</code> shape names (see <span class="tt">backend::detail::BindRequest</span>'s table) carrying a non-zero <span class="tt">callId</span> drawn from the same counter <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span> uses, and settles the returned <span class="tt">Completion</span> from the I/O thread when the matching reply arrives. No thread is parked anywhere: in particular this never enters <span class="tt">sendSync</span>, so a bind neither waits on <span class="tt">_syncCv</span> nor takes the one-synchronous-call token, and therefore cannot wait on the I/O thread that would satisfy it.</p>
+<p>The two degradations the legacy verbs perform are preserved exactly: an empty <span class="tt">primary</span> with a live <span class="tt">current</span> gives that instance up first, and an empty <span class="tt">primary</span> binds a private instance.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">request</td><td>Owning bind request; moved from. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>Executor the continuation is delivered on. Borrowed: it must outlive the returned <span class="tt">Completion</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with the bound <span class="tt">ModelId</span>; rejected with <span class="tt"><a class="el" href="../../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html" title="Thrown to in-flight Completions when a transport drops mid-call (e.g. a Qt WebSocket disconnect)....">backend::DisconnectedError</a></span> if the socket is down or drops before the reply, or with a <span class="tt">std::runtime_error</span> carrying the server's own error message. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a39d4848c41081eb7d3c7d8d05e67b04b" name="a39d4848c41081eb7d3c7d8d05e67b04b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a39d4848c41081eb7d3c7d8d05e67b04b">&#9670;&#160;</a></span>promoteModel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;::morph::exec::detail::ModelId &gt; morph::net::SocketBackend::promoteModel </td>
+          <td>(</td>
+          <td class="paramtype">::morph::backend::detail::PromoteRequest</td>          <td class="paramname"><span class="paramname"><em>request</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Files an already-live server-side instance under a key, without blocking the calling thread. </p>
+<p>The promote counterpart of <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span>, on the same callId-multiplexed path. Resolves with <span class="tt">request.mid</span> echoed back exactly as <span class="tt">IBackend::promoteModel</span> documents — including for the two guards <span class="tt"><a class="el" href="#a4e873f2e34acf90020418052004dc563" title="Files a live server-side instance under primary.">assignPrimary</a></span> applies locally (empty <span class="tt">primary</span>, zero <span class="tt">mid</span>), which resolve without sending anything.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">request</td><td>Owning promote request; moved from. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>Executor the continuation is delivered on. Borrowed: it must outlive the returned <span class="tt">Completion</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with <span class="tt">request.mid</span>, or rejected as <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span> documents. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00343">343</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+
+</div>
+</div>
 <a id="aa8b1294c215041aadde4f2345237c074" name="aa8b1294c215041aadde4f2345237c074"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa8b1294c215041aadde4f2345237c074">&#9670;&#160;</a></span>listInstances()</h2>
 
@@ -552,7 +641,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -590,7 +679,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00396">396</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -637,7 +726,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00416">416</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -684,7 +773,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion resolved asynchronously when the server's reply arrives, or immediately with <span class="tt">DisconnectedError</span> if not connected. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00345">345</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00436">436</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -713,7 +802,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00390">390</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00481">481</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -740,15 +829,15 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
 </table>
 </div><div class="memdoc">
 
-<p>Resolves every pending execute call's <span class="tt">Completion</span> with <code class="param">exc</code>. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Resolves every pending call's <span class="tt">Completion</span> with <code class="param">exc</code>. </p>
+<p>Covers both in-flight tables: the <span class="tt"><a class="el" href="#adccec9d533fd8021f3f6634df007c19a" title="Sends an execute message and returns a Completion resolved on reply.">execute</a></span> calls in <span class="tt">_pending</span> and the <span class="tt"><a class="el" href="#a23344886fdc9f1679083d4f88be1a7e3" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span>/<span class="tt"><a class="el" href="#a39d4848c41081eb7d3c7d8d05e67b04b" title="Files an already-live server-side instance under a key, without blocking the calling thread.">promoteModel</a></span> control calls in <span class="tt">_pendingControl</span>. A bind left out of this sweep would hang forever on a disconnect, since its reply can now only arrive on a connection that is gone — the async counterpart of <span class="tt">sendSync</span>'s <span class="tt">!_connected</span> wake-up. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">exc</td><td>Exception delivered to every pending completion's error sink. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00394">394</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00491">491</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -778,12 +867,12 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
 <p>Installs the handler invoked after each <em>subsequent</em> successful (re)connect. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">handler</td><td>Callable invoked on the I/O thread. Pass <span class="tt">nullptr</span> to clear. </td></tr>
+    <tr><td class="paramname">handler</td><td>Callable invoked on this backend's dedicated handler thread — deliberately not the I/O thread, see <span class="tt">onConnected</span>. Pass <span class="tt">nullptr</span> to clear. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00512">512</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -818,7 +907,7 @@ this payload to whichever `sendSync()` is parked", so a fire-and-forget <span cl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00521">521</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>

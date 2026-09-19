@@ -1,5 +1,7 @@
 var NAVTREEINDEX2 =
 {
+"d7/d54/structmorph_1_1util_1_1detail_1_1IsTagged.html":[2,0,0,20,0,0],
+"d7/d6b/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1DateTime_01_4.html":[2,0,0,12,8],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html":[2,0,0,8,23],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html#a607e1d136db6d51bc20fd60259179ada":[2,0,0,8,23,4],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html#a67fe3e060b0f6774a83d913a16dce50e":[2,0,0,8,23,1],
@@ -247,7 +249,5 @@ var NAVTREEINDEX2 =
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#ac4251df7c4776d6cd0c68f4751952d45":[2,0,0,15,6,6],
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#adff798ad5c1b3aa6c49d4a2b5e5f3c1b":[2,0,0,15,6,4],
 "dc/d11/structmorph_1_1app_1_1WizardScreen.html":[2,0,0,0,2],
-"dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html":[2,0,0,9,8],
-"dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html#a1165e54df5387ce30972222227a67c71":[2,0,0,9,8,2],
-"dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html#a554f4b39d861af89bcbcffaf2a5f0aa7":[2,0,0,9,8,0]
+"dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html":[2,0,0,9,8]
 };

@@ -8,6 +8,8 @@ var classmorph_1_1net_1_1SocketBackend =
     [ "registerModelShared", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#acc4462e718bb6a08fe7b601ea61bd86f", null ],
     [ "attachModel", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a95b27b580383fd5fe72786a420b10e68", null ],
     [ "assignPrimary", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a4e873f2e34acf90020418052004dc563", null ],
+    [ "bindModel", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a23344886fdc9f1679083d4f88be1a7e3", null ],
+    [ "promoteModel", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a39d4848c41081eb7d3c7d8d05e67b04b", null ],
     [ "listInstances", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#aa8b1294c215041aadde4f2345237c074", null ],
     [ "deregisterModel", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#ac24914155bba1992eb56f3bf9a50a06d", null ],
     [ "sendControlForId", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a35878a08af138c734b9153176a06f3d5", null ],
