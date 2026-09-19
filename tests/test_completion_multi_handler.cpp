@@ -7,6 +7,7 @@
 // arrives, in attachment order.
 
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <morph/core/completion.hpp>
 #include <morph/core/logger.hpp>
 #include <stdexcept>
@@ -20,11 +21,12 @@ using LogGuard = morph::log::ScopedLoggerOverride;
 
 namespace {
 
-/// A value whose *copy* constructor throws on demand. `setValue`'s first act on
-/// a state with handlers attached is `auto savedVal = val;` -- the copy
-/// morph#520 introduced -- so this is what exercises the strong exception
-/// guarantee documented there. The flag travels with the value rather than
-/// living in a global so two tests cannot arm each other.
+/// A value whose *copy* constructor throws on demand. Under the value contract
+/// (morph#553) nothing on the value path copies `T`, so an armed `ThrowOnCopy`
+/// settling through `const T&` handlers is a booby trap that must never go off
+/// -- which is what turns "zero copies" from a comment into a test. The flag
+/// travels with the value rather than living in a global so two tests cannot
+/// arm each other.
 struct ThrowOnCopy {
     int payload = 0;
     bool explode = false;
@@ -40,6 +42,36 @@ struct ThrowOnCopy {
     ThrowOnCopy& operator=(const ThrowOnCopy&) = default;
     ThrowOnCopy& operator=(ThrowOnCopy&&) noexcept = default;
     ~ThrowOnCopy() = default;
+};
+
+/// A value whose *move* constructor throws on demand. `setValue`'s only act on
+/// `T` is `value = std::move(val)`, so this is what exercises the strong
+/// exception guarantee it documents: the store happens before `onOk` is
+/// drained, so an escape must leave the state exactly as it was.
+///
+/// `setValue(T val)` takes its argument by value and every call below passes a
+/// prvalue, so C++17 guaranteed elision constructs it directly in the
+/// parameter: the move inside `setValue` is the *first* move this type ever
+/// sees, and arming it on construction is enough.
+struct ThrowOnMove {
+    int payload = 0;
+    bool explode = false;
+
+    ThrowOnMove() = default;
+    ThrowOnMove(int value, bool boom) : payload{value}, explode{boom} {}
+    ThrowOnMove(const ThrowOnMove&) = default;
+    // A throwing, non-`noexcept` move constructor is the whole point of this
+    // fixture -- `bugprone-exception-escape` and the two noexcept-move checks
+    // are correct about ordinary code and wrong about a fault injector.
+    // NOLINTNEXTLINE(bugprone-exception-escape,cppcoreguidelines-noexcept-move-operations,performance-noexcept-move-constructor)
+    ThrowOnMove(ThrowOnMove&& other) : payload{other.payload}, explode{other.explode} {
+        if (explode) {
+            throw std::runtime_error{"move ctor blew up"};
+        }
+    }
+    ThrowOnMove& operator=(const ThrowOnMove&) = default;
+    ThrowOnMove& operator=(ThrowOnMove&&) = default;
+    ~ThrowOnMove() = default;
 };
 
 }  // namespace
@@ -242,23 +274,55 @@ TEST_CASE("Completion: a then() attached after settlement observes the same valu
     REQUIRE(secondSeen == original);
 }
 
-TEST_CASE("Completion: a throwing T copy leaves the state unsettled with every handler intact",
-          "[completion][issue-520]") {
-    // The guarantee `setValue` documents: the copy is taken *before* `onOk` is
-    // drained or `value`/`ready` are set, so a throwing copy constructor must
-    // leave the state exactly as it was -- unready, with every handler still
-    // attached -- rather than half-settled with its handlers already lost.
+TEST_CASE("Completion: settling never copies T -- an armed throwing copy constructor never runs",
+          "[completion][issue-553]") {
+    // The value half of the contract, stated as a trap rather than a comment:
+    // `onOk` is erased as `std::function<void(const T&)>` and both dispatch
+    // paths read the stored value in place, so settling a state with `const T&`
+    // handlers -- attached before *or* after -- copies `T` exactly zero times.
+    // An armed `ThrowOnCopy` therefore settles without incident. Before
+    // morph#553 this threw: `setValue` copied into `savedVal` before draining
+    // `onOk`, and `attachThen`'s fire-now path copied twice more.
     SyncExecutor exec;
     auto state = std::make_shared<morph::async::detail::CompletionState<ThrowOnCopy>>();
     morph::async::Completion<ThrowOnCopy> comp{state, &exec};
 
     int fired = 0;
-    // `const&` parameters: a by-value one would be an extra copy per handler
-    // that this test never reads, and `std::function<void(T)>` accepts either.
-    comp.then([&](const ThrowOnCopy&) { ++fired; });
+    int seen = 0;
+    comp.then([&](const ThrowOnCopy& v) {
+        ++fired;
+        seen = v.payload;
+    });
     comp.then([&](const ThrowOnCopy&) { ++fired; });
 
-    REQUIRE_THROWS_AS(state->setValue(ThrowOnCopy{7, true}), std::runtime_error);
+    REQUIRE_NOTHROW(state->setValue(ThrowOnCopy{7, true}));
+
+    CHECK(state->ready);
+    CHECK(fired == 2);
+    CHECK(seen == 7);
+
+    // The attach-after-ready path is copy-free too, and still sees the genuine
+    // value rather than a husk -- the value is observed, never consumed.
+    int lateSeen = 0;
+    REQUIRE_NOTHROW(comp.then([&](const ThrowOnCopy& v) { lateSeen = v.payload; }));
+    CHECK(lateSeen == 7);
+}
+
+TEST_CASE("Completion: a throwing T move leaves the state unsettled with every handler intact",
+          "[completion][issue-520][issue-553]") {
+    // The guarantee `setValue` documents: `value = std::move(val)` runs before
+    // `onOk` is drained or `ready` is set, so a throwing move constructor must
+    // leave the state exactly as it was -- unready, with every handler still
+    // attached -- rather than half-settled with its handlers already lost.
+    SyncExecutor exec;
+    auto state = std::make_shared<morph::async::detail::CompletionState<ThrowOnMove>>();
+    morph::async::Completion<ThrowOnMove> comp{state, &exec};
+
+    int fired = 0;
+    comp.then([&](const ThrowOnMove&) { ++fired; });
+    comp.then([&](const ThrowOnMove&) { ++fired; });
+
+    REQUIRE_THROWS_AS(state->setValue(ThrowOnMove{7, true}), std::runtime_error);
 
     CHECK_FALSE(state->ready);
     CHECK_FALSE(state->value.has_value());
@@ -268,7 +332,7 @@ TEST_CASE("Completion: a throwing T copy leaves the state unsettled with every h
     // And the state is still usable afterwards: the failed settlement consumed
     // nothing, so a later non-throwing one settles normally and both handlers
     // -- the ones that survived the throw -- run.
-    state->setValue(ThrowOnCopy{9, false});
+    state->setValue(ThrowOnMove{9, false});
 
     CHECK(state->ready);
     CHECK(fired == 2);

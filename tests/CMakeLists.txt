@@ -28,6 +28,7 @@ add_executable(morph_tests
     test_completion_extra.cpp
     test_completion_multi_handler.cpp
     test_completion_promise.cpp
+    test_completion_value_contract.cpp
     test_model.cpp
     test_logger.cpp
     test_observability.cpp
