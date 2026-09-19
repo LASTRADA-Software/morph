@@ -424,10 +424,11 @@ types:
 - **`ASTNode`** — a node in the DAG: its own `ASTUnit current` step, an optional
   symbol `name` (set by `named()` / `NamedQuantity`, which makes the node opaque
   and stops `equation()` expanding it), and `shared_ptr<ASTNode> left` / `right`
-  handles onto the nodes that fed this one. The struct is a plain aggregate, but
-  nodes are **never copied** in practice: sharing is done through the `shared_ptr`,
-  never by duplicating a node — every operation allocates a fresh `ASTNode` and
-  links the (shared) prior ones.
+  handles onto the nodes that fed this one. Copy and move are the defaulted
+  ones, but nodes are **never copied** in practice: sharing is done through the
+  `shared_ptr`, never by duplicating a node — every operation allocates a fresh
+  `ASTNode` and links the (shared) prior ones. The destructor is the one member
+  with a body, and its job is depth (see below), not ownership.
 - **`Context`** — the per-`Quantity` handle: a single `shared_ptr<ASTNode> node`
   pointing at the root of that value's derivation. Copying a `Quantity` copies its
   `Context`, which just bumps the node's refcount — the tree itself is never
@@ -442,6 +443,32 @@ it a single shared placeholder. The tree is deliberately **unit-erased** so it
 can be shared across differently typed quantities. It is *not* precision-erased:
 every value stored in a node is the exact `Rational` as computed, carrying its
 own runtime `DecimalPlaces` tag.
+
+**Depth is unbounded, so every walk of the DAG is iterative.** The ordinary
+running-total pattern — `total = total + one` in a loop — records one node per
+iteration, chained through `left`, and nothing collapses that chain: a loop over
+*n* wire rows leaves an *n*-deep derivation. A recursive walk of it overflows
+the stack, so none of the walks is recursive:
+
+- **Destruction.** `~ASTNode` detaches its children into a local worklist and
+  releases them one at a time, unlinking a node's own children only when that
+  pop holds its last reference. Every `~ASTNode` the loop reaches therefore runs
+  with both children already null and cannot recurse. Without this the
+  compiler-generated destructor releases the chain through
+  `~shared_ptr` → `~ASTNode` → `~shared_ptr` → …, one frame per node.
+- **`equation()`.** All four traversals — the reference count, the placeholder
+  labelling, and the symbolic and substituted renderings — run over an explicit
+  stack. The two renderings share one stack machine (`EquationRenderer::render`,
+  selected by `RenderMode`) whose frames resume at the same three points a
+  recursive call would: render-or-descend-left, take-left-descend-right,
+  combine.
+
+Measured (morph#574, clang 20 and clang 22, `-O0`, 8 MiB stack): before this,
+destroying a 21,000-node chain segfaulted and `equation()` segfaulted inside
+`renderSymbolic` at 25,000 nodes. The destruction case *survived* 200,000 nodes
+at `-O2`, because clang rewrites that particular chain into a loop — "crashes in
+Debug, survives in Release" — which is precisely why the flattening is a
+specified property of the type rather than something left to the optimiser.
 
 **Nodes are immutable once built.** No operation ever mutates an existing
 `ASTNode` — arithmetic, conversion, and `named()` each allocate a *new* node
@@ -1219,6 +1246,39 @@ deliberately not attempted):
   never crosses the wire and has a **single consumer**, `equation()`. For hot
   paths that never call `equation()`, build with `MORPH_QUANTITY_PROVENANCE=0`:
   the API stays callable and no nodes are allocated.
+
+  The cost is measured, not estimated. A 200,000-iteration running total
+  (morph#574, clang 22, `-O2`, Linux): **54,056 KB** max RSS and 0.034 s with
+  the default, against **12,236 KB** and 0.006 s with `MORPH_QUANTITY_PROVENANCE=0`
+  — 4.4x the memory and 5.7x the time, for a loop that adds integers. The
+  retained chain is proportional to the loop bound, so a loop whose bound comes
+  from wire input (a ledger replay, a batch of rows) allocates in proportion to
+  that input. **An application that puts `Quantity` on a bulk path, and does not
+  need `equation()` on it, should build with the macro set to `0`.**
+
+  morph#574 proposed flipping the default to `0` on those numbers. It stays at
+  `1`, and the reasoning is recorded here rather than left implicit, because the
+  two readings are both defensible and the disagreement is the interesting part:
+
+  - *For flipping.* Nobody opts into a cost they do not know about, and the
+    price of the default is paid by every build that never calls `equation()`.
+  - *Against, and this is the decision.* The toggle **changes observable
+    behaviour, not just performance** — see the limitation two entries below:
+    with tracing off `equation()` collapses to the bare value and `named()`
+    discards the name. Flipping the default would silently empty the output of
+    both for every existing build that did not set the macro. And provenance is
+    not an incidental extra: this document opens by naming it as the third of
+    the three things a `Quantity` knows, and as the reason a domain application
+    reaches for this type instead of an exact number. A default that turns the
+    distinguishing feature off, silently, to buy speed on paths that can already
+    opt out of it with one flag, trades the wrong way round.
+
+  The crash that report also found is a separate matter and was **not** left to
+  the toggle: a deep chain used to overflow the stack in *either* setting, which
+  is not an acceptable failure mode for a default, and both the destructor and
+  every `equation()` traversal are now iterative (see *Provenance*, "Depth is
+  unbounded"). If the default is ever revisited, it should be revisited on the
+  behaviour argument above, not on the crash — that is fixed.
 - **`int64` ratio overflow for wide-range unit systems.** Conversion ratios are
   exact `Rational`s of 64-bit integers. A unit system spanning many orders of
   magnitude (pico- to tera-, say) risks overflowing a composed chained ratio —

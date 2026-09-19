@@ -670,3 +670,59 @@ TEST_CASE("formatRationalDecimal: an un-canonicalised INT64_MIN numerator render
     // survive the unsigned negation intact rather than wrapping.
     REQUIRE(morph::units::detail::formatRationalDecimal(value) == "-9223372036854775808");
 }
+
+// ── morph#574: a deep derivation chain must not overflow the stack ──
+//
+// `total = total + one` in a loop records one ASTNode per iteration, chained
+// through `left`, and nothing collapses the chain. Both walks over it used to
+// be recursive -- the compiler-generated `~ASTNode` and every traversal in
+// `equation()` -- so a long enough chain ran the stack out.
+//
+// **What makes these two cases evidence, and what does not.** The destruction
+// case is load-bearing in an *unoptimised* build only: measured on clang 20 and
+// clang 22 with an 8 MiB stack, unfixed code segfaults on destruction at 21,000
+// nodes at `-O0` and survives 200,000 at `-O2`, because clang rewrites the
+// recursive release into a loop. So this case fails on unfixed code in every
+// Debug configuration CI runs (gcc-debug, clang-debug, the three sanitizer
+// legs, cl-debug) and passes vacuously in a Release one. The `equation()` case
+// has no such escape: its frames hold live `Rendered` strings across the call,
+// no optimiser can turn it into a loop, and unfixed code segfaulted inside
+// `renderSymbolic` at 25,000 nodes.
+namespace {
+constexpr int kDeepChainNodes = 100000;
+}  // namespace
+
+TEST_CASE("A 100000-node provenance chain is destroyed without overflowing the stack",
+          "[quantity][provenance][morph574]") {
+    {
+        Euro total{Rational{Numerator{0}, Denominator{1}, DecimalPlaces{2}}};
+        Euro const one{Rational{Numerator{1}, Denominator{1}, DecimalPlaces{2}}};
+        for (int i = 0; i < kDeepChainNodes; ++i) {
+            total = total + one;
+        }
+        REQUIRE(total.hasValue());
+        REQUIRE(total.value()->toDouble() == static_cast<double>(kDeepChainNodes));
+        // The chain is released here. On unfixed code this is a SIGSEGV at -O0,
+        // which takes the whole test binary with it rather than failing one
+        // assertion -- the crash *is* the failure signal.
+    }
+    SUCCEED("the chain was released without a stack overflow");
+}
+
+TEST_CASE("equation() walks a 100000-node provenance chain without overflowing the stack",
+          "[quantity][provenance][equation][morph574]") {
+    Euro total{Rational{Numerator{0}, Denominator{1}, DecimalPlaces{2}}};
+    Euro const one{Rational{Numerator{1}, Denominator{1}, DecimalPlaces{2}}};
+    for (int i = 0; i < kDeepChainNodes; ++i) {
+        total = total + one;
+    }
+
+    auto const lines = total.equation();
+    // Formula, substitution, result, and one `where` line: the single `one`
+    // leaf is referenced 100,000 times, so it earns exactly one placeholder.
+    REQUIRE(lines.size() == 4);
+    CHECK(lines[0].starts_with("0 + c1 + c1"));
+    CHECK(lines[1].starts_with("    = 0 + 1 + 1"));
+    CHECK(lines[2] == "    = 100000");
+    CHECK(lines[3] == "where c1 = 1");
+}
