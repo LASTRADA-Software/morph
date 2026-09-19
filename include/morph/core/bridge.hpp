@@ -207,12 +207,12 @@ struct HandlerBinding {
     /// @brief Registration-settled seam (see `Bridge::whenBound`).
     ///
     /// `registrationInFlight` is `true` from just *before* `registerHandlerImpl`
-    /// calls `IBackend::registerModelAsync` until that call's
-    /// `onRegistered`/`onError` callback resolves. It is set unconditionally on
-    /// every path, the synchronous fallback included — see the comment at the
-    /// assignment for why it must be set before the backend call rather than
-    /// after. The fallback does not *leave* it set: it resolves the waiters
-    /// (and clears the flag) before returning. `whenBound()`
+    /// calls the backend until that call's continuation resolves. It is set
+    /// unconditionally on every path, the blocking one included — see the
+    /// comment at the assignment for why it must be set before the backend call
+    /// rather than after. A backend that settles inside the dispatch frame does
+    /// not *leave* it set: the continuation runs before `registerHandlerImpl`
+    /// returns and resolves the waiters (clearing the flag). `whenBound()`
     /// checks it to distinguish "an async reply is coming, queue a waiter"
     /// from "nothing is in flight, resolve false now". `registrationWaiters`
     /// holds callbacks queued by `whenBound()` while `registrationInFlight` is
@@ -226,6 +226,28 @@ struct HandlerBinding {
     bool registrationInFlight = false;
     std::vector<std::pair<std::function<void(bool)>, std::function<void(std::exception_ptr)>>> registrationWaiters;
 };
+
+/// @brief Renders @p failure as the diagnostic string a log line wants.
+///
+/// The `Completion` surface carries an `exception_ptr`; the one remaining place
+/// that needs text rather than a rethrowable failure is a log message. Kept
+/// here rather than inline so "what does a rejected control call read like"
+/// has one answer.
+///
+/// @param failure Rejection to describe; may be null.
+/// @return `what()` for a `std::exception`, or a generic stand-in otherwise.
+inline std::string describeFailure(const std::exception_ptr& failure) {
+    if (!failure) {
+        return "unknown error";
+    }
+    try {
+        std::rethrow_exception(failure);
+    } catch (const std::exception& exc) {
+        return exc.what();
+    } catch (...) {
+        return "unknown error";
+    }
+}
 
 /// @brief Outcome a backend's inline completion parked for its dispatcher.
 struct ParkedOutcome {
@@ -510,36 +532,39 @@ public:
         binding->currentId.store(newId.v);
     }
 
-    /// @brief Async counterpart to `attachHandler`: prefers the backend's
-    ///        `attachModelAsync` when available, invoking @p onDone once
-    ///        attached (or failed) instead of blocking.
+    /// @brief Async counterpart to `attachHandler`: dispatches the attach and
+    ///        invokes @p onDone once attached (or failed), instead of blocking.
     ///
-    /// Falls back to the synchronous `attachHandler` body (and calls @p onDone
-    /// immediately, from this thread) when the backend offers no async
-    /// path — so a caller that always goes through this method behaves
-    /// identically to calling `attachHandler` directly, on every backend
-    /// that has not opted in to `attachModelAsync`.
+    /// Reaches the backend through `IBackend::bindModel` — the structural
+    /// registration surface — unless the backend still overrides the legacy
+    /// `attachModelAsync`, which is offered first and which morph#571 removes.
+    /// Either way there is exactly one dispatch and exactly one continuation: a
+    /// backend with no non-blocking attach settles inside the `bindModel` call,
+    /// having blocked for the same round trip the synchronous `attachHandler`
+    /// would have, and @p onDone is then invoked from this thread before this
+    /// method returns — so a caller that always goes through this method
+    /// behaves identically to calling `attachHandler` directly on such a
+    /// backend.
     ///
     /// @par Locking
-    /// `_attachMtx` is held around the guard check, the async branch's
-    /// *dispatch*, and the synchronous branch's own state mutation — matching
+    /// `_attachMtx` is held around the guard check and the *dispatch* — matching
     /// `attachHandler`'s existing lock scope — but is **released before
     /// @p onDone is ever invoked**, on every path, unconditionally. That is not
     /// a nicety: what `execute()` does from inside @p onDone is dispatch the
     /// action, and a result-keyed dispatch promotes its binding through
     /// `assignHandlerPrimary`, which takes `_attachMtx` itself. Invoking
     /// @p onDone under the lock therefore self-deadlocks the moment the
-    /// completion is delivered on the calling thread — which is exactly what
-    /// the synchronous fallback below does, and what an inline executor does
-    /// for every callback. This is `registerHandlerImpl`'s existing rule ("the
-    /// backend call must not run under `_mtx`") applied to `_attachMtx`.
+    /// completion is delivered on the calling thread — which is exactly what a
+    /// blocking backend's `bindModel` does, since the executor this call site
+    /// names runs the continuation inline. This is `registerHandlerImpl`'s
+    /// existing rule ("the backend call must not run under `_mtx`") applied to
+    /// `_attachMtx`.
     ///
-    /// The guarantee holds even for a backend that completes its callback
-    /// *inline*, from inside `attachModelAsync` itself, while this frame still
-    /// holds the lock: such a callback parks its outcome in a
-    /// `detail::AsyncDispatchHandoff` and returns without acting, and this frame
-    /// applies it after the dispatch call has returned and the lock is gone.
-    /// See that struct's doc comment.
+    /// The guarantee holds even for a backend that settles *inline*, from inside
+    /// the dispatch call itself, while this frame still holds the lock: such a
+    /// continuation parks its outcome in a `detail::AsyncDispatchHandoff` and
+    /// returns without acting, and this frame applies it after the dispatch call
+    /// has returned and the lock is gone. See that struct's doc comment.
     ///
     /// An out-of-frame success callback re-acquires `_attachMtx` for the two
     /// `std::string` fields it publishes (`contextKey`/`primary`, which
@@ -581,83 +606,109 @@ public:
         }
         auto const previous = ::morph::exec::detail::ModelId{binding->currentId.load()};
         auto backend = loadBackend();
-        auto primaryCopy = primary;
+        auto primaryCopy = std::move(primary);
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
         auto const weakLiveness = _callbacks.token();
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
-        bool started = false;
+        auto onAttached = [this, weakBackend, weakLiveness, weakBinding, primaryCopy, onDone,
+                           handoff](::morph::exec::detail::ModelId newId) {
+            if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
+                return;  // Completed inline: the dispatching frame will finish this.
+            }
+            // This check and the `this` touch below it are two steps -- the
+            // morph#486 shape. Closed not by a gate but by
+            // `IBackend::registerModelAsync`'s threading contract (see its
+            // doc comment): an overriding backend must deliver `*Async`
+            // replies on a thread that cannot run `~Bridge` concurrently.
+            // Gating instead would block `~Bridge` behind `_attachMtx`,
+            // which `attachHandler` holds across a full `attachModel` round
+            // trip. See morph#489.
+            if (!weakLiveness.active()) {
+                return;  // The Bridge is gone; publishing this id would be pointless.
+            }
+            auto strongBinding = weakBinding.lock();
+            if (!strongBinding) {
+                return;  // The BridgeHandler (and its binding) is gone.
+            }
+            std::exception_ptr failure;
+            {
+                // contextKey/primary are plain std::strings that every
+                // other site reads under `_attachMtx`; publishing them
+                // without it would be a data race, not just a stale
+                // read. (`registerHandlerImpl`'s read during
+                // registration is the one documented carve-out -- see
+                // its own comment, and morph#505.)
+                std::scoped_lock const guard{_attachMtx};
+                auto pinned = weakBackend.lock();
+                if (!pinned || pinned != loadBackend()) {
+                    // A switchBackend() already moved past this attach
+                    // (see registerHandlerImpl's identical guard) and
+                    // its own re-registration loop already handled
+                    // `binding` on the *new* backend -- applying this
+                    // stale reply now would overwrite that with a
+                    // dangling id from a backend nothing uses any
+                    // more. Unlike registerHandlerImpl's fire-and-
+                    // forget re-registration, a real execute() call is
+                    // synchronously waiting on `onDone` here, so the
+                    // stale reply must still be reported -- silently
+                    // dropping it would hang that caller forever.
+                    failure = std::make_exception_ptr(
+                        std::runtime_error("attach reply arrived from a backend switchBackend() already replaced"));
+                } else {
+                    try {
+                        strongBinding->contextKey = primaryCopy;
+                        strongBinding->primary = primaryCopy;
+                        strongBinding->currentId.store(newId.v);
+                    } catch (...) {
+                        failure = std::current_exception();
+                    }
+                }
+            }
+            onDone(failure);  // Outside the lock -- see @par Locking.
+        };
+        auto onFailed = [onDone, handoff](const std::exception_ptr& failure) {
+            if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
+                return;
+            }
+            onDone(failure);
+        };
         try {
-            started = backend->attachModelAsync(
+            bool const started = backend->attachModelAsync(
                 binding->typeId, binding->modelFactory, {.contextKey = primaryCopy, .primary = primaryCopy}, previous,
-                [this, weakBackend, weakLiveness, weakBinding, primaryCopy, onDone,
-                 handoff](::morph::exec::detail::ModelId newId) {
-                    if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
-                        return;  // Completed inline: the dispatching frame will finish this.
-                    }
-                    // This check and the `this` touch below it are two steps -- the
-                    // morph#486 shape. Closed not by a gate but by
-                    // `IBackend::registerModelAsync`'s threading contract (see its
-                    // doc comment): an overriding backend must deliver `*Async`
-                    // replies on a thread that cannot run `~Bridge` concurrently.
-                    // Gating instead would block `~Bridge` behind `_attachMtx`,
-                    // which `attachHandler` holds across a full `attachModel` round
-                    // trip. See morph#489.
-                    if (!weakLiveness.active()) {
-                        return;  // The Bridge is gone; publishing this id would be pointless.
-                    }
-                    auto strongBinding = weakBinding.lock();
-                    if (!strongBinding) {
-                        return;  // The BridgeHandler (and its binding) is gone.
-                    }
-                    std::exception_ptr failure;
-                    {
-                        // contextKey/primary are plain std::strings that every
-                        // other site reads under `_attachMtx`; publishing them
-                        // without it would be a data race, not just a stale
-                        // read. (`registerHandlerImpl`'s read during
-                        // registration is the one documented carve-out -- see
-                        // its own comment, and morph#505.)
-                        std::scoped_lock const guard{_attachMtx};
-                        auto pinned = weakBackend.lock();
-                        if (!pinned || pinned != loadBackend()) {
-                            // A switchBackend() already moved past this attach
-                            // (see registerHandlerImpl's identical guard) and
-                            // its own re-registration loop already handled
-                            // `binding` on the *new* backend -- applying this
-                            // stale reply now would overwrite that with a
-                            // dangling id from a backend nothing uses any
-                            // more. Unlike registerHandlerImpl's fire-and-
-                            // forget re-registration, a real execute() call is
-                            // synchronously waiting on `onDone` here, so the
-                            // stale reply must still be reported -- silently
-                            // dropping it would hang that caller forever.
-                            failure = std::make_exception_ptr(std::runtime_error(
-                                "attach reply arrived from a backend switchBackend() already replaced"));
-                        } else {
-                            try {
-                                strongBinding->contextKey = primaryCopy;
-                                strongBinding->primary = primaryCopy;
-                                strongBinding->currentId.store(newId.v);
-                            } catch (...) {
-                                failure = std::current_exception();
-                            }
-                        }
-                    }
-                    onDone(failure);  // Outside the lock -- see @par Locking.
-                },
-                [onDone, handoff](const std::string& message) {
-                    auto failure = std::make_exception_ptr(std::runtime_error(message));
-                    if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
-                        return;
-                    }
-                    onDone(failure);
+                onAttached, [onFailed](const std::string& message) {
+                    onFailed(std::make_exception_ptr(std::runtime_error(message)));
                 });
+            if (!started) {
+                // The structural surface (`IBackend::bindModel`). A backend
+                // with a genuinely non-blocking attach settles the returned
+                // `Completion` when its reply lands; one without settles it
+                // from inside this call, having blocked exactly as the
+                // synchronous `attachModel` this replaces did. Either way the
+                // continuation exists, so there is no third path below.
+                //
+                // `inlineExecutor()` because that is where the continuation ran
+                // before: on whichever thread the backend settled the reply on
+                // (`IBackend::registerModelAsync`'s prose contract). What is
+                // new is that this call site *names* it; see
+                // `exec::detail::InlineExecutor`. An inline settle therefore
+                // reaches `onAttached`/`onFailed` while `_attachMtx` is still
+                // held, which is precisely the case `handoff` exists for.
+                auto completion =
+                    backend->bindModel(::morph::backend::detail::BindRequest{.typeId = binding->typeId,
+                                                                             .factory = binding->modelFactory,
+                                                                             .contextKey = primaryCopy,
+                                                                             .primary = primaryCopy,
+                                                                             .current = previous},
+                                       ::morph::exec::detail::inlineExecutor());
+                completion.then(onAttached).onError(onFailed);
+            }
         } catch (...) {
-            // The backend's own dispatch call can throw synchronously (e.g.
-            // QtWebSocketBackend::attachModelAsync's wire::encode() failing
-            // before send) -- report it like any other failure instead of
-            // letting it escape execute()'s documented never-throws contract.
+            // A backend's own dispatch call can throw synchronously (e.g. a
+            // `wire::encode()` failing before send) -- report it like any other
+            // failure instead of letting it escape execute()'s documented
+            // never-throws contract. `bindModel` rejects rather than throws, so
+            // this now guards only the legacy `attachModelAsync` branch.
             lock.unlock();
             onDone(std::current_exception());
             return;
@@ -682,24 +733,8 @@ public:
             onDone(failure);
             return;
         }
-        if (started) {
-            return;
-        }
-        // No async path on this backend: run the identical synchronous attach
-        // `attachHandler` would have run, under the same lock, then report the
-        // outcome only once the lock is gone (see @par Locking above).
-        std::exception_ptr failure;
-        try {
-            auto newId = backend->attachModel(binding->typeId, binding->modelFactory,
-                                              {.contextKey = primary, .primary = primary}, previous);
-            binding->contextKey = primary;
-            binding->primary = std::move(primary);
-            binding->currentId.store(newId.v);
-        } catch (...) {
-            failure = std::current_exception();
-        }
-        lock.unlock();
-        onDone(failure);
+        // Nothing parked: the reply is still to come, and `onAttached`/
+        // `onFailed` will deliver it themselves once it does.
     }
 
     /// @brief Gives @p binding an anonymous instance if it does not have one yet.
@@ -746,60 +781,77 @@ public:
         auto const weakLiveness = _callbacks.token();
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
-        bool started = false;
+        auto onBound = [this, weakBackend, weakLiveness, weakBinding, onDone,
+                        handoff](::morph::exec::detail::ModelId newId) {
+            if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
+                return;  // Completed inline: the dispatching frame will finish this.
+            }
+            // This check and the `this` touch below it are two steps -- the
+            // morph#486 shape. Closed not by a gate but by delivering on a
+            // thread that cannot run `~Bridge` concurrently: the legacy
+            // `*Async` branch below leaves that to the backend (see
+            // `IBackend::registerModelAsync`'s doc comment), the `bindModel`
+            // branch names it as an executor. Gating instead would block
+            // `~Bridge` behind `_attachMtx`, which `attachHandler` holds
+            // across a full `attachModel` round trip. See morph#489.
+            if (!weakLiveness.active()) {
+                return;  // The Bridge is gone; publishing this id would be pointless.
+            }
+            auto strongBinding = weakBinding.lock();
+            if (!strongBinding) {
+                return;  // The BridgeHandler (and its binding) is gone.
+            }
+            std::exception_ptr failure;
+            {
+                // Brief `_attachMtx` window purely to serialise this
+                // check against a concurrent switchBackend() (which
+                // takes the same lock) -- `currentId` itself is an
+                // atomic and needs no lock to store.
+                std::scoped_lock const guard{_attachMtx};
+                auto pinned = weakBackend.lock();
+                if (!pinned || pinned != loadBackend()) {
+                    // See attachHandlerAsync's identical guard: a
+                    // stale reply from a backend switchBackend()
+                    // already replaced must still resolve `onDone`
+                    // (a real execute() call is waiting), not be
+                    // silently dropped.
+                    failure = std::make_exception_ptr(
+                        std::runtime_error("attach reply arrived from a backend switchBackend() already replaced"));
+                } else {
+                    strongBinding->currentId.store(newId.v);
+                }
+            }
+            onDone(failure);
+        };
+        auto onFailed = [onDone, handoff](const std::exception_ptr& failure) {
+            if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
+                return;
+            }
+            onDone(failure);
+        };
         try {
-            started = backend->registerModelSharedAsync(
-                binding->typeId, binding->modelFactory, {.contextKey = binding->contextKey, .primary = {}},
-                [this, weakBackend, weakLiveness, weakBinding, onDone, handoff](::morph::exec::detail::ModelId newId) {
-                    if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
-                        return;  // Completed inline: the dispatching frame will finish this.
-                    }
-                    // This check and the `this` touch below it are two steps -- the
-                    // morph#486 shape. Closed not by a gate but by
-                    // `IBackend::registerModelAsync`'s threading contract (see its
-                    // doc comment): an overriding backend must deliver `*Async`
-                    // replies on a thread that cannot run `~Bridge` concurrently.
-                    // Gating instead would block `~Bridge` behind `_attachMtx`,
-                    // which `attachHandler` holds across a full `attachModel` round
-                    // trip. See morph#489.
-                    if (!weakLiveness.active()) {
-                        return;  // The Bridge is gone; publishing this id would be pointless.
-                    }
-                    auto strongBinding = weakBinding.lock();
-                    if (!strongBinding) {
-                        return;  // The BridgeHandler (and its binding) is gone.
-                    }
-                    std::exception_ptr failure;
-                    {
-                        // Brief `_attachMtx` window purely to serialise this
-                        // check against a concurrent switchBackend() (which
-                        // takes the same lock) -- `currentId` itself is an
-                        // atomic and needs no lock to store.
-                        std::scoped_lock const guard{_attachMtx};
-                        auto pinned = weakBackend.lock();
-                        if (!pinned || pinned != loadBackend()) {
-                            // See attachHandlerAsync's identical guard: a
-                            // stale reply from a backend switchBackend()
-                            // already replaced must still resolve `onDone`
-                            // (a real execute() call is waiting), not be
-                            // silently dropped.
-                            failure = std::make_exception_ptr(std::runtime_error(
-                                "attach reply arrived from a backend switchBackend() already replaced"));
-                        } else {
-                            strongBinding->currentId.store(newId.v);
-                        }
-                    }
-                    onDone(failure);
-                },
-                [onDone, handoff](const std::string& message) {
-                    auto failure = std::make_exception_ptr(std::runtime_error(message));
-                    if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
-                        return;
-                    }
-                    onDone(failure);
+            bool const started = backend->registerModelSharedAsync(
+                binding->typeId, binding->modelFactory, {.contextKey = binding->contextKey, .primary = {}}, onBound,
+                [onFailed](const std::string& message) {
+                    onFailed(std::make_exception_ptr(std::runtime_error(message)));
                 });
+            if (!started) {
+                // The structural surface; see `attachHandlerAsync`'s identical
+                // branch for why `inlineExecutor()` is the executor this call
+                // site names. An empty `primary` with a zero `current` is the
+                // request shape that means `registerModelShared` -- the very
+                // verb the synchronous `ensureBound` calls.
+                auto completion =
+                    backend->bindModel(::morph::backend::detail::BindRequest{.typeId = binding->typeId,
+                                                                             .factory = binding->modelFactory,
+                                                                             .contextKey = binding->contextKey,
+                                                                             .primary = {},
+                                                                             .current = {}},
+                                       ::morph::exec::detail::inlineExecutor());
+                completion.then(onBound).onError(onFailed);
+            }
         } catch (...) {
-            // See attachHandlerAsync's identical guard: the backend's own
+            // See attachHandlerAsync's identical guard: a backend's own legacy
             // dispatch call can throw synchronously before send.
             lock.unlock();
             onDone(std::current_exception());
@@ -815,23 +867,8 @@ public:
             onDone(parked->failure);
             return;
         }
-        if (started) {
-            return;
-        }
-        // No async path on this backend: run the identical synchronous
-        // registration `ensureBound` would have run, under the same lock, then
-        // report the outcome only once the lock is gone (see
-        // `attachHandlerAsync`'s "@par Locking").
-        std::exception_ptr failure;
-        try {
-            auto newId = backend->registerModelShared(binding->typeId, binding->modelFactory,
-                                                      {.contextKey = binding->contextKey, .primary = {}});
-            binding->currentId.store(newId.v);
-        } catch (...) {
-            failure = std::current_exception();
-        }
-        lock.unlock();
-        onDone(failure);
+        // Nothing parked: the reply is still to come, and `onBound`/`onFailed`
+        // will deliver it themselves once it does.
     }
 
     /// @brief Files @p binding's current instance under @p primary, in place.
@@ -855,24 +892,26 @@ public:
     /// `bool` return threaded across every `IBackend` implementation and, for
     /// wire backends, a reply field) — tracked as a follow-up, not fixed
     /// here.
-    /// Prefers the backend's `IBackend::assignPrimaryAsync` when it offers
-    /// one — the same "avoid a nested-event-loop block that aborts a WASM
+    /// Reaches the backend through `IBackend::promoteModel` — the structural
+    /// registration surface — unless it still overrides the legacy
+    /// `assignPrimaryAsync`, which is offered first and which morph#571
+    /// removes. The same "avoid a nested-event-loop block that aborts a WASM
     /// main thread" rationale `Bridge::registerHandler()` follows for the
-    /// initial bind step (`backend.md`, "Asynchronous registration") applies
-    /// identically here: this method is invoked from inside the result
-    /// `Completion`'s callback chain (`BridgeHandler::execute`'s `onResult`),
-    /// not from the original call stack, so there is no caller left blocked
-    /// waiting on it either way — the async path simply avoids parking the
-    /// Qt event loop for the round trip. `binding->contextKey`/`primary` are
-    /// only published once the (possibly async) reply confirms the call, so
-    /// a caller reading `binding->primary()` never sees a promotion that the
-    /// backend has not actually completed. Falls back to the synchronous
-    /// `assignPrimary` when the backend offers no async path, publishing
-    /// immediately in that case.
+    /// initial bind step applies here: this method is invoked from inside the
+    /// result `Completion`'s callback chain (`BridgeHandler::execute`'s
+    /// `onResult`), not from the original call stack, so there is no caller
+    /// left blocked waiting on it either way — a non-blocking promote simply
+    /// avoids parking the Qt event loop for the round trip.
+    /// `binding->contextKey`/`primary` are only published once the reply
+    /// confirms the call, so a caller reading `binding->primary()` never sees a
+    /// promotion the backend has not actually completed. A backend with no
+    /// non-blocking promote settles inside the `promoteModel` call, publishing
+    /// before this method returns; a failure is logged rather than thrown,
+    /// since `promoteModel` reports through its `Completion` by contract.
     ///
-    /// `_attachMtx` is released *before* calling `assignPrimaryAsync` — not
-    /// held across it — mirroring `registerHandlerImpl`'s discipline for
-    /// `registerModelAsync`: the success/error callback below re-acquires
+    /// `_attachMtx` is released *before* the dispatch — not held across it —
+    /// mirroring `registerHandlerImpl`'s discipline: the success callback
+    /// below re-acquires
     /// `_attachMtx`, so a backend that ever invoked it synchronously (none
     /// documented here do, but nothing prevents one from doing so) would
     /// otherwise self-deadlock re-acquiring a mutex this same call stack
@@ -895,57 +934,63 @@ public:
         auto const weakLiveness = _callbacks.token();
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
-        bool const started = backend->assignPrimaryAsync(
-            ::morph::exec::detail::ModelId{raw}, binding->typeId, primary,
-            [this, weakLiveness, weakBackend, weakBinding, primary](::morph::exec::detail::ModelId) {
-                // This check and the `this` touch below it are two steps -- the
-                // morph#486 shape. Closed not by a gate but by
-                // `IBackend::registerModelAsync`'s threading contract (see its
-                // doc comment): an overriding backend must deliver `*Async`
-                // replies on a thread that cannot run `~Bridge` concurrently.
-                // Gating instead would block `~Bridge` behind `_attachMtx`,
-                // which `attachHandler` holds across a full `attachModel` round
-                // trip. See morph#489.
-                if (!weakLiveness.active()) {
-                    return;  // The Bridge is gone; do not touch `this`.
-                }
-                auto strongBinding = weakBinding.lock();
-                if (!strongBinding) {
-                    return;  // The BridgeHandler (and its binding) is gone.
-                }
-                std::scoped_lock const attachLock{_attachMtx};
-                auto pinned = weakBackend.lock();
-                if (!pinned || pinned != loadBackend()) {
-                    // A switchBackend() already moved past this promotion;
-                    // applying a stale reply now would overwrite whatever
-                    // state the new backend's re-registration already
-                    // established -- same reasoning as registerHandlerImpl's
-                    // async callback.
-                    return;
-                }
-                // A binding whose primary is already set (by a concurrent
-                // attach/assign that raced ahead of this async reply, or
-                // simply already promoted) must not be overwritten here.
-                if (!strongBinding->primary.empty()) {
-                    return;
-                }
-                strongBinding->contextKey = primary;
-                strongBinding->primary = primary;
-            },
-            [typeId = binding->typeId](const std::string& message) {
-                ::morph::log::logError("[assignHandlerPrimary] async promotion of '" + typeId +
-                                       "' failed: " + message);
-            });
-        if (!started) {
-            backend->assignPrimary(::morph::exec::detail::ModelId{raw}, binding->typeId, primary);
-            std::scoped_lock const lock{_attachMtx};
-            // Re-check under the lock: a concurrent attach/assign could have
-            // raced ahead while the (now-established-synchronous) backend
-            // call above ran without _attachMtx held.
-            if (binding->primary.empty()) {
-                binding->contextKey = primary;
-                binding->primary = std::move(primary);
+        auto onPromoted = [this, weakLiveness, weakBackend, weakBinding, primary](::morph::exec::detail::ModelId) {
+            // This check and the `this` touch below it are two steps -- the
+            // morph#486 shape. Closed not by a gate but by delivering on a
+            // thread that cannot run `~Bridge` concurrently: the legacy
+            // `assignPrimaryAsync` branch below leaves that to the backend (see
+            // `IBackend::registerModelAsync`'s doc comment), the `promoteModel`
+            // branch names it as an executor. Gating instead would block
+            // `~Bridge` behind `_attachMtx`, which `attachHandler` holds across
+            // a full `attachModel` round trip. See morph#489.
+            if (!weakLiveness.active()) {
+                return;  // The Bridge is gone; do not touch `this`.
             }
+            auto strongBinding = weakBinding.lock();
+            if (!strongBinding) {
+                return;  // The BridgeHandler (and its binding) is gone.
+            }
+            std::scoped_lock const attachLock{_attachMtx};
+            auto pinned = weakBackend.lock();
+            if (!pinned || pinned != loadBackend()) {
+                // A switchBackend() already moved past this promotion;
+                // applying a stale reply now would overwrite whatever
+                // state the new backend's re-registration already
+                // established -- same reasoning as registerHandlerImpl's
+                // async callback.
+                return;
+            }
+            // A binding whose primary is already set (by a concurrent
+            // attach/assign that raced ahead of this async reply, or
+            // simply already promoted) must not be overwritten here.
+            if (!strongBinding->primary.empty()) {
+                return;
+            }
+            strongBinding->contextKey = primary;
+            strongBinding->primary = primary;
+        };
+        auto onFailed = [typeId = binding->typeId](const std::string& message) {
+            ::morph::log::logError("[assignHandlerPrimary] async promotion of '" + typeId + "' failed: " + message);
+        };
+        bool const started = backend->assignPrimaryAsync(::morph::exec::detail::ModelId{raw}, binding->typeId, primary,
+                                                         onPromoted, onFailed);
+        if (!started) {
+            // The structural surface (`IBackend::promoteModel`). A backend with
+            // no non-blocking promote settles the returned `Completion` from
+            // inside this call, having run the same synchronous `assignPrimary`
+            // this replaces; `inlineExecutor()` then delivers `onPromoted` on
+            // this thread, exactly where the synchronous branch used to publish.
+            // Unlike that branch, a failure is logged rather than thrown: this
+            // runs inside the result `Completion`'s callback chain, where an
+            // escaping exception is swallowed by `CompletionState` anyway, and
+            // `promoteModel` reports through the `Completion` by contract.
+            auto completion = backend->promoteModel(
+                ::morph::backend::detail::PromoteRequest{
+                    .mid = ::morph::exec::detail::ModelId{raw}, .typeId = binding->typeId, .primary = primary},
+                ::morph::exec::detail::inlineExecutor());
+            completion.then(onPromoted).onError([onFailed](const std::exception_ptr& failure) {
+                onFailed(detail::describeFailure(failure));
+            });
         }
     }
 
@@ -1740,21 +1785,27 @@ private:
         return _backend;
     }
 
-    /// @brief Shared body of both `registerHandler()` overloads: prefers the
-    ///        backend's `registerModelAsync` path (see `IBackend::registerModelAsync`'s
-    ///        doc comment for why — avoiding a nested-event-loop block that
-    ///        aborts a WASM main thread) and falls back to the synchronous
-    ///        `registerModelWithContext` when the backend offers no async path.
+    /// @brief Shared body of both `registerHandler()` overloads: binds through
+    ///        `IBackend::bindModel` — the structural registration surface —
+    ///        unless the backend still overrides the legacy
+    ///        `registerModelAsync`, which is offered first and which morph#571
+    ///        removes.
     ///
-    /// @p binding is added to `_handlers` *before* the backend call — not
-    /// after, as the synchronous fallback below does internally — so a
+    /// A backend with a non-blocking bind returns an unsettled `Completion` and
+    /// the binding is returned unbound (see `IBackend::bindModel`'s doc comment
+    /// for why that matters — a nested-event-loop block aborts a WASM main
+    /// thread). One with only the blocking default settles inside the call,
+    /// having run exactly the `registerModelWithContext` this used to call
+    /// directly, so the binding is bound before this returns and a failure is
+    /// **rethrown** to the caller, as that call used to throw.
+    ///
+    /// @p binding is added to `_handlers` *before* the backend call, so a
     /// concurrently-running `switchBackend()`/reconnect can already see and
     /// re-register it even while this registration is still in flight (see
-    /// the async branch's comment for why that race is harmless). This also
-    /// means the backend call must not run under `_mtx`: a backend that (unlike
-    /// every backend documented here) invoked `onRegistered`/`onError`
-    /// synchronously from inside `registerModelAsync` would otherwise
-    /// self-deadlock re-acquiring `_mtx` in the callback below.
+    /// the continuation's comment for why that race is harmless). This also
+    /// means the backend call must not run under `_mtx`: a backend that settles
+    /// from inside the dispatch call would otherwise self-deadlock re-acquiring
+    /// `_mtx` in the continuation below.
     /// @param binding Binding to register; its `typeId`/`modelFactory`/`contextKey` must be set.
     void registerHandlerImpl(const std::shared_ptr<detail::HandlerBinding>& binding) {
         auto backend = loadBackend();
@@ -1796,73 +1847,110 @@ private:
         // **set `contextKey` before calling `registerHandler()`, and do not
         // mutate it concurrently with that call.** After registration returns,
         // every access goes under `_attachMtx` as documented. morph#505.
-        bool const started = backend->registerModelAsync(
-            binding->typeId, binding->modelFactory, binding->contextKey,
-            [this, weakBackend, weakBinding, lifetime = _lifetime](::morph::exec::detail::ModelId newId) {
-                auto strongBinding = weakBinding.lock();
-                bool applied = false;
-                if (strongBinding) {
-                    // `lifetime`'s gate held across the whole touch of `this`
-                    // below (`_mtx`, `loadBackend()`), not just at entry --
-                    // `CallbackToken::active()` is advisory and cannot carry
-                    // this weight (see `detail::BridgeLifetime`'s own doc
-                    // comment). Safe to hold across this span, unlike
-                    // `installReconnectHandler`'s reconnect callback
-                    // (morph#489, site 4): nothing inside is a call into
-                    // unbounded/consumer-supplied code, only a mutex and a
-                    // backend-pointer comparison.
-                    std::shared_lock const gate{lifetime->mtx};
-                    if (lifetime->alive) {
-                        std::scoped_lock const lock{_mtx};
-                        auto pinned = weakBackend.lock();
-                        if (pinned && pinned == loadBackend()) {
-                            // A switchBackend() already moved past this registration
-                            // (see this backend's own doc comment on the class) and
-                            // its own re-registration loop already gave `binding` a
-                            // fresh id on the *new* backend -- applying this stale
-                            // one now would overwrite that with a dangling id from a
-                            // backend nothing uses any more.
-                            strongBinding->currentId.store(newId.v);
-                            applied = true;
-                        }
+        auto onRegistered = [this, weakBackend, weakBinding,
+                             lifetime = _lifetime](::morph::exec::detail::ModelId newId) {
+            auto strongBinding = weakBinding.lock();
+            bool applied = false;
+            if (strongBinding) {
+                // `lifetime`'s gate held across the whole touch of `this`
+                // below (`_mtx`, `loadBackend()`), not just at entry --
+                // `CallbackToken::active()` is advisory and cannot carry
+                // this weight (see `detail::BridgeLifetime`'s own doc
+                // comment). Safe to hold across this span, unlike
+                // `installReconnectHandler`'s reconnect callback
+                // (morph#489, site 4): nothing inside is a call into
+                // unbounded/consumer-supplied code, only a mutex and a
+                // backend-pointer comparison.
+                std::shared_lock const gate{lifetime->mtx};
+                if (lifetime->alive) {
+                    std::scoped_lock const lock{_mtx};
+                    auto pinned = weakBackend.lock();
+                    if (pinned && pinned == loadBackend()) {
+                        // A switchBackend() already moved past this registration
+                        // (see this backend's own doc comment on the class) and
+                        // its own re-registration loop already gave `binding` a
+                        // fresh id on the *new* backend -- applying this stale
+                        // one now would overwrite that with a dangling id from a
+                        // backend nothing uses any more.
+                        strongBinding->currentId.store(newId.v);
+                        applied = true;
                     }
                 }
-                // Resolve whenBound() waiters regardless of whether the id was
-                // actually applied above: either way this binding's initial
-                // registration attempt has settled (a stale reply ignored here
-                // means switchBackend's own synchronous re-registration already
-                // bound it), so nothing should still be described as "in
-                // flight". Runs even when the Bridge/binding is gone -- both
-                // weak locks above are only guards on touching `this`/the
-                // binding's other fields, not on this bookkeeping, which reads
-                // no Bridge state.
-                if (strongBinding) {
-                    resolveRegistrationWaiters(*strongBinding, /*ok=*/applied || isBound(strongBinding), nullptr);
-                }
-            },
-            [weakBinding, typeId = binding->typeId](const std::string& message) {
-                ::morph::log::logError("[registerHandler] async registration of '" + typeId + "' failed: " + message);
-                if (auto strongBinding = weakBinding.lock()) {
-                    resolveRegistrationWaiters(
-                        *strongBinding, /*ok=*/false,
-                        std::make_exception_ptr(std::runtime_error("registration failed: " + message)));
-                }
-            });
+            }
+            // Resolve whenBound() waiters regardless of whether the id was
+            // actually applied above: either way this binding's initial
+            // registration attempt has settled (a stale reply ignored here
+            // means switchBackend's own synchronous re-registration already
+            // bound it), so nothing should still be described as "in
+            // flight". Runs even when the Bridge/binding is gone -- both
+            // weak locks above are only guards on touching `this`/the
+            // binding's other fields, not on this bookkeeping, which reads
+            // no Bridge state.
+            if (strongBinding) {
+                resolveRegistrationWaiters(*strongBinding, /*ok=*/applied || isBound(strongBinding), nullptr);
+            }
+        };
+        auto onFailed = [weakBinding, typeId = binding->typeId](const std::string& message) {
+            ::morph::log::logError("[registerHandler] async registration of '" + typeId + "' failed: " + message);
+            if (auto strongBinding = weakBinding.lock()) {
+                resolveRegistrationWaiters(
+                    *strongBinding, /*ok=*/false,
+                    std::make_exception_ptr(std::runtime_error("registration failed: " + message)));
+            }
+        };
 
-        if (!started) {
-            binding->currentId.store(
-                backend->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey).v);
-            // Route through resolveRegistrationWaiters (not a bare flag
-            // clear): a whenBound() call from another thread that already
-            // holds this same binding (the pre-built-binding registerHandler()
-            // overload hands the caller the shared_ptr before this function
-            // is even called) could have raced in during the window above and
-            // queued a waiter while registrationInFlight was still true. That
-            // waiter's Completion must still be settled here, or it hangs
-            // forever -- registrationInFlight was never in flight for a
-            // backend with no async path, but whenBound() cannot tell that
-            // apart from "the reply just hasn't arrived yet" without this.
-            resolveRegistrationWaiters(*binding, /*ok=*/true, nullptr);
+        bool const started = backend->registerModelAsync(binding->typeId, binding->modelFactory, binding->contextKey,
+                                                         onRegistered, onFailed);
+        if (started) {
+            return;
+        }
+
+        // The structural surface (`IBackend::bindModel`). An empty `primary`
+        // with a zero `current` is the request shape that means
+        // `registerModelWithContext` -- the verb this branch used to call
+        // directly -- so a backend with no non-blocking bind runs exactly that,
+        // blocks exactly as long, and settles before `bindModel` returns.
+        //
+        // `inlineExecutor()` because that is where this continuation ran
+        // before: on whichever thread the backend settled on, which for the
+        // blocking default is this one. See `exec::detail::InlineExecutor`.
+        //
+        // A synchronous backend that *fails* must still fail the way it used to
+        // -- `registerModelWithContext` threw out of `registerHandler()`, and a
+        // `BridgeHandler` constructor that cannot bind must not return as if it
+        // had. So a rejection arriving inside this frame is parked and
+        // rethrown, while one arriving later (a genuinely non-blocking backend,
+        // where no caller is left to throw at) goes to `onFailed`, which
+        // settles `whenBound()` waiters instead.
+        auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
+        auto completion = backend->bindModel(::morph::backend::detail::BindRequest{.typeId = binding->typeId,
+                                                                                   .factory = binding->modelFactory,
+                                                                                   .contextKey = binding->contextKey,
+                                                                                   .primary = {},
+                                                                                   .current = {}},
+                                             ::morph::exec::detail::inlineExecutor());
+        completion
+            .then([onRegistered, handoff](::morph::exec::detail::ModelId newId) {
+                if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
+                    return;
+                }
+                onRegistered(newId);
+            })
+            .onError([onFailed, handoff](const std::exception_ptr& failure) {
+                if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
+                    return;
+                }
+                onFailed(detail::describeFailure(failure));
+            });
+        if (auto parked = detail::claimHandoff(*handoff)) {
+            if (!parked->succeeded) {
+                // Settles the waiters queued during the window above before
+                // unwinding, so a concurrent whenBound() is rejected rather
+                // than left hanging on a registration that will never complete.
+                resolveRegistrationWaiters(*binding, /*ok=*/false, parked->failure);
+                std::rethrow_exception(parked->failure);
+            }
+            onRegistered(parked->modelId);
         }
     }
 
