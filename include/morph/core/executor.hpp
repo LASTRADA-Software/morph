@@ -229,4 +229,55 @@ private:
     std::queue<std::function<void()>> _q;
 };
 
+namespace detail {
+
+/// @brief Executor that runs each posted task on the posting thread, at once.
+///
+/// "Deliver wherever the producer settled", expressed as an executor rather
+/// than as a rule nobody can check. `Bridge` names it at the structural
+/// registration surface (`IBackend::bindModel`/`promoteModel`, see
+/// `docs/spec/core/backend.md`) because `Bridge` owns no thread of its own: it
+/// has no event loop to post a registration continuation to, and the four
+/// legacy `*Async` verbs it is replacing delivered their callbacks on exactly
+/// this thread — whichever one the backend settled the reply on. Naming that
+/// choice at the call site is the point of the change: the *caller* now decides
+/// where a registration continuation runs, and can be changed to decide
+/// differently without touching a single backend.
+///
+/// @warning Not a general-purpose executor. Posting to it re-enters the caller,
+///          so a handler that takes a lock the posting frame already holds
+///          self-deadlocks. Every `Bridge` site that names it either releases
+///          its locks first or parks the outcome through
+///          `detail::AsyncDispatchHandoff` (see `Bridge::attachHandlerAsync`'s
+///          `@par Locking`). Application code that wants "run it now" should
+///          call the function instead of posting it.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
+class InlineExecutor : public IExecutor {
+public:
+    /// @brief Runs @p task immediately, on the calling thread.
+    ///
+    /// An empty @p task is ignored rather than invoked, since `std::function`'s
+    /// empty state is a legal value to move around and calling it is undefined.
+    /// @param task Callable to execute.
+    void post(std::function<void()> task) override {
+        if (task) {
+            task();
+        }
+    }
+};
+
+/// @brief The process-wide `InlineExecutor`.
+///
+/// A function-local static, so it is constructed on first use and outlives every
+/// `Completion` built against it — which is exactly what `Completion`'s "the
+/// executor must outlive the completion" requirement asks of a caller that has
+/// no executor of its own to name.
+/// @return Reference to the shared inline executor.
+inline IExecutor& inlineExecutor() {
+    static InlineExecutor executor;
+    return executor;
+}
+
+}  // namespace detail
+
 }  // namespace morph::exec
