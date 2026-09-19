@@ -678,28 +678,52 @@ TEST_CASE("formatRationalDecimal: an un-canonicalised INT64_MIN numerator render
 // be recursive -- the compiler-generated `~ASTNode` and every traversal in
 // `equation()` -- so a long enough chain ran the stack out.
 //
-// **What makes these two cases evidence, and what does not.** The destruction
-// case is load-bearing in an *unoptimised* build only: measured on clang 20 and
-// clang 22 with an 8 MiB stack, unfixed code segfaults on destruction at 21,000
-// nodes at `-O0` and survives 200,000 at `-O2`, because clang rewrites the
-// recursive release into a loop. So this case fails on unfixed code in every
-// Debug configuration CI runs (gcc-debug, clang-debug, the three sanitizer
-// legs, cl-debug) and passes vacuously in a Release one. The `equation()` case
-// has no such escape: its frames hold live `Rendered` strings across the call,
-// no optimiser can turn it into a loop, and unfixed code segfaulted inside
-// `renderSymbolic` at 25,000 nodes.
+// **What makes each case evidence, and where each one is vacuous.** Both
+// depths below were measured against unfixed code with an 8 MiB stack, not
+// guessed:
+//
+//   destruction, clang -O0   returns at 20,800 nodes, SIGSEGV at 21,000
+//   destruction, clang -O2   returns at 200,000 -- clang rewrites the
+//                            recursive release into a loop, so no depth fails
+//   equation(),  clang -O0   returns at 24,000, SIGSEGV at 25,000
+//   equation(),  clang -O2   returns at 50,000, SIGSEGV at 60,000
+//   equation(),  gcc 16 -O2  SIGSEGV already at 40,000
+//
+// So the destruction case is load-bearing in an unoptimised build only, and
+// passes vacuously in a Release one -- "crashes in Debug, survives in Release"
+// is the defect's own signature, and it is not reproducible any other way. CI
+// runs it where it bites: gcc-debug, clang-debug, the three sanitizer legs and
+// cl-debug are all -O0. The `equation()` case has no such escape: optimisation
+// shrinks its frames but cannot eliminate the recursion, because they hold
+// live `Rendered` strings across the call, so its depth is chosen to fail in
+// every configuration rather than only the unoptimised ones.
 namespace {
+// Destruction is linear in the chain, so the depth the ticket asked for costs
+// nothing to run.
 constexpr int kDeepChainNodes = 100000;
+
+// equation() renders the whole chain into one string by repeated
+// concatenation, which is quadratic in the depth, so this one is priced: 70,000
+// nodes cost 32 s under ASan where 100,000 cost 83 s. It stays above the
+// highest measured survival depth (50,000, clang -O2) with margin, which is
+// what keeps it from passing vacuously in an optimised build.
+constexpr int kDeepEquationNodes = 70000;
+
+// Builds `0 + one + one + ...`, one retained ASTNode per term.
+[[nodiscard]] Euro runningTotal(int terms) {
+    Euro total{Rational{Numerator{0}, Denominator{1}, DecimalPlaces{2}}};
+    Euro const one{Rational{Numerator{1}, Denominator{1}, DecimalPlaces{2}}};
+    for (int i = 0; i < terms; ++i) {
+        total = total + one;
+    }
+    return total;
+}
 }  // namespace
 
 TEST_CASE("A 100000-node provenance chain is destroyed without overflowing the stack",
           "[quantity][provenance][morph574]") {
     {
-        Euro total{Rational{Numerator{0}, Denominator{1}, DecimalPlaces{2}}};
-        Euro const one{Rational{Numerator{1}, Denominator{1}, DecimalPlaces{2}}};
-        for (int i = 0; i < kDeepChainNodes; ++i) {
-            total = total + one;
-        }
+        Euro const total = runningTotal(kDeepChainNodes);
         REQUIRE(total.hasValue());
         REQUIRE(total.value()->toDouble() == static_cast<double>(kDeepChainNodes));
         // The chain is released here. On unfixed code this is a SIGSEGV at -O0,
@@ -709,20 +733,16 @@ TEST_CASE("A 100000-node provenance chain is destroyed without overflowing the s
     SUCCEED("the chain was released without a stack overflow");
 }
 
-TEST_CASE("equation() walks a 100000-node provenance chain without overflowing the stack",
+TEST_CASE("equation() walks a 70000-node provenance chain without overflowing the stack",
           "[quantity][provenance][equation][morph574]") {
-    Euro total{Rational{Numerator{0}, Denominator{1}, DecimalPlaces{2}}};
-    Euro const one{Rational{Numerator{1}, Denominator{1}, DecimalPlaces{2}}};
-    for (int i = 0; i < kDeepChainNodes; ++i) {
-        total = total + one;
-    }
+    Euro const total = runningTotal(kDeepEquationNodes);
 
     auto const lines = total.equation();
     // Formula, substitution, result, and one `where` line: the single `one`
-    // leaf is referenced 100,000 times, so it earns exactly one placeholder.
+    // leaf is referenced 70,000 times, so it earns exactly one placeholder.
     REQUIRE(lines.size() == 4);
     CHECK(lines[0].starts_with("0 + c1 + c1"));
     CHECK(lines[1].starts_with("    = 0 + 1 + 1"));
-    CHECK(lines[2] == "    = 100000");
+    CHECK(lines[2] == "    = 70000");
     CHECK(lines[3] == "where c1 = 1");
 }
