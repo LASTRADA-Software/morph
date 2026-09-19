@@ -29,6 +29,7 @@ and react to backend changes.
 - [The abstract interface — `IBackend`](#the-abstract-interface--ibackend)
 - [Connect/disconnect notifications](#connectdisconnect-notifications)
 - [Asynchronous registration — `registerModelAsync`](#asynchronous-registration--registermodelasync)
+- [The structural registration surface — `bindModel` and `promoteModel`](#the-structural-registration-surface--bindmodel-and-promotemodel)
 - [Error types](#error-types)
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
@@ -75,6 +76,8 @@ holds a `unique_ptr<IBackend>` and delegates all model operations to it.
 | `registerModel(typeId, factory)` | Registers a new model instance, returns its opaque `ModelId`. |
 | `registerModelWithContext(typeId, factory, contextKey)` | Same as `registerModel`, additionally passes a stable identity (e.g. account id). Default implementation drops `contextKey` and forwards to `registerModel` — correct for `LocalBackend` where the factory closure already captures identity. `SimulatedRemoteBackend` overrides to carry `contextKey` across the wire. |
 | `registerModelAsync(typeId, factory, contextKey, onRegistered, onError)` | Optional non-blocking counterpart to `registerModelWithContext`. Returns `false` by default (no async path); `Bridge::registerHandler()` prefers this when it returns `true` and falls back to the synchronous call otherwise. See [Asynchronous registration](#asynchronous-registration--registermodelasync). |
+| `bindModel(request, cbExec)` | Acquires a model instance and returns a `Completion<ModelId>` delivered on `cbExec`. One verb covering `registerModelWithContext`, `registerModelShared` and `attachModel`, selected by the request's shape. The preferred surface — see [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
+| `promoteModel(request, cbExec)` | Files an already-live instance under a key and returns a `Completion<ModelId>` delivered on `cbExec`. The structural counterpart of `assignPrimary`. |
 | `deregisterModel(mid)` | Removes the model identified by `mid`. |
 | `execute(mid, call, cbExec)` | Dispatches `call` against the model identified by `mid`. Returns a `Completion<std::shared_ptr<void>>`. |
 | `notifyBackendChanged()` | Called by `Bridge::switchBackend()` after all handlers are re-registered. |
@@ -304,6 +307,153 @@ A backend that replies on its own transport thread therefore reopens #486's
 use-after-free. That is a **contract break**, diagnosable from this page and
 from `IBackend::registerModelAsync`'s doc comment — not a latent race to be
 rediscovered by a sanitizer.
+
+## The structural registration surface — `bindModel` and `promoteModel`
+
+Everything above this heading describes the **older** of two registration
+surfaces. It still works, every backend in the tree still uses it, and nothing
+about it has changed — but it is being retired by
+[morph#522](https://github.com/LASTRADA-Software/morph/issues/522), whose
+five-step set replaces it. This section describes what replaces it and why.
+
+### What was wrong with the old shape
+
+Not the duplication. Two things that are properties of the *signatures*:
+
+1. **The continuation is optional.** Each `*Async` verb returns `bool`: `true`
+   means "I accepted the request and will call exactly one callback later",
+   `false` means "I have no async path, call the synchronous verb instead".
+   Every call site therefore carries two paths, and no backend can be partially
+   migrated without the caller knowing about it. `Bridge::attachHandlerAsync`,
+   `ensureBoundAsync` and `assignHandlerPrimary` each carry that second path,
+   plus the `detail::AsyncDispatchHandoff` machinery needed because the "async"
+   verb may also answer inline.
+
+2. **The delivery thread is prose.** [Threading contract — the callback's
+   delivery thread](#threading-contract--the-callbacks-delivery-thread) above
+   states the requirement precisely, and nothing can check it: a backend that
+   replies on its own transport thread compiles, passes, and reopens
+   morph#486's use-after-free. The contract is stated in a comment because the
+   signature has nowhere to put it.
+
+### What replaces it
+
+Two verbs, on `IBackend`, carrying every case the five acquire/promote verbs
+carry between them:
+
+| Verb | Signature | Replaces |
+|---|---|---|
+| `bindModel` | `virtual Completion<ModelId> bindModel(BindRequest, IExecutor& cbExec)` | `registerModel`, `registerModelWithContext`, `registerModelShared`, `attachModel` — and their `*Async` twins. |
+| `promoteModel` | `virtual Completion<ModelId> promoteModel(PromoteRequest, IExecutor& cbExec)` | `assignPrimary` and `assignPrimaryAsync`. |
+
+`BindRequest` carries the union of the three acquire verbs' parameters, and its
+*shape* — not the verb name — selects the behaviour:
+
+| `primary` | `current` | Meaning | Legacy verb |
+|---|---|---|---|
+| empty | `ModelId{0}` | Private instance, never enters the shared directory. | `registerModelWithContext` |
+| non-empty | `ModelId{0}` | Register-or-attach on `(typeId, primary)`. | `registerModelShared` |
+| non-empty | non-zero | Re-point from `current` to `(typeId, primary)`. | `attachModel` |
+
+That collapse is not a simplification imposed on the model: the three verbs
+already degrade into each other exactly this way (`registerModelShared` with an
+empty `primary` *is* `registerModelWithContext`; `attachModel` with a zero
+`current` *is* `registerModelShared`). Naming them separately made the same
+distinction three times.
+
+Both request types own their strings. `InstanceIdentity` holds `string_view`s,
+which is safe for a synchronous call and safe for the `*Async` verbs only
+because their one implementor copies into its envelope before returning. A
+request that may outlive the frame that issued it cannot rest on that.
+
+### How the threading contract becomes structural
+
+`Completion<T>` posts its handlers to the executor it was built with
+(`completion.md`). Passing that executor into the verb makes the delivery
+thread an argument:
+
+- The continuation runs where `cbExec` says. A backend cannot choose the
+  delivery thread, whatever it does with its own threads or when it settles.
+- `cbExec` is a **reference**, not a pointer. A null executor would make
+  `Completion` drop every handler silently, which is the same class of
+  unobservable failure the surface exists to remove — so "deliver nowhere"
+  cannot be spelled.
+
+What this does **not** do is make morph#486 impossible by itself. It does not
+add a lock, and it does not know what the caller's teardown looks like. What it
+changes is *who decides*: the choice of delivery thread moves from fifteen
+`IBackend` implementors, none of which knows anything about the caller's
+destructor, to the one caller that does — and it moves from a comment to a
+value that call site has to produce. A caller whose teardown runs on its own
+event-loop thread passes that thread's executor and the two-step
+check-then-dereference can no longer straddle a destructor, by construction
+rather than by the backend author having read a `@note`.
+
+`tests/test_backend_registration_surface.cpp` pins this: the backend settles
+from a thread that is asserted to be *not* the caller's, the caller's executor
+is a `MainThreadExecutor` that runs nothing until the test thread drains it, and
+the test asserts the continuation has not run before that drain and runs on the
+draining thread after it. An implementation that delivered inline fails both
+assertions.
+
+### `SynchronousBackendAdapter` — a blocking backend on the new surface
+
+A decorator (`morph::backend::SynchronousBackendAdapter`) that wraps an
+`IBackend`, forwards every verb to it, and implements `bindModel`/`promoteModel`
+by running the wrapped backend's *synchronous* control call on an executor named
+at construction:
+
+```cpp
+auto local = std::make_shared<morph::backend::LocalBackend>(pool);
+morph::backend::SynchronousBackendAdapter adapter{local, pool};
+```
+
+It is what makes morph#522's steps 2–5 migrations rather than rewrites: every
+backend that stays blocking — `LocalBackend`, `SimulatedRemoteBackend`, and
+eleven test doubles, plus `SocketBackend` if morph#569 decides a wrapper is
+right for it — reaches the new surface without being edited. The one backend
+that has a real non-blocking path, `QtWebSocketBackend`, deliberately does not
+use this: morph#568 moves it across natively, because wrapping it would
+reintroduce the blocking this exists to route around.
+
+- **It does not make blocking non-blocking.** The wrapped backend still blocks.
+  What changes is which thread pays: the blocking call runs on the adapter's
+  executor, so the caller returns immediately with an unresolved `Completion`.
+  A single-threaded WASM main thread has no such executor to offer, which is
+  why morph#568 puts `QtWebSocketBackend` on the surface natively instead.
+- **The executor is required.** An adapter that ran the call inline when handed
+  nothing would be a `bindModel` that blocks on some configurations and not
+  others — contract by configuration, which is what is being removed.
+- **Control calls are serialised** onto one strand, so the wrapped backend sees
+  them one at a time, as it did when the blocking call itself serialised
+  callers. `~SynchronousBackendAdapter` waits for any in-flight control call, so
+  the executor must still be running tasks when the adapter is destroyed — the
+  same rule as `StrandExecutor`'s own `base`.
+- **A control call issued from a reconnect handler runs on the strand**, never
+  on the wrapped backend's transport thread. Whether that settles
+  `SocketBackend`'s documented reconnect-handler deadlock hazard (see the
+  "runs reconnect handlers on a dedicated thread" row under [Design
+  decisions](#design-decisions)) is morph#569's question; this page does not
+  claim it does.
+
+### Backends with a genuinely non-blocking path
+
+A backend that can register without blocking overrides `bindModel` and settles
+the `Completion` when its reply arrives. There is no `bool`, no fallback verb
+and no inline-completion special case to declare: settling the `Completion`
+inside the dispatch call and settling it a second later from a transport thread
+are the same code at the call site, because delivery goes through `cbExec`
+either way. That is the shape morph#568 moves `QtWebSocketBackend` onto.
+
+### Migration status
+
+Nothing in the tree uses this surface yet. `Bridge` still calls the five
+synchronous verbs and prefers the four `*Async` twins, every existing
+implementor still compiles unchanged, and the default `bindModel`/`promoteModel`
+implementations route to exactly the legacy verb each request shape names — so a
+backend that has overridden nothing behaves identically through either surface.
+The four twins are removed, and the prose threading contract retired, in
+morph#571.
 
 ## Error types
 
@@ -1665,6 +1815,9 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 |---|---|---|
 | `registerModel` | `virtual ModelId registerModel(const string&, function<unique_ptr<IModelHolder>()>)` | Pure virtual. |
 | `registerModelWithContext` | `virtual ModelId registerModelWithContext(const string&, function<unique_ptr<IModelHolder>()>, string_view)` | Default: drops `contextKey`, calls `registerModel`. |
+| `bindModel` | `virtual Completion<ModelId> bindModel(BindRequest, IExecutor& cbExec)` | Default: runs `bindModelBlocking` inline and settles. See [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
+| `promoteModel` | `virtual Completion<ModelId> promoteModel(PromoteRequest, IExecutor& cbExec)` | Default: calls `assignPrimary` inline and settles with `request.mid`. |
+| `bindModelBlocking` | `ModelId bindModelBlocking(BindRequest)` | Non-virtual. Routes a `BindRequest` to `registerModelWithContext` / `registerModelShared` / `attachModel` by its shape; blocks. Shared by the default `bindModel` and by `SynchronousBackendAdapter`. |
 | `deregisterModel` | `virtual void deregisterModel(ModelId)` | Pure virtual. |
 | `execute` | `virtual Completion<shared_ptr<void>> execute(ModelId, ActionCall, IExecutor*)` | Pure virtual. |
 | `notifyBackendChanged` | `virtual void notifyBackendChanged()` | Pure virtual. |
@@ -1673,6 +1826,29 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `setConnectHandler` | `virtual void setConnectHandler(const function<void()>&)` | Default: no-op. Fires on every successful connect, first included. |
 | `setDisconnectHandler` | `virtual void setDisconnectHandler(const function<void()>&)` | Default: no-op. Fires whenever the transport drops, before any reconnect is scheduled. |
 | `setSession` | `virtual void setSession(session::Context)` | Default: no-op. Stamped onto every control envelope (`register`/`registerShared`/`attach`/`assign`/`deregister`) subsequently built. See [Session propagation to control envelopes](#session-propagation-to-control-envelopes). |
+
+### `detail::BindRequest` / `detail::PromoteRequest`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `BindRequest::typeId` | `std::string` | String type-id of the model. |
+| `BindRequest::factory` | `std::function<unique_ptr<IModelHolder>()>` | Constructs the holder. Local path only; not called on an attach to a live shared instance. |
+| `BindRequest::contextKey` | `std::string` | Entity key for the action log; empty if none. Owned, not a view. |
+| `BindRequest::primary` | `std::string` | Canonical primary key; empty means a private instance. Owned, not a view. |
+| `BindRequest::current` | `ModelId` | Instance currently held; non-zero makes the bind a re-point. |
+| `PromoteRequest::mid` | `ModelId` | Live instance to promote. |
+| `PromoteRequest::typeId` | `std::string` | Model type id — the directory's first key component. |
+| `PromoteRequest::primary` | `std::string` | Key to file `mid` under. |
+
+### `SynchronousBackendAdapter`
+
+| Method | Notes |
+|---|---|
+| `SynchronousBackendAdapter(shared_ptr<IBackend> inner, IExecutor& blockingExec)` | Throws `std::invalid_argument` if `inner` is null. `blockingExec` is `MORPH_LIFETIMEBOUND` and must keep running tasks until the destructor's wait completes. |
+| `wrapped()` | The wrapped backend; never null. |
+| `bindModel(request, cbExec)` | Posts `inner->bindModelBlocking(request)` onto the control strand; settles the returned `Completion` on `cbExec`. Never blocks the caller. |
+| `promoteModel(request, cbExec)` | Posts `inner->assignPrimary(...)` onto the control strand; resolves with `request.mid`. |
+| every other `IBackend` verb | Forwarded to `inner` unchanged, including the four `*Async` twins — wrapping a backend that has a non-blocking path must not take it away. |
 
 ### Error types
 
@@ -1854,6 +2030,10 @@ not a behavior change to the existing loopback-only default.
 | `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + base64 + HTTP Upgrade + frame codec), not a third-party library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency to keep morph's default build dependency-free, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |
 | `WsFrameReader` reassembles fragments | Accumulates continuation frames and returns only the completed message | Fragmentation is not an exotic case: a peer fragments whenever a message exceeds its outgoing frame size, and Qt's `QWebSocket` defaults that to 512 KiB. Rejecting fragments broke interop with the transport this project ships, for every payload past that size. Control frames interleaved between fragments pass through untouched, and the reassembled total is bounded by `wire::kMaxEnvelopeBytes` so a stream of tiny continuations cannot grow the buffer without limit. |
 | `WsFrameReader` rejects RFC 6455-illegal frames instead of tolerating them | Masking direction, RSV bits, opcode range, control-frame framing, Close status code, minimal length encoding and text-payload UTF-8 are all checked; a violation throws out of `tryExtractFrame()` and the call site drops the connection | The interop requirement above makes what the reader *refuses* part of the transport's contract rather than an implementation detail: ten classes of illegal frame used to be accepted, and a peer that sends one now gets disconnected (morph#533). The reader is given its role at construction (`expectMasked`) because §5.1 is directional — a server MUST reject an unmasked client frame and a client MUST reject a masked server frame, and that rule is the anti-cache-poisoning defence, not a formality. Text UTF-8 is validated incrementally, since a multi-byte sequence may straddle a fragment boundary. On the sending side the mask key is drawn per frame from a thread-local `std::random_device` rather than a thread-local `std::mt19937`, whose state a peer can reconstruct from 624 observed keys (§5.3); `random_device` has no reproducible state to recover, and holding it thread-local keeps the entropy source open instead of reacquiring it on every outbound message. |
+| Registration continuation delivered via a caller-supplied `IExecutor&`, not on the backend's thread | `bindModel`/`promoteModel` return a `Completion<ModelId>` built with the caller's executor | The four `*Async` twins' threading contract could only be stated in prose, and its violation is a use-after-free (morph#486/#489). Making the executor an argument moves the choice of delivery thread from fifteen implementors that know nothing about the caller's teardown to the one caller that does, and turns it from a `@note` into a value a call site must produce. Rejected: matching `execute`'s `IExecutor*` — a null pointer makes `Completion` drop every handler silently, which is the same unobservable failure the surface removes. |
+| One `bindModel` instead of three acquire verbs | Behaviour selected by `BindRequest`'s shape (`primary` empty?, `current` zero?) | The three verbs already degrade into each other exactly along those two fields, so naming them separately stated the same distinction three times — and tripled it again for the `*Async` twins. The default implementation still routes each shape to the legacy verb it names, so a backend that overrides only some of the three is unaffected. |
+| `SynchronousBackendAdapter` is a decorator, not a base class or a CRTP mixin | Wraps `shared_ptr<IBackend>` and forwards every verb | It must work on `LocalBackend` and eleven test doubles *without modifying them*, which rules out anything they would have to derive from. Cost is one forwarding method per unchanged verb; benefit is that morph#522's remaining four steps are migrations rather than rewrites. |
+| The adapter's blocking executor is required, not defaulted | Constructor parameter with no default; null `inner` throws | "Where does the blocking happen" is the only question the class exists to answer. An adapter that silently ran the call inline when handed nothing would block on some configurations and not others — contract by configuration, which is the thing being removed. |
 | `SocketBackend` runs reconnect handlers on a dedicated thread | Not inline from the I/O thread's connect path | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the I/O thread's read loop can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. |
 
 ## Lifetime annotations

@@ -13,6 +13,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "../attributes.hpp"
@@ -69,6 +70,65 @@ struct InstanceIdentity {
     /// @brief Canonical string encoding of the primary key; empty if the
     ///        instance is anonymous and therefore unshareable.
     std::string_view primary;
+};
+
+/// @brief One *bind* request: everything needed to acquire a model instance.
+///
+/// The request half of the structural registration surface
+/// (`IBackend::bindModel`). It replaces the three separate acquire verbs
+/// (`registerModelWithContext`, `registerModelShared`, `attachModel`) with one
+/// request whose *shape* selects the behaviour, because the three differ only
+/// in which fields are populated:
+///
+/// | `primary` | `current` | Equivalent legacy verb |
+/// |---|---|---|
+/// | empty | `0` | `registerModelWithContext(typeId, factory, contextKey)` |
+/// | non-empty | `0` | `registerModelShared(typeId, factory, identity)` |
+/// | non-empty | non-zero | `attachModel(typeId, factory, identity, current)` |
+///
+/// Unlike `InstanceIdentity`, every string here is **owned**. That is not a
+/// style preference: a bind may outlive the frame that issued it, so a
+/// `string_view` into the caller's stack is a dangling read waiting for a
+/// backend that copies its envelope after the dispatch call returns rather
+/// than before it. The legacy `*Async` verbs take views and are safe only
+/// because their one implementor happens to encode before returning.
+struct BindRequest {
+    /// @brief String type-id of the model to instantiate (from `ModelTraits`).
+    std::string typeId;
+
+    /// @brief Callable that constructs the `IModelHolder`. Local path only; a
+    ///        wire backend never calls it, and an attach to a live shared
+    ///        instance does not call it either.
+    std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory;
+
+    /// @brief Entity key for the action log; empty if none. See `journal::LogEntry::entityKey`.
+    std::string contextKey;
+
+    /// @brief Canonical string encoding of the primary key. Empty means "no
+    ///        identity": the bind produces a private instance that never enters
+    ///        the shared directory.
+    std::string primary;
+
+    /// @brief Instance currently held, or `ModelId{0}` if none. Non-zero makes
+    ///        this bind a *re-point*: the backend names what it is re-pointing
+    ///        from, exactly as `attachModel` does.
+    ::morph::exec::detail::ModelId current{};
+};
+
+/// @brief One *promote* request: file an already-live instance under a key.
+///
+/// The request half of `IBackend::promoteModel`, the structural counterpart of
+/// `assignPrimary`. Its strings are owned for the same reason `BindRequest`'s
+/// are.
+struct PromoteRequest {
+    /// @brief Live instance to promote.
+    ::morph::exec::detail::ModelId mid{};
+
+    /// @brief Model type id — the directory's first key component.
+    std::string typeId;
+
+    /// @brief Canonical string encoding of the key to file @p mid under.
+    std::string primary;
 };
 
 /// @brief Abstract interface for execution backends (local, remote, …).
@@ -419,6 +479,129 @@ struct IBackend {
         return false;
     }
 
+    // ── The structural registration surface ──────────────────────────────
+    //
+    // `bindModel`/`promoteModel` are what the five verbs above become once the
+    // continuation stops being optional. Two differences carry the whole
+    // change, and both are visible in the signature rather than in a comment:
+    //
+    //   1. **The continuation is not opt-in.** There is no `bool` saying "I
+    //      have no async path, call the other one" — so no call site carries a
+    //      second path, and a backend cannot be *half* migrated. A blocking
+    //      backend satisfies the surface unchanged through the default
+    //      implementations below, or without blocking the caller at all
+    //      through `SynchronousBackendAdapter`.
+    //
+    //   2. **The delivery thread is a parameter.** `Completion<T>` posts its
+    //      handlers to the executor it was built with, so the continuation runs
+    //      where @p cbExec says and nowhere else — the backend does not choose.
+    //      That is the whole of the threading contract the four `*Async` verbs
+    //      could only state in prose (see `registerModelAsync`'s `@note`, and
+    //      docs/spec/core/backend.md, "The structural registration surface").
+    //      It does not by itself make a `~Bridge` race impossible: it moves the
+    //      choice of delivery thread from fifteen backend implementors, none of
+    //      which knows what the caller's teardown looks like, to the one caller
+    //      that does. `cbExec` is a reference precisely so that "deliver
+    //      nowhere" cannot be expressed — a null executor would silently drop
+    //      every continuation (see `Completion`'s constructor).
+    //
+    // Retiring the five older verbs is morph#571; until then both surfaces
+    // exist and nothing in the tree has moved off the old one.
+
+    /// @brief Acquires a model instance: the structural counterpart of
+    ///        `registerModelWithContext` / `registerModelShared` / `attachModel`.
+    ///
+    /// One verb for all three, selected by @p request's shape — see
+    /// `BindRequest`'s table. The default implementation dispatches to exactly
+    /// the legacy verb each shape corresponds to and settles the returned
+    /// `Completion` from this thread, so a backend that has not overridden
+    /// anything keeps its current behaviour bit for bit, including its current
+    /// blocking behaviour: the default **blocks the calling thread** for as
+    /// long as the underlying synchronous verb does. A backend with a genuine
+    /// non-blocking path (morph#568's `QtWebSocketBackend`) overrides this and
+    /// settles the `Completion` when its reply arrives; a blocking backend that
+    /// must not block its caller is wrapped in `SynchronousBackendAdapter`,
+    /// which moves the blocking call to an executor it names.
+    ///
+    /// An exception thrown by the underlying verb is delivered to the
+    /// `Completion`'s `onError` rather than propagated, so a caller has one
+    /// failure channel instead of two.
+    ///
+    /// @param request Owning bind request; moved from.
+    /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
+    ///                must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the bound `ModelId`, or rejected
+    ///         with the failure.
+    virtual ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(BindRequest request,
+                                                                                 ::morph::exec::IExecutor& cbExec) {
+        auto [completion, promise] =
+            ::morph::async::Completion<::morph::exec::detail::ModelId>::makeSettleable(&cbExec);
+        try {
+            promise.resolve(bindModelBlocking(std::move(request)));
+        } catch (...) {
+            promise.reject(std::current_exception());
+        }
+        return std::move(completion);
+    }
+
+    /// @brief Files an already-live instance under a key: the structural
+    ///        counterpart of `assignPrimary`.
+    ///
+    /// The default implementation calls `assignPrimary` and settles the
+    /// returned `Completion` from this thread, echoing @p request's `mid` back
+    /// exactly as `assignPrimaryAsync` documents — including for every
+    /// documented no-op case (empty primary, dead `mid`, key already taken,
+    /// `mid` already keyed differently), which are not backend failures and
+    /// therefore resolve rather than reject.
+    ///
+    /// @param request Owning promote request. By value, matching `bindModel`,
+    ///                so an overriding backend can move it into its pending
+    ///                state; this default only reads it.
+    /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
+    ///                must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with `request.mid`, or rejected with the
+    ///         failure.
+    // NOLINTBEGIN(performance-unnecessary-value-param) — by value to match `bindModel` and because an overriding
+    // backend moves the request into its pending-reply state; this default happens only to read it.
+    virtual ::morph::async::Completion<::morph::exec::detail::ModelId> promoteModel(PromoteRequest request,
+                                                                                    ::morph::exec::IExecutor& cbExec) {
+        auto [completion, promise] =
+            ::morph::async::Completion<::morph::exec::detail::ModelId>::makeSettleable(&cbExec);
+        try {
+            assignPrimary(request.mid, request.typeId, request.primary);
+            promise.resolve(request.mid);
+        } catch (...) {
+            promise.reject(std::current_exception());
+        }
+        return std::move(completion);
+    }
+    // NOLINTEND(performance-unnecessary-value-param)
+
+    /// @brief Runs @p request against the legacy synchronous verbs, blocking.
+    ///
+    /// Factored out of `bindModel`'s default implementation so that
+    /// `SynchronousBackendAdapter` runs the *same* dispatch on its own executor
+    /// instead of restating it — one definition of "which legacy verb does this
+    /// request shape mean", not two that can drift apart.
+    ///
+    /// Each branch is the verb the corresponding call site uses today, so
+    /// routing a plain registration through `attachModel` (which would also
+    /// have worked, since its default degrades) cannot change behaviour for a
+    /// backend that overrides only some of the three.
+    ///
+    /// @param request Owning bind request; moved from.
+    /// @return The bound `ModelId`.
+    ::morph::exec::detail::ModelId bindModelBlocking(BindRequest request) {
+        InstanceIdentity const identity{.contextKey = request.contextKey, .primary = request.primary};
+        if (request.current.v != 0U) {
+            return attachModel(request.typeId, std::move(request.factory), identity, request.current);
+        }
+        if (!request.primary.empty()) {
+            return registerModelShared(request.typeId, std::move(request.factory), identity);
+        }
+        return registerModelWithContext(request.typeId, std::move(request.factory), request.contextKey);
+    }
+
     /// @brief Lists the primary keys of live shared instances of @p typeId.
     ///
     /// Only instances created through `registerModelShared`/`attachModel` with a
@@ -595,6 +778,312 @@ struct TimeoutError : std::runtime_error {
 struct ClientTimeoutError : std::runtime_error {
     /// @brief Constructs the error with a canned diagnostic message.
     ClientTimeoutError() : std::runtime_error{"execute timed out waiting for any reply"} {}
+};
+
+/// @brief Makes a blocking backend satisfy the structural registration surface
+///        without blocking the caller — and without touching the backend.
+///
+/// A decorator, not a base class: it wraps an existing `IBackend` and forwards
+/// every verb to it, overriding only `bindModel`/`promoteModel` to run the
+/// wrapped backend's *synchronous* control call on an executor this adapter
+/// names, then settle the returned `Completion`. That is the whole trick, and
+/// it is why migrating the rest of morph#522's set is a set of migrations
+/// rather than a set of rewrites: a backend with no non-blocking path of its
+/// own (every backend in the tree except `QtWebSocketBackend`) reaches the new
+/// surface by being wrapped, not by being rewritten.
+///
+/// @par What it does and does not change
+/// The wrapped backend still blocks — nothing here makes a nested event loop
+/// or a socket round trip non-blocking. What changes is **which thread pays**:
+/// the blocking call happens on the executor passed at construction, so the
+/// caller's thread returns from `bindModel` immediately with an unresolved
+/// `Completion`. A single-threaded WASM main thread has no such executor to
+/// offer and is therefore not what this adapter is for; that case needs a
+/// backend with a genuinely non-blocking path (morph#568).
+///
+/// @par Why the executor is required rather than optional
+/// "Where does the blocking happen" is the only question this class exists to
+/// answer, so it is a constructor parameter with no default. An adapter that
+/// silently ran the call inline when handed nothing would be a `bindModel`
+/// that blocks on some configurations and not others — the same
+/// contract-by-configuration the surface is replacing.
+///
+/// @par Ordering
+/// Control calls are serialised onto one strand, so the wrapped backend sees
+/// them one at a time, as it did when the blocking call itself serialised
+/// callers. `~SynchronousBackendAdapter` waits for any in-flight control call
+/// to finish (`StrandExecutor`'s destructor does), so a reply can never land
+/// in a destroyed adapter; the executor must therefore still be running tasks
+/// when this adapter is destroyed, on the same terms as `StrandExecutor`'s own
+/// `base` (see docs/spec/concurrency_and_lifetimes.md, "Destruction ordering").
+///
+/// @par Reconnect handlers
+/// A control call issued from a reconnect handler runs on the strand, never on
+/// the wrapped backend's transport thread, so a backend whose reply can only
+/// be delivered by the thread that is running the reconnect handler does not
+/// wait on itself. Whether that is enough to settle `SocketBackend`'s
+/// documented reconnect hazard is morph#569's question, not a claim made here.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
+class SynchronousBackendAdapter : public detail::IBackend {
+public:
+    /// @brief Wraps @p inner, running its blocking control calls on @p blockingExec.
+    /// @param inner        Backend to wrap. Owned (shared): the adapter keeps it
+    ///                     alive for as long as any control call it dispatched is
+    ///                     still in flight. Must not be null.
+    /// @param blockingExec Executor the wrapped backend's blocking control calls
+    ///                     run on. Borrowed: it must outlive this adapter and
+    ///                     keep running tasks until the destructor's wait has
+    ///                     completed.
+    /// @throws std::invalid_argument if @p inner is null.
+    SynchronousBackendAdapter(std::shared_ptr<detail::IBackend> inner,
+                              ::morph::exec::IExecutor& blockingExec MORPH_LIFETIMEBOUND)
+        : _inner{std::move(inner)}, _control{blockingExec} {
+        if (_inner == nullptr) {
+            throw std::invalid_argument{"SynchronousBackendAdapter requires a backend to wrap"};
+        }
+    }
+
+    /// @brief The wrapped backend.
+    /// @return Reference to the backend passed at construction; never null.
+    [[nodiscard]] detail::IBackend& wrapped() const noexcept { return *_inner; }
+
+    /// @brief Acquires a model instance without blocking the calling thread.
+    ///
+    /// Posts `IBackend::bindModelBlocking(request)` — the same legacy-verb
+    /// dispatch the default `bindModel` performs inline — to this adapter's
+    /// control strand and returns immediately. Exactly one of the returned
+    /// `Completion`'s `then`/`onError` handlers runs, on @p cbExec.
+    /// @param request Owning bind request; moved from.
+    /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
+    ///                must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the bound `ModelId`, or rejected
+    ///         with whatever the wrapped backend threw.
+    ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(detail::BindRequest request,
+                                                                         ::morph::exec::IExecutor& cbExec) override {
+        return dispatch(cbExec, [inner = _inner, request = std::move(request)]() mutable {
+            return inner->bindModelBlocking(std::move(request));
+        });
+    }
+
+    /// @brief Files an already-live instance under a key without blocking the caller.
+    ///
+    /// The promote counterpart of `bindModel` above, on the same strand and
+    /// with the same settling rules: resolves with `request.mid` (echoed, as
+    /// `IBackend::promoteModel` documents) or rejects with what the wrapped
+    /// backend threw.
+    /// @param request Owning promote request; moved from.
+    /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
+    ///                must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with `request.mid`, or rejected.
+    ::morph::async::Completion<::morph::exec::detail::ModelId> promoteModel(
+        detail::PromoteRequest request, ::morph::exec::IExecutor& cbExec) override {
+        return dispatch(cbExec, [inner = _inner, request = std::move(request)]() mutable {
+            inner->assignPrimary(request.mid, request.typeId, request.primary);
+            return request.mid;
+        });
+    }
+
+    // ── Everything else is forwarded unchanged ───────────────────────────
+    //
+    // A decorator has to forward every verb it does not reshape, including the
+    // four legacy `*Async` twins: wrapping a backend that *does* have a
+    // non-blocking path must not quietly take it away.
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param typeId  String type-id of the model to instantiate.
+    /// @param factory Callable that constructs the `IModelHolder`.
+    /// @return The wrapped backend's `ModelId`.
+    ::morph::exec::detail::ModelId registerModel(
+        const std::string& typeId,
+        std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override {
+        return _inner->registerModel(typeId, std::move(factory));
+    }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param typeId     String type-id of the model to instantiate.
+    /// @param factory    Callable that constructs the `IModelHolder`.
+    /// @param contextKey Stable identity of the new instance; empty if none.
+    /// @return The wrapped backend's `ModelId`.
+    ::morph::exec::detail::ModelId registerModelWithContext(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        std::string_view contextKey) override {
+        return _inner->registerModelWithContext(typeId, std::move(factory), contextKey);
+    }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param typeId   String type-id of the model.
+    /// @param factory  Callable that constructs the `IModelHolder`.
+    /// @param identity Entity key for the action log plus the directory primary key.
+    /// @return The wrapped backend's `ModelId`.
+    ::morph::exec::detail::ModelId registerModelShared(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        detail::InstanceIdentity identity) override {
+        return _inner->registerModelShared(typeId, std::move(factory), identity);
+    }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param typeId   String type-id of the model.
+    /// @param factory  Callable that constructs the `IModelHolder`.
+    /// @param identity Entity key for the action log plus the directory primary key.
+    /// @param current  Instance currently held, or `ModelId{0}` if none.
+    /// @return The wrapped backend's `ModelId`.
+    ::morph::exec::detail::ModelId attachModel(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override {
+        return _inner->attachModel(typeId, std::move(factory), identity, current);
+    }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param typeId       String type-id of the model to instantiate.
+    /// @param factory      Callable that constructs the `IModelHolder`.
+    /// @param contextKey   Stable identity of the new instance; empty if none.
+    /// @param onRegistered Invoked with the assigned `ModelId` on success.
+    /// @param onError      Invoked with a diagnostic message on failure.
+    /// @return Whatever the wrapped backend returned.
+    bool registerModelAsync(const std::string& typeId,
+                            std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+                            std::string_view contextKey,
+                            std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                            std::function<void(const std::string&)> onError) override {
+        return _inner->registerModelAsync(typeId, std::move(factory), contextKey, std::move(onRegistered),
+                                          std::move(onError));
+    }
+
+    // NOLINTBEGIN(performance-unnecessary-value-param) — the overridden
+    // signatures take these by value; see `IBackend::registerModelSharedAsync`.
+    /// @brief Forwards to the wrapped backend.
+    /// @param typeId       String type-id of the model.
+    /// @param factory      Callable that constructs the `IModelHolder`.
+    /// @param identity     Entity key for the action log plus the directory primary key.
+    /// @param onRegistered Invoked with the assigned/attached `ModelId` on success.
+    /// @param onError      Invoked with a diagnostic message on failure.
+    /// @return Whatever the wrapped backend returned.
+    bool registerModelSharedAsync(const std::string& typeId,
+                                  std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+                                  detail::InstanceIdentity identity,
+                                  std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                                  std::function<void(const std::string&)> onError) override {
+        return _inner->registerModelSharedAsync(typeId, std::move(factory), identity, std::move(onRegistered),
+                                                std::move(onError));
+    }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param typeId       String type-id of the model.
+    /// @param factory      Callable that constructs the `IModelHolder`.
+    /// @param identity     Entity key for the action log plus the directory primary key.
+    /// @param current      Instance currently held, or `ModelId{0}` if none.
+    /// @param onRegistered Invoked with the `ModelId` now attached to, on success.
+    /// @param onError      Invoked with a diagnostic message on failure.
+    /// @return Whatever the wrapped backend returned.
+    bool attachModelAsync(const std::string& typeId,
+                          std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+                          detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current,
+                          std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                          std::function<void(const std::string&)> onError) override {
+        return _inner->attachModelAsync(typeId, std::move(factory), identity, current, std::move(onRegistered),
+                                        std::move(onError));
+    }
+    // NOLINTEND(performance-unnecessary-value-param)
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param mid     Live instance to promote.
+    /// @param typeId  Model type id — the directory's first key component.
+    /// @param primary Canonical string encoding of the key to file it under.
+    void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
+                       std::string_view primary) override {
+        _inner->assignPrimary(mid, typeId, primary);
+    }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param mid          Live instance to promote.
+    /// @param typeId       Model type id — the directory's first key component.
+    /// @param primary      Canonical string encoding of the key to file it under.
+    /// @param onRegistered Invoked with @p mid on success.
+    /// @param onError      Invoked with a diagnostic message on failure.
+    /// @return Whatever the wrapped backend returned.
+    bool assignPrimaryAsync(::morph::exec::detail::ModelId mid, const std::string& typeId, std::string_view primary,
+                            std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                            std::function<void(const std::string&)> onError) override {
+        return _inner->assignPrimaryAsync(mid, typeId, primary, std::move(onRegistered), std::move(onError));
+    }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param typeId String type-id to enumerate.
+    /// @return The wrapped backend's snapshot of live shared instance keys.
+    std::vector<std::string> listInstances(const std::string& typeId) override {
+        return _inner->listInstances(typeId);
+    }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param mid Instance to release.
+    void deregisterModel(::morph::exec::detail::ModelId mid) override { _inner->deregisterModel(mid); }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param mid    Instance to dispatch against.
+    /// @param call   The action call to dispatch.
+    /// @param cbExec Executor the resulting `Completion`'s callbacks are posted on.
+    /// @return The wrapped backend's `Completion`.
+    ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
+                                                              detail::ActionCall call,
+                                                              ::morph::exec::IExecutor* cbExec) override {
+        return _inner->execute(mid, std::move(call), cbExec);
+    }
+
+    /// @brief Forwards to the wrapped backend.
+    void notifyBackendChanged() override { _inner->notifyBackendChanged(); }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param exc Exception delivered to every still-pending completion.
+    void cancelPending(const std::exception_ptr& exc) override { _inner->cancelPending(exc); }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param handler Callable invoked after a successful reconnect; `nullptr` clears.
+    void setReconnectHandler(const std::function<void()>& handler) override { _inner->setReconnectHandler(handler); }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param handler Callable invoked after every successful connect; `nullptr` clears.
+    void setConnectHandler(const std::function<void()>& handler) override { _inner->setConnectHandler(handler); }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param handler Callable invoked whenever the transport drops; `nullptr` clears.
+    void setDisconnectHandler(const std::function<void()>& handler) override { _inner->setDisconnectHandler(handler); }
+
+    /// @brief Forwards to the wrapped backend.
+    /// @param session Session stamped onto every subsequently built control envelope.
+    void setSession(::morph::session::Context session) override { _inner->setSession(std::move(session)); }
+
+private:
+    /// @brief Posts @p op to the control strand and settles a `Completion` with its outcome.
+    ///
+    /// The posted task captures the wrapped backend's `shared_ptr` and the
+    /// promise, never `this`, so nothing it touches depends on the adapter
+    /// still existing.
+    /// @tparam Op     Callable returning the `ModelId` the completion resolves with.
+    /// @param  cbExec Executor the continuation is delivered on.
+    /// @param  op     The blocking control call to run on the strand.
+    /// @return A `Completion` settled by @p op's outcome.
+    template <typename Op>
+    ::morph::async::Completion<::morph::exec::detail::ModelId> dispatch(::morph::exec::IExecutor& cbExec, Op op) {
+        using Settled = ::morph::async::Completion<::morph::exec::detail::ModelId>;
+        auto [completion, promise] = Settled::makeSettleable(&cbExec);
+        auto shared = std::make_shared<Settled::Promise>(std::move(promise));
+        _control.post(kControlStrand, [shared, op = std::move(op)]() mutable {
+            try {
+                shared->resolve(op());
+            } catch (...) {
+                shared->reject(std::current_exception());
+            }
+        });
+        return std::move(completion);
+    }
+
+    /// @brief The single strand key every control call shares, so they run one
+    ///        at a time. Not a real model id: this `StrandExecutor` is private
+    ///        to the adapter and shares no key space with any backend's own.
+    static constexpr ::morph::exec::detail::ModelId kControlStrand{1};
+
+    std::shared_ptr<detail::IBackend> _inner;
+    ::morph::exec::detail::StrandExecutor _control;
 };
 
 /// @brief In-process backend that executes model actions on a thread pool strand.
