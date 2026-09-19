@@ -1879,10 +1879,15 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
     // waits on `_syncCv` for a `callId == 0` reply that is deliberately not
     // sent until the very end of this test.
     std::atomic<bool> syncReturned{false};
+    std::string syncOutcome;
     std::thread syncThread{[&] {
         try {
             (void)backend.registerModel("SbEchoModel", nullptr);
-        } catch (const std::exception&) {
+            syncOutcome = "returned";
+        } catch (const std::exception& exc) {
+            // Recorded rather than swallowed: how the parked call ended is not
+            // what this test asserts, but it is what explains a failure below.
+            syncOutcome = exc.what();
         }
         syncReturned.store(true);
     }};
@@ -1944,6 +1949,7 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
     // Release the parked call so the thread can be joined.
     fake.sendFrame(morph::net::detail::WsOpcode::kText, morph::wire::encode(morph::wire::makeOk(0, {}, 7)));
     syncThread.join();
+    CHECK(syncOutcome == "returned");
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
