@@ -261,6 +261,97 @@ public:
         (void)sendControlForId(env, "assign");
     }
 
+    // ── The structural registration surface (morph#567 / morph#569) ──────
+    //
+    // Overridden natively rather than reached through
+    // `backend::SynchronousBackendAdapter`. The reasoning is recorded in
+    // docs/spec/core/backend.md (`SocketBackend`'s section, "The structural
+    // registration surface, natively"); the short form is that this transport
+    // already demultiplexes replies by `callId` on its I/O thread for
+    // `execute`, and a control call is the same shape. Running the *blocking*
+    // verb on a wrapper's strand would park a thread for a round trip this
+    // transport need not park for, and would keep every bind inside
+    // `sendSync`'s one-synchronous-call-at-a-time token — which a concurrent
+    // `listInstances` or legacy `registerModel` on another thread shares, and
+    // which this backend is otherwise documented as not having (it may be
+    // driven from several threads at once).
+    //
+    // Nothing about the legacy verbs changes: `registerModel`,
+    // `registerModelShared`, `attachModel` and `assignPrimary` still use
+    // `sendSync` and `callId == 0`, so every caller morph#570/#571 has yet to
+    // migrate behaves exactly as before.
+
+    /// @brief Acquires a model instance without blocking the calling thread.
+    ///
+    /// Sends the control envelope @p request's shape names (see
+    /// `backend::detail::BindRequest`'s table) carrying a non-zero `callId`
+    /// drawn from the same counter `execute` uses, and settles the returned
+    /// `Completion` from the I/O thread when the matching reply arrives. No
+    /// thread is parked anywhere: in particular this never enters `sendSync`,
+    /// so a bind neither waits on `_syncCv` nor takes the one-synchronous-call
+    /// token, and therefore cannot wait on the I/O thread that would satisfy it.
+    ///
+    /// The two degradations the legacy verbs perform are preserved exactly: an
+    /// empty `primary` with a live `current` gives that instance up first, and
+    /// an empty `primary` binds a private instance.
+    ///
+    /// @param request Owning bind request; moved from.
+    /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
+    ///                must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the bound `ModelId`; rejected with
+    ///         `backend::DisconnectedError` if the socket is down or drops
+    ///         before the reply, or with a `std::runtime_error` carrying the
+    ///         server's own error message.
+    ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(::morph::backend::detail::BindRequest request,
+                                                                         ::morph::exec::IExecutor& cbExec) override {
+        if (request.primary.empty() && request.current.v != 0U) {
+            // `attachModel`'s empty-primary branch: the instance being given up
+            // is released before the private bind that replaces it.
+            deregisterModel(request.current);
+        }
+        if (request.primary.empty()) {
+            // `contextKey` is dropped here because the blocking path drops it:
+            // `IBackend::registerModelWithContext`'s default forwards to
+            // `registerModel` and discards it, and this backend does not
+            // override it. Keeping the native path bit-for-bit identical
+            // matters more than changing that here; it is filed separately.
+            return sendControlAsync(::morph::wire::makeRegister(request.typeId), "register", std::nullopt, cbExec);
+        }
+        if (request.current.v != 0U) {
+            return sendControlAsync(
+                ::morph::wire::makeAttach(request.typeId, request.primary, request.current.v, request.contextKey),
+                "attach", std::nullopt, cbExec);
+        }
+        return sendControlAsync(::morph::wire::makeRegisterShared(request.typeId, request.primary, request.contextKey),
+                                "register", std::nullopt, cbExec);
+    }
+
+    /// @brief Files an already-live server-side instance under a key, without
+    ///        blocking the calling thread.
+    ///
+    /// The promote counterpart of `bindModel`, on the same callId-multiplexed
+    /// path. Resolves with `request.mid` echoed back exactly as
+    /// `IBackend::promoteModel` documents — including for the two guards
+    /// `assignPrimary` applies locally (empty `primary`, zero `mid`), which
+    /// resolve without sending anything.
+    ///
+    /// @param request Owning promote request; moved from.
+    /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
+    ///                must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with `request.mid`, or rejected as
+    ///         `bindModel` documents.
+    ::morph::async::Completion<::morph::exec::detail::ModelId> promoteModel(
+        ::morph::backend::detail::PromoteRequest request, ::morph::exec::IExecutor& cbExec) override {
+        if (request.primary.empty() || request.mid.v == 0U) {
+            auto state = std::make_shared<::morph::async::detail::CompletionState<::morph::exec::detail::ModelId>>();
+            ::morph::async::Completion<::morph::exec::detail::ModelId> comp{state, &cbExec};
+            state->setValue(request.mid);
+            return comp;
+        }
+        return sendControlAsync(::morph::wire::makeAssign(request.typeId, request.primary, request.mid.v), "assign",
+                                request.mid, cbExec);
+    }
+
     /// @brief Asks the server for the live shared primary keys of @p typeId.
     /// @param typeId String type-id to enumerate.
     /// @return Canonical key strings of the live shared instances.
@@ -389,11 +480,24 @@ public:
     /// @brief No-op — this backend holds no local model objects.
     void notifyBackendChanged() override {}
 
-    /// @brief Resolves every pending execute call's `Completion` with @p exc.
+    /// @brief Resolves every pending call's `Completion` with @p exc.
+    ///
+    /// Covers both in-flight tables: the `execute` calls in `_pending` and the
+    /// `bindModel`/`promoteModel` control calls in `_pendingControl`. A bind
+    /// left out of this sweep would hang forever on a disconnect, since its
+    /// reply can now only arrive on a connection that is gone — the async
+    /// counterpart of `sendSync`'s `!_connected` wake-up.
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
         auto drained = _pending.drain();
         for (auto& [callId, pending] : drained) {
+            (void)callId;
+            if (pending.state) {
+                pending.state->setException(exc);
+            }
+        }
+        auto drainedControl = _pendingControl.drain();
+        for (auto& [callId, pending] : drainedControl) {
             (void)callId;
             if (pending.state) {
                 pending.state->setException(exc);
@@ -429,6 +533,89 @@ private:
         std::function<std::shared_ptr<void>(std::string_view)> deserialize;
         ::morph::exec::IExecutor* cbExec{nullptr};
     };
+
+    /// @brief One in-flight control call issued through `bindModel`/`promoteModel`.
+    ///
+    /// Kept in its own table rather than in `_pending`: an execute reply
+    /// settles a `Completion<shared_ptr<void>>` through a deserializer, a
+    /// control reply settles a `Completion<ModelId>` and has none. The two
+    /// tables share one `callId` counter (`_pending.nextCallId()`), so an id is
+    /// never ambiguous between them.
+    struct PendingControl {
+        /// @brief State of the `Completion<ModelId>` this call settles.
+        std::shared_ptr<::morph::async::detail::CompletionState<::morph::exec::detail::ModelId>> state;
+        /// @brief Verb name prefixing the server's error message, matching the
+        ///        legacy verbs' `"<what> failed: ..."` wording.
+        std::string what;
+        /// @brief Id to resolve with, for `promoteModel`, which echoes its
+        ///        request's `mid`. `nullopt` means "resolve with the reply's".
+        std::optional<::morph::exec::detail::ModelId> echo;
+    };
+
+    /// @brief Sends one control envelope on the callId-multiplexed path and
+    ///        returns the `Completion` its reply will settle.
+    /// @param env    Envelope to send; its `callId` and `session` are filled in here.
+    /// @param what   Verb name for the error message.
+    /// @param echo   Id to resolve with, or `nullopt` to use the reply's `modelId`.
+    /// @param cbExec Executor the continuation is delivered on.
+    /// @return The `Completion` the reply — or a disconnect — settles.
+    ::morph::async::Completion<::morph::exec::detail::ModelId> sendControlAsync(
+        ::morph::wire::Envelope env, std::string_view what, std::optional<::morph::exec::detail::ModelId> echo,
+        ::morph::exec::IExecutor& cbExec) {
+        auto state = std::make_shared<::morph::async::detail::CompletionState<::morph::exec::detail::ModelId>>();
+        ::morph::async::Completion<::morph::exec::detail::ModelId> comp{state, &cbExec};
+
+        std::uint64_t const callId = _pending.nextCallId();
+        env.callId = callId;
+        env.session = currentSession();
+        std::string payload;
+        try {
+            payload = ::morph::wire::encode(env);
+        } catch (const std::exception& exc) {
+            state->setException(
+                std::make_exception_ptr(std::runtime_error(std::string{what} + " failed: " + exc.what())));
+            return comp;
+        }
+
+        // Admitted under the table's own lock, for the reason `execute` spells
+        // out: a disconnect sweep (`cancelPending` -> `drain()`) running between
+        // a bare `_connected` check and the insert would file this entry after
+        // the sweep already emptied the table, and nothing would settle it.
+        if (!_pendingControl.insertIf(callId, PendingControl{.state = state, .what = std::string{what}, .echo = echo},
+                                      [this] { return _connected.load(); })) {
+            state->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+            return comp;
+        }
+
+        try {
+            sendFrame(::morph::net::detail::WsOpcode::kText, payload);
+        } catch (const std::exception&) {
+            // The write either raced a disconnect already under way or (as
+            // `sendFrame` documents) tore the connection down itself. Reclaim
+            // the entry rather than leave it to the io thread's sweep: `take`
+            // is atomic, so if the sweep won the race it already settled this
+            // state and there is nothing here to settle.
+            if (auto reclaimed = _pendingControl.take(callId)) {
+                state->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+            }
+        }
+        return comp;
+    }
+
+    /// @brief Settles one control call from its matched reply envelope.
+    /// @param pending Entry taken out of `_pendingControl`.
+    /// @param reply   Decoded reply carrying the same `callId`.
+    static void settleControl(const PendingControl& pending, const ::morph::wire::Envelope& reply) {
+        if (!pending.state) {
+            return;
+        }
+        if (reply.kind == "ok") {
+            pending.state->setValue(pending.echo.value_or(::morph::exec::detail::ModelId{reply.modelId}));
+            return;
+        }
+        pending.state->setException(
+            std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + reply.message)));
+    }
 
     void sendFrame(::morph::net::detail::WsOpcode opcode, std::string_view payload) {
         std::scoped_lock lock{_socketMtx};
@@ -591,6 +778,15 @@ private:
         if (env.callId != 0U) {
             auto pending = _pending.take(env.callId);
             if (!pending) {
+                // Not an execute: it may be a control reply for a `bindModel`/
+                // `promoteModel` in flight, which shares this id space. Settling
+                // it here — on the io thread, before `readLoop` asks for the
+                // next frame — is what lets a control call be issued without
+                // parking any thread on `_syncCv`.
+                if (auto control = _pendingControl.take(env.callId)) {
+                    settleControl(*control, env);
+                    return;
+                }
                 return;  // late/cancelled reply — dropped silently
             }
             // Triage shared with SimulatedRemoteBackend and QtWebSocketBackend
@@ -782,6 +978,10 @@ private:
     std::optional<std::string> _syncReply;
 
     ::morph::backend::detail::PendingCallTable<PendingExecute> _pending;
+    // Control calls issued through the structural surface. Deliberately shares
+    // `_pending`'s callId counter (allocated via `_pending.nextCallId()`) rather
+    // than owning a second one, so the two tables can never claim the same id.
+    ::morph::backend::detail::PendingCallTable<PendingControl> _pendingControl;
 
     std::mutex _reconnectHandlerMtx;
     std::function<void()> _reconnectHandler;
