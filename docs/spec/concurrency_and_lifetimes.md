@@ -298,13 +298,17 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   `CallbackToken::active()` check and then takes `_attachMtx` and calls
   `loadBackend()`, so the two-step shape is present in the source. What closes
   the window is not a gate but a contract on the backend:
-  `IBackend::registerModelAsync`'s doc comment now states that a backend
+  `IBackend::registerModelAsync`'s doc comment states that a backend
   overriding any `*Async` hook must deliver its callbacks on a thread from
-  which `~Bridge` cannot run concurrently. `QtWebSocketBackend` — the only
-  backend in the tree that overrides them — satisfies this by construction
-  rather than by care: it must itself be used from the Qt event loop thread,
-  and fires all four callbacks from `onTextMessage` on that same thread, so the
-  check and the use cannot straddle a destructor. Gating these instead would
+  which `~Bridge` cannot run concurrently. Since morph#568 **no backend
+  overrides them**: each of the three sites now reaches
+  `IBackend::bindModel`/`promoteModel` instead, naming
+  `exec::detail::inlineExecutor()` as the delivery executor. That reproduces the
+  old delivery thread exactly — the continuation runs wherever the backend
+  settled — so the window is unchanged, and `QtWebSocketBackend` is still safe
+  for the same reason it was: it must itself be used from the Qt event loop
+  thread, and settles every reply from `onTextMessage` on that same thread, so
+  the check and the use cannot straddle a destructor. Gating these instead would
   make `~Bridge` block behind `_attachMtx`, which the synchronous
   `attachHandler` holds across a full `attachModel` round trip — the same shape
   of objection that rules a gate out for the reconnect handler. **The safety
@@ -313,14 +317,20 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   thread would reopen morph#486's use-after-free, and that is a contract break
   rather than a latent race to be rediscovered.
 
-  A structural alternative now exists alongside these four hooks and is what
-  replaces them: `IBackend::bindModel`/`promoteModel` take the executor the
-  continuation is delivered on as an argument, so the delivery thread is chosen
-  by the caller — which knows what its own teardown looks like — instead of by
-  the backend, which does not. That does not by itself close the window above;
-  it relocates the decision from a documented obligation on fifteen
-  implementors to a value one call site produces. Nothing in `Bridge` uses it
-  yet. See [core/backend.md](core/backend.md#the-structural-registration-surface--bindmodel-and-promotemodel)
+  The structural surface that replaces these four hooks —
+  `IBackend::bindModel`/`promoteModel` — takes the executor the continuation is
+  delivered on as an argument, so the delivery thread is chosen by the caller,
+  which knows what its own teardown looks like, instead of by the backend, which
+  does not. `Bridge` now reaches it at all four sites (morph#568). **That does
+  not close the window above, and morph#568 does not claim it does**: `Bridge`
+  owns no event loop, so the executor it names is
+  `exec::detail::inlineExecutor()` — "deliver wherever you settled", which is
+  what the prose contract already required. What changed is where the decision
+  lives: one value produced at four `Bridge` call sites, rather than a
+  documented obligation on every `IBackend` implementor. Closing the window
+  means giving `Bridge` an executor bound to the thread that runs `~Bridge` and
+  naming that instead; nothing in the morph#522 set does that. See
+  [core/backend.md](core/backend.md#the-structural-registration-surface--bindmodel-and-promotemodel)
   and morph#522.
 
 `switchBackend()` and `whenBound()` were audited for the same shape and do not
