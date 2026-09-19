@@ -237,6 +237,14 @@ TEST_CASE("normalizeLocaleNumber: a group separator must sit on a group boundary
     // ...and never after the decimal separator.
     CHECK(normalizeLocaleNumber("1,050.25", ",", ".") == std::nullopt);
     CHECK(normalizeLocaleNumber("1.000,250.25", ",", ".") == std::nullopt);
+
+    // A grouping locale with no separator in the entry at all: there is no
+    // placement to be wrong about, and the digits pass through.
+    CHECK(normalizeLocaleNumber("1050", ",", ".") == "1050");
+
+    // A non-digit inside a grouping locale restarts the digit run rather than
+    // being counted into it -- and is malformed for the ordinary reason.
+    CHECK(normalizeLocaleNumber("1.0x0", "", ".") == std::nullopt);
 }
 
 TEST_CASE("normalizeLocaleNumber: every well-formed locale entry still normalises", "[render][locale][morph574]") {

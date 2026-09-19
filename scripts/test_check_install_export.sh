@@ -185,21 +185,45 @@ expect_caught "the detail/ header set dropped from the install" \
     "detail/instance_directory.hpp"
 
 # Bug 2: INTERFACE_HEADER_SETS_TO_VERIFY defaults to *every* interface header
-# set, and quantity_equation.hpp is included partway down quantity.hpp and is
-# not self-contained. This is the one case the slow phase exists for, so it is
-# the one case that runs it.
+# set, including the detail/ one, which is deliberately not held to compiling
+# standalone. This is the one case the slow phase exists for, so it is the one
+# case that runs it.
 #
-# `formatOptionalDecimal` is the identifier the header uses before quantity.hpp
-# has declared it. Both compilers name it -- clang as "use of undeclared
+# The mutation plants its own non-self-contained detail header rather than
+# relying on a real one being broken. It used to point at
+# morph/detail/quantity_equation.hpp, which was included partway down
+# quantity.hpp and used `formatOptionalDecimal` before that header declared it.
+# morph#574 made it self-contained -- a good change for clang-tidy and for any
+# tool that opens a header on its own -- and this case went red, correctly: no
+# detail/ header was left that VERIFY_INTERFACE_HEADER_SETS would reject, so
+# deleting the property no longer broke anything and the mutation could not be
+# caught. That is a gate resting on an accident of the tree. Borrowing a real
+# header's brokenness meant this case silently depended on it staying broken,
+# and the next person to fix one would have hit the same wall. A planted
+# fixture cannot be repaired out from under the gate.
+#
+# The header goes into the detail/ FILE_SET (two paths on one line, which
+# `FILES` accepts, because a portable `sed` replacement cannot insert a
+# newline), so the unmutated property keeps it out of the verified set and
+# deleting that property pulls it in.
+#
+# `morphSelfTestUndeclaredHelper` is the identifier the planted header calls
+# without declaring. Both compilers name it -- clang as "use of undeclared
 # identifier", GCC as "was not declared in this scope" -- and it appears
 # nowhere else in the output, which the file name alone cannot promise (ninja
 # prints that on the progress line for a unit that compiled fine).
 expect_caught "the verified header sets widened back to include detail/" \
-    "edit CMakeLists.txt -e '/INTERFACE_HEADER_SETS_TO_VERIFY HEADERS/d'" \
+    "edit CMakeLists.txt \
+        -e '/INTERFACE_HEADER_SETS_TO_VERIFY HEADERS/d' \
+        -e 's@include/morph/detail/fixed_string.hpp@include/morph/detail/fixed_string.hpp include/morph/detail/selftest_not_standalone.hpp@' \
+     && printf '%s\n' \
+        '#pragma once' \
+        'inline int morphSelfTestNotStandalone() { return morphSelfTestUndeclaredHelper(); }' \
+        > include/morph/detail/selftest_not_standalone.hpp" \
     full \
     "morph's interface header sets do not all compile standalone" \
-    "morph/detail/quantity_equation.hpp" \
-    "formatOptionalDecimal"
+    "morph/detail/selftest_not_standalone.hpp" \
+    "morphSelfTestUndeclaredHelper"
 
 # Bug 3: install(EXPORT NAMESPACE morph::) prefixes the target name, so
 # morph_net is exported as morph::morph_net while every in-tree alias, the

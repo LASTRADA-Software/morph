@@ -140,13 +140,14 @@ struct EquationRenderer {
     /// @param root The node to start from (may be null).
     void countRefs(const ASTNode* root) {
         std::vector<const ASTNode*> pending;
-        if (root != nullptr) {
-            pending.push_back(root);
-        }
+        pending.push_back(root);
         while (!pending.empty()) {
             const ASTNode* node = pending.back();
             pending.pop_back();
-            if (seen.contains(node)) {
+            // Children are pushed unconditionally and the null case handled
+            // here, exactly as the recursive form handled it on entry: the
+            // absent operand of a leaf, unary or scalar step is a null child.
+            if (node == nullptr || seen.contains(node)) {
                 continue;
             }
             seen.insert(node);
@@ -155,12 +156,12 @@ struct EquationRenderer {
             }
             if (node->left) {
                 ++refCount[node->left.get()];
-                pending.push_back(node->left.get());
             }
             if (node->right) {
                 ++refCount[node->right.get()];
-                pending.push_back(node->right.get());
             }
+            pending.push_back(node->left.get());
+            pending.push_back(node->right.get());
         }
     }
 
@@ -191,12 +192,8 @@ struct EquationRenderer {
             if (isAtomNode(*node)) {
                 continue;
             }
-            if (node->right) {
-                pending.push_back(LabelFrame{.node = node->right.get(), .expandThis = false});
-            }
-            if (node->left) {
-                pending.push_back(LabelFrame{.node = node->left.get(), .expandThis = false});
-            }
+            pending.push_back(LabelFrame{.node = node->right.get(), .expandThis = false});
+            pending.push_back(LabelFrame{.node = node->left.get(), .expandThis = false});
         }
     }
 
