@@ -66,6 +66,24 @@ env:
   # unchanged here so the effect of the cache-sharing change can be read on
   # its own.
   SCCACHE_CACHE_SIZE: "1G"
+  # Attributes every fastcache-cc invocation to this one job, so the
+  # "fastcache-cc stats" steps below can report *this* build's hit rate.
+  # Without it they call `--show-stats` bare, which reads the whole
+  # invocations log -- a self-hosted runner's lifetime totals across every job
+  # it has ever run. A run of `Linux / all optional features (clang)` that
+  # compiled 609 translation units reported "80.0% of 9157 cacheable": roughly
+  # fifteen jobs' worth, of which this job was 6.6%. The step exists to say
+  # whether the build was cached and structurally could not, which is the
+  # failure AGENTS.md puts first -- a hit rate says nothing until you know how
+  # many compilations it was offered.
+  #
+  # A group id rather than `--zero-stats`: zeroing is a process-wide truncation
+  # of a log this runner's other concurrent jobs are also writing to, so it
+  # would race them and destroy their numbers as well as the history. The id is
+  # explicitly not part of the cache key (see `fastcache-cc --help`,
+  # FASTCACHE_PREFETCH_GROUP), so this partitions the *statistics* and never
+  # the cache itself -- jobs still read each other's entries.
+  FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   CLANG_VERSION: "22"
   # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
   QT_VERSION: "6.8.1"
@@ -345,6 +363,12 @@ jobs:
             exit 0
           fi
           echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          # This job's own numbers, not the runner's lifetime totals. The
+          # bare form is kept underneath because the whole-runner view is
+          # what shows eviction pressure across jobs, which a single job's
+          # slice cannot.
+          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
+          echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -517,6 +541,12 @@ jobs:
             exit 0
           fi
           echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          # This job's own numbers, not the runner's lifetime totals. The
+          # bare form is kept underneath because the whole-runner view is
+          # what shows eviction pressure across jobs, which a single job's
+          # slice cannot.
+          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
+          echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
   # ── Linux: coverage (clang, ladder + Qt) ─────────────────────────────
@@ -1374,6 +1404,12 @@ jobs:
             exit 0
           fi
           echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          # This job's own numbers, not the runner's lifetime totals. The
+          # bare form is kept underneath because the whole-runner view is
+          # what shows eviction pressure across jobs, which a single job's
+          # slice cannot.
+          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
+          echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -1627,6 +1663,12 @@ jobs:
             exit 0
           fi
           echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          # This job's own numbers, not the runner's lifetime totals. The
+          # bare form is kept underneath because the whole-runner view is
+          # what shows eviction pressure across jobs, which a single job's
+          # slice cannot.
+          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
+          echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -1869,6 +1911,12 @@ jobs:
             exit 0
           fi
           echo "launcher: $FC   FASTCACHE_ADDR=${FASTCACHE_ADDR:-<unset>}"
+          # This job's own numbers, not the runner's lifetime totals. The
+          # bare form is kept underneath because the whole-runner view is
+          # what shows eviction pressure across jobs, which a single job's
+          # slice cannot.
+          "$FC" --show-stats --prefetch-group "$FASTCACHE_PREFETCH_GROUP" || true
+          echo "--- whole runner, all jobs (context for the above) ---"
           "$FC" --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
