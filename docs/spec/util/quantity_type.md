@@ -461,7 +461,16 @@ the stack, so none of the walks is recursive:
   stack. The two renderings share one stack machine (`EquationRenderer::render`,
   selected by `RenderMode`) whose frames resume at the same three points a
   recursive call would: render-or-descend-left, take-left-descend-right,
-  combine.
+  combine. The step limit below does **not** replace this: it bounds what gets
+  rendered, and the reference count still walks every node at any limit, so the
+  walks must survive a depth no limit constrains. A caller can also ask for the
+  whole derivation (`kEquationStepsUnlimited`), which walks all of it.
+
+  The labelling walk carries a **visited set**, like the reference count. Both
+  are walks of a DAG rather than a tree, and without one a node reachable by
+  several paths is walked once per *path*: a derivation of 31 nodes built by
+  repeated `q = q + q` has 2³⁰ root-to-leaf paths and took **10.3 s** to render
+  33 short lines before the set was added, 0.000 s after (morph#602).
 
 Measured against the recursive code (morph#574, 8 MiB stack, clang 22.1.8 and
 gcc 16.2.1):
@@ -519,12 +528,108 @@ so a caller emits them verbatim), in this fixed order:
    value used exactly once never reaches the legend — it is inlined at its one
    point of use instead.
 
+### The rendering is bounded; the derivation is not
+
+Depth is unbounded (see *Provenance*), and for a while `equation()` rendered
+whatever depth it was handed: a 100,000-iteration running total produced four
+lines whose first was **500,001 characters** of `0 + c1 + c1 + …`, built in
+58.8 s (morph#582, clang 22.1.8, `-O1` under ASan+UBSan). That is not an
+explanation of anything, and a caller printing it emits a single half-megabyte
+line. So `equation()` takes a **step limit**:
+
+```cpp
+std::vector<std::string> equation(std::size_t maxSteps = kDefaultEquationSteps) const;
+```
+
+**A step is one operation node written out.** Atoms — leaves, conversions — and
+named nodes render as a single token and cost no steps; only a node whose
+operation is spelled out does. The limit is spent **once per `equation()`
+call**, across the formula and the legend together, so a derivation that reaches
+the limit inside a `where` line has reached it for the whole call.
+
+**Past the limit a sub-derivation is *elided*.** It renders as `eK` — `e1`,
+`e2`, …, numbered in order of first appearance, exactly as `cN` placeholders
+are — and it earns a legend line of its own:
+
+```
+e1 + c1 + c1 + c1 + … + c1
+    = 69900 + 1 + 1 + 1 + … + 1
+    = 70000
+where c1 = 1
+      e1 = 69900 (elided at the 100-step limit)
+```
+
+The pieces of that contract, exactly:
+
+- In the **formula** (`[0]`) an elided node is the token `eK`, an atom for
+  parenthesisation purposes.
+- In the **substitution** (`[1]`) it is its **value**, like any other label.
+- In the **legend** it is `eK = <value> (elided at the <maxSteps>-step limit)`,
+  after the `cN` lines and sharing the same `where ` / indent alignment. The
+  parenthetical is on every such line, and names the limit, so that a caller
+  meeting an `eK` for the first time can tell it from an ordinary value without
+  consulting this document.
+- The **result** (`[2]`) is unaffected. Eliding changes the account of how a
+  value was reached, never the value.
+- **Elision beats a placeholder.** A node that is both reused and past the limit
+  gets an `eK`, not a `cN`: a `cN`'s legend line expands the very subtree the
+  limit just declined to render.
+- The walk is **not** what the limit bounds. Reference counting still visits
+  every node in the DAG, because reuse is a property of the derivation and not
+  of how much of it gets printed — a value shown once must not be given a
+  placeholder just because the limit hid its other uses. That walk is linear and
+  iterative; the limit bounds the *rendering*.
+
+**Where the cut falls is a choice.** The walk is a left-before-right pre-order
+from the root, so the steps that survive are the ones **nearest the result** and
+what collapses is the deep end. On the running-total shape that is the right
+way round: the last *N* additions stay legible and the accumulated history
+folds into one number.
+
+**The default is 100 steps, and it is a readability bound, not a cost bound.**
+Two things decide it:
+
+- *A rendered formula stops being an explanation long before it stops being
+  affordable.* morph#574's phrasing — "an explanation 200,000 steps deep is not
+  an explanation" — is the defect; 100 written-out steps is already more than a
+  person reads, and it is two orders of magnitude above any derivation this
+  repository's own examples build. Setting the default where the *cost* becomes
+  intolerable instead (thousands of steps) would keep producing output nobody
+  can use.
+- *The two errors are not symmetric.* Because the limit is a parameter, a
+  default set too low costs a caller one argument. A default set too high costs
+  everyone the half-megabyte line, and they cannot opt out of what they never
+  knew was unbounded. So the default sits at the human end of the range.
+
+**The limit is the caller's, not the type's.** `Quantity` reports its
+derivation; how much of one is worth reading is a decision of the layer doing
+the reading — an audit log and a tooltip do not want the same answer, and this
+type cannot know which it is talking to. Hence a parameter with a default rather
+than a fixed constant. Two named values sit at the ends of its range:
+
+| Argument | Meaning |
+|---|---|
+| `kDefaultEquationSteps` (100) | The default. |
+| `kEquationStepsUnlimited` | Write the derivation out in full — the pre-morph#582 behaviour, unbounded in output size, with the cost taken deliberately. The depth regression tests use it, since they exist to walk deeper than any limit would render. |
+| `0` | Write no step out: the one-element formatted value, the same answer a build with tracing compiled out gives. |
+
+**Rendering a derivation in full is affordable but not linear in every shape.**
+`combine` appends to its left operand instead of concatenating both sides into a
+fresh string, which makes a **left**-leaning chain — the shape
+`total = total + row` records — linear in the depth: rendering 70,000 steps in
+full costs 0.11 s rather than 27.7 s (same build as the measurement above).
+A **right**-leaning chain (`a + (b + (c + …))`) and a chain of unary negations
+still copy the big operand once per level and are still quadratic; the step
+limit is what bounds those, not the append.
+
 **Degenerate roots return a single element.** When the value has no expandable
 derivation, `equation()` returns a one-element vector (formula only, no
 substitution/result/legend lines):
 
 - an **empty** quantity, or any quantity with tracing compiled out → the
   formatted value alone (the `N/A` text when empty);
+- any quantity rendered with **`maxSteps == 0`** → the formatted value alone,
+  the same answer tracing-off gives, since no step may be shown;
 - a **bare unnamed leaf** (a raw input never operated on) → its formatted value;
 - an **engaged value with no recorded derivation node** — one materialised
   directly (the wire codec writing `payload`, or direct assignment to the public
@@ -565,6 +670,7 @@ placeholder**:
 | **Unnamed conversion**, reused | placeholder `cN` | its value | `cN = <value>` |
 | **Unnamed computed**, used once | its inlined expression (`"a" - "b"`) | the substituted expression | — (inlined) |
 | **Unnamed computed**, reused | placeholder `cN` | its value | `cN = <symbolic> = <substituted> = <value>` |
+| **Past the step limit** (any unnamed computed node) | elision `eN` | its value | `eN = <value> (elided at the <maxSteps>-step limit)` |
 
 A value used exactly once is inlined at its one point of use and never reaches
 the legend; only a *reused* value earns a `cN` placeholder, so shared work is
@@ -935,7 +1041,7 @@ readability).
 | `roundedToDecimalPlaces(p, mode)` | `Quantity roundedToDecimalPlaces(DecimalPlaces, math::RoundingMode = HalfAwayFromZero) const` | **Rounds the exact value** to `p` decimals and tags it there (`math::roundToDecimalPlaces`); no-op on empty. Precision silently clamped; saturates and logs if the scale-up leaves `int64`. |
 | `atDeclaredPrecision()` | `Quantity atDeclaredPrecision() const` | `roundedToDecimalPlaces(declaredPrecision())` — **rounds** the value to the field's declared precision, the one the schema advertises as `x-decimalPlaces`; no-op on empty. |
 | `named(label)` | `Quantity named(std::string label) const` | Returns a same-unit quantity marked as the symbol `label`; builds a fresh history node (no-op returning empty on empty, or with tracing off). |
-| `equation()` | `std::vector<std::string> equation() const` | The worked formula as print-ready lines (see *Provenance*). Single-element (the formatted value) when empty or tracing off. |
+| `equation(maxSteps)` | `std::vector<std::string> equation(std::size_t = kDefaultEquationSteps) const` | The worked formula as print-ready lines (see *Provenance*). Writes at most `maxSteps` derivation steps; past that a sub-derivation renders as `eK` with its value in the legend. Single-element (the formatted value) when empty, tracing off, or `maxSteps == 0`. |
 | `operator Quantity<To>()` | `operator Quantity<To>() const` | Implicit same-dimension conversion; delegates to `convert`, propagates empty, records a provenance step. |
 
 ### Free functions and operators (namespace scope)
@@ -949,6 +1055,8 @@ readability).
 | `operator*`, `operator/` (scalar) | `Quantity<U, Dec> op(Quantity<U, Dec>, Rational)` | Scale/divide by a dimensionless `Rational`; unit and declared precision unchanged. |
 | `operator==` | `bool operator==(Quantity<U>, Quantity<U>)` | **Total**; empty==empty is `true`. |
 | `operator<=>` (`<`,`<=`,`>`,`>=`) | `std::strong_ordering operator<=>(Quantity<U>, Quantity<U>)` | Ordering; **throws `std::logic_error`** if either operand is empty. |
+| `kDefaultEquationSteps` | `inline constexpr std::size_t = 100` | `equation()`'s default step limit — see *The rendering is bounded*. |
+| `kEquationStepsUnlimited` | `inline constexpr std::size_t = SIZE_MAX` | Pass to `equation()` to write the derivation out in full. |
 
 All arithmetic and conversion **propagate empty**; division by a non-empty zero
 yields empty.

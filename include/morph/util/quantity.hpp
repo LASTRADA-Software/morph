@@ -53,6 +53,7 @@
 #include <cstdint>
 #include <format>
 #include <glaze/glaze.hpp>
+#include <limits>
 #include <morph/core/payload_shape_tag.hpp>
 #include <optional>
 #include <span>
@@ -470,6 +471,24 @@ concept SameEnumDistinct = std::same_as<decltype(A), decltype(B)> && (A != B);
 
 }  // namespace detail
 
+/// @brief How many derivation steps `equation()` writes out by default.
+///
+/// A derivation has no bound — `total = total + row` over a data-driven loop
+/// records one step per iteration — so without a limit `equation()` renders
+/// every one of them into a single line (morph#582: 100,000 steps produced a
+/// 500,001-character line in 58.8 s). This is where a *rendered* formula stops
+/// being something a person reads, not where the cost stops being tolerable:
+/// a caller that wants more passes its own limit, so erring low costs one
+/// argument while erring high costs an unreadable line nobody asked for.
+inline constexpr std::size_t kDefaultEquationSteps = 100;
+
+/// @brief Pass as `equation()`'s limit to write the derivation out in full.
+///
+/// Restores the pre-morph#582 behaviour: no step is elided, and the cost is
+/// the caller's, taken deliberately. Used by the depth regression tests, which
+/// exist precisely to walk a derivation deeper than any limit would render.
+inline constexpr std::size_t kEquationStepsUnlimited = std::numeric_limits<std::size_t>::max();
+
 // Forward declaration (carrying the default arg) so `convert` and the
 // conversion operator can name `Quantity<From>` before the full definition.
 template <auto U, std::uint32_t DeclaredDecimals = UnitTraits<decltype(U)>::meta(U).defaultDecimals>
@@ -862,10 +881,18 @@ struct Quantity {
     }
 
     /// @brief The worked derivation as print-ready lines (see `docs/spec/util/quantity_type.md`).
+    /// @param maxSteps How many derivation steps to write out, across the
+    ///        formula and the legend together. Past it a sub-derivation is
+    ///        elided: it renders as `eK` and its value appears in the `where`
+    ///        legend. `kEquationStepsUnlimited` writes the whole derivation
+    ///        out (unbounded, quadratic on a right-leaning chain); `0` returns
+    ///        the formatted value alone. Ignored with tracing off, which has
+    ///        no derivation to render either way.
     /// @return `[0]` formula, `[1]` substitution, `[2]` result, `[3..]` `where`
     ///         legend; a single formatted-value element for a degenerate root
-    ///         (empty, named root, bare leaf, or tracing off).
-    [[nodiscard]] std::vector<std::string> equation() const
+    ///         (empty, named root, bare leaf, tracing off, or `maxSteps == 0`).
+    [[nodiscard]] std::vector<std::string> equation(
+        [[maybe_unused]] std::size_t maxSteps = kDefaultEquationSteps) const
 #if MORPH_QUANTITY_PROVENANCE
         ;
 #else

@@ -211,25 +211,15 @@ endif()
 include(Catch)
 # Every test is sub-second in practice; cap each at 120s so a hung/deadlocked
 # test fails fast instead of stalling the whole CI job (observed: a single test
-# hanging blocked a Windows runner for over half an hour). One named exception
-# below, registered separately: DISCOVERY_MODE PRE_TEST defers test discovery
-# to ctest invocation time, so a per-test TIMEOUT can't be set with
-# set_tests_properties() here (nothing named that test yet at configure time)
-# -- excluding it by tag and giving the excluded tag its own
-# catch_discover_tests() call is the mechanism that's actually available.
-catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "~[slow]" PROPERTIES TIMEOUT 120)
-
-# `[slow]` (issue #589): `equation()` walks a 70,000-node provenance chain
-# purely to prove the morph#574 iterative rewrite doesn't overflow the stack
-# -- it has no performance budget of its own, but the O(n^2) string-building
-# cost #582 measured (32.3s at this size under ASan+UBSan) is close enough to
-# 120s that TSan's heavier per-access instrumentation pushes it over: observed
-# at ">120.07s" on master's own CI (the sanitizer killed it at the deadline,
-# so the true completion time is unknown, just past it). Widened generously
-# rather than precisely measured, to leave headroom for sanitizer variance,
-# without raising the cap for every other test and weakening the "hang fails
-# fast" property the 120s default exists for.
-catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "[slow]" PROPERTIES TIMEOUT 600)
+# hanging blocked a Windows runner for over half an hour).
+#
+# One test used to need an exception, registered separately by tag: the
+# 70,000-node `equation()` depth test, whose O(n^2) string building cost 32.3s
+# under ASan+UBSan and blew past 120s under TSan (#589, widened to 600s by
+# #590). #582 made that rendering linear -- the same test now takes 0.11s under
+# ASan+UBSan and 1.3s at -O0 under TSan -- so the exception, and the `[slow]`
+# tag it keyed on, are gone again and every test is back under one cap.
+catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
 
 # ── Two-binary journal-path skew test (issue #246) ───────────────────────────
 # The executable form of the journal's data-at-rest contract, which

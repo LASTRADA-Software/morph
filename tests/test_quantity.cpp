@@ -702,11 +702,13 @@ namespace {
 // nothing to run.
 constexpr int kDeepChainNodes = 100000;
 
-// equation() renders the whole chain into one string by repeated
-// concatenation, which is quadratic in the depth, so this one is priced: 70,000
-// nodes cost 32 s under ASan where 100,000 cost 83 s. It stays above the
-// highest measured survival depth (50,000, clang -O2) with margin, which is
-// what keeps it from passing vacuously in an optimised build.
+// Stays above the highest measured survival depth (50,000, clang -O2) with
+// margin, which is what keeps it from passing vacuously in an optimised build.
+// It used to be priced as well -- rendering the chain in full was quadratic in
+// the depth, 27.7 s at this size under ASan+UBSan and over ctest's 120 s
+// timeout under TSan (morph#589) -- but since morph#582 `combine` appends to
+// its left operand instead of copying it, and the same render costs 0.11 s
+// under ASan+UBSan and 1.3 s at -O0 under TSan.
 constexpr int kDeepEquationNodes = 70000;
 
 // Builds `0 + one + one + ...`, one retained ASTNode per term.
@@ -734,10 +736,15 @@ TEST_CASE("A 100000-node provenance chain is destroyed without overflowing the s
 }
 
 TEST_CASE("equation() walks a 70000-node provenance chain without overflowing the stack",
-          "[quantity][provenance][equation][morph574][slow]") {
+          "[quantity][provenance][equation][morph574]") {
     Euro const total = runningTotal(kDeepEquationNodes);
 
-    auto const lines = total.equation();
+    // `kEquationStepsUnlimited`, not the default limit, and that is what keeps
+    // this test load-bearing: under the default the renderer stops 100 steps
+    // in and never walks deep enough to have overflowed anything, so it would
+    // pass against the recursive code this test exists to catch (morph#582).
+    // The chain is still rendered in full here -- 350,001 characters of it.
+    auto const lines = total.equation(morph::units::kEquationStepsUnlimited);
     // Formula, substitution, result, and one `where` line: the single `one`
     // leaf is referenced 70,000 times, so it earns exactly one placeholder.
     REQUIRE(lines.size() == 4);
@@ -745,4 +752,135 @@ TEST_CASE("equation() walks a 70000-node provenance chain without overflowing th
     CHECK(lines[1].starts_with("    = 0 + 1 + 1"));
     CHECK(lines[2] == "    = 70000");
     CHECK(lines[3] == "where c1 = 1");
+}
+
+// ── morph#582: the rendered derivation is bounded, the walk is not ──
+//
+// Two separate things, and the tests below hold them apart. The **step limit**
+// bounds what `equation()` writes out (the first two cases); the **append in
+// `combine`** is what keeps writing it out in full affordable when a caller
+// asks for that (the case above, which renders all 70,000 steps and cost 27.7 s
+// before the change, 0.11 s after, measured at -O1 under ASan+UBSan).
+namespace {
+// Spells the expected formula out rather than matching a prefix of it: a
+// `starts_with` check would pass just as well against an uncapped 350,001-char
+// line, which is the very thing these cases are about.
+[[nodiscard]] std::string repeated(const std::string& unit, std::size_t times) {
+    std::string out;
+    for (std::size_t i = 0; i < times; ++i) {
+        out += unit;
+    }
+    return out;
+}
+}  // namespace
+
+TEST_CASE("equation() renders a deep derivation within the default step limit",
+          "[quantity][provenance][equation][morph582]") {
+    Euro const total = runningTotal(kDeepEquationNodes);
+
+    auto const lines = total.equation();
+
+    // The whole assertion is that this output is *small*: unlimited, the same
+    // value renders as 4 lines whose first is 350,001 characters long.
+    REQUIRE(lines.size() == 5);
+    CHECK(lines[0] == "e1" + repeated(" + c1", morph::units::kDefaultEquationSteps));
+    CHECK(lines[0].size() == 502);
+    CHECK(lines[1] == "    = 69900" + repeated(" + 1", morph::units::kDefaultEquationSteps));
+    // The result is the real one: eliding the deep end of the derivation does
+    // not touch the value, only the account of how it was reached.
+    CHECK(lines[2] == "    = 70000");
+    CHECK(lines[3] == "where c1 = 1");
+    // Self-describing, and it names the limit that cut it: a caller meeting an
+    // `e1` for the first time can tell it apart from an ordinary value.
+    CHECK(lines[4] == "      e1 = 69900 (elided at the 100-step limit)");
+}
+
+TEST_CASE("equation()'s step limit is the caller's to set", "[quantity][provenance][equation][morph582]") {
+    SECTION("a derivation at exactly the limit is written out whole") {
+        // 100 steps, 100 allowed: nothing is elided, and the output is the
+        // same one the uncapped renderer produced.
+        auto const lines = runningTotal(100).equation();
+        REQUIRE(lines.size() == 4);
+        CHECK(lines[0] == "0" + repeated(" + c1", 100));
+        CHECK(lines[3] == "where c1 = 1");
+    }
+
+    SECTION("one step past it elides exactly one sub-derivation") {
+        auto const lines = runningTotal(101).equation();
+        REQUIRE(lines.size() == 5);
+        CHECK(lines[0] == "e1" + repeated(" + c1", 100));
+        CHECK(lines[2] == "    = 101");
+        CHECK(lines[4] == "      e1 = 1 (elided at the 100-step limit)");
+    }
+
+    SECTION("a caller that wants less says so") {
+        auto const lines = runningTotal(10).equation(3);
+        REQUIRE(lines.size() == 5);
+        CHECK(lines[0] == "e1 + c1 + c1 + c1");
+        CHECK(lines[1] == "    = 7 + 1 + 1 + 1");
+        CHECK(lines[2] == "    = 10");
+        CHECK(lines[4] == "      e1 = 7 (elided at the 3-step limit)");
+    }
+
+    SECTION("a caller that wants the whole derivation says so") {
+        auto const lines = runningTotal(150).equation(morph::units::kEquationStepsUnlimited);
+        REQUIRE(lines.size() == 4);
+        CHECK(lines[0] == "0" + repeated(" + c1", 150));
+        CHECK(lines[2] == "    = 150");
+    }
+
+    SECTION("a limit of zero is the tracing-off answer: the value alone") {
+        CHECK(runningTotal(10).equation(0) == std::vector<std::string>{"10"});
+    }
+
+    SECTION("a derivation shorter than the limit is untouched") {
+        // The limit must not change what a domain-sized explanation looks
+        // like; this is the same output the pre-limit renderer produced.
+        auto const a = KilowattHour::fromDouble(6.0).named("a");
+        auto const b = KilowattHour::fromDouble(1.8).named("b");
+        auto const lines = (a - b).equation();
+        REQUIRE(lines.size() == 3);
+        CHECK(lines[0] == R"("a" - "b")");
+    }
+}
+
+// ── morph#602: the label walk must count nodes, not root-to-leaf paths ──
+TEST_CASE("equation() renders a derivation shared along many paths in node time",
+          "[quantity][provenance][equation][morph602]") {
+    // `q = q + q` forty times: 41 distinct nodes, 2^40 root-to-leaf paths.
+    // Before `assignLabels` carried a visited set the walk was per-path, and
+    // the measured curve (0.099 s at 25 nodes, x4 per node, morph#602) puts
+    // this run at hours -- so the failure signal here is ctest's 120 s timeout,
+    // as the morph#574 cases' is a segfault. The assertions below cannot tell
+    // the two implementations apart; the clock is what does.
+    Euro q{Rational{Numerator{1}, Denominator{1}, DecimalPlaces{2}}};
+    for (int i = 0; i < 40; ++i) {
+        q = q + q;
+    }
+
+    auto const lines = q.equation(morph::units::kEquationStepsUnlimited);
+    // One `c` per level plus formula, substitution and result: linear in the
+    // node count, which is the point.
+    REQUIRE(lines.size() == 43);
+    CHECK(lines[0] == "c1 + c1");
+    CHECK(lines[2] == "    = 1099511627776");
+    CHECK(lines[3] == "where c1 = c2 + c2 = 274877906944 + 274877906944 = 549755813888");
+}
+
+TEST_CASE("equation() numbers several elisions in first-appearance order",
+          "[quantity][provenance][equation][morph582]") {
+    // A bushy derivation rather than a chain: ((1+2) + (3+4)) + ((5+6) + (7+8)),
+    // seven steps, each leaf distinct so nothing earns a `c` placeholder. With
+    // three steps allowed, the walk expands the root and the left spine and
+    // cuts everything the fourth step would have reached.
+    auto const leaf = [](double v) { return Euro::fromDouble(v); };
+    auto const total = ((leaf(1) + leaf(2)) + (leaf(3) + leaf(4))) + ((leaf(5) + leaf(6)) + (leaf(7) + leaf(8)));
+
+    auto const lines = total.equation(3);
+    REQUIRE(lines.size() == 5);
+    CHECK(lines[0] == "1 + 2 + e1 + e2");
+    CHECK(lines[1] == "    = 1 + 2 + 7 + 26");
+    CHECK(lines[2] == "    = 36");
+    CHECK(lines[3] == "where e1 = 7 (elided at the 3-step limit)");
+    CHECK(lines[4] == "      e2 = 26 (elided at the 3-step limit)");
 }
