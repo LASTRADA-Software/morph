@@ -128,6 +128,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;format&gt;</code><br />
 <code>#include &lt;glaze/glaze.hpp&gt;</code><br />
+<code>#include &lt;limits&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../dd/d09/payload__shape__tag_8hpp_source.html">morph/core/payload_shape_tag.hpp</a>&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;span&gt;</code><br />
@@ -236,6 +237,10 @@ requires requires { typename std::type_identity_t&lt;<a class="el" href="../../d
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
+<tr class="memitem:a47f74e1b35e852c9104b5ad3e5576520" id="r_a47f74e1b35e852c9104b5ad3e5576520"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a47f74e1b35e852c9104b5ad3e5576520">morph::units::kDefaultEquationSteps</a> = 100</td></tr>
+<tr class="memdesc:a47f74e1b35e852c9104b5ad3e5576520"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many derivation steps <span class="tt">equation()</span> writes out by default.  <br /></td></tr>
+<tr class="memitem:a929e685516f4f67bd6a1755921d745bd" id="r_a929e685516f4f67bd6a1755921d745bd"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a929e685516f4f67bd6a1755921d745bd">morph::units::kEquationStepsUnlimited</a> = std::numeric_limits&lt;std::size_t&gt;::max()</td></tr>
+<tr class="memdesc:a929e685516f4f67bd6a1755921d745bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pass as <span class="tt">equation()</span>'s limit to write the derivation out in full.  <br /></td></tr>
 <tr class="memitem:a58fa61dc1e60108e7e44631ffe60ce69" id="r_a58fa61dc1e60108e7e44631ffe60ce69"><td class="memTemplParams" colspan="2">template&lt;typename T&gt; </td></tr>
 <tr class="memitem:a58fa61dc1e60108e7e44631ffe60ce69 template"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a58fa61dc1e60108e7e44631ffe60ce69">morph::units::isQuantity</a> = detail::IsQuantity&lt;std::remove_cvref_t&lt;T&gt;&gt;::value</td></tr>
 <tr class="memdesc:a58fa61dc1e60108e7e44631ffe60ce69"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">true</span> when <span class="tt">T</span> (cvref-stripped) is a <span class="tt"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html" title="A unit-tagged, optionally-empty exact value with a declared precision in its type and (optionally) a ...">morph::units::Quantity</a></span>.  <br /></td></tr>
@@ -312,7 +317,7 @@ requires RatioConvertible&lt;From, To&gt;</div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00929">929</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00956">956</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -355,7 +360,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when both empty or both engaged with equal value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00946">946</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00973">973</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -404,7 +409,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00958">958</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00985">985</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -447,7 +452,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum, or empty when either operand is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00976">976</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01003">1003</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -490,7 +495,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact difference, or empty when either operand is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00990">990</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01017">1017</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -534,7 +539,7 @@ requires (detail::SameEnumDistinct&lt;A, B&gt; &amp;&amp; requires(Quantity&lt;B
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum in <span class="tt">A</span>'s unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01005">1005</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01032">1032</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -578,7 +583,7 @@ requires (detail::SameEnumDistinct&lt;A, B&gt; &amp;&amp; requires(Quantity&lt;B
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact difference in <span class="tt">A</span>'s unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01015">1015</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01042">1042</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -616,7 +621,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The negated value, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01023">1023</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01050">1050</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -660,7 +665,7 @@ requires requires { typename std::type_identity_t&lt;Quantity&lt;A * B&gt;&gt;; 
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact product in the deduced unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01040">1040</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01067">1067</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -704,7 +709,7 @@ requires requires { typename std::type_identity_t&lt;Quantity&lt;A / B&gt;&gt;; 
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact quotient in the deduced unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01057">1057</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01084">1084</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -747,7 +752,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The scaled quantity, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01075">1075</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01102">1102</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -790,7 +795,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The scaled quantity, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01089">1089</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01116">1116</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -833,7 +838,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The divided quantity, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01099">1099</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01126">1126</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -881,7 +886,7 @@ unitMeta().display</span> true for every value, engaged or not, so <span class="
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact decimal text, or <span class="tt">"N/A"</span> when the quantity is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01188">1188</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01215">1215</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -929,11 +934,65 @@ formattable" even though the specialization is valid and the identical call comp
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The formatted text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01219">1219</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01246">1246</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
+<a id="a47f74e1b35e852c9104b5ad3e5576520" name="a47f74e1b35e852c9104b5ad3e5576520"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a47f74e1b35e852c9104b5ad3e5576520">&#9670;&#160;</a></span>kDefaultEquationSteps</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::units::kDefaultEquationSteps = 100</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many derivation steps <span class="tt">equation()</span> writes out by default. </p>
+<p>A derivation has no bound — <span class="tt">total = total + row</span> over a data-driven loop records one step per iteration — so without a limit <span class="tt">equation()</span> renders every one of them into a single line (morph#582: 100,000 steps produced a 500,001-character line in 58.8 s). This is where a <em>rendered</em> formula stops being something a person reads, not where the cost stops being tolerable: a caller that wants more passes its own limit, so erring low costs one argument while erring high costs an unreadable line nobody asked for. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00483">483</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a929e685516f4f67bd6a1755921d745bd" name="a929e685516f4f67bd6a1755921d745bd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a929e685516f4f67bd6a1755921d745bd">&#9670;&#160;</a></span>kEquationStepsUnlimited</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::units::kEquationStepsUnlimited = std::numeric_limits&lt;std::size_t&gt;::max()</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Pass as <span class="tt">equation()</span>'s limit to write the derivation out in full. </p>
+<p>Restores the pre-morph#582 behaviour: no step is elided, and the cost is the caller's, taken deliberately. Used by the depth regression tests, which exist precisely to walk a derivation deeper than any limit would render. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00490">490</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a58fa61dc1e60108e7e44631ffe60ce69" name="a58fa61dc1e60108e7e44631ffe60ce69"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a58fa61dc1e60108e7e44631ffe60ce69">&#9670;&#160;</a></span>isQuantity</h2>
 
@@ -964,7 +1023,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00923">923</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00950">950</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>

@@ -18,7 +18,7 @@ var searchData=
   ['envelope_15',['Envelope',['../d5/d77/structmorph_1_1wire_1_1Envelope.html',1,'morph::wire']]],
   ['equals_16',['Equals',['../db/ddd/structmorph_1_1forms_1_1Equals.html',1,'morph::forms']]],
   ['equals_17',['equals',['../d4/d11/forms_8hpp.html#a7f5f0377a75336f0e17da1aeb721c04b',1,'morph::forms::equals(V A::*field, L literal)'],['../d4/d11/forms_8hpp.html#a9ccb0426c5378d88206b35ac296f571a',1,'morph::forms::equals(V A::*field, const char(&amp;literal)[N])']]],
-  ['equation_18',['equation',['../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73',1,'morph::units::Quantity']]],
+  ['equation_18',['equation',['../d5/dda/structmorph_1_1units_1_1Quantity.html#ae92d43357a91c8a82846e542c91caa64',1,'morph::units::Quantity']]],
   ['erasure_19',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
   ['error_20',['error',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a646cb97e461dcd84d20260cecab748a8',1,'morph::journal::LogEntry']]],
   ['error_20propagation_21',['Error propagation',['../index.html#error-propagation',1,'']]],

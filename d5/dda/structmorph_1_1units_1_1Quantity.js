@@ -13,7 +13,7 @@ var structmorph_1_1units_1_1Quantity =
     [ "roundedToDecimalPlaces", "d5/dda/structmorph_1_1units_1_1Quantity.html#af19ad973981224caceb822181204afaf", null ],
     [ "atDeclaredPrecision", "d5/dda/structmorph_1_1units_1_1Quantity.html#a71c5b40c2b3ee9b1dea894405b837ff6", null ],
     [ "named", "d5/dda/structmorph_1_1units_1_1Quantity.html#a161651d7fca578b928901cdac557051a", null ],
-    [ "equation", "d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73", null ],
+    [ "equation", "d5/dda/structmorph_1_1units_1_1Quantity.html#ae92d43357a91c8a82846e542c91caa64", null ],
     [ "operator Quantity< To >", "d5/dda/structmorph_1_1units_1_1Quantity.html#a5252c3cebbc4708d242bcee514b55869", null ],
     [ "payload", "d5/dda/structmorph_1_1units_1_1Quantity.html#a7a80d984d0cc6760a677a2c4f802d58f", null ]
 ];

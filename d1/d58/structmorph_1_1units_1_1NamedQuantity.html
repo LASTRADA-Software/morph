@@ -175,9 +175,9 @@ constexpr&#160;</td><td class="memItemRight"><b>Quantity</b> () noexcept=default
 <tr class="memitem:a71c5b40c2b3ee9b1dea894405b837ff6 pub_methods_structmorph_1_1units_1_1Quantity" id="r_a71c5b40c2b3ee9b1dea894405b837ff6"><td class="memItemLeft"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a71c5b40c2b3ee9b1dea894405b837ff6">atDeclaredPrecision</a> () const</td></tr>
 <tr class="memdesc:a71c5b40c2b3ee9b1dea894405b837ff6 pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rounds the value to this field's <b>declared</b> precision — the one the generated schema advertises as <span class="tt">x-decimalPlaces</span>.  <br /></td></tr>
 <tr class="memitem:a161651d7fca578b928901cdac557051a pub_methods_structmorph_1_1units_1_1Quantity" id="r_a161651d7fca578b928901cdac557051a"><td class="memItemLeft"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a161651d7fca578b928901cdac557051a">named</a> (std::string label) const</td></tr>
-<tr class="memdesc:a161651d7fca578b928901cdac557051a pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Seals this value with a name: <span class="tt"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73">equation()</a></span> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off.  <br /></td></tr>
-<tr class="memitem:ac4899dbe76c9b39a724a0e8073257c73 pub_methods_structmorph_1_1units_1_1Quantity" id="r_ac4899dbe76c9b39a724a0e8073257c73"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73">equation</a> () const</td></tr>
-<tr class="memdesc:ac4899dbe76c9b39a724a0e8073257c73 pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">The worked derivation as print-ready lines (see <span class="tt">docs/spec/util/quantity_type.md</span>).  <br /></td></tr>
+<tr class="memdesc:a161651d7fca578b928901cdac557051a pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Seals this value with a name: <span class="tt"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ae92d43357a91c8a82846e542c91caa64">equation()</a></span> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off.  <br /></td></tr>
+<tr class="memitem:ae92d43357a91c8a82846e542c91caa64 pub_methods_structmorph_1_1units_1_1Quantity" id="r_ae92d43357a91c8a82846e542c91caa64"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ae92d43357a91c8a82846e542c91caa64">equation</a> (std::size_t maxSteps=<a class="el" href="../../d9/db8/quantity_8hpp.html#a47f74e1b35e852c9104b5ad3e5576520">kDefaultEquationSteps</a>) const</td></tr>
+<tr class="memdesc:ae92d43357a91c8a82846e542c91caa64 pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">The worked derivation as print-ready lines (see <span class="tt">docs/spec/util/quantity_type.md</span>).  <br /></td></tr>
 <tr class="memitem:a5252c3cebbc4708d242bcee514b55869 pub_methods_structmorph_1_1units_1_1Quantity" id="r_a5252c3cebbc4708d242bcee514b55869"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a5252c3cebbc4708d242bcee514b55869">operator Quantity&lt; To &gt;</a> () const</td></tr>
 <tr class="memdesc:a5252c3cebbc4708d242bcee514b55869 pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Implicit within-dimension conversion to another unit; delegates to <span class="tt"><a class="el" href="../../d9/db8/quantity_8hpp.html#ac6333f923fa45288c3385091318bca26" title="Auto-generated within-dimension conversion (ratio + chaining).">convert</a></span>, propagates empty, and records a provenance step.  <br /></td></tr>
 </table><table class="memberdecls">
@@ -219,7 +219,7 @@ struct morph::units::NamedQuantity&lt; Name, U &gt;</div><p>A <span class="tt"><
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01130">1130</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01157">1157</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="af067a9bec5485a0e395856980ee0f598" name="af067a9bec5485a0e395856980ee0f598"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af067a9bec5485a0e395856980ee0f598">&#9670;&#160;</a></span>Base</h2>
@@ -237,7 +237,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
 
 <p>The plain base quantity type. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01132">1132</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01159">1159</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -269,7 +269,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
 
 <p>Constructs empty, then names. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01135">1135</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01162">1162</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -306,7 +306,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01139">1139</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01166">1166</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -343,7 +343,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01144">1144</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01171">1171</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -382,7 +382,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The named quantity. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01154">1154</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01181">1181</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
