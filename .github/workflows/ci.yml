@@ -1803,6 +1803,20 @@ jobs:
           # engine-load smoke test were built by nothing at all. This job has
           # Qt ${{ env.QT_VERSION }} from aqtinstall, so here they are built,
           # and the smoke test runs, on every push.
+          #
+          # MORPH_BUILD_BANK_GUI (with MORPH_BUILD_BANK_EXAMPLE, which it needs
+          # -- examples/bank/CMakeLists.txt only descends into gui/ from the
+          # bank example's own subdirectory) was, until this line, the single
+          # MORPH_BUILD_* option no job in .github/workflows/ enabled at all:
+          # the `linux-everything` preset that sets it is named by no workflow.
+          # morph#604 is what that costs -- bank_gui stopped compiling on
+          # master with every gate green. This is the one leg that can host it:
+          # it already installs Qt ${{ env.QT_VERSION }} from aqtinstall (the
+          # GUI needs Qml/Quick/QuickControls2 at 6.5+, which the distro Qt the
+          # other bank jobs use cannot give) and already installs the
+          # ODBC/SQLite/yaml-cpp/libzip set the bank example's Lightweight
+          # fetch requires. The check-workflow-option-coverage job below is
+          # what keeps the next option from repeating this.
           # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
           # Configure steps for why leaving it unset is what lets
           # fastcache-cc be selected.
@@ -1816,6 +1830,8 @@ jobs:
             -DMORPH_BUILD_LOAD_TESTS=ON \
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
             -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
+            -DMORPH_BUILD_BANK_EXAMPLE=ON \
+            -DMORPH_BUILD_BANK_GUI=ON \
             -DMORPH_REQUIRE_VETTED_HMAC=ON \
             $EXTRA \
             $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
@@ -2363,6 +2379,40 @@ jobs:
       # loud. See docs/spec/journal/journal.md, "Payload schema fingerprint".
       - name: Check hand-rolled LogEntry constructions stamp schema
         run: bash scripts/check_journal_stamps.sh examples
+
+  # ── Every MORPH_BUILD_* option is built by some job ────────────────────
+  #
+  # Its own job, and deliberately a cheap one: it reads CMake files and
+  # workflow files and builds nothing, so it reports in seconds rather than
+  # riding on a leg that takes 26-74 minutes to say the same thing.
+  #
+  # (drift-guard.yml is the more natural home and is where this belongs once
+  # PR #614 lands; it is held there now, so the step lives here.)
+  #
+  # Catches morph#605's bug class: MORPH_BUILD_BANK_GUI was set ON by a
+  # CMakePresets.json preset no workflow ever names, so it was compiled by no
+  # native job at all -- and bank_gui duly stopped compiling on master with
+  # every gate green (morph#604), while the job named "all optional features"
+  # went on passing. Adding the missing flag closes that hole once; only a
+  # check that *derives* the option list closes the class, because nothing
+  # stops the next option from being declared and enabled by nobody.
+  option-coverage:
+    name: Every MORPH_BUILD_* option is built by some job
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # See scripts/test_check_workflow_option_coverage.sh's own comment: a
+      # lint gate nobody tests reports green whether or not it still detects
+      # anything, and this one is maximally exposed to that -- the tree it
+      # guards is correct the day it lands, so it passes on day one whether it
+      # parses anything at all. Its whole value is what it does on a day that
+      # has not happened yet.
+      - name: Self-test the option-coverage checker
+        run: bash scripts/test_check_workflow_option_coverage.sh
+
+      - name: Check every declared MORPH_BUILD_* option is enabled by some job
+        run: python3 scripts/check_workflow_option_coverage.py .
 
   # ── Install / export: find_package(morph CONFIG) must work ─────────────
   #
