@@ -134,15 +134,18 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d3a/locale_
 Functions</h2></td></tr>
 <tr class="memitem:aae03a37827071172d1d9397d0323c224" id="r_aae03a37827071172d1d9397d0323c224"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aae03a37827071172d1d9397d0323c224">morph::render::detail::groupingIsWellPlaced</a> (std::string_view text, std::string_view decimalSeparator, std::string_view groupSeparator)</td></tr>
 <tr class="memdesc:aae03a37827071172d1d9397d0323c224"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether every group separator in <code class="param">text</code> sits where a group separator can legally sit.  <br /></td></tr>
-<tr class="memitem:a5447aae2448f6a892fe4a0202c224942" id="r_a5447aae2448f6a892fe4a0202c224942"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5447aae2448f6a892fe4a0202c224942">morph::render::normalizeLocaleNumber</a> (std::string_view text, std::string_view decimalSeparator, std::string_view groupSeparator)</td></tr>
-<tr class="memdesc:a5447aae2448f6a892fe4a0202c224942"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts a locale-formatted numeric string to canonical (<span class="tt">-?[0-9]+(\.[0-9]+)?</span>) text.  <br /></td></tr>
-<tr class="memitem:a8a5e641c416e175501d315d722c97b0b" id="r_a8a5e641c416e175501d315d722c97b0b"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a8a5e641c416e175501d315d722c97b0b">morph::render::formatCanonicalNumber</a> (std::string_view canonicalText, std::string_view decimalSeparator, std::string_view groupSeparator)</td></tr>
-<tr class="memdesc:a8a5e641c416e175501d315d722c97b0b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts canonical (<span class="tt">.</span>-decimal) numeric text to locale-formatted display text, grouping the integer part in triples.  <br /></td></tr>
+<tr class="memitem:a2d34c495af04f2e9fc256d8f5f04a872" id="r_a2d34c495af04f2e9fc256d8f5f04a872"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a2d34c495af04f2e9fc256d8f5f04a872">morph::render::detail::leadingSignLength</a> (std::string_view rest, std::string_view negativeSign)</td></tr>
+<tr class="memdesc:a2d34c495af04f2e9fc256d8f5f04a872"><td class="mdescLeft">&#160;</td><td class="mdescRight">The length of the negative sign at the start of <code class="param">rest</code>, in bytes, or <span class="tt">0</span> when there is none there.  <br /></td></tr>
+<tr class="memitem:aceabb7a9d5ea09e873859e7678ecf386" id="r_aceabb7a9d5ea09e873859e7678ecf386"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aceabb7a9d5ea09e873859e7678ecf386">morph::render::normalizeLocaleNumber</a> (std::string_view text, std::string_view decimalSeparator, std::string_view groupSeparator, std::string_view negativeSign=&quot;-&quot;)</td></tr>
+<tr class="memdesc:aceabb7a9d5ea09e873859e7678ecf386"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts a locale-formatted numeric string to canonical (<span class="tt">-?[0-9]+(\.[0-9]+)?</span>) text.  <br /></td></tr>
+<tr class="memitem:a80da1591a65e4a3567bc9440ac71e9b5" id="r_a80da1591a65e4a3567bc9440ac71e9b5"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a80da1591a65e4a3567bc9440ac71e9b5">morph::render::formatCanonicalNumber</a> (std::string_view canonicalText, std::string_view decimalSeparator, std::string_view groupSeparator, std::string_view negativeSign=&quot;-&quot;)</td></tr>
+<tr class="memdesc:a80da1591a65e4a3567bc9440ac71e9b5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts canonical (<span class="tt">.</span>-decimal) numeric text to locale-formatted display text, grouping the integer part in triples.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Locale numeric-entry normalisation for the control edge. </p>
 <p>A locale may render and accept e.g. <span class="tt">"1.050,25"</span>; the payload a <span class="tt"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html" title="A unit-tagged, optionally-empty exact value with a declared precision in its type and (optionally) a ...">morph::units::Quantity</a></span> field submits is always the canonical exact <span class="tt">{num, den, dp}</span> regardless. This header is the one control-edge conversion step between the two: the exact <span class="tt">Rational</span>/<span class="tt">Quantity</span> digit routines stay entirely locale-free (they only ever see plain <span class="tt">.</span>-decimal text), and a renderer calls <span class="tt">normalizeLocaleNumber</span> once, at the point text leaves the control, before handing it to those routines.</p>
-<dl class="section user"><dt>Separators are strings, not characters</dt><dd>Both functions take their separators as <span class="tt">std::string_view</span>, because a real locale's separator is not always one byte. fr-FR groups with U+202F (narrow no-break space) and several locales use U+00A0 — three and two UTF-8 bytes respectively. Typed as <span class="tt">char</span>, those cannot be expressed at all: the caller can only pass some single byte that never matches, so a perfectly valid <span class="tt">"1 050,25"</span> typed by a French user normalises to <span class="tt">std::nullopt</span> and the entry is reported malformed. An empty view means "this locale has no such separator" (the role <span class="tt">'\0'</span> used to play). </dd></dl>
+<dl class="section user"><dt>Separators are strings, not characters</dt><dd>Both functions take their separators as <span class="tt">std::string_view</span>, because a real locale's separator is not always one byte. fr-FR groups with U+202F (narrow no-break space) and several locales use U+00A0 — three and two UTF-8 bytes respectively. Typed as <span class="tt">char</span>, those cannot be expressed at all: the caller can only pass some single byte that never matches, so a perfectly valid <span class="tt">"1 050,25"</span> typed by a French user normalises to <span class="tt">std::nullopt</span> and the entry is reported malformed. An empty view means "this locale has no such separator" (the role <span class="tt">'\0'</span> used to play).</dd></dl>
+<dl class="section user"><dt>So is the negative sign</dt><dd>For the same reason, and measured rather than assumed: of the 711 locales Qt 6.11.2 knows, 77 report a <span class="tt">negativeSign</span> that is not a bare ASCII <span class="tt">'-'</span>. 23 use U+2212 MINUS SIGN (e.g. eu_ES); 54 more prefix the sign with a bidi control &ndash; U+061C ARABIC LETTER MARK, U+200E LEFT-TO-RIGHT MARK or U+200F RIGHT-TO-LEFT MARK &ndash; making it two or three code points, and ar_DZ does so even though its sign is the ordinary hyphen. Matched as a single <span class="tt">char</span>, none of those round-trips: the display edge emitted a sign the entry edge then rejected. So <span class="tt">negativeSign</span> is a <span class="tt">std::string_view</span> matched as a whole string too, defaulting to <span class="tt">"-"</span> so that every existing caller is unchanged (morph#583). </dd></dl>
 
 <p class="definition">Definition in file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
@@ -191,12 +194,54 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when the grouping is well placed (or absent). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a5447aae2448f6a892fe4a0202c224942" name="a5447aae2448f6a892fe4a0202c224942"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5447aae2448f6a892fe4a0202c224942">&#9670;&#160;</a></span>normalizeLocaleNumber()</h2>
+<a id="a2d34c495af04f2e9fc256d8f5f04a872" name="a2d34c495af04f2e9fc256d8f5f04a872"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2d34c495af04f2e9fc256d8f5f04a872">&#9670;&#160;</a></span>leadingSignLength()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::render::detail::leadingSignLength </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>rest</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>negativeSign</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The length of the negative sign at the start of <code class="param">rest</code>, in bytes, or <span class="tt">0</span> when there is none there. </p>
+<p>Two spellings count. <code class="param">negativeSign</code> is the locale's own, matched as a whole string so that U+2212 and the bidi-control-prefixed forms &ndash; two and three code points &ndash; match at all; a single <span class="tt">char</span> could express none of them (morph#583). A bare ASCII <span class="tt">'-'</span> counts as well, in every locale: U+2212 and the bidi marks are on no keyboard, so matching only the locale's spelling would reject the sign the user can actually type. The hyphen has no second reading in a numeric entry, so this is not the kind of guess the grouping rule forbids.</p>
+<p>This is a function of its own so that the caller's scan reads as one statement per character class; whichever spelling matched, the caller emits the canonical <span class="tt">'-'</span>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">rest</td><td>The remainder of the entry, starting at the scan position. </td></tr>
+    <tr><td class="paramname">negativeSign</td><td>The locale's negative-sign string; empty matches nothing, leaving only the ASCII spelling. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The number of bytes the sign occupies, or <span class="tt">0</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aceabb7a9d5ea09e873859e7678ecf386" name="aceabb7a9d5ea09e873859e7678ecf386"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aceabb7a9d5ea09e873859e7678ecf386">&#9670;&#160;</a></span>normalizeLocaleNumber()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -217,7 +262,12 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>groupSeparator</em></span>&#160;)</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>groupSeparator</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>negativeSign</em></span><span class="paramdefsep"> = </span><span class="paramdefval">&quot;-&quot;</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -234,22 +284,26 @@ Functions</h2></td></tr>
 <dl class="section user"><dt>The two separators must differ</dt><dd>When <code class="param">groupSeparator</code> is non-empty and equal to <code class="param">decimalSeparator</code> the entry is rejected: with one string in both roles there is no reading of <span class="tt">"1.5"</span> the function could defend. This is a caller (locale-configuration) error rather than a user one, but it is reported through the return value like any other malformed entry, deliberately not through an assertion &ndash; an assertion would make the two build configurations behave differently at a control edge, and would be untestable in the one where it fires.</dd></dl>
 <p>The result is <span class="tt">.</span>-decimal and digit-only, but is <b>not</b> narrowed to <span class="tt">-?[0-9]+(\.[0-9]+)?</span>: a bare "`.`", a leading "`.5`" and a trailing "`5.`" are passed through, exactly as that same QML mirror passes them. Tightening one side alone would put the two control edges back out of step, so the shape is documented here rather than changed.</p>
 <p>Separators are matched as whole strings, so a multi-byte one (e.g. U+202F) works; matching them before the per-byte digit scan is what keeps their continuation bytes from being mistaken for stray non-digit characters.</p>
+<dl class="section user"><dt>The negative sign is matched as a whole string too (morph#583)</dt><dd><code class="param">negativeSign</code> is matched the same way, which is what lets a locale whose sign is U+2212, or is prefixed by a bidi control mark, be entered at all &ndash; 77 of the 711 locales Qt 6.11.2 knows. Before this the sign was the literal byte <span class="tt">'-'</span>, so <span class="tt">formatCanonicalNumber</span> emitted a sign this function then rejected, and the pair was not inverse for those locales.</dd></dl>
+<dl class="section user"><dt>ASCII <span class="tt">'-'</span> stays accepted whatever the locale</dt><dd>A bare <span class="tt">'-'</span> is accepted in the leading position in addition to <code class="param">negativeSign</code>. U+2212 and the bidi marks are on no keyboard, so matching only the locale's own spelling would reject the sign the user can actually type and leave them no way to enter a negative number at all. The hyphen has no second reading in a numeric entry, so accepting it is not the kind of guess morph#574 forbids &ndash; that was about producing a wrong <em>value</em>, and this produces the only value the input can mean.</dd></dl>
+<dl class="section user"><dt>An empty <code class="param">negativeSign</code> means the ASCII default, not "no sign"</dt><dd>Unlike a group separator, there is no locale without a negative sign, so an empty view leaves the ASCII <span class="tt">'-'</span> above as the only spelling rather than meaning "this entry cannot be negative". <span class="tt">formatCanonicalNumber</span> reads it the same way, and the display edge is why it must: a sign that formatted to nothing would turn <span class="tt">-5</span> into <span class="tt">5</span> silently &ndash; a wrong value, not a rejected one.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">text</td><td>The locale-formatted entry, e.g. <span class="tt">"1.050,25"</span>. </td></tr>
     <tr><td class="paramname">decimalSeparator</td><td>The locale's decimal-point string, e.g. <span class="tt">","</span>. </td></tr>
     <tr><td class="paramname">groupSeparator</td><td>The locale's digit-grouping string, e.g. <span class="tt">"."</span>, or empty when the locale has none. </td></tr>
+    <tr><td class="paramname">negativeSign</td><td>The locale's negative-sign string, e.g. <span class="tt">"\u2212"</span>; empty is read as the default <span class="tt">"-"</span>. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The canonical <span class="tt">.</span>-decimal text, or <span class="tt">std::nullopt</span> when malformed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00218">218</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a8a5e641c416e175501d315d722c97b0b" name="a8a5e641c416e175501d315d722c97b0b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8a5e641c416e175501d315d722c97b0b">&#9670;&#160;</a></span>formatCanonicalNumber()</h2>
+<a id="a80da1591a65e4a3567bc9440ac71e9b5" name="a80da1591a65e4a3567bc9440ac71e9b5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a80da1591a65e4a3567bc9440ac71e9b5">&#9670;&#160;</a></span>formatCanonicalNumber()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -270,7 +324,12 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>groupSeparator</em></span>&#160;)</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>groupSeparator</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>negativeSign</em></span><span class="paramdefsep"> = </span><span class="paramdefval">&quot;-&quot;</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -281,17 +340,20 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Converts canonical (<span class="tt">.</span>-decimal) numeric text to locale-formatted display text, grouping the integer part in triples. </p>
-<p>The display-direction inverse of <span class="tt">normalizeLocaleNumber</span>'s decimal-separator substitution, plus display-only thousands grouping (grouping is never accepted back on entry — <span class="tt">normalizeLocaleNumber</span> strips it unconditionally). Passing <span class="tt">decimalSeparator == "."</span> and an empty <code class="param">groupSeparator</code> is the identity transform. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>The display-direction inverse of <span class="tt">normalizeLocaleNumber</span>'s decimal-separator substitution, plus display-only thousands grouping (grouping is never accepted back on entry — <span class="tt">normalizeLocaleNumber</span> strips it unconditionally). Passing <span class="tt">decimalSeparator == "."</span> and an empty <code class="param">groupSeparator</code> is the identity transform.</p>
+<p>The sign is emitted as <code class="param">negativeSign</code>, matching what <span class="tt">normalizeLocaleNumber</span> accepts back (morph#583); an empty view is read as <span class="tt">"-"</span> rather than as "no
+sign", because formatting a negative to no sign at all is a silently wrong value. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">canonicalText</td><td>Canonical <span class="tt">-?[0-9]+(\.[0-9]+)?</span> text. </td></tr>
     <tr><td class="paramname">decimalSeparator</td><td>The locale's decimal-point display string. </td></tr>
     <tr><td class="paramname">groupSeparator</td><td>The locale's digit-grouping display string, or empty to omit grouping. </td></tr>
+    <tr><td class="paramname">negativeSign</td><td>The locale's negative-sign display string; empty is read as the default <span class="tt">"-"</span>. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The locale-formatted display text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html#l00311">311</a> of file <a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">locale_format.hpp</a>.</p>
 
 </div>
 </div>

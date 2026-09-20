@@ -10,7 +10,7 @@ var searchData=
   ['networkmonitorconfig_7',['NetworkMonitorConfig',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html',1,'morph::offline']]],
   ['new_20model_20and_20actions_8',['Adding a new model and actions',['../index.html#adding-a-new-model-and-actions',1,'']]],
   ['normal_9',['normal',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555',1,'morph::offline::SqliteOfflineQueue']]],
-  ['normalizelocalenumber_10',['normalizeLocaleNumber',['../d8/d3a/locale__format_8hpp.html#a5447aae2448f6a892fe4a0202c224942',1,'morph::render']]],
+  ['normalizelocalenumber_10',['normalizeLocaleNumber',['../d8/d3a/locale__format_8hpp.html#aceabb7a9d5ea09e873859e7678ecf386',1,'morph::render']]],
   ['nosharing_11',['NoSharing',['../d8/d38/structmorph_1_1bridge_1_1NoSharing.html',1,'morph::bridge']]],
   ['not_12',['Not',['../d1/db1/structmorph_1_1forms_1_1Not.html',1,'morph::forms']]],
   ['not_20a_20framework_20concern_13',['Conflict Resolution — a domain concern, not a framework concern',['../index.html#conflict-resolution--a-domain-concern-not-a-framework-concern',1,'']]],
