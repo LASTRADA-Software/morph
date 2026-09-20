@@ -318,8 +318,6 @@ jobs:
         if: endsWith(matrix.preset, '-debug')
         run: ctest --preset ${{ matrix.preset }}
 
-  # ── Linux: sanitizers + coverage (all clang) ─────────────────────────
-
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
@@ -386,6 +384,7 @@ jobs:
           path: /home/runner/.cache/sccache
           key: sccache-${{ matrix.preset }}-${{ github.sha }}
 
+  # ── Linux: sanitizers + coverage (all clang) ─────────────────────────
   linux-sanitizers:
     name: Linux / ${{ matrix.preset }}
     needs: probe-self-hosted
@@ -708,27 +707,6 @@ jobs:
           # forever, since the step now actually runs on every coverage build.
           retention-days: 14
 
-  # ── Linux: kanban's concurrent-move stress test under ThreadSanitizer ──
-  # test_kanban_stress.cpp's [tsan]-tagged TEST_CASE drives BoardModel through
-  # a bare morph::bridge::Bridge/morph::backend::LocalBackend directly, on a
-  # real morph::exec::ThreadPoolExecutor{4}, with zero Qt frames anywhere in
-  # its call graph (see the test file's own header comment) -- so the "a GUI
-  # stack under TSan is mostly noise" rationale that keeps the ladder out of
-  # linux-sanitizers does not apply to this one test. This job builds only
-  # what that test needs -- MORPH_BUILD_LADDER=ON, MORPH_LADDER_RUNGS=kanban,
-  # no Qt GUI modules beyond the WebSockets backend the ladder testkit itself
-  # requires -- to keep it a minimal, fast, TSan-clean addition rather than
-  # pulling every rung's Qt Quick/QML code into the sanitizer matrix.
-  #
-  # (History: an earlier version of this test drove the same scenario through
-  # BackendRig{Mode::Local, ...}, whose Mode::Local unconditionally
-  # constructs a real morph::qt::QtExecutor for client-facing callback
-  # delivery -- morph#128 found 165 ThreadSanitizer warnings bottoming out in
-  # genuine Qt-internal frames reached through it, undetectable as real bugs
-  # or false positives from outside a TSan-instrumented Qt build. Rewriting
-  # the test to never construct a QtExecutor at all sidesteps the ambiguity
-  # entirely rather than resolving it.)
-
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
@@ -752,6 +730,26 @@ jobs:
           path: /home/runner/.cache/sccache
           key: sccache-clang-coverage-${{ github.sha }}
 
+  # ── Linux: kanban's concurrent-move stress test under ThreadSanitizer ──
+  # test_kanban_stress.cpp's [tsan]-tagged TEST_CASE drives BoardModel through
+  # a bare morph::bridge::Bridge/morph::backend::LocalBackend directly, on a
+  # real morph::exec::ThreadPoolExecutor{4}, with zero Qt frames anywhere in
+  # its call graph (see the test file's own header comment) -- so the "a GUI
+  # stack under TSan is mostly noise" rationale that keeps the ladder out of
+  # linux-sanitizers does not apply to this one test. This job builds only
+  # what that test needs -- MORPH_BUILD_LADDER=ON, MORPH_LADDER_RUNGS=kanban,
+  # no Qt GUI modules beyond the WebSockets backend the ladder testkit itself
+  # requires -- to keep it a minimal, fast, TSan-clean addition rather than
+  # pulling every rung's Qt Quick/QML code into the sanitizer matrix.
+  #
+  # (History: an earlier version of this test drove the same scenario through
+  # BackendRig{Mode::Local, ...}, whose Mode::Local unconditionally
+  # constructs a real morph::qt::QtExecutor for client-facing callback
+  # delivery -- morph#128 found 165 ThreadSanitizer warnings bottoming out in
+  # genuine Qt-internal frames reached through it, undetectable as real bugs
+  # or false positives from outside a TSan-instrumented Qt build. Rewriting
+  # the test to never construct a QtExecutor at all sidesteps the ambiguity
+  # entirely rather than resolving it.)
   kanban-tsan:
     name: Kanban / ThreadSanitizer
     runs-on: ubuntu-24.04
@@ -874,8 +872,6 @@ jobs:
           TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp
         run: ctest --preset clang-tsan -L ladder-kanban -R ThreadSanitizer --output-on-failure
 
-  # ── Linux: Qt WebSocket backend build + tests ─────────────────────────
-
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
@@ -899,6 +895,7 @@ jobs:
           path: /home/runner/.cache/sccache
           key: sccache-clang-tsan-${{ github.sha }}
 
+  # ── Linux: Qt WebSocket backend build + tests ─────────────────────────
   linux-qt:
     name: Linux / Qt6 WebSockets
     runs-on: ubuntu-24.04
@@ -964,8 +961,6 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset gcc-debug
 
-  # ── Linux: application ladder testkit (path-filtered) ─────────────────
-
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
@@ -989,6 +984,7 @@ jobs:
           path: /home/runner/.cache/sccache
           key: sccache-gcc-debug-${{ github.sha }}
 
+  # ── Linux: application ladder testkit (path-filtered) ─────────────────
   ladder-tests:
     name: Application ladder
     needs: probe-self-hosted
@@ -1360,30 +1356,6 @@ jobs:
           python3 scripts/scenario/run_scenarios.py \
             --build-dir build/gcc-debug "${rungs[@]}"
 
-  # ── Linux: every rung's tests under AddressSanitizer + UBSan ──────────
-  # Before this job, no rung test ran under any sanitizer: ladder-tests above
-  # builds plain gcc-debug, and the linux-sanitizers matrix deliberately skips
-  # the ladder (only its clang-coverage leg sets MORPH_BUILD_LADDER). So every
-  # rung's models, presenters and QML adapters — the code the ladder exists to
-  # exercise — were compiled and run with no memory or UB instrumentation
-  # anywhere in CI.
-  #
-  # ASan and UBSan, not TSan. `apply_sanitizers(<target> asan)` compiles with
-  # -fsanitize=address,undefined (cmake/compiler_options.cmake), so this one
-  # preset delivers both and a separate ubsan leg for the ladder would re-run
-  # a strict subset. TSan is deliberately absent: a rung's tests drive Qt on
-  # every path, and against an uninstrumented system Qt that produces warnings
-  # bottoming out in Qt-internal frames which cannot be classified as real
-  # races or false positives from outside a TSan-instrumented Qt build —
-  # morph#128 hit exactly that, 165 warnings deep. The resolution there was to
-  # rewrite the one test that mattered to construct no QtExecutor at all and
-  # run only it under TSan, which is what kanban-tsan above does. Thread-
-  # sanitising a rung means following that pattern per test, not adding a
-  # blanket -DAF_SANITIZER=tsan leg here.
-  #
-  # -LE stress mirrors ladder-tests: the stress cases are long-running by
-  # design and ASan's shadow-memory overhead compounds that.
-
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
@@ -1448,6 +1420,29 @@ jobs:
           path: /home/runner/.cache/sccache
           key: sccache-gcc-debug-${{ github.sha }}
 
+  # ── Linux: every rung's tests under AddressSanitizer + UBSan ──────────
+  # Before this job, no rung test ran under any sanitizer: ladder-tests above
+  # builds plain gcc-debug, and the linux-sanitizers matrix deliberately skips
+  # the ladder (only its clang-coverage leg sets MORPH_BUILD_LADDER). So every
+  # rung's models, presenters and QML adapters — the code the ladder exists to
+  # exercise — were compiled and run with no memory or UB instrumentation
+  # anywhere in CI.
+  #
+  # ASan and UBSan, not TSan. `apply_sanitizers(<target> asan)` compiles with
+  # -fsanitize=address,undefined (cmake/compiler_options.cmake), so this one
+  # preset delivers both and a separate ubsan leg for the ladder would re-run
+  # a strict subset. TSan is deliberately absent: a rung's tests drive Qt on
+  # every path, and against an uninstrumented system Qt that produces warnings
+  # bottoming out in Qt-internal frames which cannot be classified as real
+  # races or false positives from outside a TSan-instrumented Qt build —
+  # morph#128 hit exactly that, 165 warnings deep. The resolution there was to
+  # rewrite the one test that mattered to construct no QtExecutor at all and
+  # run only it under TSan, which is what kanban-tsan above does. Thread-
+  # sanitising a rung means following that pattern per test, not adding a
+  # blanket -DAF_SANITIZER=tsan leg here.
+  #
+  # -LE stress mirrors ladder-tests: the stress cases are long-running by
+  # design and ASan's shadow-memory overhead compounds that.
   ladder-sanitizers:
     name: Application ladder / ASan+UBSan
     needs: probe-self-hosted
@@ -1638,16 +1633,6 @@ jobs:
           ctest --preset clang-asan --no-tests=error --output-on-failure \
             -R 'morph::qt::|qt_tls_example_runs'
 
-  # ── Linux: every optional feature enabled at once ─────────────────────
-  # Every MORPH_BUILD_* option below is off by default, and until this job
-  # existed no CI configuration turned any of them on — so several thousand
-  # lines (morph::net, the Qt/QML forms renderer, the SQLite queue, the fuzz
-  # harnesses, the vetted-HMAC adapters, the soak/bench targets) were never
-  # compiled here, let alone tested. That is how a build that cannot configure
-  # (MORPH_REQUIRE_VETTED_HMAC) and a replay test matching the wrong file
-  # extension both reached master green. Enabling them together also proves
-  # they compose, which building each alone would not.
-
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
@@ -1712,6 +1697,15 @@ jobs:
           path: /home/runner/.cache/sccache
           key: sccache-clang-asan-${{ github.sha }}
 
+  # ── Linux: every optional feature enabled at once ─────────────────────
+  # Every MORPH_BUILD_* option below is off by default, and until this job
+  # existed no CI configuration turned any of them on — so several thousand
+  # lines (morph::net, the Qt/QML forms renderer, the SQLite queue, the fuzz
+  # harnesses, the vetted-HMAC adapters, the soak/bench targets) were never
+  # compiled here, let alone tested. That is how a build that cannot configure
+  # (MORPH_REQUIRE_VETTED_HMAC) and a replay test matching the wrong file
+  # extension both reached master green. Enabling them together also proves
+  # they compose, which building each alone would not.
   linux-all-features:
     name: Linux / all optional features (${{ matrix.compiler }})
     needs: probe-self-hosted
@@ -1916,8 +1910,6 @@ jobs:
           done
           exit "$status"
 
-  # ── Valgrind (memcheck) ───────────────────────────────────────────────
-
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
@@ -1982,6 +1974,7 @@ jobs:
           path: /home/runner/.cache/sccache
           key: sccache-${{ matrix.preset }}-${{ github.sha }}
 
+  # ── Valgrind (memcheck) ───────────────────────────────────────────────
   valgrind:
     name: Valgrind memcheck
     runs-on: ubuntu-24.04
@@ -2445,6 +2438,45 @@ jobs:
 
       - name: Check every declared MORPH_BUILD_* option is enabled by some job
         run: python3 scripts/check_workflow_option_coverage.py .
+
+  # ── Every job's section banner introduces that job ────────────────────
+  #
+  # Its own job, and deliberately a cheap one: it reads workflow files and
+  # builds nothing, so it reports in seconds rather than riding on a leg that
+  # takes 26-74 minutes to say the same thing.
+  #
+  # (drift-guard.yml is the more natural home and is where this belongs once
+  # PR #635 lands; it is held there now, so the job lives here -- the same
+  # arrangement the option-coverage job above is in.)
+  #
+  # Catches morph#621's bug class: seven of the seventeen banners in this file
+  # sat above the *previous* job's trailing `sccache stats` / `Save sccache`
+  # steps, so each banner's multi-paragraph rationale -- for several jobs the
+  # only written record of why the job exists -- described a job that began
+  # 6-31 lines further down, behind another job's steps. YAML comments are
+  # inert, so nothing else in this repository can notice, and the displacement
+  # recurs every time a step is appended to the end of a job.
+  #
+  # Checking "no banner is displaced" alone would be vacuous: a file with every
+  # banner deleted scores zero displacements. The gate pairs both ways -- every
+  # banner introduces a job, and every job is introduced by a banner -- so a
+  # deletion fails it instead of satisfying it.
+  banner-lint:
+    name: Every job's section banner introduces that job
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # See scripts/test_check_workflow_job_banners.sh's own comment: a lint
+      # gate nobody tests reports green whether or not it still detects
+      # anything, and this one repairs the defect it guards in the same commit
+      # that adds it, so it passes on day one whether it parses anything at
+      # all.
+      - name: Self-test the job-banner checker
+        run: bash scripts/test_check_workflow_job_banners.sh
+
+      - name: Check every workflow section banner introduces its job
+        run: python3 scripts/check_workflow_job_banners.py .
 
   # ── Install / export: find_package(morph CONFIG) must work ─────────────
   #
