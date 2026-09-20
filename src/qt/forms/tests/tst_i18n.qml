@@ -355,6 +355,135 @@ Item {
             compare(localeForm.formatCanonicalNumber("-1050.25", ",", "."), "-1.050,25")
         }
 
+        // ── morph#599: the separators are matched as whole strings too ───
+        //
+        // The premise, measured rather than assumed -- and it says something
+        // different from the two sign premises above, which is the whole point
+        // of stating it. Over the same 711 locales Qt 6.11.2 reports through
+        // QLocale::matchingLocales, *every* decimalPoint and *every*
+        // groupSeparator is exactly one UTF-16 code unit:
+        //
+        //   decimalPoint   with size() > 1: 0
+        //   groupSeparator with size() > 1: 0
+        //   negativeSign   with size() > 1: 54   <- the control
+        //   positiveSign   with size() > 1: 54   <- the control
+        //
+        // So no locale reaches this and no user is affected. What is fixed is
+        // the mirror's own consistency: morph#583 and morph#596 converted the
+        // *signs* in this function to whole-string matching and left the
+        // separators as one-code-unit comparisons a few lines away, with
+        // nothing saying why. docs/spec/forms/forms.md, "Both edges, or
+        // neither": a divergence between the mirror and
+        // include/morph/render/locale_format.hpp is a divergence in what the
+        // product accepts, whether or not a locale can currently express it.
+        //
+        // Qt.locale() cannot enumerate, so the widest spellings the
+        // enumeration found are pinned here one by one. If CLDR ever gives one
+        // of them a second code unit, this fails first and says so.
+        function test_noLocaleSeparatorNeedsMoreThanOneCodeUnit() {
+            // One locale per distinct groupSeparator spelling Qt reports:
+            // U+002C, U+002E, U+0027, U+00A0, U+060C, U+066C, U+12C8, U+202F,
+            // U+2E41 -- plus the two control locales the tests above use.
+            const names = ["C", "de", "eu_ES", "en_CH", "ar_EG", "ar_DZ",
+                           "nqo_GN", "gez_ET", "ff_BF", "ab_GE", "en_FR"]
+            for (let i = 0; i < names.length; ++i) {
+                const l = Qt.locale(names[i])
+                compare(l.decimalPoint.length, 1, names[i] + " decimalPoint")
+                compare(l.groupSeparator.length, 1, names[i] + " groupSeparator")
+            }
+            // The control, read off the same objects: a length check on locale
+            // data is not vacuously 1: the signs really are two and three units
+            // in these very locales, which is what morph#583/#596 were about.
+            compare(Qt.locale("ar_EG").negativeSign.length, 2)
+            compare(Qt.locale("az_IR").positiveSign.length, 3)
+        }
+
+        // The defect, driven directly because nothing else can drive it. A
+        // test built on Qt.locale(...) would pass against the unfixed code --
+        // every real separator is one code unit, so `ch === groupSeparator`
+        // and `text.startsWith(groupSeparator, i)` agree on all 711 -- and
+        // would therefore be evidence of nothing. These separators are
+        // synthetic for exactly that reason.
+        //
+        // Before the fix: a multi-unit separator matched no single `ch`, so
+        // each of its units fell through to the "any other character is
+        // malformed" arm and the whole entry was rejected. The C++ edge, which
+        // has always used `rest.starts_with(...)`, accepted it.
+        //
+        // ── the shared corpus ────────────────────────────────────────────
+        // tests/test_render_locale_format.cpp, [morph599], pins the identical
+        // rows against the C++ edge (as their UTF-8 spellings). The two lists
+        // are meant to be read side by side; a row that disagrees between them
+        // is the divergence the rule forbids.
+        //
+        //   G2 = U+200E U+002E   D2 = U+200E U+002C   two code points
+        //   G4 = U+1D16D         D4 = U+1D16E         one code point, two
+        //                                             UTF-16 units each
+        //
+        // G4/D4 are the sharper case: they are single *code points*, so a
+        // mirror that iterated code points rather than code units would still
+        // fail on them. The bug is about UTF-16 code units.
+        function test_aMultiUnitSeparatorIsMatchedAsAWholeString() {
+            const G2 = "\u200E."
+            const D2 = "\u200E,"
+            const G4 = "\uD834\uDD6D"
+            const D4 = "\uD834\uDD6E"
+
+            compare(localeForm.normalizeLocaleNumber("1" + G2 + "050" + D2 + "25", D2, G2), "1050.25")
+            compare(localeForm.normalizeLocaleNumber("-1" + G2 + "050" + D2 + "25", D2, G2), "-1050.25")
+            compare(localeForm.normalizeLocaleNumber("+1" + G2 + "050" + D2 + "25", D2, G2), "1050.25")
+            compare(localeForm.normalizeLocaleNumber("1" + G4 + "050" + D4 + "25", D4, G4), "1050.25")
+            compare(localeForm.normalizeLocaleNumber("1" + G4 + "050" + G4 + "000", "", G4), "1050000")
+            // A locale with a multi-unit decimal separator and no grouping.
+            compare(localeForm.normalizeLocaleNumber("5" + D2 + "25", D2, ""), "5.25")
+        }
+
+        // Whole-string matching must not loosen any of the rules the
+        // one-unit comparison enforced. morph#574's grouping validation and
+        // morph#497's leading-position rule are stated over "the separator",
+        // so they have to hold when the separator is more than one unit.
+        //
+        // Stated plainly, because it matters for what this function is worth
+        // as evidence: every row here is a rejection, and the *unfixed* code
+        // rejected all of them too -- it rejected everything with a multi-unit
+        // separator in it. So this function is a guard against the fix
+        // over-accepting, not a demonstration of the defect. The two functions
+        // either side of it are the ones that fail against the unfixed mirror.
+        function test_aMultiUnitSeparatorIsStillValidatedTheSameWay() {
+            const G2 = "\u200E."
+            const D2 = "\u200E,"
+
+            // morph#574: the last group of the integer part is short.
+            compare(localeForm.normalizeLocaleNumber("1" + G2 + "5", D2, G2), null)
+            compare(localeForm.normalizeLocaleNumber("1" + G2 + "2" + G2 + "3" + G2 + "4", D2, G2), null)
+            // Grouping belongs to the integer part only.
+            compare(localeForm.normalizeLocaleNumber("1" + D2 + "5" + G2 + "000", D2, G2), null)
+            // A second decimal separator.
+            compare(localeForm.normalizeLocaleNumber("1" + D2 + "0" + D2 + "5", D2, G2), null)
+            // morph#497: a sign after the decimal separator is not leading.
+            compare(localeForm.normalizeLocaleNumber(D2 + "-5", D2, G2), null)
+            // One string cannot play both roles, multi-unit or not.
+            compare(localeForm.normalizeLocaleNumber("1" + G2 + "050", G2, G2), null)
+            // Controls, unchanged by this fix and rejected before and after: a
+            // lone *prefix* of the separator is not the separator. Whole-string
+            // matching must not degrade into "any unit of it will do".
+            compare(localeForm.normalizeLocaleNumber("1\u200E050" + D2 + "25", D2, G2), null)
+            compare(localeForm.normalizeLocaleNumber("1.050,25", D2, G2), null)
+        }
+
+        // The round trip, which is where "both edges, or neither" bites:
+        // formatCanonicalNumber has always emitted the separators as whole
+        // strings, so with a multi-unit separator the display edge produced
+        // text the entry edge then rejected -- the exact morph#583 shape, for
+        // a locale that does not exist yet.
+        function test_theDisplayEdgeEmitsAMultiUnitSeparatorAndEntryTakesItBack() {
+            const G2 = "\u200E."
+            const D2 = "\u200E,"
+            const display = localeForm.formatCanonicalNumber("-1050.25", D2, G2, "\u2212")
+            compare(display, "\u2212" + "1" + G2 + "050" + D2 + "25")
+            compare(localeForm.normalizeLocaleNumber(display, D2, G2, "\u2212"), "-1050.25")
+        }
+
         function test_zonedTimestampRoundTripsToUtc() {
             zonedForm.setFieldValue("when", "2026-07-05T16:30:00")  // 16:30 in UTC+2
             verify(zonedForm.ready)

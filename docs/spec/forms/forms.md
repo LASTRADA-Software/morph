@@ -1454,6 +1454,46 @@ Display formatting is the renderer's duty; the wire stays canonical:
   above; the renderer forwards `qtLocale.positiveSign` at the two entry call
   sites that already forward `qtLocale.negativeSign`, and nothing changes at the
   display call site.
+
+  **The two separators are matched the same way, for consistency rather than
+  for a locale** (morph#599). Both sign conversions above left the mirror's
+  *separator* branches spelled `ch === groupSeparator` and
+  `ch === decimalSeparator` — a one-code-unit comparison, a few lines from the
+  whole-string sign match, with nothing saying why. They are now
+  `text.startsWith(sep, i)` as well, advancing the index by the separator's
+  length the way the sign branches already do.
+
+  Unlike the signs, **no locale reaches this**, and the rule rather than a user
+  report is the reason to fix it. Measured with `QLocale::matchingLocales`
+  under Qt 6.11.2, over the same 711 locales:
+
+  | field | spellings longer than one UTF-16 code unit |
+  | --- | ---: |
+  | `decimalPoint` | 0 of 711 |
+  | `groupSeparator` | 0 of 711 |
+  | `negativeSign` (control) | 54 of 711 |
+  | `positiveSign` (control) | 54 of 711 |
+
+  The two sign rows are the control: this is not a measurement that returns
+  zero for any locale field it is pointed at. Every one of the nine distinct
+  `groupSeparator` spellings (U+0027, U+002C, U+002E, U+00A0, U+060C, U+066C,
+  U+12C8, U+202F, U+2E41) and all three `decimalPoint` spellings (U+002C,
+  U+002E, U+066B) is a single code unit, so entry behaviour is byte-identical
+  before and after for every locale Qt knows. The change is to the *rule* this
+  paragraph states, not to the product.
+
+  That has a consequence for how it can be tested, and it is the reason this is
+  written down: **a test driven by a real `Qt.locale(...)` cannot distinguish
+  the fixed mirror from the broken one.** With a one-unit separator,
+  `ch === sep` and `startsWith(sep, i)` agree on all 711, so such a test passes
+  whatever the code does. The corpus that pins this is therefore synthetic —
+  separators of two or more code units that no locale uses, passed straight to
+  both functions — and it is pinned identically on both edges
+  (`[morph599]` in `tests/test_render_locale_format.cpp`, and the
+  `test_aMultiUnitSeparator*` functions in
+  `src/qt/forms/tests/tst_i18n.qml`). One of the synthetic separators is a
+  surrogate pair: a single code *point* that is two code *units*, which a
+  per-code-point mirror would still get wrong.
 - **Timestamps.** The wire value is strict UTC ISO-8601
   ([datetime.md](../util/datetime.md)); a renderer displays and edits in the
   user's zone by shifting a `morph::time::DateTime` with its existing

@@ -836,6 +836,18 @@ Frame {
     // emits one: a positive displays unsigned in every locale, and emitting the
     // sign would turn every positive number in every form from "5" into "+5".
     // The pair is therefore deliberately not inverse across a positive sign.
+    // The two *separators* are matched as whole strings for the same reason
+    // (morph#599), and that this was not already true was the mixed idiom
+    // morph#583 and morph#596 left behind: they converted the signs to
+    // `text.startsWith(sign, i)` and left the separators on `ch === sep`, one
+    // UTF-16 code unit, a few lines apart with nothing saying why. Unlike the
+    // signs, no locale reaches this: measured over the 711 locales Qt 6.11.2
+    // reports, *every* decimalPoint and *every* groupSeparator is exactly one
+    // code unit (0 multi-unit, against 54 for each sign). So this changes what
+    // no user could reach, and fixes what every reader of these thirty lines
+    // could: docs/spec/forms/forms.md, "Both edges, or neither" -- the C++ edge
+    // has always matched separators whole (`rest.starts_with(...)`), and a
+    // divergence between the two is a divergence in what the product accepts.
     function normalizeLocaleNumber(text, decimalSeparator, groupSeparator, negativeSign, positiveSign) {
         // One string cannot play both roles: there is no reading of "1.5" this
         // function could defend, so it reports rather than guesses.
@@ -852,7 +864,7 @@ Frame {
         let sawGroup = false
         for (let i = 0; i < text.length; ++i) {
             const ch = text[i]
-            if (groupSeparator !== "" && ch === groupSeparator) {
+            if (groupSeparator !== "" && text.startsWith(groupSeparator, i)) {
                 if (sawDecimal)
                     return null          // grouping belongs to the integer part only
                 // The first group is one to three digits; every later one is
@@ -863,9 +875,10 @@ Frame {
                     return null
                 sawGroup = true
                 digitsInGroup = 0
+                i += groupSeparator.length - 1 // the loop's ++i consumes the last unit
                 continue
             }
-            if (decimalSeparator !== "" && ch === decimalSeparator) {
+            if (decimalSeparator !== "" && text.startsWith(decimalSeparator, i)) {
                 if (sawDecimal)
                     return null
                 if (sawGroup && digitsInGroup !== groupSize)
@@ -875,6 +888,7 @@ Frame {
                 // The decimal point is output, so a sign straight after it is
                 // not leading (morph#497).
                 sawAnyOutput = true
+                i += decimalSeparator.length - 1 // the loop's ++i consumes the last unit
                 continue
             }
             if (text.startsWith(sign, i)) {

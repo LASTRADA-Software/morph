@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <initializer_list>
 #include <morph/render/locale_format.hpp>
 #include <morph/util/datetime.hpp>
 #include <optional>
@@ -526,4 +527,121 @@ TEST_CASE("normalizeLocaleNumber: the new parameter costs no existing behaviour"
     CHECK(normalizeLocaleNumber("abc", ".", "") == std::nullopt);
     CHECK(normalizeLocaleNumber("", ".", "") == std::nullopt);
     CHECK(normalizeLocaleNumber(entry(kSignEuEs, "5"), ".", "", kSignEuEs) == "-5");  // morph#583 still holds
+}
+
+// ──── morph#599: the QML mirror's separators, cross-checked here ─────────────
+//
+// This block adds no C++ behaviour. `normalizeLocaleNumber` has matched both
+// separators as whole strings since it was written -- "accepts a multi-byte
+// group separator" above already pins that -- and morph#599 is a defect in the
+// *QML mirror* (`src/qt/forms/qml/DynamicForm.qml`), which compared one UTF-16
+// code unit (`ch === groupSeparator`) while this side used
+// `rest.starts_with`. docs/spec/forms/forms.md, "Both edges, or neither": a
+// divergence between the two is a divergence in what the product accepts, so
+// the fix is worth only as much as the evidence that the edges now agree.
+//
+// What that evidence is, stated plainly, because its shape is unusual:
+//
+//   * No locale reaches this. Measured on this revision with
+//     QLocale::matchingLocales under Qt 6.11.2, over all 711 locales:
+//
+//       decimalPoint   with size() > 1 (UTF-16 units): 0
+//       groupSeparator with size() > 1 (UTF-16 units): 0
+//       negativeSign   with size() > 1:                54   <- the control
+//       positiveSign   with size() > 1:                54   <- the control
+//
+//     The two sign counts are the control: this is not a measurement that
+//     returns 0 for any locale field you point it at. All nine distinct
+//     groupSeparator spellings Qt reports (U+0027, U+002C, U+002E, U+00A0,
+//     U+060C, U+066C, U+12C8, U+202F, U+2E41) and all three decimalPoint
+//     spellings (U+002C, U+002E, U+066B) are single code units. So this is a
+//     consistency fix, and nobody is affected today.
+//
+//   * Which is exactly why the corpus below is synthetic. A test driven by a
+//     real locale could not tell the fixed mirror from the broken one -- with
+//     a one-unit separator `ch === sep` and `startsWith(sep, i)` agree on all
+//     711 -- and would be a check that passes whatever the code does.
+//
+// The identical rows are pinned against the mirror in
+// src/qt/forms/tests/tst_i18n.qml -- its two `test_aMultiUnitSeparator...`
+// functions and `test_theDisplayEdgeEmitsAMultiUnitSeparatorAndEntryTakesItBack`.
+// The two
+// lists are meant to be read side by side; a row that disagrees between them is
+// the divergence the rule forbids. UTF-16 units there, UTF-8 bytes here -- the
+// same separators, spelled for each edge's string type.
+namespace {
+// Two code points: a bidi mark before the separator, the shape 54 locales
+// really give the signs. Spelled as explicit UTF-8 bytes for the same MSVC
+// C4566 reason as kNarrowNbsp above, and split across two literals so the
+// trailing '.'/',' cannot be read as a continuation of the \x escape.
+constexpr std::string_view kGroup2 =
+    "\xE2\x80\x8E"
+    ".";  // U+200E U+002E
+constexpr std::string_view kDecimal2 =
+    "\xE2\x80\x8E"
+    ",";  // U+200E U+002C
+// One code point each, but two UTF-16 units (a surrogate pair) -- the sharper
+// case for the mirror: a scan that iterated code points rather than code units
+// would still have failed on these.
+constexpr std::string_view kGroup4 = "\xF0\x9D\x85\xAD";    // U+1D16D
+constexpr std::string_view kDecimal4 = "\xF0\x9D\x85\xAE";  // U+1D16E
+
+/// @brief Concatenates the parts of one corpus row into an entry string.
+///
+/// A named helper for the same reason `entry` above is one: the constants are
+/// views, so `kGroup2 + "050"` does not compile, and `std::string{...} + ...`
+/// at forty call sites reads worse than this does.
+[[nodiscard]] std::string joined(std::initializer_list<std::string_view> parts) {
+    std::string out;
+    for (auto const part : parts) {
+        out += part;
+    }
+    return out;
+}
+}  // namespace
+
+TEST_CASE("locale_format: the multi-unit separator corpus the QML mirror now shares", "[render][locale][morph599]") {
+    // The premise of the spelling: these really are multi-unit on both edges.
+    REQUIRE(kGroup2.size() == 4);  // 3 UTF-8 bytes + 1; 2 UTF-16 units
+    REQUIRE(kDecimal2.size() == 4);
+    REQUIRE(kGroup4.size() == 4);  // 4 UTF-8 bytes; 2 UTF-16 units
+    REQUIRE(kDecimal4.size() == 4);
+
+    CHECK(normalizeLocaleNumber(joined({"1", kGroup2, "050", kDecimal2, "25"}), kDecimal2, kGroup2) == "1050.25");
+    CHECK(normalizeLocaleNumber(joined({"-1", kGroup2, "050", kDecimal2, "25"}), kDecimal2, kGroup2) == "-1050.25");
+    CHECK(normalizeLocaleNumber(joined({"+1", kGroup2, "050", kDecimal2, "25"}), kDecimal2, kGroup2) == "1050.25");
+    CHECK(normalizeLocaleNumber(joined({"1", kGroup4, "050", kDecimal4, "25"}), kDecimal4, kGroup4) == "1050.25");
+    CHECK(normalizeLocaleNumber(joined({"1", kGroup4, "050", kGroup4, "000"}), "", kGroup4) == "1050000");
+    CHECK(normalizeLocaleNumber(joined({"5", kDecimal2, "25"}), kDecimal2, "") == "5.25");
+}
+
+TEST_CASE("locale_format: a multi-unit separator is validated exactly as a one-unit one is",
+          "[render][locale][morph599]") {
+    // morph#574's grouping validation and morph#497's leading-position rule are
+    // stated over "the separator", so they have to hold when it is longer than
+    // one unit -- on both edges. Same rows as the mirror's
+    // `test_aMultiUnitSeparatorIsStillValidatedTheSameWay`.
+    CHECK(normalizeLocaleNumber(joined({"1", kGroup2, "5"}), kDecimal2, kGroup2) == std::nullopt);
+    CHECK(normalizeLocaleNumber(joined({"1", kGroup2, "2", kGroup2, "3", kGroup2, "4"}), kDecimal2, kGroup2) ==
+          std::nullopt);
+    CHECK(normalizeLocaleNumber(joined({"1", kDecimal2, "5", kGroup2, "000"}), kDecimal2, kGroup2) == std::nullopt);
+    CHECK(normalizeLocaleNumber(joined({"1", kDecimal2, "0", kDecimal2, "5"}), kDecimal2, kGroup2) == std::nullopt);
+    CHECK(normalizeLocaleNumber(joined({kDecimal2, "-5"}), kDecimal2, kGroup2) == std::nullopt);
+    CHECK(normalizeLocaleNumber(joined({"1", kGroup2, "050"}), kGroup2, kGroup2) == std::nullopt);
+    // A lone prefix of the separator is not the separator: whole-string
+    // matching must not degrade into "any part of it will do".
+    CHECK(normalizeLocaleNumber(joined({"1", "\xE2\x80\x8E", "050", kDecimal2, "25"}), kDecimal2, kGroup2) ==
+          std::nullopt);
+    CHECK(normalizeLocaleNumber("1.050,25", kDecimal2, kGroup2) == std::nullopt);
+}
+
+TEST_CASE("locale_format: the pair round-trips through a multi-unit separator", "[render][locale][morph599]") {
+    // Where "both edges, or neither" bites. `formatCanonicalNumber` has always
+    // emitted the separators whole on both sides, so with a multi-unit
+    // separator the mirror's display edge produced text its own entry edge then
+    // rejected -- the morph#583 shape, for a locale that does not exist yet.
+    // This side round-tripped throughout; that is what made the two disagree.
+    auto const display = formatCanonicalNumber("-1050.25", kDecimal2, kGroup2, kSignEuEs);
+    CHECK(display == joined({kSignEuEs, "1", kGroup2, "050", kDecimal2, "25"}));
+    CHECK(normalizeLocaleNumber(display, kDecimal2, kGroup2, kSignEuEs) == "-1050.25");
 }
