@@ -29,15 +29,32 @@
     "side channels are recorded separately so a future decision about logs is made about logs.",
     "But the residual class is an upper bound on missing assertions, not a set of them.",
     "",
-    "The `line` on each entry below points at current code, not at where the survivor",
-    "sat when it was triaged. scripts/check_mutation_survivors.py resolves every entry by",
-    "its `source` text on every pull request and fails when the hint has drifted (morph#608,",
-    "which found 5 of 7 already wrong and one off by 479 lines). When it fails, re-read the",
-    "code at the line it prints, confirm the reason still holds, and update `line`. Deleting",
-    "an entry, or editing its `source` to match some other line, is a triage nobody did.",
-    "Note what that gate does NOT cover: the citations written as prose in this file (the",
-    "`representative_sites` lists, `site` fields, and the narrative in `runs`) carry no",
-    "verbatim source text, so nothing audits them and several are known stale (morph#613).",
+    "TWO KINDS OF `line` LIVE IN THIS FILE, AND THEY MEAN OPPOSITE THINGS (morph#613).",
+    "Which one you are reading is decided by the section, so the split is written down here",
+    "rather than left to be inferred:",
+    "",
+    "  LIVE -- everything under `classes`. These describe a classification asserted to hold",
+    "  NOW, so every citation in them points at CURRENT code and is carried as a structured",
+    "  {file, line, source, reason} entry: `classes.equivalent.entries`, the two",
+    "  `representative_sites` lists, and `classes.unasserted.shapes_worth_naming[1].sites`.",
+    "  scripts/check_mutation_survivors.py resolves each of them by its `source` text on",
+    "  every pull request and fails when the hint has drifted (morph#608, which found 5 of 7",
+    "  already wrong and one off by 479 lines). When it fails, re-read the code at the line",
+    "  it prints, confirm the reason still holds, and update `line`. Deleting an entry, or",
+    "  editing its `source` to match some other line, is a triage nobody did. The gate finds",
+    "  these by walking the whole document for {file, line, source} dicts, so a new live",
+    "  citation is audited the moment it is written in that shape -- no script edit needed.",
+    "",
+    "  HISTORICAL -- `runs`, `false_positive_finding`, `mechanism_confirmed` and",
+    "  `classification_2026_09_09`. These are records of dated campaigns, and their line",
+    "  numbers point at the tree AS IT WAS WHEN THE CAMPAIGN RAN. They are not stale; they",
+    "  are not about HEAD at all. Each such section carries a `revision` (plus a",
+    "  `revision_provenance` saying how well it is established), so a citation resolves with",
+    "  `git show <revision>:<path>` and keeps resolving forever. Resolving one against HEAD",
+    "  is the reader error, and the gate deliberately does NOT audit them -- it prints how",
+    "  many it left alone on every run, so a green tick never reads as 'all citations",
+    "  checked'. Do not refresh a historical line number to match today's code: that would",
+    "  falsify the record of what was measured.",
     "",
     "Re-measure with: MULL_PREFIX=... bash scripts/mutation.sh core-forms"
   ],
@@ -109,8 +126,18 @@
       "meaning": "Removing a log call survives because nothing in morph_tests captures log output.",
       "reason": "This is not equivalence -- a log line that stops being emitted is an observable change, and morph::log has a sink this suite could install. It is a deliberate absence of assertions on a diagnostic channel, and it is recorded separately from the gaps below so that a future decision to assert on logs (or not to) is made about logs rather than buried in a total.",
       "representative_sites": [
-        "include/morph/core/remote.hpp:1031 -- logError on an undecodable envelope",
-        "include/morph/core/remote.hpp:1038 -- the one-line-per-request log every kind goes through"
+        {
+          "file": "include/morph/core/remote.hpp",
+          "line": 975,
+          "source": "::morph::log::logError(",
+          "reason": "logError on an undecodable envelope -- the decode-failure arm of dispatchMessage. Deleting the call is invisible to morph_tests because no test installs a morph::log sink, so the survivor is a missing assertion on a diagnostic channel, not an equivalent mutant."
+        },
+        {
+          "file": "include/morph/core/remote.hpp",
+          "line": 991,
+          "source": "::morph::log::logDebug(",
+          "reason": "The one-line-per-request log every kind funnels through, on the successfully-decoded arm. Same disposition as the logError site above: observable in a deployment, unobserved by this suite."
+        }
       ]
     },
     "side_channel_metrics": {
@@ -118,8 +145,18 @@
       "meaning": "Removing an emitMetric/beginSpan call survives.",
       "reason": "include/morph/core/observability.hpp has a test file of its own (tests/test_observability.cpp), so unlike logging this is a surface the suite already asserts on -- just not on these eight call sites. Closer to a gap than logging is, and separated from it for that reason.",
       "representative_sites": [
-        "include/morph/core/backend.hpp:613 -- emitMetric(Metric::registerCount, 1.0)",
-        "include/morph/core/backend.hpp:807 -- emitMetric(Metric::executeInFlight, ...)"
+        {
+          "file": "include/morph/core/backend.hpp",
+          "line": 1215,
+          "source": "::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);",
+          "reason": "The registerCount emission on LocalBackend::registerModel. Note for whoever refreshes this hint: the same statement appears character-for-character on the registerModelShared arm as well, so if this `line` ever drifts the gate will report the citation as ambiguous rather than printing a corrected line. That is the right outcome -- which of the two arms is meant is a question for a reader, not for a resolver -- and it is recorded here so the message is not a surprise."
+        },
+        {
+          "file": "include/morph/core/backend.hpp",
+          "line": 1379,
+          "source": "::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,",
+          "reason": "The executeInFlight emission on the increment side of an execute. Its decrement twin inside the posted task is the same text after stripping, so the ambiguity note on the registerCount entry above applies here too."
+        }
       ]
     },
     "unasserted": {
@@ -156,8 +193,34 @@
         {
           "shape": "a boundary comparison is only ever exercised away from its boundary",
           "count_approx": 30,
-          "detail": "cxx_gt_to_ge and its family survive on include/morph/core/wire.hpp:514 (the kMaxEnvelopeBytes cap), payload_schema.hpp:169 (kPayloadShapeMaxDepth), forms/instance_constraints.hpp:156 (kMaxDecimalPlaces), forms/forms.hpp:2356 and a dozen more. Each is a comparison tested only at values where moving it by one changes nothing. wire.hpp:514 is the one this run turned into a test -- see tests/test_wire_hardening.cpp, 'decode's size cap is exact at kMaxEnvelopeBytes', whose neighbour was already named 'at the size limit boundary' while asserting a 1 KiB envelope.",
-          "status": "Real, and three of them are now closed: payload_schema.hpp's kPayloadShapeMaxDepth comparison, instance_constraints.hpp:156's kMaxDecimalPlaces guard and forms.hpp:2356's offender-list separator are all off the survivor list as of runs[1]."
+          "detail": "cxx_gt_to_ge and its family survive on the four comparisons listed under `sites` below, and on a dozen more. Each is a comparison tested only at values where moving it by one changes nothing. The envelope-size cap is the one this run turned into a test -- see tests/test_wire_hardening.cpp, 'decode's size cap is exact at kMaxEnvelopeBytes', whose neighbour was already named 'at the size limit boundary' while asserting a 1 KiB envelope.",
+          "sites": [
+            {
+              "file": "include/morph/core/wire.hpp",
+              "line": 540,
+              "source": "if (json.size() > kMaxEnvelopeBytes) {",
+              "reason": "The wire-layer envelope size cap. Turned into an exact boundary assertion by tests/test_wire_hardening.cpp during this run, so it is listed here as the worked example of the shape rather than as an open gap."
+            },
+            {
+              "file": "include/morph/core/payload_schema.hpp",
+              "line": 171,
+              "source": "if (depth > kPayloadShapeMaxDepth) {",
+              "reason": "The payload-shape depth limit. Closed: off the survivor list as of runs[1], which pinned the comparison at its edge."
+            },
+            {
+              "file": "include/morph/forms/instance_constraints.hpp",
+              "line": 156,
+              "source": "if (places > math::kMaxDecimalPlaces) {",
+              "reason": "The decimal-places guard. Closed: off the survivor list as of runs[1]."
+            },
+            {
+              "file": "include/morph/forms/forms.hpp",
+              "line": 2535,
+              "source": "if (offenderCount > 0) {",
+              "reason": "The offender-list separator guard in requiredFieldsNamedBy -- the comparison that decides whether a comma is prepended. Closed: off the survivor list as of runs[1]."
+            }
+          ],
+          "status": "Real, and three of the four sites below are now closed: the payload-shape depth comparison, the decimal-places guard and the offender-list separator are all off the survivor list as of runs[1]."
         },
         {
           "shape": "a completion is never delivered and nothing waits on it",
@@ -170,6 +233,8 @@
   "runs": [
     {
       "date": "2026-09-03",
+      "revision": "92366f61",
+      "revision_provenance": "INFERRED, not recorded by the run itself. cb6222f6 is the commit that wrote this entry, and 92366f61 is its parent -- the newest tree the baseline could have been measured on. This run carries no line citations, so nothing resolves against the revision; it is here so the entry states which tree it describes rather than only when it was taken.",
       "scope": "include/morph/core, include/morph/forms",
       "driven_by": "morph_tests (1279 Catch2 cases, all passing)",
       "tool": "Mull 0.34.0, mull-runner-22 / mull-ir-frontend-22, LLVM 22.1.2",
@@ -192,6 +257,8 @@
     {
       "label": "lane/d-framework, after morph#431 and morph#432's tests",
       "date": "2026-09-03",
+      "revision": "d5c455f2",
+      "revision_provenance": "VERIFIED. d5c455f2 is the commit on lane/d-framework that wrote this entry, and both of the line citations in `movement_against_baseline` below resolve to the text they claim at that revision (checked with `git show`). The branch was merged, not squashed (merge commit 022336e0, morph#436), so the revision is reachable from master and the citations stay resolvable.",
       "scope": "include/morph/core, include/morph/forms",
       "driven_by": "morph_tests (1303 Catch2 cases, all passing)",
       "tool": "Mull 0.34.0, mull-runner-22 / mull-ir-frontend-22, LLVM 22.1.2",
@@ -248,6 +315,8 @@
     {
       "label": "first scheduled-gate run, cxx_remove_void_call excluded",
       "date": "2026-09-09",
+      "revision": "adfe8e5f317246f6063c4cf3e0a3cf3e23598eda",
+      "revision_provenance": "VERIFIED. The run id below is a GitHub Actions run, not a commit; `gh run view 34349442137 --json headSha` reports headSha adfe8e5f317246f6063c4cf3e0a3cf3e23598eda on branch master, and `git cat-file -t` confirms that object is a commit in this repository. This is the same revision classification_2026_09_09 classifies, which is why that section's citations resolve against it.",
       "scope": "core-forms",
       "driven_by": ".github/workflows/mutation.yml (workflow_dispatch, run 34349442137)",
       "tool": "Mull 0.34.0 / LLVM 22",
@@ -306,6 +375,8 @@
   "false_positive_finding": {
     "verdict": "A survivor in this report is not evidence that the site is unasserted.",
     "verification_status": "measured, 2026-09-03, on lane/d-framework in the same build tree and configuration the run above used",
+    "revision": "d5c455f2",
+    "revision_provenance": "VERIFIED for the header citations. d5c455f2 is the commit on lane/d-framework that wrote this section. At that revision every `site` below resolves to the code it names character-for-character -- the two reply() sites, the emitDeclaredBound() site and the attachIdentity() site -- checked with `git show`. Of the four `tests/` citations, two resolve to exactly the assertion quoted (a REQUIRE on the awaited registration, and the primary-key REQUIRE); the other two resolve to plausible but unquoted assertions and were NOT confirmed against the failure text recorded here.",
     "method": [
       "Four survivors were picked from the run above, from three different headers, and the",
       "mutation Mull reported was applied to the source by hand -- the call deleted, exactly",
@@ -375,6 +446,8 @@
   "mechanism_confirmed": {
     "verdict": "The linker-dedup hypothesis above is REFUTED. The real mechanism is a Mull codegen bug: cxx_remove_void_call's IR pass does not remove the call it claims to remove, for a member-function call site, in Mull 0.34.0.",
     "verification_status": "measured, 2026-09-04, in an isolated WSL Ubuntu 24.04 environment, Mull-19 0.34.0 / LLVM 19.1.7, clang 19.1.7 -- a different build (Windows) and toolchain from every prior measurement in this file, so the finding is not specific to one environment's linker. Mull 0.34.0 (checked 2026-09-04) is the project's latest release, so there is no newer version to retest the mechanism against.",
+    "revision": "567168b2",
+    "revision_provenance": "PARTIAL, and stated as such. 567168b2 is the commit that wrote this section; `git cat-file -t` confirms it. It does NOT pin the measurement, because the measurement was not made against this repository: the four programs under `method` below are standalone .cpp/.hpp files reproduced inline there, built outside the tree. This section carries no line citations into include/morph, so there is nothing here for a revision to resolve. The field is recorded anyway so every dated section in this file states a revision and a reader does not have to work out which ones a revision would help.",
     "method": [
       "The linker-dedup hypothesis predicts the bug disappears once a function has only one copy",
       "to be discarded -- i.e. a single translation unit, linked alone, with no duplicate object",
@@ -438,6 +511,8 @@
     ]
   },
   "classification_2026_09_09": {
+    "revision": "adfe8e5f317246f6063c4cf3e0a3cf3e23598eda",
+    "revision_provenance": "VERIFIED. This is runs[2]'s revision, already named in prose below as `adfe8e5f`; lifted into a field of its own so it is machine-readable and sits next to the citations it resolves. Every one of this section's line citations was re-resolved at it with `git show` and each names the code it claims -- the Feistel round function, the three hash-combine sites, the fingerprint accumulation, the three permute() lines, and the four `survivor_list_unreliable` samples.",
     "_comment": [
       "Classification of run[2]'s 199 survivors (morph#453 item A).",
       "Updated 2026-09-10. The headline finding is NOT a classification: sampling",

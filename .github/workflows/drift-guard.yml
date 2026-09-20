@@ -3,8 +3,13 @@ name: Drift guard
 # Gates for the "a list that stopped matching what it describes" class of bug.
 # Every job here is fast and dependency-free; none of them compiles anything.
 #
-# Sections below: the spec <-> code gates, the ladder rung-list gate, then the
-# scenario-coverage gate.
+# It also carries one gate for the neighbouring "a suppression that suppresses
+# nothing" class (the NOLINT-directive scan at the end of prose-lint, #627),
+# which is the same shape of defect one level down: a control that parses, looks
+# applied, and measures nothing.
+#
+# Sections below: the spec <-> code gates and the NOLINT-directive gate, the
+# ladder rung-list gate, then the scenario-coverage gate.
 #
 # Two independent gates for the "spec <-> code drift" class of bug (a
 # docs/spec/*.md file stating a mechanical fact -- an enum cardinality, a
@@ -156,6 +161,46 @@ jobs:
 
       - name: Check every test name selects itself as a Catch2 filter
         run: bash scripts/check_catch_test_names.sh
+
+      # ── NOLINT directives that cannot take effect (#627, folded here by #633) ──
+      # NOLINTNEXTLINE applies to the next *physical* line. When the reason is
+      # wrapped onto a second comment line, the directive annotates that
+      # comment, the findings it names are still reported, and clang-tidy says
+      # nothing about it -- the directive parses and the file looks annotated.
+      # Four such directives existed on master and six findings leaked past
+      # three of them (#627).
+      #
+      # That is the failure mode AGENTS.md names first -- a control that
+      # reports success while measuring nothing -- one level below the gate. It
+      # also matters for the clang-tidy campaign in #580, whose agreed remedy
+      # is partly "write an individually reasoned NOLINT": that campaign cannot
+      # proceed honestly on a tree where NOLINTs silently fail to apply, so
+      # this gate is its precondition.
+      #
+      # A fast, dependency-free text scan over ~700 source files that compiles
+      # nothing, so it rides this job for the same reason the CI-clang-pin and
+      # Catch2-name scans above do, rather than paying for a runner of its own.
+      # It landed as a workflow of its own only because this file was held by
+      # an open PR at the time (#614); that PR has landed and #633 folds it in.
+      #
+      # The scan leaves a deliberate residual: an anchoring `NOLINTNEXTLINE`
+      # whose own line carries no finding is accepted, because a directive may
+      # legitimately annotate a line the current check set says nothing about.
+      # The self-test below pins that, and it is the reason this gate is not a
+      # blanket "every directive must suppress something".
+      #
+      # Self-test first, as every other lint in this repository does: a gate
+      # that detects nothing reports the same green as a clean tree, and for
+      # this gate that would be the very defect it exists to catch, one level
+      # up. It drives the checker against tests/lint/nolint_directives/ -- the
+      # two effective shapes must be accepted, each inert shape rejected on its
+      # own and naming its own file, and a directory with no directives at all
+      # rejected rather than called clean.
+      - name: Self-test the NOLINT-directive checker
+        run: bash scripts/test_check_nolint_directives.sh
+
+      - name: Check every NOLINTNEXTLINE annotates a line of code
+        run: bash scripts/check_nolint_directives.sh
 
   # ── Ladder rung list <-> the CI filters that are supposed to track it ──
   # examples/rungs.txt is the ladder's single authoritative rung list, and
