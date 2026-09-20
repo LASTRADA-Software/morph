@@ -658,6 +658,17 @@ jobs:
         run: |
           LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage
 
+      # Deliberately left on the implicit `success()`, unlike the three test
+      # steps morph#618 moved to `!cancelled()` (ladder-tests' scenario corpus,
+      # ladder-sanitizers' Qt transport suites, linux-all-features' fuzz-replay
+      # verification). This is a decision, not an oversight, and it is written
+      # down so it is not "fixed" later: this step and the two below it consume
+      # the Test step's `.profraw` output rather than measuring a surface of
+      # their own. Forcing them to run after a failed or truncated test pass
+      # would produce a coverage *number* computed from partial profile data --
+      # and a number nobody should trust is worse than no number. The rule the
+      # three others follow is "a red leg reports everything it was able to
+      # measure"; here, nothing was.
       - name: Generate coverage report
         run: bash scripts/coverage.sh
 
@@ -1325,8 +1336,18 @@ jobs:
       # A missing binary is not tolerated. run_scenarios.py exits 2 when a
       # server is absent and that is the right answer; softening it into a skip
       # would rebuild the blindness this step exists to end.
+      # `!cancelled()` rather than the implicit `success()`: this step tests a
+      # different surface from the ctest step above it (the scenario corpus
+      # against real servers, versus the ladder unit tests), so a red ctest
+      # skipping it leaves that surface unmeasured with nothing in the log
+      # distinguishing "fine" from "never attempted" -- and the next push pays
+      # a full 26-74 minute cycle to discover it. Not `always()`, which also
+      # fires during teardown of a *cancelled* run and manufactures a leg that
+      # stopped within seconds of its siblings looking like a defect rather
+      # than a cancellation. The job's conclusion is unchanged either way: a
+      # red step keeps the job red (morph#618).
       - name: Run the scenario corpus against the built servers
-        if: steps.filter.outputs.run == 'true'
+        if: "!cancelled() && steps.filter.outputs.run == 'true'"
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
@@ -1599,8 +1620,13 @@ jobs:
       # that goes stale silently: a renamed TEST_CASE would otherwise leave
       # ctest reporting success having run nothing (morph#466 is the same trap
       # one level down).
+      # `!cancelled()`, for the reason morph#618 gives and which bites hardest
+      # here: this is the only leg in CI that runs the Qt transport suites
+      # under any sanitizer, so if the ladder step above goes red and this one
+      # is skipped, that surface is measured nowhere at all. Not `always()` --
+      # see ladder-tests' own note. The job still fails on a red step.
       - name: Test (the Qt transport suites, which no sanitizer leg ran)
-        if: steps.filter.outputs.run == 'true'
+        if: "!cancelled() && steps.filter.outputs.run == 'true'"
         env:
           QT_QPA_PLATFORM: offscreen
           # detect_leaks=0 for the reason the ladder step above gives: Qt's
@@ -1871,8 +1897,14 @@ jobs:
       # A guard that never fires is indistinguishable from one that works, so
       # assert the fuzz replay actually ran the committed crash reproducers
       # rather than silently matching nothing (the `.txt`-vs-`.bin` glob bug).
+      # `!cancelled()`, per morph#618: this checks something the ctest step
+      # above cannot report on -- whether the replay matched the committed
+      # reproducers at all, the `.txt`-vs-`.bin` glob bug -- so skipping it
+      # when some unrelated test fails hides a guard going vacuous behind an
+      # unrelated red. Not `always()`; see ladder-tests' note. Still red on
+      # failure.
       - name: Verify the fuzz replay covered the committed reproducers
-        if: matrix.fuzzers == 'ON'
+        if: "!cancelled() && matrix.fuzzers == 'ON'"
         run: |
           ctest --preset ${{ matrix.preset }} -R fuzz -V > fuzz-replay.log 2>&1
           status=0
