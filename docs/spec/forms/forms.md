@@ -1316,17 +1316,138 @@ could not pre-empt.
 
 Display formatting is the renderer's duty; the wire stays canonical:
 
-- **Numbers.** `morph::render::normalizeLocaleNumber(text, decimalSeparator,
-  groupSeparator)` (`include/morph/render/locale_format.hpp`) converts a
-  locale-formatted entry (`"1.050,25"`) to the canonical `.`-decimal text
-  `Quantity`'s exact digit routines already consume (`"1050.25"`); malformed
-  input yields `std::nullopt` rather than a best-effort guess.
-  `formatCanonicalNumber` is the display-direction inverse, with
-  display-only thousands grouping. The exact `Rational`/`Quantity` digit
-  arithmetic ([rational.md](../util/rational.md)) never sees a
-  locale-formatted string — the conversion happens at the control edge only.
+- **Numbers.** `morph::render::normalizeLocaleNumber(text, loc)`
+  (`include/morph/render/locale_format.hpp`) converts a locale-formatted entry
+  (`"1.050,25"`) to the canonical `.`-decimal text `Quantity`'s exact digit
+  routines already consume (`"1050.25"`); malformed input yields `std::nullopt`
+  rather than a best-effort guess. `formatCanonicalNumber(canonicalText, loc)`
+  is the display-direction inverse, with display-only thousands grouping. The
+  exact `Rational`/`Quantity` digit arithmetic
+  ([rational.md](../util/rational.md)) never sees a locale-formatted string
+  — the conversion happens at the control edge only.
 
-  Both separators are `std::string_view`, not `char`, because a real locale's
+  **The locale facts travel as one aggregate, not as a row of positional
+  views** (morph#591):
+
+  ```cpp
+  struct NumericLocale {
+      std::string_view decimalSeparator = ".";
+      std::string_view groupSeparator   = "";
+      std::string_view negativeSign     = "-";
+      std::string_view positiveSign     = "+";
+      std::string_view zeroDigit        = "0";
+  };
+  ```
+
+  Both edges take it, and a call site names each fact with a designated
+  initialiser: `normalizeLocaleNumber(text, {.decimalSeparator = ",",
+  .groupSeparator = "."})`. Three things this is for, and the first is not
+  tidiness. The five facts were five adjacent `std::string_view` parameters,
+  every one silently swappable with its neighbours, and the header carried a
+  clang-tidy suppression for `bugprone-easily-swappable-parameters` — on each
+  of the two functions and on the sign helper — with a paragraph of
+  justification each. A sixth would have made that argument weaker, not
+  stronger; the aggregate deleted all three suppressions instead, and the header
+  is clean under `bugprone-*` with no suppression of that check anywhere in it.
+  Second, the next locale fact (a percent sign, an exponent separator) is a new
+  defaulted member rather than a seventh parameter. Third, and the reason it is
+  worth the churn: **the two edges take the same type**, so "these two must
+  agree" is structural rather than a convention a caller can get half right —
+  which is the drift morph#591 and morph#599 both came from. There is
+  deliberately no back-compatible positional overload: two spellings of one call
+  is how the edges drifted apart to begin with. The QML mirror takes the
+  parallel shape, an object literal with the same member names, so the two
+  mirrors stay structurally identical.
+
+  Every member is defaulted to its `"C"`-locale spelling, so a caller that names
+  none of them gets the identity transform in both directions.
+
+  **The digits are locale data too, carried as a base** (morph#591). A Unicode
+  decimal digit set *is* ten contiguous code points — UAX #44 assigns `Nd`
+  with `Numeric_Value` 0 through 9 in code point order — so a single
+  `zeroDigit` is sufficient and a ten-element table is not needed. Measured with
+  `QLocale::matchingLocales` under Qt 6.11.2, over the same 711 locales:
+
+  | `zeroDigit` | locales | e.g. |
+  | --- | ---: | --- |
+  | U+0030 | 604 | `C` |
+  | U+0660 | 26 | `ar_BH` |
+  | U+06F0 | 19 | `fa_IR` |
+  | U+1E950 | 12 | `ff_Adlm_BF` |
+  | U+0966 | 8 | `bgc_IN` |
+  | U+09E6 | 4 | `as_IN` |
+  | U+11136 | 2 | `ccp_BD` |
+  | U+07C0 | 1 | `nqo_GN` |
+  | U+0F20 | 1 | `dz_BT` |
+  | U+1040 | 1 | `my_MM` |
+  | U+1C50 | 1 | `sat_IN` |
+  | U+ABF0 | 1 | `mni_IN` |
+
+  76 of 711, across eleven distinct sets. Two of them (Chakma U+11136, Adlam
+  U+1E950) are outside the BMP, so one digit is four UTF-8 bytes on the C++
+  edge and two UTF-16 units on the QML edge — both scans therefore decode a
+  code *point* rather than comparing a unit. The figure the issue could defend
+  before this was 24, and it said so plainly: 24 was a count of locales whose
+  *negative sign* is `U+061C U+002D`, not a digit-set count. 76 is the measured
+  one.
+
+  Before this, `normalizeLocaleNumber` compared one byte against `['0','9']`,
+  so a user of any of those 76 locales could not enter a number at all — a flat
+  rejection, not a wrong value.
+
+  **Both edges move or neither does, and the round trip is what says so.**
+  `formatCanonicalNumber` used to copy the canonical ASCII digits out unchanged.
+  That is *why* the pair was self-consistent and the defect invisible from
+  either side alone: display emitted the locale's separators and sign around
+  ASCII digits, and entry accepted exactly that. Teaching entry to accept
+  U+0665 while display kept emitting `'5'` satisfies a naive reading of the bug
+  report and breaks the round trip this section requires. So the display edge
+  emits the digit that far above `zeroDigit`, and the property is stated in
+  those terms:
+
+  > for every canonical `-?[0-9]+(\.[0-9]+)?` text and every `NumericLocale`,
+  > `normalizeLocaleNumber(formatCanonicalNumber(canonical, loc), loc) ==
+  > canonical`, byte for byte, with every digit of the display text drawn from
+  > `[loc.zeroDigit, loc.zeroDigit + 9]`.
+
+  The second half of that sentence is load-bearing. The round trip *alone* does
+  not fail if only the entry edge moved, because entry accepts ASCII digits too
+  — so the test that pins this asserts the display text contains no ASCII
+  digit as well as asserting the round trip, and it is that assertion which
+  fails for the half-fix. Pinned over all eleven digit sets on both edges:
+  `[morph591]` in `tests/test_render_locale_format.cpp`, and the
+  `test_thePairRoundTripsThroughEveryMeasuredDigitSet` function in
+  `src/qt/forms/tests/tst_i18n.qml`.
+
+  **Entry accepts the locale's digits *and* ASCII ones; display emits only the
+  locale's.** That asymmetry is the rule morph#596 already set for signs,
+  applied to digits: an ASCII `'+'` is accepted in every locale because the
+  locale's own spelling is on no keyboard, and an ASCII `'5'` is accepted in an
+  `ar_EG` locale for the same reason — a user with an ASCII keyboard has to be
+  able to type a number. It costs nothing, because the canonical output spells
+  every digit in ASCII whatever the input spelled it, so no two accepted
+  spellings can produce different *values*.
+
+  **An entry may not mix the two digit families.** `"\u06655"` — one
+  Arabic-Indic digit and one ASCII digit — is malformed, not `"55"`. This is a
+  decision rather than a consequence, so it is written here and pinned by a test
+  on both edges: neither a keyboard nor a display edge produces an
+  interleaving, and rejecting it matches the existing strictness about a sign
+  anywhere but the leading position. When `zeroDigit` is the ASCII `"0"` the two
+  families are the same set, so nothing can mix and the rule is invisible —
+  which is why it costs no existing caller anything.
+
+  **An empty or undecodable `zeroDigit` reads as ASCII `"0"`**, the reading an
+  empty `negativeSign` gets and for the same reason: there is no locale without
+  digits, so empty cannot mean absence, and a base of "nothing" would reject
+  every entry the locale can produce. Because `zeroDigit` defaults to `"0"`,
+  every caller that does not name it is byte-identical to the
+  five-positional-parameter version — asserted rather than assumed: a 1680-case
+  sweep (14 locale configurations × 60 entries × both edges) run against the
+  pre-morph#591 header and against this one produced identical output.
+
+  All the locale facts are `std::string_view`, not `char`, because a real
+  locale's
   separator is not always one byte: fr-FR groups with U+202F (narrow no-break
   space, 3 bytes in UTF-8) and several locales use U+00A0 (2 bytes). Typed as
   `char`, neither could be expressed at all — a caller could only pass some
@@ -1335,9 +1456,9 @@ Display formatting is the renderer's duty; the wire stays canonical:
   malformed. An empty view means "this locale has no such separator".
 
   **So is the negative sign** (morph#583). The same argument applies to the
-  sign, and was missing here: both functions take a fourth
-  `std::string_view negativeSign = "-"`, matched and emitted as a whole string
-  the way the separators are. Of the 711 locales `QLocale::matchingLocales`
+  sign, and was missing here: both edges read `NumericLocale::negativeSign`,
+  matched and emitted as a whole string the way the separators are. Of the 711
+  locales `QLocale::matchingLocales`
   reports under Qt 6.11.2, 77 spell it as something other than a bare ASCII
   `'-'`:
 
@@ -1378,11 +1499,11 @@ Display formatting is the renderer's duty; the wire stays canonical:
   `qtLocale: Qt.locale(displayLocale)` and forwards
   `qtLocale.decimalPoint`/`qtLocale.groupSeparator`, and now forwards
   `qtLocale.negativeSign` from the same object at all three call sites. The
-  parameter is defaulted, so a caller that passes three arguments is unchanged.
+  member is defaulted, so a caller that names only the separators is unchanged.
 
   **A leading positive sign is accepted on entry and never emitted on
-  display** (morph#596). `normalizeLocaleNumber` takes a fifth
-  `std::string_view positiveSign = "+"`, matched exactly as `negativeSign` is —
+  display** (morph#596). `normalizeLocaleNumber` reads
+  `NumericLocale::positiveSign`, matched exactly as `negativeSign` is —
   the locale's own spelling as a whole string, plus a bare ASCII `'+'` in every
   locale — and **drops** what it matches: `"+5"` normalises to `"5"`, not to
   `"+5"`. Measured over `QLocale::positiveSign` for the same 711 locales under
@@ -1404,8 +1525,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
   included.
 
   **The two functions are deliberately not inverse across a positive sign.**
-  `formatCanonicalNumber` takes no `positiveSign` parameter and never emits a
-  positive sign, in any locale. This breaks the strict inverse relationship the
+  `formatCanonicalNumber` ignores `NumericLocale::positiveSign` entirely and
+  never emits a positive sign, in any locale. This breaks the strict inverse relationship the
   pair otherwise holds, on purpose, and it is written down here rather than left
   for the next reader to infer from a missing parameter. The reason is the
   asymmetry in what each direction can get wrong. Canonical text is
@@ -1453,7 +1574,9 @@ Display formatting is the renderer's duty; the wire stays canonical:
   it the same way, and its `formatCanonicalNumber` takes none, for the reason
   above; the renderer forwards `qtLocale.positiveSign` at the two entry call
   sites that already forward `qtLocale.negativeSign`, and nothing changes at the
-  display call site.
+  display call site. All three call sites now also forward
+  `qtLocale.zeroDigit`, the display one included — that is what "both edges, or
+  neither" costs for morph#591.
 
   **The two separators are matched the same way, for consistency rather than
   for a locale** (morph#599). Both sign conversions above left the mirror's
