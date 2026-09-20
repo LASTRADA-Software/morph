@@ -62,7 +62,7 @@
     },
     {
       "file": "include/morph/util/rational.hpp",
-      "line": 1542,
+      "line": 1498,
       "source": "if (ctx.begin() == ctx.end() || *ctx.begin() == '}') {",
       "reason": "The ctx.begin() == ctx.end() true arm is unreachable. This is the textbook cppreference-style custom-formatter parse() idiom. Empirically verified on this toolchain (libc++, via a standalone probe compiled with clang++ -std=c++23 -stdlib=libc++): for both std::format(\"{}\", x) and std::format(\"{:}\", x), ctx.end() always points past the terminating '}', so ctx.begin() == ctx.end() is false and the terminator is always reachable via *ctx.begin() == '}' -- matching the observed 0/14 split exactly. std::format's top-level parser (and std::vformat's, which performs the same replacement-field validation before dispatching to a type's parse()) rejects an unterminated '{...' before ever calling into formatter<Rational>::parse, so this function is never invoked with an already-exhausted range. The first disjunct is defensive boilerplate that this standard library's implementation (and the standard's own guarantee about validated replacement fields) makes structurally unreachable."
     },
@@ -80,7 +80,7 @@
     },
     {
       "file": "include/morph/core/backend.hpp",
-      "line": 1230,
+      "line": 1324,
       "source": "if (const auto* inst = _instances.find(modelId)) {",
       "reason": "Unreachable by construction given the `_changeAware`/`_instances` invariant (core audit finding BK2). `_changeAware` is an index over the instance directory: an id enters it in `createHolder` (this file, when the holder answers `isBackendChangeAware()`) in the same `_regMtx`-held critical section that files the instance, and leaves it in `deregisterModel` only when `InstanceDirectory::release` reports the instance actually destroyed. `notifyBackendChanged()` (this function) holds the same `_regMtx` while walking `_changeAware` and looking each id up at this line, so every id it walks is still live -- the null arm cannot occur without a code change that breaks that subset invariant. Formerly keyed on `_models`, the map morph#523 replaced with the directory; the invariant and its reason are unchanged."
     },
@@ -98,7 +98,7 @@
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1498,
+      "line": 1542,
       "source": "if (_executeDeadline.count() > 0 && _timeoutScheduler) {",
       "reason": "Unreachable by construction (core audit finding B6). `setExecuteDeadline` (this file) is the only writer of both `_executeDeadline` and `_timeoutScheduler`, and always creates `_timeoutScheduler` in the same call that sets `_executeDeadline` positive (`_executeDeadline = deadline; if (_executeDeadline.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_shared<...>(); }`, both under `_executeDeadlineMtx`); nothing anywhere resets `_timeoutScheduler` back to null -- the class's own doc comment on `setExecuteDeadline` says so explicitly (\"setting the deadline back to 0 stops new calls from arming it but does not tear the thread down\"). So `_executeDeadline > 0 && !_timeoutScheduler` cannot happen at this line once any positive deadline has ever been set."
     },
