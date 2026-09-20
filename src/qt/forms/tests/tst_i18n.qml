@@ -280,8 +280,8 @@ Item {
         function test_qtExposesAPositiveSignOnTheLocaleObject() {
             compare(Qt.locale("C").positiveSign, "+")
             compare(Qt.locale("de").positiveSign, "+")
-            compare(Qt.locale("ar_EG").positiveSign, "؜+")
-            compare(Qt.locale("az_IR").positiveSign, "‎+‎")
+            compare(Qt.locale("ar_EG").positiveSign, "\u061C+")
+            compare(Qt.locale("az_IR").positiveSign, "\u200E+\u200E")
         }
 
         // The defect: a leading "+" fell through to the "any other character is
@@ -305,22 +305,22 @@ Item {
         // what the product accepts.
         function test_positiveSignIsMatchedAsAWholeString() {
             compare(localeForm.normalizeLocaleNumber("+5", ".", ""), "5")
-            compare(localeForm.normalizeLocaleNumber("؜+5", ".", "", "-", "؜+"), "5")      // ar_EG
-            compare(localeForm.normalizeLocaleNumber("‎+5", ".", "", "-", "‎+"), "5")      // ar_DZ
-            compare(localeForm.normalizeLocaleNumber("‎+‎5", ".", "", "-", "‎+‎"), "5")  // az_IR
-            compare(localeForm.normalizeLocaleNumber("‏+5", ".", "", "-", "‏+"), "5")      // ckb_IQ
+            compare(localeForm.normalizeLocaleNumber("\u061C+5", ".", "", "-", "\u061C+"), "5")      // ar_EG
+            compare(localeForm.normalizeLocaleNumber("\u200E+5", ".", "", "-", "\u200E+"), "5")      // ar_DZ
+            compare(localeForm.normalizeLocaleNumber("\u200E+\u200E5", ".", "", "-", "\u200E+\u200E"), "5")  // az_IR
+            compare(localeForm.normalizeLocaleNumber("\u200F+5", ".", "", "-", "\u200F+"), "5")      // ckb_IQ
 
             // Controls: with positiveSign left at its ASCII default, the
             // bidi-prefixed spellings are still rejected -- which is what makes
             // the parameter, and not the unconditional ASCII acceptance, the
             // thing under test above.
-            compare(localeForm.normalizeLocaleNumber("؜+5", ".", ""), null)
-            compare(localeForm.normalizeLocaleNumber("‎+‎5", ".", ""), null)
+            compare(localeForm.normalizeLocaleNumber("\u061C+5", ".", ""), null)
+            compare(localeForm.normalizeLocaleNumber("\u200E+\u200E5", ".", ""), null)
 
             // The ASCII "+" stays accepted in a bidi-sign locale, for the same
             // reason the ASCII "-" does (morph#583): the locale's own spelling
             // is on no keyboard.
-            compare(localeForm.normalizeLocaleNumber("+5", ".", "", "-", "؜+"), "5")
+            compare(localeForm.normalizeLocaleNumber("+5", ".", "", "-", "\u061C+"), "5")
             // An empty positiveSign leaves the ASCII spelling, and must not
             // match at every index.
             compare(localeForm.normalizeLocaleNumber("+5", ".", "", "-", ""), "5")
