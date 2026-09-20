@@ -646,10 +646,14 @@ struct IBackend {
     ///
     /// Answers the one question `Completion` cannot: an unsettled `Completion`
     /// looks the same whether the reply is coming from a thread the caller does
-    /// not own or from the caller's own event loop. Only a synchronous entry
-    /// point that must hand back a *bound* instance asks it —
-    /// `Bridge::registerHandlerImpl` is the single caller in the framework; the
-    /// asynchronous entry points never wait and never consult it.
+    /// not own or from the caller's own event loop. Only a frame that would
+    /// otherwise stop and wait asks it — `Bridge::registerHandlerImpl` (a
+    /// synchronous entry point that must hand back a *bound* instance),
+    /// `Bridge::switchBackend`'s staging phase, and
+    /// `Bridge::installReconnectHandler`'s handler, which is the one that runs
+    /// on the backend's own transport thread and so is the one a wrong answer
+    /// deadlocks outright (morph#615). The asynchronous entry points never wait
+    /// and never consult it.
     ///
     /// A backend that returns `kCallerMayBlock` (the default) commits to
     /// settling every `Completion` it returns exactly once without any further

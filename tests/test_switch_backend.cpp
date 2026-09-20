@@ -3,6 +3,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <condition_variable>
 #include <memory>
 #include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
@@ -10,6 +11,7 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
+#include <mutex>
 #include <thread>
 
 #include "test_support.hpp"
@@ -838,4 +840,277 @@ TEST_CASE(
     REQUIRE(counterA->load() == 1);
 
     (void)midB;
+}
+
+// ── The two re-registration sites and `bindWaitPolicy` (morph#615) ───────────
+//
+// `switchBackend`'s phase 1 and the reconnect handler both called the blocking
+// `registerModelShared`/`registerModelWithContext` directly, with no policy
+// check at all -- so a backend that answers `kCallerMustNotBlock`, which by
+// definition delivers its reply through the calling thread's own event loop,
+// was blocked at both of them anyway (on a WASM main thread: a page abort).
+// Both now go through `bindModel` and ask, exactly as `registerHandlerImpl`
+// does.
+//
+// The double below is what that costs to test honestly: its `bindModel` never
+// blocks and never settles on its own, while its legacy verbs park the calling
+// thread until the test releases them. So a site that went back to a blocking
+// verb does not merely fail an assertion -- it fails to return, which is the
+// real symptom. Each case therefore runs the site on its own thread, records
+// whether it came back within the polling budget, releases the latch so the
+// thread is joinable either way, and only then asserts. A regression fails the
+// case; it does not wedge the suite.
+
+namespace {
+
+/// @brief A backend with a genuinely non-blocking bind and blocking legacy
+///        verbs -- `QtWebSocketBackend` under `asyncRegistrationEnabled`, as
+///        far as `Bridge` can tell.
+class DeferredBindBackend : public morph::backend::LocalBackend {
+public:
+    explicit DeferredBindBackend(morph::exec::IExecutor& pool MORPH_LIFETIMEBOUND) : LocalBackend{pool} {}
+
+    /// @brief Keeps the request and its promise; settles neither.
+    morph::async::Completion<morph::exec::detail::ModelId> bindModel(morph::backend::detail::BindRequest request,
+                                                                     morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = morph::async::Completion<morph::exec::detail::ModelId>::makeSettleable(&cbExec);
+        std::scoped_lock const lock{_mtx};
+        _pending.emplace_back(std::make_shared<Promise>(std::move(promise)), std::move(request));
+        return std::move(completion);
+    }
+
+    [[nodiscard]] morph::backend::detail::BindWait bindWaitPolicy() const noexcept override {
+        return morph::backend::detail::BindWait::kCallerMustNotBlock;
+    }
+
+    // The trap. Nothing in `Bridge` should reach either of these any more; a
+    // site that does parks here until `letGo()`.
+    morph::exec::detail::ModelId registerModelWithContext(
+        const std::string& typeId, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+        std::string_view contextKey) override {
+        hold();
+        return LocalBackend::registerModelWithContext(typeId, std::move(factory), contextKey);
+    }
+    morph::exec::detail::ModelId registerModelShared(
+        const std::string& typeId, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+        morph::backend::detail::InstanceIdentity identity) override {
+        hold();
+        return LocalBackend::registerModelShared(typeId, std::move(factory), identity);
+    }
+
+    void setReconnectHandler(const std::function<void()>& handler) override { _handler = handler; }
+    void fireReconnect() const {
+        if (_handler) {
+            _handler();
+        }
+    }
+
+    /// @brief Number of binds waiting for a reply.
+    [[nodiscard]] std::size_t pendingCount() const {
+        std::scoped_lock const lock{_mtx};
+        return _pending.size();
+    }
+
+    /// @brief Answers every waiting bind for real, through the blocking
+    ///        dispatch its own legacy verbs would have run.
+    void settlePending() {
+        std::vector<std::pair<std::shared_ptr<Promise>, morph::backend::detail::BindRequest>> taken;
+        {
+            std::scoped_lock const lock{_mtx};
+            taken.swap(_pending);
+        }
+        for (auto& [promise, request] : taken) {
+            try {
+                promise->resolve(LocalBackend::bindModelBlocking(std::move(request)));
+            } catch (...) {
+                promise->reject(std::current_exception());
+            }
+        }
+    }
+
+    /// @brief Releases anything parked in a legacy verb.
+    void letGo() {
+        {
+            std::scoped_lock const lock{_gateMtx};
+            _released = true;
+        }
+        _gate.notify_all();
+    }
+
+private:
+    using Promise = morph::async::Completion<morph::exec::detail::ModelId>::Promise;
+
+    // Bounded only so a regression cannot wedge the suite for ever, and
+    // bounded far above `kDefaultWaitBudget` on purpose: each case measures
+    // "did the site come back within the polling budget", so a parked legacy
+    // verb must still be parked when that budget runs out. A bound near the
+    // budget would make the measurement a coin flip -- observed, while
+    // mutation-testing morph#615: with both set to two seconds the mutated
+    // (blocking) build passed.
+    void hold() {
+        std::unique_lock lock{_gateMtx};
+        (void)_gate.wait_for(lock, std::chrono::seconds{60}, [this] { return _released; });
+    }
+
+    mutable std::mutex _mtx;
+    std::vector<std::pair<std::shared_ptr<Promise>, morph::backend::detail::BindRequest>> _pending;
+    std::mutex _gateMtx;
+    std::condition_variable _gate;
+    bool _released = false;
+    std::function<void()> _handler;
+};
+
+/// @brief A backend whose second bind is **rejected**, never thrown.
+///
+/// `switchBackend`'s rollback used to key on a `catch (...)` around the
+/// blocking verbs. The structural surface reports failure through the
+/// `Completion` instead, which a `catch` cannot see -- so this double fails
+/// the way that surface actually fails, with no exception ever crossing the
+/// call.
+class RejectSecondBindBackend : public morph::backend::LocalBackend {
+public:
+    explicit RejectSecondBindBackend(morph::exec::IExecutor& pool MORPH_LIFETIMEBOUND) : LocalBackend{pool} {}
+
+    morph::async::Completion<morph::exec::detail::ModelId> bindModel(morph::backend::detail::BindRequest request,
+                                                                     morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = morph::async::Completion<morph::exec::detail::ModelId>::makeSettleable(&cbExec);
+        if (++_calls >= 2) {
+            promise.reject(std::make_exception_ptr(std::runtime_error{"bind refused"}));
+        } else {
+            try {
+                promise.resolve(LocalBackend::bindModelBlocking(std::move(request)));
+            } catch (...) {
+                promise.reject(std::current_exception());
+            }
+        }
+        return std::move(completion);
+    }
+
+    void deregisterModel(morph::exec::detail::ModelId mid) override {
+        ++(*_deregisters);
+        LocalBackend::deregisterModel(mid);
+    }
+
+    /// @brief Survives the backend, which `switchBackend` destroys as it unwinds.
+    [[nodiscard]] std::shared_ptr<const int> deregisterCounter() const { return _deregisters; }
+
+private:
+    int _calls = 0;
+    std::shared_ptr<int> _deregisters{std::make_shared<int>(0)};
+};
+
+}  // namespace
+
+TEST_CASE("morph::bridge::Bridge::switchBackend does not block on a kCallerMustNotBlock backend",
+          "[bridge][switch][registration-surface]") {
+    morph::exec::ThreadPoolExecutor poolA{2};
+    morph::exec::ThreadPoolExecutor poolB{2};
+    morph::exec::MainThreadExecutor waiterExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolA)};
+
+    auto binding = bridge.registerHandler<CountModel>();
+    REQUIRE(morph::bridge::Bridge::isBound(binding));
+
+    auto async = std::make_shared<DeferredBindBackend>(poolB);
+    std::atomic<bool> returned{false};
+    std::thread switcher{[&] {
+        bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(async));
+        returned.store(true);
+    }};
+    // The measurement: did the switch come back while its bind is still
+    // unanswered? On the blocking verbs it cannot -- nothing releases them
+    // until the line below, which runs either way so the thread is joinable.
+    bool const returnedPromptly = morph::testing::waitUntil([&] { return returned.load(); });
+    async->letGo();
+    switcher.join();
+    REQUIRE(returnedPromptly);
+
+    // The swap happened, and the binding is unbound rather than holding the id
+    // it had on the backend that is no longer there.
+    REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));
+    REQUIRE(async->pendingCount() == 1);
+
+    // ...and `whenBound()` says "in flight" rather than "nothing to wait for",
+    // which is what makes the unbound window usable by a caller.
+    bool bound = false;
+    bool settled = false;
+    bridge.whenBound(binding, &waiterExec)
+        .then([&](bool ok) {
+            bound = ok;
+            settled = true;
+        })
+        .onError([&](const std::exception_ptr&) { settled = true; });
+    waiterExec.runOnce();
+    REQUIRE_FALSE(settled);
+
+    async->settlePending();
+    REQUIRE(morph::bridge::Bridge::isBound(binding));
+    waiterExec.runOnce();
+    REQUIRE(settled);
+    REQUIRE(bound);
+}
+
+TEST_CASE("Bridge: the reconnect handler does not block on a kCallerMustNotBlock backend",
+          "[bridge][switch][reconnect][registration-surface]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto owned = std::make_unique<DeferredBindBackend>(pool);
+    auto* backend = owned.get();
+    morph::bridge::Bridge bridge{std::move(owned)};
+
+    auto binding = bridge.registerHandler<CountModel>();
+    REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));  // registerHandler already honours the policy
+    backend->settlePending();
+    REQUIRE(morph::bridge::Bridge::isBound(binding));
+
+    // Fired from a thread standing in for the transport thread the real
+    // handler runs on -- the one a `QtWebSocketBackend` needs back in its event
+    // loop before the reply it is waiting for can possibly arrive.
+    std::atomic<bool> returned{false};
+    std::thread transport{[&] {
+        backend->fireReconnect();
+        returned.store(true);
+    }};
+    bool const returnedPromptly = morph::testing::waitUntil([&] { return returned.load(); });
+    backend->letGo();
+    transport.join();
+    REQUIRE(returnedPromptly);
+
+    // The id it held belonged to the connection that just dropped, so it is
+    // cleared rather than left to be dispatched against.
+    REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));
+    REQUIRE(backend->pendingCount() == 1);
+
+    backend->settlePending();
+    REQUIRE(morph::bridge::Bridge::isBound(binding));
+}
+
+TEST_CASE("morph::bridge::Bridge::switchBackend rolls back on a rejected bind, not only on a thrown one",
+          "[bridge][switch][rollback][registration-surface]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::ThreadPoolExecutor pool2{2};
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CountModel> handler1{bridge, &cbExec};
+    morph::bridge::BridgeHandler<CountModel> const handler2{bridge, &cbExec};
+
+    auto const idBefore1 = handler1.binding()->currentId.load();
+    auto const idBefore2 = handler2.binding()->currentId.load();
+
+    auto rejecting = std::make_unique<RejectSecondBindBackend>(pool2);
+    auto deregisters = rejecting->deregisterCounter();  // outlives the backend
+
+    REQUIRE_THROWS_AS(bridge.switchBackend(std::move(rejecting)), std::runtime_error);
+
+    // The staged first bind was rolled back, and nothing was published: the
+    // rollback keyed on a `Completion` that rejected without ever throwing,
+    // which the old `catch (...)` around the blocking verbs could not see.
+    REQUIRE(*deregisters == 1);
+    REQUIRE(handler1.binding()->currentId.load() == idBefore1);
+    REQUIRE(handler2.binding()->currentId.load() == idBefore2);
+
+    // The old backend is still the active one.
+    std::atomic<int> res{-1};
+    handler1.execute(CountAction{5}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
+    REQUIRE(morph::testing::waitUntil([&] { return res.load() != -1; }));
+    REQUIRE(res.load() == 5);
 }
