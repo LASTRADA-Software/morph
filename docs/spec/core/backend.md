@@ -460,6 +460,28 @@ natively](#the-structural-registration-surface-natively).
 - **The executor is required.** An adapter that ran the call inline when handed
   nothing would be a `bindModel` that blocks on some configurations and not
   others — contract by configuration, which is what is being removed.
+- **It cancels its own pending completions rather than only the wrapped
+  backend's** (morph#619). `bindModel`/`promoteModel` settle from a task on
+  `_control`, holding a promise the wrapped backend never sees, so the
+  one-line `_inner->cancelPending(exc)` this verb used to be reached none of
+  them: a bind cancelled by `~Bridge` or by `switchBackend` went on to resolve
+  **successfully** afterwards, against `IBackend::cancelPending`'s "after this
+  call, any later `setValue`/`setException` on those states is a no-op". The
+  adapter therefore keeps a `weak_ptr` to each dispatched promise and rejects
+  the live ones first, on the same snapshot-then-deliver shape and the same
+  amortised compaction as
+  [`LocalBackend`'s pending list](#the-pending-list-and-its-amortised-compaction);
+  an entry expires by itself when its strand task is destroyed, so the success
+  path erases nothing.
+
+  Two limits are deliberate rather than overlooked. A task that settles first
+  wins, because its completion was not still pending — the same race
+  `LocalBackend::cancelPending` has always had. And a task already **queued**
+  on `_control` still runs its blocking control call against the wrapped
+  backend after `cancelPending` returns: the caller is told the bind was
+  cancelled while the registration may still go through. Stopping that is a
+  different change — it needs the task to check before calling `op()`, not the
+  promise to be settled after it — and is tracked as morph#636.
 - **Control calls are serialised** onto one strand, so the wrapped backend sees
   them one at a time, as it did when the blocking call itself serialised
   callers. `~SynchronousBackendAdapter` waits for any in-flight control call, so
@@ -2240,6 +2262,7 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `bindModel(request, cbExec)` | Posts `inner->bindModelBlocking(request)` onto the control strand; settles the returned `Completion` on `cbExec`. Never blocks the caller. |
 | `bindWaitPolicy()` | `BindWait::kCallerMustNotBlock`, always. Not forwarded: it describes the two verbs the adapter reshapes. |
 | `promoteModel(request, cbExec)` | Posts `inner->assignPrimary(...)` onto the control strand; resolves with `request.mid`. |
+| `cancelPending(exc)` | Rejects the adapter's own still-unsettled `bindModel`/`promoteModel` promises with `exc`, **then** forwards to `inner`. Not a plain forward: those promises are settled from `_control` tasks the wrapped backend has never heard of (morph#619). |
 | every other `IBackend` verb | Forwarded to `inner` unchanged, including the four `*Async` twins — wrapping a backend that has a non-blocking path must not take it away. |
 
 ### Error types
