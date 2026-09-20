@@ -111,6 +111,16 @@ struct LabelFrame {
 
 /// @brief Stateful renderer for one `equation()` call.
 struct EquationRenderer {
+    /// @brief Builds a renderer with a step limit.
+    /// @param steps How many derivation steps may be written out in total.
+    explicit EquationRenderer(std::size_t steps) : maxSteps(steps), stepBudget(steps) {}
+
+    /// @brief The limit this render was asked for (quoted in the legend).
+    std::size_t maxSteps;
+
+    /// @brief How many steps `assignLabels` may still spend expanding.
+    std::size_t stepBudget;
+
     /// @brief Placeholder number per reused, unnamed node (1-based).
     std::unordered_map<const ASTNode*, std::size_t> labelIndex;
 
@@ -122,6 +132,17 @@ struct EquationRenderer {
 
     /// @brief Reused-node placeholders, in first-appearance order.
     std::vector<const ASTNode*> placeholderOrder;
+
+    /// @brief Nodes `assignLabels` has already settled (label, elision, or
+    ///        neither). A node's second visit can only repeat the first one's
+    ///        verdict, so it is skipped.
+    std::unordered_set<const ASTNode*> settled;
+
+    /// @brief Elision number per node the step limit cut (1-based).
+    std::unordered_map<const ASTNode*, std::size_t> elisionIndex;
+
+    /// @brief Elided nodes, in first-appearance order.
+    std::vector<const ASTNode*> elisionOrder;
 
     /// @brief Whether a node earns a placeholder (reused). Only ever called on
     ///        unnamed nodes recorded by `countRefs` (callers return early on
@@ -165,12 +186,27 @@ struct EquationRenderer {
         }
     }
 
-    /// @brief Assigns placeholder labels in first-appearance order.
+    /// @brief Assigns placeholder labels, and decides where the step limit cuts.
     ///
     /// Iterative for the same reason as `countRefs`. First appearance is a
     /// left-before-right pre-order, so the right child is pushed first and the
     /// left one popped first — the order a recursive walk would have visited
     /// them in.
+    ///
+    /// This pass is also where `maxSteps` is spent, and it is spent **once**
+    /// for the whole `equation()` call rather than per rendering. The two
+    /// renderings and every legend line then consult the one `elisionIndex`
+    /// they all share, so the formula, the substitution and the legend agree
+    /// on which sub-derivations were written out — which a per-rendering
+    /// budget could not guarantee, since the legend renders subtrees the
+    /// formula stops short of.
+    ///
+    /// A step is one **operation node expanded**: atoms (leaves, conversions)
+    /// and named nodes render as a single token and cost nothing. Past the
+    /// budget a node is *elided* — it takes an `eK` label and its children are
+    /// not walked — and elision wins over a `cK` placeholder, because a
+    /// placeholder's legend line would expand the very subtree the limit just
+    /// declined to render.
     /// @param root       The node to start from.
     /// @param expandRoot Whether to expand @p root itself (rather than label it).
     void assignLabels(const ASTNode* root, bool expandRoot) {
@@ -183,14 +219,33 @@ struct EquationRenderer {
             if (node == nullptr || node->name.has_value()) {
                 continue;
             }
-            if (!frame.expandThis && isPlaceholder(node) && !labelIndex.contains(node)) {
+            // A node reachable by several displayed paths is settled by its
+            // first visit; re-walking it would assign nothing new and, on a
+            // DAG, costs one walk per path rather than per node (morph#602:
+            // 31 nodes built by repeated `q = q + q` have 2^30 paths and took
+            // 10.3 s to render 33 short lines).
+            if (!settled.insert(node).second) {
+                continue;
+            }
+            bool const labelIt = !frame.expandThis && isPlaceholder(node);
+            // An atom is a token in every rendering, so it is not a step and
+            // the budget does not apply to it — only its placeholder does.
+            if (isAtomNode(*node)) {
+                if (labelIt) {
+                    labelIndex.emplace(node, placeholderOrder.size() + 1);
+                    placeholderOrder.push_back(node);
+                }
+                continue;
+            }
+            if (stepBudget == 0) {
+                elisionIndex.emplace(node, elisionOrder.size() + 1);
+                elisionOrder.push_back(node);
+                continue;
+            }
+            --stepBudget;
+            if (labelIt) {
                 labelIndex.emplace(node, placeholderOrder.size() + 1);
                 placeholderOrder.push_back(node);
-            }
-            // Both the labelled and the unlabelled arm descend exactly when the
-            // node is not an atom, so the two cases share one exit.
-            if (isAtomNode(*node)) {
-                continue;
             }
             pending.push_back(LabelFrame{.node = node->right.get(), .expandThis = false});
             pending.push_back(LabelFrame{.node = node->left.get(), .expandThis = false});
@@ -198,17 +253,42 @@ struct EquationRenderer {
     }
 
     /// @brief Parenthesises and joins a binary subexpression.
+    ///
+    /// Takes its left operand **by value** and appends to it rather than
+    /// concatenating both sides into a fresh string. The left operand of a
+    /// left-leaning chain — the shape `total = total + row` records — is the
+    /// whole expression rendered so far, so copying it once per level made
+    /// rendering quadratic in the depth (morph#582: 27.7 s and a
+    /// 350,001-character line at 70,000 steps). Appending makes that shape
+    /// linear, amortised. A **right**-leaning chain (`a + (b + (c + …))`) is
+    /// still quadratic — the big operand is on the copied side — and so is a
+    /// chain of unary negations, which has to prepend; `equation()`'s step
+    /// limit is what bounds those, not this.
     /// @param op    The operator token.
-    /// @param left  Rendered left operand.
+    /// @param left  Rendered left operand; moved from, so callers pass an
+    ///              operand they are done with.
     /// @param right Rendered right operand.
     /// @return The combined rendering.
-    [[nodiscard]] static Rendered combine(const std::string& op, const Rendered& left, const Rendered& right) {
+    [[nodiscard]] static Rendered combine(const std::string& op, Rendered left, const Rendered& right) {
         int const precedence = (op == "*" || op == "/") ? 2 : 1;
-        std::string const leftText = (left.precedence < precedence) ? "(" + left.text + ")" : left.text;
+        std::string text = std::move(left.text);
+        if (left.precedence < precedence) {
+            text.insert(0, 1, '(');
+            text += ')';
+        }
+        text += ' ';
+        text += op;
+        text += ' ';
         bool const rightNeedsParens =
             (right.precedence < precedence) || (right.precedence == precedence && (op == "-" || op == "/"));
-        std::string const rightText = rightNeedsParens ? "(" + right.text + ")" : right.text;
-        return Rendered{.text = leftText + " " + op + " " + rightText, .precedence = precedence};
+        if (rightNeedsParens) {
+            text += '(';
+            text += right.text;
+            text += ')';
+        } else {
+            text += right.text;
+        }
+        return Rendered{.text = std::move(text), .precedence = precedence};
     }
 
     /// @brief Renders a unary-negation subexpression.
@@ -227,6 +307,17 @@ struct EquationRenderer {
     /// @return The atom's rendering, or `std::nullopt` when @p node has
     ///         operands that must be rendered first.
     [[nodiscard]] std::optional<Rendered> atomRendering(const ASTNode* node, bool expandThis, RenderMode mode) const {
+        // Checked first, and before `isPlaceholder`: a node can be both reused
+        // and past the limit, and `assignLabels` gives such a node an `eK` and
+        // no `cK` — so asking about the placeholder first would look up a
+        // label that was deliberately never assigned. An elided node is never
+        // named and never the root, so `expandThis` cannot be set on it.
+        if (auto const elided = elisionIndex.find(node); elided != elisionIndex.end()) {
+            if (mode == RenderMode::symbolic) {
+                return Rendered{.text = "e" + std::to_string(elided->second), .precedence = 100};
+            }
+            return Rendered{.text = formatOptional(nodeValue(*node)), .precedence = 100};
+        }
         if (mode == RenderMode::symbolic) {
             if (node->name.has_value()) {
                 return Rendered{.text = "\"" + *node->name + "\"", .precedence = 100};
@@ -308,7 +399,7 @@ struct EquationRenderer {
                 finished = Rendered{.text = formatOptional(top.node->current.rhs), .precedence = 100};
                 continue;
             }
-            finished = combine(top.node->current.operation, top.left, finished);
+            finished = combine(top.node->current.operation, std::move(top.left), finished);
             stack.pop_back();
         }
         return finished;
@@ -341,6 +432,19 @@ struct EquationRenderer {
         return label + " = " + renderSymbolic(node, true).text + " = " + renderSubstituted(node, true).text + " = " +
                formatOptional(node->current.result);
     }
+
+    /// @brief Builds one `where`-legend line for an elided sub-derivation.
+    ///
+    /// Value only, and self-describing: an `eK` stands for work that was *not*
+    /// written out, so the line says so and names the limit that cut it rather
+    /// than leaving a caller to wonder why a number appeared where a formula
+    /// was expected.
+    /// @param node The elided node.
+    /// @return The legend body (`eK = <value> (elided at the <N>-step limit)`).
+    [[nodiscard]] std::string elisionLine(const ASTNode* node) const {
+        return "e" + std::to_string(elisionIndex.at(node)) + " = " + formatOptional(nodeValue(*node)) +
+               " (elided at the " + std::to_string(maxSteps) + "-step limit)";
+    }
 };
 
 }  // namespace morph::units::detail
@@ -349,8 +453,13 @@ namespace morph::units {
 
 template <auto U, std::uint32_t DeclaredDecimals>
     requires UnitEnum<decltype(U)>
-std::vector<std::string> Quantity<U, DeclaredDecimals>::equation() const {
+std::vector<std::string> Quantity<U, DeclaredDecimals>::equation(std::size_t maxSteps) const {
     if (!payload) {
+        return {detail::formatOptional(payload)};
+    }
+    // Asked for no steps at all: the same one-element answer a build with
+    // tracing compiled out gives, since nothing of the derivation may be shown.
+    if (maxSteps == 0) {
         return {detail::formatOptional(payload)};
     }
     const detail::ASTNode* root = _ctx.node.get();
@@ -367,7 +476,12 @@ std::vector<std::string> Quantity<U, DeclaredDecimals>::equation() const {
         return {detail::formatOptional(root->current.result)};
     }
 
-    detail::EquationRenderer renderer;
+    // The reference count still walks the whole DAG: reuse is a property of
+    // the derivation, not of how much of it gets printed, and a value shown
+    // once must not be given a placeholder just because the limit hid its
+    // other uses. That walk is linear and iterative; only the *rendering* is
+    // what `maxSteps` bounds.
+    detail::EquationRenderer renderer{maxSteps};
     renderer.countRefs(root);
     renderer.assignLabels(root, true);
 
@@ -375,9 +489,19 @@ std::vector<std::string> Quantity<U, DeclaredDecimals>::equation() const {
     lines.push_back(renderer.renderSymbolic(root, true).text);
     lines.push_back("    = " + renderer.renderSubstituted(root, true).text);
     lines.push_back("    = " + detail::formatOptional(root->current.result));
-    for (std::size_t i = 0; i < renderer.placeholderOrder.size(); ++i) {
-        std::string const body = renderer.legendLine(renderer.placeholderOrder[i]);
-        lines.push_back((i == 0 ? "where " : "      ") + body);
+    // Placeholders first, then elisions: both are things the formula referred
+    // to by label, in the order the formula introduced them. The first legend
+    // line of either kind carries the `where `, the rest align under it.
+    bool firstLegendLine = true;
+    auto const appendLegend = [&lines, &firstLegendLine](const std::string& body) {
+        lines.push_back((firstLegendLine ? "where " : "      ") + body);
+        firstLegendLine = false;
+    };
+    for (const detail::ASTNode* node : renderer.placeholderOrder) {
+        appendLegend(renderer.legendLine(node));
+    }
+    for (const detail::ASTNode* node : renderer.elisionOrder) {
+        appendLegend(renderer.elisionLine(node));
     }
     return lines;
 }

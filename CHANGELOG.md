@@ -11,6 +11,41 @@ API surface).
 
 ### Changed
 
+- **`Quantity::equation()` writes out at most 100 derivation steps by default,
+  and takes the limit as an argument.** A derivation has no bound — a
+  data-driven `total = total + row` loop records one step per iteration — and
+  `equation()` used to render every one of them: 100,000 steps produced a
+  **500,001-character** first line in **58.8 s** (clang 22.1.8, `-O1` under
+  ASan+UBSan). It now produces **502 characters in 0.057 s**, with the deep end
+  of the derivation collapsed to an `e1` whose value carries a legend line:
+  `e1 = 99900 (elided at the 100-step limit)`. The result line is unaffected —
+  eliding changes the account of how a value was reached, never the value.
+
+  **Public signature change**:
+  `equation(std::size_t maxSteps = kDefaultEquationSteps)`. Source-compatible
+  (every existing call site compiles and keeps working), but the *output* of an
+  existing call changes once a derivation passes 100 steps. Callers that want
+  the old rendering pass `kEquationStepsUnlimited`; `0` returns the formatted
+  value alone. The limit is a parameter rather than a constant because how much
+  of a derivation is worth reading is the reading layer's decision, not the
+  value type's — an audit log and a tooltip do not want the same answer. The
+  default sits at the human end of the range because the two errors are not
+  symmetric: too low costs a caller one argument, too high costs everyone a
+  half-megabyte line they never knew was unbounded. Pre-1.0, per
+  `docs/spec/VERSIONING.md`. See `docs/spec/util/quantity_type.md`, "The
+  rendering is bounded; the derivation is not", and morph#582.
+
+  Rendering a derivation **in full** also got cheap, which is a separate half of
+  the same issue: `combine` appends to its left operand instead of copying it
+  into a fresh string, so the left-leaning chain an accumulate loop records is
+  linear rather than quadratic in its depth — 70,000 steps rendered whole went
+  from 27.7 s to 0.11 s under ASan+UBSan, and from over ctest's 120 s timeout to
+  1.3 s at `-O0` under TSan. The `[slow]` tag and 600 s timeout exception added
+  for that test in morph#590 are gone again; every test is back under one 120 s
+  cap. A right-leaning chain and a chain of unary negations still copy the big
+  operand per level and are still quadratic — the step limit is what bounds
+  those.
+
 - **`Completion<T>` has a stated value-handling contract, and `T` no longer has
   to be copyable.** `std::move_constructible<T>` is now the whole type
   requirement; copyability became a *per-handler* obligation, diagnosed where
@@ -205,6 +240,14 @@ API surface).
   `docs/spec/VERSIONING.md`.
 
 ### Fixed
+
+- **`equation()` no longer walks a shared derivation once per path.**
+  `EquationRenderer::assignLabels` was the one traversal without a visited set,
+  so a node reachable by *k* displayed paths was walked *k* times. Since the
+  derivation is a DAG, that is exponential in the node count: 31 nodes built by
+  repeated `q = q + q` have 2³⁰ root-to-leaf paths and took **10.3 s** to render
+  33 short lines. With the set, the same call is instant and its output is
+  byte-identical, and 61 nodes (2⁶⁰ paths) render instantly too. morph#602.
 
 - **A model registered privately over `morph::net` was not journalled at all.**
   `morph::net::SocketBackend` left `IBackend::registerModelWithContext`
