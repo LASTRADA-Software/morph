@@ -516,9 +516,11 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
     objAddr -= objAddr % alignof(morph::bridge::Bridge);
     void* const bridgeMem = reinterpret_cast<void*>(objAddr);  // NOLINT(performance-no-int-to-ptr)
 
-    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) -- placement new into
-    // the mmap'd region above; destroyed via an explicit dtor call below, not
-    // `delete` (the memory is not heap-owned).
+    // Placement new into the mmap'd region above; destroyed via an explicit dtor
+    // call below, not `delete` (the memory is not heap-owned). The directive
+    // stays on one physical line; see the note at
+    // include/morph/detail/fixed_string.hpp:48.
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     auto* const bridge = new (bridgeMem) morph::bridge::Bridge(std::move(backendOwner));
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();

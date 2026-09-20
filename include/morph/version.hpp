@@ -3,6 +3,30 @@
 #pragma once
 #include <string_view>
 
+// The five macros below are the `#if`-testable half of morph's version API, and
+// being macros is the whole of what they are for. A downstream compiling against
+// two morph releases writes
+//
+//     #if MORPH_VERSION >= MORPH_MAKE_VERSION(1, 2, 0)
+//
+// which the preprocessor has to answer before any C++ declaration exists. An
+// enumerator or a `constexpr int` is invisible in a `#if`, and a `constexpr`
+// function cannot be called from one, so `MORPH_MAKE_VERSION` has to be
+// function-like for the same reason. The three checks below do not propose a
+// different spelling of this header; they propose removing the capability it
+// exists to provide. That is the meaning of "unfixable by construction", and it
+// is why this is a suppression rather than a deferral -- there is no later
+// version of this file in which the finding goes away.
+//
+// The C++-visible constants the checks ask for do exist: `morph::version::kMajor`
+// and friends, below, defined *from* these macros so the two cannot drift. Code
+// that does not need a `#if` should use those, and this header offering both is
+// the resolution, not a duplication.
+//
+// docs/spec/VERSIONING.md is the contract; tests/test_version.cpp pins these
+// against the top-level `project(morph VERSION ...)`.
+// NOLINTBEGIN(cppcoreguidelines-macro-to-enum, modernize-macro-to-enum, cppcoreguidelines-macro-usage)
+
 /// @brief morph's major version component (semantic-versioning MAJOR:
 /// incremented for a breaking source change to the stable public surface —
 /// see docs/spec/VERSIONING.md).
@@ -30,6 +54,8 @@
 /// the `VERSION` field of the top-level `project(morph VERSION ...)` in
 /// `CMakeLists.txt` — the two are cross-checked by `tests/test_version.cpp`.
 #define MORPH_VERSION MORPH_MAKE_VERSION(MORPH_VERSION_MAJOR, MORPH_VERSION_MINOR, MORPH_VERSION_PATCH)
+
+// NOLINTEND(cppcoreguidelines-macro-to-enum, modernize-macro-to-enum, cppcoreguidelines-macro-usage)
 
 namespace morph::version {
 

@@ -27,6 +27,17 @@
 // opens a header on its own -- clang-tidy analysing a changed header, an IDE,
 // include-what-you-use -- otherwise sees `unknown type name 'ASTNode'` on
 // every line and reports a cascade of findings about code that compiles fine.
+//
+// misc-header-include-cycle sees the back-edge and is, as a graph statement,
+// correct: quantity.hpp -> quantity_equation.hpp -> quantity.hpp is a cycle.
+// What it cannot see is that the cycle is closed by `#pragma once` on the
+// second visit, which is the mechanism the paragraph above relies on rather
+// than an accident it survives. The check's remedy -- break the edge -- is the
+// state this file was deliberately moved away from, and it would restore the
+// standalone-analysis failure the paragraph describes. Suppressed here rather
+// than at the definition because this one include is the only cycle in the
+// tree; if a second appears, it should be argued for on its own.
+// NOLINTNEXTLINE(misc-header-include-cycle)
 #include "../util/quantity.hpp"
 #include "../util/rational.hpp"
 
