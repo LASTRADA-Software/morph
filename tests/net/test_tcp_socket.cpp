@@ -9,12 +9,15 @@
 #include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <cerrno>
 #include <chrono>
 #include <cstring>
 #include <morph/net/detail/tcp_socket.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -394,6 +397,26 @@ TEST_CASE("TcpSocket::listen: fails with EADDRINUSE when the port is already bou
     auto first = TcpSocket::listen(0);
     std::uint16_t const port = first.boundPort();
     REQUIRE_THROWS_AS(TcpSocket::listen(port), std::runtime_error);
+}
+
+// Pins the *shape* of a socket error message, and pins it to the category that
+// renders it rather than to a literal string. Every throw site in
+// `tcp_socket.hpp` formats its message on whichever thread hit the error, and
+// this subsystem spawns those threads itself, so the renderer has to be one
+// that two threads may call at once -- `std::error_category::message`, not
+// `std::strerror` (morph#625).
+//
+// What this case does not establish: that the previous `std::strerror`
+// spelling was actually racing. glibc renders both spellings to the same
+// bytes, so this assertion would have held before the change too. The evidence
+// for the change is clang-tidy `concurrency-mt-unsafe` going from six findings
+// in this header to none; this case is a standing guard on the message, not
+// that measurement.
+TEST_CASE("TcpSocket::listen renders a bind() failure through std::system_category", "[net][tcp]") {
+    auto first = TcpSocket::listen(0);
+    std::uint16_t const port = first.boundPort();
+    REQUIRE_THROWS_WITH(TcpSocket::listen(port), Catch::Matchers::Equals("TcpSocket::listen: bind() failed: " +
+                                                                         std::system_category().message(EADDRINUSE)));
 }
 
 TEST_CASE("TcpSocket::boundPort: returns 0 on an empty socket", "[net][tcp]") {

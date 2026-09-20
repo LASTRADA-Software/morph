@@ -616,6 +616,27 @@ transport above is not a matter of degree:
   (without a Close status code — see
   [backend.md](core/backend.md#limitations)). This is the one area where the
   two transports are comparable; it is also the only one.
+- **Socket errors are rendered with a thread-safe formatter.** Every throw
+  site in `net/detail/tcp_socket.hpp` builds its message on whichever thread
+  hit the error, and this transport owns several of them: `SocketServer` runs
+  an accept loop thread plus one `clientLoop` thread per accepted connection,
+  and `SocketBackend` runs an I/O thread and a handler thread. A peer that
+  provokes socket errors on several connections at once therefore has several
+  threads rendering an `errno` at the same moment. They go through
+  `std::system_category().message()`, which returns an owned `std::string` and
+  carries the library's ordinary "shall not introduce a data race" guarantee,
+  rather than `std::strerror`, which is permitted to hand every caller a
+  pointer to one shared static buffer (morph#625). Stated precisely, because
+  the distinction matters: what was repaired is the data race the
+  specification of `std::strerror` permits, inferred from the code. No
+  interleaved or corrupted message was ever observed, and on the glibc/Linux
+  configuration this project tests, the two spellings render an `errno` to
+  identical bytes. The property gained is that the guarantee now holds by
+  specification rather than by the implementation happening to be safe.
+  `TcpSocket::connect`'s `::gai_strerror` is deliberately untouched: it renders
+  `EAI_*` resolver codes, which are not `errno` values, so
+  `std::system_category()` cannot describe them and no drop-in substitution
+  exists.
 
 ## Residual limitations & hardening checklist
 
