@@ -11,12 +11,13 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 
 #if defined(__APPLE__)
 #include <signal.h>
@@ -192,7 +193,7 @@ public:
     static TcpSocket listen(std::uint16_t port, int backlog = 64) {
         int fd = ::socket(AF_INET, SOCK_STREAM, 0);
         if (fd < 0) {
-            throw std::runtime_error(std::string{"TcpSocket::listen: socket() failed: "} + std::strerror(errno));
+            throw std::runtime_error("TcpSocket::listen: socket() failed: " + errnoMessage(errno));
         }
         int const reuse = 1;
         ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
@@ -203,12 +204,12 @@ public:
         if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
             int const err = errno;
             ::close(fd);
-            throw std::runtime_error(std::string{"TcpSocket::listen: bind() failed: "} + std::strerror(err));
+            throw std::runtime_error("TcpSocket::listen: bind() failed: " + errnoMessage(err));
         }
         if (::listen(fd, backlog) != 0) {
             int const err = errno;
             ::close(fd);
-            throw std::runtime_error(std::string{"TcpSocket::listen: listen() failed: "} + std::strerror(err));
+            throw std::runtime_error("TcpSocket::listen: listen() failed: " + errnoMessage(err));
         }
         return TcpSocket{fd};
     }
@@ -273,7 +274,7 @@ public:
             if (errno == EINTR) {
                 continue;
             }
-            throw std::runtime_error(std::string{"TcpSocket::accept: "} + std::strerror(errno));
+            throw std::runtime_error("TcpSocket::accept: " + errnoMessage(errno));
         }
     }
 
@@ -328,8 +329,7 @@ public:
             if (wouldBlock(err)) {
                 return std::nullopt;
             }
-            // NOLINTNEXTLINE(concurrency-mt-unsafe) — std::strerror, as at every other throw site here
-            throw std::runtime_error(std::string{"TcpSocket::tryAccept: "} + std::strerror(err));
+            throw std::runtime_error("TcpSocket::tryAccept: " + errnoMessage(err));
         }
     }
 
@@ -350,7 +350,7 @@ public:
                 if (errno == ECONNRESET) {
                     return 0;
                 }
-                throw std::runtime_error(std::string{"TcpSocket::recvSome: "} + std::strerror(errno));
+                throw std::runtime_error("TcpSocket::recvSome: " + errnoMessage(errno));
             }
             return static_cast<std::size_t>(n);
         }
@@ -368,7 +368,7 @@ public:
                 if (errno == EINTR) {
                     continue;
                 }
-                throw std::runtime_error(std::string{"TcpSocket::sendAll: "} + std::strerror(errno));
+                throw std::runtime_error("TcpSocket::sendAll: " + errnoMessage(errno));
             }
             sent += static_cast<std::size_t>(n);
         }
@@ -445,6 +445,29 @@ public:
     [[nodiscard]] bool valid() const noexcept { return _fd >= 0; }
 
 private:
+    /// Describes `err` the way `std::strerror` would, without `std::strerror`'s
+    /// shared static buffer.
+    ///
+    /// Every throw site in this class formats its message on whichever thread
+    /// hit the error, and this subsystem spawns those threads itself:
+    /// `SocketServer` runs an accept loop thread plus one `clientLoop` thread
+    /// per accepted connection (each of which drives `recvSome`/`sendAll`), and
+    /// `SocketBackend` runs an I/O thread and a handler thread. Two of them can
+    /// therefore be inside a throw site at the same moment, and `std::strerror`
+    /// is permitted to return a pointer to one buffer shared by all callers --
+    /// a data race on the message, not merely an interleaved string.
+    ///
+    /// `std::error_category::message` is specified with no such carve-out, so
+    /// it carries the library's ordinary "shall not introduce a data race"
+    /// guarantee, and it returns an owned `std::string`, leaving nothing for
+    /// two threads to share. `std::system_category()` is the category whose
+    /// values are `errno` values on POSIX, which is what every caller here
+    /// passes. Preferred over `strerror_r` because that function's XSI and GNU
+    /// variants differ in return type, so a portable call needs a build-time
+    /// discriminator and a caller-supplied buffer; this needs neither.
+    /// morph#625.
+    static std::string errnoMessage(int err) { return std::system_category().message(err); }
+
     /// POSIX allows `EAGAIN` and `EWOULDBLOCK` to differ, and both name the
     /// same "nothing to take right now" answer. Written as two statements
     /// rather than `err == EAGAIN || err == EWOULDBLOCK` so GCC's
