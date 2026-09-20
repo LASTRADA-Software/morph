@@ -1835,8 +1835,9 @@ jobs:
           # GUI needs Qml/Quick/QuickControls2 at 6.5+, which the distro Qt the
           # other bank jobs use cannot give) and already installs the
           # ODBC/SQLite/yaml-cpp/libzip set the bank example's Lightweight
-          # fetch requires. The check-workflow-option-coverage job below is
-          # what keeps the next option from repeating this.
+          # fetch requires. The option-coverage job below, which runs
+          # scripts/check_workflow_option_coverage.py, is what keeps the next
+          # option from repeating this.
           # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
           # Configure steps for why leaving it unset is what lets
           # fastcache-cc be selected.
