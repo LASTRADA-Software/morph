@@ -30,9 +30,13 @@ git worktree list | grep '\.claude/worktrees'     # lanes still holding files
 ```
 
 Bucket the issues by `triage:` label. **A fast-forwarded main checkout matters** —
-triaging or dispatching against a stale tree produces stale verdicts. Then pick up
-at whichever step below is unsatisfied: untriaged issues exist → Step 1; no lane
-free → Step 5; a lane free and `valid` work available → Step 2.
+triaging or dispatching against a stale tree produces stale verdicts.
+
+This runs as a pipeline, so on every pass do all of these rather than choosing
+one: **open PRs get landed or fixed** (Step 7), **untriaged issues get triaged**
+(Step 1, capped), and **every free lane slot gets refilled with a batch**
+(Steps 2 and 4). A pass that drains the queue without refilling it, or refills
+without draining, stalls the half it skipped.
 
 ## Step 1 — sweep anything untriaged
 
@@ -113,9 +117,34 @@ When consolidating:
 - **Apply no `triage:` label** — AGENTS.md forbids self-assessing that verdict.
   The new issue is untriaged by design; Step 1 picks it up.
 
-## Step 4 — dispatch, at most two lanes
+## Step 4 — dispatch batches, up to five lanes, and do not wait for CI
 
-One `Agent` call per lane, `isolation: "worktree"`, one issue or one batch each.
+One `Agent` call per lane, `isolation: "worktree"`, **one batch each** (Step 2).
+
+**A lane's job ends when it has pushed and opened a PR — not when CI is green.**
+Waiting is what makes a lane expensive: a CI cycle here is 26–74 minutes, and a
+lane that sits watching one is a worker doing nothing while tickets queue behind
+it. Put this in every lane prompt:
+
+> Push, open the PR, report back **immediately**. Do not wait for CI, do not
+> poll it in a loop, do not re-run it. Report the check counts you happened to
+> see at hand-off and say they are incomplete. The runner lands PRs; you do not.
+
+The landing sweep (Step 7) is what closes the loop, and it runs on its own
+cadence. This is a pipeline: lanes produce PRs continuously, the sweep drains
+them. The two must not block each other.
+
+**Five lanes is the ceiling, and disjointness is the real bound.** Five batches
+only pay off if all five sit on genuinely disjoint file trees; concurrent lanes
+on overlapping trees produce PRs that invalidate each other, and the rebases cost
+more than the parallelism buys. If only three disjoint trees have `valid` work,
+run three lanes — a fourth on a tree another lane already holds is worse than an
+idle slot.
+
+The hard bounds below are what make five lanes safe rather than reckless. They
+are per-lane and do not relax as the count rises: six lanes dispatched *without*
+them became 16 agent tasks and ~318 background bash tasks. The count was never
+the problem.
 
 **Bounding the agent count does not bound the task count.** Three multipliers
 escape a "don't spawn agents" instruction. Paste this into every lane prompt:
@@ -185,26 +214,73 @@ moves. Re-measure **before** a lane is dispatched against a figure, not after.
 If a PR in flight rewrites the code a measurement was taken on, that measurement
 is already stale. Say so on the issue before someone builds against it.
 
-## Step 7 — land, then refill
+## Step 7 — the landing sweep: drain the queue on a cadence
 
-- **Land what unblocks the most first.** A chain head sitting green in review
-  stalls every lane behind it.
-- **Rebase a stale-base PR before merging if the gates have since tightened.** A
-  PR whose CI ran two merges ago was judged by the old gates.
-- **A merge is outward-facing — confirm it.** Approval to merge one PR is not
-  approval for the next.
-- **Prune the lane's worktree.** They accumulate; ~39 stale ones had built up
-  under `.claude/worktrees/` before anyone looked.
-- Refill the free slot from Step 2, and go again.
+Lanes produce PRs and move on (Step 4). Nothing lands until a sweep lands it, so
+**run this on a schedule — every two hours is the working cadence** — and walk
+*every* open PR each time. Use a cron schedule, not `Monitor`; `Monitor` caps at
+30 minutes and cannot hold the cadence.
 
-Watch pending CI with one `Monitor` over all open PRs, emitting **failures and
-completion only** — re-arm on expiry rather than polling.
+For each open PR, count the checks and sort it into one of four buckets:
+
+| Bucket | Action |
+|---|---|
+| **green** | Apply the staleness test below, then merge. |
+| **red** | Diagnose it *now* — the lane that wrote it is gone. |
+| **pending** | Leave it. Do not poll it; the next sweep will catch it. |
+| **fork** | Never merge, never approve its workflows. Not yours. |
+
+### Staleness: a *material* delta, not any delta
+
+A PR whose base has moved is not automatically disqualified — reflexively
+rebasing every stale PR costs one full CI cycle each, which in a queue model is
+most of them, every sweep. Ask instead what actually moved:
+
+```bash
+mb=$(git merge-base origin/master <head>)
+git diff --name-only $mb origin/master
+```
+
+- A **gate** changed (`.github/workflows/`, `scripts/`, `CMakePresets.json`) → **rebase**. Its CI was judged by rules that no longer exist.
+- A **source file it touches, or a header those include**, changed → **rebase**. The combination was never tested.
+- Only unrelated files, or reporting-only lines → **merge**. Re-running CI cannot change the verdict, and the cycle buys nothing.
+
+State which of the three you concluded, and why, in your report. Getting this
+wrong in the safe direction is expensive but recoverable; getting it wrong in the
+unsafe direction merges something nothing judged.
+
+### Handling red
+
+The lane is gone, so the sweep owns the failure. Read the failing job's log
+before anything else — a leg that stopped within seconds of its siblings is a
+cancellation, not a defect, and purged logs mean re-running is the only way to
+learn anything. If the fix is small and obvious, make it. If it needs the
+context the lane had, dispatch a lane whose whole batch is *that PR*, and give it
+the failing log, not just the PR number.
+
+### Ordering
+
+**Land what unblocks the most first** — a chain head sitting green stalls
+everything behind it. Among equals, prefer the PR whose merge forces the fewest
+rebases on the rest. Merging several PRs on disjoint trees in one sweep is fine
+and is the point; merging two that touch the same file is two rebases you chose.
+
+### Always
+
+- **Prune each merged lane's worktree.** They accumulate; ~39 stale ones had
+  built up under `.claude/worktrees/` before anyone looked. A worktree still
+  locked by a live agent is not yours to remove.
+- **Refill every free lane slot** from Step 2 before ending the sweep. A sweep
+  that lands three PRs and dispatches nothing has emptied the pipeline.
 
 ## Red flags
 
 - Counting issues to decide how many lanes to run.
 - Dispatching a lane with **one** ticket when two or three disjoint ones were
   sitting in `triage: valid`.
+- A lane still running after it pushed, because it is watching its own CI.
+- A sweep that merges PRs and dispatches nothing, leaving the pipeline empty.
+- Rebasing every stale-base PR reflexively, instead of asking what moved.
 - A batched branch with one commit for the whole batch, so a single bad ticket
   cannot be dropped without redoing the rest.
 - A lane prompt that says "do not spawn agents" and stops there.
@@ -230,3 +306,6 @@ completion only** — re-arm on expiry rather than polling.
 | "One ticket per PR keeps it focused and reviewable." | Focus is measured in hours here: 26–74 min a cycle, plus a forced rebase and re-run on every other open PR. One commit per ticket buys the reviewability without the cycles. |
 | "These two tickets aren't really related." | Unrelated is fine. The batching constraint is *disjoint files a single lane can land*, not a shared theme — that is Step 3's rule for consolidating issues, not this one's for grouping work. |
 | "I'll batch them next sweep, once the backlog settles." | The backlog does not settle; lanes file new issues while closing old ones. Batch what is `valid` and disjoint now. |
+| "The lane should wait for CI so it can report a green PR." | That is 26–74 minutes of a worker doing nothing while tickets queue behind it. The sweep lands PRs; the lane's job ends at the push. |
+| "Its base moved, so it has to be rebased." | Only if something *material* moved — a gate, or a file it touches. Reflexive rebasing costs one full cycle per PR per sweep and buys nothing when the delta is unrelated. |
+| "I'll leave the red PR for the lane that wrote it." | That lane handed back and is gone. A red PR nobody owns sits red forever. |
