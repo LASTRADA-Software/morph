@@ -104,9 +104,10 @@ void* allocateOrInject(std::size_t size) {
                                 // this thread afterward) allocates normally.
         throw std::bad_alloc{};
     }
-    // NOLINTNEXTLINE(cppcoreguidelines-no-malloc, cppcoreguidelines-owning-memory) --
-    // this *is* the process-wide operator new/delete pair; std::malloc/free
-    // is what it has to be built from.
+    // This *is* the process-wide operator new/delete pair; std::malloc/free is
+    // what it has to be built from. The directive stays on one physical line;
+    // see the note at include/morph/detail/fixed_string.hpp:48.
+    // NOLINTNEXTLINE(cppcoreguidelines-no-malloc, cppcoreguidelines-owning-memory)
     if (void* ptr = std::malloc(size == 0 ? 1 : size)) {
         return ptr;
     }

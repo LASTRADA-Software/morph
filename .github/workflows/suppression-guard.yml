@@ -1,0 +1,61 @@
+name: Suppression guard
+
+# Gates for the "a suppression that suppresses nothing" class of bug.
+#
+# NOLINTNEXTLINE applies to the next *physical* line. When the reason is wrapped
+# onto a second comment line, the directive annotates that comment, the findings
+# it names are still reported, and clang-tidy says nothing about it -- the
+# directive parses and the file looks annotated. Four such directives existed on
+# master and six findings leaked past three of them (#627).
+#
+# That is the failure mode AGENTS.md names first -- a control that reports
+# success while measuring nothing -- one level below the gate. It also matters
+# for the clang-tidy campaign in #580, whose agreed remedy is partly "write an
+# individually reasoned NOLINT": that campaign cannot proceed honestly on a tree
+# where NOLINTs silently fail to apply, so this gate is its precondition.
+#
+# WHY THIS IS ITS OWN WORKFLOW, AND WHERE IT BELONGS
+#
+# This job is a fast, dependency-free text scan that compiles nothing, which is
+# exactly .github/workflows/drift-guard.yml's remit, and it should be a job in
+# that file. It is here instead only because drift-guard.yml was held by an open
+# PR (#614) when this landed, and ci.yml by another (#623). Folding it into
+# drift-guard.yml once that has landed is tracked as its own issue; nothing
+# about the gate's behaviour changes when it moves.
+#
+# The self-test runs before the gate, as every other lint in this repository
+# does: a gate that detects nothing reports the same green as a clean tree, and
+# for this gate that would be the very defect it exists to catch, one level up.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+# Supersede a run a newer commit on the same ref has made obsolete -- see the
+# note in ci.yml. Cheap here, but the queue it shares is account-wide.
+concurrency:
+  group: suppression-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  nolint-lint:
+    name: NOLINT directives that cannot take effect
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Drives the checker against tests/lint/nolint_directives/ first: the two
+      # effective shapes must be accepted, each inert shape must be rejected on
+      # its own and name its own file, and a directory with no directives at all
+      # must be rejected rather than called clean. Without this the step below
+      # would report green whether or not it still detects anything.
+      - name: Self-test the NOLINT-directive checker
+        run: bash scripts/test_check_nolint_directives.sh
+
+      - name: Check every NOLINTNEXTLINE annotates a line of code
+        run: bash scripts/check_nolint_directives.sh

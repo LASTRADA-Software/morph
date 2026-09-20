@@ -484,15 +484,26 @@ template <typename A>
 /// @brief Invokes `visitor.operator()<I>(name, member)` for every reflected
 ///        member of @p action (glaze pure reflection).
 template <typename A, typename Visitor>
-// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-// — member-tie iteration
+// Neither forwarding reference is forwarded, and neither may be. `action` is
+// bound by `glz::to_tie` into a tuple of references that outlives this line and
+// is read member-by-member below; moving from it would leave the tie pointing
+// at a moved-from object. `visitor` is invoked once per reflected member by the
+// fold expression, so forwarding it would move from it on the first member and
+// call a moved-from callable for every one after. Both are `&&` to preserve the
+// argument's cv-qualification through the tie — a `const A&` must tie to const
+// members — not to enable a move. The directive stays on one physical line
+// deliberately; see the note at detail/fixed_string.hpp:48.
+// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
 constexpr void forEachNamedMember(A&& action, Visitor&& visitor) {
     using Plain = std::remove_cvref_t<A>;
     constexpr auto memberCount = glz::reflect<Plain>::size;
     auto memberTie = glz::to_tie(action);
     [&]<std::size_t... I>(std::index_sequence<I...>) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — index bounded by
-        // reflect::size
+        // `I` is a pack of `std::index_sequence<memberCount>`, i.e. every value in
+        // [0, glz::reflect<Plain>::size), and `keys` is an array of exactly that
+        // size — the index cannot be out of range by construction. The directive
+        // stays on one physical line; see the note at detail/fixed_string.hpp:48.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
         (visitor.template operator()<I>(glz::reflect<Plain>::keys[I], glz::get_member(action, get<I>(memberTie))),
          ...);
     }(std::make_index_sequence<memberCount>{});
