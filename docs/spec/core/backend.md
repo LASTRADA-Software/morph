@@ -77,7 +77,7 @@ holds a `unique_ptr<IBackend>` and delegates all model operations to it.
 | Method | Purpose |
 |---|---|
 | `registerModel(typeId, factory)` | Registers a new model instance, returns its opaque `ModelId`. |
-| `registerModelWithContext(typeId, factory, contextKey)` | Same as `registerModel`, additionally passes a stable identity (e.g. account id). Default implementation drops `contextKey` and forwards to `registerModel` — correct for `LocalBackend` where the factory closure already captures identity. Every backend whose instances live behind a wire protocol overrides it to carry `contextKey` across: `SimulatedRemoteBackend` and `SocketBackend` both do. Not cosmetic — `RemoteServer::attachLogIfConfigured` skips the `LogProvider` lookup entirely on an empty `contextKey`, so a wire backend that drops the key leaves the instance with **no** action log rather than a log missing a field (morph#587). |
+| `registerModelWithContext(typeId, factory, contextKey)` | Same as `registerModel`, additionally passes a stable identity (e.g. account id). Default implementation drops `contextKey` and forwards to `registerModel` — correct for `LocalBackend` where the factory closure already captures identity. Every backend whose instances live behind a wire protocol overrides it to carry `contextKey` across: `SimulatedRemoteBackend`, `SocketBackend` (morph#587) and `QtWebSocketBackend` (morph#594) all do. Not cosmetic — `RemoteServer::attachLogIfConfigured` skips the `LogProvider` lookup entirely on an empty `contextKey`, so a wire backend that drops the key leaves the instance with **no** action log rather than a log missing a field (morph#587). |
 | `registerModelAsync(typeId, factory, contextKey, onRegistered, onError)` | Optional non-blocking counterpart to `registerModelWithContext`. Returns `false` by default, and since morph#568 no backend overrides it, so it always does; `Bridge::registerHandler()` then falls back to `bindModel`. Removed by morph#571. See [Asynchronous registration](#asynchronous-registration--registermodelasync). |
 | `bindModel(request, cbExec)` | Acquires a model instance and returns a `Completion<ModelId>` delivered on `cbExec`. One verb covering `registerModelWithContext`, `registerModelShared` and `attachModel`, selected by the request's shape. The preferred surface — see [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
 | `promoteModel(request, cbExec)` | Files an already-live instance under a key and returns a `Completion<ModelId>` delivered on `cbExec`. The structural counterpart of `assignPrimary`. |
@@ -1486,9 +1486,29 @@ by `_pendingMtx`, because `cancelPending` can be called from `Bridge` /
   `std::runtime_error("register failed: <what>")` (so a lost connection surfaces
   as `"register failed: disconnected"`) rather than propagating the raw error or
   hanging. The `factory` argument is ignored (model construction is delegated to
-  the server, as with all remote backends). `registerModelWithContext` is
-  **not** overridden — the default drops the `contextKey`, so this transport
-  does not carry a context key to the server's `LogProvider`.
+  the server, as with all remote backends). `registerModel` is a forward to
+  `registerModelWithContext` with an empty key, so there is one place that
+  builds this envelope rather than two.
+
+- `registerModelWithContext` — the same `register` round trip, carrying
+  `contextKey` on the envelope (`wire::makeRegister(typeId, contextKey)`).
+  Overridden since morph#594; before that it was `IBackend`'s default, which
+  drops the key. That is not a missing field:
+  `RemoteServer::attachLogIfConfigured` returns **before** consulting its
+  `LogProvider` when the envelope's `contextKey` is empty, so a privately
+  registered instance over this transport produced no action-log record at all
+  while `SimulatedRemoteBackend` and `SocketBackend` produced one. Three call
+  sites reached the dropping default: the blocking `bindModel`'s
+  empty-`primary`/zero-`current` branch (so, every private registration made
+  with `Config::asyncRegistrationEnabled` unset — its default),
+  `Bridge::switchBackend`'s re-registration after a reconnect (whatever that
+  flag was set to), and `registerModelShared`/`attachModel`'s own
+  empty-`primary` degradation. `bindModel`'s non-blocking path already carried
+  the key, which is what made the flag decide whether an instance was audited.
+  `tests/qt/test_qt_websocket.cpp`, "a private registration carries contextKey
+  to the server's log provider", pins all of it against a real
+  `QtWebSocketServer` and asserts on the provider rather than on the
+  registration succeeding — registration succeeded before the fix too.
 
   `sendSync` itself is hardened against a disconnect mid-call. Before parking the
   nested loop it checks `_connected` and throws `"disconnected"` up front if the
@@ -2294,10 +2314,12 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `QtWebSocketBackend(serverUrl, tls, cfg = Config{})` | Overload that skips the unused `dispatcher`/`registry` pair (issue #55): a caller who only needs `tls`/`cfg` reaches them directly, without naming `morph::model::detail::defaultDispatcher()`/`defaultRegistry()` explicitly. Delegates to the main constructor with both defaulted. Not declared on a `QT_NO_SSL` build (no `tls` parameter to distinguish it from the `(serverUrl, cfg)` overload below). |
 | `QtWebSocketBackend(serverUrl, cfg)` | Overload that skips `dispatcher`/`registry` and `tls` together — the common case for a caller that only wants to set a `Config` field (e.g. `asyncRegistrationEnabled`) over a plaintext `ws://` connection. Delegates to the main constructor with `dispatcher`/`registry` defaulted and (on an SSL-enabled build) `tls = std::nullopt`. |
 | `bindModel(request, cbExec)` | Defers to `IBackend::bindModel` (blocking) unless `cfg.asyncRegistrationEnabled` is `true`. Otherwise builds the envelope `request`'s shape names — `register`, shared `register`, or `attach` — assigns a fresh `callId` (the same counter `execute` uses), records the promise in `_pendingRegistrations[callId]` and sends. The `Completion` settles later from `onTextMessage` (or from `cancelPending` on a disconnect). A private bind on an unconnected socket is queued in `_queuedRegistrations` instead; a keyed one rejects with `"disconnected"`. |
+| `bindWaitPolicy()` | `kCallerMustNotBlock` exactly when `cfg.asyncRegistrationEnabled` is set — that is when completions are settled by `onTextMessage`, a Qt slot delivered by the calling thread's own event loop, so a caller that blocked waiting for one would never see it arrive. `kCallerMayBlock` otherwise, where `bindModel` settles inside the call. |
 | `promoteModel(request, cbExec)` | Always non-blocking, with no `Config` gate — `assignPrimary`'s caller is inside a `Completion` chain, so there is no synchronous guarantee to preserve. Sends `assign` through the same path. An empty `primary` or zero `mid` resolves with `request.mid` without sending. |
 | `waitForConnected(timeoutMs = 5000)` | Pumps the Qt loop until connected or timeout; returns `_connected`. |
 | `negotiateProtocolVersion()` | Opt-in: sends `hello` synchronously (same nested-`QEventLoop` path as `registerModel`), classifies the reply via `wire::interpretHelloReply`. Throws on an explicit version rejection or a `sendSync` failure. |
-| `registerModel(typeId, factory)` | Synchronous via nested `QEventLoop`; `factory` ignored. Throws on `err` reply. |
+| `registerModel(typeId, factory)` | Forwards to `registerModelWithContext` with an empty key. |
+| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous via nested `QEventLoop`; `factory` ignored. Sends `register` carrying `contextKey`, so a privately registered instance is journalled (morph#594). Throws on `err` reply, and wraps a `sendSync` failure as `"register failed: <what>"`. |
 | `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses, recorded in `_pendingDeregisters` so `onTextMessage` recognises the unwanted reply and drops it rather than handing it to a parked `sendSync` (issue #65). |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. |
 | `notifyBackendChanged()` | No-op. |

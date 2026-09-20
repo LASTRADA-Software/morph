@@ -215,6 +215,41 @@ public:
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override;
 
+    /// @brief Sends a `register` carrying @p contextKey and blocks until the reply arrives.
+    ///
+    /// `IBackend::registerModelWithContext`'s default drops @p contextKey, which
+    /// is right for `LocalBackend` — the caller's own factory closure already
+    /// captures the identity — but wrong for a backend whose instances live on
+    /// the far side of a wire protocol: the server constructs the holder itself,
+    /// so `contextKey` is the *only* channel by which the instance's identity
+    /// reaches it. `RemoteServer::attachLogIfConfigured` returns without
+    /// consulting its `LogProvider` at all when the envelope's `contextKey` is
+    /// empty, so dropping it here did not merely lose an entity key — it left
+    /// the instance **unjournalled** (morph#594). `SimulatedRemoteBackend` and
+    /// `morph::net::SocketBackend` (morph#587) override this for the same
+    /// reason; backends documented as interchangeable must not disagree about
+    /// whether a private registration is audited.
+    ///
+    /// This is also the verb the *blocking* `bindModel` path reaches for an
+    /// empty-`primary`, zero-`current` request, and the one
+    /// `Bridge::switchBackend` calls directly when it re-registers a handler
+    /// after a reconnect — so before morph#594 the key was dropped whatever
+    /// `Config::asyncRegistrationEnabled` was set to on a backend swap, and
+    /// dropped on every private registration when it was unset. `bindModel`'s
+    /// own non-blocking path already carried it.
+    ///
+    /// `registerModel` forwards here with an empty key, so there is one place
+    /// that builds this envelope rather than two that can drift apart.
+    ///
+    /// @param typeId     String type-id of the model to register.
+    /// @param factory    Ignored — model construction is delegated to the server.
+    /// @param contextKey Stable identity of the new instance; empty if none.
+    /// @return `ModelId` assigned by the server.
+    /// @throws std::runtime_error if the server replies with an error or the socket is not connected.
+    ::morph::exec::detail::ModelId registerModelWithContext(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        std::string_view contextKey) override;
+
     /// @brief Acquires a model instance over the wire, natively non-blocking
     ///        when `Config::asyncRegistrationEnabled` is set.
     ///

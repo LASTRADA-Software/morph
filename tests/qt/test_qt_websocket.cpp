@@ -23,6 +23,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_tls.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
@@ -2459,6 +2460,74 @@ TEST_CASE("Process separation: TLS handshake works across processes", "[qt][wss]
 
     QString url = QStringLiteral("wss://127.0.0.1:%1").arg(server.port);
     REQUIRE(runClient(url, {QStringLiteral("--tls")}) == 0);
+}
+
+// Coverage for morph#594: a *private* registration over this transport must
+// carry `contextKey` to the server, exactly as `SimulatedRemoteBackend` and
+// `morph::net::SocketBackend` (morph#587) do.
+//
+// The assertion is deliberately on the provider, not on the registration:
+// registration succeeded before this was fixed too. `RemoteServer::
+// attachLogIfConfigured` returns *before* consulting the `LogProvider` when the
+// envelope's `contextKey` is empty, so a dropped key does not produce an audit
+// record missing a field — it produces no audit record at all, silently.
+TEST_CASE("morph::qt::QtWebSocketBackend: a private registration carries contextKey to the server's log provider",
+          "[qt][ws][action_log]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    // The provider runs on the server's own strand and the assertions on this
+    // thread; the mutex is what makes that handoff an ordinary handoff rather
+    // than a data race TSan will flag.
+    std::mutex providerMtx;
+    std::vector<std::string> requestedFor;
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    server->setLogProvider([&](std::string_view modelType, std::string_view contextKey) {
+        std::scoped_lock const lock{providerMtx};
+        requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
+        return log;
+    });
+
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl const url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    SECTION("through the blocking registerModelWithContext path") {
+        auto const mid = backend.registerModelWithContext("WsEchoModel", nullptr, "acct-594");
+        REQUIRE(mid.v != 0U);
+        std::scoped_lock const lock{providerMtx};
+        CHECK(requestedFor == std::vector<std::string>{"WsEchoModel:acct-594"});
+    }
+
+    SECTION("and through the default bindModel, which is what Bridge::registerHandler reaches here") {
+        // `asyncRegistrationEnabled` is unset, so this is `IBackend::bindModel`'s
+        // default dispatching the empty-`primary`/zero-`current` shape to
+        // `registerModelWithContext` — the path a `Bridge` over this backend
+        // takes, and the one morph#594 reported as dropping the key.
+        morph::exec::detail::ModelId bound{};
+        backend
+            .bindModel(morph::backend::detail::BindRequest{.typeId = "WsEchoModel",
+                                                           .factory = nullptr,
+                                                           .contextKey = "acct-bind",
+                                                           .primary = {},
+                                                           .current = {}},
+                       morph::exec::detail::inlineExecutor())
+            .thenDetached([&](morph::exec::detail::ModelId mid) { bound = mid; });
+        REQUIRE(bound.v != 0U);
+        std::scoped_lock const lock{providerMtx};
+        CHECK(requestedFor == std::vector<std::string>{"WsEchoModel:acct-bind"});
+    }
+
+    SECTION("while plain registerModel still sends no key, so the provider is not consulted") {
+        auto const mid = backend.registerModel("WsEchoModel", nullptr);
+        REQUIRE(mid.v != 0U);
+        std::scoped_lock const lock{providerMtx};
+        CHECK(requestedFor.empty());
+    }
 }
 
 // ── Custom main: own the QCoreApplication explicitly ─────────────────────────

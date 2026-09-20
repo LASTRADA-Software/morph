@@ -139,8 +139,14 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
 }
 
 ::morph::exec::detail::ModelId QtWebSocketBackend::registerModel(
-    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/) {
-    auto env = ::morph::wire::makeRegister(typeId);
+    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) {
+    return registerModelWithContext(typeId, std::move(factory), {});
+}
+
+::morph::exec::detail::ModelId QtWebSocketBackend::registerModelWithContext(
+    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
+    std::string_view contextKey) {
+    auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
     env.session = _session;
     std::string replyJson;
     try {
