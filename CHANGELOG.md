@@ -257,6 +257,24 @@ API surface).
   `MORPH_BUILD_BANK_GUI`, so this fix is not yet gated by anything; morph#605
   covers that separately. morph#604.
 
+- **The compiler-cache module told you to throw away your build directory, and
+  for a preset it did not even work.** When a launcher is already pinned in the
+  CMake cache, `cmake/CompileCache.cmake` advised "reconfigure with `--fresh`
+  to let this module choose instead". Reconfiguring the *same* directory with
+  `-UCMAKE_C_COMPILER_LAUNCHER -UCMAKE_CXX_COMPILER_LAUNCHER` removes exactly
+  the two entries the module's guard reads, reaches the same selection, and
+  leaves the build directory standing; `--fresh` deletes `CMakeFiles/` and,
+  unless the generator is re-passed, drops `CMAKE_GENERATOR` back to the
+  platform default (measured: a `-G Ninja` tree came back `Unix Makefiles`
+  with a stale `build.ninja` beside the new `Makefile`). And where the pin
+  comes from a **preset** — one of the three sources the message itself
+  names — `--fresh` clears nothing at all, because the preset re-applies its
+  `cacheVariables` on the very reconfigure `--fresh` triggers: the tree is
+  gone and the launcher is still pinned. The message now names `-U` first and
+  keeps `--fresh` with its actual cost and its actual limits. Behaviour is
+  unchanged; only the advice is. Measured on an isolated harness that does
+  nothing but `include()` the module. morph#592.
+
 - **`equation()` no longer walks a shared derivation once per path.**
   `EquationRenderer::assignLabels` was the one traversal without a visited set,
   so a node reachable by *k* displayed paths was walked *k* times. Since the

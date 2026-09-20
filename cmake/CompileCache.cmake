@@ -58,9 +58,36 @@ if(DEFINED CMAKE_CXX_COMPILER_LAUNCHER OR DEFINED CMAKE_C_COMPILER_LAUNCHER)
     # A build tree configured before this module existed carries the launcher of
     # the day in its cache, and would keep it forever without a word about why
     # the selection below never runs.
+    #
+    # -U before --fresh, because the guard above reads exactly two cache entries
+    # and -U deletes exactly those two: the reconfigure then falls through to
+    # the selection below without discarding the build directory. --fresh
+    # reaches the same place for a -D or an older configure, but it deletes
+    # CMakeFiles/ and, unless the generator is re-passed, drops CMAKE_GENERATOR
+    # back to the platform default on the way -- a `cmake -S . -B build --fresh`
+    # on a tree configured `-G Ninja` comes back a Makefile tree with a stale
+    # build.ninja still sitting in it.
+    #
+    # What -U saves is the configure state -- the populated _deps tree, the
+    # generator, generated sources, cached find_ results -- and not, note, the
+    # compiling: a launcher is part of every C/C++ compile command, so the next
+    # build recompiles those TUs whichever route got here. That is the honest
+    # size of it.
+    #
+    # The case that makes the ordering matter rather than merely cheaper is the
+    # "a preset" one this very message names, where --fresh does not work at
+    # all: the preset re-applies its cacheVariables on the reconfigure that
+    # --fresh triggers, so the launcher comes back pinned and the tree is gone
+    # for nothing. -U clears it there too, until the preset is next run.
+    # All of the above measured on an isolated harness, morph#592.
     if(DEFINED CACHE{CMAKE_CXX_COMPILER_LAUNCHER} OR DEFINED CACHE{CMAKE_C_COMPILER_LAUNCHER})
         message(STATUS "[cache] That value comes from the CMake cache (a -D, a preset, or an older configure); "
-                       "reconfigure with --fresh to let this module choose instead.")
+                       "to let this module choose instead, reconfigure the same build directory with "
+                       "-UCMAKE_C_COMPILER_LAUNCHER -UCMAKE_CXX_COMPILER_LAUNCHER, which clears exactly those "
+                       "two entries and leaves the build directory standing. (--fresh clears them too when they "
+                       "came from a -D or an older configure, at the price of the whole build directory; when "
+                       "they come from a preset it clears nothing, because the preset re-applies them on the "
+                       "same reconfigure.)")
     endif()
     return()
 endif()
