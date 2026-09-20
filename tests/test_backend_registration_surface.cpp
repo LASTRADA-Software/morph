@@ -679,3 +679,133 @@ TEST_CASE("morph::bridge::Bridge: registerHandler does not wait for a kCallerMus
     REQUIRE(binding->currentId.load() == 99U);
     REQUIRE(backend->settledOffCallerThread.load());
 }
+
+// ── cancelPending and the completions the adapter itself produced (#619) ─────
+//
+// `SynchronousBackendAdapter::cancelPending` used to be a one-line forward to
+// the wrapped backend. The two verbs the adapter *reshapes* settle from a task
+// on its own private control strand, so the forward reached none of them: a
+// bind cancelled mid-flight went on to resolve **successfully**, which is the
+// opposite of `IBackend::cancelPending`'s contract. The case below holds the
+// wrapped call open so the completion is provably still pending when
+// `cancelPending` runs, and fails if the adapter goes back to forwarding only
+// -- the success continuation runs instead of the error one.
+
+namespace {
+
+/// @brief A wrapped backend whose blocking control calls do not return until
+///        the test lets them, so a cancellation can land while one is in
+///        flight.
+///
+/// Every field the test thread reads is atomic: `RecordingBackend::calls` is a
+/// plain vector appended from the strand thread, so this double counts through
+/// atomics instead and leaves that vector to the strand alone.
+struct GatedBackend : RecordingBackend {
+    std::mutex mtx;
+    std::condition_variable gate;
+    bool released = false;
+    /// @brief Control calls that have entered the blocking region.
+    std::atomic<int> entered{0};
+    /// @brief Control calls that have come back out of it.
+    std::atomic<int> finished{0};
+    /// @brief Times the adapter forwarded a cancellation here.
+    std::atomic<int> cancels{0};
+
+    /// @brief Blocks the calling (strand) thread until `letGo()`.
+    void hold() {
+        entered.fetch_add(1);
+        std::unique_lock lock{mtx};
+        (void)gate.wait_for(lock, morph::testing::kDefaultWaitBudget, [this] { return released; });
+    }
+
+    /// @brief Releases every held control call.
+    void letGo() {
+        {
+            std::scoped_lock const lock{mtx};
+            released = true;
+        }
+        gate.notify_all();
+    }
+
+    ModelId registerModelWithContext(const std::string& /*typeId*/,
+                                     std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
+                                     std::string_view /*contextKey*/) override {
+        hold();
+        finished.fetch_add(1);
+        return ModelId{2};
+    }
+
+    void assignPrimary(ModelId /*mid*/, const std::string& /*typeId*/, std::string_view /*primary*/) override {
+        hold();
+        finished.fetch_add(1);
+    }
+
+    void cancelPending(const std::exception_ptr& /*exc*/) override { cancels.fetch_add(1); }
+};
+
+}  // namespace
+
+TEST_CASE("morph::backend::SynchronousBackendAdapter: cancelPending rejects the completions it produced itself",
+          "[backend][registration-surface][threading]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::exec::MainThreadExecutor callerExec;
+    auto inner = std::make_shared<GatedBackend>();
+    SynchronousBackendAdapter adapter{inner, pool};
+
+    std::atomic<int> okRan{0};
+    std::atomic<int> errRan{0};
+    std::string message;
+
+    auto attach = [&](ModelCompletion completion) {
+        completion.then([&](ModelId /*mid*/) { okRan.fetch_add(1); }).onError([&](const std::exception_ptr& exc) {
+            try {
+                std::rethrow_exception(exc);
+            } catch (const std::exception& err) {
+                message = err.what();
+            }
+            errRan.fetch_add(1);
+        });
+    };
+
+    SECTION("bind") {
+        attach(adapter.bindModel(
+            BindRequest{.typeId = std::string{kTypeId}, .factory = makeHolder, .contextKey = "ctx", .primary = {}},
+            callerExec));
+    }
+    SECTION("promote") {
+        attach(adapter.promoteModel(
+            PromoteRequest{.mid = ModelId{7}, .typeId = std::string{kTypeId}, .primary = "key"}, callerExec));
+    }
+
+    // The wrapped control call is provably inside its blocking region, so the
+    // completion is genuinely still pending -- not merely unobserved.
+    REQUIRE(morph::testing::waitUntil([&] { return inner->entered.load() == 1; }));
+    REQUIRE(inner->finished.load() == 0);
+    REQUIRE(okRan.load() == 0);
+    REQUIRE(errRan.load() == 0);
+
+    adapter.cancelPending(std::make_exception_ptr(morph::backend::BridgeDestroyedError{}));
+
+    // Delivered on the caller's executor, like every other continuation from
+    // this adapter, and delivered *before* the wrapped call has returned.
+    REQUIRE(morph::testing::waitUntil([&] {
+        callerExec.runOnce();
+        return errRan.load() == 1;
+    }));
+    REQUIRE(inner->finished.load() == 0);
+    REQUIRE(okRan.load() == 0);
+    REQUIRE(message == std::string{morph::backend::BridgeDestroyedError{}.what()});
+    // ...and the wrapped backend still saw the cancellation it always saw.
+    REQUIRE(inner->cancels.load() == 1);
+
+    // Letting the wrapped call finish must not resurrect the cancelled
+    // completion: its `resolve` finds the state already ready.
+    inner->letGo();
+    REQUIRE(morph::testing::waitUntil([&] {
+        callerExec.runOnce();
+        return inner->finished.load() == 1;
+    }));
+    callerExec.runOnce();
+    REQUIRE(okRan.load() == 0);
+    REQUIRE(errRan.load() == 1);
+}

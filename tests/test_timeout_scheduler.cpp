@@ -98,3 +98,57 @@ TEST_CASE("TimeoutScheduler: cancel() before the deadline prevents the callback 
     std::this_thread::sleep_for(80ms);
     REQUIRE_FALSE(fired.load());
 }
+
+// ── What `cancel()` does about a callback that has already started ───────────
+//
+// The header now states the distinction these two cases make (issue #620):
+// `cancel()` stops a callback that has not started, and returns *without
+// waiting* for one that has. Only `~TimeoutScheduler` means "no callback is in
+// flight", because only it joins. Both halves are asserted below so the prose
+// is measured rather than asserted: the first case fails if `cancel()` ever
+// starts waiting, the second fails if the destructor ever stops joining.
+
+TEST_CASE("TimeoutScheduler: cancel() returns while the callback it names is still running", "[timeout_scheduler]") {
+    std::atomic<bool> entered{false};
+    std::atomic<bool> release{false};
+    std::atomic<bool> finished{false};
+
+    TimeoutScheduler scheduler;
+    auto const handle = scheduler.schedule(1ms, [&] {
+        entered = true;
+        // Bounded so a regression fails the case rather than wedging the suite.
+        (void)waitFor([&] { return release.load(); }, 5s);
+        finished = true;
+    });
+
+    REQUIRE(waitFor([&] { return entered.load(); }));
+
+    // The callback is provably inside its body here, and `run()` erased the
+    // entry before invoking it -- so this takes cancel()'s not-found branch and
+    // returns at once. Nothing stops or waits for the callback.
+    scheduler.cancel(handle);
+    REQUIRE_FALSE(finished.load());
+
+    release = true;
+    REQUIRE(waitFor([&] { return finished.load(); }));
+}
+
+TEST_CASE("TimeoutScheduler: the destructor -- unlike cancel() -- waits for a running callback",
+          "[timeout_scheduler]") {
+    std::atomic<bool> entered{false};
+    std::atomic<bool> finished{false};
+
+    {
+        TimeoutScheduler scheduler;
+        scheduler.schedule(1ms, [&] {
+            entered = true;
+            std::this_thread::sleep_for(50ms);
+            finished = true;
+        });
+        REQUIRE(waitFor([&] { return entered.load(); }));
+    }  // ~TimeoutScheduler joins its thread here.
+
+    // The contrast that makes the cancel() case above a real distinction rather
+    // than a timing accident: this one *is* "no callback in flight afterwards".
+    REQUIRE(finished.load());
+}

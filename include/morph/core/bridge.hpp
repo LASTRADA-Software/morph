@@ -260,6 +260,30 @@ struct ParkedOutcome {
     std::exception_ptr failure;
 };
 
+/// @brief What `Bridge::switchBackend`'s staging phase accumulated before it
+///        committed or rolled back.
+///
+/// Its own type rather than four parallel locals because the rollback and the
+/// commit each need a different subset of it, and a subset silently missed is
+/// how a waiter ends up hanging on a registration that will never report.
+struct StagedRebinds {
+    /// @brief Bindings still live, in `_handlers` order; replaces `_handlers` on commit.
+    std::vector<std::weak_ptr<HandlerBinding>> live;
+
+    /// @brief `(binding, newId)` for every bind that settled successfully in
+    ///        the staging frame. Published on commit, deregistered on rollback.
+    std::vector<std::pair<std::shared_ptr<HandlerBinding>, std::uint64_t>> staged;
+
+    /// @brief Bindings whose bind is still in flight; published as unbound and
+    ///        bound later by their own reply. Only ever non-empty for a
+    ///        `kCallerMustNotBlock` backend.
+    std::vector<std::shared_ptr<HandlerBinding>> deferred;
+
+    /// @brief Every binding this staging phase marked `registrationInFlight`.
+    ///        Settled whichever way the phase ends.
+    std::vector<std::shared_ptr<HandlerBinding>> armed;
+};
+
 /// @brief Handoff slot between an async attach/bind dispatch and its callback.
 ///
 /// `Bridge::attachHandlerAsync`/`ensureBoundAsync` dispatch to the backend while
@@ -1361,6 +1385,21 @@ public:
             newShared->setSession(_defaultSession);
         }
         std::shared_ptr<::morph::backend::detail::IBackend> previous;
+        // Settled after the mutexes are released, never under them: resolving a
+        // waiter runs consumer code, which is free to call back into this
+        // `Bridge`.
+        std::vector<std::shared_ptr<detail::HandlerBinding>> settleBound;
+        std::vector<std::shared_ptr<detail::HandlerBinding>> settleFailed;
+        std::exception_ptr staging;
+        // Whether this frame may stop and wait for each bind to settle. A
+        // backend that answers `kCallerMustNotBlock` delivers its replies
+        // through the calling thread's own event loop, so waiting here is a
+        // deadlock rather than a delay — on a WASM main thread, a page abort.
+        // Until morph#615 this site did not ask at all: it called the blocking
+        // `registerModelShared`/`registerModelWithContext` directly, so a
+        // backend that had just been given a way to say "do not do this to me"
+        // was blocked here anyway. See `IBackend::bindWaitPolicy`.
+        bool const mayBlock = newShared->bindWaitPolicy() == ::morph::backend::detail::BindWait::kCallerMayBlock;
         {
             // Both mutexes: this phase reads/writes every live binding's
             // `primary`/`contextKey` (via `_attachMtx`'s ownership of those
@@ -1369,58 +1408,28 @@ public:
             // assignHandlerPrimary() call on any one of them.
             std::scoped_lock const lock{_mtx, _attachMtx};
 
-            // Phase 1 — register every live binding on the new backend WITHOUT
-            // mutating any `currentId` yet, staging (binding, newId) pairs. If a
-            // registration throws partway (a plausible remote/transport failure),
-            // roll back the ones already registered and rethrow, leaving the old
-            // backend and every `currentId` untouched — so the switch is atomic:
-            // it either fully succeeds or is a no-op.
-            std::vector<std::weak_ptr<detail::HandlerBinding>> live;
-            std::vector<std::pair<std::shared_ptr<detail::HandlerBinding>, uint64_t>> staged;
-            try {
-                for (auto& weak : _handlers) {
-                    auto binding = weak.lock();
-                    if (!binding) {
-                        continue;
-                    }
-                    // A shared binding that never attached has no instance to
-                    // re-create: it stays live and unbound, and acquires one on
-                    // the new backend the first time it is attached.
-                    if (binding->shared && binding->primary.empty()) {
-                        live.push_back(weak);
-                        continue;
-                    }
-                    auto newId = binding->shared
-                                     ? newShared->registerModelShared(
-                                           binding->typeId, binding->modelFactory,
-                                           {.contextKey = binding->contextKey, .primary = binding->primary})
-                                     : newShared->registerModelWithContext(binding->typeId, binding->modelFactory,
-                                                                           binding->contextKey);
-                    staged.emplace_back(binding, newId.v);
-                    live.push_back(weak);
-                }
-            } catch (...) {
-                for (const auto& [binding, newId] : staged) {
-                    try {
-                        newShared->deregisterModel(::morph::exec::detail::ModelId{newId});
-                    } catch (const std::exception& exc) {
-                        ::morph::log::logError(std::string{"[switchBackend] rollback deregister failed: "} +
-                                               exc.what());
-                    }
-                }
-                throw;
+            detail::StagedRebinds rebinds;
+            staging = stageRebinds(newShared, mayBlock, rebinds);
+            if (staging) {
+                rollbackStaged(*newShared, rebinds.staged);
+                settleFailed = std::move(rebinds.armed);
+            } else {
+                previous = commitRebinds(newShared, mayBlock, rebinds, settleBound);
             }
-
-            // Phase 2 — commit. Every registration succeeded, so it is now safe to
-            // publish the new ids and swap the backend in.
-            for (const auto& [binding, newId] : staged) {
-                binding->currentId.store(newId);
-            }
-            _handlers = std::move(live);
-
-            previous = exchangeBackend(newShared);
-            newShared->notifyBackendChanged();
-            installReconnectHandler(newShared);
+        }
+        for (const auto& binding : settleFailed) {
+            resolveRegistrationWaiters(*binding, /*ok=*/false, staging);
+        }
+        for (const auto& binding : settleBound) {
+            resolveRegistrationWaiters(*binding, /*ok=*/true, nullptr);
+        }
+        if (staging) {
+            // Rethrown here rather than from inside the locked block, so the
+            // waiters above are settled outside `_mtx`/`_attachMtx`. Everything
+            // below stays unreached on this path, exactly as before: a staging
+            // failure leaves the outgoing backend's reconnect handler and its
+            // pending completions alone, because the switch did not happen.
+            std::rethrow_exception(staging);
         }
         if (previous && previous != newShared) {
             previous->setReconnectHandler(nullptr);
@@ -1542,7 +1551,17 @@ public:
             if (_executeDeadline.count() > 0 && _timeoutScheduler) {
                 schedulerRef = _timeoutScheduler;
                 // The callback captures `typedState` alone -- never `this` -- so
-                // it stays safe to fire even while ~Bridge() is running.
+                // it stays safe to fire even while ~Bridge() is running, and
+                // equally safe to fire *after* its own `cancel()`:
+                // `TimeoutScheduler::cancel` stops a callback that has not
+                // started but returns without waiting for one that already has
+                // (see that function's comment), so the disarms in the two
+                // continuations below are best-effort by contract and not only
+                // when `cancel()` throws. A deadline callback that is already
+                // mid-flight when the real reply lands still runs its
+                // `setException`, which `CompletionState` discards on an
+                // already-ready state -- first result wins. That, not the
+                // disarm, is what makes the race harmless (morph#620).
                 deadlineHandle = schedulerRef->schedule(_executeDeadline, [typedState] {
                     typedState->setException(std::make_exception_ptr(::morph::backend::ClientTimeoutError{}));
                 });
@@ -1869,9 +1888,6 @@ private:
             binding->registrationInFlight = true;
         }
 
-        std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
-        std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
-
         // `binding->contextKey` is read here without `_attachMtx`, and that is a
         // deliberate carve-out from the "read only under `_attachMtx`" rule the
         // member comment states -- not an oversight. Taking the lock here is
@@ -1891,57 +1907,14 @@ private:
         // **set `contextKey` before calling `registerHandler()`, and do not
         // mutate it concurrently with that call.** After registration returns,
         // every access goes under `_attachMtx` as documented. morph#505.
-        auto onRegistered = [this, weakBackend, weakBinding,
-                             lifetime = _lifetime](::morph::exec::detail::ModelId newId) {
-            auto strongBinding = weakBinding.lock();
-            bool applied = false;
-            if (strongBinding) {
-                // `lifetime`'s gate held across the whole touch of `this`
-                // below (`_mtx`, `loadBackend()`), not just at entry --
-                // `CallbackToken::active()` is advisory and cannot carry
-                // this weight (see `detail::BridgeLifetime`'s own doc
-                // comment). Safe to hold across this span, unlike
-                // `installReconnectHandler`'s reconnect callback
-                // (morph#489, site 4): nothing inside is a call into
-                // unbounded/consumer-supplied code, only a mutex and a
-                // backend-pointer comparison.
-                std::shared_lock const gate{lifetime->mtx};
-                if (lifetime->alive) {
-                    std::scoped_lock const lock{_mtx};
-                    auto pinned = weakBackend.lock();
-                    if (pinned && pinned == loadBackend()) {
-                        // A switchBackend() already moved past this registration
-                        // (see this backend's own doc comment on the class) and
-                        // its own re-registration loop already gave `binding` a
-                        // fresh id on the *new* backend -- applying this stale
-                        // one now would overwrite that with a dangling id from a
-                        // backend nothing uses any more.
-                        strongBinding->currentId.store(newId.v);
-                        applied = true;
-                    }
-                }
-            }
-            // Resolve whenBound() waiters regardless of whether the id was
-            // actually applied above: either way this binding's initial
-            // registration attempt has settled (a stale reply ignored here
-            // means switchBackend's own synchronous re-registration already
-            // bound it), so nothing should still be described as "in
-            // flight". Runs even when the Bridge/binding is gone -- both
-            // weak locks above are only guards on touching `this`/the
-            // binding's other fields, not on this bookkeeping, which reads
-            // no Bridge state.
-            if (strongBinding) {
-                resolveRegistrationWaiters(*strongBinding, /*ok=*/applied || isBound(strongBinding), nullptr);
-            }
-        };
-        auto onFailed = [weakBinding, typeId = binding->typeId](const std::string& message) {
-            ::morph::log::logError("[registerHandler] async registration of '" + typeId + "' failed: " + message);
-            if (auto strongBinding = weakBinding.lock()) {
-                resolveRegistrationWaiters(
-                    *strongBinding, /*ok=*/false,
-                    std::make_exception_ptr(std::runtime_error("registration failed: " + message)));
-            }
-        };
+        //
+        // Both continuations come from `makeBindCallbacks`, shared with
+        // `switchBackend`'s phase 1 and the reconnect handler: a stale reply
+        // is discarded rather than allowed to overwrite the id one of those
+        // two just installed, and `whenBound()` waiters are settled either
+        // way, because a discarded reply still means this binding's own
+        // registration attempt is over.
+        auto [onRegistered, onFailed] = makeBindCallbacks(binding, backend, "[registerHandler]");
 
         bool const started = backend->registerModelAsync(binding->typeId, binding->modelFactory, binding->contextKey,
                                                          onRegistered, onFailed);
@@ -2051,6 +2024,319 @@ private:
         }
     }
 
+    /// @brief Builds the two continuations every model acquisition needs when
+    ///        its reply may arrive after the dispatching frame has gone.
+    ///
+    /// One body for the three sites that acquire an instance for a binding —
+    /// `registerHandlerImpl`, `switchBackend`'s phase 1 and
+    /// `installReconnectHandler`'s handler — because all three have the same
+    /// two problems, and had three chances to solve one of them differently:
+    /// the reply may land on a thread that does not own the `Bridge`, and it
+    /// may be stale by the time it lands.
+    ///
+    /// The success continuation holds `lifetime`'s gate across the whole touch
+    /// of `this` (`_mtx`, `loadBackend()`) rather than only checking at entry —
+    /// `CallbackToken::active()` is advisory and cannot carry that weight, see
+    /// `detail::BridgeLifetime`. Holding it across this span is safe for the
+    /// reason morph#489 gives: nothing inside is a call into unbounded or
+    /// consumer-supplied code, only a mutex and a backend-pointer comparison.
+    /// The id is published only while @p backend is still the active one, so a
+    /// reply from a backend `switchBackend()` has already replaced cannot
+    /// overwrite the id that switch just installed.
+    ///
+    /// Waiters are resolved either way, and outside `_mtx`: whether the id was
+    /// applied or discarded, this binding's registration attempt has settled,
+    /// and nothing should still be described as in flight.
+    /// @param binding Binding the reply belongs to; held weakly by both callbacks.
+    /// @param backend Backend the call was issued to; held weakly, and compared
+    ///                against the active one before anything is published.
+    /// @param site    Bracketed tag naming the caller in the failure log line.
+    /// @return `{onRegistered, onFailed}` — the first takes the new `ModelId`,
+    ///         the second a diagnostic string.
+    [[nodiscard]] std::pair<std::function<void(::morph::exec::detail::ModelId)>,
+                            std::function<void(const std::string&)>>
+    makeBindCallbacks(const std::shared_ptr<detail::HandlerBinding>& binding,
+                      const std::shared_ptr<::morph::backend::detail::IBackend>& backend, std::string_view site) {
+        std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
+        std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
+        std::function<void(::morph::exec::detail::ModelId)> onRegistered =
+            [this, weakBackend, weakBinding, lifetime = _lifetime](::morph::exec::detail::ModelId newId) {
+                auto strongBinding = weakBinding.lock();
+                bool applied = false;
+                if (strongBinding) {
+                    std::shared_lock const gate{lifetime->mtx};
+                    if (lifetime->alive) {
+                        std::scoped_lock const lock{_mtx};
+                        auto pinned = weakBackend.lock();
+                        if (pinned && pinned == loadBackend()) {
+                            strongBinding->currentId.store(newId.v);
+                            applied = true;
+                        }
+                    }
+                }
+                if (strongBinding) {
+                    resolveRegistrationWaiters(*strongBinding, /*ok=*/applied || isBound(strongBinding), nullptr);
+                }
+            };
+        std::function<void(const std::string&)> onFailed = [weakBinding, tag = std::string{site},
+                                                            typeId = binding->typeId](const std::string& message) {
+            ::morph::log::logError(tag + " registration of '" + typeId + "' failed: " + message);
+            if (auto strongBinding = weakBinding.lock()) {
+                resolveRegistrationWaiters(
+                    *strongBinding, /*ok=*/false,
+                    std::make_exception_ptr(std::runtime_error("registration failed: " + message)));
+            }
+        };
+        return {std::move(onRegistered), std::move(onFailed)};
+    }
+
+    /// @brief Acquires an instance for @p binding on @p backend through
+    ///        `IBackend::bindModel`, waiting only if @p mayBlock says it may.
+    ///
+    /// The one dispatch shape `switchBackend`'s staging phase and the reconnect
+    /// handler share (morph#615). A non-empty `primary` with a zero `current`
+    /// is the request shape that means `registerModelShared`, an empty one the
+    /// shape that means `registerModelWithContext` — the two blocking verbs
+    /// both sites called directly until morph#615 — so a backend with only the
+    /// default `bindModel` runs exactly the call it always did and settles
+    /// before this returns. `inlineExecutor()` because that is where these
+    /// continuations ran before; see `attachHandlerAsync`.
+    ///
+    /// A reply that lands inside this frame is parked rather than acted on,
+    /// because both callers hold `_mtx`/`_attachMtx` here and the continuation
+    /// takes `_mtx` itself.
+    /// @param binding  Binding to acquire an instance for.
+    /// @param backend  Backend to acquire it from.
+    /// @param mayBlock `true` to wait the bind out (`bindWaitPolicy()` said the
+    ///                 caller may), `false` to take only what has already landed.
+    /// @param site     Bracketed tag naming the caller in a failure log line.
+    /// @return The outcome if it settled in this frame; `std::nullopt` if the
+    ///         reply is still to come, which only @p mayBlock `== false` allows.
+    [[nodiscard]] std::optional<detail::ParkedOutcome> rebindThroughSurface(
+        const std::shared_ptr<detail::HandlerBinding>& binding,
+        const std::shared_ptr<::morph::backend::detail::IBackend>& backend, bool mayBlock, std::string_view site) {
+        auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
+        auto [onBound, onFailed] = makeBindCallbacks(binding, backend, site);
+        auto completion = backend->bindModel(
+            ::morph::backend::detail::BindRequest{.typeId = binding->typeId,
+                                                  .factory = binding->modelFactory,
+                                                  .contextKey = binding->contextKey,
+                                                  .primary = binding->shared ? binding->primary : std::string{},
+                                                  .current = {}},
+            ::morph::exec::detail::inlineExecutor());
+        completion
+            .then([onBound, handoff](::morph::exec::detail::ModelId newId) {
+                if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
+                    return;  // Settled inline: the dispatching frame owns the outcome.
+                }
+                onBound(newId);
+            })
+            .onError([onFailed, handoff](const std::exception_ptr& failure) {
+                if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
+                    return;
+                }
+                onFailed(detail::describeFailure(failure));
+            });
+        return mayBlock ? detail::awaitHandoff(*handoff) : detail::claimHandoff(*handoff);
+    }
+
+    /// @brief Marks @p binding's registration in flight, so `whenBound()` can
+    ///        gate on the window a deferred re-registration opens.
+    ///
+    /// Set *before* the dispatch, not after: the reply can land the moment
+    /// `bindModel` is called, and a `whenBound()` racing in from another thread
+    /// must see "in flight" for the whole window the bind can resolve in.
+    /// @param binding Binding to arm.
+    static void armRegistration(detail::HandlerBinding& binding) {
+        std::scoped_lock const guard{binding.registrationMtx};
+        binding.registrationInFlight = true;
+    }
+
+    /// @brief `switchBackend`'s phase 1: acquire an instance for every live
+    ///        binding on @p newBackend without publishing anything yet.
+    ///
+    /// Caller holds `_mtx` and `_attachMtx`. Reports failure by returning the
+    /// exception rather than throwing it, so the caller keeps everything
+    /// @p out accumulated and can roll it back.
+    ///
+    /// Atomicity is exactly as strong as the wait is. For a `kCallerMayBlock`
+    /// backend — everything in the tree that is not a
+    /// `SynchronousBackendAdapter` or a WASM-configured `QtWebSocketBackend` —
+    /// this frame waits out each bind, so every outcome is known before
+    /// anything is published and the guarantee is what it always was. For a
+    /// `kCallerMustNotBlock` backend it cannot be: "did every re-registration
+    /// succeed" is not knowable without waiting, and waiting is the deadlock
+    /// the policy exists to prevent. Those binds land in `out.deferred`.
+    /// @param newBackend Backend being switched to.
+    /// @param mayBlock   Whether this frame may wait for each bind to settle.
+    /// @param out        Accumulator; filled incrementally, valid on failure too.
+    /// @return Null on success, or the failure that ended staging.
+    [[nodiscard]] std::exception_ptr stageRebinds(
+        const std::shared_ptr<::morph::backend::detail::IBackend>& newBackend, bool mayBlock,
+        detail::StagedRebinds& out) {
+        try {
+            for (auto& weak : _handlers) {
+                auto binding = weak.lock();
+                if (!binding) {
+                    continue;
+                }
+                // A shared binding that never attached has no instance to
+                // re-create: it stays live and unbound, and acquires one on the
+                // new backend the first time it is attached.
+                if (binding->shared && binding->primary.empty()) {
+                    out.live.push_back(weak);
+                    continue;
+                }
+                // Only armed on the path that can actually defer — a waiting
+                // frame settles every outcome itself, so `registrationInFlight`
+                // stays what it was before morph#615 for every backend that
+                // lets this frame wait.
+                if (!mayBlock) {
+                    armRegistration(*binding);
+                    out.armed.push_back(binding);
+                }
+                auto parked = rebindThroughSurface(binding, newBackend, mayBlock, "[switchBackend]");
+                if (!parked) {
+                    out.deferred.push_back(binding);
+                    out.live.push_back(weak);
+                    continue;
+                }
+                if (!parked->succeeded) {
+                    // A rejected `Completion`, where this loop used to catch a
+                    // throw: the structural surface reports failure through the
+                    // completion, and a bare `catch (...)` can no longer see
+                    // it. The rollback keys on this (morph#615).
+                    return parked->failure;
+                }
+                out.staged.emplace_back(binding, parked->modelId.v);
+                out.live.push_back(weak);
+            }
+        } catch (...) {
+            // `bindModel` rejects rather than throws by contract, so this
+            // guards only what the contract does not cover — an allocation in
+            // this loop, or a backend that throws out of `bindModel` anyway.
+            return std::current_exception();
+        }
+        return nullptr;
+    }
+
+    /// @brief Undoes every instance `stageRebinds` created, after it failed.
+    ///
+    /// A deregister that itself throws is logged and the sweep continues: the
+    /// staging failure is the error the caller must see, not this one.
+    /// @param backend Backend the staged instances were created on.
+    /// @param staged  Staged `(binding, newId)` pairs to release.
+    static void rollbackStaged(
+        ::morph::backend::detail::IBackend& backend,
+        const std::vector<std::pair<std::shared_ptr<detail::HandlerBinding>, std::uint64_t>>& staged) {
+        for (const auto& [binding, newId] : staged) {
+            try {
+                backend.deregisterModel(::morph::exec::detail::ModelId{newId});
+            } catch (const std::exception& exc) {
+                ::morph::log::logError(std::string{"[switchBackend] rollback deregister failed: "} + exc.what());
+            }
+        }
+    }
+
+    /// @brief `switchBackend`'s phase 2: publish the staged ids and swap the
+    ///        backend in. Caller holds `_mtx` and `_attachMtx`.
+    ///
+    /// A deferred binding is published as **unbound**: the id it held belonged
+    /// to the backend being replaced and means nothing on the new one, while
+    /// the new id is not here yet. Unbound is the honest state, and it is the
+    /// one `executeVia` fails fast on and `whenBound()` gates on — strictly
+    /// better than a dangling id from a backend nothing uses any more, which
+    /// `executeVia` would happily dispatch against.
+    /// @param newBackend Backend to install.
+    /// @param mayBlock   Whether staging was allowed to wait; when it was, no
+    ///                   binding was armed and none needs settling.
+    /// @param rebinds    What staging accumulated.
+    /// @param settleBound Out: bindings whose waiters the caller must resolve
+    ///                    with `true`, once it has released the mutexes.
+    /// @return The backend just replaced, for the caller to retire.
+    [[nodiscard]] std::shared_ptr<::morph::backend::detail::IBackend> commitRebinds(
+        const std::shared_ptr<::morph::backend::detail::IBackend>& newBackend, bool mayBlock,
+        detail::StagedRebinds& rebinds, std::vector<std::shared_ptr<detail::HandlerBinding>>& settleBound) {
+        for (const auto& [binding, newId] : rebinds.staged) {
+            binding->currentId.store(newId);
+        }
+        for (const auto& binding : rebinds.deferred) {
+            binding->currentId.store(0);
+        }
+        _handlers = std::move(rebinds.live);
+
+        auto previous = exchangeBackend(newBackend);
+        newBackend->notifyBackendChanged();
+        installReconnectHandler(newBackend);
+        if (!mayBlock) {
+            settleBound.reserve(rebinds.staged.size());
+            for (const auto& [binding, newId] : rebinds.staged) {
+                settleBound.push_back(binding);
+            }
+        }
+        return previous;
+    }
+
+    /// @brief Re-acquires an instance for every live binding on a backend that
+    ///        has just reconnected. Caller holds `_mtx` and `_attachMtx`.
+    ///
+    /// The reconnect counterpart of `stageRebinds`, and deliberately not the
+    /// same function: there is nothing to stage here. The connection those ids
+    /// belonged to is gone either way, so each binding is published as it
+    /// settles and a failure costs only that binding.
+    /// @param pinned   The reconnected backend, already checked to be the active one.
+    /// @param mayBlock Whether this frame may wait for each bind to settle.
+    /// @return `(binding, failure)` pairs whose waiters the caller must resolve
+    ///         once it has released the mutexes; a null failure means success.
+    [[nodiscard]] std::vector<std::pair<std::shared_ptr<detail::HandlerBinding>, std::exception_ptr>> reregisterLive(
+        const std::shared_ptr<::morph::backend::detail::IBackend>& pinned, bool mayBlock) {
+        std::vector<std::pair<std::shared_ptr<detail::HandlerBinding>, std::exception_ptr>> settle;
+        for (auto& weak : _handlers) {
+            auto binding = weak.lock();
+            if (!binding) {
+                continue;
+            }
+            // Same branch as switchBackend()'s staging phase: a shared binding
+            // that never attached has no instance to re-create on the
+            // reconnected backend either, and a shared binding that did attach
+            // must come back through the `registerModelShared` request shape (a
+            // non-empty `primary`), or it re-registers as a non-shared instance
+            // and silently drops the sharing.
+            if (binding->shared && binding->primary.empty()) {
+                continue;
+            }
+            if (!mayBlock) {
+                armRegistration(*binding);
+            }
+            auto parked = rebindThroughSurface(binding, pinned, mayBlock, "[reconnect]");
+            if (!parked) {
+                // The reply is still to come and will publish itself. The id
+                // this binding holds belongs to the connection that just
+                // dropped, so it is cleared rather than left to be dispatched
+                // against: `executeVia` fails fast on an unbound handler, and
+                // `whenBound()` — which this path is the first re-registration
+                // ever to arm — lets a caller wait the reconnect out instead.
+                binding->currentId.store(0);
+                continue;
+            }
+            if (!parked->succeeded) {
+                // Before morph#615 a failing re-registration threw out of the
+                // handler and onto the transport thread, taking every binding
+                // after it with it. A rejected `Completion` is reported per
+                // binding instead: this one is left unbound and the loop
+                // carries on.
+                binding->currentId.store(0);
+                settle.emplace_back(binding, parked->failure);
+                continue;
+            }
+            binding->currentId.store(parked->modelId.v);
+            if (!mayBlock) {
+                settle.emplace_back(binding, nullptr);
+            }
+        }
+        return settle;
+    }
+
     std::shared_ptr<::morph::backend::detail::IBackend> exchangeBackend(
         std::shared_ptr<::morph::backend::detail::IBackend> next) {
         std::scoped_lock const lock{_backendMtx};
@@ -2077,33 +2363,34 @@ private:
                 return;  // The Bridge is gone; do not touch `this`.
             }
             auto pinned = weakBackend.lock();
-            // Both mutexes: reads `_handlers` (guarded by `_mtx`) and each
-            // binding's `contextKey` (guarded by `_attachMtx`), same
-            // reasoning as switchBackend() above.
-            std::scoped_lock const lock{_mtx, _attachMtx};
-            if (!pinned || pinned != loadBackend()) {
-                return;  // We've moved on to a different backend; ignore.
+            // Settled after the mutexes are released, for the reason
+            // switchBackend() gives: resolving a waiter runs consumer code.
+            std::vector<std::pair<std::shared_ptr<detail::HandlerBinding>, std::exception_ptr>> settle;
+            {
+                // Both mutexes: reads `_handlers` (guarded by `_mtx`) and each
+                // binding's `contextKey` (guarded by `_attachMtx`), same
+                // reasoning as switchBackend() above.
+                std::scoped_lock const lock{_mtx, _attachMtx};
+                if (!pinned || pinned != loadBackend()) {
+                    return;  // We've moved on to a different backend; ignore.
+                }
+                // The same question switchBackend() now asks, for the same
+                // reason, and it matters more here: this handler runs on the
+                // backend's *transport* thread, and for a `QtWebSocketBackend`
+                // with `asyncRegistrationEnabled` that thread is the one whose
+                // event loop has to deliver the reply. Calling the blocking
+                // verb here — which is what this loop did until morph#615 —
+                // parks it against itself, and on a WASM main thread aborts
+                // the page. See `IBackend::bindWaitPolicy` and morph#568.
+                settle = reregisterLive(
+                    pinned, pinned->bindWaitPolicy() == ::morph::backend::detail::BindWait::kCallerMayBlock);
             }
-            for (auto& weak : _handlers) {
-                auto binding = weak.lock();
-                if (!binding) {
-                    continue;
+            for (const auto& [binding, failure] : settle) {
+                if (failure) {
+                    ::morph::log::logError("[reconnect] registration of '" + binding->typeId +
+                                           "' failed: " + detail::describeFailure(failure));
                 }
-                // Same branch as switchBackend()'s phase 1: a shared binding
-                // that never attached has no instance to re-create on the
-                // reconnected backend either, and a shared binding that did
-                // attach must come back through registerModelShared (not
-                // registerModelWithContext), or it re-registers as a
-                // non-shared instance and silently drops the sharing.
-                if (binding->shared && binding->primary.empty()) {
-                    continue;
-                }
-                auto newId = binding->shared ? pinned->registerModelShared(
-                                                   binding->typeId, binding->modelFactory,
-                                                   {.contextKey = binding->contextKey, .primary = binding->primary})
-                                             : pinned->registerModelWithContext(binding->typeId, binding->modelFactory,
-                                                                                binding->contextKey);
-                binding->currentId.store(newId.v);
+                resolveRegistrationWaiters(*binding, /*ok=*/failure == nullptr, failure);
             }
         });
     }

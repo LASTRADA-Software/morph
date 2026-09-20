@@ -104,12 +104,34 @@ handler so backends with recoverable transports (e.g. `QtWebSocketBackend`)
 re-register all live bindings on reconnection. The handler branches on
 `binding->shared` exactly as `switchBackend()`'s phase 1 does: an unattached
 shared binding (`binding->primary` empty) has no instance to recreate and is
-skipped, and an attached shared binding re-registers through
-`registerModelShared(typeId, modelFactory, {contextKey, primary})` rather than
-`registerModelWithContext` — otherwise the reconnected registration would come
-back as an ordinary non-shared instance, silently dropping the sharing a
+skipped, and an attached shared binding re-registers through the
+`registerModelShared` request shape (a non-empty `primary`) rather than the
+`registerModelWithContext` one — otherwise the reconnected registration would
+come back as an ordinary non-shared instance, silently dropping the sharing a
 surviving handler had before the disconnect. A non-shared binding is
-unaffected and still re-registers via `registerModelWithContext`.
+unaffected and still re-registers through the `registerModelWithContext`
+shape.
+
+Since morph#615 the handler reaches the backend through
+`IBackend::bindModel` — the structural registration surface — and consults
+`IBackend::bindWaitPolicy()` exactly as `registerHandlerImpl` does. It matters
+here more than anywhere: the handler runs on the backend's *transport* thread,
+so for a backend whose reply is delivered by that same thread's event loop
+(`QtWebSocketBackend` with `asyncRegistrationEnabled`) the blocking verbs this
+loop used to call park the thread against itself, and on a WASM main thread
+abort the page. Three consequences:
+
+- For a `kCallerMayBlock` backend the handler waits out each bind and behaves
+  exactly as it did before, blocking verb for blocking verb.
+- For a `kCallerMustNotBlock` backend it does not wait. Each binding's
+  `currentId` is cleared — the id belonged to the connection that just
+  dropped, so `executeVia`'s fast fail is the honest answer and `whenBound()`
+  becomes gateable (see below) — and the reply publishes the new id when it
+  arrives.
+- A failing re-registration no longer takes the rest of the loop with it. It
+  used to throw out of the handler and onto the transport thread; a rejected
+  `Completion` is reported per binding instead, the binding is left unbound,
+  and the loop continues.
 
 **`registerHandler<Model>()`** creates a `HandlerBinding` with the default
 `ModelFactory::create<Model>()` factory and registers it on the active
@@ -197,8 +219,32 @@ only the two bridge-touching side effects are skipped when the token has
 expired.
 
 **`switchBackend(newBackend)`** replaces the active backend atomically: the
-switch either fully succeeds or leaves everything exactly as it was. It has
-two overloads:
+switch either fully succeeds or leaves everything exactly as it was. Since
+morph#615 phase 1 acquires each instance through `IBackend::bindModel` and
+consults `IBackend::bindWaitPolicy()`, and **atomicity is exactly as strong as
+the wait is**:
+
+- `kCallerMayBlock` (every backend in the tree that is not a
+  `SynchronousBackendAdapter` or a WASM-configured `QtWebSocketBackend`): the
+  frame waits out each bind, so every outcome is known before anything is
+  published. The guarantee is unchanged; the rollback simply keys on a
+  rejected `Completion` now rather than on a thrown exception, which is what
+  the structural surface reports failure through.
+- `kCallerMustNotBlock`: it cannot be. "Did every re-registration succeed" is
+  not knowable without waiting, and waiting on such a backend is the deadlock
+  the policy exists to prevent. Those bindings are *deferred*: the swap
+  happens, their `currentId` is set to 0, `registrationInFlight` is set so
+  `whenBound()` can gate on them, and each reply binds its own. A deferred
+  bind that fails after the swap is logged and rejects that binding's
+  `whenBound()` waiters; it cannot roll the switch back. An instance created
+  by a deferred bind whose switch later threw is not deregistered either —
+  nothing in the rollback ever learns its id.
+
+Waiters are always resolved after `_mtx`/`_attachMtx` are released, because
+resolving one runs consumer code that is free to re-enter the `Bridge`; the
+staging exception is rethrown after that, for the same reason.
+
+It has two overloads:
 
 - `switchBackend(shared_ptr<IBackend>)` — the caller keeps its own reference,
   so the same backend instance can be re-installed later (e.g. switching back
@@ -575,10 +621,14 @@ here and nowhere else. See issue #347.
 Scope limits worth knowing, because each is a question `whenBound()` looks like
 it answers and does not:
 
-- **It tracks the initial registration only.** `registerHandlerImpl` is the
-  sole writer of `registrationInFlight`. Re-registration by `switchBackend()`
-  and by the reconnect handler is synchronous and never sets it, so
-  `whenBound()` says nothing about a backend swap or a reconnect in progress.
+- **It tracks the initial registration, plus a re-registration that could not
+  be waited for.** `registerHandlerImpl` sets `registrationInFlight` on every
+  path. `switchBackend()` and the reconnect handler set it only when the new
+  backend answers `kCallerMustNotBlock` (morph#615) — the one case where they
+  leave a binding unbound with a reply still to come, which is exactly the
+  state `whenBound()` exists to describe. Against a `kCallerMayBlock` backend
+  both still settle every outcome inside their own frame and set nothing, so
+  `whenBound()` says nothing about a swap or reconnect there, as before.
 - **It does not track the shared attach path.** `attachHandler`/`ensureBound`
   and their async counterparts bind a shared handler without going through
   `registerHandlerImpl`, so for an `AllowShared` handler `whenBound()` is only
@@ -900,7 +950,7 @@ make teardown order-independent.)
 | dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
 | `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. Prefers `IBackend::registerModelAsync`; see `backend.md`. |
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
-| `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Pushes the current default session onto the new backend via `setSession` before staging. Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its duration. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
+| `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Pushes the current default session onto the new backend via `setSession` before staging. Stages all re-registrations through `bindModel` on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Atomic exactly when the new backend answers `kCallerMayBlock`; a `kCallerMustNotBlock` backend's binds are deferred and the switch is not all-or-nothing (see above). Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its staging and commit, and resolves `whenBound()` waiters after releasing them. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
 | `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, the `pendingCalls()` decrement, and the execute-deadline disarm) are gated on the bridge's `CallbackToken`, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. Arms the client-side execute deadline when one is installed (see `setExecuteDeadline`); the fast-fail "handler not bound" path returns before that and arms nothing. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context; also pushes it to the active backend via `IBackend::setSession` so control envelopes (register/attach/assign/deregister) carry it too, not only `execute`. |

@@ -301,13 +301,23 @@ that bounded wait into an unbounded one. Four dispositions, by site:
 - **`installReconnectHandler`'s reconnect callback.** Left as a `liveness()`
   check, deliberately not moved to `BridgeLifetime` — this is the case the
   first paragraph above warns about. The handler runs on the backend's
-  transport thread and calls `registerModelWithContext`/`registerModelShared`,
-  which blocks on a nested `QEventLoop` for `QtWebSocketBackend`. Gating that
-  span would let `~Bridge` block for the same round trip, and if the reconnect
-  and `~Bridge` ever land on the same thread — plausible for Qt, whose nested
-  loop pumps the very deferred-delete event that could run the destructor —
-  that is a self-deadlock, not a slow teardown. No safe mechanical fix is known
-  for this site; it remains open, tracked as the residual scope of issue #489.
+  transport thread; gating its span would let `~Bridge` block for the whole
+  re-registration, and if the reconnect and `~Bridge` ever land on the same
+  thread — plausible for Qt, whose nested loop pumps the very deferred-delete
+  event that could run the destructor — that is a self-deadlock, not a slow
+  teardown.
+
+  morph#615 removed the worst version of that span rather than the span
+  itself. The handler used to call `registerModelWithContext`/
+  `registerModelShared`, which for `QtWebSocketBackend` block on a nested
+  `QEventLoop`; it now calls `bindModel` and consults
+  `IBackend::bindWaitPolicy()`, so a backend that says `kCallerMustNotBlock`
+  is not waited for at all and the handler returns promptly. A
+  `kCallerMayBlock` backend is still waited out, on the transport thread,
+  under both bridge mutexes — a bounded round trip by that backend's own
+  contract, but still a span a `BridgeLifetime` gate must not cover. So the
+  site stays on `liveness()`, and the residual scope of issue #489 stays
+  open.
 - **The `*Async` reply callbacks** — `attachHandlerAsync`, `ensureBoundAsync`
   and `assignHandlerPrimary`, three of the four `IBackend` async hooks. (The
   fourth, `registerHandlerImpl`, is covered by the `BridgeLifetime` bullet

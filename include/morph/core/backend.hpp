@@ -646,10 +646,14 @@ struct IBackend {
     ///
     /// Answers the one question `Completion` cannot: an unsettled `Completion`
     /// looks the same whether the reply is coming from a thread the caller does
-    /// not own or from the caller's own event loop. Only a synchronous entry
-    /// point that must hand back a *bound* instance asks it —
-    /// `Bridge::registerHandlerImpl` is the single caller in the framework; the
-    /// asynchronous entry points never wait and never consult it.
+    /// not own or from the caller's own event loop. Only a frame that would
+    /// otherwise stop and wait asks it — `Bridge::registerHandlerImpl` (a
+    /// synchronous entry point that must hand back a *bound* instance),
+    /// `Bridge::switchBackend`'s staging phase, and
+    /// `Bridge::installReconnectHandler`'s handler, which is the one that runs
+    /// on the backend's own transport thread and so is the one a wrong answer
+    /// deadlocks outright (morph#615). The asynchronous entry points never wait
+    /// and never consult it.
     ///
     /// A backend that returns `kCallerMayBlock` (the default) commits to
     /// settling every `Completion` it returns exactly once without any further
@@ -925,6 +929,12 @@ public:
         }
     }
 
+    /// @brief The producer side of a `bindModel`/`promoteModel` completion.
+    ///
+    /// Named because `cancelPending` has to hold these weakly; see
+    /// `trackPending`.
+    using BindPromise = ::morph::async::Completion<::morph::exec::detail::ModelId>::Promise;
+
     /// @brief The wrapped backend.
     /// @return Reference to the backend passed at construction; never null.
     [[nodiscard]] detail::IBackend& wrapped() const noexcept { return *_inner; }
@@ -1128,9 +1138,47 @@ public:
     /// @brief Forwards to the wrapped backend.
     void notifyBackendChanged() override { _inner->notifyBackendChanged(); }
 
-    /// @brief Forwards to the wrapped backend.
-    /// @param exc Exception delivered to every still-pending completion.
-    void cancelPending(const std::exception_ptr& exc) override { _inner->cancelPending(exc); }
+    /// @brief Rejects the completions *this adapter* produced, then forwards.
+    ///
+    /// Not a plain forward, unlike everything else in this block, and for the
+    /// same reason `bindWaitPolicy()` is not: the two verbs this adapter
+    /// reshapes produce completions the wrapped backend has never heard of.
+    /// A `bindModel` here settles from a task on `_control`, so
+    /// `_inner->cancelPending` reaches nothing of it — before morph#619 a bind
+    /// dispatched through this adapter went on to resolve **successfully**
+    /// after cancellation, which is the exact opposite of what
+    /// `IBackend::cancelPending` promises ("after this call, any later
+    /// `setValue`/`setException` on those states is a no-op").
+    ///
+    /// The adapter's own promises are rejected first and the forward happens
+    /// second: the strand task is still running `op()` while this executes, and
+    /// rejecting before handing control to the wrapped backend keeps that
+    /// window as short as the caller's own call. A task that finished first
+    /// wins — its completion was not "still pending" — and a task that finishes
+    /// after finds the promise settled, which `CompletionState::setValue`'s
+    /// `if (ready) return;` makes a no-op.
+    ///
+    /// **What this does not do:** a task already queued on `_control` still
+    /// runs its blocking control call against the wrapped backend after this
+    /// returns. The caller is told the bind was cancelled, but the registration
+    /// may still happen — morph#636, since stopping it needs the task to check
+    /// before calling `op()`, not the promise to be settled after it.
+    /// @param exc Exception delivered to every still-pending completion, this
+    ///            adapter's own and then the wrapped backend's.
+    void cancelPending(const std::exception_ptr& exc) override {
+        std::vector<std::weak_ptr<BindPromise>> snapshot;
+        {
+            std::scoped_lock const lock{_pendingMtx};
+            snapshot.swap(_pending);
+            _compactAt = kPendingCompactFloor;
+        }
+        for (auto& weak : snapshot) {
+            if (auto promise = weak.lock()) {
+                promise->reject(exc);
+            }
+        }
+        _inner->cancelPending(exc);
+    }
 
     /// @brief Forwards to the wrapped backend.
     /// @param handler Callable invoked after a successful reconnect; `nullptr` clears.
@@ -1163,6 +1211,12 @@ private:
         using Settled = ::morph::async::Completion<::morph::exec::detail::ModelId>;
         auto [completion, promise] = Settled::makeSettleable(&cbExec);
         auto shared = std::make_shared<Settled::Promise>(std::move(promise));
+        // Tracked *before* the post, not after: a `cancelPending` that lands in
+        // between would otherwise find an empty list and leave a completion
+        // that is genuinely pending uncancelled. Rejecting a promise whose task
+        // has not started yet is safe — the task's own `resolve` then finds the
+        // state ready and returns (morph#619).
+        trackPending(shared);
         _control.post(kControlStrand, [shared, op = std::move(op)]() mutable {
             try {
                 shared->resolve(op());
@@ -1173,13 +1227,49 @@ private:
         return std::move(completion);
     }
 
+    /// @brief Records @p promise as cancellable until its task settles it.
+    ///
+    /// The strand task holds the only `shared_ptr` to the promise, so an entry
+    /// here expires exactly when that task is destroyed — "still pending" needs
+    /// no separate bookkeeping and no erase on the success path.
+    ///
+    /// Swept on the same amortised schedule as `LocalBackend::trackPending`
+    /// (morph#528): dead entries are reclaimed only when the list reaches
+    /// `_compactAt`, which each sweep re-arms at twice the surviving count, so
+    /// the per-dispatch cost is O(1) and the list stays bounded at twice the
+    /// live count plus the floor. Control calls are serialised onto one strand,
+    /// so in practice the live count is one and the floor is never reached;
+    /// without the sweep the list would still grow without bound on an adapter
+    /// whose `cancelPending` is never called.
+    /// @param promise Promise to reject if `cancelPending` runs before its task settles it.
+    void trackPending(const std::shared_ptr<BindPromise>& promise) {
+        std::scoped_lock const lock{_pendingMtx};
+        if (_pending.size() >= _compactAt) {
+            std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
+            _compactAt = std::max(kPendingCompactFloor, _pending.size() * 2);
+        }
+        _pending.emplace_back(promise);
+    }
+
     /// @brief The single strand key every control call shares, so they run one
     ///        at a time. Not a real model id: this `StrandExecutor` is private
     ///        to the adapter and shares no key space with any backend's own.
     static constexpr ::morph::exec::detail::ModelId kControlStrand{1};
 
+    /// @brief Smallest size at which `trackPending` sweeps; see `LocalBackend`'s.
+    static constexpr std::size_t kPendingCompactFloor = 32;
+
     std::shared_ptr<detail::IBackend> _inner;
     ::morph::exec::detail::StrandExecutor _control;
+    mutable std::mutex _pendingMtx;
+    // Every `bindModel`/`promoteModel` promise handed to a `_control` task and
+    // not yet settled by it. Weak, so a settled task's promise drops out on its
+    // own; guarded by `_pendingMtx`, because `cancelPending` is called from
+    // `Bridge`'s thread while `dispatch` runs on whichever thread called it.
+    std::vector<std::weak_ptr<BindPromise>> _pending;
+    // Size at which `trackPending` next sweeps `_pending`; re-armed at twice
+    // the surviving count. Guarded by `_pendingMtx` with `_pending` itself.
+    std::size_t _compactAt = kPendingCompactFloor;
 };
 
 /// @brief In-process backend that executes model actions on a thread pool strand.

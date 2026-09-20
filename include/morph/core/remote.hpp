@@ -1502,6 +1502,15 @@ private:
                 // typo-drift risk a shared constant guards against doesn't
                 // apply here the way it does for the consumer-side comparison
                 // in `core/detail/reply_router.hpp`.
+                //
+                // Safe to fire after its own `cancel()`, which the strand task
+                // below issues on both its success and its failure arm:
+                // `TimeoutScheduler::cancel` stops a callback that has not
+                // started but returns without waiting for one that already has
+                // (see that function's comment). A timeout callback already
+                // mid-flight when the dispatch finishes therefore still calls
+                // `complete`, and `complete`'s reply-exactly-once flag drops
+                // it rather than double-answering the call (morph#620).
                 timeoutHandle = _timeoutScheduler->schedule(limits.executeTimeout, [complete, callId]() mutable {
                     complete(::morph::wire::encode(::morph::wire::makeErr("timeout", callId)));
                 });
