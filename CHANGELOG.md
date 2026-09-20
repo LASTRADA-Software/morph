@@ -11,6 +11,27 @@ API surface).
 
 ### Changed
 
+- **`LocalBackend::execute` no longer rescans the pending-completion list on
+  every dispatch.** `trackPending` used to `std::erase_if` the whole `_pending`
+  vector before each append, so admitting one call with *n* already in flight
+  cost *n* atomic `weak_ptr::expired()` loads under `_pendingMtx`, and a burst of
+  *n* cost O(n²) — before any model work started. Measured against one parked
+  model (clang 22.1.8, `-O2`, 8-core Linux), timing only the `execute()` calls:
+  32,000 queued executes spent **362 ms** in admission alone, at **24.1 µs** per
+  admission over the last tenth; 16,000 spent 77.8 ms. The sweep is now
+  amortised — it runs only when the list reaches a threshold re-armed at twice
+  the surviving entry count after each sweep — which brings the same case to
+  **7.6 ms** total and **0.31 µs** per admission, flat in *n*, and within noise of
+  the 7.6 ms measured with the sweep deleted outright.
+
+  The list is now bounded at twice the live count rather than exactly it, which
+  is the whole price; a new `LocalBackend::trackedPendingCount()` makes that
+  observable. `cancelPending` is unaffected and still fails every live
+  completion on a backend swap or `~Bridge`: it never saw dead entries in the
+  first place, because `weak.lock()` has always skipped them. See
+  `docs/spec/core/backend.md`, "The pending list and its amortised compaction",
+  and morph#528.
+
 - **`Quantity::equation()` writes out at most 100 derivation steps by default,
   and takes the limit as an argument.** A derivation has no bound — a
   data-driven `total = total + row` loop records one step per iteration — and
