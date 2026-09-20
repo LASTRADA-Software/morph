@@ -401,10 +401,17 @@ Emscripten's non-pthread `pthread_create` stub, so constructing a `std::thread`
 throws `std::system_error` at runtime — which would have made
 `setExecuteDeadline` unusable from a browser tab, and with it
 `examples/common/gui/event_poller.hpp`, whose constructor calls it
-unconditionally. Two behavioural differences, both documented in
+unconditionally. Three behavioural differences, all documented in
 `timeout_scheduler.hpp`'s own `@file` comment: callbacks are never concurrent
-with the caller, and `cancel()` releases the callback immediately but leaves the
-underlying browser timer to elapse harmlessly rather than clearing it. **This
+with the caller; `cancel()` releases the callback immediately but leaves the
+underlying browser timer to elapse harmlessly rather than clearing it; and
+`cancel()` there really does mean "no callback runs after this returns",
+whereas the threaded build's `cancel()` returns while an *already-started*
+callback goes on running on the scheduler thread (morph#620). A caller that
+must work in both builds gets the weaker of the two: every scheduled callback
+has to stay safe to run after its own `cancel()`, which the deadline callback
+here does by settling a write-once `CompletionState` it holds a `shared_ptr`
+to. **This
 build has never been compiled or run in this repository** — no Emscripten
 toolchain is available here; its only verification is the `ladder-wasm` CI
 compile gate.

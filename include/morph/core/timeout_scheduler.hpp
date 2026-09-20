@@ -43,6 +43,15 @@
 ///   the underlying browser timer is not itself cleared — it still fires at
 ///   its original deadline and finds nothing to do. Only a small ticket
 ///   allocation outlives `cancel()`, until that point.
+/// - **Cancelling a callback that has *already started*.** Threaded build:
+///   `cancel()` cannot stop it. `run()` erases the entry before invoking the
+///   callback and drops `_mtx` across the invocation, so a `cancel()` racing a
+///   firing callback takes the same not-found branch as one for a handle that
+///   already finished, and returns while that callback is still executing on
+///   the scheduler thread. Browser build: the case cannot arise — the timer
+///   callback and `cancel()` run on the same single thread, so "no callback
+///   will start after `cancel()` returns" holds there and only there. See
+///   `cancel()`'s own comment for what this asks of a caller.
 /// - **Destruction.** Threaded build: the destructor joins its thread, so no
 ///   callback can be in flight afterwards. Browser build: nothing to join;
 ///   pending browser timers observe an expired `std::weak_ptr` to the
@@ -122,12 +131,38 @@ public:
         return handle;
     }
 
-    /// @brief Cancels a previously scheduled callback immediately.
+    /// @brief Cancels a previously scheduled callback: stops one that has not
+    ///        started, and returns without waiting for one that has.
     ///
-    /// If @p handle has not fired yet, its entry (and anything its callback
-    /// captured) is erased right away — the caller does not have to wait for
-    /// the original deadline for that memory to be released. A no-op if
-    /// @p handle already fired or was already cancelled.
+    /// Two cases, and telling them apart is the caller's business because the
+    /// scheduler cannot:
+    ///
+    /// - **@p handle has not started.** Its entry — and anything its callback
+    ///   captured — is erased right away, the callback never runs, and the
+    ///   caller does not have to wait for the original deadline for that memory
+    ///   to be released.
+    /// - **@p handle is already running.** `run()` erases the entry *before* it
+    ///   invokes the callback, so this call finds nothing, takes the same
+    ///   no-op branch as a handle that already finished, and **returns while
+    ///   the callback is still executing** on the scheduler thread. The
+    ///   callback is neither interrupted nor waited for.
+    ///
+    /// So `cancel()` returning does **not** mean "no callback is in flight".
+    /// The only thing in this class that means that is `~TimeoutScheduler`,
+    /// which joins the scheduler thread. A caller must therefore keep every
+    /// scheduled callback safe to run *after* its `cancel()`: both callbacks in
+    /// this repository (`Bridge::executeVia`'s deadline and `RemoteServer`'s
+    /// `LimitPolicy::executeTimeout`) capture a `shared_ptr` to the state they
+    /// settle and settle it write-once, so a late run is an ignored duplicate
+    /// rather than a use-after-free.
+    ///
+    /// Blocking here until the callback finished would be the wrong contract
+    /// rather than a missing feature: a callback that posts back to the
+    /// cancelling thread would deadlock it — the hazard
+    /// `docs/spec/concurrency_and_lifetimes.md` names, and the same reason
+    /// `CallbackScope` deliberately offers no block-until-drained.
+    ///
+    /// A no-op if @p handle already fired, is firing, or was already cancelled.
     /// @param handle Handle returned by a prior `schedule()` call.
     void cancel(Handle handle) {
         std::scoped_lock const lock{_mtx};
@@ -238,6 +273,13 @@ public:
     /// build. The browser timer itself is left to elapse and find nothing —
     /// see the `@file` comment. A no-op if @p handle already fired or was
     /// already cancelled.
+    ///
+    /// Unlike the threaded build, "already fired" here can only mean
+    /// *finished*: `fire()` and this function run on the same single thread, so
+    /// a callback cannot be mid-flight while `cancel()` is called. This build
+    /// therefore does give the guarantee the threaded one does not — no
+    /// callback runs after `cancel()` returns — and a caller that must work in
+    /// both builds still cannot rely on it.
     /// @param handle Handle returned by a prior `schedule()` call.
     void cancel(Handle handle) { _state->pending.erase(handle); }
 

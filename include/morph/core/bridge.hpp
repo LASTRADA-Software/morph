@@ -1542,7 +1542,17 @@ public:
             if (_executeDeadline.count() > 0 && _timeoutScheduler) {
                 schedulerRef = _timeoutScheduler;
                 // The callback captures `typedState` alone -- never `this` -- so
-                // it stays safe to fire even while ~Bridge() is running.
+                // it stays safe to fire even while ~Bridge() is running, and
+                // equally safe to fire *after* its own `cancel()`:
+                // `TimeoutScheduler::cancel` stops a callback that has not
+                // started but returns without waiting for one that already has
+                // (see that function's comment), so the disarms in the two
+                // continuations below are best-effort by contract and not only
+                // when `cancel()` throws. A deadline callback that is already
+                // mid-flight when the real reply lands still runs its
+                // `setException`, which `CompletionState` discards on an
+                // already-ready state -- first result wins. That, not the
+                // disarm, is what makes the race harmless (morph#620).
                 deadlineHandle = schedulerRef->schedule(_executeDeadline, [typedState] {
                     typedState->setException(std::make_exception_ptr(::morph::backend::ClientTimeoutError{}));
                 });
