@@ -234,7 +234,7 @@ jobs:
       - name: Self-test the duplicate-ctest-name checker
         run: bash scripts/test_check_ctest_name_collisions.sh
 
-  # ── The scheduled mutation gate's own self-test (morph#408) ──────────────
+  # ── The mutation gates: a self-test (morph#408) and a citation gate (morph#608) ──
   #
   # scripts/check_mutation_regression.py is the gate .github/workflows/mutation.yml
   # runs after scripts/mutation.sh, on a schedule rather than per-PR (that
@@ -253,13 +253,41 @@ jobs:
   # successful run -- would be indistinguishable from a healthy one without
   # this self-test.
   mutation-regression-lint:
-    name: Mutation-regression checker self-test
+    name: Mutation gates (regression self-test, survivor citations)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Self-test the mutation-regression checker
         run: python3 scripts/check_mutation_regression.py --self-test
+
+      # scripts/check_mutation_survivors.py, and unlike everything else in this
+      # file this one is the *gate itself*, not only its self-test. It reads no
+      # coverage data and no Mull report -- its inputs are
+      # scripts/mutation_survivors.json and the headers in the tree -- so there
+      # is nothing to defer it to a build leg or to the scheduled campaign for.
+      #
+      # It belongs per-PR precisely because what it audits rots per-PR. The
+      # triage record cites each equivalent mutant by `{file, line, source}`,
+      # and an ordinary edit anywhere above one of those lines moves it. By the
+      # time morph#608 measured, 5 of the 7 entries pointed at the wrong line
+      # and include/morph/core/backend.hpp's was off by 479 -- landing in the
+      # middle of an unrelated function, for a reader the mutation gate's own
+      # failure message had sent there. Nothing failed, because nothing looked:
+      # check_mutation_regression.py compares survivor *counts* against
+      # scripts/mutation_baseline.json and never opens the triage file at all.
+      #
+      # The resolution is check_branch_coverage.py's
+      # resolve_allowlist_source_line(), shared rather than reimplemented --
+      # scripts/branch_partial_allowlist.json and
+      # scripts/error_path_allowlist.json are hardened by that same function,
+      # against the same defect found three times over (morph#349, morph#355,
+      # morph#419).
+      - name: Audit the mutation-survivor citations
+        run: python3 scripts/check_mutation_survivors.py
+
+      - name: Self-test the mutation-survivor citation gate
+        run: python3 scripts/check_mutation_survivors.py --self-test
 
   # ── The coverage-object gate's own self-test ───────────────────────────
   # The gate itself (scripts/check_coverage_objects.sh) runs inside
