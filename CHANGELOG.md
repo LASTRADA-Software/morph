@@ -262,6 +262,37 @@ API surface).
 
 ### Fixed
 
+- **The QML renderer's numeric-entry mirror matched the decimal and group
+  separators as one UTF-16 code unit while the C++ edge matched whole
+  strings.** `src/qt/forms/qml/DynamicForm.qml`'s `normalizeLocaleNumber` tested
+  `ch === groupSeparator` and `ch === decimalSeparator`, where `ch` is
+  `text[i]` — a single code unit — while
+  `include/morph/render/locale_format.hpp` has always used
+  `rest.starts_with(...)`. Both now use `text.startsWith(sep, i)`.
+
+  **No locale reaches this, and no user is affected.** Measured on `91515ae5`
+  with `QLocale::matchingLocales` under Qt 6.11.2, over all 711 locales:
+  `decimalPoint` and `groupSeparator` are **one UTF-16 code unit in every
+  single one** (0 multi-unit each), against 54 multi-unit for `negativeSign`
+  and 54 for `positiveSign` — the control that shows the measurement is not
+  trivially zero for any locale field. What is live is the *mixed idiom*:
+  morph#583 and morph#596 converted the signs in that same function to
+  whole-string matching and left the separators on a code-unit comparison a few
+  lines away, with nothing saying why. `docs/spec/forms/forms.md`, "Both edges,
+  or neither": a divergence between the mirror and the C++ edge is a divergence
+  in what the product accepts, whether or not a locale can currently express
+  it. Behaviour for every locale Qt knows is byte-identical before and after.
+
+  Because no real locale can drive the difference, the tests pass **synthetic**
+  multi-unit separators straight to the function; a test built on
+  `Qt.locale(...)` would pass against the unfixed code and be evidence of
+  nothing. The same corpus is pinned on both edges — `[morph599]` in
+  `tests/test_render_locale_format.cpp` and three `test_aMultiUnitSeparator*`
+  functions in `src/qt/forms/tests/tst_i18n.qml` — and each half of the fix was
+  confirmed by mutation: restoring `ch === groupSeparator`, restoring
+  `ch === decimalSeparator`, or dropping the index advance each takes the QML
+  suite to `28 passed, 2 failed`. morph#599.
+
 - **`bank_gui_qml_tests` did not compile.** The target compiles
   `examples/common/testkit/testkit_main.cpp`, whose `#include
   <testkit/log_level.hpp>` resolves only against the repository's `tests/`
