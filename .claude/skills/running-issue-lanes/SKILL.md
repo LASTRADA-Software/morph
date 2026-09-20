@@ -53,7 +53,39 @@ Group on **disjoint files**. Never on issue count, never on subject matter.
 > each step is blocked on the last. Counting issues suggests five lanes; counting
 > file trees gives one, plus whatever is genuinely disjoint.
 
-Several small tickets in one tree go on **one branch, one PR, one CI cycle**.
+**A one-ticket PR is the exception, not the default.** Always try to put more
+than one issue in a PR: several tickets go on **one branch, one PR, one CI
+cycle**. Aim for **3–5 tickets per lane** where the files allow it.
+
+This is arithmetic, not tidiness. A CI run on this repository takes **26–74
+minutes**, and every merge invalidates every other open PR's base, forcing a
+rebase and a full re-run. So a single-ticket PR costs its own cycle *plus* a
+cycle on every PR it lands ahead of. Six single-ticket merges in one session
+cost well over a dozen cycles.
+
+**One commit per ticket, always.** This is what makes batching safe rather than
+risky: when one ticket turns out to be wrong — and it will — the lane drops that
+commit and force-pushes instead of redoing the batch. Put it in the lane prompt.
+
+Three things must *not* go in a batch, because each turns one bad ticket into a
+stalled PR:
+
+- **A ticket that needs a decision nobody in the lane can make.** One of those
+  blocks every other ticket in the PR on a question that may take days.
+- **A ticket touching a file another open PR holds.** The batch inherits that
+  contention for all of its tickets, not just the one.
+- **A ticket whose premise you have not re-measured this sweep** (Step 6). Mixing
+  fresh and stale figures in one branch means the whole batch is dispatched
+  against a number nobody checked.
+
+The trade is real and worth stating when you report: a batch is atomic for CI,
+so the slowest ticket sets the pace for the rest, and a batched PR is harder to
+review than a focused one. One commit per ticket mitigates both. At the measured
+cycle times the arithmetic still favours batching by a wide margin.
+
+**Merge ordering matters more once PRs are bigger.** Land the PR that unblocks
+the most first, and among equals prefer the one whose merge forces the fewest
+rebases on the others.
 
 ## Step 3 — compress `triage: rescope` by fix site
 
@@ -171,6 +203,10 @@ completion only** — re-arm on expiry rather than polling.
 ## Red flags
 
 - Counting issues to decide how many lanes to run.
+- Dispatching a lane with **one** ticket when two or three disjoint ones were
+  sitting in `triage: valid`.
+- A batched branch with one commit for the whole batch, so a single bad ticket
+  cannot be dropped without redoing the rest.
 - A lane prompt that says "do not spawn agents" and stops there.
 - Consolidating two issues because they share a subsystem.
 - A consolidated issue with cleaner evidence than its sources.
@@ -191,3 +227,6 @@ completion only** — re-arm on expiry rather than polling.
 | "It's green and clean, just merge it." | Green against which base? Check what landed since. |
 | "This finding is small, I'll fold it into the PR." | AGENTS.md: file it, link it, keep the change about one thing. |
 | "Faster if I just fix this one myself." | Then do — but a runner writing feature code has stopped running lanes. |
+| "One ticket per PR keeps it focused and reviewable." | Focus is measured in hours here: 26–74 min a cycle, plus a forced rebase and re-run on every other open PR. One commit per ticket buys the reviewability without the cycles. |
+| "These two tickets aren't really related." | Unrelated is fine. The batching constraint is *disjoint files a single lane can land*, not a shared theme — that is Step 3's rule for consolidating issues, not this one's for grouping work. |
+| "I'll batch them next sweep, once the backlog settles." | The backlog does not settle; lanes file new issues while closing old ones. Batch what is `valid` and disjoint now. |
