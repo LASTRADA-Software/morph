@@ -226,77 +226,24 @@
   ],
   "testPresets": [
     {
-      "name": "cl-debug",
-      "configurePreset": "cl-debug",
+      "name": "base-test",
+      "hidden": true,
+      "description": "Shared test-run policy for every leg. Two things a reader needs. (1) stopOnFailure is deliberately NOT set here. A red CI leg has to name every test that failed, not whichever one ctest happened to reach first: stopping early makes one broken test and thirty broken tests look identical in the log, and a diagnosis made from that log is made on partial information (morph#616). ctest has no --no-stop-on-failure, so 'set it in the preset and override it in CI' is not available -- the preset is the only place the decision can be made. (2) A leg whose later tests are genuinely meaningless after an early failure may set stopOnFailure on its own preset, but must say why in its own description. Inheritance merges 'execution' key by key -- measured on CMake 4.4.3: a child preset that sets only stopOnFailure still gets noTestsAction from here -- so setting it back is a one-key change, not a copy of this whole block.",
       "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
+      "execution": { "noTestsAction": "error" }
     },
-    {
-      "name": "cl-qt-debug",
-      "configurePreset": "cl-qt-debug",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "cl-qt-release",
-      "configurePreset": "cl-qt-release",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "clangcl-debug",
-      "configurePreset": "clangcl-debug",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "windows-everything",
-      "configurePreset": "windows-everything",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "gcc-debug",
-      "configurePreset": "gcc-debug",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "clang-debug",
-      "configurePreset": "clang-debug",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "linux-everything",
-      "configurePreset": "linux-everything",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "clang-asan",
-      "configurePreset": "clang-asan",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "clang-tsan",
-      "configurePreset": "clang-tsan",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "clang-ubsan",
-      "configurePreset": "clang-ubsan",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "clang-coverage",
-      "configurePreset": "clang-coverage",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    }
+    { "name": "cl-debug",          "configurePreset": "cl-debug",          "inherits": "base-test" },
+    { "name": "cl-qt-debug",       "configurePreset": "cl-qt-debug",       "inherits": "base-test" },
+    { "name": "cl-qt-release",     "configurePreset": "cl-qt-release",     "inherits": "base-test" },
+    { "name": "clangcl-debug",     "configurePreset": "clangcl-debug",     "inherits": "base-test" },
+    { "name": "windows-everything","configurePreset": "windows-everything","inherits": "base-test" },
+    { "name": "gcc-debug",         "configurePreset": "gcc-debug",         "inherits": "base-test" },
+    { "name": "clang-debug",       "configurePreset": "clang-debug",       "inherits": "base-test" },
+    { "name": "linux-everything",  "configurePreset": "linux-everything",  "inherits": "base-test" },
+    { "name": "clang-asan",        "configurePreset": "clang-asan",        "inherits": "base-test" },
+    { "name": "clang-tsan",        "configurePreset": "clang-tsan",        "inherits": "base-test" },
+    { "name": "clang-ubsan",       "configurePreset": "clang-ubsan",       "inherits": "base-test" },
+    { "name": "clang-coverage",    "configurePreset": "clang-coverage",    "inherits": "base-test" }
   ],
   "workflowPresets": [
     {
