@@ -167,6 +167,11 @@ var annotated_dup =
         [ "QtWebSocketServer", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer" ],
         [ "QtWebSocketServerConfig", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig" ]
       ] ],
+      [ "render", null, [
+        [ "detail", null, [
+          [ "SignMatch", "d0/d95/structmorph_1_1render_1_1detail_1_1SignMatch.html", "d0/d95/structmorph_1_1render_1_1detail_1_1SignMatch" ]
+        ] ]
+      ] ],
       [ "session", null, [
         [ "detail", null, [
           [ "EscapingWriteOpts", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts" ],

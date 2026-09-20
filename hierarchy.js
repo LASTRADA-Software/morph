@@ -123,6 +123,7 @@ var hierarchy =
     [ "morph::qt::QtWebSocketBackendConfig", "d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html", null ],
     [ "morph::qt::QtWebSocketServer", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html", null ],
     [ "morph::qt::QtWebSocketServerConfig", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html", null ],
+    [ "morph::render::detail::SignMatch", "d0/d95/structmorph_1_1render_1_1detail_1_1SignMatch.html", null ],
     [ "morph::session::Context", "dd/d85/structmorph_1_1session_1_1Context.html", null ],
     [ "morph::session::detail::EscapingWriteOpts", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html", null ],
     [ "morph::session::detail::ScopedContext", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html", null ],
