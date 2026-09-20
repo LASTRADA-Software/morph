@@ -18,7 +18,7 @@ qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(morph_ladder_wasm_spike main_wasm.cpp)
 # morph::qt is header-only (INTERFACE); the compiled QtWebSocketBackend
-# constructor/registerModelAsync/setConnectHandler bodies live in
+# constructor/bindModel/setConnectHandler bodies live in
 # morph_qt_impl (see ../../../CMakeLists.txt's `add_library(morph_qt_impl
 # STATIC ...)`). main_wasm.cpp constructs a QtWebSocketBackend directly, so
 # without this the WASM link fails on undefined symbols -- every other real

@@ -138,17 +138,19 @@ runs on.
    in `gui/qml/Main.qml` still points here.
 
    The struck claim was: `Bridge::assignHandlerPrimary`'s promote step has
-   no async path (`IBackend::assignPrimary` being a synchronous `sendSync`
-   on `QtWebSocketBackend`, "with no `assignPrimaryAsync` anywhere in the
-   tree"), so a WASM tab dispatching `CreatePoll` would abort the page at
-   the promote step. Both premises are false against the tree as it stands:
+   no non-blocking path (`IBackend::assignPrimary` being a synchronous
+   `sendSync` on `QtWebSocketBackend`, with nothing beside it), so a WASM tab
+   dispatching `CreatePoll` would abort the page at the promote step. Both
+   premises are false against the tree as it stands:
 
-   - **`assignPrimaryAsync` exists**, at every layer the claim named:
-     `IBackend::assignPrimaryAsync` (`include/morph/core/backend.hpp`),
-     `QtWebSocketBackend::assignPrimaryAsync`
+   - **A non-blocking promote exists**, at every layer the claim named:
+     `IBackend::promoteModel` (`include/morph/core/backend.hpp`),
+     `QtWebSocketBackend::promoteModel`
      (`src/qt/qt_websocket_backend.cpp`), and `assignHandlerPrimary` itself,
-     which prefers it and falls back to the synchronous call only for a
-     backend that offers none (`include/morph/core/bridge.hpp`).
+     which calls it unconditionally (`include/morph/core/bridge.hpp`). When
+     the claim was written that layer was an optional non-blocking twin a
+     backend could decline; morph#567–morph#571 replaced it with
+     `promoteModel`, which no backend can decline.
    - **The promote step never runs for this rung anyway.**
      `assignHandlerPrimary` is reached from exactly one branch of
      `BridgeHandler::execute`, guarded by `kShared &&
@@ -219,19 +221,20 @@ since shipped** — this rung built them, as the heading above says. They are
 kept here because they explain the rung's task order, with a pointer to where
 each now lives:
 
-- **Async shared/keyed attach.** *Shipped:*
-  `IBackend::registerModelSharedAsync` and `IBackend::attachModelAsync`
+- **Async shared/keyed attach.** *Shipped:* `IBackend::bindModel`
   (`include/morph/core/backend.hpp`), dispatched to by
-  `Bridge::ensureBoundAsync`/`attachHandlerAsync` and implemented by
-  `QtWebSocketBackend`. The synchronous `registerModelShared`/`attachModel`
-  still nest a `QEventLoop` and still abort the page on the WASM main thread,
-  so a WASM client must use the async pair — but it exists, and the very first
+  `Bridge::ensureBoundAsync`/`attachHandlerAsync` and implemented natively by
+  `QtWebSocketBackend`. The blocking `sendSync` path a wire backend used to
+  take for a keyed acquire nests a `QEventLoop` and aborts the page on the
+  WASM main thread, so a WASM client must not reach it — and with
+  `Config::asyncRegistrationEnabled` set it does not, so the very first
   `OpenPoll` a WASM tab makes is no longer blocked on the framework. Built as
-  this rung's first framework-level task, mirroring
-  `registerModelAsync`'s existing opt-in/fallback shape (backend returns
-  `true` and later invokes exactly one callback, or returns `false` and the
-  caller falls back to the synchronous path unaffected) so every backend
-  that has not opted in keeps its current behavior.
+  this rung's first framework-level task, and built in the shape that existed
+  then: a pair of optional non-blocking twins a backend returned `true` or
+  `false` from, with the caller falling back to the synchronous verb on
+  `false`. morph#567–morph#571 removed the twins in favour of the one verb
+  above, so there is no opt-in left to decline and no fallback path; the
+  synchronous verbs survive only as what the *default* `bindModel` runs.
 - **Client-side execute deadline.** *Shipped:*
   `Bridge::setExecuteDeadline` (`include/morph/core/bridge.hpp`), specified in
   `docs/spec/core/completion.md`. Without it a genuinely hung server blocked
@@ -347,10 +350,10 @@ log table above.
   (`registerModelShared`/`attachModel`) nests an event loop and **aborts the
   page on the WASM main thread**, so a WASM tab's very first `OpenPoll` must
   not go through it. This is no longer a framework prerequisite:
-  `registerModelSharedAsync`/`attachModelAsync` ship the non-blocking pair
+  `IBackend::bindModel` carries the keyed acquire without blocking
   (see § Framework prerequisites above). Still worth running the "several WASM
-  tabs" demo literally — the async path's *behaviour in a browser* has never
-  been observed, only its compilation.
+  tabs" demo literally — the non-blocking path's *behaviour in a browser* has
+  never been observed, only its compilation.
 - **The polling helper must own a client-side timeout**: an unwrapped poll
   call against a hung server hangs its completion forever, which is what
   `Bridge::setExecuteDeadline` now exists to bound. A rate-limited server no

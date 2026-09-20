@@ -63,10 +63,10 @@ QProcess client harness, the Qt-owning Catch2 `main()`), the pump helpers in
    themselves.** `Remote` is asynchronously connected and exposes
    `ready()`/`onReady(cb)`: presenters (which build `BridgeHandler`s, and a
    `BridgeHandler` constructor registers) **must** be constructed from inside
-   `onReady`. `QtWebSocketBackend::registerModelAsync()` queues a
-   registration issued before the socket connects and retries it once the
-   connection comes up (`docs/spec/core/backend.md`, "Asynchronous
-   registration"), so this is no longer the correctness hazard it once was
+   `onReady`. `QtWebSocketBackend::bindModel()` queues a private bind
+   issued before the socket connects and sends it once the
+   connection comes up (`docs/spec/core/backend.md`, "The structural
+   registration surface"), so this is no longer the correctness hazard it was
    — but building presenters/`BridgeHandler`s from inside `onReady` stays the
    simpler ordering to reason about, and is what every rung does.
    `Local` is ready on construction and runs `onReady` inline, so mode-blind
@@ -550,11 +550,13 @@ Open framework facts every rung must respect (verified):
   (`registerModelShared`/`attachModel`) nests an event loop that aborts the
   page on WASM** — that part still holds, and a WASM client must not call it.
   What has changed is the remedy: async attach is **no longer a missing
-  framework prerequisite**. `IBackend::registerModelSharedAsync` and
-  `IBackend::attachModelAsync` (`include/morph/core/backend.hpp`) ship the
-  non-blocking counterparts, `Bridge::ensureBoundAsync`/`attachHandlerAsync`
-  dispatch to them, and `QtWebSocketBackend` implements both. A rung's WASM
-  story uses those rather than waiting on the framework. (The rung-1 coupling
+  framework prerequisite**. `IBackend::bindModel`
+  (`include/morph/core/backend.hpp`) is the one non-blocking acquire verb —
+  a request with a non-empty `primary` is the register-or-attach case, one
+  that also carries a non-zero `current` is the re-point —
+  `Bridge::ensureBoundAsync`/`attachHandlerAsync` dispatch to it, and
+  `QtWebSocketBackend` implements it natively. A rung's WASM
+  story uses that rather than waiting on the framework. (The rung-1 coupling
   the pastebin README calls out — burn atomicity via a shared keyed instance —
   is likewise no longer gated on this.)
 

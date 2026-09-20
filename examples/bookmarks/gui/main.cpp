@@ -95,9 +95,10 @@ int main(int argc, char** argv) {
     // Mirrors AppContext's own doc-comment construction pattern: pick the
     // mode, then build every handler from inside onReady(). `Remote` mode
     // builds its backend with `asyncRegistrationEnabled`, and
-    // `QtWebSocketBackend::registerModelAsync()` queues a registration issued
-    // before the socket finishes connecting and retries it once the connection
-    // comes up (`docs/spec/core/backend.md`, "Asynchronous registration"), so
+    // `QtWebSocketBackend::bindModel()` queues a private bind issued before
+    // the socket finishes connecting and sends it once the connection comes
+    // up (`docs/spec/core/backend.md`, "The structural registration
+    // surface"), so
     // this ordering is no longer load-bearing for correctness — it is simply
     // the one shape that reads the same in both modes (`Local` is ready on
     // construction and runs onReady() inline). See

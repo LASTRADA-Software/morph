@@ -311,9 +311,10 @@ TEST_CASE("AppContext{Remote} defers readiness to the first connect",
 
     // Not ready the line after construction: QWebSocket::open() is
     // asynchronous and no event-loop turn has run yet. A BridgeHandler
-    // constructed here would queue its registration and retry once the
-    // socket connects (registerModelAsync's queueing, docs/spec/core/
-    // backend.md), rather than failing -- but ctx.ready() still reflects
+    // constructed here would queue its bind and send it once the socket
+    // connects (`QtWebSocketBackend::bindModel`'s pre-connect queue,
+    // docs/spec/core/backend.md), rather than failing -- but ctx.ready()
+    // still reflects
     // socket-connect timing, not registration settlement, so it is false
     // regardless.
     REQUIRE_FALSE(ctx.ready());

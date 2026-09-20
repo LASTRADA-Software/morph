@@ -36,11 +36,12 @@ BRIDGE_REGISTER_ACTION(WasmSpikeProbeModel, WasmSpikeProbeAction, "WasmSpikeProb
 // constructed a `BridgeHandler` unconditionally, immediately after
 // constructing the Bridge -- before any Qt event-loop turn had a chance to
 // run, so the QWebSocket was guaranteed to still be unconnected at that
-// point. `QtWebSocketBackend::registerModelAsync()` now queues a
-// pre-connect registration and retries it once the socket connects (see
-// tests/qt/test_qt_websocket.cpp's "registerModelAsync called before the
-// socket connects queues and retries once connected fires",
-// docs/spec/core/backend.md's "Asynchronous registration") -- so this call
+// point. `QtWebSocketBackend::bindModel()` queues a pre-connect private
+// bind and sends it once the socket connects (see
+// tests/qt/test_qt_websocket.cpp's "bindModel called before the socket
+// connects queues and retries once connected fires",
+// docs/spec/core/backend.md's "The structural registration surface") -- so
+// this call
 // sequence now resolves natively, with no need for the deferred-construction
 // workaround the test below demonstrates (which remains a valid,
 // simpler-still sequence, just no longer the only correct one).
