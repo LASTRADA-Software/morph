@@ -24,7 +24,7 @@
 /// diagnostic — a build break under the project's `-Werror`. So every use in
 /// morph goes through this macro, which expands to nothing on a compiler that
 /// does not know the attribute.
-#if defined(__has_cpp_attribute)
+#ifdef __has_cpp_attribute
 #if __has_cpp_attribute(clang::lifetimebound)
 #define MORPH_LIFETIMEBOUND [[clang::lifetimebound]]
 #elif __has_cpp_attribute(msvc::lifetimebound)

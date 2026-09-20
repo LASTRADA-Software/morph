@@ -74,7 +74,7 @@ struct LogEntry {
     /// entry — one written before this field existed, or appended directly by
     /// application code — whose payload shape is unknown and therefore
     /// unverifiable. See `UnstampedPayloadPolicy` for what replay does with one.
-    std::string schema{};
+    std::string schema;
 
     /// @brief JSON-encoded result (`ActionTraits<A>::resultToJson`), captured after
     ///        successful execution. Empty when `outcome == Outcome::Failed`.
@@ -88,7 +88,7 @@ struct LogEntry {
 
     /// @brief `std::exception::what()` from the exception that rejected the
     ///        action. Empty unless `outcome == Outcome::Failed`.
-    std::string error{};
+    std::string error;
 
     /// @brief Auth principal from `morph::session::current()`, if any. Empty if unset.
     std::string principal;
@@ -102,7 +102,7 @@ struct LogEntry {
     ///        `morph::offline::QueueItem::idempotencyKey`'s exact contract: opaque,
     ///        stored verbatim, stable across restarts for one logical outbox row.
     ///        See `journal::OutboxRelay` (`outbox.hpp`) for how it's used.
-    std::string idempotencyKey{};
+    std::string idempotencyKey;
 
     /// @brief Line-format version this entry was written at.
     ///
@@ -135,7 +135,7 @@ struct LogEntry {
     /// entry at the point it is created, independent of whatever `seq` any
     /// sink later assigns it, and reuse that same identity as every cascaded
     /// entry's `causalParentId`.
-    std::string causalParentId{};
+    std::string causalParentId;
 };
 
 }  // namespace morph::journal

@@ -114,7 +114,7 @@ public:
     /// @param onReply    Success callback.
     /// @param onError    Failure callback.
     template <typename OnReply, typename OnError>
-    void submitIfValid(std::string actionType, std::string bodyJson, OnReply onReply, OnError onError) {
+    void submitIfValid(const std::string& actionType, const std::string& bodyJson, OnReply onReply, OnError onError) {
         try {
             dispatch(actionType, bodyJson)
                 .then(

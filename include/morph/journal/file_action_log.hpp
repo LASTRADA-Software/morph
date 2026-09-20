@@ -257,8 +257,8 @@ public:
     /// @return Matching entries, in on-disk (append) order.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
         std::scoped_lock const lock{_mtx};
-        std::ifstream in{_path};
-        if (!in && std::filesystem::exists(_path)) {
+        std::ifstream input{_path};
+        if (!input && std::filesystem::exists(_path)) {
             // Distinguish "no journal yet" (absent: legitimately empty, and the
             // constructor's dedup rebuild depends on that) from "journal present
             // but unreadable". Returning {} for the second silently empties the
@@ -268,16 +268,21 @@ public:
         }
         std::vector<std::string> lines;
         std::string line;
-        while (std::getline(in, line)) {
+        while (std::getline(input, line)) {
             if (!line.empty()) {
                 lines.push_back(line);
             }
         }
         std::vector<LogEntry> out;
         for (std::size_t i = 0; i < lines.size(); ++i) {
+            // .at() outside the try, not lines[i] inside it: the loop condition
+            // already bounds i, so the bounds check cannot fire, but if it ever
+            // could its std::out_of_range would be swallowed by the catch below
+            // and mis-reported as a malformed journal line.
+            std::string const& rawLine = lines.at(i);
             LogEntry entry;
             try {
-                entry = fromJson(lines[i]);
+                entry = fromJson(rawLine);
             } catch (const std::exception& exc) {
                 // A crash between `append`'s `fwrite` and the next flush can leave
                 // a truncated final line. Tolerate exactly that — skip a malformed

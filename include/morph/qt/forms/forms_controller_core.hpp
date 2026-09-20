@@ -93,7 +93,7 @@ public:
     /// @param onReply    Success callback.
     /// @param onError    Failure callback.
     template <typename OnReply, typename OnError>
-    void submitIfValid(std::string actionType, std::string bodyJson, OnReply onReply, OnError onError) {
+    void submitIfValid(const std::string& actionType, const std::string& bodyJson, OnReply onReply, OnError onError) {
         _handler.executeJson(actionType, bodyJson)
             .then([onReply = std::move(onReply)](std::string resultJson) mutable { onReply(std::move(resultJson)); })
             .onError([onError = std::move(onError)](const std::exception_ptr& err) mutable { onError(err); });
@@ -114,7 +114,8 @@ public:
     /// @param onReply       Success callback.
     /// @param onError       Failure callback.
     template <typename OnReply, typename OnError>
-    void fetchOptions(std::string optionsAction, std::string bodyJson, OnReply onReply, OnError onError) {
+    void fetchOptions(const std::string& optionsAction, const std::string& bodyJson, OnReply onReply,
+                      OnError onError) {
         _handler.executeJson(optionsAction, bodyJson)
             .then([onReply = std::move(onReply)](std::string resultJson) mutable { onReply(std::move(resultJson)); })
             .onError([onError = std::move(onError)](const std::exception_ptr& err) mutable { onError(err); });

@@ -51,9 +51,34 @@ using TranslationProvider =
 /// @param derivedKey    The mechanically-derived key for this slot.
 /// @param schemaLiteral The schema's authored fallback text for this slot.
 /// @return The resolved display text.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
+// `derivedKey` and `schemaLiteral` are adjacent `std::string_view`s, and the
+// check is right that swapping them would be silent and wrong: the derived key
+// would be rendered to the user as display text, and the schema's authored
+// title would be looked up in the catalog, miss, and fall back to the key. No
+// type or arity error would catch it.
+//
+// They stay in this order because the order *is* the contract. The three
+// parameters are the resolution chain in precedence order -- explicit key, then
+// derived key, then the schema literal as the fallback -- which is how the
+// @brief above states it, how the body below tries them, and how
+// docs/spec/forms/forms.md specifies it. The QML renderer carries a mirror of
+// this function with the same parameters in the same order
+// (src/qt/forms/qml/DynamicForm.qml, `resolveText(explicitKey, derivedKey,
+// literal)`), and the two are meant to be read against each other. Reordering
+// to break the adjacency here would desynchronise that pair and leave the
+// signature the only place in the stack that does not read as the chain --
+// trading a mistake that no caller in the tree is positioned to make for one a
+// reader of both renderers would.
+//
+// Strong types would remove the hazard outright, but a `TranslationKey` wrapper
+// on this seam would have to be threaded through every caller in morph::forms,
+// which is a design change to the renderer boundary and not a lint fix. If that
+// is ever done, delete this suppression rather than widening it.
 [[nodiscard]] inline std::string resolveText(const TranslationProvider& provider, std::string_view bcp47Locale,
                                              const std::optional<std::string>& explicitKey,
                                              std::string_view derivedKey, std::string_view schemaLiteral) {
+    // NOLINTEND(bugprone-easily-swappable-parameters)
     if (provider) {
         if (explicitKey.has_value()) {
             if (auto hit = provider(*explicitKey, bcp47Locale)) {
