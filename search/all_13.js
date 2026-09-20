@@ -32,10 +32,11 @@ var searchData=
   ['topologies_29',['Deployment topologies',['../index.html#deployment-topologies',1,'']]],
   ['tostring_30',['toString',['../d9/db8/quantity_8hpp.html#a22d27c318fd909bab2e0562e48e2bf14',1,'morph::units']]],
   ['tracesink_31',['TraceSink',['../d5/d5e/structmorph_1_1observe_1_1TraceSink.html',1,'morph::observe']]],
-  ['translationprovider_32',['TranslationProvider',['../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283',1,'morph::render']]],
-  ['trunc_33',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]],
-  ['tryreconnect_34',['tryReconnect',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#adb8457d14b2b1bf531c6c070ea667403',1,'morph::offline::ReconnectCoordinator::Deps']]],
-  ['type_20erasure_35',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
-  ['typeid_36',['typeId',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#af154f3156a5d37877f06c9ebd33b7192',1,'morph::wire::Envelope']]],
-  ['types_37',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]]
+  ['trackedpendingcount_32',['trackedPendingCount',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a3f7a8adfb34735899ff6a1f195363564',1,'morph::backend::LocalBackend']]],
+  ['translationprovider_33',['TranslationProvider',['../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283',1,'morph::render']]],
+  ['trunc_34',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]],
+  ['tryreconnect_35',['tryReconnect',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#adb8457d14b2b1bf531c6c070ea667403',1,'morph::offline::ReconnectCoordinator::Deps']]],
+  ['type_20erasure_36',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
+  ['typeid_37',['typeId',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#af154f3156a5d37877f06c9ebd33b7192',1,'morph::wire::Envelope']]],
+  ['types_38',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]]
 ];

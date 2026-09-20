@@ -1,5 +1,6 @@
 var NAVTREEINDEX3 =
 {
+"db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8d947c7f41ebffae2073c9e3d32dc3bb":[2,0,0,15,6,2],
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#ac4251df7c4776d6cd0c68f4751952d45":[2,0,0,15,6,6],
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#adff798ad5c1b3aa6c49d4a2b5e5f3c1b":[2,0,0,15,6,4],
 "dc/d11/structmorph_1_1app_1_1WizardScreen.html":[2,0,0,0,2],
@@ -248,6 +249,5 @@ var NAVTREEINDEX3 =
 "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a30aa430d93a6c47a46a764d12543205b":[2,0,0,2,9,0],
 "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a474040c5b686b20ca2ef1fc358cfd164":[2,0,0,2,9,9],
 "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a4889651dff3f0bb7bf273a5b6118d785":[2,0,0,2,9,16],
-"df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435":[2,0,0,2,9,3],
-"df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5c5f4e55737f4e6614759ccf7a6a9a09":[2,0,0,2,9,18]
+"df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435":[2,0,0,2,9,3]
 };

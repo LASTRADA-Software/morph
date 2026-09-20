@@ -152,12 +152,14 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ac638da4c0824021c5a63f1bd5f13b6f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Schedules <span class="tt">call.localOp</span> on the model's strand and returns a <span class="tt">Completion</span>.  <br /></td></tr>
 <tr class="memitem:a8cd0f4114df7c7f9ff9b224bdba3f5e4" id="r_a8cd0f4114df7c7f9ff9b224bdba3f5e4"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8cd0f4114df7c7f9ff9b224bdba3f5e4">cancelPending</a> (const std::exception_ptr &amp;exc) override</td></tr>
 <tr class="memdesc:a8cd0f4114df7c7f9ff9b224bdba3f5e4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves every still-pending completion this backend produced with <code class="param">exc</code>.  <br /></td></tr>
+<tr class="memitem:a3f7a8adfb34735899ff6a1f195363564" id="r_a3f7a8adfb34735899ff6a1f195363564"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a3f7a8adfb34735899ff6a1f195363564">trackedPendingCount</a> () const</td></tr>
+<tr class="memdesc:a3f7a8adfb34735899ff6a1f195363564"><td class="mdescLeft">&#160;</td><td class="mdescRight">Number of entries currently held in the pending list.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>In-process backend that executes model actions on a thread pool strand. </p>
 <p>Each model instance gets its own strand so actions are serialised per-model without a global lock on the pool. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01093">1093</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01095">1095</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a1bbaff0063b89c293f427e07da9f1424" name="a1bbaff0063b89c293f427e07da9f1424"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a1bbaff0063b89c293f427e07da9f1424">&#9670;&#160;</a></span>LocalBackend()</h2>
@@ -191,7 +193,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01103">1103</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01105">1105</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +234,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Newly assigned <span class="tt">ModelId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01116">1116</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01118">1118</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -279,7 +281,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Id of the shared (or newly created) instance. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01132">1132</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01134">1134</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -325,7 +327,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01157">1157</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01159">1159</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -361,7 +363,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Canonical key strings of the live shared instances, in unspecified order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01172">1172</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01174">1174</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -396,7 +398,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01184">1184</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01186">1186</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -431,7 +433,7 @@ Public Member Functions</h2></td></tr>
 </ul>
 <p>A <span class="tt">shared_ptr</span> copy of each holder is captured into the posted task so a concurrent <span class="tt"><a class="el" href="#a9a539d67d97dbb987f5a644d2c6073d5" title="Removes the model with mid, or releases one attachment to it. Thread-safe.">deregisterModel</a></span> cannot free the model out from under its pending notification (mirrors <span class="tt"><a class="el" href="#ac638da4c0824021c5a63f1bd5f13b6f4" title="Schedules call.localOp on the model&#39;s strand and returns a Completion.">execute</a></span>'s holder capture). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01221">1221</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01223">1223</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -479,7 +481,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that will carry the result or an exception. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01247">1247</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01249">1249</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -514,7 +516,37 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01343">1343</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01345">1345</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3f7a8adfb34735899ff6a1f195363564" name="a3f7a8adfb34735899ff6a1f195363564"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3f7a8adfb34735899ff6a1f195363564">&#9670;&#160;</a></span>trackedPendingCount()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::backend::LocalBackend::trackedPendingCount </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Number of entries currently held in the pending list. </p>
+<p><b>Not</b> the number of calls in flight: the list is compacted amortised (see <span class="tt">trackPending</span>), so it also carries entries whose completion has already been destroyed and which <span class="tt"><a class="el" href="#a8cd0f4114df7c7f9ff9b224bdba3f5e4" title="Resolves every still-pending completion this backend produced with exc.">cancelPending</a></span> would skip. It is an upper bound on the in-flight count and a direct measure of what the compaction policy costs in memory — which is what it exists to make observable. For a count of in-flight <em>calls</em>, use <span class="tt">Bridge::pendingCalls()</span>. </p><dl class="section return"><dt>Returns</dt><dd>Size of the pending list, live and dead entries alike. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01368">1368</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

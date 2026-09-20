@@ -17,5 +17,6 @@ var searchData=
   ['tokenissuer_14',['TokenIssuer',['../dc/de7/classmorph_1_1session_1_1TokenIssuer.html#a481f5554cb6af08565623f293a61e5e8',1,'morph::session::TokenIssuer']]],
   ['tokenverifier_15',['TokenVerifier',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#aa635acbcb8543b3ed5d5475dc47355ad',1,'morph::session::TokenVerifier']]],
   ['tostring_16',['toString',['../d9/db8/quantity_8hpp.html#a22d27c318fd909bab2e0562e48e2bf14',1,'morph::units']]],
-  ['trunc_17',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]]
+  ['trackedpendingcount_17',['trackedPendingCount',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a3f7a8adfb34735899ff6a1f195363564',1,'morph::backend::LocalBackend']]],
+  ['trunc_18',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]]
 ];
