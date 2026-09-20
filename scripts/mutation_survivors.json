@@ -81,7 +81,7 @@
         },
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1322,
+          "line": 1412,
           "mutants": 1,
           "mutator": "cxx_replace_scalar_call",
           "source": "aware.reserve(_changeAware.size());",
@@ -147,13 +147,13 @@
       "representative_sites": [
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1215,
+          "line": 1305,
           "source": "::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);",
           "reason": "The registerCount emission on LocalBackend::registerModel. Note for whoever refreshes this hint: the same statement appears character-for-character on the registerModelShared arm as well, so if this `line` ever drifts the gate will report the citation as ambiguous rather than printing a corrected line. That is the right outcome -- which of the two arms is meant is a question for a reader, not for a resolver -- and it is recorded here so the message is not a surprise."
         },
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1379,
+          "line": 1469,
           "source": "::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,",
           "reason": "The executeInFlight emission on the increment side of an execute. Its decrement twin inside the posted task is the same text after stripping, so the ambiguity note on the registerCount entry above applies here too."
         }
