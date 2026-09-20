@@ -1380,6 +1380,46 @@ Display formatting is the renderer's duty; the wire stays canonical:
   `qtLocale.negativeSign` from the same object at all three call sites. The
   parameter is defaulted, so a caller that passes three arguments is unchanged.
 
+  **A leading positive sign is accepted on entry and never emitted on
+  display** (morph#596). `normalizeLocaleNumber` takes a fifth
+  `std::string_view positiveSign = "+"`, matched exactly as `negativeSign` is —
+  the locale's own spelling as a whole string, plus a bare ASCII `'+'` in every
+  locale — and **drops** what it matches: `"+5"` normalises to `"5"`, not to
+  `"+5"`. Measured over `QLocale::positiveSign` for the same 711 locales under
+  Qt 6.11.2:
+
+  | `positiveSign` | locales | e.g. |
+  | --- | ---: | --- |
+  | U+002B | 657 | `C` |
+  | U+061C U+002B | 24 | `ar_EG` |
+  | U+200E U+002B | 11 | `ar_DZ` |
+  | U+200E U+002B U+200E | 17 | `az_IR` |
+  | U+200F U+002B | 2 | `ckb_IQ` |
+
+  54 of 711 are more than one code point. Unlike the negative side there is no
+  U+2212 analogue, so *every* non-ASCII spelling here is multi-code-point and
+  whole-string matching is the only thing that can match any of them. Before
+  this, a leading `'+'` fell through to the "any other character is malformed"
+  arm and an explicitly-positive entry was rejected in every locale, `"C"`
+  included.
+
+  **The two functions are deliberately not inverse across a positive sign.**
+  `formatCanonicalNumber` takes no `positiveSign` parameter and never emits a
+  positive sign, in any locale. This breaks the strict inverse relationship the
+  pair otherwise holds, on purpose, and it is written down here rather than left
+  for the next reader to infer from a missing parameter. The reason is the
+  asymmetry in what each direction can get wrong. Canonical text is
+  `-?[0-9]+(\.[0-9]+)?` — there is no `'+'` in it — so the entry edge has
+  somewhere to put an accepted `'+'`: nowhere, which costs nothing. The display
+  edge has no such option: `positiveSign` is `'+'` in 657 of the 711 locales, so
+  emitting it would turn every positive number in every form from `5` into `+5`,
+  a visible change to the product with no reported need behind it. morph#583 had
+  a forced hand — the display edge emitted a sign the entry edge rejected, so
+  the pair *was* broken and something had to give. Here nothing is broken: this
+  is new acceptance, which is why it is an enhancement and why it stops at the
+  one edge where acceptance is free. Rejecting text the display edge produced is
+  a defect; accepting text no display edge produces is not.
+
   **Grouping is validated, never merely stripped.** A group separator is
   dropped only where a group separator can legally be: preceded by one to three
   digits, followed by exactly three more, and never after the decimal
@@ -1408,7 +1448,12 @@ Display formatting is the renderer's duty; the wire stays canonical:
   validation now; changing one without the other is the defect, not the fix.
   The mirror compares one UTF-16 code unit at a time, so the whole-string sign
   match is spelled `text.startsWith(sign, i)` there rather than `ch === sign` —
-  a one-unit comparison could not match the 2–3 code point forms at all.
+  a one-unit comparison could not match the 2–3 code point forms at all. The
+  mirror's `normalizeLocaleNumber` takes `positiveSign` the same way and drops
+  it the same way, and its `formatCanonicalNumber` takes none, for the reason
+  above; the renderer forwards `qtLocale.positiveSign` at the two entry call
+  sites that already forward `qtLocale.negativeSign`, and nothing changes at the
+  display call site.
 - **Timestamps.** The wire value is strict UTC ISO-8601
   ([datetime.md](../util/datetime.md)); a renderer displays and edits in the
   user's zone by shifting a `morph::time::DateTime` with its existing

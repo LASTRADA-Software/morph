@@ -826,13 +826,24 @@ Frame {
     // only the locale spelling would leave those users no way to type a
     // negative number at all. An omitted or empty negativeSign reads as "-",
     // not as "no sign" -- there is no locale without one.
-    function normalizeLocaleNumber(text, decimalSeparator, groupSeparator, negativeSign) {
+    // A leading positive sign is accepted and *dropped* (morph#596): canonical
+    // text is -?[0-9]+(\.[0-9]+)?, which has no "+" in it, so "+5" yields "5".
+    // 54 of the 711 locales spell the positive sign with a bidi control mark
+    // before the "+" (U+061C, U+200E, U+200F), and unlike the negative side
+    // there is no U+2212 analogue -- every non-ASCII spelling here is two or
+    // three code units, so whole-string matching is the only thing that matches
+    // any of them. formatCanonicalNumber below takes no positiveSign and never
+    // emits one: a positive displays unsigned in every locale, and emitting the
+    // sign would turn every positive number in every form from "5" into "+5".
+    // The pair is therefore deliberately not inverse across a positive sign.
+    function normalizeLocaleNumber(text, decimalSeparator, groupSeparator, negativeSign, positiveSign) {
         // One string cannot play both roles: there is no reading of "1.5" this
         // function could defend, so it reports rather than guesses.
         if (groupSeparator !== "" && groupSeparator === decimalSeparator)
             return null
 
         const sign = negativeSign ? negativeSign : "-"
+        const plus = positiveSign ? positiveSign : "+"
         const groupSize = 3
         let canonical = ""
         let sawDecimal = false
@@ -874,10 +885,24 @@ Frame {
                 i += sign.length - 1 // the loop's ++i consumes the last unit
                 continue
             }
+            if (text.startsWith(plus, i)) {
+                if (sawAnyOutput)
+                    return null
+                // Dropped, never carried into the output -- but sawAnyOutput is
+                // still set, so "+-5" and "+1+2" stay malformed.
+                sawAnyOutput = true
+                i += plus.length - 1 // the loop's ++i consumes the last unit
+                continue
+            }
             if (ch === "-") {
                 if (sawAnyOutput)
                     return null
                 canonical += ch
+            } else if (ch === "+") {
+                // The bare ASCII spelling, accepted in every locale even when
+                // the locale's own is a bidi-prefixed form. Dropped, as above.
+                if (sawAnyOutput)
+                    return null
             } else if (ch >= "0" && ch <= "9") {
                 canonical += ch
                 ++digitsInGroup
@@ -894,6 +919,9 @@ Frame {
         return canonical
     }
 
+    // There is no positiveSign parameter here, deliberately (morph#596): a
+    // positive number displays unsigned in every locale, so the entry edge above
+    // accepts a leading "+" that this edge never produces.
     function formatCanonicalNumber(text, decimalSeparator, groupSeparator, negativeSign) {
         // Empty reads as "-", not as "no sign": formatting a negative to no
         // sign at all would be a silently wrong value, not a rejected one.
@@ -1069,7 +1097,7 @@ Frame {
         }
         if (f.isQuantity) {
             const canonicalText = normalizeLocaleNumber(text, qtLocale.decimalPoint, qtLocale.groupSeparator,
-                                                        qtLocale.negativeSign)
+                                                        qtLocale.negativeSign, qtLocale.positiveSign)
             if (canonicalText === null || !/^-?\d+(\.\d+)?$/.test(canonicalText))
                 return null
             const unit = f.unitOptions[opt(fieldUnits[f.name], 0)]
@@ -1746,7 +1774,7 @@ Frame {
                         if (entry.text.trim() !== "") {
                             const canonicalText = form.normalizeLocaleNumber(
                                     entry.text.trim(), form.qtLocale.decimalPoint, form.qtLocale.groupSeparator,
-                                    form.qtLocale.negativeSign)
+                                    form.qtLocale.negativeSign, form.qtLocale.positiveSign)
                             const converted = canonicalText !== null
                                     ? form.convertText(canonicalText, fromUnit, toUnit) : ""
                             entry.text = converted !== ""

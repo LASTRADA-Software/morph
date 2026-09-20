@@ -63,6 +63,30 @@ API surface).
 
 ### Added
 
+- **A locale numeric entry accepts an explicit `+`.**
+  `morph::render::normalizeLocaleNumber` had no notion of a positive sign: a
+  leading `+` fell through to the "any other character is malformed" arm, so
+  `"+5"` was rejected in every locale, `"C"` included. It now takes a fifth
+  `std::string_view positiveSign = "+"`, matched exactly as `negativeSign` is —
+  the locale's own spelling as a whole string, plus a bare ASCII `'+'`
+  everywhere. Measured over `QLocale::positiveSign` for the 711 locales Qt
+  6.11.2 knows, 54 spell it with a bidi control mark before the `+` (U+061C,
+  U+200E or U+200F; e.g. `ar_EG`, `ar_DZ`, `az_IR`, `ckb_IQ`) and the other 657
+  use the bare `+`. Unlike the negative side there is no U+2212 analogue, so
+  *every* non-ASCII spelling here is multi-code-point and whole-string matching
+  is the only thing that can match any of them. **The sign is dropped, not
+  carried**: canonical text is `-?[0-9]+(\.[0-9]+)?` and has no `+` in it, so
+  `"+5"` yields `"5"`. **`formatCanonicalNumber` deliberately takes no
+  `positiveSign` and never emits one** — `+` is the positive sign in 657 of 711
+  locales, so emitting it would turn every positive number in every form from
+  `5` into `+5`. The pair is therefore not a strict inverse across a positive
+  sign, which is stated in `docs/spec/forms/forms.md`, "Locale data formatting",
+  rather than left to be inferred from a missing parameter. The JavaScript
+  mirror in `src/qt/forms/qml/DynamicForm.qml` carries the identical change and
+  the renderer forwards `qtLocale.positiveSign` at the two entry call sites. The
+  parameter is defaulted, so no existing call site changes behaviour. See
+  morph#596.
+
 - **Every form in the ladder's showcase GUI now renders through
   `morph::forms`.** `examples/kanban` gains schema-driven `CreateProject`,
   `CreateColumn`, `CreateSwimlane`, `CreateTask` and `AddComment` forms
@@ -201,6 +225,19 @@ API surface).
   consulted with the key and that the attached log records the action under it.
   See morph#587.
 
+- **`formatCanonicalNumber`'s doc comment described the behaviour morph#574
+  removed.** It told the reader that grouping is "never accepted back on entry"
+  and that `normalizeLocaleNumber` "strips it unconditionally" — both false, and
+  in opposite directions. Measured on `be64026a`:
+  `normalizeLocaleNumber("1.050,25", ",", ".")` is `"1050.25"` (grouping *is*
+  accepted back) and `normalizeLocaleNumber("1.5", ",", ".")` is `std::nullopt`
+  (it is *not* stripped unconditionally — stripping is what used to turn that
+  entry into `15`). No behaviour changed: the spec and the code already agreed,
+  and only the comment was stale, dating to `d2cb3ae1` and never updated when
+  morph#574 deliberately reversed what it describes. It matters because it is
+  the comment a reader consults when deciding whether a grouped display can be
+  fed back through the entry edge, and it told them the round trip does not
+  hold when it does. See morph#597.
 - **77 of the 711 locales Qt knows could not enter a negative number.**
   `morph::render::normalizeLocaleNumber` matched the minus sign as the literal
   byte `'-'`, and `formatCanonicalNumber` emitted one whatever the locale, so

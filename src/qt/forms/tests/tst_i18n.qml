@@ -269,6 +269,92 @@ Item {
             compare(signForm.normalizeLocaleNumber("\u2212", ".", "", "\u2212"), null)
         }
 
+        // ── morph#596: a leading positive sign is accepted, and dropped ──
+        //
+        // The premise, measured rather than assumed, and on the same object the
+        // renderer forwards from. 54 of the 711 locales Qt 6.11.2 knows spell
+        // the positive sign with a bidi control mark before the "+"; unlike the
+        // negative side there is no U+2212 analogue, so every non-ASCII
+        // spelling is two or three code units and a one-unit comparison could
+        // match none of them.
+        function test_qtExposesAPositiveSignOnTheLocaleObject() {
+            compare(Qt.locale("C").positiveSign, "+")
+            compare(Qt.locale("de").positiveSign, "+")
+            compare(Qt.locale("ar_EG").positiveSign, "؜+")
+            compare(Qt.locale("az_IR").positiveSign, "‎+‎")
+        }
+
+        // The defect: a leading "+" fell through to the "any other character is
+        // malformed" arm, so an explicitly-positive entry was rejected in every
+        // locale. It is now accepted and *dropped* -- canonical text is
+        // -?[0-9]+(\.[0-9]+)? and has no "+" in it, so the payload is
+        // byte-identical to the one the unsigned entry produces.
+        function test_aLeadingPositiveSignIsAcceptedAndDropped() {
+            localeForm.setFieldValue("mass", "+1.050,25")
+            verify(localeForm.ready)
+            compare(localeForm.previewLine, '{"mass":{"num":1050250,"den":1000,"dp":3}}')
+
+            // Byte-identical to the unsigned entry: the sign changes nothing
+            // about the value, which is the whole reason dropping it is safe.
+            localeForm.setFieldValue("mass", "1.050,25")
+            compare(localeForm.previewLine, '{"mass":{"num":1050250,"den":1000,"dp":3}}')
+        }
+
+        // The C++ edge (tests/test_render_locale_format.cpp, [morph596]) pins
+        // the identical table; a divergence between the two is a divergence in
+        // what the product accepts.
+        function test_positiveSignIsMatchedAsAWholeString() {
+            compare(localeForm.normalizeLocaleNumber("+5", ".", ""), "5")
+            compare(localeForm.normalizeLocaleNumber("؜+5", ".", "", "-", "؜+"), "5")      // ar_EG
+            compare(localeForm.normalizeLocaleNumber("‎+5", ".", "", "-", "‎+"), "5")      // ar_DZ
+            compare(localeForm.normalizeLocaleNumber("‎+‎5", ".", "", "-", "‎+‎"), "5")  // az_IR
+            compare(localeForm.normalizeLocaleNumber("‏+5", ".", "", "-", "‏+"), "5")      // ckb_IQ
+
+            // Controls: with positiveSign left at its ASCII default, the
+            // bidi-prefixed spellings are still rejected -- which is what makes
+            // the parameter, and not the unconditional ASCII acceptance, the
+            // thing under test above.
+            compare(localeForm.normalizeLocaleNumber("؜+5", ".", ""), null)
+            compare(localeForm.normalizeLocaleNumber("‎+‎5", ".", ""), null)
+
+            // The ASCII "+" stays accepted in a bidi-sign locale, for the same
+            // reason the ASCII "-" does (morph#583): the locale's own spelling
+            // is on no keyboard.
+            compare(localeForm.normalizeLocaleNumber("+5", ".", "", "-", "؜+"), "5")
+            // An empty positiveSign leaves the ASCII spelling, and must not
+            // match at every index.
+            compare(localeForm.normalizeLocaleNumber("+5", ".", "", "-", ""), "5")
+            compare(localeForm.normalizeLocaleNumber("123", ".", "", "-", ""), "123")
+        }
+
+        // morph#497's rule is about the *output*, so a new sign spelling must
+        // not open a new way to inject one.
+        function test_aPositiveSignObeysTheLeadingPositionRule() {
+            compare(localeForm.normalizeLocaleNumber("1+2", ".", ""), null)
+            compare(localeForm.normalizeLocaleNumber("+-5", ".", ""), null)
+            compare(localeForm.normalizeLocaleNumber("-+5", ".", ""), null)
+            compare(localeForm.normalizeLocaleNumber("++5", ".", ""), null)
+            compare(localeForm.normalizeLocaleNumber(",+5", ",", "."), null)
+            compare(localeForm.normalizeLocaleNumber("+", ".", ""), null)
+        }
+
+        // The deliberate asymmetry, pinned so that "make it symmetric" is a
+        // test failure rather than a tidy-up. formatCanonicalNumber takes no
+        // positiveSign at all and never emits one -- Qt reports "+" for 657 of
+        // 711 locales, so emitting it would turn every positive number in every
+        // form from "5" into "+5".
+        function test_theDisplayEdgeNeverEmitsAPositiveSign() {
+            compare(localeForm.formatCanonicalNumber("5", ".", ""), "5")
+            compare(localeForm.formatCanonicalNumber("1050.25", ",", "."), "1.050,25")
+            // So the pair is not inverse across a positive sign: entry accepts
+            // a spelling display never produces.
+            const canonical = localeForm.normalizeLocaleNumber("+1.050,25", ",", ".")
+            compare(canonical, "1050.25")
+            compare(localeForm.formatCanonicalNumber(canonical, ",", "."), "1.050,25")
+            // ...while the negative side still round-trips exactly.
+            compare(localeForm.formatCanonicalNumber("-1050.25", ",", "."), "-1.050,25")
+        }
+
         function test_zonedTimestampRoundTripsToUtc() {
             zonedForm.setFieldValue("when", "2026-07-05T16:30:00")  // 16:30 in UTC+2
             verify(zonedForm.ready)

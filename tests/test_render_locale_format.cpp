@@ -392,3 +392,138 @@ TEST_CASE("locale_format: an empty negative sign reads as '-', not as 'no sign'"
     // as a separator would never advance.
     CHECK(normalizeLocaleNumber("123", ".", "", "") == "123");
 }
+
+// ──── morph#596: a leading positive sign is accepted, and dropped ────────────
+//
+// `normalizeLocaleNumber` had no notion of a positive sign at all: a leading
+// '+' fell through to the "any other character is malformed" arm, so an
+// explicitly-positive entry was rejected in every locale, "C" included.
+// Measured on be64026a:
+//
+//   normalize("+5", dec=".", grp="")  -> NULLOPT
+//   normalize("5",  dec=".", grp="")  -> "5"     (control)
+//   normalize("-5", dec=".", grp="")  -> "-5"    (control)
+//
+// Of the 711 locales Qt 6.11.2 reports through QLocale::matchingLocales, 54
+// spell QLocale::positiveSign as more than one code point:
+//
+//   U+002B                 657   e.g. C
+//   U+061C U+002B           24   e.g. ar_EG
+//   U+200E U+002B           11   e.g. ar_DZ
+//   U+200E U+002B U+200E    17   e.g. az_IR
+//   U+200F U+002B            2   e.g. ckb_IQ
+//
+// Unlike the negative side there is no U+2212 analogue, so every non-ASCII
+// spelling here is multi-code-point: whole-string matching is the only thing
+// that can match any of them.
+namespace {
+constexpr std::string_view kPlusArEg = "\xD8\x9C+";                  // ar_EG: U+061C U+002B
+constexpr std::string_view kPlusArDz = "\xE2\x80\x8E+";              // ar_DZ: U+200E U+002B
+constexpr std::string_view kPlusAzIr = "\xE2\x80\x8E+\xE2\x80\x8E";  // az_IR: U+200E U+002B U+200E
+constexpr std::string_view kPlusCkbIq = "\xE2\x80\x8F+";             // ckb_IQ: U+200F U+002B
+}  // namespace
+
+TEST_CASE("normalizeLocaleNumber: a bare ASCII '+' is accepted and dropped", "[render][locale][morph596]") {
+    // THE case. This was std::nullopt before, in every locale.
+    CHECK(normalizeLocaleNumber("+5", ".", "") == "5");
+    CHECK(normalizeLocaleNumber("+1.050,25", ",", ".") == "1050.25");
+    CHECK(normalizeLocaleNumber("+0.001", ".", "") == "0.001");
+
+    // Dropped, not carried: canonical text is `-?[0-9]+(\.[0-9]+)?` and has no
+    // '+' in it. "+5" must be "5", never "+5" -- a "+"-prefixed result would
+    // fail the renderer's own `/^-?\d+(\.\d+)?$/` gate and every exact digit
+    // routine downstream.
+    auto const plus = normalizeLocaleNumber("+5", ".", "");
+    REQUIRE(plus.has_value());
+    CHECK(*plus == "5");
+    CHECK(!plus->contains('+'));
+    CHECK(plus == normalizeLocaleNumber("5", ".", ""));
+}
+
+TEST_CASE("normalizeLocaleNumber: a locale's multi-code-point positive sign is matched whole",
+          "[render][locale][morph596]") {
+    // Two and three code points. A one-byte comparison could match none of
+    // them, which is why the parameter is a view matched with starts_with.
+    REQUIRE(kPlusArEg.size() == 3);
+    REQUIRE(kPlusAzIr.size() == 7);
+
+    CHECK(normalizeLocaleNumber(entry(kPlusArEg, "5"), ".", "", "-", kPlusArEg) == "5");
+    CHECK(normalizeLocaleNumber(entry(kPlusArDz, "5"), ".", "", "-", kPlusArDz) == "5");
+    CHECK(normalizeLocaleNumber(entry(kPlusAzIr, "5"), ".", "", "-", kPlusAzIr) == "5");
+    CHECK(normalizeLocaleNumber(entry(kPlusCkbIq, "5"), ".", "", "-", kPlusCkbIq) == "5");
+    CHECK(normalizeLocaleNumber(entry(kPlusArEg, "1.050,25"), ",", ".", "-", kPlusArEg) == "1050.25");
+
+    // Controls: with positiveSign left at its ASCII default, the bidi-prefixed
+    // spellings are still rejected -- the prefix byte is not a digit, and the
+    // bare '+' match cannot reach past it. This is what makes the parameter,
+    // rather than the unconditional ASCII acceptance above, the thing under
+    // test in this case.
+    CHECK(normalizeLocaleNumber(entry(kPlusArEg, "5"), ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber(entry(kPlusAzIr, "5"), ".", "") == std::nullopt);
+}
+
+TEST_CASE("normalizeLocaleNumber: the ASCII '+' stays accepted in a bidi-sign locale", "[render][locale][morph596]") {
+    // The morph#583 precedent: the locale's own spelling is on no keyboard, so
+    // matching only it would reject the sign the user can actually type.
+    CHECK(normalizeLocaleNumber("+5", ".", "", "-", kPlusArEg) == "5");
+    CHECK(normalizeLocaleNumber("+5", ".", "", "-", kPlusAzIr) == "5");
+    // An empty positiveSign leaves the ASCII spelling as the only one, rather
+    // than disabling the sign -- and must not match at every index, which would
+    // stall the scan.
+    CHECK(normalizeLocaleNumber("+5", ".", "", "-", "") == "5");
+    CHECK(normalizeLocaleNumber("123", ".", "", "-", "") == "123");
+}
+
+TEST_CASE("normalizeLocaleNumber: a positive sign obeys the same leading-position rule",
+          "[render][locale][morph596]") {
+    // morph#497's rule is about the *output*, so accepting a new sign spelling
+    // must not open a new way to inject one.
+    CHECK(normalizeLocaleNumber("1+2", ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber("+-5", ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber("-+5", ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber("++5", ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber(",+5", ",", ".") == std::nullopt);  // straight after the decimal point
+    CHECK(normalizeLocaleNumber("1" + entry(kPlusArEg, "2"), ".", "", "-", kPlusArEg) == std::nullopt);
+    // A sign and nothing else is not a number, whatever its spelling -- and for
+    // the positive sign this is the `canonical.empty()` arm rather than the
+    // `canonical == "-"` one, because nothing is emitted at all.
+    CHECK(normalizeLocaleNumber("+", ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber(kPlusArEg, ".", "", "-", kPlusArEg) == std::nullopt);
+}
+
+TEST_CASE("formatCanonicalNumber: the display edge never emits a positive sign", "[render][locale][morph596]") {
+    // The deliberate asymmetry, pinned so that "make it symmetric" is a test
+    // failure rather than a tidy-up. positiveSign is '+' in 657 of 711 locales,
+    // so emitting it would turn every positive number in every form into "+5".
+    CHECK(formatCanonicalNumber("5", ".", "") == "5");
+    CHECK(formatCanonicalNumber("1050.25", ",", ".") == "1.050,25");
+    CHECK(formatCanonicalNumber("1050.25", ",", ".", kSignEuEs) == "1.050,25");
+    // The negative direction is untouched by any of this.
+    CHECK(formatCanonicalNumber("-1050.25", ",", ".", kSignEuEs) == entry(kSignEuEs, "1.050,25"));
+}
+
+TEST_CASE("locale_format: the pair is not inverse across a positive sign, by design", "[render][locale][morph596]") {
+    // Entry accepts a spelling display never produces. Recorded as a test so
+    // the relationship is pinned rather than assumed: normalising a
+    // "+"-prefixed entry and formatting the result back gives the *unsigned*
+    // display, the same text a user who omitted the sign would see.
+    auto const canonical = normalizeLocaleNumber("+1.050,25", ",", ".");
+    REQUIRE(canonical == "1050.25");
+    CHECK(formatCanonicalNumber(*canonical, ",", ".") == "1.050,25");
+    CHECK(formatCanonicalNumber(*canonical, ",", ".") != "+1.050,25");
+    // ...while the negative side still round-trips exactly, unchanged.
+    auto const negative = normalizeLocaleNumber("-1.050,25", ",", ".");
+    REQUIRE(negative == "-1050.25");
+    CHECK(formatCanonicalNumber(*negative, ",", ".") == "-1.050,25");
+}
+
+TEST_CASE("normalizeLocaleNumber: the new parameter costs no existing behaviour", "[render][locale][morph596]") {
+    // Four- and three-argument callers are unchanged: positiveSign is
+    // defaulted, and nothing that was accepted or rejected before has moved.
+    CHECK(normalizeLocaleNumber("1.050,25", ",", ".") == "1050.25");
+    CHECK(normalizeLocaleNumber("-1.050,25", ",", ".") == "-1050.25");
+    CHECK(normalizeLocaleNumber("1.5", ",", ".") == std::nullopt);  // morph#574 still holds
+    CHECK(normalizeLocaleNumber("abc", ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber("", ".", "") == std::nullopt);
+    CHECK(normalizeLocaleNumber(entry(kSignEuEs, "5"), ".", "", kSignEuEs) == "-5");  // morph#583 still holds
+}
