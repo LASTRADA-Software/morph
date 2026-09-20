@@ -1,12 +1,92 @@
-# Checks suppressed inside tests/ only. Every entry below is a check whose
-# finding is *test idiom* — a property of Catch2 or of a raw-syscall harness —
-# rather than a defect. Checks whose findings turned out to be real problems
-# were fixed in the test sources instead of being listed here; in particular
-# misc-const-correctness, readability-container-contains,
+# Checks suppressed for translation units under tests/. Every entry below is a
+# check whose finding is *test idiom* — a property of Catch2 or of a raw-syscall
+# harness — rather than a defect. Checks whose findings turned out to be real
+# problems were fixed in the test sources instead of being listed here; in
+# particular misc-const-correctness, readability-container-contains,
 # cppcoreguidelines-special-member-functions, performance-unnecessary-value-param
 # and bugprone-empty-catch are deliberately still enabled here.
 #
 # One entry per check, with the reason it cannot fire on anything worth fixing.
+#
+# ── These suppressions are NOT confined to test sources (morph#632) ──────────
+#
+# clang-tidy resolves its configuration from the path of the *translation unit*
+# it is analysing, not from the path of the file a diagnostic lands in. This
+# file's directory therefore scopes which TUs it governs; it does not scope
+# which files their diagnostics may name. Every entry below is also off for
+# every header those TUs reach — all of include/morph/** included — so the same
+# finding in the same header is reported from an examples/ TU and silently
+# dropped from a tests/ one.
+#
+# Each entry's reasoning below is a correct statement about test code and says
+# nothing about include/morph/. The reasoning is not the problem; its unstated
+# reach is.
+#
+# Measured, not inferred. On a8511aa6 with clang-tidy 22.1.8, over the 134
+# tests/ translation units in the compile database the clang-tidy-diff job
+# configures for itself (every optional feature ON), every TU analysed and none
+# failing to compile:
+#
+#     distinct findings inside include/morph/**, from those 134 TUs
+#       with this file in place ....  262
+#       with this file removed .....  595
+#       hidden by this file ........  333, across 25 headers
+#
+#     247  cppcoreguidelines-pro-bounds-avoid-unchecked-container-access
+#      57  readability-identifier-length
+#       6  cppcoreguidelines-pro-bounds-array-to-pointer-decay
+#       5  modernize-avoid-c-arrays
+#       5  cppcoreguidelines-avoid-c-arrays
+#       5  bugprone-unchecked-optional-access
+#       3  cppcoreguidelines-pro-type-vararg
+#       3  readability-convert-member-functions-to-static
+#       2  readability-function-cognitive-complexity
+#
+#     most affected: forms/forms.hpp 90, session/session_auth.hpp 61,
+#     net/detail/sha1.hpp 32, forms/views.hpp 31, util/quantity.hpp 19
+#
+# The consequence for anyone building a gate over include/morph/**: a gate
+# driven by TUs under tests/ cannot report any of the checks listed under
+# `header-reach:` below, in any header it reaches, and would go green on
+# findings it was built to catch. Drive it from TUs whose path is not under
+# tests/ — the verify_interface_header_sets stubs generated under build/ sit
+# outside this file's reach and inherit the repository-root configuration — or
+# record, wherever the gate is documented, which checks it is structurally
+# unable to report.
+#
+# This is a property of the tool, not a choice: clang-tidy offers no way to
+# scope a suppression to the file a diagnostic lands in rather than to the TU.
+# scripts/check_tidy_suppression_scope.sh pins both halves of the record — that
+# the reach still exists, behaviourally, so this note goes red rather than
+# quietly stale if that ever changes, and that the list below still names
+# exactly what `Checks:` subtracts.
+#
+# header-reach: bugprone-chained-comparison
+# header-reach: bugprone-misplaced-widening-cast
+# header-reach: bugprone-unchecked-optional-access
+# header-reach: cppcoreguidelines-avoid-c-arrays
+# header-reach: cppcoreguidelines-pro-bounds-array-to-pointer-decay
+# header-reach: cppcoreguidelines-pro-bounds-avoid-unchecked-container-access
+# header-reach: cppcoreguidelines-pro-type-vararg
+# header-reach: misc-use-internal-linkage
+# header-reach: modernize-avoid-c-arrays
+# header-reach: readability-convert-member-functions-to-static
+# header-reach: readability-function-cognitive-complexity
+# header-reach: readability-identifier-length
+# header-reach: readability-named-parameter
+#
+# The nine examples/*/tests/.clang-tidy and examples/common/testkit/.clang-tidy
+# copies have the same reach and, measured on the same revision, no effect
+# through it: they subtract exactly one check, bugprone-chained-comparison,
+# which fires only on Catch2's own REQUIRE expansion and is attributed to the
+# test source line rather than to any morph header. Over the 154 example test
+# TUs in the same database, findings inside include/morph/** were identical
+# with and without those nine files — 312 either way. That measurement cannot
+# by itself separate "no header reach" from "the check never fired": Catch2
+# 3.16.0 locally carries the NOLINT that suppresses it, and this check produced
+# zero findings in either run. The structural argument above is what carries
+# the conclusion; the measurement only fails to contradict it.
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Catch2's REQUIRE(a == b) macro expansion is parsed by clang-tidy as a
 # chained comparison. This is a false positive — not a real code issue.

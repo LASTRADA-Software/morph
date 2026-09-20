@@ -2179,6 +2179,31 @@ jobs:
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
           sudo apt-get install -y clang-tidy-${{ env.CLANG_VERSION }}
 
+      # Here rather than in a lint job of its own because this is the only job
+      # that already has a pinned clang-tidy on it, and both steps below need
+      # one. Neither reads the compile database, so they run before the
+      # Configure step and fail in seconds rather than after it.
+      #
+      # See scripts/test_check_tidy_suppression_scope.sh's own comment: a lint
+      # gate nobody tests reports green whether or not it still detects
+      # anything, and this one's behavioural half asserts a *negative* -- that
+      # a check does not fire in a header -- which a broken probe satisfies by
+      # accident.
+      - name: Self-test the clang-tidy suppression-scope checker
+        run: bash scripts/test_check_tidy_suppression_scope.sh clang-tidy-${{ env.CLANG_VERSION }}
+
+      # Catches morph#632's bug class: tests/.clang-tidy's thirteen
+      # suppressions are argued as Catch2 and raw-syscall idiom, which is true
+      # of test sources and says nothing about include/morph/** -- yet
+      # clang-tidy resolves configuration from the translation unit's path, so
+      # they are off for every header a tests/ TU reaches as well. Measured on
+      # a8511aa6: 333 findings inside include/morph/**, across 25 headers,
+      # reported from those 134 TUs only once that file is removed. The reach
+      # cannot be narrowed, so it is written down in tests/.clang-tidy -- and
+      # this step is what keeps the record from going stale.
+      - name: Check tests/.clang-tidy records the reach it actually has
+        run: bash scripts/check_tidy_suppression_scope.sh clang-tidy-${{ env.CLANG_VERSION }} .
+
       # See the linux-all-features job: the QML renderer needs Qt 6.5+.
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
