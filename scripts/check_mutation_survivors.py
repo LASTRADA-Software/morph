@@ -46,15 +46,29 @@ What it does NOT audit, stated rather than left to be discovered
 ----------------------------------------------------------------
 Only the *structured* entries -- dicts carrying `file`, `line` and `source`.
 The same document also carries citations as free text, inside prose strings:
-`"include/morph/core/backend.hpp:613 -- emitMetric(Metric::registerCount, 1.0)"`,
-`"site": "remote.hpp:1031"`, and 29 more (31 in all, as this script's own
+`"site": "remote.hpp:1031"`, `"core/registry.hpp:54 -- PairKeyHash
+hash-combine"`, and 18 more (20 in all, as this script's own
 count_free_text_citations() reports on every run). Those have no verbatim
 `source` text to resolve against -- the text after the `--` is a paraphrase,
 and several use a bare filename with no directory -- so this resolver cannot
-see them, and several of them are measurably stale (morph#613). The count is
-printed on every run so this gate's coverage of the file is visible rather than
-assumed: auditing the structured half of a file while the prose half rots is a
-narrower claim than a green tick looks.
+see them.
+
+Every one of those 20 is *deliberately* out of reach, and morph#613 settled
+why. They live in the file's dated campaign records -- `runs`,
+`false_positive_finding`, `mechanism_confirmed` and
+`classification_2026_09_09` -- whose line numbers describe the tree as it was
+when the campaign ran, and each of those sections now carries a `revision` so
+the citation resolves with `git show <revision>:<path>`. Auditing them against
+HEAD would fail forever and correctly so: the record is not wrong, the reading
+would be. The citations that *do* describe current code all sit under
+`classes`, and morph#613 converted them to the structured shape above, which
+this script picked up with no edit to it -- find_entries() walks the whole
+document by design, exactly so that a new class of live citation is covered
+without a second mechanism.
+
+The count is printed on every run so this gate's coverage of the file is
+visible rather than assumed: auditing the structured half of a file while the
+prose half is exempt by design is a narrower claim than a green tick looks.
 
 Vacuity
 -------
