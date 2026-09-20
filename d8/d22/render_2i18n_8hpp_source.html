@@ -173,27 +173,52 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d22/render_
 <div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span><span class="comment">/// @param derivedKey    The mechanically-derived key for this slot.</span></div>
 <div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span><span class="comment">/// @param schemaLiteral The schema&#39;s authored fallback text for this slot.</span></div>
 <div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="comment">/// @return The resolved display text.</span></div>
-<div class="foldopen" id="foldopen00054" data-start="{" data-end="}">
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno"><a class="line" href="../../d8/d22/render_2i18n_8hpp.html#ae18339e4878ba6ecca8dde12df99bee0">   54</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../d8/d22/render_2i18n_8hpp.html#ae18339e4878ba6ecca8dde12df99bee0">resolveText</a>(<span class="keyword">const</span> <a class="code hl_typedef" href="../../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283">TranslationProvider</a>&amp; provider, std::string_view bcp47Locale,</div>
-<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span>                                             <span class="keyword">const</span> std::optional&lt;std::string&gt;&amp; explicitKey,</div>
-<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span>                                             std::string_view derivedKey, std::string_view schemaLiteral) {</div>
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span>    <span class="keywordflow">if</span> (provider) {</div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>        <span class="keywordflow">if</span> (explicitKey.has_value()) {</div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>            <span class="keywordflow">if</span> (<span class="keyword">auto</span> hit = provider(*explicitKey, bcp47Locale)) {</div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>                <span class="keywordflow">return</span> *hit;</div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>            }</div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>        }</div>
-<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>        <span class="keywordflow">if</span> (<span class="keyword">auto</span> hit = provider(derivedKey, bcp47Locale)) {</div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>            <span class="keywordflow">return</span> *hit;</div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>        }</div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>    }</div>
-<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span>    <span class="keywordflow">return</span> std::string{schemaLiteral};</div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span>}</div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment">// NOLINTBEGIN(bugprone-easily-swappable-parameters)</span></div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">// `derivedKey` and `schemaLiteral` are adjacent `std::string_view`s, and the</span></div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">// check is right that swapping them would be silent and wrong: the derived key</span></div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">// would be rendered to the user as display text, and the schema&#39;s authored</span></div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment">// title would be looked up in the catalog, miss, and fall back to the key. No</span></div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment">// type or arity error would catch it.</span></div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment">//</span></div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment">// They stay in this order because the order *is* the contract. The three</span></div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="comment">// parameters are the resolution chain in precedence order -- explicit key, then</span></div>
+<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="comment">// derived key, then the schema literal as the fallback -- which is how the</span></div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="comment">// @brief above states it, how the body below tries them, and how</span></div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="comment">// docs/spec/forms/forms.md specifies it. The QML renderer carries a mirror of</span></div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span><span class="comment">// this function with the same parameters in the same order</span></div>
+<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="comment">// (src/qt/forms/qml/DynamicForm.qml, `resolveText(explicitKey, derivedKey,</span></div>
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="comment">// literal)`), and the two are meant to be read against each other. Reordering</span></div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span><span class="comment">// to break the adjacency here would desynchronise that pair and leave the</span></div>
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="comment">// signature the only place in the stack that does not read as the chain --</span></div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment">// trading a mistake that no caller in the tree is positioned to make for one a</span></div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="comment">// reader of both renderers would.</span></div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span><span class="comment">//</span></div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span><span class="comment">// Strong types would remove the hazard outright, but a `TranslationKey` wrapper</span></div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="comment">// on this seam would have to be threaded through every caller in morph::forms,</span></div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment">// which is a design change to the renderer boundary and not a lint fix. If that</span></div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span><span class="comment">// is ever done, delete this suppression rather than widening it.</span></div>
+<div class="foldopen" id="foldopen00078" data-start="{" data-end="}">
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno"><a class="line" href="../../d8/d22/render_2i18n_8hpp.html#ae18339e4878ba6ecca8dde12df99bee0">   78</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../d8/d22/render_2i18n_8hpp.html#ae18339e4878ba6ecca8dde12df99bee0">resolveText</a>(<span class="keyword">const</span> <a class="code hl_typedef" href="../../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283">TranslationProvider</a>&amp; provider, std::string_view bcp47Locale,</div>
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span>                                             <span class="keyword">const</span> std::optional&lt;std::string&gt;&amp; explicitKey,</div>
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>                                             std::string_view derivedKey, std::string_view schemaLiteral) {</div>
+<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span>    <span class="comment">// NOLINTEND(bugprone-easily-swappable-parameters)</span></div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>    <span class="keywordflow">if</span> (provider) {</div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span>        <span class="keywordflow">if</span> (explicitKey.has_value()) {</div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span>            <span class="keywordflow">if</span> (<span class="keyword">auto</span> hit = provider(*explicitKey, bcp47Locale)) {</div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span>                <span class="keywordflow">return</span> *hit;</div>
+<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span>            }</div>
+<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span>        }</div>
+<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span>        <span class="keywordflow">if</span> (<span class="keyword">auto</span> hit = provider(derivedKey, bcp47Locale)) {</div>
+<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span>            <span class="keywordflow">return</span> *hit;</div>
+<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span>        }</div>
+<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span>    }</div>
+<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span>    <span class="keywordflow">return</span> std::string{schemaLiteral};</div>
+<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span>}</div>
 </div>
-<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span> </div>
-<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span>}  <span class="comment">// namespace morph::render</span></div>
+<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span> </div>
+<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span>}  <span class="comment">// namespace morph::render</span></div>
 <div class="ttc" id="arender_2i18n_8hpp_html_a6022e390d39cf81cd37bba36b5f65283"><div class="ttname"><a href="../../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283">morph::render::TranslationProvider</a></div><div class="ttdeci">std::function&lt; std::optional&lt; std::string &gt;(std::string_view key, std::string_view bcp47Locale)&gt; TranslationProvider</div><div class="ttdoc">A host-supplied catalog lookup: key/bcp47Locale -&gt; translated text, or std::nullopt on a miss.</div><div class="ttdef"><b>Definition</b> <a href="#l00033">i18n.hpp:33</a></div></div>
-<div class="ttc" id="arender_2i18n_8hpp_html_ae18339e4878ba6ecca8dde12df99bee0"><div class="ttname"><a href="../../d8/d22/render_2i18n_8hpp.html#ae18339e4878ba6ecca8dde12df99bee0">morph::render::resolveText</a></div><div class="ttdeci">std::string resolveText(const TranslationProvider &amp;provider, std::string_view bcp47Locale, const std::optional&lt; std::string &gt; &amp;explicitKey, std::string_view derivedKey, std::string_view schemaLiteral)</div><div class="ttdoc">Resolves one display slot&#39;s text: explicit key, then derived key, then the schema literal.</div><div class="ttdef"><b>Definition</b> <a href="#l00054">i18n.hpp:54</a></div></div>
+<div class="ttc" id="arender_2i18n_8hpp_html_ae18339e4878ba6ecca8dde12df99bee0"><div class="ttname"><a href="../../d8/d22/render_2i18n_8hpp.html#ae18339e4878ba6ecca8dde12df99bee0">morph::render::resolveText</a></div><div class="ttdeci">std::string resolveText(const TranslationProvider &amp;provider, std::string_view bcp47Locale, const std::optional&lt; std::string &gt; &amp;explicitKey, std::string_view derivedKey, std::string_view schemaLiteral)</div><div class="ttdoc">Resolves one display slot&#39;s text: explicit key, then derived key, then the schema literal.</div><div class="ttdef"><b>Definition</b> <a href="#l00078">i18n.hpp:78</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

@@ -138,23 +138,23 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a64eb9f5a32f498759160e5e2697cdfae"><td class="mdescLeft">&#160;</td><td class="mdescRight">String type-id of the executed action (<span class="tt">ActionTraits&lt;A&gt;::typeId()</span>).  <br /></td></tr>
 <tr class="memitem:a3391f30563d9f938b266527937c8c4ed" id="r_a3391f30563d9f938b266527937c8c4ed"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a3391f30563d9f938b266527937c8c4ed">payload</a></td></tr>
 <tr class="memdesc:a3391f30563d9f938b266527937c8c4ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">JSON-encoded request (<span class="tt">ActionTraits&lt;A&gt;::toJson</span>).  <br /></td></tr>
-<tr class="memitem:a4bf6f8bdd1b73a40955203c9e45dd992" id="r_a4bf6f8bdd1b73a40955203c9e45dd992"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a4bf6f8bdd1b73a40955203c9e45dd992">schema</a> {}</td></tr>
+<tr class="memitem:a4bf6f8bdd1b73a40955203c9e45dd992" id="r_a4bf6f8bdd1b73a40955203c9e45dd992"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a4bf6f8bdd1b73a40955203c9e45dd992">schema</a></td></tr>
 <tr class="memdesc:a4bf6f8bdd1b73a40955203c9e45dd992"><td class="mdescLeft">&#160;</td><td class="mdescRight">Structural fingerprint of the action payload's shape at the moment <span class="tt"><a class="el" href="#a3391f30563d9f938b266527937c8c4ed" title="JSON-encoded request (ActionTraits&lt;A&gt;::toJson).">payload</a></span> was encoded (<span class="tt"><a class="el" href="../../dc/d50/payload__schema_8hpp.html#ac52e95bf399047c5d1266ca9a843250a" title="Returns A&#39;s payload fingerprint: &quot;&lt;scheme&gt;:&lt;16 hex digits&gt;&quot;.">morph::model::payloadFingerprint</a></span>).  <br /></td></tr>
 <tr class="memitem:ada474537fac0bac3b932d4fde686f42e" id="r_ada474537fac0bac3b932d4fde686f42e"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ada474537fac0bac3b932d4fde686f42e">result</a></td></tr>
 <tr class="memdesc:ada474537fac0bac3b932d4fde686f42e"><td class="mdescLeft">&#160;</td><td class="mdescRight">JSON-encoded result (<span class="tt">ActionTraits&lt;A&gt;::resultToJson</span>), captured after successful execution. Empty when <span class="tt"><a class="el" href="#a65b1a905d7736eaf3cb6ae8f112de353" title="Whether this execution succeeded or was rejected/threw. Defaults to Succeeded so a pre-existing on-di...">outcome</a> == Outcome::Failed</span>.  <br /></td></tr>
 <tr class="memitem:a65b1a905d7736eaf3cb6ae8f112de353" id="r_a65b1a905d7736eaf3cb6ae8f112de353"><td class="memItemLeft">Outcome&#160;</td><td class="memItemRight"><a class="el" href="#a65b1a905d7736eaf3cb6ae8f112de353">outcome</a> = Outcome::Succeeded</td></tr>
 <tr class="memdesc:a65b1a905d7736eaf3cb6ae8f112de353"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether this execution succeeded or was rejected/threw. Defaults to <span class="tt">Succeeded</span> so a pre-existing on-disk entry (written before this field existed) decodes unchanged under the lenient reader — an absent key is indistinguishable from an explicit <span class="tt">Succeeded</span>.  <br /></td></tr>
-<tr class="memitem:a646cb97e461dcd84d20260cecab748a8" id="r_a646cb97e461dcd84d20260cecab748a8"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a646cb97e461dcd84d20260cecab748a8">error</a> {}</td></tr>
+<tr class="memitem:a646cb97e461dcd84d20260cecab748a8" id="r_a646cb97e461dcd84d20260cecab748a8"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a646cb97e461dcd84d20260cecab748a8">error</a></td></tr>
 <tr class="memdesc:a646cb97e461dcd84d20260cecab748a8"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">std::exception::what()</span> from the exception that rejected the action. Empty unless <span class="tt"><a class="el" href="#a65b1a905d7736eaf3cb6ae8f112de353" title="Whether this execution succeeded or was rejected/threw. Defaults to Succeeded so a pre-existing on-di...">outcome</a> == Outcome::Failed</span>.  <br /></td></tr>
 <tr class="memitem:a0179dc557393efbb5572f4609b651b30" id="r_a0179dc557393efbb5572f4609b651b30"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a0179dc557393efbb5572f4609b651b30">principal</a></td></tr>
 <tr class="memdesc:a0179dc557393efbb5572f4609b651b30"><td class="mdescLeft">&#160;</td><td class="mdescRight">Auth principal from <span class="tt">morph::session::current()</span>, if any. Empty if unset.  <br /></td></tr>
 <tr class="memitem:ab965e19dcd3a6526e4d17e898bd69a07" id="r_ab965e19dcd3a6526e4d17e898bd69a07"><td class="memItemLeft">int64_t&#160;</td><td class="memItemRight"><a class="el" href="#ab965e19dcd3a6526e4d17e898bd69a07">timestampMs</a> = 0</td></tr>
 <tr class="memdesc:ab965e19dcd3a6526e4d17e898bd69a07"><td class="mdescLeft">&#160;</td><td class="mdescRight">Wall-clock time of execution, milliseconds since the Unix epoch.  <br /></td></tr>
-<tr class="memitem:a455b9e155aca28cd310650e73b2a7b24" id="r_a455b9e155aca28cd310650e73b2a7b24"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a455b9e155aca28cd310650e73b2a7b24">idempotencyKey</a> {}</td></tr>
+<tr class="memitem:a455b9e155aca28cd310650e73b2a7b24" id="r_a455b9e155aca28cd310650e73b2a7b24"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a455b9e155aca28cd310650e73b2a7b24">idempotencyKey</a></td></tr>
 <tr class="memdesc:a455b9e155aca28cd310650e73b2a7b24"><td class="mdescLeft">&#160;</td><td class="mdescRight">Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (from <span class="tt">ActionDispatcher</span>'s runner or <span class="tt">Bridge::executeVia</span>'s local op) never set it. Mirrors <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">morph::offline::QueueItem::idempotencyKey</a></span>'s exact contract: opaque, stored verbatim, stable across restarts for one logical outbox row. See <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html" title="Moves committed-but-unrelayed rows from a model&#39;s own outbox table to a durable IActionLog,...">journal::OutboxRelay</a></span> (<span class="tt"><a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a></span>) for how it's used.  <br /></td></tr>
 <tr class="memitem:a9ca4bf6f47ab3438eebbabde2fb9807a" id="r_a9ca4bf6f47ab3438eebbabde2fb9807a"><td class="memItemLeft">std::uint32_t&#160;</td><td class="memItemRight"><a class="el" href="#a9ca4bf6f47ab3438eebbabde2fb9807a">v</a> = kLogFormatVersion</td></tr>
 <tr class="memdesc:a9ca4bf6f47ab3438eebbabde2fb9807a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Line-format version this entry was written at.  <br /></td></tr>
-<tr class="memitem:a3f6645af9ccf2dd75508e1771ef1e1e5" id="r_a3f6645af9ccf2dd75508e1771ef1e1e5"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a3f6645af9ccf2dd75508e1771ef1e1e5">causalParentId</a> {}</td></tr>
+<tr class="memitem:a3f6645af9ccf2dd75508e1771ef1e1e5" id="r_a3f6645af9ccf2dd75508e1771ef1e1e5"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a3f6645af9ccf2dd75508e1771ef1e1e5">causalParentId</a></td></tr>
 <tr class="memdesc:a3f6645af9ccf2dd75508e1771ef1e1e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Identity of the "trigger" entry that caused this entry to be recorded, or empty (the sentinel) if this entry was not caused by another one.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
@@ -260,7 +260,7 @@ Public Attributes</h2></td></tr>
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::journal::LogEntry::schema {}</td>
+          <td class="memname">std::string morph::journal::LogEntry::schema</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -317,7 +317,7 @@ fingerprint".</p>
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::journal::LogEntry::error {}</td>
+          <td class="memname">std::string morph::journal::LogEntry::error</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -371,7 +371,7 @@ fingerprint".</p>
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::journal::LogEntry::idempotencyKey {}</td>
+          <td class="memname">std::string morph::journal::LogEntry::idempotencyKey</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -408,7 +408,7 @@ fingerprint".</p>
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::journal::LogEntry::causalParentId {}</td>
+          <td class="memname">std::string morph::journal::LogEntry::causalParentId</td>
         </tr>
       </table>
 </div><div class="memdoc">

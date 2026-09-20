@@ -134,12 +134,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a5fe9f97a355a83000e52e225d64c96ba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the core over a caller-supplied <span class="tt">Bridge</span>/executor, instead of building a private, always-local one.  <br /></td></tr>
 <tr class="memitem:a9d0ae1a3f274ce98ef9c5c0aa5bdc767" id="r_a9d0ae1a3f274ce98ef9c5c0aa5bdc767"><td class="memItemLeft">const std::string &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a9d0ae1a3f274ce98ef9c5c0aa5bdc767">schemasJson</a> () const noexcept</td></tr>
 <tr class="memdesc:a9d0ae1a3f274ce98ef9c5c0aa5bdc767"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">{actionType: schema}</span> JSON supplied at construction.  <br /></td></tr>
-<tr class="memitem:ad015e78d8fa026c904b8157d0e6f8a57" id="r_ad015e78d8fa026c904b8157d0e6f8a57"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
-<tr class="memitem:ad015e78d8fa026c904b8157d0e6f8a57 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad015e78d8fa026c904b8157d0e6f8a57">submitIfValid</a> (std::string actionType, std::string bodyJson, OnReply onReply, OnError onError)</td></tr>
-<tr class="memdesc:ad015e78d8fa026c904b8157d0e6f8a57"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">bodyJson</code> as <code class="param">actionType's</code> body via the generic <span class="tt">executeJson</span> path, invoking <code class="param">onReply</code> / <code class="param">onError</code> on the GUI thread once the reply arrives.  <br /></td></tr>
-<tr class="memitem:accb54a2ee3b00d879f7351cd199be106" id="r_accb54a2ee3b00d879f7351cd199be106"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
-<tr class="memitem:accb54a2ee3b00d879f7351cd199be106 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#accb54a2ee3b00d879f7351cd199be106">fetchOptions</a> (std::string optionsAction, std::string bodyJson, OnReply onReply, OnError onError)</td></tr>
-<tr class="memdesc:accb54a2ee3b00d879f7351cd199be106"><td class="mdescLeft">&#160;</td><td class="mdescRight">Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#ad015e78d8fa026c904b8157d0e6f8a57" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses &ndash; <code class="param">optionsAction</code> is never hardcoded, unlike the pre-factoring example controller, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body.  <br /></td></tr>
+<tr class="memitem:a9a8ab11ed270dd7cce1614f19a858ef7" id="r_a9a8ab11ed270dd7cce1614f19a858ef7"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
+<tr class="memitem:a9a8ab11ed270dd7cce1614f19a858ef7 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7">submitIfValid</a> (const std::string &amp;actionType, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td></tr>
+<tr class="memdesc:a9a8ab11ed270dd7cce1614f19a858ef7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">bodyJson</code> as <code class="param">actionType's</code> body via the generic <span class="tt">executeJson</span> path, invoking <code class="param">onReply</code> / <code class="param">onError</code> on the GUI thread once the reply arrives.  <br /></td></tr>
+<tr class="memitem:a1b6eed5ade78c6e44ffc6da9107e4a5c" id="r_a1b6eed5ade78c6e44ffc6da9107e4a5c"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
+<tr class="memitem:a1b6eed5ade78c6e44ffc6da9107e4a5c template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1b6eed5ade78c6e44ffc6da9107e4a5c">fetchOptions</a> (const std::string &amp;optionsAction, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td></tr>
+<tr class="memdesc:a1b6eed5ade78c6e44ffc6da9107e4a5c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses &ndash; <code class="param">optionsAction</code> is never hardcoded, unlike the pre-factoring example controller, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Model&gt;<br />
@@ -225,7 +225,7 @@ template&lt;typename Model&gt; </div>
 </div><div class="memdoc">
 
 <p>Constructs the core over a caller-supplied <span class="tt">Bridge</span>/executor, instead of building a private, always-local one. </p>
-<p>The core registers a <span class="tt">BridgeHandler&lt;Model&gt;</span> on <code class="param">bridge</code> exactly as the owning constructor's internal one does, so <span class="tt"><a class="el" href="#ad015e78d8fa026c904b8157d0e6f8a57" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span>/ <span class="tt"><a class="el" href="#accb54a2ee3b00d879f7351cd199be106" title="Executes optionsAction with bodyJson to fetch a Choice field&#39;s combo-box options, via the same generi...">fetchOptions</a></span> dispatch through whatever backend <code class="param">bridge</code> currently has installed (<span class="tt">LocalBackend</span>, <span class="tt">SimulatedRemoteBackend</span>, <span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">QtWebSocketBackend</a></span>, ...) &ndash; including a backend <code class="param">bridge</code> switches to later via <span class="tt">Bridge::switchBackend</span>, since the registered handler re-registers itself automatically.</p>
+<p>The core registers a <span class="tt">BridgeHandler&lt;Model&gt;</span> on <code class="param">bridge</code> exactly as the owning constructor's internal one does, so <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span>/ <span class="tt"><a class="el" href="#a1b6eed5ade78c6e44ffc6da9107e4a5c" title="Executes optionsAction with bodyJson to fetch a Choice field&#39;s combo-box options, via the same generi...">fetchOptions</a></span> dispatch through whatever backend <code class="param">bridge</code> currently has installed (<span class="tt">LocalBackend</span>, <span class="tt">SimulatedRemoteBackend</span>, <span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">QtWebSocketBackend</a></span>, ...) &ndash; including a backend <code class="param">bridge</code> switches to later via <span class="tt">Bridge::switchBackend</span>, since the registered handler re-registers itself automatically.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">bridge</td><td>The bridge to register this core's handler on. Must outlive this core. </td></tr>
@@ -272,8 +272,8 @@ template&lt;typename Model&gt; </div>
 
 </div>
 </div>
-<a id="ad015e78d8fa026c904b8157d0e6f8a57" name="ad015e78d8fa026c904b8157d0e6f8a57"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad015e78d8fa026c904b8157d0e6f8a57">&#9670;&#160;</a></span>submitIfValid()</h2>
+<a id="a9a8ab11ed270dd7cce1614f19a858ef7" name="a9a8ab11ed270dd7cce1614f19a858ef7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9a8ab11ed270dd7cce1614f19a858ef7">&#9670;&#160;</a></span>submitIfValid()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -288,12 +288,12 @@ template&lt;typename OnReply, typename OnError&gt; </div>
         <tr>
           <td class="memname">void <a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model &gt;::submitIfValid </td>
           <td>(</td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>actionType</em></span>, </td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>actionType</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>bodyJson</em></span>, </td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>bodyJson</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
@@ -335,8 +335,8 @@ template&lt;typename OnReply, typename OnError&gt; </div>
 
 </div>
 </div>
-<a id="accb54a2ee3b00d879f7351cd199be106" name="accb54a2ee3b00d879f7351cd199be106"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#accb54a2ee3b00d879f7351cd199be106">&#9670;&#160;</a></span>fetchOptions()</h2>
+<a id="a1b6eed5ade78c6e44ffc6da9107e4a5c" name="a1b6eed5ade78c6e44ffc6da9107e4a5c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1b6eed5ade78c6e44ffc6da9107e4a5c">&#9670;&#160;</a></span>fetchOptions()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -351,12 +351,12 @@ template&lt;typename OnReply, typename OnError&gt; </div>
         <tr>
           <td class="memname">void <a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model &gt;::fetchOptions </td>
           <td>(</td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>optionsAction</em></span>, </td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>optionsAction</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>bodyJson</em></span>, </td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>bodyJson</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
@@ -376,7 +376,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#ad015e78d8fa026c904b8157d0e6f8a57" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses &ndash; <code class="param">optionsAction</code> is never hardcoded, unlike the pre-factoring example controller, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body. </p>
+<p>Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses &ndash; <code class="param">optionsAction</code> is never hardcoded, unlike the pre-factoring example controller, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">OnReply</td><td>Callable invoked with the options-action result JSON on success. </td></tr>

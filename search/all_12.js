@@ -78,7 +78,7 @@ var searchData=
   ['stoprequested_75',['stopRequested',['../d7/d9f/classmorph_1_1async_1_1CallbackScope.html#ae36f1a1d24f3f19f7624a5319a475065',1,'morph::async::CallbackScope']]],
   ['strandexecutor_76',['StrandExecutor',['../index.html#strandexecutor',1,'']]],
   ['subassignchecked_77',['subAssignChecked',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a3485b333f3ebde4dc1a8585fcfa60d89',1,'morph::math::Rational']]],
-  ['submitifvalid_78',['submitIfValid',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#ad015e78d8fa026c904b8157d0e6f8a57',1,'morph::qt::forms::FormsControllerCore']]],
+  ['submitifvalid_78',['submitIfValid',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#a9a8ab11ed270dd7cce1614f19a858ef7',1,'morph::qt::forms::FormsControllerCore']]],
   ['subscribe_79',['subscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940',1,'morph::bridge::BridgeHandler::subscribe(std::function&lt; void(R)&gt; cb)'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ac5cef1ee0699d0fe7fddede90b0e9738',1,'morph::bridge::BridgeHandler::subscribe(const ::morph::async::CallbackScope &amp;scope, std::function&lt; void(R)&gt; cb)'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8ba5a1b0041cfa1d47974856a83a4078',1,'morph::bridge::BridgeHandler::subscribe(::morph::async::CallbackToken token, std::function&lt; void(R)&gt; cb)']]],
   ['subscription_5fregistry_2ehpp_80',['subscription_registry.hpp',['../d0/dd4/subscription__registry_8hpp.html',1,'']]],
   ['subscriptions_81',['Instance subscriptions',['../index.html#instance-subscriptions',1,'']]],
