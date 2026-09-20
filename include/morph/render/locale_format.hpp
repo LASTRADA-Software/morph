@@ -289,10 +289,24 @@ namespace detail {
 ///        display text, grouping the integer part in triples.
 ///
 /// The display-direction inverse of `normalizeLocaleNumber`'s
-/// decimal-separator substitution, plus display-only thousands grouping
-/// (grouping is never accepted back on entry — `normalizeLocaleNumber`
-/// strips it unconditionally). Passing `decimalSeparator == "."` and an empty
-/// @p groupSeparator is the identity transform.
+/// decimal-separator substitution, plus thousands grouping that
+/// `normalizeLocaleNumber` takes back: a grouped display round-trips, because
+/// the entry direction *validates* the grouping rather than stripping it (see
+/// "Grouping is validated, not stripped" on that function). Passing
+/// `decimalSeparator == "."` and an empty @p groupSeparator is the identity
+/// transform.
+///
+/// @par What this paragraph used to say, and why it was wrong (morph#597)
+/// It claimed grouping was "never accepted back on entry" and that
+/// `normalizeLocaleNumber` "strips it unconditionally" -- the pre-morph#574
+/// behaviour, and false in two opposite directions at once. Measured on
+/// `be64026a`: `normalizeLocaleNumber("1.050,25", ",", ".")` is `"1050.25"`,
+/// so grouping *is* accepted back; `normalizeLocaleNumber("1.5", ",", ".")` is
+/// `std::nullopt`, so it is *not* stripped unconditionally -- unconditional
+/// stripping is exactly what would have made that entry `15`, the silent
+/// ten-times-wrong value morph#574 exists to prevent. The spec
+/// (`docs/spec/forms/forms.md`, "Grouping is validated, never merely
+/// stripped") and the code already agreed; only this comment was stale.
 ///
 /// The sign is emitted as @p negativeSign, matching what `normalizeLocaleNumber`
 /// accepts back (morph#583); an empty view is read as `"-"` rather than as "no

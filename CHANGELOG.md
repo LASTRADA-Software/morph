@@ -201,6 +201,19 @@ API surface).
   consulted with the key and that the attached log records the action under it.
   See morph#587.
 
+- **`formatCanonicalNumber`'s doc comment described the behaviour morph#574
+  removed.** It told the reader that grouping is "never accepted back on entry"
+  and that `normalizeLocaleNumber` "strips it unconditionally" — both false, and
+  in opposite directions. Measured on `be64026a`:
+  `normalizeLocaleNumber("1.050,25", ",", ".")` is `"1050.25"` (grouping *is*
+  accepted back) and `normalizeLocaleNumber("1.5", ",", ".")` is `std::nullopt`
+  (it is *not* stripped unconditionally — stripping is what used to turn that
+  entry into `15`). No behaviour changed: the spec and the code already agreed,
+  and only the comment was stale, dating to `d2cb3ae1` and never updated when
+  morph#574 deliberately reversed what it describes. It matters because it is
+  the comment a reader consults when deciding whether a grouped display can be
+  fed back through the entry edge, and it told them the round trip does not
+  hold when it does. See morph#597.
 - **77 of the 711 locales Qt knows could not enter a negative number.**
   `morph::render::normalizeLocaleNumber` matched the minus sign as the literal
   byte `'-'`, and `formatCanonicalNumber` emitted one whatever the locale, so
