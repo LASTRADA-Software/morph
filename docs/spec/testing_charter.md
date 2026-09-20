@@ -74,6 +74,7 @@ floor means anything.
 | Compile-time contract checks | `tests/compile_checks/` | Every configure that reaches `tests/CMakeLists.txt` | `FATAL_ERROR` at configure time |
 | Multiple independent harnesses | Catch2 suite + `scripts/scenario/` (wire-level scenario corpus against real rung servers) | `tests/`, local scenario runs | Catch2 assertions; `scripts/scenario/scenario_coverage.py`'s drift gate (self-tested in `drift-guard.yml`) |
 | Error-path instrumentation | `scripts/check_error_path_coverage.py` (morph#406) | Local / on demand; self-test only in `drift-guard.yml` today | Its own self-test; not yet wired as a build-blocking gate (see "What is unenforced") |
+| Mutation-triage citations still point at the code they triage | `scripts/check_mutation_survivors.py` (morph#608) | `drift-guard` (the gate itself, per-PR — it needs no build and no Mull report) | The gate: every `{file, line, source}` entry in `scripts/mutation_survivors.json` must resolve to the line it names, via `check_branch_coverage.py`'s `resolve_allowlist_source_line()`. Audits the structured entries only; the same file's free-text citations are counted and reported, not gated (morph#613) |
 
 ## Declined techniques, and why
 
@@ -196,6 +197,6 @@ Named honestly rather than folded into the table above as if a check existed:
 | [testing_strategy.md](testing_strategy.md) | The opt-in test categories this charter's table cites in detail — fuzz harness, soak tests, load benchmark, adversarial cross-socket run. |
 | [error_handling.md](error_handling.md) | The propagation design morph#406's error-path instrument measures test coverage of. |
 | `codecov.yml` | The per-subsystem coverage targets and the artifact-audit allowlists (`branch_partial_allowlist.json`, `error_path_allowlist.json`) this charter's guarantee is enforced through. |
-| `scripts/mutation_survivors.json` | The triaged survivor list behind this charter's 64.06% mutation-score figure. |
+| `scripts/mutation_survivors.json` | The triaged survivor list behind this charter's 64.06% mutation-score figure. Its structured `{file, line, source}` entries are audited per-PR by `scripts/check_mutation_survivors.py` (morph#608); its free-text citations are not (morph#613). |
 | `tests/oom_injector.hpp` | The OOM-injection limitation this charter states under "Instrument reach". |
 | `examples/common/testkit/fault_proxy.hpp` | The ladder-only fault-injection seam this charter states has no `include/morph`-side equivalent. |

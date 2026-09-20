@@ -29,6 +29,16 @@
     "side channels are recorded separately so a future decision about logs is made about logs.",
     "But the residual class is an upper bound on missing assertions, not a set of them.",
     "",
+    "The `line` on each entry below points at current code, not at where the survivor",
+    "sat when it was triaged. scripts/check_mutation_survivors.py resolves every entry by",
+    "its `source` text on every pull request and fails when the hint has drifted (morph#608,",
+    "which found 5 of 7 already wrong and one off by 479 lines). When it fails, re-read the",
+    "code at the line it prints, confirm the reason still holds, and update `line`. Deleting",
+    "an entry, or editing its `source` to match some other line, is a triage nobody did.",
+    "Note what that gate does NOT cover: the citations written as prose in this file (the",
+    "`representative_sites` lists, `site` fields, and the narrative in `runs`) carry no",
+    "verbatim source text, so nothing audits them and several are known stale (morph#613).",
+    "",
     "Re-measure with: MULL_PREFIX=... bash scripts/mutation.sh core-forms"
   ],
   "classes": {
@@ -46,7 +56,7 @@
         },
         {
           "file": "include/morph/core/bridge.hpp",
-          "line": 119,
+          "line": 121,
           "mutants": 3,
           "mutator": "cxx_add_to_sub",
           "source": "return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));",
@@ -54,7 +64,7 @@
         },
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 749,
+          "line": 1228,
           "mutants": 1,
           "mutator": "cxx_replace_scalar_call",
           "source": "aware.reserve(_changeAware.size());",
@@ -66,31 +76,31 @@
           "mutants": 1,
           "mutator": "cxx_replace_scalar_call",
           "source": "out.reserve(msg.size() + 8);",
-          "reason": "A capacity hint on a std::string, equivalent for the same reason as backend.hpp:749."
+          "reason": "A capacity hint on a std::string, equivalent for the same reason as the `aware.reserve(_changeAware.size());` entry in core/backend.hpp above."
         },
         {
           "file": "include/morph/core/wire.hpp",
-          "line": 302,
+          "line": 307,
           "mutants": 1,
           "mutator": "cxx_replace_scalar_call",
           "source": "out.reserve(text.size());",
-          "reason": "A capacity hint on a std::string, equivalent for the same reason as backend.hpp:749."
+          "reason": "A capacity hint on a std::string, equivalent for the same reason as the `aware.reserve(_changeAware.size());` entry in core/backend.hpp above."
         },
         {
           "file": "include/morph/forms/views.hpp",
-          "line": 264,
+          "line": 271,
           "mutants": 1,
           "mutator": "cxx_replace_scalar_call",
           "source": "ordered.reserve(propsObj.size());",
-          "reason": "A capacity hint on a std::vector, equivalent for the same reason as backend.hpp:749."
+          "reason": "A capacity hint on a std::vector, equivalent for the same reason as the `aware.reserve(_changeAware.size());` entry in core/backend.hpp above."
         },
         {
           "file": "include/morph/forms/views.hpp",
-          "line": 430,
+          "line": 437,
           "mutants": 1,
           "mutator": "cxx_replace_scalar_call",
           "source": "ids.reserve(_providers.size());",
-          "reason": "A capacity hint on a std::vector, equivalent for the same reason as backend.hpp:749."
+          "reason": "A capacity hint on a std::vector, equivalent for the same reason as the `aware.reserve(_changeAware.size());` entry in core/backend.hpp above."
         }
       ]
     },
