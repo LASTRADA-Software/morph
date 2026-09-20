@@ -223,16 +223,16 @@ Item {
         // directly: these locales' own separators are Arabic-Indic, which is a
         // separate gap (morph#591), so the sign is isolated here.
         function test_bidiPrefixedSignIsMatchedAsAWholeString() {
-            compare(signForm.normalizeLocaleNumber("\u200E\u22125", ".", "", "\u200E\u2212"), "-5")  // fa_IR
-            compare(signForm.normalizeLocaleNumber("\u200E-\u200E5", ".", "", "\u200E-\u200E"), "-5")  // az_IR
-            compare(signForm.normalizeLocaleNumber("\u200E-5", ".", "", "\u200E-"), "-5")  // ar_DZ
-            compare(signForm.normalizeLocaleNumber("\u061C-5", ".", "", "\u061C-"), "-5")  // ar_EG
+            compare(signForm.normalizeLocaleNumber("\u200E\u22125", { decimalSeparator: ".", groupSeparator: "", negativeSign: "\u200E\u2212" }), "-5")  // fa_IR
+            compare(signForm.normalizeLocaleNumber("\u200E-\u200E5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "\u200E-\u200E" }), "-5")  // az_IR
+            compare(signForm.normalizeLocaleNumber("\u200E-5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "\u200E-" }), "-5")  // ar_DZ
+            compare(signForm.normalizeLocaleNumber("\u061C-5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "\u061C-" }), "-5")  // ar_EG
 
             // Controls: rejected with the sign left at its ASCII default, which
             // is exactly what the renderer passed before this change.
-            compare(signForm.normalizeLocaleNumber("\u200E\u22125", ".", ""), null)
-            compare(signForm.normalizeLocaleNumber("\u200E-5", ".", ""), null)
-            compare(signForm.normalizeLocaleNumber("\u22125", ".", ""), null)
+            compare(signForm.normalizeLocaleNumber("\u200E\u22125", { decimalSeparator: ".", groupSeparator: "" }), null)
+            compare(signForm.normalizeLocaleNumber("\u200E-5", { decimalSeparator: ".", groupSeparator: "" }), null)
+            compare(signForm.normalizeLocaleNumber("\u22125", { decimalSeparator: ".", groupSeparator: "" }), null)
         }
 
         // The C++ edge (tests/test_render_locale_format.cpp, [morph583]) pins
@@ -241,14 +241,14 @@ Item {
         function test_displayEdgeEmitsTheLocaleSignAndEntryTakesItBack() {
             const signs = ["\u2212", "\u200E\u2212", "\u200E-", "\u200E-\u200E", "\u061C-"]
             for (let i = 0; i < signs.length; ++i) {
-                const display = signForm.formatCanonicalNumber("-1050.25", ",", ".", signs[i])
+                const display = signForm.formatCanonicalNumber("-1050.25", { decimalSeparator: ",", groupSeparator: ".", negativeSign: signs[i] })
                 compare(display, signs[i] + "1.050,25")
-                compare(signForm.normalizeLocaleNumber(display, ",", ".", signs[i]), "-1050.25")
+                compare(signForm.normalizeLocaleNumber(display, { decimalSeparator: ",", groupSeparator: ".", negativeSign: signs[i] }), "-1050.25")
             }
             // A positive never carries the sign, and the ASCII default is
             // unchanged for every existing caller.
-            compare(signForm.formatCanonicalNumber("1050.25", ",", ".", "\u2212"), "1.050,25")
-            compare(signForm.formatCanonicalNumber("-1050.25", ",", "."), "-1.050,25")
+            compare(signForm.formatCanonicalNumber("1050.25", { decimalSeparator: ",", groupSeparator: ".", negativeSign: "\u2212" }), "1.050,25")
+            compare(signForm.formatCanonicalNumber("-1050.25", { decimalSeparator: ",", groupSeparator: "." }), "-1.050,25")
         }
 
         // Unlike a group separator, no locale is without a negative sign, so an
@@ -256,17 +256,17 @@ Item {
         // -5 to "5" would be a silently wrong value, which is the morph#574
         // failure mode rather than a rejection.
         function test_anEmptySignReadsAsTheAsciiDefault() {
-            compare(signForm.formatCanonicalNumber("-5", ".", "", ""), "-5")
-            compare(signForm.normalizeLocaleNumber("-5", ".", "", ""), "-5")
-            compare(signForm.normalizeLocaleNumber("123", ".", "", ""), "123")
+            compare(signForm.formatCanonicalNumber("-5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "" }), "-5")
+            compare(signForm.normalizeLocaleNumber("-5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "" }), "-5")
+            compare(signForm.normalizeLocaleNumber("123", { decimalSeparator: ".", groupSeparator: "", negativeSign: "" }), "123")
         }
 
         // The morph#497 rule is about the *output*, so it has to hold for a
         // multi-unit sign exactly as it does for "-".
         function test_aLocaleSignIsStillRejectedOffTheLeadingPosition() {
-            compare(signForm.normalizeLocaleNumber("1\u22122", ".", "", "\u2212"), null)
-            compare(signForm.normalizeLocaleNumber(",\u22125", ",", ".", "\u2212"), null)
-            compare(signForm.normalizeLocaleNumber("\u2212", ".", "", "\u2212"), null)
+            compare(signForm.normalizeLocaleNumber("1\u22122", { decimalSeparator: ".", groupSeparator: "", negativeSign: "\u2212" }), null)
+            compare(signForm.normalizeLocaleNumber(",\u22125", { decimalSeparator: ",", groupSeparator: ".", negativeSign: "\u2212" }), null)
+            compare(signForm.normalizeLocaleNumber("\u2212", { decimalSeparator: ".", groupSeparator: "", negativeSign: "\u2212" }), null)
         }
 
         // ── morph#596: a leading positive sign is accepted, and dropped ──
@@ -280,8 +280,8 @@ Item {
         function test_qtExposesAPositiveSignOnTheLocaleObject() {
             compare(Qt.locale("C").positiveSign, "+")
             compare(Qt.locale("de").positiveSign, "+")
-            compare(Qt.locale("ar_EG").positiveSign, "؜+")
-            compare(Qt.locale("az_IR").positiveSign, "‎+‎")
+            compare(Qt.locale("ar_EG").positiveSign, "\u061C+")
+            compare(Qt.locale("az_IR").positiveSign, "\u200E+\u200E")
         }
 
         // The defect: a leading "+" fell through to the "any other character is
@@ -304,38 +304,38 @@ Item {
         // the identical table; a divergence between the two is a divergence in
         // what the product accepts.
         function test_positiveSignIsMatchedAsAWholeString() {
-            compare(localeForm.normalizeLocaleNumber("+5", ".", ""), "5")
-            compare(localeForm.normalizeLocaleNumber("؜+5", ".", "", "-", "؜+"), "5")      // ar_EG
-            compare(localeForm.normalizeLocaleNumber("‎+5", ".", "", "-", "‎+"), "5")      // ar_DZ
-            compare(localeForm.normalizeLocaleNumber("‎+‎5", ".", "", "-", "‎+‎"), "5")  // az_IR
-            compare(localeForm.normalizeLocaleNumber("‏+5", ".", "", "-", "‏+"), "5")      // ckb_IQ
+            compare(localeForm.normalizeLocaleNumber("+5", { decimalSeparator: ".", groupSeparator: "" }), "5")
+            compare(localeForm.normalizeLocaleNumber("\u061C+5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "-", positiveSign: "\u061C+" }), "5")      // ar_EG
+            compare(localeForm.normalizeLocaleNumber("\u200E+5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "-", positiveSign: "\u200E+" }), "5")      // ar_DZ
+            compare(localeForm.normalizeLocaleNumber("\u200E+\u200E5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "-", positiveSign: "\u200E+\u200E" }), "5")  // az_IR
+            compare(localeForm.normalizeLocaleNumber("\u200F+5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "-", positiveSign: "\u200F+" }), "5")      // ckb_IQ
 
             // Controls: with positiveSign left at its ASCII default, the
             // bidi-prefixed spellings are still rejected -- which is what makes
             // the parameter, and not the unconditional ASCII acceptance, the
             // thing under test above.
-            compare(localeForm.normalizeLocaleNumber("؜+5", ".", ""), null)
-            compare(localeForm.normalizeLocaleNumber("‎+‎5", ".", ""), null)
+            compare(localeForm.normalizeLocaleNumber("\u061C+5", { decimalSeparator: ".", groupSeparator: "" }), null)
+            compare(localeForm.normalizeLocaleNumber("\u200E+\u200E5", { decimalSeparator: ".", groupSeparator: "" }), null)
 
             // The ASCII "+" stays accepted in a bidi-sign locale, for the same
             // reason the ASCII "-" does (morph#583): the locale's own spelling
             // is on no keyboard.
-            compare(localeForm.normalizeLocaleNumber("+5", ".", "", "-", "؜+"), "5")
+            compare(localeForm.normalizeLocaleNumber("+5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "-", positiveSign: "\u061C+" }), "5")
             // An empty positiveSign leaves the ASCII spelling, and must not
             // match at every index.
-            compare(localeForm.normalizeLocaleNumber("+5", ".", "", "-", ""), "5")
-            compare(localeForm.normalizeLocaleNumber("123", ".", "", "-", ""), "123")
+            compare(localeForm.normalizeLocaleNumber("+5", { decimalSeparator: ".", groupSeparator: "", negativeSign: "-", positiveSign: "" }), "5")
+            compare(localeForm.normalizeLocaleNumber("123", { decimalSeparator: ".", groupSeparator: "", negativeSign: "-", positiveSign: "" }), "123")
         }
 
         // morph#497's rule is about the *output*, so a new sign spelling must
         // not open a new way to inject one.
         function test_aPositiveSignObeysTheLeadingPositionRule() {
-            compare(localeForm.normalizeLocaleNumber("1+2", ".", ""), null)
-            compare(localeForm.normalizeLocaleNumber("+-5", ".", ""), null)
-            compare(localeForm.normalizeLocaleNumber("-+5", ".", ""), null)
-            compare(localeForm.normalizeLocaleNumber("++5", ".", ""), null)
-            compare(localeForm.normalizeLocaleNumber(",+5", ",", "."), null)
-            compare(localeForm.normalizeLocaleNumber("+", ".", ""), null)
+            compare(localeForm.normalizeLocaleNumber("1+2", { decimalSeparator: ".", groupSeparator: "" }), null)
+            compare(localeForm.normalizeLocaleNumber("+-5", { decimalSeparator: ".", groupSeparator: "" }), null)
+            compare(localeForm.normalizeLocaleNumber("-+5", { decimalSeparator: ".", groupSeparator: "" }), null)
+            compare(localeForm.normalizeLocaleNumber("++5", { decimalSeparator: ".", groupSeparator: "" }), null)
+            compare(localeForm.normalizeLocaleNumber(",+5", { decimalSeparator: ",", groupSeparator: "." }), null)
+            compare(localeForm.normalizeLocaleNumber("+", { decimalSeparator: ".", groupSeparator: "" }), null)
         }
 
         // The deliberate asymmetry, pinned so that "make it symmetric" is a
@@ -344,15 +344,15 @@ Item {
         // 711 locales, so emitting it would turn every positive number in every
         // form from "5" into "+5".
         function test_theDisplayEdgeNeverEmitsAPositiveSign() {
-            compare(localeForm.formatCanonicalNumber("5", ".", ""), "5")
-            compare(localeForm.formatCanonicalNumber("1050.25", ",", "."), "1.050,25")
+            compare(localeForm.formatCanonicalNumber("5", { decimalSeparator: ".", groupSeparator: "" }), "5")
+            compare(localeForm.formatCanonicalNumber("1050.25", { decimalSeparator: ",", groupSeparator: "." }), "1.050,25")
             // So the pair is not inverse across a positive sign: entry accepts
             // a spelling display never produces.
-            const canonical = localeForm.normalizeLocaleNumber("+1.050,25", ",", ".")
+            const canonical = localeForm.normalizeLocaleNumber("+1.050,25", { decimalSeparator: ",", groupSeparator: "." })
             compare(canonical, "1050.25")
-            compare(localeForm.formatCanonicalNumber(canonical, ",", "."), "1.050,25")
+            compare(localeForm.formatCanonicalNumber(canonical, { decimalSeparator: ",", groupSeparator: "." }), "1.050,25")
             // ...while the negative side still round-trips exactly.
-            compare(localeForm.formatCanonicalNumber("-1050.25", ",", "."), "-1.050,25")
+            compare(localeForm.formatCanonicalNumber("-1050.25", { decimalSeparator: ",", groupSeparator: "." }), "-1.050,25")
         }
 
         // ── morph#599: the separators are matched as whole strings too ───
@@ -429,13 +429,13 @@ Item {
             const G4 = "\uD834\uDD6D"
             const D4 = "\uD834\uDD6E"
 
-            compare(localeForm.normalizeLocaleNumber("1" + G2 + "050" + D2 + "25", D2, G2), "1050.25")
-            compare(localeForm.normalizeLocaleNumber("-1" + G2 + "050" + D2 + "25", D2, G2), "-1050.25")
-            compare(localeForm.normalizeLocaleNumber("+1" + G2 + "050" + D2 + "25", D2, G2), "1050.25")
-            compare(localeForm.normalizeLocaleNumber("1" + G4 + "050" + D4 + "25", D4, G4), "1050.25")
-            compare(localeForm.normalizeLocaleNumber("1" + G4 + "050" + G4 + "000", "", G4), "1050000")
+            compare(localeForm.normalizeLocaleNumber("1" + G2 + "050" + D2 + "25", { decimalSeparator: D2, groupSeparator: G2 }), "1050.25")
+            compare(localeForm.normalizeLocaleNumber("-1" + G2 + "050" + D2 + "25", { decimalSeparator: D2, groupSeparator: G2 }), "-1050.25")
+            compare(localeForm.normalizeLocaleNumber("+1" + G2 + "050" + D2 + "25", { decimalSeparator: D2, groupSeparator: G2 }), "1050.25")
+            compare(localeForm.normalizeLocaleNumber("1" + G4 + "050" + D4 + "25", { decimalSeparator: D4, groupSeparator: G4 }), "1050.25")
+            compare(localeForm.normalizeLocaleNumber("1" + G4 + "050" + G4 + "000", { decimalSeparator: "", groupSeparator: G4 }), "1050000")
             // A locale with a multi-unit decimal separator and no grouping.
-            compare(localeForm.normalizeLocaleNumber("5" + D2 + "25", D2, ""), "5.25")
+            compare(localeForm.normalizeLocaleNumber("5" + D2 + "25", { decimalSeparator: D2, groupSeparator: "" }), "5.25")
         }
 
         // Whole-string matching must not loosen any of the rules the
@@ -454,21 +454,21 @@ Item {
             const D2 = "\u200E,"
 
             // morph#574: the last group of the integer part is short.
-            compare(localeForm.normalizeLocaleNumber("1" + G2 + "5", D2, G2), null)
-            compare(localeForm.normalizeLocaleNumber("1" + G2 + "2" + G2 + "3" + G2 + "4", D2, G2), null)
+            compare(localeForm.normalizeLocaleNumber("1" + G2 + "5", { decimalSeparator: D2, groupSeparator: G2 }), null)
+            compare(localeForm.normalizeLocaleNumber("1" + G2 + "2" + G2 + "3" + G2 + "4", { decimalSeparator: D2, groupSeparator: G2 }), null)
             // Grouping belongs to the integer part only.
-            compare(localeForm.normalizeLocaleNumber("1" + D2 + "5" + G2 + "000", D2, G2), null)
+            compare(localeForm.normalizeLocaleNumber("1" + D2 + "5" + G2 + "000", { decimalSeparator: D2, groupSeparator: G2 }), null)
             // A second decimal separator.
-            compare(localeForm.normalizeLocaleNumber("1" + D2 + "0" + D2 + "5", D2, G2), null)
+            compare(localeForm.normalizeLocaleNumber("1" + D2 + "0" + D2 + "5", { decimalSeparator: D2, groupSeparator: G2 }), null)
             // morph#497: a sign after the decimal separator is not leading.
-            compare(localeForm.normalizeLocaleNumber(D2 + "-5", D2, G2), null)
+            compare(localeForm.normalizeLocaleNumber(D2 + "-5", { decimalSeparator: D2, groupSeparator: G2 }), null)
             // One string cannot play both roles, multi-unit or not.
-            compare(localeForm.normalizeLocaleNumber("1" + G2 + "050", G2, G2), null)
+            compare(localeForm.normalizeLocaleNumber("1" + G2 + "050", { decimalSeparator: G2, groupSeparator: G2 }), null)
             // Controls, unchanged by this fix and rejected before and after: a
             // lone *prefix* of the separator is not the separator. Whole-string
             // matching must not degrade into "any unit of it will do".
-            compare(localeForm.normalizeLocaleNumber("1\u200E050" + D2 + "25", D2, G2), null)
-            compare(localeForm.normalizeLocaleNumber("1.050,25", D2, G2), null)
+            compare(localeForm.normalizeLocaleNumber("1\u200E050" + D2 + "25", { decimalSeparator: D2, groupSeparator: G2 }), null)
+            compare(localeForm.normalizeLocaleNumber("1.050,25", { decimalSeparator: D2, groupSeparator: G2 }), null)
         }
 
         // The round trip, which is where "both edges, or neither" bites:
@@ -479,9 +479,135 @@ Item {
         function test_theDisplayEdgeEmitsAMultiUnitSeparatorAndEntryTakesItBack() {
             const G2 = "\u200E."
             const D2 = "\u200E,"
-            const display = localeForm.formatCanonicalNumber("-1050.25", D2, G2, "\u2212")
+            const display = localeForm.formatCanonicalNumber("-1050.25", { decimalSeparator: D2, groupSeparator: G2, negativeSign: "\u2212" })
             compare(display, "\u2212" + "1" + G2 + "050" + D2 + "25")
-            compare(localeForm.normalizeLocaleNumber(display, D2, G2, "\u2212"), "-1050.25")
+            compare(localeForm.normalizeLocaleNumber(display, { decimalSeparator: D2, groupSeparator: G2, negativeSign: "\u2212" }), "-1050.25")
+        }
+
+        // --- morph#591: the digits are locale data too --------------------
+        //
+        // The same corpus the C++ edge pins under [morph591] in
+        // tests/test_render_locale_format.cpp. docs/spec/forms/forms.md,
+        // "Both edges, or neither": a row that disagrees between the two lists
+        // is a divergence in what the product accepts.
+        //
+        // Measured on this revision with QLocale::matchingLocales under
+        // Qt 6.11.2: 76 of the 711 locales report a zeroDigit other than ASCII
+        // "0", across the eleven sets below. Two of them are astral, so one
+        // digit is two UTF-16 units here and four UTF-8 bytes there -- the case
+        // a code-unit scan gets wrong.
+
+        // The premise, measured rather than assumed, on the same object the
+        // renderer forwards from. If Qt stops reporting these, this fails first
+        // and says so, rather than the tests below failing for a reason that
+        // looks like a regression in the renderer.
+        function test_qtExposesAZeroDigitOnTheLocaleObject() {
+            compare(Qt.locale("C").zeroDigit, "0")
+            compare(Qt.locale("de").zeroDigit, "0")
+            compare(Qt.locale("ar_EG").zeroDigit, "\u0660")
+            compare(Qt.locale("fa_IR").zeroDigit, "\u06F0")
+            // Astral: one code point, two UTF-16 units.
+            compare(Qt.locale("ccp_BD").zeroDigit.length, 2)
+            compare(Qt.locale("ccp_BD").zeroDigit.codePointAt(0), 0x11136)
+            compare(Qt.locale("ff_Adlm_BF").zeroDigit.codePointAt(0), 0x1E950)
+        }
+
+        // The defect: the scan compared one code unit against ["0","9"], so a
+        // locale whose digits are not ASCII could not enter a number at all --
+        // a flat rejection, not a wrong value.
+        function test_theLocalesOwnDigitsAreAccepted() {
+            compare(localeForm.normalizeLocaleNumber("\u0665", { zeroDigit: "\u0660" }), "5")
+            compare(localeForm.normalizeLocaleNumber("\u06F5", { zeroDigit: "\u06F0" }), "5")
+            compare(localeForm.normalizeLocaleNumber("\u061C-\u0665",
+                                                     { negativeSign: "\u061C-", zeroDigit: "\u0660" }), "-5")
+            // Astral digits, one code point in two units each.
+            compare(localeForm.normalizeLocaleNumber("\u{1113B}", { zeroDigit: "\u{11136}" }), "5")
+            compare(localeForm.normalizeLocaleNumber("\u{1E955}", { zeroDigit: "\u{1E950}" }), "5")
+        }
+
+        // The display edge had to move with the entry edge or the pair would no
+        // longer be inverse. These are the exact units Qt's own
+        // QLocale("ar_BH").toString(-1050.25) produces.
+        function test_theDisplayEdgeEmitsTheLocalesDigits() {
+            const display = localeForm.formatCanonicalNumber("-1050.25", {
+                decimalSeparator: "\u066B", groupSeparator: "\u066C",
+                negativeSign: "\u061C-", zeroDigit: "\u0660"
+            })
+            compare(display, "\u061C-\u0661\u066C\u0660\u0665\u0660\u066B\u0662\u0665")
+        }
+
+        // The acceptance test this ticket exists for. The round trip alone does
+        // not catch a fix applied to the entry edge only -- entry accepts ASCII
+        // digits too, so a display edge still emitting them round-trips fine.
+        // The "no ASCII digit in the display text" check is what fails then.
+        function test_thePairRoundTripsThroughEveryMeasuredDigitSet() {
+            const zeros = ["\u0660", "\u06F0", "\u07C0", "\u0966", "\u09E6", "\u0F20",
+                           "\u1040", "\u1C50", "\uABF0", "\u{11136}", "\u{1E950}"]
+            const canonicals = ["0", "5", "-5", "1050.25", "-1050.25", "1000000.25",
+                                "0.001", "-0.001", "1234567"]
+            for (let i = 0; i < zeros.length; ++i) {
+                const loc = {
+                    decimalSeparator: "\u066B", groupSeparator: "\u066C",
+                    negativeSign: "\u061C-", zeroDigit: zeros[i]
+                }
+                for (let k = 0; k < canonicals.length; ++k) {
+                    const display = localeForm.formatCanonicalNumber(canonicals[k], loc)
+                    verify(!/[0-9]/.test(display),
+                           "display for " + canonicals[k] + " in set " + i + " still has an ASCII digit: " + display)
+                    compare(localeForm.normalizeLocaleNumber(display, loc), canonicals[k],
+                            "round trip failed for " + canonicals[k] + " in set " + i)
+                }
+            }
+        }
+
+        // The morph#596 precedent, applied to digits: the locale's own digits
+        // are on the user's keyboard only if their keyboard has them, so entry
+        // accepts a spelling display never produces.
+        function test_asciiDigitsStayAcceptedInANativeDigitLocale() {
+            compare(localeForm.normalizeLocaleNumber("5", { zeroDigit: "\u0660" }), "5")
+            compare(localeForm.normalizeLocaleNumber("-1050.25",
+                                                     { negativeSign: "\u061C-", zeroDigit: "\u0660" }), "-1050.25")
+            compare(localeForm.normalizeLocaleNumber("5", { zeroDigit: "\u{1E950}" }), "5")
+        }
+
+        // A decision, not a consequence, so a test records it: an entry that
+        // interleaves the two families is malformed rather than read as 55.
+        function test_anEntryMayNotMixDigitFamilies() {
+            compare(localeForm.normalizeLocaleNumber("\u06655", { zeroDigit: "\u0660" }), null)
+            compare(localeForm.normalizeLocaleNumber("5\u0665", { zeroDigit: "\u0660" }), null)
+            compare(localeForm.normalizeLocaleNumber("1\u0660\u06650", { zeroDigit: "\u0660" }), null)
+            // Each family on its own is fine, which is what makes the rejection
+            // about the mixing rather than about either spelling.
+            compare(localeForm.normalizeLocaleNumber("\u0665\u0665", { zeroDigit: "\u0660" }), "55")
+            compare(localeForm.normalizeLocaleNumber("55", { zeroDigit: "\u0660" }), "55")
+            // In an ASCII-digit locale the two families are the same set, so
+            // nothing can mix -- which is why this costs no existing caller.
+            compare(localeForm.normalizeLocaleNumber("55", {}), "55")
+        }
+
+        // Grouping counts digits, not units. A two-unit astral digit would
+        // otherwise reset the run-length counter mid-digit, so a correctly
+        // grouped native-digit entry -- what the display edge now emits -- would
+        // be rejected and the pair would not round-trip. The rule itself is
+        // unchanged: a short group is still malformed.
+        function test_groupingIsValidatedInTheLocalesDigitsToo() {
+            const arEg = { decimalSeparator: "\u066B", groupSeparator: "\u066C", zeroDigit: "\u0660" }
+            compare(localeForm.normalizeLocaleNumber("\u0661\u066C\u0660\u0665\u0660", arEg), "1050")
+            compare(localeForm.normalizeLocaleNumber("\u0661\u066C\u0665", arEg), null)  // short group
+            const ccp = { decimalSeparator: ".", groupSeparator: ",", zeroDigit: "\u{11136}" }
+            compare(localeForm.normalizeLocaleNumber("\u{11137},\u{11136}\u{1113B}\u{11136}", ccp), "1050")
+            compare(localeForm.normalizeLocaleNumber("\u{11137},\u{1113B}", ccp), null)  // short group
+        }
+
+        // An omitted or empty zeroDigit reads as ASCII "0", the reading an
+        // omitted negativeSign gets, and every caller that names no zeroDigit is
+        // byte-identical to what it produced before morph#591.
+        function test_anAbsentZeroDigitReadsAsAscii() {
+            compare(localeForm.normalizeLocaleNumber("55", { zeroDigit: "" }), "55")
+            compare(localeForm.formatCanonicalNumber("55", { zeroDigit: "" }), "55")
+            compare(localeForm.normalizeLocaleNumber("1.050,25", { decimalSeparator: ",", groupSeparator: "." }), "1050.25")
+            compare(localeForm.formatCanonicalNumber("1050.25", { decimalSeparator: ",", groupSeparator: "." }), "1.050,25")
+            compare(localeForm.formatCanonicalNumber("-1050.25", { decimalSeparator: ",", groupSeparator: "." }), "-1.050,25")
         }
 
         function test_zonedTimestampRoundTripsToUtc() {

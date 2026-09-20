@@ -13,15 +13,34 @@
 /// `.`-decimal text), and a renderer calls `normalizeLocaleNumber` once, at
 /// the point text leaves the control, before handing it to those routines.
 ///
+/// @par One aggregate, not a row of swappable views (morph#591)
+/// Both functions take a single `NumericLocale`. They used to take the locale
+/// facts as four and five positional `std::string_view`s, every one of which
+/// was silently swappable with its neighbours -- the header carried a
+/// clang-tidy suppression block for `bugprone-easily-swappable-parameters`,
+/// with a paragraph of justification, on each of the two functions and on the
+/// sign helper below. (Spelling the marker out here would suppress nothing and
+/// trip `clang-tidy-nolint`'s unmatched-begin check, which is why this
+/// paragraph names the check instead.) Adding a digit base would have made
+/// six adjacent views. With the aggregate a call site
+/// names each fact (`{.decimalSeparator = ",", .groupSeparator = "."}`), no two
+/// parameters of either function share a type, and all three suppressions are
+/// deleted rather than widened. The next locale fact -- a percent sign, an
+/// exponent separator -- is then a new defaulted member rather than a seventh
+/// parameter. The two edges taking the *same* type is the point as much as the
+/// naming is: "these two must agree" becomes structural instead of a convention
+/// a caller can get half right, which is the drift morph#591 and morph#599 were
+/// both about.
+///
 /// @par Separators are strings, not characters
-/// Both functions take their separators as `std::string_view`, because a
-/// real locale's separator is not always one byte. fr-FR groups with U+202F
-/// (narrow no-break space) and several locales use U+00A0 — three and two
-/// UTF-8 bytes respectively. Typed as `char`, those cannot be expressed at
-/// all: the caller can only pass some single byte that never matches, so a
-/// perfectly valid `"1 050,25"` typed by a French user normalises to
-/// `std::nullopt` and the entry is reported malformed. An empty view means
-/// "this locale has no such separator" (the role `'\0'` used to play).
+/// The locale facts are `std::string_view`, because a real locale's separator
+/// is not always one byte. fr-FR groups with U+202F (narrow no-break space) and
+/// several locales use U+00A0 -- three and two UTF-8 bytes respectively. Typed
+/// as `char`, those cannot be expressed at all: the caller can only pass some
+/// single byte that never matches, so a perfectly valid `"1 050,25"` typed by a
+/// French user normalises to `std::nullopt` and the entry is reported
+/// malformed. An empty view means "this locale has no such separator" (the role
+/// `'\0'` used to play).
 ///
 /// @par So is the negative sign
 /// For the same reason, and measured rather than assumed: of the 711 locales
@@ -31,19 +50,43 @@
 /// RIGHT-TO-LEFT MARK -- making it two or three code points, and ar_DZ does so
 /// even though its sign is the ordinary hyphen. Matched as a single `char`,
 /// none of those round-trips: the display edge emitted a sign the entry edge
-/// then rejected. So `negativeSign` is a `std::string_view` matched as a whole
-/// string too, defaulting to `"-"` so that every existing caller is unchanged
-/// (morph#583).
+/// then rejected. So `negativeSign` is matched as a whole string too,
+/// defaulting to `"-"` so that every existing caller is unchanged (morph#583).
 ///
 /// @par And so is the positive sign, on the entry edge only
-/// `normalizeLocaleNumber` takes a fifth `std::string_view positiveSign = "+"`
-/// and *drops* what it matches, because canonical text has no `'+'` in it
-/// (morph#596). `formatCanonicalNumber` has no such parameter and never emits
-/// one: a positive number displays unsigned in every locale, and changing that
-/// would alter every positive number the product shows. So the two functions
-/// are inverse across the decimal separator, the grouping and the negative
-/// sign, but deliberately not across a positive sign -- entry accepts a
-/// spelling display never produces.
+/// `normalizeLocaleNumber` reads `NumericLocale::positiveSign` and *drops* what
+/// it matches, because canonical text has no `'+'` in it (morph#596).
+/// `formatCanonicalNumber` never emits one: a positive number displays unsigned
+/// in every locale, and changing that would alter every positive number the
+/// product shows. So the two functions are inverse across the decimal
+/// separator, the grouping, the digits and the negative sign, but deliberately
+/// not across a positive sign -- entry accepts a spelling display never
+/// produces.
+///
+/// @par The digits are locale data too (morph#591)
+/// `NumericLocale::zeroDigit` is the locale's DIGIT ZERO, and the ten digits
+/// are the ten code points contiguous from it. One base is sufficient rather
+/// than a ten-element table because a Unicode decimal digit set *is* ten
+/// contiguous code points: UAX #44 assigns `Nd` with `Numeric_Value` 0 through
+/// 9 in code point order. Measured over the same 711 locales under Qt 6.11.2,
+/// 76 report a `zeroDigit` other than ASCII `'0'`, across eleven distinct sets:
+/// U+0660 (26 locales), U+06F0 (19), U+1E950 Adlam (12), U+0966 (8), U+09E6
+/// (4), U+11136 Chakma (2), and one each of U+07C0, U+0F20, U+1040, U+1C50 and
+/// U+ABF0. Two of those sets are astral, so a digit is one to four UTF-8 bytes
+/// and the scan decodes a code point rather than comparing a byte.
+///
+/// @par Entry accepts more digit spellings than display emits
+/// `normalizeLocaleNumber` accepts a digit in `[zeroDigit, zeroDigit + 9]` *or*
+/// in `['0', '9']`; `formatCanonicalNumber` emits only the former. That
+/// asymmetry is the rule morph#596 already set for signs, applied to digits: an
+/// ASCII `'+'` is accepted in every locale because the locale's own spelling is
+/// on no keyboard, and an ASCII `'5'` is accepted in an `ar_EG` locale for
+/// exactly the same reason. A user with an ASCII keyboard in a native-digit
+/// locale would otherwise be unable to enter a number at all. As with the
+/// positive sign, accepting a spelling display never produces costs nothing:
+/// the canonical output spells every digit in ASCII whatever the input spelled
+/// it, so no *value* can differ. What is not accepted is the two families in
+/// one entry -- see "Digit families do not mix" on `normalizeLocaleNumber`.
 
 #include <cstddef>
 #include <optional>
@@ -52,7 +95,221 @@
 
 namespace morph::render {
 
+/// @brief The locale facts both control-edge conversions need, in one
+///        designated-initialisable aggregate.
+///
+/// Every member is defaulted to its `"C"`-locale spelling, so a
+/// default-constructed `NumericLocale` is the identity transform in both
+/// directions and a caller naming only the members it cares about gets the
+/// previous five-parameter defaults exactly.
+struct NumericLocale {
+    /// The locale's decimal-point string, e.g. `","`. Empty means the locale
+    /// has no decimal separator (an integer-only entry).
+    std::string_view decimalSeparator = ".";
+    /// The locale's digit-grouping string, e.g. `"."` or U+202F. Empty means
+    /// the locale does not group.
+    std::string_view groupSeparator;
+    /// The locale's negative-sign string, e.g. `"\u2212"`. Empty is read as the
+    /// ASCII `"-"`, not as "this entry cannot be negative".
+    std::string_view negativeSign = "-";
+    /// The locale's positive-sign string, e.g. `"\u061c+"`. Entry-edge only:
+    /// it is accepted and dropped, never emitted. Empty leaves the ASCII `"+"`
+    /// as the only accepted spelling.
+    std::string_view positiveSign = "+";
+    /// The locale's DIGIT ZERO, e.g. `"\u0660"`. The ten digits are the ten
+    /// code points contiguous from it. Empty, or not a well-formed UTF-8 code
+    /// point, is read as the ASCII `"0"`.
+    std::string_view zeroDigit = "0";
+};
+
 namespace detail {
+
+/// @brief One decoded UTF-8 code point: its value and how many bytes it took.
+struct CodePoint {
+    /// The decoded scalar value; meaningless when @ref length is `0`.
+    char32_t value = 0;
+    /// The number of bytes consumed, or `0` when the input does not begin with
+    /// a well-formed UTF-8 sequence.
+    std::size_t length = 0;
+};
+
+/// @brief Decodes the UTF-8 sequence at the start of @p text.
+///
+/// Strict: an overlong encoding, a surrogate code point, a truncated sequence
+/// and a stray continuation byte all report a `CodePoint::length` of `0`
+/// rather than some salvaged value. That strictness is load-bearing rather than
+/// pedantic. The digit test below is a *range* test on the decoded value, so a
+/// lenient decoder that let the overlong `C0 B5` through would read it as
+/// U+0035 and accept it as the digit `'5'` -- in the default ASCII locale,
+/// where the previous byte-range scan rejected that input. Rejecting it here is
+/// what keeps the default behaviour byte-identical.
+/// @param text The remainder of the entry, starting at the scan position.
+/// @return The decoded code point, or a `length` of `0` when @p text does not
+///         start with a well-formed sequence.
+[[nodiscard]] inline CodePoint decodeUtf8(std::string_view text) {
+    if (text.empty()) {
+        return {};
+    }
+    auto const lead = static_cast<unsigned char>(text.front());
+    if (lead < 0x80U) {
+        return {.value = lead, .length = 1};
+    }
+
+    std::size_t length = 0;
+    char32_t value = 0;
+    char32_t least = 0;  // the smallest value this length may legally encode
+    if ((lead & 0xE0U) == 0xC0U) {
+        length = 2;
+        value = lead & 0x1FU;
+        least = 0x80;
+    } else if ((lead & 0xF0U) == 0xE0U) {
+        length = 3;
+        value = lead & 0x0FU;
+        least = 0x800;
+    } else if ((lead & 0xF8U) == 0xF0U) {
+        length = 4;
+        value = lead & 0x07U;
+        least = 0x10000;
+    } else {
+        return {};  // a continuation byte or a 5+ byte lead: not a lead byte
+    }
+    if (text.size() < length) {
+        return {};  // truncated
+    }
+    for (std::size_t k = 1; k < length; ++k) {
+        // k is bounded by the size check above.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        auto const cont = static_cast<unsigned char>(text[k]);
+        if ((cont & 0xC0U) != 0x80U) {
+            return {};  // not a continuation byte
+        }
+        value = (value << 6U) | (cont & 0x3FU);
+    }
+    constexpr char32_t kMaxScalar = 0x10FFFF;
+    constexpr char32_t kSurrogateFirst = 0xD800;
+    constexpr char32_t kSurrogateLast = 0xDFFF;
+    if (value < least || value > kMaxScalar || (value >= kSurrogateFirst && value <= kSurrogateLast)) {
+        return {};  // overlong, out of range, or a surrogate
+    }
+    return {.value = value, .length = length};
+}
+
+/// @brief Appends @p value to @p out as UTF-8.
+/// @param out   The string to append to.
+/// @param value A scalar value; callers here only ever pass a digit derived
+///              from a `zeroDigit` that `decodeUtf8` already validated.
+inline void appendUtf8(std::string& out, char32_t value) {
+    constexpr char32_t kContMask = 0x3F;
+    constexpr unsigned kContShift = 6;
+    auto const byte = [&out](char32_t bits) { out += static_cast<char>(bits); };
+    if (value < 0x80) {
+        byte(value);
+    } else if (value < 0x800) {
+        byte(0xC0U | (value >> kContShift));
+        byte(0x80U | (value & kContMask));
+    } else if (value < 0x10000) {
+        byte(0xE0U | (value >> (2 * kContShift)));
+        byte(0x80U | ((value >> kContShift) & kContMask));
+        byte(0x80U | (value & kContMask));
+    } else {
+        byte(0xF0U | (value >> (3 * kContShift)));
+        byte(0x80U | ((value >> (2 * kContShift)) & kContMask));
+        byte(0x80U | ((value >> kContShift) & kContMask));
+        byte(0x80U | (value & kContMask));
+    }
+}
+
+/// @brief Appends one character of canonical text to a display string, with a
+///        digit rewritten into the locale's set.
+///
+/// Anything that is not an ASCII digit is copied through verbatim. That arm is
+/// not dead code for a caller that honours the contract, but it is what keeps
+/// `formatCanonicalNumber` byte-identical for one that does not: the function
+/// has always passed non-digits out unchanged, so a `"12.34.56"` handed to the
+/// display edge kept its second `'.'` rather than becoming some code point
+/// below the digit base. morph#591 widened what a digit *is*, not what the
+/// function does with text that has none.
+/// @param out  The display string to append to.
+/// @param base The locale's DIGIT ZERO code point (see `digitBase`).
+/// @param chr  One byte of canonical text.
+inline void appendDisplayDigit(std::string& out, char32_t base, char chr) {
+    if (chr >= '0' && chr <= '9') {
+        appendUtf8(out, base + static_cast<char32_t>(chr - '0'));
+    } else {
+        out += chr;
+    }
+}
+
+/// @brief How many bytes @p value occupies in UTF-8.
+/// @param value A scalar value.
+/// @return `1`, `2`, `3` or `4`.
+[[nodiscard]] inline std::size_t utf8Length(char32_t value) {
+    if (value < 0x80) {
+        return 1;
+    }
+    if (value < 0x800) {
+        return 2;
+    }
+    if (value < 0x10000) {
+        return 3;
+    }
+    return 4;
+}
+
+/// @brief The code point of @p zeroDigit, or `U'0'` when it is empty or not a
+///        well-formed UTF-8 code point.
+///
+/// Empty reads as the ASCII `'0'` for the reason an empty `negativeSign` reads
+/// as `'-'`: there is no locale without digits, so empty cannot mean absence,
+/// and a base of "nothing" would reject every entry the locale can produce.
+/// Only the first code point is read; anything after it is locale data this
+/// function has no use for.
+/// @param zeroDigit The locale's DIGIT ZERO spelling.
+/// @return The base code point of the locale's digit set.
+[[nodiscard]] inline char32_t digitBase(std::string_view zeroDigit) {
+    CodePoint const decoded = decodeUtf8(zeroDigit);
+    return decoded.length == 0 ? U'0' : decoded.value;
+}
+
+/// @brief A digit matched at the start of an entry.
+struct DigitMatch {
+    /// The number of bytes the digit occupies; `0` when there is no digit there.
+    std::size_t length = 0;
+    /// The canonical ASCII spelling of the digit's value, `'0'`-`'9'`.
+    char canonical = '0';
+    /// Whether the match came from the locale's own digit set rather than from
+    /// the ASCII set every locale additionally accepts. When @p base is `U'0'`
+    /// the two sets coincide and this is always `true`.
+    bool native = false;
+};
+
+/// @brief Matches a digit at the start of @p rest, in the locale's set or in
+///        ASCII.
+///
+/// A function of its own for the reason `leadingSign` is: the normalising scan
+/// reads as one statement per character class, and folding the two digit
+/// families plus the UTF-8 decode into it took it over clang-tidy's cognitive
+/// complexity threshold.
+/// @param rest The remainder of the entry, starting at the scan position.
+/// @param base The locale's DIGIT ZERO code point (see `digitBase`).
+/// @return The match, or a `length` of `0` when @p rest starts with no digit.
+[[nodiscard]] inline DigitMatch leadingDigit(std::string_view rest, char32_t base) {
+    CodePoint const decoded = decodeUtf8(rest);
+    if (decoded.length == 0) {
+        return {};
+    }
+    if (decoded.value >= base && decoded.value < base + 10) {
+        return {
+            .length = decoded.length, .canonical = static_cast<char>(U'0' + (decoded.value - base)), .native = true};
+    }
+    if (decoded.value >= U'0' && decoded.value <= U'9') {
+        // The ASCII spelling, accepted in every locale for the reason the ASCII
+        // '-' and '+' are: the locale's own digits are on the user's keyboard
+        // only if their keyboard has them.
+        return {.length = decoded.length, .canonical = static_cast<char>(decoded.value), .native = false};
+    }
+    return {};
+}
 
 /// @brief Whether every group separator in @p text sits where a group
 ///        separator can legally sit.
@@ -61,63 +318,85 @@ namespace detail {
 /// preceded by one to three digits (the first group), or by exactly three
 /// (every later one); it is followed by exactly three more digits, at each
 /// group and at the end of the integer part; and it never appears after the
-/// decimal separator. A locale with no grouping (@p groupSeparator empty) has
-/// nothing to place, so it trivially passes.
+/// decimal separator. A locale with no grouping (an empty
+/// `NumericLocale::groupSeparator`) has nothing to place, so it trivially
+/// passes.
 ///
 /// This is a pass of its own rather than extra state inside the normalising
 /// scan below: "the grouping is well placed" and "the digits convert" are two
 /// separate statements about the entry, and reading them as one made neither
 /// clear.
 ///
+/// It counts *digits*, not bytes, in the locale's set as well as in ASCII
+/// (morph#591). Scanning byte by byte was correct only while a digit was one
+/// byte: a two-byte U+0665 would have reset the run-length counter on its own
+/// continuation byte, so `"\u0661\u066c\u0660\u0665\u0660"` -- what
+/// `formatCanonicalNumber` emits for `1050` in an `ar_EG` locale -- would be
+/// rejected as badly grouped and the pair would not round-trip.
+///
 /// Characters this function does not recognise are simply not digits — the
 /// normalising scan is what rejects them, and it rejects them whatever this
 /// pass concludes.
-/// @param text             The locale-formatted entry.
-/// @param decimalSeparator The locale's decimal-point string; may be empty.
-/// @param groupSeparator   The locale's digit-grouping string; empty means the
-///                         locale does not group.
+/// @param text The locale-formatted entry.
+/// @param loc  The locale facts; only the two separators and the digit base are
+///             read.
 /// @return `true` when the grouping is well placed (or absent).
-[[nodiscard]] inline bool groupingIsWellPlaced(std::string_view text, std::string_view decimalSeparator,
-                                               std::string_view groupSeparator) {
-    if (groupSeparator.empty()) {
+[[nodiscard]] inline bool groupingIsWellPlaced(std::string_view text, NumericLocale const& loc) {
+    if (loc.groupSeparator.empty()) {
         return true;
     }
     constexpr std::size_t kGroupSize = 3;
+    char32_t const base = digitBase(loc.zeroDigit);
     std::size_t digits = 0;
     bool sawGroup = false;
     bool sawDecimal = false;
 
     for (std::size_t i = 0; i < text.size();) {
         const std::string_view rest = text.substr(i);
-        if (rest.starts_with(groupSeparator)) {
+        if (rest.starts_with(loc.groupSeparator)) {
             bool const opensAGroup = sawGroup ? digits == kGroupSize : (digits >= 1 && digits <= kGroupSize);
             if (sawDecimal || !opensAGroup) {
                 return false;
             }
             sawGroup = true;
             digits = 0;
-            i += groupSeparator.size();
+            i += loc.groupSeparator.size();
             continue;
         }
-        if (!decimalSeparator.empty() && rest.starts_with(decimalSeparator)) {
+        if (!loc.decimalSeparator.empty() && rest.starts_with(loc.decimalSeparator)) {
             if (sawGroup && digits != kGroupSize) {
                 return false;  // the last group of the integer part is short
             }
             sawDecimal = true;
             digits = 0;
-            i += decimalSeparator.size();
+            i += loc.decimalSeparator.size();
             continue;
         }
-        // i is bounded by the loop condition.
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-        char const chr = text[i];
-        digits = (chr >= '0' && chr <= '9') ? digits + 1 : 0;
-        ++i;
+        DigitMatch const digit = leadingDigit(rest, base);
+        digits = digit.length != 0 ? digits + 1 : 0;
+        i += digit.length != 0 ? digit.length : 1;
     }
 
     // An ungrouped fractional part ends the number, so the trailing check only
     // applies when the integer part was the last thing scanned.
     return !sawGroup || sawDecimal || digits == kGroupSize;
+}
+
+/// @brief The length of @p separator at the start of @p rest, in bytes, or `0`
+///        when it is not there -- or is empty.
+///
+/// The empty case is why this is a function and not an inline `starts_with`:
+/// `rest.starts_with("")` is `true` at every index, so an empty separator
+/// matched inline would swallow the whole entry one zero-length step at a time.
+/// Every call site used to spell the guard as `!sep.empty() && ...`, and two of
+/// those conjunctions were what put `normalizeLocaleNumber` over clang-tidy's
+/// cognitive-complexity threshold once the digit scan arrived.
+/// @param rest      The remainder of the entry, starting at the scan position.
+/// @param separator The locale's spelling of this separator; empty means the
+///                  locale has none, and matches nothing.
+/// @return The number of bytes the separator occupies, or `0`.
+[[nodiscard]] inline std::size_t leadingSeparatorLength(std::string_view rest, std::string_view separator) {
+    return !separator.empty() && rest.starts_with(separator) ? separator.size() : 0U;
 }
 
 /// @brief The length of a sign at the start of @p rest, in bytes, or `0` when
@@ -174,29 +453,20 @@ struct SignMatch {
 /// locale Qt 6.11.2 reports -- `starts_with` is an exact prefix match and no
 /// locale spells one sign as a prefix of the other -- but it is fixed here so
 /// that it cannot vary.
-/// @param rest         The remainder of the entry, starting at the scan position.
-/// @param negativeSign The locale's negative-sign string; empty leaves `'-'`.
-/// @param positiveSign The locale's positive-sign string; empty leaves `'+'`.
+/// @param rest The remainder of the entry, starting at the scan position.
+/// @param loc  The locale facts; only the two signs are read. An empty
+///             `negativeSign` leaves `'-'`, an empty `positiveSign` leaves
+///             `'+'`.
 /// @return The match, or a `length` of `0` when @p rest starts with no sign.
-// NOLINTBEGIN(bugprone-easily-swappable-parameters)
-// The two signs are adjacent `std::string_view`s sharing the suffix `Sign`, and
-// the check is right that swapping them would be silent: the entry would take
-// '+' as a negative and '-' as a positive. They stay in this order anyway,
-// because it is normalizeLocaleNumber's own parameter order, and its single
-// call site is four lines below this one. Reordering to break the adjacency
-// would put the helper out of step with the function it exists to serve, which
-// trades a mistake nobody can make here for one a reader of both would.
-[[nodiscard]] inline SignMatch leadingSign(std::string_view rest, std::string_view negativeSign,
-                                           std::string_view positiveSign) {
-    // NOLINTEND(bugprone-easily-swappable-parameters)
-    std::size_t const negativeLength = leadingSignLength(rest, negativeSign, '-');
+[[nodiscard]] inline SignMatch leadingSign(std::string_view rest, NumericLocale const& loc) {
+    std::size_t const negativeLength = leadingSignLength(rest, loc.negativeSign, '-');
     if (negativeLength != 0) {
         // The canonical spelling, whatever the locale's is.
         return {.length = negativeLength, .emits = "-"};
     }
     // Dropped, never emitted: canonical text is `-?[0-9]+(\.[0-9]+)?` and has
     // no `+` in it.
-    return {.length = leadingSignLength(rest, positiveSign, '+'), .emits = ""};
+    return {.length = leadingSignLength(rest, loc.positiveSign, '+'), .emits = ""};
 }
 
 }  // namespace detail
@@ -204,14 +474,15 @@ struct SignMatch {
 /// @brief Converts a locale-formatted numeric string to canonical
 ///        (`-?[0-9]+(\.[0-9]+)?`) text.
 ///
-/// Drops @p groupSeparator where it is correctly placed, and replaces every
-/// occurrence of @p decimalSeparator with `.`. Passing `decimalSeparator ==
-/// "."` and an empty @p groupSeparator is the identity transform (the
-/// locale-free behavior). Malformed input (a second decimal separator, a
-/// sign anywhere but the leading position of the *output*, or any character that
-/// is not a digit) yields `std::nullopt` rather than a best-effort guess. The
-/// decimal point counts as output, so a sign placed straight after the separator
-/// ("`,-5`" in a de-DE locale) is rejected -- matching the QML mirror in
+/// Drops `NumericLocale::groupSeparator` where it is correctly placed, replaces
+/// every occurrence of `NumericLocale::decimalSeparator` with `.`, and rewrites
+/// the locale's digits as ASCII ones. A default-constructed `NumericLocale` is
+/// the identity transform (the locale-free behavior). Malformed input (a second
+/// decimal separator, a sign anywhere but the leading position of the *output*,
+/// two digit families in one entry, or any character that is not a digit)
+/// yields `std::nullopt` rather than a best-effort guess. The decimal point
+/// counts as output, so a sign placed straight after the separator ("`,-5`" in
+/// a de-DE locale) is rejected -- matching the QML mirror in
 /// `src/qt/forms/qml/DynamicForm.qml`, which has always rejected it (morph#497).
 ///
 /// @par Grouping is validated, not stripped (morph#574)
@@ -225,13 +496,13 @@ struct SignMatch {
 /// and the en-US mirror image `"1,5"` gave `15`.
 ///
 /// @par The two separators must differ
-/// When @p groupSeparator is non-empty and equal to @p decimalSeparator the
-/// entry is rejected: with one string in both roles there is no reading of
-/// `"1.5"` the function could defend. This is a caller (locale-configuration)
-/// error rather than a user one, but it is reported through the return value
-/// like any other malformed entry, deliberately not through an assertion --
-/// an assertion would make the two build configurations behave differently at
-/// a control edge, and would be untestable in the one where it fires.
+/// When `groupSeparator` is non-empty and equal to `decimalSeparator` the entry
+/// is rejected: with one string in both roles there is no reading of `"1.5"`
+/// the function could defend. This is a caller (locale-configuration) error
+/// rather than a user one, but it is reported through the return value like any
+/// other malformed entry, deliberately not through an assertion -- an assertion
+/// would make the two build configurations behave differently at a control
+/// edge, and would be untestable in the one where it fires.
 ///
 /// The result is `.`-decimal and digit-only, but is **not** narrowed to
 /// `-?[0-9]+(\.[0-9]+)?`: a bare "`.`", a leading "`.5`" and a trailing "`5.`"
@@ -240,11 +511,11 @@ struct SignMatch {
 /// is documented here rather than changed.
 ///
 /// Separators are matched as whole strings, so a multi-byte one (e.g. U+202F)
-/// works; matching them before the per-byte digit scan is what keeps their
-/// continuation bytes from being mistaken for stray non-digit characters.
+/// works; matching them before the digit scan is what keeps their continuation
+/// bytes from being mistaken for stray non-digit characters.
 ///
 /// @par The negative sign is matched as a whole string too (morph#583)
-/// @p negativeSign is matched the same way, which is what lets a locale whose
+/// `negativeSign` is matched the same way, which is what lets a locale whose
 /// sign is U+2212, or is prefixed by a bidi control mark, be entered at all --
 /// 77 of the 711 locales Qt 6.11.2 knows. Before this the sign was the literal
 /// byte `'-'`, so `formatCanonicalNumber` emitted a sign this function then
@@ -252,14 +523,14 @@ struct SignMatch {
 ///
 /// @par ASCII `'-'` stays accepted whatever the locale
 /// A bare `'-'` is accepted in the leading position in addition to
-/// @p negativeSign. U+2212 and the bidi marks are on no keyboard, so matching
+/// `negativeSign`. U+2212 and the bidi marks are on no keyboard, so matching
 /// only the locale's own spelling would reject the sign the user can actually
 /// type and leave them no way to enter a negative number at all. The hyphen has
 /// no second reading in a numeric entry, so accepting it is not the kind of
 /// guess morph#574 forbids -- that was about producing a wrong *value*, and
 /// this produces the only value the input can mean.
 ///
-/// @par An empty @p negativeSign means the ASCII default, not "no sign"
+/// @par An empty `negativeSign` means the ASCII default, not "no sign"
 /// Unlike a group separator, there is no locale without a negative sign, so an
 /// empty view leaves the ASCII `'-'` above as the only spelling rather than
 /// meaning "this entry cannot be negative". `formatCanonicalNumber` reads it
@@ -268,7 +539,7 @@ struct SignMatch {
 /// one.
 ///
 /// @par A leading positive sign is accepted and dropped (morph#596)
-/// @p positiveSign is matched exactly like @p negativeSign -- the locale's own
+/// `positiveSign` is matched exactly like `negativeSign` -- the locale's own
 /// spelling as a whole string, plus a bare ASCII `'+'` in every locale. Of the
 /// 711 locales Qt 6.11.2 knows, 54 spell it as more than one code point
 /// (U+061C, U+200E or U+200F before the `'+'`, e.g. `ar_EG`, `ar_DZ`, `az_IR`,
@@ -282,64 +553,74 @@ struct SignMatch {
 /// @par The sign is **dropped**, and `formatCanonicalNumber` never emits one
 /// This is a deliberate asymmetry with the negative sign, not an oversight.
 /// Canonical text is `-?[0-9]+(\.[0-9]+)?`: there is no `'+'` in it, so `"+5"`
-/// yields `"5"` and not `"+5"`. The display edge has no @p positiveSign
-/// parameter at all, because emitting one would change what every positive
-/// number in every form looks like -- `5` would become `+5` on screen. So the
-/// two functions are *not* strict inverses across a positive sign: entry
-/// accepts a spelling display never produces. That is the only shape that adds
-/// acceptance without changing a single rendered value, and it is why morph#596
-/// is an enhancement rather than the repaired round trip morph#583 was. Written
-/// down in `docs/spec/forms/forms.md` as well, under "Locale data formatting".
+/// yields `"5"` and not `"+5"`. The display edge reads no `positiveSign` at
+/// all, because emitting one would change what every positive number in every
+/// form looks like -- `5` would become `+5` on screen. So the two functions are
+/// *not* strict inverses across a positive sign: entry accepts a spelling
+/// display never produces. That is the only shape that adds acceptance without
+/// changing a single rendered value, and it is why morph#596 is an enhancement
+/// rather than the repaired round trip morph#583 was. Written down in
+/// `docs/spec/forms/forms.md` as well, under "Locale data formatting".
 ///
-/// @par An empty @p positiveSign leaves the ASCII `'+'`
+/// @par An empty `positiveSign` leaves the ASCII `'+'`
 /// Here empty really can mean "match nothing extra", because there is no
 /// display edge to get wrong: the worst an unmatched positive sign can do is
 /// reject an entry, never produce a value of the wrong sign. The bare ASCII
 /// `'+'` stays accepted regardless.
 ///
-/// @param text             The locale-formatted entry, e.g. `"1.050,25"`.
-/// @param decimalSeparator The locale's decimal-point string, e.g. `","`.
-/// @param groupSeparator   The locale's digit-grouping string, e.g. `"."`, or
-///                         empty when the locale has none.
-/// @param negativeSign     The locale's negative-sign string, e.g. `"\u2212"`;
-///                         empty is read as the default `"-"`.
-/// @param positiveSign     The locale's positive-sign string, e.g.
-///                         `"\u061c+"`; empty leaves the ASCII `"+"` as the
-///                         only accepted spelling.
+/// @par The locale's own digits are accepted, and so are ASCII ones (morph#591)
+/// A digit is accepted when its code point is in
+/// `[zeroDigit, zeroDigit + 9]` -- a Unicode decimal digit set is ten
+/// contiguous code points by definition (UAX #44) -- *or* in `['0', '9']`. 76
+/// of the 711 locales Qt 6.11.2 knows use a non-ASCII `zeroDigit`; before this
+/// their users could not enter a number at all, because the scan compared a
+/// single byte against the ASCII range and the very first byte of U+0665
+/// failed it. The second acceptance is the same rule as the ASCII `'-'` and
+/// `'+'` above, for the same reason: a user with an ASCII keyboard in an
+/// `ar_EG` locale has to be able to type `5`. It costs nothing, because the
+/// canonical output spells every digit in ASCII whatever the input spelled it,
+/// so no two accepted spellings can produce different *values*.
+///
+/// @par Digit families do not mix
+/// `"\u06655"` -- one Arabic-Indic digit and one ASCII digit -- is malformed,
+/// not `"55"`. The two families are each accepted whole; interleaving them is
+/// not a spelling any keyboard or any display edge produces, and rejecting it
+/// matches the existing strictness about a sign anywhere but the leading
+/// position. It is a choice rather than a consequence, so it is stated here and
+/// pinned by a test on both edges. Note that when `zeroDigit` is the ASCII
+/// `"0"` the two families are the same set, so nothing can mix and the rule is
+/// invisible -- which is why it costs no existing caller anything.
+///
+/// @param text The locale-formatted entry, e.g. `"1.050,25"`.
+/// @param loc  The locale facts. Designated initialisers are the intended
+///             spelling: `{.decimalSeparator = ",", .groupSeparator = "."}`.
 /// @return The canonical `.`-decimal text, or `std::nullopt` when malformed.
-// NOLINTBEGIN(bugprone-easily-swappable-parameters)
-// The four locale strings are one fixed order; the first three are mirrored by
-// formatCanonicalNumber so the two directions read alike, and separating a sign
-// from the separators to break the adjacency would put them out of step.
-// positiveSign is last because it is the one parameter the display direction
-// does not take -- see "The sign is dropped" above.
 [[nodiscard]] inline std::optional<std::string> normalizeLocaleNumber(std::string_view text,
-                                                                      std::string_view decimalSeparator,
-                                                                      std::string_view groupSeparator,
-                                                                      std::string_view negativeSign = "-",
-                                                                      std::string_view positiveSign = "+") {
-    // NOLINTEND(bugprone-easily-swappable-parameters)
-    if (!groupSeparator.empty() && groupSeparator == decimalSeparator) {
+                                                                      NumericLocale const& loc) {
+    if (!loc.groupSeparator.empty() && loc.groupSeparator == loc.decimalSeparator) {
         return std::nullopt;  // one string cannot play both roles: see above
     }
-    if (!detail::groupingIsWellPlaced(text, decimalSeparator, groupSeparator)) {
+    if (!detail::groupingIsWellPlaced(text, loc)) {
         return std::nullopt;  // a separator off a group boundary: see above
     }
 
+    char32_t const base = detail::digitBase(loc.zeroDigit);
     std::string canonical;
     canonical.reserve(text.size());
     bool sawDecimal = false;
     bool sawAnyOutput = false;
+    bool sawNativeDigit = false;
+    bool sawAsciiDigit = false;
 
     for (std::size_t i = 0; i < text.size();) {
         const std::string_view rest = text.substr(i);
-        if (!groupSeparator.empty() && rest.starts_with(groupSeparator)) {
+        if (std::size_t const group = detail::leadingSeparatorLength(rest, loc.groupSeparator); group != 0) {
             // Placement was settled above, so by here the separator is display
             // only and is never carried into the output.
-            i += groupSeparator.size();
+            i += group;
             continue;
         }
-        if (!decimalSeparator.empty() && rest.starts_with(decimalSeparator)) {
+        if (std::size_t const point = detail::leadingSeparatorLength(rest, loc.decimalSeparator); point != 0) {
             if (sawDecimal) {
                 return std::nullopt;  // a second decimal separator: malformed
             }
@@ -351,10 +632,10 @@ struct SignMatch {
             // ("`,-5`" in a de-DE locale) is accepted as if it were leading.
             // morph#497.
             sawAnyOutput = true;
-            i += decimalSeparator.size();
+            i += point;
             continue;
         }
-        detail::SignMatch const sign = detail::leadingSign(rest, negativeSign, positiveSign);
+        detail::SignMatch const sign = detail::leadingSign(rest, loc);
         if (sign.length != 0) {
             // Leading position of the *output*: a stripped group separator
             // before the sign would otherwise make an injected sign look
@@ -372,17 +653,24 @@ struct SignMatch {
             i += sign.length;
             continue;
         }
-        // i is bounded by the loop condition.
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-        char const chr = text[i];
-        if (chr < '0' || chr > '9') {
+        detail::DigitMatch const digit = detail::leadingDigit(rest, base);
+        if (digit.length == 0) {
             return std::nullopt;  // any other character is malformed
         }
-        canonical += chr;
+        // Which family each digit came from is recorded here and judged once,
+        // below the loop: an entry that mixes them is malformed wherever the
+        // second family appears, so there is nothing an early return would
+        // decide differently, and the scan stays one statement per character
+        // class.
+        (digit.native ? sawNativeDigit : sawAsciiDigit) = true;
+        canonical += digit.canonical;
         sawAnyOutput = true;
-        ++i;
+        i += digit.length;
     }
 
+    if (sawNativeDigit && sawAsciiDigit) {
+        return std::nullopt;  // two digit families in one entry: see above
+    }
     if (canonical.empty() || canonical == "-") {
         return std::nullopt;
     }
@@ -393,12 +681,11 @@ struct SignMatch {
 ///        display text, grouping the integer part in triples.
 ///
 /// The display-direction inverse of `normalizeLocaleNumber`'s
-/// decimal-separator substitution, plus thousands grouping that
-/// `normalizeLocaleNumber` takes back: a grouped display round-trips, because
-/// the entry direction *validates* the grouping rather than stripping it (see
-/// "Grouping is validated, not stripped" on that function). Passing
-/// `decimalSeparator == "."` and an empty @p groupSeparator is the identity
-/// transform.
+/// decimal-separator substitution and digit rewriting, plus thousands grouping
+/// that `normalizeLocaleNumber` takes back: a grouped display round-trips,
+/// because the entry direction *validates* the grouping rather than stripping
+/// it (see "Grouping is validated, not stripped" on that function). A
+/// default-constructed `NumericLocale` is the identity transform.
 ///
 /// @par What this paragraph used to say, and why it was wrong (morph#597)
 /// It claimed grouping was "never accepted back on entry" and that
@@ -412,59 +699,67 @@ struct SignMatch {
 /// (`docs/spec/forms/forms.md`, "Grouping is validated, never merely
 /// stripped") and the code already agreed; only this comment was stale.
 ///
-/// The sign is emitted as @p negativeSign, matching what `normalizeLocaleNumber`
-/// accepts back (morph#583); an empty view is read as `"-"` rather than as "no
-/// sign", because formatting a negative to no sign at all is a silently wrong
-/// value.
+/// The sign is emitted as `NumericLocale::negativeSign`, matching what
+/// `normalizeLocaleNumber` accepts back (morph#583); an empty view is read as
+/// `"-"` rather than as "no sign", because formatting a negative to no sign at
+/// all is a silently wrong value.
 ///
-/// @par There is no positive-sign parameter, deliberately (morph#596)
+/// @par The digits are emitted in the locale's set (morph#591)
+/// Each canonical `'0'`-`'9'` is emitted as the code point that far above
+/// `NumericLocale::zeroDigit`, so an `ar_EG` caller sees `"\u0665"` where the
+/// canonical text said `'5'`. This edge *had* to move with the entry edge: it
+/// used to copy the canonical ASCII bytes out unchanged, so teaching entry to
+/// accept U+0665 while display kept emitting `'5'` would have left the pair no
+/// longer inverse, which is the round trip `docs/spec/forms/forms.md` requires.
+/// With the default `zeroDigit` of `"0"` the offset is zero and every byte is
+/// the one this function emitted before.
+///
+/// @par There is no positive-sign emission, deliberately (morph#596)
 /// A positive number is displayed with no sign at all, in every locale, and
-/// this function takes no `positiveSign` for the caller to change that.
+/// this function ignores `NumericLocale::positiveSign` entirely.
 /// `normalizeLocaleNumber` *accepts* a leading positive sign and drops it, so
 /// the pair is not a strict inverse across one: entry takes a spelling display
-/// never produces. Adding the parameter is what would be the defect --
+/// never produces. Emitting it is what would be the defect --
 /// `QLocale::positiveSign()` is `'+'` in 657 of the 711 locales Qt 6.11.2
 /// knows, so emitting it would turn every positive number in every form from
 /// `5` into `+5`, a visible product change with no reported need behind it.
 /// Rejecting text the display edge produced is the morph#583 shape and is not
 /// what happens here; producing text no display edge asked for would be.
-/// @param canonicalText    Canonical `-?[0-9]+(\.[0-9]+)?` text.
-/// @param decimalSeparator The locale's decimal-point display string.
-/// @param groupSeparator   The locale's digit-grouping display string, or empty
-///                         to omit grouping.
-/// @param negativeSign     The locale's negative-sign display string; empty is
-///                         read as the default `"-"`.
+/// @param canonicalText Canonical `-?[0-9]+(\.[0-9]+)?` text.
+/// @param loc           The locale facts; `positiveSign` is not read.
 /// @return The locale-formatted display text.
-// Mirrors normalizeLocaleNumber's parameter order; the two are inverses, so
-// diverging here would be the more confusing choice.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-[[nodiscard]] inline std::string formatCanonicalNumber(std::string_view canonicalText,
-                                                       std::string_view decimalSeparator,
-                                                       std::string_view groupSeparator,
-                                                       std::string_view negativeSign = "-") {
+[[nodiscard]] inline std::string formatCanonicalNumber(std::string_view canonicalText, NumericLocale const& loc) {
+    constexpr std::size_t kGroupSize = 3;
+    char32_t const base = detail::digitBase(loc.zeroDigit);
     bool const neg = !canonicalText.empty() && canonicalText.front() == '-';
     std::string_view const magnitude = neg ? canonicalText.substr(1) : canonicalText;
     auto const dot = magnitude.find('.');
     std::string_view const wholePart = dot == std::string_view::npos ? magnitude : magnitude.substr(0, dot);
     std::string_view const fracPart = dot == std::string_view::npos ? std::string_view{} : magnitude.substr(dot + 1);
 
-    std::string grouped;
-    grouped.reserve(wholePart.size() + ((wholePart.size() / 3) * groupSeparator.size()));
-    for (std::size_t i = 0; i < wholePart.size(); ++i) {
-        if (!groupSeparator.empty() && i != 0 && (wholePart.size() - i) % 3 == 0) {
-            grouped += groupSeparator;
-        }
-        grouped += wholePart[i];
-    }
-
+    // A digit of the locale's set is one to four UTF-8 bytes, so the reserve
+    // hint scales with the base rather than assuming one byte per digit.
+    std::size_t const perDigit = detail::utf8Length(base);
     std::string out;
+    out.reserve(loc.negativeSign.size() + (magnitude.size() * perDigit) +
+                ((wholePart.size() / kGroupSize) * loc.groupSeparator.size()) + loc.decimalSeparator.size());
+
     if (neg) {
-        out += negativeSign.empty() ? std::string_view{"-"} : negativeSign;
+        out += loc.negativeSign.empty() ? std::string_view{"-"} : loc.negativeSign;
     }
-    out += grouped;
+    std::size_t index = 0;
+    for (char const chr : wholePart) {
+        if (!loc.groupSeparator.empty() && index != 0 && (wholePart.size() - index) % kGroupSize == 0) {
+            out += loc.groupSeparator;
+        }
+        detail::appendDisplayDigit(out, base, chr);
+        ++index;
+    }
     if (!fracPart.empty()) {
-        out += decimalSeparator;
-        out += fracPart;
+        out += loc.decimalSeparator;
+        for (char const chr : fracPart) {
+            detail::appendDisplayDigit(out, base, chr);
+        }
     }
     return out;
 }

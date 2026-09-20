@@ -836,6 +836,27 @@ Frame {
     // emits one: a positive displays unsigned in every locale, and emitting the
     // sign would turn every positive number in every form from "5" into "+5".
     // The pair is therefore deliberately not inverse across a positive sign.
+    // The digits are locale data too (morph#591), carried as a *base*: a
+    // Unicode decimal digit set is ten contiguous code points by definition
+    // (UAX #44), so one zeroDigit is enough and a ten-element table is not
+    // needed. 76 of the 711 locales Qt 6.11.2 knows report a zeroDigit other
+    // than ASCII "0", across eleven distinct sets -- two of them astral
+    // (U+11136 Chakma, U+1E950 Adlam), which is why this scans code *points*
+    // via codePointAt and steps two units for one digit when it has to. Entry
+    // accepts a digit in [zeroDigit, zeroDigit+9] or in ["0","9"]; display
+    // emits only the locale's. That asymmetry is the morph#596 rule applied to
+    // digits: the locale's own digits are on the user's keyboard only if their
+    // keyboard has them, and accepting an extra spelling cannot change a value
+    // because the canonical output always spells digits in ASCII. Mixing the
+    // two families in one entry is malformed -- see below.
+    // All five facts now travel as one object rather than as five positional
+    // arguments, mirroring the C++ NumericLocale aggregate: on that side the
+    // row of interchangeable string_views needed a clang-tidy suppression for
+    // bugprone-easily-swappable-parameters, and a sixth would have made the
+    // argument for it weaker rather than stronger. Here the gain is the same
+    // one a reader gets -- a call names each fact -- and it keeps the two
+    // mirrors structurally identical, which is the property morph#599 and
+    // morph#591 were both about.
     // The two *separators* are matched as whole strings for the same reason
     // (morph#599), and that this was not already true was the mixed idiom
     // morph#583 and morph#596 left behind: they converted the signs to
@@ -848,20 +869,51 @@ Frame {
     // could: docs/spec/forms/forms.md, "Both edges, or neither" -- the C++ edge
     // has always matched separators whole (`rest.starts_with(...)`), and a
     // divergence between the two is a divergence in what the product accepts.
-    function normalizeLocaleNumber(text, decimalSeparator, groupSeparator, negativeSign, positiveSign) {
+    // The digit-set base of a NumericLocale-shaped object: the code point of
+    // its zeroDigit, or ASCII "0" when it is absent or empty. Empty reads as
+    // the default for the reason an empty negativeSign does -- there is no
+    // locale without digits, so it cannot mean "this entry has none".
+    function localeDigitBase(loc) {
+        const zero = (loc && loc.zeroDigit) ? loc.zeroDigit : "0"
+        return zero.codePointAt(0)
+    }
+
+    // A digit at index i, in the locale's set or in ASCII, or null. Returns the
+    // canonical ASCII spelling, how many UTF-16 units it occupied (two for an
+    // astral digit) and which family it came from. When base is "0" the two
+    // families are the same set, so `native` is always true and nothing can mix.
+    function leadingDigit(text, i, base) {
+        const cp = text.codePointAt(i)
+        if (cp === undefined)
+            return null
+        const units = cp > 0xFFFF ? 2 : 1
+        if (cp >= base && cp < base + 10)
+            return { canonical: String(cp - base), units: units, native: true }
+        if (cp >= 0x30 && cp <= 0x39)
+            return { canonical: String(cp - 0x30), units: units, native: false }
+        return null
+    }
+
+    function normalizeLocaleNumber(text, locale) {
+        const loc = locale ? locale : {}
+        const decimalSeparator = loc.decimalSeparator !== undefined ? loc.decimalSeparator : "."
+        const groupSeparator = loc.groupSeparator !== undefined ? loc.groupSeparator : ""
         // One string cannot play both roles: there is no reading of "1.5" this
         // function could defend, so it reports rather than guesses.
         if (groupSeparator !== "" && groupSeparator === decimalSeparator)
             return null
 
-        const sign = negativeSign ? negativeSign : "-"
-        const plus = positiveSign ? positiveSign : "+"
+        const sign = loc.negativeSign ? loc.negativeSign : "-"
+        const plus = loc.positiveSign ? loc.positiveSign : "+"
+        const base = localeDigitBase(loc)
         const groupSize = 3
         let canonical = ""
         let sawDecimal = false
         let sawAnyOutput = false
         let digitsInGroup = 0
         let sawGroup = false
+        let sawNativeDigit = false
+        let sawAsciiDigit = false
         for (let i = 0; i < text.length; ++i) {
             const ch = text[i]
             if (groupSeparator !== "" && text.startsWith(groupSeparator, i)) {
@@ -917,29 +969,62 @@ Frame {
                 // the locale's own is a bidi-prefixed form. Dropped, as above.
                 if (sawAnyOutput)
                     return null
-            } else if (ch >= "0" && ch <= "9") {
-                canonical += ch
-                ++digitsInGroup
             } else {
-                return null
+                const digit = leadingDigit(text, i, base)
+                if (digit === null)
+                    return null
+                // Which family the digit came from is recorded and judged once,
+                // after the loop: an entry that mixes them is malformed
+                // wherever the second family appears.
+                if (digit.native)
+                    sawNativeDigit = true
+                else
+                    sawAsciiDigit = true
+                canonical += digit.canonical
+                ++digitsInGroup
+                i += digit.units - 1 // the loop's ++i consumes the last unit
             }
             sawAnyOutput = true
         }
         // A grouped integer part has to end on a group boundary too.
         if (sawGroup && !sawDecimal && digitsInGroup !== groupSize)
             return null
+        // Two digit families in one entry is malformed, not "55": neither a
+        // keyboard nor a display edge produces an interleaving, and rejecting
+        // it matches the rule that a sign anywhere but the leading position is
+        // malformed. Pinned by a test on both edges, because accepting it would
+        // have been equally implementable.
+        if (sawNativeDigit && sawAsciiDigit)
+            return null
         if (canonical === "" || canonical === "-")
             return null
         return canonical
     }
 
-    // There is no positiveSign parameter here, deliberately (morph#596): a
+    // One canonical character as the locale would display it: an ASCII digit
+    // becomes the code point that far above the digit base, anything else is
+    // copied through. The pass-through arm is what keeps this byte-identical
+    // for text that does not honour the canonical shape, which this function
+    // has always passed out unchanged.
+    function displayDigit(ch, base) {
+        const cp = ch.codePointAt(0)
+        return (cp >= 0x30 && cp <= 0x39) ? String.fromCodePoint(base + (cp - 0x30)) : ch
+    }
+
+    // The locale's positiveSign is deliberately not read here (morph#596): a
     // positive number displays unsigned in every locale, so the entry edge above
-    // accepts a leading "+" that this edge never produces.
-    function formatCanonicalNumber(text, decimalSeparator, groupSeparator, negativeSign) {
+    // accepts a leading "+" that this edge never produces. The digits, by
+    // contrast, *are* emitted in the locale's set (morph#591) -- this edge had
+    // to move with the entry edge or the pair would no longer be inverse, which
+    // is the round trip docs/spec/forms/forms.md requires.
+    function formatCanonicalNumber(text, locale) {
+        const loc = locale ? locale : {}
+        const decimalSeparator = loc.decimalSeparator !== undefined ? loc.decimalSeparator : "."
+        const groupSeparator = loc.groupSeparator !== undefined ? loc.groupSeparator : ""
         // Empty reads as "-", not as "no sign": formatting a negative to no
         // sign at all would be a silently wrong value, not a rejected one.
-        const sign = negativeSign ? negativeSign : "-"
+        const sign = loc.negativeSign ? loc.negativeSign : "-"
+        const base = localeDigitBase(loc)
         const neg = text.startsWith("-")
         const magnitude = neg ? text.slice(1) : text
         const dot = magnitude.indexOf(".")
@@ -949,9 +1034,12 @@ Frame {
         for (let i = 0; i < wholePart.length; ++i) {
             if (groupSeparator !== "" && i !== 0 && (wholePart.length - i) % 3 === 0)
                 grouped += groupSeparator
-            grouped += wholePart[i]
+            grouped += displayDigit(wholePart[i], base)
         }
-        return (neg ? sign : "") + grouped + (fracPart !== "" ? decimalSeparator + fracPart : "")
+        let fraction = ""
+        for (let k = 0; k < fracPart.length; ++k)
+            fraction += displayDigit(fracPart[k], base)
+        return (neg ? sign : "") + grouped + (fracPart !== "" ? decimalSeparator + fraction : "")
     }
 
     // --- zoned Timestamp entry --------------------------------------------
@@ -1110,8 +1198,13 @@ Frame {
             return utcIso === null ? null : JSON.stringify(utcIso)
         }
         if (f.isQuantity) {
-            const canonicalText = normalizeLocaleNumber(text, qtLocale.decimalPoint, qtLocale.groupSeparator,
-                                                        qtLocale.negativeSign, qtLocale.positiveSign)
+            const canonicalText = normalizeLocaleNumber(text, {
+                                                            decimalSeparator: qtLocale.decimalPoint,
+                                                            groupSeparator: qtLocale.groupSeparator,
+                                                            negativeSign: qtLocale.negativeSign,
+                                                            positiveSign: qtLocale.positiveSign,
+                                                            zeroDigit: qtLocale.zeroDigit
+                                                        })
             if (canonicalText === null || !/^-?\d+(\.\d+)?$/.test(canonicalText))
                 return null
             const unit = f.unitOptions[opt(fieldUnits[f.name], 0)]
@@ -1786,15 +1879,22 @@ Frame {
                         const toUnit = fieldColumn.modelData.unitOptions[currentIndex]
                         form.fieldUnits[name] = currentIndex
                         if (entry.text.trim() !== "") {
-                            const canonicalText = form.normalizeLocaleNumber(
-                                    entry.text.trim(), form.qtLocale.decimalPoint, form.qtLocale.groupSeparator,
-                                    form.qtLocale.negativeSign, form.qtLocale.positiveSign)
+                            const canonicalText = form.normalizeLocaleNumber(entry.text.trim(), {
+                                    decimalSeparator: form.qtLocale.decimalPoint,
+                                    groupSeparator: form.qtLocale.groupSeparator,
+                                    negativeSign: form.qtLocale.negativeSign,
+                                    positiveSign: form.qtLocale.positiveSign,
+                                    zeroDigit: form.qtLocale.zeroDigit
+                                })
                             const converted = canonicalText !== null
                                     ? form.convertText(canonicalText, fromUnit, toUnit) : ""
                             entry.text = converted !== ""
-                                    ? form.formatCanonicalNumber(
-                                          converted, form.qtLocale.decimalPoint, form.qtLocale.groupSeparator,
-                                          form.qtLocale.negativeSign)
+                                    ? form.formatCanonicalNumber(converted, {
+                                          decimalSeparator: form.qtLocale.decimalPoint,
+                                          groupSeparator: form.qtLocale.groupSeparator,
+                                          negativeSign: form.qtLocale.negativeSign,
+                                          zeroDigit: form.qtLocale.zeroDigit
+                                      })
                                     : ""
                         } else {
                             form.revalidate()
