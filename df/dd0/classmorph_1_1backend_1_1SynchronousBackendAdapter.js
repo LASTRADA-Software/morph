@@ -4,6 +4,7 @@ var classmorph_1_1backend_1_1SynchronousBackendAdapter =
     [ "wrapped", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0", null ],
     [ "bindModel", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#ac65e916ae8ff43ddcc165f42492960fc", null ],
     [ "promoteModel", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435", null ],
+    [ "bindWaitPolicy", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a239b4766ae16c0cc014d209da8737a43", null ],
     [ "registerModel", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aca4b369c4caec66a3c65f3e583499321", null ],
     [ "registerModelWithContext", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#affe768fa0142e236fd463b34988b93a4", null ],
     [ "registerModelShared", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a89f433a93a9df45b1f4afc4ebdd02046", null ],

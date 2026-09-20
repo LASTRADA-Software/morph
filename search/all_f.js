@@ -30,7 +30,7 @@ var searchData=
   ['probefunction_27',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]],
   ['probeinterval_28',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
   ['promise_29',['Promise',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html',1,'morph::async::Completion&lt; T &gt;::Promise'],['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ab4bacd758d6d1b79b345260a76f4dd8b',1,'morph::async::Completion::Promise::Promise()']]],
-  ['promotemodel_30',['promoteModel',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435',1,'morph::backend::SynchronousBackendAdapter::promoteModel()'],['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a39d4848c41081eb7d3c7d8d05e67b04b',1,'morph::net::SocketBackend::promoteModel()']]],
+  ['promotemodel_30',['promoteModel',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435',1,'morph::backend::SynchronousBackendAdapter::promoteModel()'],['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a39d4848c41081eb7d3c7d8d05e67b04b',1,'morph::net::SocketBackend::promoteModel()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abff050c08a6c5c3ddf90bbdd50bce7c9',1,'morph::qt::QtWebSocketBackend::promoteModel()']]],
   ['propagation_31',['Error propagation',['../index.html#error-propagation',1,'']]],
   ['protocol_32',['Wire protocol',['../index.html#wire-protocol',1,'']]],
   ['protocolrange_33',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],

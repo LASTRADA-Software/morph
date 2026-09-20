@@ -137,7 +137,7 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a3eb7d1ba338774ed582fe26de164a4b9" id="r_a3eb7d1ba338774ed582fe26de164a4b9"><td class="memItemLeft">double&#160;</td><td class="memItemRight"><a class="el" href="#a3eb7d1ba338774ed582fe26de164a4b9">backoffMultiplier</a> = 2.0</td></tr>
 <tr class="memdesc:a3eb7d1ba338774ed582fe26de164a4b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Multiplier applied to the delay after each failed attempt.  <br /></td></tr>
 <tr class="memitem:a6c56987caa7c301720c589d6de8ec7ac" id="r_a6c56987caa7c301720c589d6de8ec7ac"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a6c56987caa7c301720c589d6de8ec7ac">asyncRegistrationEnabled</a> = false</td></tr>
-<tr class="memdesc:a6c56987caa7c301720c589d6de8ec7ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opt in to <span class="tt">registerModelAsync</span> (see its doc comment on <span class="tt">IBackend</span>).  <br /></td></tr>
+<tr class="memdesc:a6c56987caa7c301720c589d6de8ec7ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <span class="tt">bindModel</span>/<span class="tt">promoteModel</span> may return before the reply.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Reconnect tuning for <span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">QtWebSocketBackend</a></span>. </p>
@@ -229,11 +229,12 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Opt in to <span class="tt">registerModelAsync</span> (see its doc comment on <span class="tt">IBackend</span>). </p>
-<p>Defaults to <span class="tt">false</span>: <span class="tt">Bridge::registerHandler()</span> then falls back to the synchronous <span class="tt">registerModel</span>, exactly as before this feature existed — every existing embedder (a desktop Qt client, this backend's own test suite) keeps registering synchronously, immediately usable the line after <span class="tt">BridgeHandler</span>'s constructor returns.</p>
-<p>Set <span class="tt">true</span> only for a build where that synchronous guarantee cannot hold at all — a WASM main thread, where the nested <span class="tt">QEventLoop</span> <span class="tt">registerModel</span> relies on aborts the page outright. Doing so is a deliberate trade: the caller must then wait for registration to complete (e.g. gate the UI on it) before firing an action through that handler, since <span class="tt">executeVia</span> fails fast with "handler not bound" for an unbound binding rather than queuing or blocking. </p>
+<p>Whether <span class="tt">bindModel</span>/<span class="tt">promoteModel</span> may return before the reply. </p>
+<p>Defaults to <span class="tt">false</span>: both settle their <span class="tt">Completion</span> from inside the call, having blocked the Qt thread in a nested <span class="tt">QEventLoop</span> for the round trip — <span class="tt">IBackend</span>'s own default behaviour, and what every existing embedder (a desktop Qt client, this backend's own test suite) already relies on, since it makes a handler usable on the line after <span class="tt">BridgeHandler</span>'s constructor returns.</p>
+<p>Set <span class="tt">true</span> for a build where that blocking call cannot happen at all — a WASM main thread, where Qt refuses to spin a nested loop and the attempt aborts the page outright. <span class="tt">bindModel</span> then sends the request and returns an unsettled <span class="tt">Completion</span>, which the reply settles later. That is a deliberate trade, not a free improvement: the caller must wait for the continuation (e.g. gate the UI on <span class="tt">BridgeHandler::whenBound()</span>) before firing an action through that handler, since <span class="tt">executeVia</span> fails fast with "handler not bound" for an unbound binding rather than queuing or blocking.</p>
+<p>This flag chooses <em>whether the transport blocks</em>. It is no longer an opt-in to a second set of interface verbs: the continuation exists on both paths, because <span class="tt">bindModel</span> returns a <span class="tt">Completion</span> either way. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
