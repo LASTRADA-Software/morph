@@ -1,14 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for issue #26: Bridge::registerHandler() prefers
-// IBackend::registerModelAsync when a backend offers one, falling back to the
-// synchronous registerModelWithContext otherwise. AsyncRegisterBackend below
-// is a minimal test double whose registerModelAsync defers its reply until
-// the test explicitly completes it -- simulating a socket backend whose reply
-// arrives later on its own thread (what QtWebSocketBackend's async path does
-// against a real server), instead of blocking the calling thread via a nested
-// event loop (what registerModel does today -- the pattern this issue is
-// about, since Qt refuses to spin a nested loop on a WASM main thread at all).
+// Coverage for issue #26: Bridge::registerHandler() and the keyed
+// attach/promote entry points reach the backend through the structural
+// registration surface (IBackend::bindModel / promoteModel), and a backend
+// whose reply arrives later must not block the caller.
+//
+// AsyncRegisterBackend below is a minimal test double whose bindModel returns
+// an unsettled Completion and defers the reply until the test explicitly
+// completes it -- simulating a socket backend whose reply arrives later on its
+// own thread (what QtWebSocketBackend does against a real server), instead of
+// blocking the calling thread via a nested event loop (what the synchronous
+// registerModel does -- the pattern this issue is about, since Qt refuses to
+// spin a nested loop on a WASM main thread at all).
+//
+// Until morph#571 that shape was expressed by overriding four optional
+// `*Async` twins that returned `bool`; the doubles here now express it by
+// overriding bindModel/promoteModel and answering
+// BindWait::kCallerMustNotBlock, which is what makes registerHandlerImpl
+// return without waiting -- the same observable behaviour the `true` return
+// used to produce.
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -45,9 +55,8 @@ struct ARModel {
     int execute(const ARCount& a) { return a.x; }
 };
 
-// --- Keyed/shared coverage: the same deferred-reply idea applied to
-// --- registerModelSharedAsync/attachModelAsync (the register-or-attach and
-// --- attach counterparts of registerModelAsync).
+// --- Keyed/shared coverage: the same deferred-reply idea applied to the
+// --- register-or-attach and re-point shapes of the same bindModel request.
 
 /// Names the instance it wants in the action payload -> payload-keyed, so
 /// executing it attaches the handler first (Bridge::attachHandlerAsync).
@@ -161,7 +170,7 @@ struct morph::model::ActionKeyTraits<ARThrowingKeyTouch> {
 BRIDGE_MODEL_KEY(ARKeyedModel, ARTouch, &ARTouch::id);
 BRIDGE_KEY_FROM_RESULT(ARKeyedCreate, &ARKeyedCreated::id);
 
-// ── Issue #67: assignHandlerPrimary prefers IBackend::assignPrimaryAsync ────
+// ── Issue #67: assignHandlerPrimary goes through IBackend::promoteModel ────
 //
 // A model whose result-keyed action (BRIDGE_KEY_FROM_RESULT) drives
 // Bridge::assignHandlerPrimary. Needs **external** linkage (not an anonymous
@@ -194,9 +203,11 @@ BRIDGE_MODEL_KEY_FROM_RESULT(ARCreateModel, ARCreate, &ARCreated::id);
 
 namespace {
 
-// Offers an async registration path that does not complete until the test
-// calls completeNext()/failNext() -- simulating a backend whose registration
-// reply arrives later, asynchronously, instead of blocking the caller.
+using ModelCompletion = morph::async::Completion<morph::exec::detail::ModelId>;
+
+// Offers a non-blocking bind that does not complete until the test calls
+// completeNext()/failNext() -- simulating a backend whose registration reply
+// arrives later, asynchronously, instead of blocking the caller.
 class AsyncRegisterBackend : public morph::backend::detail::IBackend {
 public:
     morph::exec::detail::ModelId registerModel(
@@ -229,45 +240,20 @@ public:
     void cancelPending(const std::exception_ptr&) override {}
     void setReconnectHandler(const std::function<void()>&) override {}
 
-    bool registerModelAsync(const std::string& typeId,
-                            std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                            std::string_view /*contextKey*/,
-                            std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                            std::function<void(const std::string&)> onError) override {
-        std::scoped_lock const lock{_pendingMtx};
-        _pending.push_back(Pending{typeId, std::move(factory), std::move(onRegistered), std::move(onError)});
-        return true;
+    // One verb for all three acquire shapes (private, register-or-attach,
+    // re-point): each is deferred the same way, so the reply lands in the same
+    // queue completeNext()/failNext() drain and a keyed attach is observably
+    // non-blocking for the same reason a plain registration is.
+    ModelCompletion bindModel(morph::backend::detail::BindRequest request, morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = ModelCompletion::makeSettleable(&cbExec);
+        queue(request.typeId, std::move(request.factory), std::move(promise));
+        return std::move(completion);
     }
 
-    // The shared/keyed counterparts, deferred exactly the same way: the reply
-    // lands in the same queue completeNext()/failNext() drain, so a keyed
-    // attach is observably non-blocking for the same reason a plain
-    // registration is.
-    bool registerModelSharedAsync(const std::string& typeId,
-                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                                  morph::backend::detail::InstanceIdentity /*identity*/,
-                                  std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                                  std::function<void(const std::string&)> onError) override {
-        std::scoped_lock const lock{_pendingMtx};
-        _pending.push_back(Pending{.typeId = typeId,
-                                   .factory = std::move(factory),
-                                   .onRegistered = std::move(onRegistered),
-                                   .onError = std::move(onError)});
-        return true;
-    }
-
-    bool attachModelAsync(const std::string& typeId,
-                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                          morph::backend::detail::InstanceIdentity /*identity*/,
-                          morph::exec::detail::ModelId /*current*/,
-                          std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                          std::function<void(const std::string&)> onError) override {
-        std::scoped_lock const lock{_pendingMtx};
-        _pending.push_back(Pending{.typeId = typeId,
-                                   .factory = std::move(factory),
-                                   .onRegistered = std::move(onRegistered),
-                                   .onError = std::move(onError)});
-        return true;
+    // The point of the double: the caller must not stop and wait, because
+    // nothing settles until the test says so.
+    [[nodiscard]] morph::backend::detail::BindWait bindWaitPolicy() const noexcept override {
+        return morph::backend::detail::BindWait::kCallerMustNotBlock;
     }
 
     void assignPrimary(morph::exec::detail::ModelId mid, const std::string& /*typeId*/,
@@ -309,6 +295,23 @@ public:
         return _pending.size();
     }
 
+protected:
+    /// @brief Parks one bind request until completeNext()/failNext() settles it.
+    void queue(std::string typeId, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+               ModelCompletion::Promise promise) {
+        auto kept = std::make_shared<ModelCompletion::Promise>(std::move(promise));
+        std::scoped_lock const lock{_pendingMtx};
+        _pending.push_back(Pending{
+            .typeId = std::move(typeId),
+            .factory = std::move(factory),
+            .onRegistered = [kept](morph::exec::detail::ModelId mid) { kept->resolve(mid); },
+            .onError =
+                [kept](const std::string& message) {
+                    kept->reject(std::make_exception_ptr(std::runtime_error(message)));
+                },
+        });
+    }
+
 private:
     struct Pending {
         std::string typeId;
@@ -325,96 +328,79 @@ private:
     uint64_t _nextId{100};
 };
 
-// Completes its async attach/bind callbacks *inline* -- synchronously, from
-// inside attachModelAsync/registerModelSharedAsync itself, before the dispatch
-// call returns. This is legal (nothing in IBackend forbids it) and it is what
-// QtWebSocketBackend already does on its !_connected error branch, so
-// Bridge::attachHandlerAsync/ensureBoundAsync must survive it: at that moment
-// the Bridge is still holding _attachMtx around the dispatch, and anything the
-// callback does that re-enters the Bridge under that lock -- publishing the
-// binding's primary, or a result-keyed dispatch's assignHandlerPrimary --
-// self-deadlocks unless the outcome is deferred out of the dispatch frame.
+// Settles its bind *inline* -- synchronously, from inside bindModel itself,
+// before the dispatch call returns. This is legal (nothing in IBackend forbids
+// it) and it is what QtWebSocketBackend already does on its !_connected error
+// branch, so Bridge::attachHandlerAsync/ensureBoundAsync must survive it: at
+// that moment the Bridge is still holding _attachMtx around the dispatch, and
+// anything the callback does that re-enters the Bridge under that lock --
+// publishing the binding's primary, or a result-keyed dispatch's
+// assignHandlerPrimary -- self-deadlocks unless the outcome is deferred out of
+// the dispatch frame.
+//
+// The executor those call sites name is inlineExecutor(), so resolving here
+// runs the continuation on this very stack.
 class InlineCompletingBackend : public AsyncRegisterBackend {
 public:
-    /// @param failInline When set, both methods report this message via onError
+    /// @param failInline When set, the bind is rejected with this message
     ///        inline instead of succeeding.
     explicit InlineCompletingBackend(std::optional<std::string> failInline = std::nullopt)
         : _failInline{std::move(failInline)} {}
 
-    bool registerModelSharedAsync(const std::string& typeId,
-                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                                  morph::backend::detail::InstanceIdentity /*identity*/,
-                                  std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                                  std::function<void(const std::string&)> onError) override {
-        completeInline(typeId, std::move(factory), onRegistered, onError);
-        return true;
-    }
-
-    bool attachModelAsync(const std::string& typeId,
-                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                          morph::backend::detail::InstanceIdentity /*identity*/,
-                          morph::exec::detail::ModelId /*current*/,
-                          std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                          std::function<void(const std::string&)> onError) override {
-        completeInline(typeId, std::move(factory), onRegistered, onError);
-        return true;
+    ModelCompletion bindModel(morph::backend::detail::BindRequest request, morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = ModelCompletion::makeSettleable(&cbExec);
+        if (_failInline) {
+            promise.reject(std::make_exception_ptr(std::runtime_error(*_failInline)));
+        } else {
+            promise.resolve(registerModel(request.typeId, std::move(request.factory)));
+        }
+        return std::move(completion);
     }
 
 private:
-    void completeInline(const std::string& typeId,
-                        std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                        const std::function<void(morph::exec::detail::ModelId)>& onRegistered,
-                        const std::function<void(const std::string&)>& onError) {
-        if (_failInline) {
-            onError(*_failInline);
-            return;
-        }
-        onRegistered(registerModel(typeId, std::move(factory)));
-    }
-
     std::optional<std::string> _failInline;
 };
 
-// A backend whose async dispatch call itself throws synchronously, before
-// returning -- e.g. QtWebSocketBackend::attachModelAsync's wire::encode()
-// failing before send. Bridge::attachHandlerAsync/ensureBoundAsync must
-// report this through onDone (matching execute()'s documented never-throws
-// contract) rather than letting it escape.
+// A backend whose dispatch call itself throws synchronously, before returning
+// -- e.g. a wire::encode() failing before send. `IBackend::bindModel`'s own
+// default converts a throwing synchronous verb into a rejection, so only an
+// override can produce this shape; Bridge::attachHandlerAsync/ensureBoundAsync
+// must still report it through onDone (matching execute()'s documented
+// never-throws contract) rather than letting it escape.
+//
+// The two arms are told apart by the request's shape, exactly as the surface
+// intends. `primary`, not `current`, is what separates them here:
+// attachHandlerAsync names the key it wants (non-empty `primary`, and a zero
+// `current` on a first attach), while ensureBoundAsync asks for an anonymous
+// instance (`primary` empty).
 class ThrowingDispatchBackend : public AsyncRegisterBackend {
 public:
-    bool attachModelAsync(const std::string&, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()>,
-                          morph::backend::detail::InstanceIdentity, morph::exec::detail::ModelId,
-                          std::function<void(morph::exec::detail::ModelId)>,
-                          std::function<void(const std::string&)>) override {
-        throw std::runtime_error("attachModelAsync dispatch failed");
-    }
-
-    bool registerModelSharedAsync(const std::string&,
-                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()>,
-                                  morph::backend::detail::InstanceIdentity,
-                                  std::function<void(morph::exec::detail::ModelId)>,
-                                  std::function<void(const std::string&)>) override {
-        throw std::runtime_error("registerModelSharedAsync dispatch failed");
+    ModelCompletion bindModel(morph::backend::detail::BindRequest request,
+                              morph::exec::IExecutor& /*cbExec*/) override {
+        if (!request.primary.empty()) {
+            throw std::runtime_error("bindModel keyed dispatch failed");
+        }
+        throw std::runtime_error("bindModel anonymous dispatch failed");
     }
 };
 
-// Violates IBackend's documented "exactly one callback per dispatch"
-// contract by invoking onRegistered twice, inline, from inside
-// attachModelAsync itself. Exercises detail::parkIfInFrame's own guard
-// against a second callback claiming an outcome that inline dispatch already
-// parked -- Bridge::attachHandlerAsync must still report exactly once.
+// Tries to settle the same bind twice, inline, from inside bindModel itself.
+// Bridge::attachHandlerAsync must still report exactly once.
+//
+// Note what moved with morph#571: the twins handed the Bridge two raw
+// std::functions, so a second call reached detail::parkIfInFrame's own guard.
+// A Completion cannot be settled twice -- CompletionState drops the second
+// settle before any Bridge code sees it -- so this double now pins the
+// *observable* contract ("exactly one onDone") while the guard inside
+// parkIfInFrame is no longer reachable from a backend. See the PR for morph#571.
 class DoubleFiringBackend : public AsyncRegisterBackend {
 public:
-    bool attachModelAsync(const std::string& typeId,
-                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                          morph::backend::detail::InstanceIdentity /*identity*/,
-                          morph::exec::detail::ModelId /*current*/,
-                          std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                          std::function<void(const std::string&)> /*onError*/) override {
-        auto mid = registerModel(typeId, std::move(factory));
-        onRegistered(mid);
-        onRegistered(mid);  // Contract violation: fires a second time inline.
-        return true;
+    ModelCompletion bindModel(morph::backend::detail::BindRequest request, morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = ModelCompletion::makeSettleable(&cbExec);
+        auto mid = registerModel(request.typeId, std::move(request.factory));
+        promise.resolve(mid);
+        promise.resolve(mid);  // Contract violation: settles a second time inline.
+        return std::move(completion);
     }
 };
 
@@ -440,60 +426,57 @@ public:
     void notifyBackendChanged() override { _target->notifyBackendChanged(); }
     void cancelPending(const std::exception_ptr& exc) override { _target->cancelPending(exc); }
     void setReconnectHandler(const std::function<void()>& handler) override { _target->setReconnectHandler(handler); }
-    bool registerModelAsync(const std::string& typeId,
-                            std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                            std::string_view contextKey,
-                            std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                            std::function<void(const std::string&)> onError) override {
-        return _target->registerModelAsync(typeId, std::move(factory), contextKey, std::move(onRegistered),
-                                           std::move(onError));
+    ModelCompletion bindModel(morph::backend::detail::BindRequest request, morph::exec::IExecutor& cbExec) override {
+        return _target->bindModel(std::move(request), cbExec);
     }
-    bool registerModelSharedAsync(const std::string& typeId,
-                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                                  morph::backend::detail::InstanceIdentity identity,
-                                  std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                                  std::function<void(const std::string&)> onError) override {
-        return _target->registerModelSharedAsync(typeId, std::move(factory), identity, std::move(onRegistered),
-                                                 std::move(onError));
-    }
-    bool attachModelAsync(const std::string& typeId,
-                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-                          morph::backend::detail::InstanceIdentity identity, morph::exec::detail::ModelId current,
-                          std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                          std::function<void(const std::string&)> onError) override {
-        return _target->attachModelAsync(typeId, std::move(factory), identity, current, std::move(onRegistered),
-                                         std::move(onError));
+    // Forwarded, not inherited: the wrapped backend defers every reply, so a
+    // shim that answered the default kCallerMayBlock would park
+    // registerHandlerImpl (and switchBackend's phase 1) on a completion
+    // nothing but the test can settle.
+    [[nodiscard]] morph::backend::detail::BindWait bindWaitPolicy() const noexcept override {
+        return _target->bindWaitPolicy();
     }
 
 private:
     std::shared_ptr<AsyncRegisterBackend> _target;
 };
 
-// Offers an async assignPrimary path that does not complete until the test
-// calls completeNext()/failNext() -- the assignHandlerPrimary counterpart of
+// Offers a non-blocking promote that does not complete until the test calls
+// completeNext()/failNext() -- the assignHandlerPrimary counterpart of
 // AsyncRegisterBackend above, simulating a backend (QtWebSocketBackend is the
 // one real example) whose promote-in-place reply arrives later, on its own
-// thread, instead of Bridge::assignHandlerPrimary falling back to the
-// synchronous assignPrimary. Everything else (registration, execute) is
-// delegated to a real LocalBackend so a result-keyed action's ensureBound()
-// step behaves normally; only the promotion step is deferred.
+// thread, instead of settling inside the promoteModel call. Everything else
+// (registration, execute) is delegated to a real LocalBackend so a
+// result-keyed action's ensureBound() step behaves normally; only the
+// promotion step is deferred.
 class AsyncAssignPrimaryBackend : public morph::backend::LocalBackend {
 public:
     explicit AsyncAssignPrimaryBackend(morph::exec::IExecutor& pool) : LocalBackend{pool} {}
 
-    bool assignPrimaryAsync(morph::exec::detail::ModelId mid, const std::string& typeId, std::string_view primary,
-                            std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                            std::function<void(const std::string&)> onError) override {
+    ModelCompletion promoteModel(morph::backend::detail::PromoteRequest request,
+                                 morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = ModelCompletion::makeSettleable(&cbExec);
+        auto kept = std::make_shared<ModelCompletion::Promise>(std::move(promise));
         std::scoped_lock const lock{_pendingMtx};
-        _pending.push_back(Pending{mid, typeId, std::string{primary}, std::move(onRegistered), std::move(onError)});
-        return true;
+        _pending.push_back(Pending{
+            .mid = request.mid,
+            .typeId = request.typeId,
+            .primary = request.primary,
+            .onRegistered = [kept](morph::exec::detail::ModelId mid) { kept->resolve(mid); },
+            .onError =
+                [kept](const std::string& message) {
+                    kept->reject(std::make_exception_ptr(std::runtime_error(message)));
+                },
+        });
+        return std::move(completion);
     }
 
-    // Test hooks: settle the oldest still-pending async promotion. Unlike
+    // Test hooks: settle the oldest still-pending promotion. Unlike
     // AsyncRegisterBackend::completeNext(), this does not also call the real
-    // (synchronous) assignPrimary -- assignPrimaryAsync's contract is that the
-    // backend performs the promotion itself and merely reports back, so the
-    // test double's completion is the promotion.
+    // (synchronous) assignPrimary from the reply path by accident:
+    // promoteModel's contract is that the backend performs the promotion
+    // itself and merely reports back, so the test double's completion is the
+    // promotion.
     void completeNext() {
         Pending pending;
         {
@@ -532,18 +515,18 @@ private:
     std::vector<Pending> _pending;
 };
 
-// A backend with no async registration path at all (registerModelSharedAsync
-// defaults to `return false`, so ensureBoundAsync always falls back to the
-// blocking path), whose synchronous register throws -- exercises
-// ensureBoundAsync's own fallback failure path (Task 15a finding B2), the
-// ensureBoundAsync counterpart of attachHandlerAsync's identical-shaped one.
+// A backend with no `bindModel` override at all, so `IBackend`'s default runs
+// the synchronous verb the request shape names -- and that verb throws.
+// Exercises ensureBoundAsync's own failure path (Task 15a finding B2), the
+// ensureBoundAsync counterpart of attachHandlerAsync's identical-shaped one,
+// and with it `bindModel`'s default promise of turning a throwing synchronous
+// verb into a rejection rather than a throw.
 //
 // Both verbs throw, not just registerModelShared. `ensureBoundAsync` asks for an
 // *anonymous* instance -- `registerModelShared` with an empty `primary` -- and
 // `IBackend::registerModelShared` documents that case as degrading to
 // `registerModelWithContext`; every backend in the tree implements the degrade
-// as its first statement. Since morph#568 the fallback goes through
-// `IBackend::bindModel`, whose `BindRequest` names that shape directly
+// as its first statement. `bindModelBlocking` names that shape directly
 // (`primary` empty, `current` zero) and therefore reaches
 // `registerModelWithContext`, so a double that threw only from
 // `registerModelShared` would quietly stop failing and this test would pass by
@@ -576,9 +559,9 @@ public:
     }
 };
 
-// A backend whose assignPrimaryAsync defers exactly like AsyncAssignPrimaryBackend
+// A backend whose promoteModel defers exactly like AsyncAssignPrimaryBackend
 // above, but which -- instead of relying on a test-driven completeNext() --
-// fires its one still-pending completion synchronously from inside its own
+// settles its one still-pending completion synchronously from inside its own
 // destructor. This models a backend torn down (e.g. by switchBackend()) while
 // a promotion reply is still in flight, self-reporting success as a last act
 // of teardown: exactly the shape needed to exercise assignHandlerPrimary's
@@ -600,28 +583,22 @@ public:
         if (_pending) {
             auto pending = std::move(*_pending);
             _pending.reset();
-            pending.onRegistered(pending.mid);
+            pending.promise->resolve(pending.mid);
         }
     }
 
-    bool assignPrimaryAsync(morph::exec::detail::ModelId mid, const std::string& typeId, std::string_view primary,
-                            std::function<void(morph::exec::detail::ModelId)> onRegistered,
-                            std::function<void(const std::string&)> onError) override {
-        _pending = Pending{.mid = mid,
-                           .typeId = typeId,
-                           .primary = std::string{primary},
-                           .onRegistered = std::move(onRegistered),
-                           .onError = std::move(onError)};
-        return true;
+    ModelCompletion promoteModel(morph::backend::detail::PromoteRequest request,
+                                 morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = ModelCompletion::makeSettleable(&cbExec);
+        _pending =
+            Pending{.mid = request.mid, .promise = std::make_shared<ModelCompletion::Promise>(std::move(promise))};
+        return std::move(completion);
     }
 
 private:
     struct Pending {
         morph::exec::detail::ModelId mid;
-        std::string typeId;
-        std::string primary;
-        std::function<void(morph::exec::detail::ModelId)> onRegistered;
-        std::function<void(const std::string&)> onError;
+        std::shared_ptr<ModelCompletion::Promise> promise;
     };
     std::optional<Pending> _pending;
 };
@@ -1032,11 +1009,11 @@ TEST_CASE(
     CHECK(message == "registration did not complete: the reply was discarded and 'AR_Model' is still unbound");
 }
 
-TEST_CASE("Bridge::registerHandler: falls back to the synchronous path for a backend with no async support",
+TEST_CASE("Bridge::registerHandler: binds inline for a backend with no non-blocking path",
           "[bridge][registration][issue26]") {
-    // LocalBackend does not override registerModelAsync, so the default
-    // (returns false) applies and registerHandler falls back to
-    // registerModelWithContext -- binding is bound immediately, exactly as
+    // LocalBackend does not override bindModel, so IBackend's default runs
+    // registerModelWithContext -- the verb the request's shape names -- and
+    // settles before returning. The binding is bound immediately, exactly as
     // before this feature existed.
     morph::exec::ThreadPoolExecutor pool{2};
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -1164,11 +1141,12 @@ TEST_CASE("Bridge::whenBound: multiple waiters on the same in-flight registratio
     CHECK(resolvedCount == 3);
 }
 
-// ── Issue #67: assignHandlerPrimary prefers IBackend::assignPrimaryAsync ────
+// ── Issue #67: assignHandlerPrimary goes through IBackend::promoteModel ────
 //
 // A result-keyed action's execute() calls ensureBound() then, once the reply
-// names the key, assignHandlerPrimary(). When the backend offers
-// assignPrimaryAsync, Bridge::assignHandlerPrimary must send the request and
+// names the key, assignHandlerPrimary(). When the backend settles its
+// promoteModel completion later, Bridge::assignHandlerPrimary must send the
+// request and
 // return without blocking, publish binding->primary/contextKey only once the
 // (possibly deferred) reply confirms it, and guard a stale reply the same way
 // registerHandlerImpl's async callback does (Bridge/binding gone, or a
@@ -1195,7 +1173,7 @@ TEST_CASE("Bridge::assignHandlerPrimary: uses the async path when the backend of
     // The promotion reply has not arrived yet: the handler already has an
     // anonymous instance (ensureBound ran synchronously against LocalBackend),
     // so the action itself has already executed and resolved -- but the
-    // promotion is what assignPrimaryAsync defers, not the execute() call.
+    // promotion is what promoteModel defers, not the execute() call.
     REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
     REQUIRE(created.has_value());
     REQUIRE(rawBackend->pendingCount() == 1);
@@ -1347,7 +1325,7 @@ TEST_CASE("Bridge::assignHandlerPrimary: a never-attached binding (currentId sti
     // arm of the early-return guard (raw == 0U || primary.empty() ||
     // !binding->primary.empty()) is otherwise never driven true. A handler
     // that has never attached anything yet has no instance to promote a key
-    // onto, so this must return immediately: no assignPrimaryAsync dispatch,
+    // onto, so this must return immediately: no promoteModel dispatch,
     // no pendingCount bump.
     morph::exec::ThreadPoolExecutor pool{2};
     auto backend = std::make_unique<AsyncAssignPrimaryBackend>(pool);
@@ -1544,9 +1522,10 @@ TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registr
 }
 
 // ---------------------------------------------------------------------------
-// Shared/keyed registration: registerModelSharedAsync + attachModelAsync.
+// Shared/keyed registration: the register-or-attach and re-point request
+// shapes of bindModel.
 //
-// Same opt-in/fallback contract as registerModelAsync above, reached through
+// Same deferred-reply contract as the private bind above, reached through
 // Bridge::attachHandlerAsync (payload-keyed actions) and
 // Bridge::ensureBoundAsync (result-keyed ones), both of which BridgeHandler's
 // execute() now routes its keyed dispatches through. execute()'s own contract
@@ -1557,7 +1536,7 @@ TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registr
 using morph::bridge::AllowShared;
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("Bridge prefers attachModelAsync over the synchronous attachModel when the backend offers it",
+TEST_CASE("Bridge dispatches a re-point bindModel rather than the synchronous attachModel",
           "[bridge][registration][shared-instances][issue26]") {
     SyncExec cbExec;
     auto backend = std::make_unique<AsyncRegisterBackend>();
@@ -1589,12 +1568,11 @@ TEST_CASE("Bridge prefers attachModelAsync over the synchronous attachModel when
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("A backend with no async attach path falls back to the synchronous attachModel unchanged",
+TEST_CASE("A backend with no non-blocking bind runs the synchronous attachModel unchanged",
           "[bridge][registration][shared-instances][issue26]") {
-    // LocalBackend overrides neither attachModelAsync nor
-    // registerModelSharedAsync, so IBackend's defaults (returning false) apply
-    // and the keyed execute() runs the identical synchronous attach it always
-    // has -- bound before the dispatch, on this thread.
+    // LocalBackend does not override bindModel, so IBackend's default routes
+    // the re-point request shape to the identical synchronous attach it always
+    // has -- bound before the dispatch returns, on this thread.
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -1625,7 +1603,7 @@ TEST_CASE("A backend with no async attach path falls back to the synchronous att
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE(
-    "attachModelAsync's onError path surfaces through the returned Completion's onError, matching the synchronous "
+    "a rejected re-point bindModel surfaces through the returned Completion's onError, matching the synchronous "
     "path's documented contract",
     "[bridge][registration][shared-instances][issue26]") {
     SyncExec cbExec;
@@ -1661,7 +1639,7 @@ TEST_CASE(
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("A backend that completes attachModelAsync inline does not deadlock and resolves normally",
+TEST_CASE("A backend that settles a re-point bindModel inline does not deadlock and resolves normally",
           "[bridge][registration][shared-instances][issue26]") {
     // Regression guard for the inline-completion hole: attachHandlerAsync
     // dispatches under _attachMtx, and its success callback re-acquires that
@@ -1689,7 +1667,7 @@ TEST_CASE("A backend that completes attachModelAsync inline does not deadlock an
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("A backend that completes registerModelSharedAsync inline still promotes a result-keyed action",
+TEST_CASE("A backend that settles a register-or-attach bindModel inline still promotes a result-keyed action",
           "[bridge][registration][shared-instances][issue26]") {
     // The sharpest form of the same hole: an inline bind runs onDone -- i.e.
     // the whole dispatch -- inside ensureBoundAsync's frame, and a result-keyed
@@ -1717,8 +1695,8 @@ TEST_CASE("A backend that completes registerModelSharedAsync inline still promot
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("A backend that reports its async attach failure inline surfaces it through onError, exactly once",
           "[bridge][registration][shared-instances][issue26]") {
-    // QtWebSocketBackend's !_connected branch, in miniature: onError invoked
-    // synchronously from inside attachModelAsync, which then returns true.
+    // QtWebSocketBackend's !_connected branch, in miniature: the completion
+    // rejected synchronously from inside bindModel itself.
     SyncExec cbExec;
     auto backend = std::make_unique<InlineCompletingBackend>(std::optional<std::string>{"disconnected"});
     morph::bridge::Bridge bridge{std::move(backend)};
@@ -1748,7 +1726,7 @@ TEST_CASE("A backend that reports its async attach failure inline surfaces it th
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("ensureBoundAsync mirrors the same three cases for a result-keyed (creating) action",
           "[bridge][registration][shared-instances][issue26]") {
-    SECTION("prefers registerModelSharedAsync when the backend offers it") {
+    SECTION("dispatches a register-or-attach bindModel that settles later") {
         SyncExec cbExec;
         auto backend = std::make_unique<AsyncRegisterBackend>();
         auto* rawBackend = backend.get();
@@ -1797,7 +1775,7 @@ TEST_CASE("ensureBoundAsync mirrors the same three cases for a result-keyed (cre
         CHECK(handler.primary().value_or(-1) == 4242);
     }
 
-    SECTION("surfaces registerModelSharedAsync's onError through the returned Completion") {
+    SECTION("surfaces a rejected register-or-attach bindModel through the returned Completion") {
         SyncExec cbExec;
         auto backend = std::make_unique<AsyncRegisterBackend>();
         auto* rawBackend = backend.get();
@@ -1845,7 +1823,7 @@ TEST_CASE("attachHandlerAsync reports a synchronously-throwing dispatch call thr
                             }
                         }));
 
-    CHECK(message == "attachModelAsync dispatch failed");
+    CHECK(message == "bindModel keyed dispatch failed");
     CHECK_FALSE(succeeded.load());
     CHECK_FALSE(handler.primary().has_value());
 }
@@ -1868,7 +1846,7 @@ TEST_CASE("ensureBoundAsync reports a synchronously-throwing dispatch call throu
                             }
                         }));
 
-    CHECK(message == "registerModelSharedAsync dispatch failed");
+    CHECK(message == "bindModel anonymous dispatch failed");
     CHECK_FALSE(succeeded.load());
     CHECK_FALSE(handler.primary().has_value());
 }
@@ -1877,13 +1855,12 @@ TEST_CASE(
     "ensureBoundAsync's synchronous fallback surfaces a real registerModelShared throw through onDone "
     "(Task 15a finding B2)",
     "[bridge][registration][issue26]") {
-    // Distinct from the test above: ThrowingDispatchBackend's throw comes from
-    // the legacy ASYNC dispatch entry point itself (registerModelSharedAsync),
-    // before any fallback is even considered, and is caught by
-    // ensureBoundAsync's `catch (...)`. ThrowingSyncRegisterSharedBackend
-    // instead offers no async path at all (registerModelSharedAsync's default
-    // `return false`), so ensureBoundAsync falls through to `bindModel`, whose
-    // default runs the blocking register from inside the call. That throw is
+    // Distinct from the test above: ThrowingDispatchBackend's throw comes out
+    // of the `bindModel` *dispatch call* itself, before any completion exists,
+    // and is caught by ensureBoundAsync's `catch (...)`.
+    // ThrowingSyncRegisterSharedBackend instead does not override `bindModel`
+    // at all, so `IBackend`'s default runs the blocking register from inside
+    // the call. That throw is
     // turned into a rejection by `IBackend::bindModel` rather than propagating
     // -- one failure channel, the returned `Completion` -- and must still reach
     // @p onDone, with the original exception rather than a stringified one.
@@ -1977,7 +1954,7 @@ TEST_CASE("ensureBoundAsync's out-of-frame success callback is a no-op once the 
     bridge.reset();
 
     REQUIRE_NOTHROW(sharedBackend->completeNext());
-    SUCCEED("completing a registerModelSharedAsync reply after the Bridge and handler are both gone did not crash");
+    SUCCEED("completing a register-or-attach bind reply after the Bridge and handler are both gone did not crash");
 }
 
 TEST_CASE("ensureBoundAsync's out-of-frame success callback tolerates the BridgeHandler being gone",
@@ -1998,7 +1975,7 @@ TEST_CASE("ensureBoundAsync's out-of-frame success callback tolerates the Bridge
     handler.reset();
 
     REQUIRE_NOTHROW(rawBackend->completeNext());
-    SUCCEED("completing a registerModelSharedAsync reply after the BridgeHandler is gone did not crash");
+    SUCCEED("completing a register-or-attach bind reply after the BridgeHandler is gone did not crash");
 }
 
 TEST_CASE("ensureBound is a no-op when the binding already has an instance",
@@ -2078,8 +2055,8 @@ TEST_CASE(
 
 TEST_CASE("ensureBoundAsync's onError path is a no-op once the dispatching frame already claimed the outcome",
           "[bridge][registration][shared-instances][issue26]") {
-    // Mirrors attachModelAsync's identical inline-failure test above, for
-    // registerModelSharedAsync: onError invoked synchronously from inside the
+    // Mirrors the re-point shape's identical inline-failure test above, for
+    // the register-or-attach shape: the completion rejected from inside the
     // dispatch call (which then returns true) exercises the parkIfInFrame
     // no-op inside ensureBoundAsync's error callback, not just its success one.
     SyncExec cbExec;
@@ -2137,7 +2114,7 @@ TEST_CASE("execute() surfaces a throwing ActionKeyTraits::key() through onError 
 
 TEST_CASE("attachHandlerAsync reports exactly once even when the backend fires its callback twice inline",
           "[bridge][registration][shared-instances][issue26]") {
-    // DoubleFiringBackend violates attachModelAsync's documented one-callback
+    // DoubleFiringBackend violates bindModel's documented one-settle
     // contract on purpose: detail::parkIfInFrame's `handoff.fired` guard must
     // swallow the second, already-claimed callback rather than letting
     // attachHandlerAsync invoke onDone (and, downstream, publish the binding)
@@ -2215,7 +2192,7 @@ TEST_CASE("ensureBoundAsync's out-of-frame success callback is a genuine no-op o
     REQUIRE(weakBinding.expired());
 
     REQUIRE_NOTHROW(rawBackend->completeNext());
-    SUCCEED("completing a registerModelSharedAsync reply after the binding itself is gone did not crash");
+    SUCCEED("completing a register-or-attach bind reply after the binding itself is gone did not crash");
 }
 
 // ---------------------------------------------------------------------------
@@ -2307,8 +2284,8 @@ TEST_CASE(
 }
 
 // attachHandlerAsync's in-frame claimHandoff success path (binding->
-// contextKey = primaryCopy, reached when a backend's attachModelAsync
-// completes synchronously -- see InlineCompletingBackend above) has the
+// contextKey = primaryCopy, reached when a backend settles its re-point
+// bindModel synchronously -- see InlineCompletingBackend above) has the
 // identical shape of catch (...) as the out-of-frame callback the test above
 // targets, and is deliberately NOT given its own forced-OOM test: the whole
 // call happens in one stack, so several of attachHandlerAsync's own earlier

@@ -153,8 +153,8 @@ expect_caught "a citation naming a markdown file that does not resolve" \
 # *spec* renames the section, exactly as a spec edit would, and every citation
 # of it must go dangling.
 expect_caught "a spec renaming a section its code comments cite" \
-    "edit docs/spec/core/backend.md -e 's/^## Asynchronous registration .*\$/## Async registration — \`registerModelAsync\`/'" \
-    'has no section "Asynchronous registration"'
+    "edit docs/spec/core/backend.md -e 's/^## Why registration needs a non-blocking path\$/## Why registration needs a nonblocking path/'" \
+    'has no section "Why registration needs a non-blocking path"'
 
 # Vacuity guard on the scan itself. A stale glob here would leave the check
 # reporting green having verified nothing -- the exact failure mode that let

@@ -86,7 +86,7 @@ the `ModelId` value the active backend assigned; 0 = unbound.
 The last three fields are the state behind
 [`isBound()` / `whenBound()`](#registration-readiness--isbound--whenbound).
 `registrationInFlight` is `true` from just *before* `registerHandlerImpl` calls
-`IBackend::registerModelAsync` until the resulting `onRegistered`/`onError`
+`IBackend::bindModel` until the resulting `Completion`
 callback resolves. It is set unconditionally on every path, the synchronous
 fallback included — that fallback does not *leave* it set, because it resolves
 the waiters and clears the flag before returning; `registrationWaiters` holds the callbacks queued while it is.
@@ -138,8 +138,10 @@ abort the page. Three consequences:
 backend. Returns the `shared_ptr<HandlerBinding>`. An overload accepts a
 pre-built binding (for dependency injection, custom `contextKey`, or custom
 factory captures). Both funnel through a shared `registerHandlerImpl`, which
-prefers the backend's `IBackend::registerModelAsync` when it offers one (see
-`backend.md`, "Asynchronous registration") and falls back to the synchronous
+dispatches `IBackend::bindModel` (see
+`backend.md`, "The structural registration surface") and waits for it only when
+the backend says it may — otherwise it returns unbound, exactly as the removed
+non-blocking twin's caller did. It no longer falls back to the synchronous
 `registerModelWithContext` otherwise — the returned binding may therefore come
 back **unbound** (`currentId == 0`) if the backend registered asynchronously
 and the reply has not arrived yet.
@@ -526,10 +528,10 @@ subscription.
 
 ## Registration readiness — `isBound()` / `whenBound()`
 
-A handler built over a backend that offers `registerModelAsync` comes back
+A handler built over a backend that answers `BindWait::kCallerMustNotBlock` comes back
 **unbound**: `registerHandlerImpl` returns as soon as the request is sent, and
 `currentId` stays `0` until the reply arrives (`backend.md`,
-["Asynchronous registration"](backend.md#asynchronous-registration--registermodelasync)).
+["Why registration needs a non-blocking path"](backend.md#why-registration-needs-a-non-blocking-path)).
 `executeVia` fails fast with `"handler not bound"` for anything dispatched in
 that window. The window is unavoidable — it is a network round trip — so the
 contract this pair provides is not that it can be closed, but that a caller can
@@ -580,14 +582,14 @@ implementation would be wrong:
 
 - **`registrationInFlight` is set *before* the backend call, not after.** No
   backend documented here invokes `onRegistered` synchronously from inside
-  `registerModelAsync`, but one could; setting the flag afterwards would leave
+  a non-blocking bind, but one could; setting the flag afterwards would leave
   a window in which the registration has already resolved while a concurrent
   `whenBound()` still reads "nothing in flight" and answers `false`.
 - **`whenBound()` re-checks `isBound()` under `registrationMtx` after its
   lock-free check.** The resolving callback binds the id and settles the
   waiters as two steps; a caller landing between them would otherwise queue a
   waiter onto a list that has already been drained, and wait forever.
-- **The synchronous fallback settles waiters too.** When `registerModelAsync`
+- **A bind that settles inline settles waiters too.** When `bindModel`
   returns `false` and `registerHandlerImpl` falls back to
   `registerModelWithContext`, it routes through the same
   `resolveRegistrationWaiters` rather than clearing the flag directly — a
@@ -823,7 +825,7 @@ calling `registerHandler()`, and do not mutate it concurrently with that call.**
 Afterwards the ordinary `_attachMtx` rule applies. See morph#505.
 
 The guarantee is unconditional, including for a backend that completes its
-`attachModelAsync`/`registerModelSharedAsync` callback **inline** — from inside
+`bindModel` completion **inline** — from inside
 the dispatch call itself, while the dispatching frame still holds `_attachMtx`
 (`QtWebSocketBackend` does exactly this on its `!_connected` error branch).
 Such a callback does not act: it parks its outcome in a
@@ -948,7 +950,7 @@ make teardown order-independent.)
 |---|---|---|
 | ctor | `explicit Bridge(unique_ptr<IBackend>)` | Installs reconnect handler on the backend, then pushes the (initially empty) default session via `setSession`. |
 | dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
-| `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. Prefers `IBackend::registerModelAsync`; see `backend.md`. |
+| `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. Dispatches `IBackend::bindModel`; see `backend.md`. |
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
 | `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Pushes the current default session onto the new backend via `setSession` before staging. Stages all re-registrations through `bindModel` on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Atomic exactly when the new backend answers `kCallerMayBlock`; a `kCallerMustNotBlock` backend's binds are deferred and the switch is not all-or-nothing (see above). Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its staging and commit, and resolves `whenBound()` waiters after releasing them. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
@@ -993,7 +995,7 @@ make teardown order-independent.)
 | `contextKey` | `string` | Stable identity for remote backends (optional, empty by default). |
 | `currentId` | `atomic<uint64_t>` | Backend-assigned model id; 0 = unbound. Read lock-free by `isBound()`. |
 | `registrationMtx` | `mutex` | Guards the two fields below. The binding's own lock, not `Bridge::_mtx`/`_attachMtx`: it is taken from the backend's reply-delivering thread as well as the registering one. |
-| `registrationInFlight` | `bool` | `true` from just before `registerModelAsync` is called until its callback settles. The synchronous fallback path never leaves it set. |
+| `registrationInFlight` | `bool` | `true` from just before `bindModel` is dispatched until its completion settles. A bind that settles inside the call never leaves it set. |
 | `registrationWaiters` | `vector<pair<function<void(bool)>, function<void(exception_ptr)>>>` | `whenBound()` callbacks queued while a registration is in flight; invoked and cleared exactly once, by the same call that clears `registrationInFlight`. |
 
 ## Design decisions

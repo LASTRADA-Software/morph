@@ -318,31 +318,37 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   contract, but still a span a `BridgeLifetime` gate must not cover. So the
   site stays on `liveness()`, and the residual scope of issue #489 stays
   open.
-- **The `*Async` reply callbacks** — `attachHandlerAsync`, `ensureBoundAsync`
-  and `assignHandlerPrimary`, three of the four `IBackend` async hooks. (The
-  fourth, `registerHandlerImpl`, is covered by the `BridgeLifetime` bullet
-  above and is not one of these.) Each of the three keeps a
-  `CallbackToken::active()` check and then takes `_attachMtx` and calls
-  `loadBackend()`, so the two-step shape is present in the source. What closes
-  the window is not a gate but a contract on the backend:
-  `IBackend::registerModelAsync`'s doc comment states that a backend
-  overriding any `*Async` hook must deliver its callbacks on a thread from
-  which `~Bridge` cannot run concurrently. Since morph#568 **no backend
-  overrides them**: each of the three sites now reaches
-  `IBackend::bindModel`/`promoteModel` instead, naming
-  `exec::detail::inlineExecutor()` as the delivery executor. That reproduces the
-  old delivery thread exactly — the continuation runs wherever the backend
-  settled — so the window is unchanged, and `QtWebSocketBackend` is still safe
-  for the same reason it was: it must itself be used from the Qt event loop
-  thread, and settles every reply from `onTextMessage` on that same thread, so
-  the check and the use cannot straddle a destructor. Gating these instead would
-  make `~Bridge` block behind `_attachMtx`, which the synchronous
-  `attachHandler` holds across a full `attachModel` round trip — the same shape
-  of objection that rules a gate out for the reconnect handler. **The safety
-  here is therefore conditional on a documented contract, not on `Bridge`
-  alone**: a future backend delivering these replies on its own transport
-  thread would reopen morph#486's use-after-free, and that is a contract break
-  rather than a latent race to be rediscovered.
+- **The bind/promote reply continuations** — `attachHandlerAsync`,
+  `ensureBoundAsync` and `assignHandlerPrimary`. (The fourth registration site,
+  `registerHandlerImpl`, is covered by the `BridgeLifetime` bullet above and is
+  not one of these.) Each of the three keeps a `CallbackToken::active()` check
+  and then takes `_attachMtx` and calls `loadBackend()`, so the two-step shape
+  is present in the source. What closes the window is not a gate but the thread
+  the continuation is delivered on.
+
+  Until morph#571 that thread was a **contract on the backend**, stated in the
+  `*Async` twins' doc comments: a backend overriding one had to deliver its
+  callbacks from a thread on which `~Bridge` could not run concurrently.
+  morph#568 moved every site onto `IBackend::bindModel`/`promoteModel` and
+  morph#571 deleted the twins, so there is no such contract left to state — but
+  the three sites name `exec::detail::inlineExecutor()` as the delivery
+  executor, which reproduces the old delivery thread exactly: the continuation
+  runs wherever the backend settled. **The window is therefore unchanged, not
+  closed.** `QtWebSocketBackend` is still safe for the reason it always was: it
+  must itself be used from the Qt event loop thread and settles every reply
+  from `onTextMessage` on that same thread, so the check and the use cannot
+  straddle a destructor. Gating these instead would make `~Bridge` block behind
+  `_attachMtx`, which the synchronous `attachHandler` holds across a full
+  `attachModel` round trip — the same shape of objection that rules a gate out
+  for the reconnect handler.
+
+  **What changed with the removal is who could get it wrong, not whether it can
+  be wrong.** A backend that settles a `bindModel` completion on its own
+  transport thread would still reopen morph#486's use-after-free here; the
+  difference is that the delivery thread is now a value one call site produces
+  rather than an obligation on fifteen backend authors, so closing it is a
+  change in one place. That change — giving `Bridge` an executor of its own —
+  is morph#588 and has not been made.
 
   The structural surface that replaces these four hooks —
   `IBackend::bindModel`/`promoteModel` — takes the executor the continuation is

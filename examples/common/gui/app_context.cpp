@@ -24,9 +24,9 @@ AppContext::AppContext(Mode mode) {
     auto& remote = std::get<Remote>(mode);
     // asyncRegistrationEnabled: the synchronous registerModel path nests a
     // QEventLoop, which aborts a WASM page outright (`examples/TESTING.md`,
-    // "WASM reality"). Registering before the socket connects now queues and
-    // retries once it does (`docs/spec/core/backend.md`,
-    // "Asynchronous registration"), but this class still defers via
+    // "WASM reality"). A private bind issued before the socket connects is
+    // queued and sent once it does (`docs/spec/core/backend.md`,
+    // "Why registration needs a non-blocking path"), but this class still defers via
     // setConnectHandler below rather than registering immediately — simpler
     // to reason about than relying on the queue, and what makes the
     // readiness contract in this class's doc comment necessary.
