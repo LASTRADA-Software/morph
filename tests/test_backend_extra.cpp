@@ -3,6 +3,9 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <exception>
+#include <functional>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -298,4 +301,114 @@ TEST_CASE("morph::backend::LocalBackend: one execute produces exactly one beginS
     REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
     REQUIRE(beginCalls.load() == 1);
     REQUIRE(endCalls.load() == 1);
+}
+
+// ── morph::backend::LocalBackend: amortised pending-list compaction (morph#528) ────────────────
+
+namespace {
+
+/// Builds an `ActionCall` whose local op is @p op — the two morph#528 cases
+/// below differ only in that op.
+morph::backend::detail::ActionCall pendingCall(std::function<void()> op) {
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "BE_CounterModel";
+    call.actionTypeId = "BE_CounterAction";
+    call.localOp = [op = std::move(op)](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> {
+        op();
+        return {};
+    };
+    return call;
+}
+
+}  // namespace
+
+// Two properties of `trackPending`'s amortised sweep, in one fixture because
+// they are the two halves of the same trade: the sweep must run often enough to
+// bound the list, and must never take a live entry with it.
+//
+//  1. **The list stays bounded.** Compaction reclaims dead entries, so a backend
+//     that has admitted thousands of since-settled calls does not carry
+//     thousands of dead `weak_ptr`s. Mutating `trackPending` to never sweep
+//     (drop the `_pending.size() >= _compactAt` branch) leaves ~3k entries
+//     against the bound asserted below, and fails here.
+//  2. **`cancelPending` still reaches every live completion.** Dead entries
+//     linger between sweeps, so this is the property the optimisation could
+//     plausibly break. Mutating the sweep predicate to `true` (erase
+//     everything, not just the expired) drops the parked completions and fails
+//     here.
+//
+// What this does *not* assert is admission latency — the reason the sweep was
+// made amortised in the first place. That is measured by a benchmark, not by a
+// test; a wall-clock assertion on a shared CI runner would be a flake, not
+// evidence. The morph#528 numbers are recorded in docs/spec/core/backend.md.
+TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the list and keeps cancelPending whole",
+          "[backend][local][pending]") {
+    morph::exec::ThreadPoolExecutor pool{4};
+    SyncExecutor cbExec;
+    morph::backend::LocalBackend backend{pool};
+
+    // Two instances, so the parked one's strand cannot hold up the churning one.
+    auto parked = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+    auto churner = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+
+    constexpr int kRounds = 48;
+    constexpr int kChurnPerRound = 64;  // 3072 admissions that settle and are dropped
+
+    std::atomic<bool> gate{false};
+    std::atomic<int> churnSettled{0};
+    std::vector<morph::async::Completion<std::shared_ptr<void>>> live;
+    std::atomic<int> cancelled{0};
+
+    for (int round = 0; round < kRounds; ++round) {
+        // One completion that parks on the gate and so stays live in `_pending`.
+        live.push_back(backend.execute(parked, pendingCall([&gate] {
+                                           while (!gate.load(std::memory_order_acquire)) {
+                                               std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                                           }
+                                       }),
+                                       &cbExec));
+        live.back().onError([&cancelled](const std::exception_ptr& exc) {
+            try {
+                std::rethrow_exception(exc);
+            } catch (const morph::backend::BackendChangedError&) {
+                cancelled.fetch_add(1, std::memory_order_relaxed);
+            } catch (...) {  // NOLINT(bugprone-empty-catch)
+            }
+        });
+
+        // A batch that settles and is then dropped, leaving dead entries behind
+        // for the next sweep to reclaim.
+        std::vector<morph::async::Completion<std::shared_ptr<void>>> churn;
+        churn.reserve(kChurnPerRound);
+        int const target = churnSettled.load(std::memory_order_relaxed) + kChurnPerRound;
+        for (int i = 0; i < kChurnPerRound; ++i) {
+            churn.push_back(backend.execute(
+                churner, pendingCall([&churnSettled] { churnSettled.fetch_add(1, std::memory_order_relaxed); }),
+                nullptr));
+        }
+        REQUIRE(morph::testing::waitUntil([&] { return churnSettled.load(std::memory_order_relaxed) >= target; },
+                                          std::chrono::milliseconds{5000}, std::chrono::milliseconds{1}));
+        churn.clear();
+    }
+
+    // Property 1. The exact steady-state size depends on how promptly the strand
+    // releases each settled task's captured state, so the bound is deliberately
+    // loose — it only has to sit well below the 3120 entries an uncompacted list
+    // would hold, and it does.
+    auto const tracked = backend.trackedPendingCount();
+    INFO("tracked=" << tracked << " admitted=" << (kRounds * (kChurnPerRound + 1)));
+    CHECK(tracked < 1024);
+
+    // Property 2. Every parked completion, admitted across every sweep, is still
+    // reachable. `cbExec` is inline, so the handlers have all run by the time
+    // `cancelPending` returns.
+    backend.cancelPending(std::make_exception_ptr(morph::backend::BackendChangedError{}));
+    auto const cancelledCount = cancelled.load(std::memory_order_relaxed);
+
+    // Release the parked op before any assertion can abandon the fixture:
+    // ~StrandExecutor blocks until the running task returns.
+    gate.store(true, std::memory_order_release);
+    live.clear();
+
+    CHECK(cancelledCount == kRounds);
 }

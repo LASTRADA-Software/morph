@@ -517,7 +517,8 @@ there, rather than once per backend.
   `beginSpan`/`endSpan` around `localOp` — see [observability.md](observability.md).
   Both `registerModel` and `deregisterModel` emit `registerCount`/`deregisterCount`.
 - `cancelPending` — snapshots the pending list under the pending mutex, delivers
-  `exc` to every still-live state.
+  `exc` to every still-live state, and re-arms the compaction threshold. See
+  [The pending list and its amortised compaction](#the-pending-list-and-its-amortised-compaction).
 - `notifyBackendChanged` — under `_regMtx`, looks up only the models recorded in
   `_changeAware` (populated at registration from
   `IModelHolder::isBackendChangeAware()` — a compile-time answer per model type,
@@ -532,6 +533,58 @@ there, rather than once per backend.
 
 Each model instance gets its own strand so actions are serialised per-model
 without a global lock on the pool.
+
+### The pending list and its amortised compaction
+
+`_pending` is a `vector<weak_ptr<CompletionState<shared_ptr<void>>>>` guarded by
+`_pendingMtx`. It exists for exactly one reader — `cancelPending`, which swaps it
+out and fails everything still live on a backend swap or a `~Bridge`. Nothing
+else consults it, and nothing unlinks from it when a completion settles: an entry
+simply becomes a dead `weak_ptr` that `cancelPending`'s `weak.lock()` skips.
+
+Dead entries therefore have to be reclaimed by a sweep, and the question is only
+how often. Sweeping on **every** `execute`, as `trackPending` did before
+morph#528, makes admitting one call cost one atomic `weak_ptr::expired()` load
+per entry already in the list, under the mutex, before any work starts — so a
+burst of *n* costs O(n²). Measured against one parked model on an 8-core Linux
+box (clang 22.1.8, `-O2`), timing only the `execute()` calls themselves:
+
+| queued executes | total admission time | mean per admission | mean over the last 10% |
+|---|---|---|---|
+| 1 000 | 0.59 ms | 0.59 µs | 0.82 µs |
+| 4 000 | 5.01 ms | 1.25 µs | 2.19 µs |
+| 16 000 | 77.8 ms | 4.86 µs | 9.57 µs |
+| 32 000 | 362 ms | 11.3 µs | 24.1 µs |
+
+Total time quadruples per doubling of *n* and the per-admission cost doubles —
+the O(n²)/O(n) pair, not an artefact of some constant.
+
+The sweep is now **amortised**: `trackPending` sweeps only when `_pending.size()`
+reaches `_compactAt`, and each sweep re-arms `_compactAt` at twice the number of
+entries that survived it (floor 32, below which sweeping costs more than it
+reclaims). A sweep costs O(size) and at least `_compactAt / 2` appends must
+happen before the next one, so admission is amortised O(1) at any depth. On the
+same benchmark the 32 000-execute case drops from 362 ms to 7.6 ms — within noise
+of the 7.6 ms measured with the sweep deleted outright, so what is left is the
+`make_shared`, the registry lookup and the strand post, not the sweep.
+
+Two properties are the price and the guarantee:
+
+- **Memory.** The list is bounded at twice the live count plus the floor, rather
+  than at exactly the live count. `trackedPendingCount()` makes that observable;
+  the fixture in `tests/test_backend_extra.cpp` drives 3 072 settled-and-dropped
+  admissions past 48 parked ones and measures 112 entries left, against the 3 120
+  an uncompacted list would hold.
+- **`cancelPending` is unchanged.** It never saw dead entries in the first place
+  — `weak.lock()` has always skipped them — so carrying them for longer changes
+  nothing it observes. Every live state admitted across every sweep is still
+  reached, which is what the same fixture's second assertion checks. `cancelPending`
+  also resets `_compactAt` to the floor, since it has just emptied the list.
+
+What is **not** guarded by a test is the admission latency itself: a wall-clock
+assertion on a shared CI runner would be a flake rather than evidence, so the
+numbers above come from a benchmark and the test guards only the bound and the
+cancellation.
 
 ## `RemoteServer` — server-side message handler
 
@@ -1953,7 +2006,8 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `deregisterModel(mid)` | Releases one attachment through `_instances` under `_regMtx`; erases from `_changeAware` when that destroys the instance. |
 | `notifyBackendChanged()` | Looks up the models recorded in `_changeAware` under `_regMtx`, then posts `onBackendChanged()` (the `IModelHolder` base virtual — no `dynamic_cast`) onto each such model's strand (outside the lock). Cost is O(change-aware models). |
 | `execute(mid, call, cbExec)` | Posts `call.localOp` on the model's strand with `ScopedContext`. Returns a `Completion`. |
-| `cancelPending(exc)` | Snapshots `_pending`, delivers `exc` to each live state. |
+| `cancelPending(exc)` | Snapshots `_pending`, delivers `exc` to each live state, and re-arms the compaction threshold. |
+| `trackedPendingCount()` | `[[nodiscard]] std::size_t trackedPendingCount() const` — size of `_pending` under `_pendingMtx`. **Not** the in-flight count: between sweeps the list also holds entries whose state is already destroyed. An upper bound on in-flight, and the observable that makes [the compaction policy](#the-pending-list-and-its-amortised-compaction)'s memory cost measurable. For in-flight *calls*, use `Bridge::pendingCalls()`. |
 
 ### `RemoteServer`
 
@@ -2097,6 +2151,7 @@ not a behavior change to the existing loopback-only default.
 | `handleInline` | Synchronous; caller-restricted to control messages | Safe to call from a worker-pool thread (e.g. from a `BridgeHandler` constructor). It is meant for `register`/`deregister` only; an `execute` envelope is rejected with an `err` reply, because `dispatchExecute` posts to the strand and would reply after `handleInline` returns (writing into an already-destroyed reply buffer). The rejection is now enforced by the code, matching the documented intent. |
 | `SimulatedRemoteBackend` factory ignored | Model construction delegated to `RemoteServer`'s `ModelRegistryFactory` | The factory closure lives on the client side; the server owns the actual instances. |
 | `cancelPending` snapshots | Weak-ptr snapshot under lock, then resolves outside | Avoids holding the lock while delivering exceptions to each state, preventing deadlock if a callback re-enters the backend. |
+| `_pending` compacted amortised, not intrusively | Sweep when `size() >= _compactAt`, re-arm at twice the survivors | The alternative considered in morph#528 was intrusive: give `CompletionState` a slot index and unlink on settle, making both registration and removal O(1) with no sweep at all. Rejected. It pushes a back-reference to the backend's table into a type shared by every backend, and puts a `_pendingMtx` acquisition on the settle path of every completion — turning a cost paid once per burst into contention paid by every strand thread on every result, on the exact path morph#579's value-handling contract just fixed. The amortised sweep buys the same O(1) admission for one `size_t` of state confined to `LocalBackend`, at the cost of a list bounded at 2× the live count instead of exactly it. |
 | `setReconnectHandler` | Default no-op | Only backends with a transport layer (e.g. `QtWebSocketBackend`) need to react to reconnects. `LocalBackend` and `SimulatedRemoteBackend` never invoke it. |
 | `setConnectHandler`/`setDisconnectHandler` on `IBackend`, not only `QtWebSocketBackend` | Same no-op-default pattern as `setReconnectHandler` | Connection state is a property of any transport-backed backend; a UI observing it shouldn't have to downcast to a concrete backend type. A purely local backend has no meaningful connection state, so the base-class hook is simply inert for it — no behavior change, matching the existing `setReconnectHandler` precedent exactly. |
 | `setDisconnectHandler` fires before reconnect scheduling | Ordering choice, not incidental | An instant successful reconnect must not look, from an observer's perspective, like nothing happened — the disconnected state must be visible even when the very next thing that happens is a fresh `connected`. |

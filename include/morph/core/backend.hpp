@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -1345,12 +1347,27 @@ public:
         {
             std::scoped_lock const lock{_pendingMtx};
             snapshot.swap(_pending);
+            _compactAt = kPendingCompactFloor;
         }
         for (auto& weak : snapshot) {
             if (auto state = weak.lock()) {
                 state->setException(exc);
             }
         }
+    }
+
+    /// @brief Number of entries currently held in the pending list.
+    ///
+    /// **Not** the number of calls in flight: the list is compacted amortised
+    /// (see `trackPending`), so it also carries entries whose completion has
+    /// already been destroyed and which `cancelPending` would skip. It is an
+    /// upper bound on the in-flight count and a direct measure of what the
+    /// compaction policy costs in memory — which is what it exists to make
+    /// observable. For a count of in-flight *calls*, use `Bridge::pendingCalls()`.
+    /// @return Size of the pending list, live and dead entries alike.
+    [[nodiscard]] std::size_t trackedPendingCount() const {
+        std::scoped_lock const lock{_pendingMtx};
+        return _pending.size();
     }
 
 private:
@@ -1389,9 +1406,34 @@ private:
         return {mid, std::move(holder)};
     }
 
+    /// @brief Records @p state in the pending list, compacting it amortised-O(1).
+    ///
+    /// The list is append-only between compactions; dead entries are swept only
+    /// when its size reaches `_compactAt`, which each sweep re-arms at twice the
+    /// number of entries that survived it. Doubling the threshold off the live
+    /// count is what makes the sweep amortised: a sweep costs O(size), and at
+    /// least `_compactAt / 2` appends must happen before the next one, so the
+    /// per-append cost is O(1) however deep the queue gets. The list is
+    /// correspondingly bounded at twice the live count (plus the floor), which
+    /// is the whole price of dropping the per-dispatch scan.
+    ///
+    /// Before morph#528 this swept on *every* append, so admitting one call with
+    /// `n` in flight cost `n` atomic `weak_ptr::expired()` loads under
+    /// `_pendingMtx` and a burst of `n` cost O(n²) — measured at 362ms of pure
+    /// admission time for 32k queued executes against one slow model, against
+    /// 7.6ms without the sweep.
+    ///
+    /// Purely a cost change: `cancelPending` still sees every live state,
+    /// because a dead entry is one whose `CompletionState` is already gone and
+    /// which `cancelPending`'s `weak.lock()` has always skipped. Carrying dead
+    /// entries for longer changes nothing it observes.
+    /// @param state Completion state to track until it expires or is cancelled.
     void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
         std::scoped_lock const lock{_pendingMtx};
-        std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
+        if (_pending.size() >= _compactAt) {
+            std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
+            _compactAt = std::max(kPendingCompactFloor, _pending.size() * 2);
+        }
         _pending.emplace_back(state);
     }
 
@@ -1414,8 +1456,16 @@ private:
     // directory is the state the two backends genuinely share.
     std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash> _changeAware;
     std::atomic<uint64_t> _nextId{0};
-    std::mutex _pendingMtx;
+    // Smallest size at which `trackPending` will sweep. Below it the sweep costs
+    // more than the handful of dead `weak_ptr`s it could reclaim, and a backend
+    // that only ever has a few calls in flight never sweeps at all.
+    static constexpr std::size_t kPendingCompactFloor = 32;
+    mutable std::mutex _pendingMtx;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
+    // Size at which `trackPending` next sweeps `_pending` for expired entries;
+    // re-armed at twice the surviving count after each sweep. Guarded by
+    // `_pendingMtx` along with `_pending` itself. See `trackPending` (morph#528).
+    std::size_t _compactAt = kPendingCompactFloor;
     // Concurrent in-flight executes, for the executeInFlight metric. A
     // shared_ptr (not a plain atomic member) so strand tasks hold their own
     // reference instead of capturing `this` — see execute()'s comment and the
