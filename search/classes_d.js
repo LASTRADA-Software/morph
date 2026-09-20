@@ -9,6 +9,6 @@ var searchData=
   ['payloadshapetag_3c_20morph_3a_3autil_3a_3atagged_3c_20t_2c_20tag_20_3e_20_3e_6',['PayloadShapeTag&lt; morph::util::Tagged&lt; T, Tag &gt; &gt;',['../d2/d0d/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1util_1_1Tagged_3_01T_00_01Tag_01_4_01_4.html',1,'morph::model']]],
   ['primarykey_7',['PrimaryKey',['../d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html',1,'morph::model']]],
   ['principal_8',['Principal',['../d0/d26/structmorph_1_1session_1_1Principal.html',1,'morph::session']]],
-  ['promise_9',['Promise',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html',1,'morph::async::Completion']]],
+  ['promise_9',['Promise',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html',1,'morph::async::Completion&lt; T &gt;::Promise'],['../dd/de7/classmorph_1_1async_1_1Completion.html',1,'morph::async::Completion&lt;::morph::exec::detail::ModelId &gt;::Promise&lt; ModelId &gt;']]],
   ['protocolrange_10',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]]
 ];

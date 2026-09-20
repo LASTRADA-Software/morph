@@ -1,5 +1,6 @@
 var classmorph_1_1backend_1_1SynchronousBackendAdapter =
 [
+    [ "BindPromise", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5d5dc70d148745909a4e52ba61492936", null ],
     [ "SynchronousBackendAdapter", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a30aa430d93a6c47a46a764d12543205b", null ],
     [ "wrapped", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0", null ],
     [ "bindModel", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#ac65e916ae8ff43ddcc165f42492960fc", null ],

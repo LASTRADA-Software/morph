@@ -15,5 +15,6 @@ var searchData=
   ['unittraits_12',['UnitTraits',['../de/d93/structmorph_1_1units_1_1UnitTraits.html',1,'morph::units']]],
   ['unsatisfiableformerror_13',['UnsatisfiableFormError',['../d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html',1,'morph::forms::UnsatisfiableFormError'],['../d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html#a665b0ba4d4d807dcf0fb8f5de5a60534',1,'morph::forms::UnsatisfiableFormError::UnsatisfiableFormError()']]],
   ['unsubscribe_14',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aec8bdef725857e4a58d733ce13ea9028',1,'morph::bridge::BridgeHandler']]],
-  ['util_20—_20exact_20values_20units_20time_15',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]]
+  ['utf8length_15',['utf8Length',['../d8/d3a/locale__format_8hpp.html#a83a0b371622c8c036bcf237de42d8599',1,'morph::render::detail']]],
+  ['util_20—_20exact_20values_20units_20time_16',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]]
 ];

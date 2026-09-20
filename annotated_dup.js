@@ -169,8 +169,11 @@ var annotated_dup =
       ] ],
       [ "render", null, [
         [ "detail", null, [
+          [ "CodePoint", "db/dc5/structmorph_1_1render_1_1detail_1_1CodePoint.html", "db/dc5/structmorph_1_1render_1_1detail_1_1CodePoint" ],
+          [ "DigitMatch", "d7/d80/structmorph_1_1render_1_1detail_1_1DigitMatch.html", "d7/d80/structmorph_1_1render_1_1detail_1_1DigitMatch" ],
           [ "SignMatch", "d0/d95/structmorph_1_1render_1_1detail_1_1SignMatch.html", "d0/d95/structmorph_1_1render_1_1detail_1_1SignMatch" ]
-        ] ]
+        ] ],
+        [ "NumericLocale", "dc/ddc/structmorph_1_1render_1_1NumericLocale.html", "dc/ddc/structmorph_1_1render_1_1NumericLocale" ]
       ] ],
       [ "session", null, [
         [ "detail", null, [

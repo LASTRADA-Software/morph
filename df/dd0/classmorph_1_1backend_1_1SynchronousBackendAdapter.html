@@ -132,6 +132,11 @@ Inheritance diagram for morph::backend::SynchronousBackendAdapter:</div>
   <img src="../../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.png" alt=""/>
  </div></div>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-types" class="groupheader"><a id="pub-types" name="pub-types"></a>
+Public Types</h2></td></tr>
+<tr class="memitem:a5d5dc70d148745909a4e52ba61492936" id="r_a5d5dc70d148745909a4e52ba61492936"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a5d5dc70d148745909a4e52ba61492936">BindPromise</a> = <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;::morph::exec::detail::ModelId&gt;::Promise</td></tr>
+<tr class="memdesc:a5d5dc70d148745909a4e52ba61492936"><td class="mdescLeft">&#160;</td><td class="mdescRight">The producer side of a <span class="tt"><a class="el" href="#ac65e916ae8ff43ddcc165f42492960fc" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span>/<span class="tt"><a class="el" href="#a5ac29a531674844be6b60de1ae18e435" title="Files an already-live instance under a key without blocking the caller.">promoteModel</a></span> completion.  <br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a30aa430d93a6c47a46a764d12543205b" id="r_a30aa430d93a6c47a46a764d12543205b"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a30aa430d93a6c47a46a764d12543205b">SynchronousBackendAdapter</a> (std::shared_ptr&lt; detail::IBackend &gt; inner, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;blockingExec)</td></tr>
@@ -171,7 +176,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a4889651dff3f0bb7bf273a5b6118d785" id="r_a4889651dff3f0bb7bf273a5b6118d785"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4889651dff3f0bb7bf273a5b6118d785">notifyBackendChanged</a> () override</td></tr>
 <tr class="memdesc:a4889651dff3f0bb7bf273a5b6118d785"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forwards to the wrapped backend.  <br /></td></tr>
 <tr class="memitem:a0e2736666c6da8838faee69226b1083b" id="r_a0e2736666c6da8838faee69226b1083b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a0e2736666c6da8838faee69226b1083b">cancelPending</a> (const std::exception_ptr &amp;exc) override</td></tr>
-<tr class="memdesc:a0e2736666c6da8838faee69226b1083b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forwards to the wrapped backend.  <br /></td></tr>
+<tr class="memdesc:a0e2736666c6da8838faee69226b1083b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rejects the completions <em>this adapter</em> produced, then forwards.  <br /></td></tr>
 <tr class="memitem:a5c5f4e55737f4e6614759ccf7a6a9a09" id="r_a5c5f4e55737f4e6614759ccf7a6a9a09"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5c5f4e55737f4e6614759ccf7a6a9a09">setReconnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
 <tr class="memdesc:a5c5f4e55737f4e6614759ccf7a6a9a09"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forwards to the wrapped backend.  <br /></td></tr>
 <tr class="memitem:a6ba904fe1cb33719d7b65cbad3eb3272" id="r_a6ba904fe1cb33719d7b65cbad3eb3272"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a6ba904fe1cb33719d7b65cbad3eb3272">setConnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
@@ -189,8 +194,28 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>Ordering</dt><dd>Control calls are serialised onto one strand, so the wrapped backend sees them one at a time, as it did when the blocking call itself serialised callers. <span class="tt">~SynchronousBackendAdapter</span> waits for any in-flight control call to finish (<span class="tt">StrandExecutor</span>'s destructor does), so a reply can never land in a destroyed adapter; the executor must therefore still be running tasks when this adapter is destroyed, on the same terms as <span class="tt">StrandExecutor</span>'s own <span class="tt">base</span> (see docs/spec/concurrency_and_lifetimes.md, "Destruction ordering").</dd></dl>
 <dl class="section user"><dt>Reconnect handlers</dt><dd>A control call issued from a reconnect handler runs on the strand, never on the wrapped backend's transport thread, so a backend whose reply can only be delivered by the thread that is running the reconnect handler does not wait on itself. Whether that is enough to settle <span class="tt">SocketBackend</span>'s documented reconnect hazard is morph#569's question, not a claim made here. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00909">909</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
-</div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00913">913</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+</div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
+<a id="a5d5dc70d148745909a4e52ba61492936" name="a5d5dc70d148745909a4e52ba61492936"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5d5dc70d148745909a4e52ba61492936">&#9670;&#160;</a></span>BindPromise</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#a5d5dc70d148745909a4e52ba61492936">morph::backend::SynchronousBackendAdapter::BindPromise</a> = <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;::morph::exec::detail::ModelId&gt;::Promise</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The producer side of a <span class="tt"><a class="el" href="#ac65e916ae8ff43ddcc165f42492960fc" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span>/<span class="tt"><a class="el" href="#a5ac29a531674844be6b60de1ae18e435" title="Files an already-live instance under a key without blocking the caller.">promoteModel</a></span> completion. </p>
+<p>Named because <span class="tt"><a class="el" href="#a0e2736666c6da8838faee69226b1083b" title="Rejects the completions this adapter produced, then forwards.">cancelPending</a></span> has to hold these weakly; see <span class="tt">trackPending</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00936">936</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a30aa430d93a6c47a46a764d12543205b" name="a30aa430d93a6c47a46a764d12543205b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a30aa430d93a6c47a46a764d12543205b">&#9670;&#160;</a></span>SynchronousBackendAdapter()</h2>
 
@@ -233,7 +258,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00920">920</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00924">924</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -264,7 +289,7 @@ Public Member Functions</h2></td></tr>
 <p>The wrapped backend. </p>
 <dl class="section return"><dt>Returns</dt><dd>Reference to the backend passed at construction; never null. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00930">930</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00940">940</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -305,7 +330,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with the bound <span class="tt">ModelId</span>, or rejected with whatever the wrapped backend threw. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00943">943</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00953">953</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -346,7 +371,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with <span class="tt">request.mid</span>, or rejected. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00960">960</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00970">970</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -377,7 +402,7 @@ Public Member Functions</h2></td></tr>
 <p>Not forwarded to the wrapped backend, unlike everything below: <span class="tt"><a class="el" href="#ac65e916ae8ff43ddcc165f42492960fc" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span>/<span class="tt"><a class="el" href="#a5ac29a531674844be6b60de1ae18e435" title="Files an already-live instance under a key without blocking the caller.">promoteModel</a></span> are the two verbs this adapter <em>reshapes</em>, so the policy describing them describes this adapter, not what it wraps. A caller that waited would pay exactly the blocking cost the adapter was interposed to move elsewhere, and — if it happens to be running on <span class="tt">blockingExec</span> — would deadlock against the strand it is waiting on.</p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">BindWait::kCallerMustNotBlock</span>, always. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00978">978</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00988">988</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -418,7 +443,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wrapped backend's <span class="tt">ModelId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00992">992</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01002">1002</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -465,7 +490,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wrapped backend's <span class="tt">ModelId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01003">1003</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01013">1013</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -512,7 +537,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wrapped backend's <span class="tt">ModelId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01014">1014</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01024">1024</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -565,7 +590,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wrapped backend's <span class="tt">ModelId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01026">1026</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01036">1036</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -624,7 +649,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whatever the wrapped backend returned. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01039">1039</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01049">1049</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -683,7 +708,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whatever the wrapped backend returned. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01057">1057</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01067">1067</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -748,7 +773,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whatever the wrapped backend returned. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01074">1074</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01084">1084</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -794,7 +819,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01088">1088</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01098">1098</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -853,7 +878,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whatever the wrapped backend returned. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01100">1100</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01110">1110</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -889,7 +914,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wrapped backend's snapshot of live shared instance keys. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01109">1109</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01119">1119</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -924,7 +949,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01115">1115</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01125">1125</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -971,7 +996,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wrapped backend's <span class="tt">Completion</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01122">1122</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01132">1132</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1000,7 +1025,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Forwards to the wrapped backend. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01129">1129</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01139">1139</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1027,15 +1052,18 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Forwards to the wrapped backend. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Rejects the completions <em>this adapter</em> produced, then forwards. </p>
+<p>Not a plain forward, unlike everything else in this block, and for the same reason <span class="tt"><a class="el" href="#a239b4766ae16c0cc014d209da8737a43" title="This adapter&#39;s whole purpose is that the caller does not block.">bindWaitPolicy()</a></span> is not: the two verbs this adapter reshapes produce completions the wrapped backend has never heard of. A <span class="tt"><a class="el" href="#ac65e916ae8ff43ddcc165f42492960fc" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span> here settles from a task on <span class="tt">_control</span>, so <span class="tt">_inner-&gt;<a class="el" href="#a0e2736666c6da8838faee69226b1083b" title="Rejects the completions this adapter produced, then forwards.">cancelPending</a></span> reaches nothing of it — before morph#619 a bind dispatched through this adapter went on to resolve <b>successfully</b> after cancellation, which is the exact opposite of what <span class="tt">IBackend::cancelPending</span> promises ("after this call, any later
+`setValue`/`setException` on those states is a no-op").</p>
+<p>The adapter's own promises are rejected first and the forward happens second: the strand task is still running <span class="tt">op()</span> while this executes, and rejecting before handing control to the wrapped backend keeps that window as short as the caller's own call. A task that finished first wins — its completion was not "still pending" — and a task that finishes after finds the promise settled, which <span class="tt">CompletionState::setValue</span>'s <span class="tt">if (ready) return;</span> makes a no-op.</p>
+<p><b>What this does not do:</b> a task already queued on <span class="tt">_control</span> still runs its blocking control call against the wrapped backend after this returns. The caller is told the bind was cancelled, but the registration may still happen — morph#636, since stopping it needs the task to check before calling <span class="tt">op()</span>, not the promise to be settled after it. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">exc</td><td>Exception delivered to every still-pending completion. </td></tr>
+    <tr><td class="paramname">exc</td><td>Exception delivered to every still-pending completion, this adapter's own and then the wrapped backend's. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01133">1133</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01168">1168</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1070,7 +1098,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01137">1137</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01185">1185</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1105,7 +1133,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01141">1141</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01189">1189</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1140,7 +1168,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01145">1145</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01193">1193</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1175,7 +1203,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01149">1149</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01197">1197</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

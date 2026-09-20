@@ -4,5 +4,6 @@ var searchData=
   ['unitalternatives_1',['unitAlternatives',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a98aad53730bc9d5da2a7d921c0d10374',1,'morph::units::Quantity']]],
   ['unitmeta_2',['unitMeta',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a974c58708720c7c1ab9041d4f903d8df',1,'morph::units::Quantity']]],
   ['unsatisfiableformerror_3',['UnsatisfiableFormError',['../d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html#a665b0ba4d4d807dcf0fb8f5de5a60534',1,'morph::forms::UnsatisfiableFormError']]],
-  ['unsubscribe_4',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aec8bdef725857e4a58d733ce13ea9028',1,'morph::bridge::BridgeHandler']]]
+  ['unsubscribe_4',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aec8bdef725857e4a58d733ce13ea9028',1,'morph::bridge::BridgeHandler']]],
+  ['utf8length_5',['utf8Length',['../d8/d3a/locale__format_8hpp.html#a83a0b371622c8c036bcf237de42d8599',1,'morph::render::detail']]]
 ];
