@@ -241,6 +241,22 @@ API surface).
 
 ### Fixed
 
+- **`bank_gui_qml_tests` did not compile.** The target compiles
+  `examples/common/testkit/testkit_main.cpp`, whose `#include
+  <testkit/log_level.hpp>` resolves only against the repository's `tests/`
+  directory, and it reached that directory through nothing: it links
+  `Catch2::Catch2` directly, where its sibling `bank_gui_tests` links
+  `morph_test_main` (which carries the include path publicly, via
+  `morph_test_log_level`). Reproduced on `26bfdb8f` with the `linux-everything`
+  preset, the only configuration that switches `MORPH_BUILD_BANK_GUI` on:
+  `fatal error: 'testkit/log_level.hpp' file not found`. The target now also
+  links `morph_test_log_level` — the same split, for the same reason, that
+  `morph_qt_tests` already uses for a suite that owns its own `main`. It
+  builds, its 32 assertions pass offscreen, and `--log-level` (the helper that
+  header declares) is live on it. No CI job configures
+  `MORPH_BUILD_BANK_GUI`, so this fix is not yet gated by anything; morph#605
+  covers that separately. morph#604.
+
 - **`equation()` no longer walks a shared derivation once per path.**
   `EquationRenderer::assignLabels` was the one traversal without a visited set,
   so a node reachable by *k* displayed paths was walked *k* times. Since the

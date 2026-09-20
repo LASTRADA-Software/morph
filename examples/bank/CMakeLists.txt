@@ -275,6 +275,14 @@ if(MORPH_BUILD_TESTS)
                 ${PROJECT_SOURCE_DIR}/examples/common)
             target_link_libraries(bank_gui_qml_tests PRIVATE
                 bank_gui_lib Catch2::Catch2
+                # Our own main() owns the QGuiApplication, so this cannot link
+                # morph_test_main the way bank_gui_tests above does -- that
+                # library carries a `main` of its own. morph_test_log_level is
+                # the half of it that is wanted here: the --log-level helper
+                # testkit_main.cpp calls, and the tests/ include directory that
+                # puts <testkit/log_level.hpp> on the path. Same split, for the
+                # same reason, as morph_qt_tests (tests/qt/CMakeLists.txt).
+                morph_test_log_level
                 Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
             target_compile_features(bank_gui_qml_tests PRIVATE cxx_std_23)
             target_compile_definitions(bank_gui_qml_tests PRIVATE
