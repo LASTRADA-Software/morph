@@ -22,6 +22,18 @@
 /// perfectly valid `"1 050,25"` typed by a French user normalises to
 /// `std::nullopt` and the entry is reported malformed. An empty view means
 /// "this locale has no such separator" (the role `'\0'` used to play).
+///
+/// @par So is the negative sign
+/// For the same reason, and measured rather than assumed: of the 711 locales
+/// Qt 6.11.2 knows, 77 report a `negativeSign` that is not a bare ASCII `'-'`.
+/// 23 use U+2212 MINUS SIGN (e.g. eu_ES); 54 more prefix the sign with a bidi
+/// control -- U+061C ARABIC LETTER MARK, U+200E LEFT-TO-RIGHT MARK or U+200F
+/// RIGHT-TO-LEFT MARK -- making it two or three code points, and ar_DZ does so
+/// even though its sign is the ordinary hyphen. Matched as a single `char`,
+/// none of those round-trips: the display edge emitted a sign the entry edge
+/// then rejected. So `negativeSign` is a `std::string_view` matched as a whole
+/// string too, defaulting to `"-"` so that every existing caller is unchanged
+/// (morph#583).
 
 #include <cstddef>
 #include <optional>
@@ -98,6 +110,32 @@ namespace detail {
     return !sawGroup || sawDecimal || digits == kGroupSize;
 }
 
+/// @brief The length of the negative sign at the start of @p rest, in bytes, or
+///        `0` when there is none there.
+///
+/// Two spellings count. @p negativeSign is the locale's own, matched as a whole
+/// string so that U+2212 and the bidi-control-prefixed forms -- two and three
+/// code points -- match at all; a single `char` could express none of them
+/// (morph#583). A bare ASCII `'-'` counts as well, in every locale: U+2212 and
+/// the bidi marks are on no keyboard, so matching only the locale's spelling
+/// would reject the sign the user can actually type. The hyphen has no second
+/// reading in a numeric entry, so this is not the kind of guess the grouping
+/// rule forbids.
+///
+/// This is a function of its own so that the caller's scan reads as one
+/// statement per character class; whichever spelling matched, the caller emits
+/// the canonical `'-'`.
+/// @param rest         The remainder of the entry, starting at the scan position.
+/// @param negativeSign The locale's negative-sign string; empty matches nothing,
+///                     leaving only the ASCII spelling.
+/// @return The number of bytes the sign occupies, or `0`.
+[[nodiscard]] inline std::size_t leadingSignLength(std::string_view rest, std::string_view negativeSign) {
+    if (!negativeSign.empty() && rest.starts_with(negativeSign)) {
+        return negativeSign.size();
+    }
+    return rest.starts_with('-') ? 1U : 0U;
+}
+
 }  // namespace detail
 
 /// @brief Converts a locale-formatted numeric string to canonical
@@ -142,14 +180,46 @@ namespace detail {
 /// works; matching them before the per-byte digit scan is what keeps their
 /// continuation bytes from being mistaken for stray non-digit characters.
 ///
+/// @par The negative sign is matched as a whole string too (morph#583)
+/// @p negativeSign is matched the same way, which is what lets a locale whose
+/// sign is U+2212, or is prefixed by a bidi control mark, be entered at all --
+/// 77 of the 711 locales Qt 6.11.2 knows. Before this the sign was the literal
+/// byte `'-'`, so `formatCanonicalNumber` emitted a sign this function then
+/// rejected, and the pair was not inverse for those locales.
+///
+/// @par ASCII `'-'` stays accepted whatever the locale
+/// A bare `'-'` is accepted in the leading position in addition to
+/// @p negativeSign. U+2212 and the bidi marks are on no keyboard, so matching
+/// only the locale's own spelling would reject the sign the user can actually
+/// type and leave them no way to enter a negative number at all. The hyphen has
+/// no second reading in a numeric entry, so accepting it is not the kind of
+/// guess morph#574 forbids -- that was about producing a wrong *value*, and
+/// this produces the only value the input can mean.
+///
+/// @par An empty @p negativeSign means the ASCII default, not "no sign"
+/// Unlike a group separator, there is no locale without a negative sign, so an
+/// empty view leaves the ASCII `'-'` above as the only spelling rather than
+/// meaning "this entry cannot be negative". `formatCanonicalNumber` reads it
+/// the same way, and the display edge is why it must: a sign that formatted to
+/// nothing would turn `-5` into `5` silently -- a wrong value, not a rejected
+/// one.
+///
 /// @param text             The locale-formatted entry, e.g. `"1.050,25"`.
 /// @param decimalSeparator The locale's decimal-point string, e.g. `","`.
 /// @param groupSeparator   The locale's digit-grouping string, e.g. `"."`, or
 ///                         empty when the locale has none.
+/// @param negativeSign     The locale's negative-sign string, e.g. `"\u2212"`;
+///                         empty is read as the default `"-"`.
 /// @return The canonical `.`-decimal text, or `std::nullopt` when malformed.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
+// The three locale strings are one fixed order, mirrored by
+// formatCanonicalNumber so the two inverses read alike; separating the sign
+// from the separators to break the adjacency would put them out of step.
 [[nodiscard]] inline std::optional<std::string> normalizeLocaleNumber(std::string_view text,
                                                                       std::string_view decimalSeparator,
-                                                                      std::string_view groupSeparator) {
+                                                                      std::string_view groupSeparator,
+                                                                      std::string_view negativeSign = "-") {
+    // NOLINTEND(bugprone-easily-swappable-parameters)
     if (!groupSeparator.empty() && groupSeparator == decimalSeparator) {
         return std::nullopt;  // one string cannot play both roles: see above
     }
@@ -176,30 +246,35 @@ namespace detail {
             }
             sawDecimal = true;
             canonical += '.';
-            // The decimal point *is* output: without this, the `chr == '-'`
-            // guard below still believes nothing has been emitted, and a sign
-            // placed straight after the separator ("`,-5`" in a de-DE locale)
-            // is accepted as if it were leading. morph#497.
+            // The decimal point *is* output: without this, the `sawAnyOutput`
+            // guard in the sign branch below still believes nothing has been
+            // emitted, and a sign placed straight after the separator
+            // ("`,-5`" in a de-DE locale) is accepted as if it were leading.
+            // morph#497.
             sawAnyOutput = true;
             i += decimalSeparator.size();
             continue;
         }
-        // i is bounded by the loop condition.
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-        char const chr = text[i];
-        if (chr == '-') {
+        std::size_t const signLength = detail::leadingSignLength(rest, negativeSign);
+        if (signLength != 0) {
             // Leading position of the *output*: a stripped group separator
             // before the sign would otherwise make an injected sign look
             // leading.
             if (sawAnyOutput) {
                 return std::nullopt;  // sign injection past the leading position
             }
-            canonical += chr;
-        } else if (chr >= '0' && chr <= '9') {
-            canonical += chr;
-        } else {
+            canonical += '-';  // the canonical spelling, whatever the locale's is
+            sawAnyOutput = true;
+            i += signLength;
+            continue;
+        }
+        // i is bounded by the loop condition.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        char const chr = text[i];
+        if (chr < '0' || chr > '9') {
             return std::nullopt;  // any other character is malformed
         }
+        canonical += chr;
         sawAnyOutput = true;
         ++i;
     }
@@ -218,17 +293,25 @@ namespace detail {
 /// (grouping is never accepted back on entry — `normalizeLocaleNumber`
 /// strips it unconditionally). Passing `decimalSeparator == "."` and an empty
 /// @p groupSeparator is the identity transform.
+///
+/// The sign is emitted as @p negativeSign, matching what `normalizeLocaleNumber`
+/// accepts back (morph#583); an empty view is read as `"-"` rather than as "no
+/// sign", because formatting a negative to no sign at all is a silently wrong
+/// value.
 /// @param canonicalText    Canonical `-?[0-9]+(\.[0-9]+)?` text.
 /// @param decimalSeparator The locale's decimal-point display string.
 /// @param groupSeparator   The locale's digit-grouping display string, or empty
 ///                         to omit grouping.
+/// @param negativeSign     The locale's negative-sign display string; empty is
+///                         read as the default `"-"`.
 /// @return The locale-formatted display text.
 // Mirrors normalizeLocaleNumber's parameter order; the two are inverses, so
 // diverging here would be the more confusing choice.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 [[nodiscard]] inline std::string formatCanonicalNumber(std::string_view canonicalText,
                                                        std::string_view decimalSeparator,
-                                                       std::string_view groupSeparator) {
+                                                       std::string_view groupSeparator,
+                                                       std::string_view negativeSign = "-") {
     bool const neg = !canonicalText.empty() && canonicalText.front() == '-';
     std::string_view const magnitude = neg ? canonicalText.substr(1) : canonicalText;
     auto const dot = magnitude.find('.');
@@ -246,7 +329,7 @@ namespace detail {
 
     std::string out;
     if (neg) {
-        out += '-';
+        out += negativeSign.empty() ? std::string_view{"-"} : negativeSign;
     }
     out += grouped;
     if (!fracPart.empty()) {

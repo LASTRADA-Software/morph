@@ -201,6 +201,26 @@ API surface).
   consulted with the key and that the attached log records the action under it.
   See morph#587.
 
+- **77 of the 711 locales Qt knows could not enter a negative number.**
+  `morph::render::normalizeLocaleNumber` matched the minus sign as the literal
+  byte `'-'`, and `formatCanonicalNumber` emitted one whatever the locale, so
+  the pair was not inverse wherever the locale spells the sign differently.
+  Measured over `QLocale::matchingLocales` under Qt 6.11.2: 23 locales use
+  U+2212 (e.g. `eu_ES`) and 54 more prefix the sign with a bidi control mark,
+  making it two or three code points (e.g. `fa_IR`, `az_IR`, `ar_EG`) —
+  including `ar_DZ`, which failed although its sign *is* the ASCII hyphen,
+  because of the U+200E in front of it. Both functions now take a fourth
+  `std::string_view negativeSign = "-"`, matched and emitted as a whole string
+  the way the separators already were, and the JavaScript mirror in
+  `src/qt/forms/qml/DynamicForm.qml` does the same with
+  `text.startsWith(sign, i)` — a one-code-unit comparison could not match the
+  multi-unit forms. The renderer forwards `qtLocale.negativeSign` alongside the
+  decimal point and group separator it already forwarded. A bare `'-'` stays
+  accepted in every locale, since U+2212 and the bidi marks are on no keyboard,
+  and an empty `negativeSign` reads as `"-"` rather than as "no sign" — a sign
+  formatted to nothing would turn `-5` into `5`. The parameter is defaulted, so
+  no existing call site changes behaviour. See `docs/spec/forms/forms.md`,
+  "Locale data formatting"; morph#583.
 - **A locale-formatted entry could submit ten times what the user typed.**
   `morph::render::normalizeLocaleNumber` dropped every occurrence of the group
   separator unconditionally, with no check on placement, so a de-DE user typing
