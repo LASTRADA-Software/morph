@@ -2245,16 +2245,25 @@ jobs:
       # The prerequisites examples/common/CMakeLists.txt enforces with a
       # FATAL_ERROR are already met above: MORPH_BUILD_QT=ON is passed, and
       # MORPH_BUILD_TESTS defaults ON.
-      # No Build step: clang-tidy-diff.py reads compile_commands.json (a
+      # No full Build step: clang-tidy-diff.py reads compile_commands.json (a
       # configure-time artifact, CMAKE_EXPORT_COMPILE_COMMANDS=ON in the base
       # preset) and runs clang-tidy itself per translation unit -- it neither
       # needs the project actually compiled nor linked. pinned_facts.cmake's
       # generated header is likewise a configure_file() (configure-time), not
-      # a build-time add_custom_command, so it's already on disk too. Compiler
-      # caching (sccache/fastcache-cc) accordingly has nothing to do in this
-      # job, unlike every other Linux job here -- so those steps, and the
-      # Build step that was their only reason to run, are gone rather than
-      # merely skipped.
+      # a build-time add_custom_command, so it's already on disk too.
+      #
+      # That paragraph answers "which generated headers exist without a
+      # build?" for configure_file() output and *only* for configure_file()
+      # output, while reading as though it had settled the question. It has
+      # not: AUTOMOC's output is the other kind -- a build-time
+      # add_custom_command -- and two sources #include it by name. See the
+      # AUTOMOC step below (morph#624), which is why this now says "no full
+      # Build step" rather than "no Build step".
+      #
+      # Compiler caching (sccache/fastcache-cc) is still not set up here. That
+      # step compiles 67 objects; a real build of this configure would compile
+      # the database's 703, so the caching steps would cost more setup than
+      # they could save.
       - name: Configure (generates compile_commands.json over every optional feature)
         run: |
           cmake --preset clang-debug \
@@ -2269,6 +2278,112 @@ jobs:
             -DMORPH_BUILD_BANK_EXAMPLE=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
+
+      # Two sources end with `#include "<own-basename>.moc"` -- the AUTOMOC
+      # idiom for a Q_OBJECT declared inside a .cpp rather than in a header:
+      # examples/common/testkit/test_qml_surface.cpp and
+      # src/qt/forms/tests/tst_main.cpp. AUTOMOC writes that header at *build*
+      # time into <target>_autogen/include/, so after a configure-only run it
+      # does not exist and clang-tidy dies on the whole translation unit --
+      # `error: 'tst_main.moc' file not found [clang-diagnostic-error]` -- with
+      # WarningsAsErrors:"*" turning it into a failed job, before a single
+      # changed line is analysed (morph#624). Reproduced locally on c55ea5b7
+      # with this job's own configure flags and clang-tidy 22.1.8: one line
+      # added to each of the two files, and clang-tidy-diff.py exits 1 with
+      # exactly those two diagnostics and nothing else.
+      #
+      # Suppressing the diagnostic instead is not available, not merely
+      # unattractive. -Wno-missing-include-dirs below covers an include
+      # *directory* that does not exist, not a #include that resolves to
+      # nothing; and clang-tidy does not let a compiler error be filtered at
+      # all. Measured locally with clang-tidy 22.1.8 on tst_main.cpp with the
+      # moc absent: `-checks=-clang-diagnostic-error`,
+      # `-checks=-clang-diagnostic-*` and `--warnings-as-errors=''` each still
+      # exit 1 reporting the same line. The only remaining way to "filter" it
+      # would be to grep clang-tidy-diff.py's output and override its exit
+      # code, which is morph#479's defect -- a gate that cannot fail -- rebuilt
+      # deliberately.
+      #
+      # So the headers get generated, for these two targets only. Not `cmake
+      # --build` over everything, and not every *_autogen target either:
+      # building all 91 of them was measured locally at 264 objects and 179s,
+      # because a <target>_autogen target depends on that target's link
+      # dependencies. Just these two, with USE_COMPILER_CACHE=OFF on a 12-core
+      # Linux box: 100 ninja edges, 67 compilations, 7 links, 9 moc runs, 31s.
+      # 39 of the 67 are the vendored Lightweight ORM, which
+      # ladder_common_tests depends on transitively -- that, not moc, is what
+      # this step costs. A four-core hosted runner pays more.
+      #
+      # The target list is written out rather than derived, so that it is
+      # greppable and reviewable; the *check* underneath is derived from the
+      # tree, so the list cannot go quietly stale. It rescans every tracked
+      # C++ source for the self-include idiom and fails if a .moc that a
+      # source names is still absent -- which is what a third source adopting
+      # the idiom looks like. It also fails when it finds no self-include at
+      # all: a step that generates nothing and reports green is this
+      # repository's standing failure mode, and an empty scan is exactly how
+      # this one would produce it.
+      - name: Generate the AUTOMOC headers two sources include by name
+        run: |
+          cmake --build build/clang-debug --target \
+            ladder_common_tests_autogen \
+            morph_forms_qml_tests_autogen
+
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import re
+          import subprocess
+          import sys
+
+          root = pathlib.Path().resolve()
+          database = json.loads(
+              pathlib.Path("build/clang-debug/compile_commands.json").read_text())
+          command_of = {
+              pathlib.Path(entry["file"]).resolve(): entry["command"]
+              for entry in database
+          }
+
+          tracked = subprocess.run(
+              ["git", "ls-files", "-z", "*.cpp", "*.cc", "*.cxx"],
+              capture_output=True, text=True, check=True).stdout.split("\0")
+          self_include = re.compile(
+              r'^[ \t]*#[ \t]*include[ \t]+"([^"]+\.moc)"', re.M)
+
+          found = 0
+          missing = 0
+          for name in filter(None, tracked):
+              source = pathlib.Path(name)
+              for moc in self_include.findall(source.read_text(errors="replace")):
+                  found += 1
+                  command = command_of.get((root / source).resolve())
+                  if command is None:
+                      # Not in this configure's database: clang-tidy cannot
+                      # analyse the file at all, which is a different problem
+                      # (morph#481) and not one this step can fix.
+                      print(f"::warning::{name} self-includes {moc} but has no "
+                            f"compile command in this configure")
+                      continue
+                  directories = re.findall(r'-I(\S+_autogen/include)', command)
+                  if not directories:
+                      print(f"::error::{name} self-includes {moc} but its compile "
+                            f"command names no *_autogen/include directory")
+                      missing += 1
+                      continue
+                  if not any((pathlib.Path(d) / moc).is_file() for d in directories):
+                      print(f"::error::{name}: {moc} was not generated -- add this "
+                            f"source's <target>_autogen to the cmake --build above")
+                      missing += 1
+                      continue
+                  print(f"ok: {name} -> {moc}")
+
+          if found == 0:
+              print("::error::no tracked source self-includes a .moc -- this "
+                    "step's scan has stopped detecting the idiom it exists for")
+              sys.exit(1)
+          print(f"ok: {found} self-included .moc header(s), {missing} missing")
+          sys.exit(1 if missing else 0)
+          PY
 
       - name: Run clang-tidy-diff on changed lines
         run: |
@@ -2329,12 +2444,20 @@ jobs:
           # distinct directories, none of which exists after a configure-only
           # run), up from 203 of 261 -- and -Weverything + WarningsAsErrors:"*"
           # turns each into a clang-diagnostic error that says nothing about the
-          # changed lines. Suppressing it is sufficient, not merely convenient:
+          # changed lines. Suppressing it is sufficient *for the directories*:
           # over the last ten commits' changed lines against the ladder database
-          # this run reports 48 findings and *zero* clang-diagnostic-error, and
-          # no source under examples/, include/ or src/ includes a generated
-          # moc_/ui_ header (the "Application ladder" job's own "Check no
+          # this run reports 48 findings and zero clang-diagnostic-error from a
+          # missing autogen directory, and no source under examples/, include/
+          # or src/ includes a generated `moc_<name>.h`/`ui_<name>.h` from
+          # another directory (the "Application ladder" job's own "Check no
           # generated moc include ascends" step is the standing guard on that).
+          #
+          # It is not sufficient for a generated header that a source includes
+          # *by name*. This flag says nothing about `#include "tst_main.moc"`:
+          # the directory it would be found in is one of the 90, but the error
+          # raised is the file not being there, not the directory. That is what
+          # the AUTOMOC step above generates, and why this job now builds two
+          # targets (morph#624).
           if ! git diff -U0 "$BASE_SHA" | \
             python3 "$CLANG_TIDY_DIFF" \
               -path build/clang-debug \
