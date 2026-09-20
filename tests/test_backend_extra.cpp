@@ -343,6 +343,21 @@ morph::backend::detail::ActionCall pendingCall(std::function<void()> op) {
 // evidence. The morph#528 numbers are recorded in docs/spec/core/backend.md.
 TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the list and keeps cancelPending whole",
           "[backend][local][pending]") {
+    constexpr int kRounds = 48;
+    constexpr int kChurnPerRound = 64;  // 3072 admissions that settle and are dropped
+
+    // Declared *before* the pool and the backend, so they outlive them. Only the
+    // one parked task that is actually running has left the strand queue when
+    // this scope ends; the other 47 are still queued, and `~StrandExecutor` /
+    // `~ThreadPoolExecutor` run them during teardown — after any state declared
+    // below the pool has already been destroyed. Getting this backwards is a
+    // stack-use-after-scope on `gate`, which is exactly what ASan reported the
+    // first time round, not a theoretical one.
+    std::atomic<bool> gate{false};
+    std::atomic<int> churnSettled{0};
+    std::atomic<int> cancelled{0};
+    std::atomic<int> parkedRan{0};
+
     morph::exec::ThreadPoolExecutor pool{4};
     SyncExecutor cbExec;
     morph::backend::LocalBackend backend{pool};
@@ -351,20 +366,15 @@ TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the
     auto parked = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
     auto churner = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
 
-    constexpr int kRounds = 48;
-    constexpr int kChurnPerRound = 64;  // 3072 admissions that settle and are dropped
-
-    std::atomic<bool> gate{false};
-    std::atomic<int> churnSettled{0};
     std::vector<morph::async::Completion<std::shared_ptr<void>>> live;
-    std::atomic<int> cancelled{0};
 
     for (int round = 0; round < kRounds; ++round) {
         // One completion that parks on the gate and so stays live in `_pending`.
-        live.push_back(backend.execute(parked, pendingCall([&gate] {
+        live.push_back(backend.execute(parked, pendingCall([&gate, &parkedRan] {
                                            while (!gate.load(std::memory_order_acquire)) {
                                                std::this_thread::sleep_for(std::chrono::milliseconds(1));
                                            }
+                                           parkedRan.fetch_add(1, std::memory_order_relaxed);
                                        }),
                                        &cbExec));
         live.back().onError([&cancelled](const std::exception_ptr& exc) {
@@ -405,9 +415,12 @@ TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the
     backend.cancelPending(std::make_exception_ptr(morph::backend::BackendChangedError{}));
     auto const cancelledCount = cancelled.load(std::memory_order_relaxed);
 
-    // Release the parked op before any assertion can abandon the fixture:
-    // ~StrandExecutor blocks until the running task returns.
+    // Release the parked ops and drain them before any assertion can abandon the
+    // fixture: `~StrandExecutor` blocks until the running task returns, and a
+    // `CHECK` that fires mid-teardown should not leave that to chance.
     gate.store(true, std::memory_order_release);
+    REQUIRE(morph::testing::waitUntil([&] { return parkedRan.load(std::memory_order_relaxed) == kRounds; },
+                                      std::chrono::milliseconds{10000}));
     live.clear();
 
     CHECK(cancelledCount == kRounds);
