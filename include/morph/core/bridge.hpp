@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <concepts>
+#include <condition_variable>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -278,6 +279,12 @@ struct ParkedOutcome {
 struct AsyncDispatchHandoff {
     /// @brief Guards every other field; never held across `onDone` or `_attachMtx`.
     std::mutex mtx;
+    /// @brief Signalled once `fired` is set, for `awaitHandoff`'s benefit.
+    ///
+    /// Only a dispatcher that deliberately waits (`awaitHandoff`) ever blocks on
+    /// this; the three asynchronous dispatch sites never do, so for them the
+    /// `notify_all` in `parkIfInFrame` is an uncontended no-op.
+    std::condition_variable settled;
     /// @brief `true` while the backend's dispatch call is still on the caller's stack.
     bool inFrame = true;
     /// @brief Set once either callback has claimed the outcome.
@@ -305,17 +312,25 @@ struct AsyncDispatchHandoff {
 ///         `false` if the caller owns the outcome and should deliver it itself.
 inline bool parkIfInFrame(AsyncDispatchHandoff& handoff, bool succeeded, ::morph::exec::detail::ModelId modelId,
                           std::exception_ptr failure) {
-    std::scoped_lock const guard{handoff.mtx};
-    if (handoff.fired) {
-        // A backend is contractually allowed exactly one callback per dispatch;
-        // swallow a second one rather than reporting twice.
-        return true;
+    bool inFrame = false;
+    {
+        std::scoped_lock const guard{handoff.mtx};
+        if (handoff.fired) {
+            // A backend is contractually allowed exactly one callback per dispatch;
+            // swallow a second one rather than reporting twice.
+            return true;
+        }
+        handoff.fired = true;
+        handoff.succeeded = succeeded;
+        handoff.modelId = modelId;
+        handoff.failure = std::move(failure);
+        inFrame = handoff.inFrame;
     }
-    handoff.fired = true;
-    handoff.succeeded = succeeded;
-    handoff.modelId = modelId;
-    handoff.failure = std::move(failure);
-    return handoff.inFrame;
+    // Outside the lock: a waiter in `awaitHandoff` re-acquires `mtx` the moment
+    // it wakes, and notifying while still holding it makes it wake only to block
+    // again.
+    handoff.settled.notify_all();
+    return inFrame;
 }
 
 /// @brief Closes the inline window and takes whatever a callback parked.
@@ -333,6 +348,35 @@ inline std::optional<ParkedOutcome> claimHandoff(AsyncDispatchHandoff& handoff) 
     if (!handoff.fired) {
         return std::nullopt;
     }
+    return ParkedOutcome{.succeeded = handoff.succeeded, .modelId = handoff.modelId, .failure = handoff.failure};
+}
+
+/// @brief Holds the inline window open until a callback parks an outcome in it,
+///        then closes it and takes that outcome.
+///
+/// `claimHandoff`'s blocking twin, and the whole of what
+/// `BindWait::kCallerMayBlock` buys: the dispatching frame stops and waits, so a
+/// reply that lands on the backend's own thread is still delivered *by this
+/// frame*, on this thread, before the dispatching call returns — which is
+/// exactly what the frame does for a backend that settled inline. The outcome
+/// therefore takes the same path in both cases (published here, rethrown here),
+/// instead of one path for "settled in frame" and another for "settled later".
+///
+/// Only ever called on a backend that returned `BindWait::kCallerMayBlock`,
+/// whose contract is that the completion settles without this thread doing
+/// anything. There is deliberately no timeout: a bounded wait would make
+/// "is the handler bound when `registerHandler` returns" depend on how fast the
+/// network was, which is the non-determinism the synchronous contract exists to
+/// exclude. A backend that violates its own settle-exactly-once contract hangs
+/// here rather than silently returning an unbound handler, and a hang is the
+/// diagnosable failure of those two.
+///
+/// @param handoff Handoff slot created by the dispatching frame.
+/// @return The outcome a callback parked; never `std::nullopt`.
+inline std::optional<ParkedOutcome> awaitHandoff(AsyncDispatchHandoff& handoff) {
+    std::unique_lock guard{handoff.mtx};
+    handoff.settled.wait(guard, [&handoff] { return handoff.fired; });
+    handoff.inFrame = false;
     return ParkedOutcome{.succeeded = handoff.succeeded, .modelId = handoff.modelId, .failure = handoff.failure};
 }
 
@@ -1942,7 +1986,27 @@ private:
                 }
                 onFailed(detail::describeFailure(failure));
             });
-        if (auto parked = detail::claimHandoff(*handoff)) {
+        // `registerHandler` is a synchronous entry point: its caller
+        // constructs a `BridgeHandler` and uses it on the next line, and
+        // `executeVia` fails fast on an unbound `currentId`. So unless the
+        // backend says its completion cannot settle while this thread waits,
+        // this frame waits for it -- and the outcome is then published and
+        // rethrown by exactly the code below that already handles a backend
+        // that settled inline. The two cases differ in how long this frame
+        // sits still, not in what the caller observes.
+        //
+        // `kCallerMustNotBlock` is the exception, and it is the *reason* it is
+        // an exception that matters: a `QtWebSocketBackend` with
+        // `asyncRegistrationEnabled` set delivers its reply through the Qt
+        // event loop of this very thread, so waiting here is a deadlock, not a
+        // delay -- on a WASM main thread it aborts the page (morph#568). Such a
+        // backend's caller gets an unbound handler and must gate on
+        // `whenBound()`, exactly as the `*Async` path already required of it.
+        // See `IBackend::bindWaitPolicy` and morph#593.
+        auto parked = backend->bindWaitPolicy() == ::morph::backend::detail::BindWait::kCallerMayBlock
+                          ? detail::awaitHandoff(*handoff)
+                          : detail::claimHandoff(*handoff);
+        if (parked) {
             if (!parked->succeeded) {
                 // Settles the waiters queued during the window above before
                 // unwinding, so a concurrent whenBound() is rejected rather

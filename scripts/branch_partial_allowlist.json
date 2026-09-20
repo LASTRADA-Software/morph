@@ -62,7 +62,7 @@
     },
     {
       "file": "include/morph/util/rational.hpp",
-      "line": 1498,
+      "line": 1542,
       "source": "if (ctx.begin() == ctx.end() || *ctx.begin() == '}') {",
       "reason": "The ctx.begin() == ctx.end() true arm is unreachable. This is the textbook cppreference-style custom-formatter parse() idiom. Empirically verified on this toolchain (libc++, via a standalone probe compiled with clang++ -std=c++23 -stdlib=libc++): for both std::format(\"{}\", x) and std::format(\"{:}\", x), ctx.end() always points past the terminating '}', so ctx.begin() == ctx.end() is false and the terminator is always reachable via *ctx.begin() == '}' -- matching the observed 0/14 split exactly. std::format's top-level parser (and std::vformat's, which performs the same replacement-field validation before dispatching to a type's parse()) rejects an unterminated '{...' before ever calling into formatter<Rational>::parse, so this function is never invoked with an already-exhausted range. The first disjunct is defensive boilerplate that this standard library's implementation (and the standard's own guarantee about validated replacement fields) makes structurally unreachable."
     },
@@ -104,9 +104,9 @@
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1610,
+      "line": 1654,
       "source": "if (deadlineHandle && schedulerRef) {",
-      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1498 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible. This entry is specifically the exception-path use of the guard (the `catch` block that undoes `_pendingCalls` and cancels the deadline before rethrowing). Two more textually-identical `if (deadlineHandle && schedulerRef)` guards exist further down, in the `.then()`/`.onError()` continuations (lines 1634, 1723) -- present on master too, this PR only shifted their line numbers -- which are a different guard on a different, reachable arm (schedulerRef going null between capture and a callback that can run after `~Bridge()`) and are not covered by this disposition."
+      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the bridge.hpp:1542 entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible. This entry is specifically the exception-path use of the guard (the `catch` block that undoes `_pendingCalls` and cancels the deadline before rethrowing). Two more textually-identical `if (deadlineHandle && schedulerRef)` guards exist further down, in the `.then()`/`.onError()` continuations (lines 1678, 1767) -- present on master too, this PR only shifted their line numbers -- which are a different guard on a different, reachable arm (schedulerRef going null between capture and a callback that can run after `~Bridge()`) and are not covered by this disposition."
     },
     {
       "file": "include/morph/core/remote.hpp",

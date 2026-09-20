@@ -27,6 +27,7 @@
 #include <functional>
 #include <memory>
 #include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
@@ -568,4 +569,113 @@ TEST_CASE(
                                      "listInstances", "deregisterModel:7", "execute:8", "notifyBackendChanged",
                                      "cancelPending", "setReconnectHandler", "setConnectHandler",
                                      "setDisconnectHandler", "setSession:pal"});
+}
+
+// ── `bindWaitPolicy`: the one bit `Completion` cannot carry (morph#593) ──────
+//
+// Two backends both return an unsettled `Completion` from `bindModel`, and
+// `Bridge::registerHandler` — a synchronous entry point whose caller uses the
+// handler on the next line — must wait for one and must not wait for the other.
+// The pair of cases below pins both answers at the one call site that asks.
+//
+// The 200 ms reply delay is deliberate and is what makes each case *fail* under
+// the opposite policy: it is far longer than the microseconds a non-waiting
+// `registerHandler` takes to return, so "bound on return" cannot happen by luck
+// and "unbound on return" cannot be a lost race. Neither assertion's passing
+// direction depends on the exact value — the waiting case waits however long the
+// reply takes, and the non-waiting case polls until it arrives.
+
+namespace {
+
+constexpr auto kBindReplyDelay = std::chrono::milliseconds{200};
+
+/// @brief A backend whose bind reply arrives, later, from a thread the caller
+///        does not own — `morph::net::SocketBackend`'s shape.
+///
+/// Derives from `RecordingBackend` for the verbs `Bridge` needs it to have, but
+/// answers `false` to `registerModelAsync` (`RecordingBackend` answers `true`)
+/// so that `Bridge::registerHandlerImpl` reaches the structural surface rather
+/// than the legacy async verb morph#571 removes.
+struct TransportThreadBackend : RecordingBackend {
+    /// @brief Policy this double reports; the thing under test.
+    morph::backend::detail::BindWait policy = morph::backend::detail::BindWait::kCallerMayBlock;
+    /// @brief The "transport" that settles the bind, asserted to be another thread.
+    std::thread transport;
+    /// @brief Thread `bindModel` was called on.
+    std::thread::id callerThread;
+    /// @brief `true` if the completion settled somewhere other than `callerThread`.
+    std::atomic<bool> settledOffCallerThread{false};
+
+    TransportThreadBackend() = default;
+    TransportThreadBackend(const TransportThreadBackend&) = delete;
+    TransportThreadBackend& operator=(const TransportThreadBackend&) = delete;
+    TransportThreadBackend(TransportThreadBackend&&) = delete;
+    TransportThreadBackend& operator=(TransportThreadBackend&&) = delete;
+
+    ~TransportThreadBackend() override {
+        if (transport.joinable()) {
+            transport.join();
+        }
+    }
+
+    bool registerModelAsync(const std::string& /*typeId*/,
+                            std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
+                            std::string_view /*contextKey*/, std::function<void(ModelId)> /*onRegistered*/,
+                            std::function<void(const std::string&)> /*onError*/) override {
+        return false;
+    }
+
+    ModelCompletion bindModel(BindRequest /*request*/, morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = ModelCompletion::makeSettleable(&cbExec);
+        callerThread = std::this_thread::get_id();
+        transport = std::thread{[this, kept = std::make_shared<ModelCompletion::Promise>(std::move(promise))] {
+            std::this_thread::sleep_for(kBindReplyDelay);
+            settledOffCallerThread.store(std::this_thread::get_id() != callerThread);
+            kept->resolve(ModelId{99});
+        }};
+        return std::move(completion);
+    }
+
+    [[nodiscard]] morph::backend::detail::BindWait bindWaitPolicy() const noexcept override { return policy; }
+};
+
+}  // namespace
+
+TEST_CASE("morph::bridge::Bridge: registerHandler waits out a kCallerMayBlock backend's bind and returns bound",
+          "[backend][registration-surface][bridge]") {
+    auto owned = std::make_unique<TransportThreadBackend>();
+    auto* backend = owned.get();
+    backend->policy = morph::backend::detail::BindWait::kCallerMayBlock;
+
+    morph::bridge::Bridge bridge{std::move(owned)};
+    auto binding = bridge.registerHandler<RegistrationSurfaceModel>();
+
+    // No polling, no drain: the constructor did not return until the reply
+    // landed. This is the contract every non-Qt embedder had before morph#568
+    // and that morph#586 took away from `SocketBackend`.
+    REQUIRE(morph::bridge::Bridge::isBound(binding));
+    REQUIRE(binding->currentId.load() == 99U);
+    // ...and it was a *wait*, not a synchronous backend: the value was produced
+    // on a thread `registerHandler` does not own.
+    REQUIRE(backend->settledOffCallerThread.load());
+}
+
+TEST_CASE("morph::bridge::Bridge: registerHandler does not wait for a kCallerMustNotBlock backend",
+          "[backend][registration-surface][bridge]") {
+    auto owned = std::make_unique<TransportThreadBackend>();
+    auto* backend = owned.get();
+    backend->policy = morph::backend::detail::BindWait::kCallerMustNotBlock;
+
+    morph::bridge::Bridge bridge{std::move(owned)};
+    auto binding = bridge.registerHandler<RegistrationSurfaceModel>();
+
+    // Returned while the reply is still 200 ms away. For `QtWebSocketBackend`
+    // under `asyncRegistrationEnabled` this is not a preference: the reply is
+    // delivered by the Qt event loop of this very thread, so a `registerHandler`
+    // that waited here would never return (morph#568's WASM page abort).
+    REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));
+
+    REQUIRE(morph::testing::waitUntil([&] { return morph::bridge::Bridge::isBound(binding); }));
+    REQUIRE(binding->currentId.load() == 99U);
+    REQUIRE(backend->settledOffCallerThread.load());
 }

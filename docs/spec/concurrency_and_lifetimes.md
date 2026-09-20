@@ -281,6 +281,23 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   `BridgeLifetime` across its whole touch of `this` (`_mtx`, `loadBackend()`).
   Safe to hold the gate here: nothing in that span calls into consumer code or
   a blocking backend path, only a mutex and a pointer comparison.
+
+  Since morph#593 that callback may also run **on the registering thread
+  itself**: unless the backend answers `IBackend::BindWait::kCallerMustNotBlock`,
+  `registerHandlerImpl` waits for the bind completion and then delivers the
+  outcome from its own frame, so `registerHandler` returns a bound handler. That
+  reinstates, for one statement, exactly the blocking window every backend had
+  before morph#568, when the fallback was the synchronous
+  `registerModelWithContext`: a thread parked inside `registerHandler` is a
+  thread not running `~Bridge`, and a *different* thread destroying the `Bridge`
+  while `registerHandler` is still on this one was already a misuse then and is
+  no more possible now. What is new is only that the parking is visible in
+  `Bridge` rather than inside the backend verb. The two
+  `kCallerMustNotBlock` backends never park at all, which is the point: for
+  `QtWebSocketBackend` under `asyncRegistrationEnabled` the reply arrives on the
+  parked thread's own event loop, so parking would not be a slow teardown but a
+  deadlock — the same shape of objection that rules a gate out for the reconnect
+  handler below.
 - **`installReconnectHandler`'s reconnect callback.** Left as a `liveness()`
   check, deliberately not moved to `BridgeLifetime` — this is the case the
   first paragraph above warns about. The handler runs on the backend's

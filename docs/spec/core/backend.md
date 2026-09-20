@@ -28,6 +28,7 @@ and react to backend changes.
 - [The dispatch struct — `ActionCall`](#the-dispatch-struct--actioncall)
 - [The abstract interface — `IBackend`](#the-abstract-interface--ibackend)
 - [Connect/disconnect notifications](#connectdisconnect-notifications)
+- [Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy)
 - [Asynchronous registration — `registerModelAsync`](#asynchronous-registration--registermodelasync)
 - [The structural registration surface — `bindModel` and `promoteModel`](#the-structural-registration-surface--bindmodel-and-promotemodel)
   - [What a natively non-blocking backend does to `registerHandler`](#what-a-natively-non-blocking-backend-does-to-registerhandler)
@@ -80,6 +81,7 @@ holds a `unique_ptr<IBackend>` and delegates all model operations to it.
 | `registerModelAsync(typeId, factory, contextKey, onRegistered, onError)` | Optional non-blocking counterpart to `registerModelWithContext`. Returns `false` by default, and since morph#568 no backend overrides it, so it always does; `Bridge::registerHandler()` then falls back to `bindModel`. Removed by morph#571. See [Asynchronous registration](#asynchronous-registration--registermodelasync). |
 | `bindModel(request, cbExec)` | Acquires a model instance and returns a `Completion<ModelId>` delivered on `cbExec`. One verb covering `registerModelWithContext`, `registerModelShared` and `attachModel`, selected by the request's shape. The preferred surface — see [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
 | `promoteModel(request, cbExec)` | Files an already-live instance under a key and returns a `Completion<ModelId>` delivered on `cbExec`. The structural counterpart of `assignPrimary`. |
+| `bindWaitPolicy()` | Whether a caller may block its own thread until a `bindModel`/`promoteModel` completion settles. `BindWait::kCallerMayBlock` by default. The only framework caller is `Bridge::registerHandlerImpl`; see [Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy). |
 | `deregisterModel(mid)` | Removes the model identified by `mid`. |
 | `execute(mid, call, cbExec)` | Dispatches `call` against the model identified by `mid`. Returns a `Completion<std::shared_ptr<void>>`. |
 | `notifyBackendChanged()` | Called by `Bridge::switchBackend()` after all handlers are re-registered. |
@@ -447,6 +449,14 @@ natively](#the-structural-registration-surface-natively).
   executor, so the caller returns immediately with an unresolved `Completion`.
   A single-threaded WASM main thread has no such executor to offer, which is
   why morph#568 puts `QtWebSocketBackend` on the surface natively instead.
+- **It answers `bindWaitPolicy()` itself rather than forwarding it**, with
+  `kCallerMustNotBlock`. `bindModel`/`promoteModel` are the two verbs it
+  reshapes, so the policy describing them describes the adapter and not what it
+  wraps. A caller that waited would pay back exactly the blocking cost the
+  adapter was interposed to move, and would deadlock outright if it happened to
+  be running on `blockingExec`. This is why a `Bridge` over an adapter returns
+  an unbound handler while a `Bridge` over `SocketBackend` — also non-blocking
+  — does not.
 - **The executor is required.** An adapter that ran the call inline when handed
   nothing would be a `bindModel` that blocks on some configurations and not
   others — contract by configuration, which is what is being removed.
@@ -543,34 +553,91 @@ backend except a `QtWebSocketBackend` with `asyncRegistrationEnabled` set, the
 handler was bound by the time the constructor returned. After morph#568 the
 fallback is `bindModel`, so the rule is stated once, structurally:
 
-> **`registerHandler` returns a bound handler exactly when the backend's
-> `bindModel` settles inside the call.** A backend that has not overridden
-> `bindModel` gets `IBackend`'s default, which runs the legacy blocking verb and
-> settles before returning — bound. A backend that overrode it natively settles
-> when its reply lands — **unbound**, and the caller must gate on
-> `Bridge::whenBound()` (or on the `onDone` of the async entry points) before
-> issuing a call, exactly as the `*Async` path already required.
+> **`registerHandler` returns a bound handler unless the backend says the
+> caller must not wait.** A backend that has not overridden `bindModel` gets
+> `IBackend`'s default, which runs the legacy blocking verb and settles before
+> returning — bound, with no wait. A backend that overrode `bindModel` natively
+> settles when its reply lands, and `registerHandlerImpl` **waits for it** —
+> still bound — unless that backend answers
+> `BindWait::kCallerMustNotBlock`, in which case the handler is returned
+> **unbound** and the caller must gate on `Bridge::whenBound()` (or on the
+> `onDone` of the async entry points) before issuing a call, exactly as the
+> `*Async` path already required.
+
+The wait is morph#593's correction to the rule as morph#568 first wrote it. The
+rule then read "bound exactly when `bindModel` settles inside the call", which
+made *how the backend is implemented* decide what a synchronous, public entry
+point returns — and `SocketBackend` (morph#569) changed its implementation
+without any intent to change that. See
+[Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy).
 
 `executeVia` fails fast with `"handler not bound"` for a call issued before the
 reply arrives; it does not queue. That is unchanged — it is the same failure the
 `*Async` path produced, now reachable through one surface instead of two.
 
-Consequences, as of morph#568:
+Consequences, as of morph#568 and morph#593:
 
-| Backend | `bindModel` | `registerHandler` returns |
-|---|---|---|
-| `LocalBackend`, `SimulatedRemoteBackend`, the eleven test doubles | default (blocking verb) | bound |
-| A backend wrapped in `SynchronousBackendAdapter` | non-blocking, on the adapter's executor | **unbound** |
-| `QtWebSocketBackend`, `asyncRegistrationEnabled` unset | default (blocking verb) | bound |
-| `QtWebSocketBackend`, `asyncRegistrationEnabled` set | native, non-blocking | **unbound** (the WASM case, which is the whole point) |
-| `SocketBackend` (morph#569) | native, non-blocking | **unbound** |
+| Backend | `bindModel` | `bindWaitPolicy()` | `registerHandler` returns |
+|---|---|---|---|
+| `LocalBackend`, `SimulatedRemoteBackend`, the eleven test doubles | default (blocking verb) | `kCallerMayBlock` (default) | bound; the wait finds the outcome already there |
+| A backend wrapped in `SynchronousBackendAdapter` | non-blocking, on the adapter's executor | `kCallerMustNotBlock` | **unbound** |
+| `QtWebSocketBackend`, `asyncRegistrationEnabled` unset | default (blocking verb) | `kCallerMayBlock` | bound |
+| `QtWebSocketBackend`, `asyncRegistrationEnabled` set | native, non-blocking | `kCallerMustNotBlock` | **unbound** (the WASM case, which is the whole point) |
+| `SocketBackend` (morph#569) | native, non-blocking | `kCallerMayBlock` (default) | bound, after waiting for the I/O thread's reply |
 
-The last row is a behaviour change that morph#568 causes and morph#569 does not:
+### Waiting for a bind — `bindWaitPolicy`
+
+`Bridge::registerHandlerImpl` has exactly one call site for acquiring a model,
+and after morph#568 and morph#569 two shipped backends needed opposite
+behaviour from it:
+
+| Backend | What `bindModel` does | What the call site must do | Why |
+|---|---|---|---|
+| `SocketBackend` | returns an unsettled `Completion`; the I/O thread settles it | **wait** | its callers construct a `BridgeHandler` and use it on the next line; `executeVia` fails fast on `currentId == 0` |
+| `QtWebSocketBackend`, `asyncRegistrationEnabled` set | returns an unsettled `Completion` | **not wait** | the reply is delivered by the Qt event loop of the calling thread, so a wait is a deadlock — on WASM, a page abort |
+
+From the `Completion` alone the two are indistinguishable, and the surface
+morph#567 introduced had removed the only signal that told them apart (the
+`*Async` verbs' `bool` return). Measured, not argued: on morph#568's head, six
+`tests/net/` cases failed with `"handler not bound"`, and forcing the *other*
+answer at that call site instead hung five `tests/qt/` cases on the nested
+`QEventLoop`. Neither fixed setting of the call site is correct.
+
+`IBackend::bindWaitPolicy()` restores exactly one bit:
+
+- `BindWait::kCallerMayBlock` (the default) — the completion settles without
+  the calling thread's participation, either inside the call or on a thread the
+  caller does not own. A backend that answers this **must** settle every
+  `Completion` it hands out exactly once without any further call from the
+  caller, including on transport failure and on `cancelPending`/destruction.
+- `BindWait::kCallerMustNotBlock` — waiting is either impossible (the reply
+  needs the caller's own event loop) or pointless (`SynchronousBackendAdapter`,
+  which exists to move the blocking elsewhere, and would deadlock if the caller
+  happened to be running on its executor).
+
+It is deliberately not the `bool` morph#567 removed. That `bool` chose *which
+verb to call*, so every call site carried two paths and a backend could be
+half-migrated; this one chooses nothing. There is still exactly one verb, called
+unconditionally, and exactly one continuation — the only question is whether the
+thread that registered that continuation is allowed to stop and wait for it.
+Only a synchronous entry point that must return a bound instance asks:
+`registerHandlerImpl` is the sole framework caller, and the asynchronous entry
+points (`attachHandlerAsync`, `ensureBoundAsync`, `assignHandlerPrimary`) never
+wait and never consult it.
+
+The wait is unbounded by design. A timeout would make "is this handler bound
+when `registerHandler` returns" depend on how fast the network was, which is the
+non-determinism the synchronous contract exists to exclude; a backend that
+breaks its own settle-exactly-once contract therefore hangs here rather than
+silently handing back an unbound handler.
+
+`SocketBackend`'s row above is the one morph#568 changed and morph#569 did not:
 morph#569 landed while `Bridge` still called the legacy verbs, so its native
-`bindModel` had no caller and the row read "bound". It is the first time a
-non-Qt embedder sees an unbound handler out of `registerHandler`, and it is why
-`docs/spec/core/bridge.md`'s `whenBound()` section is the right place for a
-`SocketBackend` caller to start.
+`bindModel` had no caller. morph#593 puts that row back to "bound" rather than
+asking every existing non-Qt embedder to start gating on `whenBound()` —
+`docs/spec/core/bridge.md`'s `whenBound()` section remains the right place for a
+caller that wants to gate anyway, and is required for the two
+`kCallerMustNotBlock` rows.
 
 ### Migration status
 
@@ -579,6 +646,7 @@ non-Qt embedder sees an unbound handler out of `registerHandler`, and it is why
 | morph#567 | Adds `bindModel`/`promoteModel` and `SynchronousBackendAdapter`. Nothing else changes. | Landed |
 | morph#568 | `QtWebSocketBackend` implements the surface natively and drops all four `*Async` overrides; `Bridge`'s four dispatch sites fall back to it instead of to a synchronous verb. | Landed |
 | morph#569 | `SocketBackend` implements the surface natively, keeping every legacy verb on `sendSync`. | Landed |
+| morph#593 | Adds `IBackend::bindWaitPolicy()`, the one signal morph#567's surface left the call site without. Fixes the `"handler not bound"` regression morph#568 caused in `SocketBackend`. | Landed |
 | morph#570 | The example GUIs and the WASM spike; `Bridge::installReconnectHandler` onto `bindModel`. | Open |
 | morph#571 | Removes the four `*Async` verbs; migrates `LocalBackend`, `SimulatedRemoteBackend` and the test doubles. | Open |
 
@@ -2112,6 +2180,7 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `registerModelWithContext` | `virtual ModelId registerModelWithContext(const string&, function<unique_ptr<IModelHolder>()>, string_view)` | Default: drops `contextKey`, calls `registerModel`. |
 | `bindModel` | `virtual Completion<ModelId> bindModel(BindRequest, IExecutor& cbExec)` | Default: runs `bindModelBlocking` inline and settles. See [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
 | `promoteModel` | `virtual Completion<ModelId> promoteModel(PromoteRequest, IExecutor& cbExec)` | Default: calls `assignPrimary` inline and settles with `request.mid`. |
+| `bindWaitPolicy` | `virtual BindWait bindWaitPolicy() const noexcept` | Default: `BindWait::kCallerMayBlock`. Whether a caller may block until a `bindModel`/`promoteModel` completion settles. Read only by `Bridge::registerHandlerImpl`. |
 | `bindModelBlocking` | `ModelId bindModelBlocking(BindRequest)` | Non-virtual. Routes a `BindRequest` to `registerModelWithContext` / `registerModelShared` / `attachModel` by its shape; blocks. Shared by the default `bindModel` and by `SynchronousBackendAdapter`. |
 | `deregisterModel` | `virtual void deregisterModel(ModelId)` | Pure virtual. |
 | `execute` | `virtual Completion<shared_ptr<void>> execute(ModelId, ActionCall, IExecutor*)` | Pure virtual. |
@@ -2135,6 +2204,13 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `PromoteRequest::typeId` | `std::string` | Model type id — the directory's first key component. |
 | `PromoteRequest::primary` | `std::string` | Key to file `mid` under. |
 
+### `detail::BindWait`
+
+| Enumerator | Meaning |
+|---|---|
+| `kCallerMayBlock` | Default. The completion settles without the calling thread's participation; a caller may wait for it. Implies the backend settles every `Completion` exactly once, unprompted. |
+| `kCallerMustNotBlock` | Waiting is impossible (the reply needs the caller's own event loop) or pointless (`SynchronousBackendAdapter`). The caller registers its continuation and returns. |
+
 ### `SynchronousBackendAdapter`
 
 | Method | Notes |
@@ -2142,6 +2218,7 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `SynchronousBackendAdapter(shared_ptr<IBackend> inner, IExecutor& blockingExec)` | Throws `std::invalid_argument` if `inner` is null. `blockingExec` is `MORPH_LIFETIMEBOUND` and must keep running tasks until the destructor's wait completes. |
 | `wrapped()` | The wrapped backend; never null. |
 | `bindModel(request, cbExec)` | Posts `inner->bindModelBlocking(request)` onto the control strand; settles the returned `Completion` on `cbExec`. Never blocks the caller. |
+| `bindWaitPolicy()` | `BindWait::kCallerMustNotBlock`, always. Not forwarded: it describes the two verbs the adapter reshapes. |
 | `promoteModel(request, cbExec)` | Posts `inner->assignPrimary(...)` onto the control strand; resolves with `request.mid`. |
 | every other `IBackend` verb | Forwarded to `inner` unchanged, including the four `*Async` twins — wrapping a backend that has a non-blocking path must not take it away. |
 

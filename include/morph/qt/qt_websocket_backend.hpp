@@ -267,6 +267,34 @@ public:
     ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(::morph::backend::detail::BindRequest request,
                                                                          ::morph::exec::IExecutor& cbExec) override;
 
+    /// @brief Whether a caller may block waiting for this backend's
+    ///        `bindModel`/`promoteModel` completions.
+    ///
+    /// `kCallerMustNotBlock` exactly when `Config::asyncRegistrationEnabled` is
+    /// set, because that is exactly when a completion is settled by
+    /// `onTextMessage` — a Qt slot, delivered by the event loop of the thread
+    /// that called `bindModel`. A caller blocked in a wait is not running that
+    /// event loop, so the reply it is waiting for can never arrive: the
+    /// deadlock morph#568 exists to remove, which on a WASM main thread aborts
+    /// the page outright.
+    ///
+    /// With the flag unset this backend's `bindModel` is `IBackend`'s default,
+    /// which settles inside the call, so `kCallerMayBlock` is both true and
+    /// free: the caller's wait finds the outcome already parked and returns
+    /// without sleeping.
+    ///
+    /// Note which way round this reads. It does not say "registration is
+    /// asynchronous" — `SocketBackend`'s is too, and it answers
+    /// `kCallerMayBlock` because a separate I/O thread settles its completions.
+    /// It says only that *this* thread must not stop and wait. See morph#593.
+    ///
+    /// @return `kCallerMustNotBlock` when `Config::asyncRegistrationEnabled` is
+    ///         set, `kCallerMayBlock` otherwise.
+    [[nodiscard]] ::morph::backend::detail::BindWait bindWaitPolicy() const noexcept override {
+        return _cfg.asyncRegistrationEnabled ? ::morph::backend::detail::BindWait::kCallerMustNotBlock
+                                             : ::morph::backend::detail::BindWait::kCallerMayBlock;
+    }
+
     /// @brief Sends a shared (register-or-attach) `register` and blocks for the reply.
     ///
     /// An empty primary degrades to the private path.
