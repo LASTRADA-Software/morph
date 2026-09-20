@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -131,6 +132,55 @@ struct PromoteRequest {
 
     /// @brief Canonical string encoding of the key to file @p mid under.
     std::string primary;
+};
+
+/// @brief Whether a caller holding an unsettled `bindModel`/`promoteModel`
+///        `Completion` may block its own thread until that `Completion`
+///        settles.
+///
+/// This is the one thing `bindModel`'s signature cannot say, and morph#593 is
+/// what happens when it is not said: two shipped backends both return an
+/// unsettled `Completion` from `bindModel`, and `Bridge::registerHandlerImpl`
+/// — a synchronous entry point that hands its caller a `BridgeHandler` usable
+/// on the next line — must wait for one of them and must not wait for the
+/// other. From the `Completion` alone the two are indistinguishable.
+///
+/// It is deliberately **not** the `bool` the surface removed (see "The
+/// structural registration surface" below, point 1). That `bool` chose
+/// *which verb to call*, so every call site carried two paths and a backend
+/// could be half-migrated. This one chooses nothing: there is still exactly
+/// one verb, called unconditionally, and exactly one continuation. It says
+/// only whether the thread that issued the call is allowed to stop and wait
+/// for the continuation it already registered.
+enum class BindWait : std::uint8_t {
+    /// @brief The completion settles without the calling thread's
+    ///        participation — inside the call, or on a thread the caller does
+    ///        not own. A caller may block until it settles.
+    ///
+    /// The default, and correct for every backend that has not overridden
+    /// `bindModel` (the default settles before it returns) as well as for
+    /// `SocketBackend`, whose I/O thread settles the completion. A backend
+    /// that returns this **must** settle every `Completion` it hands out
+    /// exactly once without further calls from the caller — including on
+    /// transport failure and on `cancelPending`/destruction — or a caller that
+    /// waits will wait forever.
+    kCallerMayBlock,
+
+    /// @brief The completion cannot settle while the calling thread is blocked
+    ///        in a wait, or blocking it would defeat the point of this
+    ///        backend. A caller must register its continuation and return.
+    ///
+    /// Two backends say this, for two different reasons:
+    ///
+    /// - `QtWebSocketBackend` with `Config::asyncRegistrationEnabled` set: the
+    ///   reply arrives through the Qt event loop of the thread that issued the
+    ///   call, so waiting is a deadlock. On a WASM main thread it aborts the
+    ///   page (morph#568), which is the case that surface exists for.
+    /// - `SynchronousBackendAdapter`: it exists precisely to move a blocking
+    ///   call off the caller's thread, so a caller that then waits for it has
+    ///   bought nothing — and if the caller happens to be running on the
+    ///   adapter's own executor, has deadlocked.
+    kCallerMustNotBlock,
 };
 
 /// @brief Abstract interface for execution backends (local, remote, …).
@@ -494,6 +544,18 @@ struct IBackend {
     //      implementations below, or without blocking the caller at all
     //      through `SynchronousBackendAdapter`.
     //
+    //      What morph#593 established is that removing *that* bool also
+    //      removed something else the call site needed and that is not the
+    //      same question: whether the thread that called `bindModel` is
+    //      allowed to wait for the continuation it just registered. Two
+    //      shipped backends return an unsettled `Completion` and give opposite
+    //      answers (`SocketBackend`: yes, its I/O thread settles it;
+    //      `QtWebSocketBackend` under `asyncRegistrationEnabled`: no, waiting
+    //      deadlocks the event loop the reply arrives on). `bindWaitPolicy()`
+    //      below restores exactly that one bit and nothing else — it never
+    //      selects a verb, so the "second path" the removed bool created does
+    //      not come back with it.
+    //
     //   2. **The delivery thread is a parameter.** `Completion<T>` posts its
     //      handlers to the executor it was built with, so the continuation runs
     //      where @p cbExec says and nowhere else — the backend does not choose.
@@ -578,6 +640,24 @@ struct IBackend {
         return std::move(completion);
     }
     // NOLINTEND(performance-unnecessary-value-param)
+
+    /// @brief Whether a caller may block until this backend's
+    ///        `bindModel`/`promoteModel` completions settle.
+    ///
+    /// Answers the one question `Completion` cannot: an unsettled `Completion`
+    /// looks the same whether the reply is coming from a thread the caller does
+    /// not own or from the caller's own event loop. Only a synchronous entry
+    /// point that must hand back a *bound* instance asks it —
+    /// `Bridge::registerHandlerImpl` is the single caller in the framework; the
+    /// asynchronous entry points never wait and never consult it.
+    ///
+    /// A backend that returns `kCallerMayBlock` (the default) commits to
+    /// settling every `Completion` it returns exactly once without any further
+    /// call from the caller. Every backend that does not override `bindModel`
+    /// satisfies that trivially: the default settles before it returns.
+    ///
+    /// @return `BindWait::kCallerMayBlock` unless overridden.
+    [[nodiscard]] virtual BindWait bindWaitPolicy() const noexcept { return BindWait::kCallerMayBlock; }
 
     /// @brief Runs @p request against the legacy synchronous verbs, blocking.
     ///
@@ -883,6 +963,20 @@ public:
             inner->assignPrimary(request.mid, request.typeId, request.primary);
             return request.mid;
         });
+    }
+
+    /// @brief This adapter's whole purpose is that the caller does not block.
+    ///
+    /// Not forwarded to the wrapped backend, unlike everything below:
+    /// `bindModel`/`promoteModel` are the two verbs this adapter *reshapes*, so
+    /// the policy describing them describes this adapter, not what it wraps. A
+    /// caller that waited would pay exactly the blocking cost the adapter was
+    /// interposed to move elsewhere, and — if it happens to be running on
+    /// `blockingExec` — would deadlock against the strand it is waiting on.
+    ///
+    /// @return `BindWait::kCallerMustNotBlock`, always.
+    [[nodiscard]] detail::BindWait bindWaitPolicy() const noexcept override {
+        return detail::BindWait::kCallerMustNotBlock;
     }
 
     // ── Everything else is forwarded unchanged ───────────────────────────

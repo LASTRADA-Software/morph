@@ -56,7 +56,7 @@
         },
         {
           "file": "include/morph/core/bridge.hpp",
-          "line": 121,
+          "line": 122,
           "mutants": 3,
           "mutator": "cxx_add_to_sub",
           "source": "return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));",
@@ -64,7 +64,7 @@
         },
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1228,
+          "line": 1322,
           "mutants": 1,
           "mutator": "cxx_replace_scalar_call",
           "source": "aware.reserve(_changeAware.size());",

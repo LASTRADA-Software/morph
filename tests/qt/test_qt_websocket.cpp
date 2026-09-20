@@ -23,6 +23,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_tls.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
@@ -104,6 +105,56 @@ static void pumpUntil(const std::function<bool()>& done, int maxIterations = 50)
     QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::ExcludeUserInputEvents);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 }
+
+// ── Structural-registration-surface helpers ──────────────────────────────────
+//
+// The tests below drive `bindModel`/`promoteModel` directly. They need to
+// distinguish "the continuation was handed to my executor" from "the
+// continuation ran", which is precisely the distinction the surface exists to
+// make: a backend that settled inline would collapse the two.
+namespace {
+
+/// @brief `MainThreadExecutor` that counts what has been handed to it.
+///
+/// `posted` rises when the backend settles; the queued task only runs on
+/// `drain()`. A backend that ignored `cbExec` and invoked the continuation
+/// itself would leave `posted` at zero.
+struct CountingExecutor : morph::exec::MainThreadExecutor {
+    std::atomic<int> posted{0};
+
+    void post(std::function<void()> task) override {
+        posted.fetch_add(1);
+        morph::exec::MainThreadExecutor::post(std::move(task));
+    }
+};
+
+/// @brief Outcome of one `bindModel`/`promoteModel` call, as the test sees it.
+struct ControlOutcome {
+    std::atomic<uint64_t> modelId{0};
+    std::string failure;
+    std::atomic<bool> settled{false};
+};
+
+/// @brief Attaches @p outcome's handlers to @p completion.
+void observe(morph::async::Completion<morph::exec::detail::ModelId>& completion, ControlOutcome& outcome) {
+    completion
+        .then([&outcome](morph::exec::detail::ModelId mid) {
+            outcome.modelId.store(mid.v);
+            outcome.settled.store(true);
+        })
+        .onError([&outcome](const std::exception_ptr& err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const std::exception& exc) {
+                outcome.failure = exc.what();
+            } catch (...) {
+                outcome.failure = "unknown";
+            }
+            outcome.settled.store(true);
+        });
+}
+
+}  // namespace
 
 // ── TLS config helpers ───────────────────────────────────────────────────────
 static QSslConfiguration makeServerTlsConfig() {
@@ -233,7 +284,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend::notifyBackendChanged is a documented n
 }
 
 TEST_CASE(
-    "morph::qt::QtWebSocketBackend: registerModelAsync (opt-in via Config::asyncRegistrationEnabled) registers "
+    "morph::qt::QtWebSocketBackend: bindModel (non-blocking via Config::asyncRegistrationEnabled) registers "
     "without blocking",
     "[qt][ws][issue26]") {
     ensureApp();
@@ -258,7 +309,7 @@ TEST_CASE(
 
     // Registration does not block: registerHandler() already returned above,
     // yet the binding is still unbound -- this is the whole point of the
-    // async path (see IBackend::registerModelAsync's doc comment). A real
+    // non-blocking path (see IBackend::bindModel's doc comment). A real
     // WASM caller would gate its UI on this instead of firing an action
     // immediately, since executeVia fails fast on an unbound binding.
     CHECK(binding->currentId.load() == 0U);
@@ -358,7 +409,7 @@ TEST_CASE(
 #endif
 
 TEST_CASE(
-    "morph::qt::QtWebSocketBackend: registerModelAsync's pending registration is cancelled when the connection "
+    "morph::qt::QtWebSocketBackend: bindModel's pending registration is cancelled when the connection "
     "drops before a reply arrives",
     "[qt][ws][issue26]") {
     ensureApp();
@@ -391,13 +442,14 @@ TEST_CASE(
     CHECK(binding->currentId.load() == 0U);  // onRegistered never fired; still safely unbound
 }
 
-// ── The shared/keyed async wire methods ──────────────────────────────────────
-// Same opt-in gate and same callId-keyed reply routing as registerModelAsync
-// above; these drive them against a real RemoteServer, end to end.
+// ── The keyed shapes of the structural surface ───────────────────────────────
+// `bindModel` with a non-empty `primary` is the register-or-attach the
+// `registerModelShared`/`attachModel` pair used to spell as two verbs; these
+// drive it against a real RemoteServer, end to end.
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("morph::qt::QtWebSocketBackend: registerModelSharedAsync registers-or-attaches without blocking",
-          "[qt][ws][issue26][shared-instances]") {
+TEST_CASE("morph::qt::QtWebSocketBackend: bindModel with a primary registers-or-attaches without blocking",
+          "[qt][ws][issue26][shared-instances][morph568]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -410,19 +462,22 @@ TEST_CASE("morph::qt::QtWebSocketBackend: registerModelSharedAsync registers-or-
                                           morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
     REQUIRE(backend.waitForConnected());
 
-    std::atomic<uint64_t> registered{0};
-    std::string failure;
-    REQUIRE(backend.registerModelSharedAsync(
-        "WsEchoModel", nullptr, {.contextKey = "acct-1", .primary = "acct-1"},
-        [&](morph::exec::detail::ModelId mid) { registered.store(mid.v); },
-        [&](const std::string& message) { failure = message; }));
+    morph::exec::MainThreadExecutor cbExec;
+    ControlOutcome first;
+    auto firstBind = backend.bindModel(
+        {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = "acct-1", .primary = "acct-1", .current = {}},
+        cbExec);
+    observe(firstBind, first);
 
-    // Returned true without waiting for the reply: nothing has arrived yet.
-    CHECK(registered.load() == 0U);
+    // Returned without waiting for the reply: nothing has arrived yet.
+    CHECK(first.modelId.load() == 0U);
 
-    pumpUntil([&] { return registered.load() != 0U || !failure.empty(); });
-    CHECK(failure.empty());
-    REQUIRE(registered.load() != 0U);
+    pumpUntil([&] {
+        cbExec.drain();
+        return first.settled.load();
+    });
+    CHECK(first.failure.empty());
+    REQUIRE(first.modelId.load() != 0U);
 
     // It really went out as a *shared* register, not a private one: the key is
     // now in the server's instance directory.
@@ -430,21 +485,24 @@ TEST_CASE("morph::qt::QtWebSocketBackend: registerModelSharedAsync registers-or-
     REQUIRE(keys.size() == 1);
     CHECK(keys.front() == "acct-1");
 
-    // A second shared register for the same key joins the same instance rather
-    // than creating a second one -- the register-or-attach half of the name.
-    std::atomic<uint64_t> second{0};
-    REQUIRE(backend.registerModelSharedAsync(
-        "WsEchoModel", nullptr, {.contextKey = "acct-1", .primary = "acct-1"},
-        [&](morph::exec::detail::ModelId mid) { second.store(mid.v); },
-        [&](const std::string& message) { failure = message; }));
-    pumpUntil([&] { return second.load() != 0U || !failure.empty(); });
-    CHECK(failure.empty());
-    CHECK(second.load() == registered.load());
+    // A second bind for the same key joins the same instance rather than
+    // creating a second one -- the register-or-attach half of the shape.
+    ControlOutcome second;
+    auto secondBind = backend.bindModel(
+        {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = "acct-1", .primary = "acct-1", .current = {}},
+        cbExec);
+    observe(secondBind, second);
+    pumpUntil([&] {
+        cbExec.drain();
+        return second.settled.load();
+    });
+    CHECK(second.failure.empty());
+    CHECK(second.modelId.load() == first.modelId.load());
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("morph::qt::QtWebSocketBackend: attachModelAsync joins the existing shared instance without blocking",
-          "[qt][ws][issue26][shared-instances]") {
+TEST_CASE("morph::qt::QtWebSocketBackend: bindModel re-points from a live instance without blocking",
+          "[qt][ws][issue26][shared-instances][morph568]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -457,40 +515,49 @@ TEST_CASE("morph::qt::QtWebSocketBackend: attachModelAsync joins the existing sh
                                           morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
     REQUIRE(backend.waitForConnected());
 
-    // Seed the directory synchronously, so the async attach below has something
-    // to join and its reply can be compared against a known id.
+    // Seed the directory synchronously, so the bind below has something to join
+    // and its reply can be compared against a known id.
     auto const seeded =
         backend.registerModelShared("WsEchoModel", nullptr, {.contextKey = "acct-7", .primary = "acct-7"});
     REQUIRE(seeded.v != 0U);
 
-    std::atomic<uint64_t> attached{0};
-    std::string failure;
-    REQUIRE(backend.attachModelAsync(
-        "WsEchoModel", nullptr, {.contextKey = "acct-7", .primary = "acct-7"}, morph::exec::detail::ModelId{0},
-        [&](morph::exec::detail::ModelId mid) { attached.store(mid.v); },
-        [&](const std::string& message) { failure = message; }));
-    CHECK(attached.load() == 0U);  // the reply has not arrived yet
+    morph::exec::MainThreadExecutor cbExec;
+    ControlOutcome joined;
+    auto join = backend.bindModel(
+        {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = "acct-7", .primary = "acct-7", .current = {}},
+        cbExec);
+    observe(join, joined);
+    CHECK(joined.modelId.load() == 0U);  // the reply has not arrived yet
 
-    pumpUntil([&] { return attached.load() != 0U || !failure.empty(); });
-    CHECK(failure.empty());
-    CHECK(attached.load() == seeded.v);
+    pumpUntil([&] {
+        cbExec.drain();
+        return joined.settled.load();
+    });
+    CHECK(joined.failure.empty());
+    CHECK(joined.modelId.load() == seeded.v);
 
-    // Re-pointing to a different key gets a different instance, still async.
-    std::atomic<uint64_t> repointed{0};
-    REQUIRE(backend.attachModelAsync(
-        "WsEchoModel", nullptr, {.contextKey = "acct-8", .primary = "acct-8"},
-        morph::exec::detail::ModelId{attached.load()},
-        [&](morph::exec::detail::ModelId mid) { repointed.store(mid.v); },
-        [&](const std::string& message) { failure = message; }));
-    pumpUntil([&] { return repointed.load() != 0U || !failure.empty(); });
-    CHECK(failure.empty());
-    REQUIRE(repointed.load() != 0U);
-    CHECK(repointed.load() != seeded.v);
+    // Re-pointing to a different key gets a different instance -- the `attach`
+    // envelope, selected by a non-zero `current`.
+    ControlOutcome repointed;
+    auto repoint = backend.bindModel({.typeId = "WsEchoModel",
+                                      .factory = nullptr,
+                                      .contextKey = "acct-8",
+                                      .primary = "acct-8",
+                                      .current = morph::exec::detail::ModelId{joined.modelId.load()}},
+                                     cbExec);
+    observe(repoint, repointed);
+    pumpUntil([&] {
+        cbExec.drain();
+        return repointed.settled.load();
+    });
+    CHECK(repointed.failure.empty());
+    REQUIRE(repointed.modelId.load() != 0U);
+    CHECK(repointed.modelId.load() != seeded.v);
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("morph::qt::QtWebSocketBackend: attachModelAsync with an empty primary degrades to a private registration",
-          "[qt][ws][issue26][shared-instances]") {
+TEST_CASE("morph::qt::QtWebSocketBackend: bindModel with an empty primary is a private registration",
+          "[qt][ws][issue26][shared-instances][morph568]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -503,23 +570,25 @@ TEST_CASE("morph::qt::QtWebSocketBackend: attachModelAsync with an empty primary
                                           morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
     REQUIRE(backend.waitForConnected());
 
-    std::atomic<uint64_t> registered{0};
-    std::string failure;
-    REQUIRE(backend.attachModelAsync(
-        "WsEchoModel", nullptr, {.contextKey = "ctx", .primary = ""}, morph::exec::detail::ModelId{0},
-        [&](morph::exec::detail::ModelId mid) { registered.store(mid.v); },
-        [&](const std::string& message) { failure = message; }));
+    morph::exec::MainThreadExecutor cbExec;
+    ControlOutcome outcome;
+    auto bind = backend.bindModel(
+        {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = "ctx", .primary = "", .current = {}}, cbExec);
+    observe(bind, outcome);
 
-    pumpUntil([&] { return registered.load() != 0U || !failure.empty(); });
-    CHECK(failure.empty());
-    REQUIRE(registered.load() != 0U);
+    pumpUntil([&] {
+        cbExec.drain();
+        return outcome.settled.load();
+    });
+    CHECK(outcome.failure.empty());
+    REQUIRE(outcome.modelId.load() != 0U);
     // Private, exactly like the synchronous attachModel's own empty-primary
     // branch: nothing was filed in the shared directory.
     CHECK(backend.listInstances("WsEchoModel").empty());
 }
 
-TEST_CASE("morph::qt::QtWebSocketBackend: registerModelSharedAsync on a never-connected socket reports onError",
-          "[qt][ws][issue26][shared-instances][disconnect]") {
+TEST_CASE("morph::qt::QtWebSocketBackend: a keyed bindModel on a never-connected socket rejects",
+          "[qt][ws][issue26][shared-instances][disconnect][morph568]") {
     ensureApp();
     // Port 1 is reserved and never listening — the socket never reaches Connected.
     QUrl url{QString("ws://127.0.0.1:1")};
@@ -528,21 +597,116 @@ TEST_CASE("morph::qt::QtWebSocketBackend: registerModelSharedAsync on a never-co
                                           morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
     REQUIRE_FALSE(backend.waitForConnected(200));
 
-    std::string failure;
-    std::atomic<uint64_t> registered{0};
-    // Accepts the request (returns true) and reports the failure through
-    // onError rather than blocking or throwing. Bridge::ensureBoundAsync
-    // tolerates this firing inline, from inside the call itself.
-    REQUIRE(backend.registerModelSharedAsync(
-        "WsEchoModel", nullptr, {.contextKey = "acct-1", .primary = "acct-1"},
-        [&](morph::exec::detail::ModelId mid) { registered.store(mid.v); },
-        [&](const std::string& message) { failure = message; }));
-    CHECK(registered.load() == 0U);
-    CHECK(failure == "disconnected");
+    morph::exec::MainThreadExecutor cbExec;
+    ControlOutcome outcome;
+    // Reports the failure through the Completion rather than blocking or
+    // throwing: one failure channel, which is what the structural surface
+    // promises its caller.
+    auto bind = backend.bindModel(
+        {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = "acct-1", .primary = "acct-1", .current = {}},
+        cbExec);
+    observe(bind, outcome);
+    cbExec.drain();
+    CHECK(outcome.modelId.load() == 0U);
+    CHECK(outcome.failure == "disconnected");
+}
+
+// ── The delivery thread, which is what morph#567 made structural ─────────────
+//
+// This is the first *production* backend on the surface, so this is the first
+// test that the guarantee survives a real transport rather than a test double
+// settling its own promise. `QtWebSocketBackend` settles from `onTextMessage`,
+// on the Qt event-loop thread; the caller here names a different executor and
+// must be the one that decides when the continuation runs.
+//
+// Written so it fails if the backend delivered inline: `posted` rises when the
+// reply lands, and the continuation must still not have run at that point.
+TEST_CASE(
+    "morph::qt::QtWebSocketBackend: bindModel delivers its continuation on the caller's executor, not the "
+    "thread it settles on",
+    "[qt][ws][morph568][threading]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    const QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url, morph::model::detail::defaultDispatcher(),
+                                          morph::model::detail::defaultRegistry(), std::nullopt,
+                                          morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
+    REQUIRE(backend.waitForConnected());
+
+    CountingExecutor cbExec;
+    std::atomic<bool> ran{false};
+    std::atomic<uint64_t> seen{0};
+    auto bind = backend.bindModel(
+        {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = "ctx", .primary = "", .current = {}}, cbExec);
+    bind.then([&](morph::exec::detail::ModelId mid) {
+            seen.store(mid.v);
+            ran.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { ran.store(true); });
+
+    // Pump only the Qt loop: the reply arrives and the backend settles, which
+    // posts the continuation. Nothing drains `cbExec` here.
+    pumpUntil([&] { return cbExec.posted.load() != 0; });
+    REQUIRE(cbExec.posted.load() != 0);  // the reply really did land
+    CHECK_FALSE(ran.load());             // ... and the backend did not run it
+
+    cbExec.drain();
+    CHECK(ran.load());
+    CHECK(seen.load() != 0U);
+}
+
+// The promote half of the surface, direct rather than through Bridge.
+TEST_CASE("morph::qt::QtWebSocketBackend: promoteModel files a live instance under a key without blocking",
+          "[qt][ws][shared-instances][morph568]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    const QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url, morph::model::detail::defaultDispatcher(),
+                                          morph::model::detail::defaultRegistry(), std::nullopt,
+                                          morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
+    REQUIRE(backend.waitForConnected());
+
+    auto const anonymous = backend.registerModel("WsEchoModel", nullptr);
+    REQUIRE(anonymous.v != 0U);
+    REQUIRE(backend.listInstances("WsEchoModel").empty());
+
+    morph::exec::MainThreadExecutor cbExec;
+    ControlOutcome outcome;
+    auto promote = backend.promoteModel({.mid = anonymous, .typeId = "WsEchoModel", .primary = "acct-9"}, cbExec);
+    observe(promote, outcome);
+    CHECK_FALSE(outcome.settled.load());  // not blocked on the round trip
+
+    pumpUntil([&] {
+        cbExec.drain();
+        return outcome.settled.load();
+    });
+    CHECK(outcome.failure.empty());
+    CHECK(outcome.modelId.load() == anonymous.v);
+
+    auto const keys = backend.listInstances("WsEchoModel");
+    REQUIRE(keys.size() == 1);
+    CHECK(keys.front() == "acct-9");
+
+    // The documented no-op cases resolve rather than reject, and send nothing.
+    ControlOutcome noop;
+    auto emptyKey = backend.promoteModel({.mid = anonymous, .typeId = "WsEchoModel", .primary = ""}, cbExec);
+    observe(emptyKey, noop);
+    cbExec.drain();
+    CHECK(noop.settled.load());
+    CHECK(noop.failure.empty());
+    CHECK(noop.modelId.load() == anonymous.v);
 }
 
 TEST_CASE(
-    "morph::qt::QtWebSocketBackend: registerModelAsync called before the socket connects queues and retries once "
+    "morph::qt::QtWebSocketBackend: bindModel called before the socket connects queues and retries once "
     "connected fires",
     "[qt][ws][issue54]") {
     ensureApp();
@@ -565,7 +729,7 @@ TEST_CASE(
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "WsEchoModel";
     binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); };
-    // registerModelAsync is called here, before the socket has finished its
+    // bindModel is called here, before the socket has finished its
     // handshake. Previously this called onError("disconnected") immediately
     // and never retried -- currentId would stay 0 forever even once the
     // socket connects moments later. It must instead queue the attempt and
@@ -2298,6 +2462,74 @@ TEST_CASE("Process separation: TLS handshake works across processes", "[qt][wss]
     REQUIRE(runClient(url, {QStringLiteral("--tls")}) == 0);
 }
 
+// Coverage for morph#594: a *private* registration over this transport must
+// carry `contextKey` to the server, exactly as `SimulatedRemoteBackend` and
+// `morph::net::SocketBackend` (morph#587) do.
+//
+// The assertion is deliberately on the provider, not on the registration:
+// registration succeeded before this was fixed too. `RemoteServer::
+// attachLogIfConfigured` returns *before* consulting the `LogProvider` when the
+// envelope's `contextKey` is empty, so a dropped key does not produce an audit
+// record missing a field — it produces no audit record at all, silently.
+TEST_CASE("morph::qt::QtWebSocketBackend: a private registration carries contextKey to the server's log provider",
+          "[qt][ws][action_log]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    // The provider runs on the server's own strand and the assertions on this
+    // thread; the mutex is what makes that handoff an ordinary handoff rather
+    // than a data race TSan will flag.
+    std::mutex providerMtx;
+    std::vector<std::string> requestedFor;
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    server->setLogProvider([&](std::string_view modelType, std::string_view contextKey) {
+        std::scoped_lock const lock{providerMtx};
+        requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
+        return log;
+    });
+
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl const url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    SECTION("through the blocking registerModelWithContext path") {
+        auto const mid = backend.registerModelWithContext("WsEchoModel", nullptr, "acct-594");
+        REQUIRE(mid.v != 0U);
+        std::scoped_lock const lock{providerMtx};
+        CHECK(requestedFor == std::vector<std::string>{"WsEchoModel:acct-594"});
+    }
+
+    SECTION("and through the default bindModel, which is what Bridge::registerHandler reaches here") {
+        // `asyncRegistrationEnabled` is unset, so this is `IBackend::bindModel`'s
+        // default dispatching the empty-`primary`/zero-`current` shape to
+        // `registerModelWithContext` — the path a `Bridge` over this backend
+        // takes, and the one morph#594 reported as dropping the key.
+        morph::exec::detail::ModelId bound{};
+        backend
+            .bindModel(morph::backend::detail::BindRequest{.typeId = "WsEchoModel",
+                                                           .factory = nullptr,
+                                                           .contextKey = "acct-bind",
+                                                           .primary = {},
+                                                           .current = {}},
+                       morph::exec::detail::inlineExecutor())
+            .thenDetached([&](morph::exec::detail::ModelId mid) { bound = mid; });
+        REQUIRE(bound.v != 0U);
+        std::scoped_lock const lock{providerMtx};
+        CHECK(requestedFor == std::vector<std::string>{"WsEchoModel:acct-bind"});
+    }
+
+    SECTION("while plain registerModel still sends no key, so the provider is not consulted") {
+        auto const mid = backend.registerModel("WsEchoModel", nullptr);
+        REQUIRE(mid.v != 0U);
+        std::scoped_lock const lock{providerMtx};
+        CHECK(requestedFor.empty());
+    }
+}
+
 // ── Custom main: own the QCoreApplication explicitly ─────────────────────────
 //
 // Without this, `QCoreApplication` was a static local in `ensureApp()` and so
@@ -2321,7 +2553,7 @@ int main(int argc, char* argv[]) {
     return result;
 }
 
-// ── morph#495: the async control paths must stamp the session too ──
+// ── morph#495: the non-blocking control paths must stamp the session too ──
 //
 // registerModelSharedAsync, attachModelAsync and assignPrimaryAsync each built
 // their envelope and encoded it with no `env.session = _session`, while all
@@ -2329,7 +2561,10 @@ int main(int argc, char* argv[]) {
 // authorizes from env.session (remote.hpp: stampVerifiedPrincipal, and the
 // register/attach/assign authorization sites), so a client using the async path
 // -- which is the WASM path, and the only one a WASM main thread can use --
-// reached an authorizing server as an unauthenticated principal.
+// reached an authorizing server as an unauthenticated principal. Those three
+// verbs are gone (morph#568); `sendControl` is now the single place a control
+// envelope is built, so the gap has one place left to reappear in -- and this
+// test still guards it.
 //
 // A test asserting only "the async call succeeds" would have passed before the
 // fix, so this records what the *server* saw.
@@ -2355,7 +2590,7 @@ struct RecordingAuthorizer : morph::session::IAuthorizer {
 };
 }  // namespace
 
-TEST_CASE("morph::qt::QtWebSocketBackend: the async control envelopes carry the session",
+TEST_CASE("morph::qt::QtWebSocketBackend: the non-blocking control envelopes carry the session",
           "[qt][ws][morph495][security]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
@@ -2376,20 +2611,23 @@ TEST_CASE("morph::qt::QtWebSocketBackend: the async control envelopes carry the 
     session.token = "tok-495";
     backend.setSession(session);
 
-    std::atomic<uint64_t> registered{0};
-    std::string failure;
-    REQUIRE(backend.registerModelSharedAsync(
-        "WsEchoModel", nullptr, {.contextKey = "acct-495", .primary = "acct-495"},
-        [&](morph::exec::detail::ModelId mid) { registered.store(mid.v); },
-        [&](const std::string& message) { failure = message; }));
-    pumpUntil([&] { return registered.load() != 0U || !failure.empty(); });
-    CHECK(failure.empty());
-    REQUIRE(registered.load() != 0U);
+    morph::exec::MainThreadExecutor cbExec;
+    ControlOutcome outcome;
+    auto bind = backend.bindModel(
+        {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = "acct-495", .primary = "acct-495", .current = {}},
+        cbExec);
+    observe(bind, outcome);
+    pumpUntil([&] {
+        cbExec.drain();
+        return outcome.settled.load();
+    });
+    CHECK(outcome.failure.empty());
+    REQUIRE(outcome.modelId.load() != 0U);
 
     std::scoped_lock const lock{authorizer->mtx};
     REQUIRE_FALSE(authorizer->registerTokens.empty());
-    // Before the fix this was "" -- registerModelSharedAsync built its envelope
-    // with no `env.session = _session`, so the server received a
-    // default-constructed session and could not authenticate the caller at all.
+    // Before the fix this was "" -- the shared register built its envelope with
+    // no `env.session = _session`, so the server received a default-constructed
+    // session and could not authenticate the caller at all.
     CHECK(authorizer->registerTokens.back() == "tok-495");
 }
