@@ -85,6 +85,27 @@ env:
   # the cache itself -- jobs still read each other's entries.
   FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   CLANG_VERSION: "22"
+  # The Catch2 the clang-tidy-diff job analyses against. Not a version this
+  # workflow installs -- `apt-get install -y catch2` takes whatever
+  # ubuntu-24.04 ships -- but a record of what that has been measured to be,
+  # which the "Assert the Catch2 this job analyses against" step below reads
+  # back off the runner and fails on if it has moved.
+  #
+  # It is worth recording because it is load-bearing and invisible. Which
+  # Catch2 is on the include path decides whether
+  # readability-function-cognitive-complexity findings on a TEST_CASE body
+  # reach this job at all, so a workstation with a different one can run the
+  # same clang-tidy over the same diff with the same flags and exit 0 where
+  # this job exits 1 -- silently, reporting nothing rather than reporting less
+  # (morph#666). An unpinned package that decides a gate's outcome and moves
+  # without notice is the shape this repository keeps getting caught by.
+  #
+  # ubuntu-24.04's package is 3.4.0-1build1 (Launchpad, noble Release pocket),
+  # and the clang-tidy-report artifact of run 35581623269 prints
+  # `/usr/include/catch2/internal/catch_test_registry.hpp:121` with
+  # `INTERNAL_CATCH_TESTCASE2( INTERNAL_CATCH_UNIQUE_NAME( dummyFunction ) )`
+  # and no `, __VA_ARGS__` -- v3.4.0's text exactly, and not v3.5.3's.
+  CATCH2_VERSION: "3.4.0"
   # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
   QT_VERSION: "6.8.1"
 
@@ -2192,6 +2213,20 @@ jobs:
       # accident.
       - name: Self-test the clang-tidy suppression-scope checker
         run: bash scripts/test_check_tidy_suppression_scope.sh clang-tidy-${{ env.CLANG_VERSION }}
+
+      # The Catch2 on this runner's include path decides whether a
+      # readability-function-cognitive-complexity finding on a TEST_CASE body
+      # reaches this job, and `apt-get install -y catch2` above pins nothing.
+      # This step reads the version out of the headers the step above just
+      # installed and fails if it is not the one CATCH2_VERSION records, so a
+      # move in the runner image is a red job rather than a quiet change of
+      # what this gate measures (morph#666). Its self-test runs first, for the
+      # same reason the suppression-scope checker's does.
+      - name: Self-test the catch2-pin checker
+        run: bash scripts/test_check_catch2_pin.sh
+
+      - name: Assert the Catch2 this job analyses against
+        run: bash scripts/check_catch2_pin.sh . --strict
 
       # Catches morph#632's bug class: tests/.clang-tidy's thirteen
       # suppressions are argued as Catch2 and raw-syscall idiom, which is true
