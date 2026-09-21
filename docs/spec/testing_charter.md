@@ -65,7 +65,7 @@ floor means anything.
 | I/O error injection (ladder only) | `examples/common/testkit/fault_proxy.hpp` | Ladder Qt test suites | Those tests' own assertions |
 | Fuzzing | `tests/fuzz/` (`fuzz_wire_decode`, `fuzz_dispatch_execute`), libFuzzer | Local / on demand (`-DMORPH_BUILD_FUZZERS=ON`; not a CI leg) | A crash, hang, or sanitizer trip during a campaign; regression cases preserved under `tests/fuzz/findings/` |
 | AddressSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-asan`), `ladder-sanitizers` | The CI job (nonzero exit on any diagnostic) |
-| UndefinedBehaviorSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-ubsan`), `ladder-sanitizers` | The CI job |
+| UndefinedBehaviorSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-ubsan`), `ladder-sanitizers`, `bank-sanitizers` | The CI job |
 | ThreadSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-tsan`), `kanban-tsan` | The CI job |
 | A sanitizer leg can fail at all | `scripts/check_sanitizer_can_fail.sh` | `drift-guard` | The check: real undefined behaviour compiled with `apply_sanitizers()`'s own flags must make the process exit non-zero, and an unknown `AF_SANITIZER` must fail the configure (morph#541) |
 | Every sanitized binary is really sanitized | `scripts/check_sanitizer_instrumentation.sh` | `linux-sanitizers`, `ladder-sanitizers`, `kanban-tsan` (self-tested in `drift-guard.yml`) | The check: every binary `ctest` will run on a sanitizer leg must carry that sanitizer's runtime symbols (morph#542). Its `--binary <file> <mode>` mode answers the same question about one named file, with no floor, and is refused under `GITHUB_ACTIONS` so it cannot stand in for the sweep on a CI leg (morph#675) |
