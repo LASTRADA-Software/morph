@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
-#include <filesystem>
 #include <morph/core/bridge.hpp>
 #include <string>
 
@@ -19,11 +18,6 @@ using bank::testing::await;
 
 namespace {
 
-std::string testConnection() {
-    bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
-}
-
 /// Opens a fresh checking account in the given currency and returns its id.
 std::int64_t openAccount(bank::app::App& app, morph::bridge::BridgeHandler<bank::CustomerModel>& customer,
                          bank::Currency currency = bank::Currency::USD) {
@@ -39,7 +33,7 @@ std::int64_t openAccount(bank::app::App& app, morph::bridge::BridgeHandler<bank:
 }  // namespace
 
 TEST_CASE("TransactionModel deposit / withdraw adjust balances and ledger", "[transaction]") {
-    bank::app::App app{testConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("erin-txn");
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};
@@ -78,7 +72,7 @@ TEST_CASE("TransactionModel deposit / withdraw adjust balances and ledger", "[tr
 }
 
 TEST_CASE("TransactionModel transfer is atomic and balance-preserving", "[transaction]") {
-    bank::app::App app{testConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("frank-transfer");
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};

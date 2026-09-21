@@ -7,7 +7,6 @@
 // IAuthorizer that rejects one action type.
 
 #include <catch2/catch_test_macros.hpp>
-#include <filesystem>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -26,11 +25,6 @@
 using bank::testing::await;
 
 namespace {
-
-std::string testConnection() {
-    bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
-}
 
 /// Authorizer that forbids closing accounts but allows everything else.
 struct NoCloseAuthorizer : morph::session::IAuthorizer {
@@ -59,7 +53,7 @@ struct NoCloseAuthorizer : morph::session::IAuthorizer {
 
 TEST_CASE("AccountModel runs unchanged over a remote backend", "[remote]") {
     bank::testing::ensureDatabase();
-    (void)testConnection();  // ensure the shared DB is configured
+    (void)bank::testing::connectionString();  // ensure the shared DB is configured
 
     morph::exec::ThreadPoolExecutor serverPool{2};
     morph::exec::MainThreadExecutor gui;

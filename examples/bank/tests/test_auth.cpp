@@ -13,17 +13,8 @@
 
 using bank::testing::await;
 
-namespace {
-
-std::string testConnection() {
-    bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
-}
-
-}  // namespace
-
 TEST_CASE("AuthModel register/login/change-password flow", "[auth]") {
-    bank::app::App app{testConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     morph::bridge::BridgeHandler<bank::AuthModel> auth{app.bridge(), app.gui()};
 
     const std::string user = "carol-" + std::to_string(std::filesystem::hash_value("carol"));
@@ -84,7 +75,7 @@ TEST_CASE("AuthModel register/login/change-password flow", "[auth]") {
 }
 
 TEST_CASE("AuthModel WhoAmI reflects the bridge session", "[auth]") {
-    bank::app::App app{testConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     morph::bridge::BridgeHandler<bank::AuthModel> auth{app.bridge(), app.gui()};
 
     auto anon = await(auth.execute(bank::dto::WhoAmI{}), app.guiLoop());

@@ -234,6 +234,23 @@ if(MORPH_BUILD_TESTS)
         # ADD_TAGS_AS_LABELS), so `-L bank` is the only selector available,
         # and CMakePresets.json's base-test sets `noTestsAction: error`, so a
         # label that stopped matching fails the leg instead of running nothing.
+        #
+        # No RESOURCE_LOCK on any of the three calls, and that is a decision
+        # rather than the oversight it was (morph#682). catch_discover_tests
+        # registers one ctest case per TEST_CASE and ctest runs each as its own
+        # process; bank's cases all named one fixed SQLite path under
+        # temp_directory_path() and each deleted it on the way in, so
+        # `ctest -j 12 -L bank` failed 21 of 21 with
+        # `HY000 (10) - [SQLite]disk I/O error (10)`. The ladder's remedy for
+        # the same hazard is RESOURCE_LOCK morph_ladder_test_db (see
+        # cmake/morph_add_rung.cmake's own comment on it), which serialises the
+        # cases. Bank does not need to buy correctness with parallelism: no
+        # case here reads state another case wrote -- every one already started
+        # from an empty schema -- so tests/unique_test_database.hpp gives each
+        # *process* a database directory of its own instead, and all 21 pass
+        # concurrently. Measured: 0/21 at -j 12 before, 21/21 at -j 12 after,
+        # in 1.1s against the same suite's 5.7s serial -- which is what a lock
+        # would have pinned every developer run to.
         catch_discover_tests(bank_tests
             DISCOVERY_MODE PRE_TEST
             PROPERTIES LABELS "bank")

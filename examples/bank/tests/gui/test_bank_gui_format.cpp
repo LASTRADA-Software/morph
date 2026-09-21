@@ -40,8 +40,10 @@ TEST_CASE("parseMinor turns well-formed amounts into minor units", "[bank][gui][
     CHECK(parseMinor(QStringLiteral("12.34")) == 1234);
     CHECK(parseMinor(QStringLiteral("0")) == 0);
     CHECK(parseMinor(QStringLiteral("  7.5  ")) == 750);
-    // Rounds to nearest rather than truncating, which is what the `+ 0.5`
-    // does; pinned here only so that a future change to it is a visible one.
+    // Rounds to nearest rather than truncating, with a half going away from
+    // zero. This input alone does not distinguish `std::llround` from the
+    // `+ 0.5` it replaced -- both give 1 -- which is the whole point of the
+    // last case in this file.
     CHECK(parseMinor(QStringLiteral("0.005")) == 1);
     // `decimals` comes from the selected currency (JPY has none).
     CHECK(parseMinor(QStringLiteral("1200"), 0) == 1200);
@@ -90,4 +92,34 @@ TEST_CASE("parseMinor's ceiling is the int64 range, not an arbitrary cap", "[ban
     // One order of magnitude further is out, so the accept/reject edge sits
     // between them rather than somewhere arbitrary below.
     CHECK_FALSE(parseMinor(QStringLiteral("920000000000000000")).has_value());
+}
+
+// The morph#678 regression. `static_cast<std::int64_t>(x + 0.5)` is not
+// "round to nearest": for the double immediately below 0.5, adding 0.5 rounds
+// *up* to exactly 1.0 in IEEE-754, and the truncating cast then yields 1 for a
+// value that is below half a minor unit.
+//
+// The witness has to be an input where the two disagree -- `0.005` and `0.004`
+// give the same answer either way and would pin nothing. The first case in
+// this file keeps `0.005` for exactly that reason: it is the half-way input
+// that must still round away from zero, and it does under both.
+TEST_CASE("parseMinor rounds a value just below half a minor unit down", "[bank][gui][format]") {
+    // "0.004999999999999999" scales to 0.49999999999999994, the largest
+    // double below 0.5:
+    //
+    //     x                = 0.49999999999999994449
+    //     x < 0.5          = true
+    //     x + 0.5          = 1
+    //     (int64)(x + 0.5) = 1      <- what this function returned
+    //     std::llround(x)  = 0
+    //
+    // Not a constructed bit pattern: a decimal string short enough to type
+    // into the amount field, through `QString::toDouble`.
+    CHECK(parseMinor(QStringLiteral("0.004999999999999999")) == 0);
+    CHECK(parseMinor(QStringLiteral("0.0049999999999999994")) == 0);
+
+    // morph#663's bound still comes first. Rounding a value outside the int64
+    // range is no better defined than casting one, so an amount that cannot
+    // fit has to be rejected before it is rounded, not after.
+    CHECK_FALSE(parseMinor(QStringLiteral("1e30")).has_value());
 }

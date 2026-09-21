@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
-#include <filesystem>
 #include <morph/core/bridge.hpp>
 #include <string>
 
@@ -15,18 +14,8 @@
 
 using bank::testing::await;
 
-namespace {
-
-/// Builds an App against the shared test DB and logs in @p principal.
-std::string dbConnectionForTests() {
-    bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
-}
-
-}  // namespace
-
 TEST_CASE("AccountModel opens, lists, fetches and closes accounts", "[account]") {
-    bank::app::App app{dbConnectionForTests()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("alice-account-basic");
 
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
@@ -88,7 +77,7 @@ TEST_CASE("AccountModel opens, lists, fetches and closes accounts", "[account]")
 }
 
 TEST_CASE("AccountModel reports errors through onError", "[account]") {
-    bank::app::App app{dbConnectionForTests()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("bob-account-errors");
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};

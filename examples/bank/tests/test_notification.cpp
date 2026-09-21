@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
-#include <filesystem>
 #include <morph/core/bridge.hpp>
 #include <string>
 
@@ -12,17 +11,8 @@
 
 using bank::testing::await;
 
-namespace {
-
-std::string testConnection() {
-    bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
-}
-
-}  // namespace
-
 TEST_CASE("NotificationModel posts, lists, and marks read", "[notification]") {
-    bank::app::App app{testConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("mike-notify");
     morph::bridge::BridgeHandler<bank::NotificationModel> notes{app.bridge(), app.gui()};
 
