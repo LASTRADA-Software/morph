@@ -661,7 +661,7 @@ jobs:
       # alongside aqtinstall's Qt, which would leave two Qt6 installs on the
       # same runner for find_package() to pick between.
       - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -852,7 +852,7 @@ jobs:
       # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
       # every other job that builds the ladder on Linux already documents.
       - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -1047,7 +1047,7 @@ jobs:
       # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
       # every other job that builds Qt on Linux already documents.
       - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -1449,7 +1449,7 @@ jobs:
       # (it is not gated on MORPH_BUILD_FORMS_QML), so the floor still bites here.
       - name: Install Qt ${{ env.QT_VERSION }}
         if: steps.filter.outputs.run == 'true'
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -1782,7 +1782,7 @@ jobs:
       # every other job that builds the ladder on Linux already documents.
       - name: Install Qt ${{ env.QT_VERSION }}
         if: steps.filter.outputs.run == 'true'
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -2048,7 +2048,7 @@ jobs:
       # floor in CMakeLists.txt) and Ubuntu 24.04 still ships 6.4.2, whose
       # QQmlApplicationEngine has no loadFromModule.
       - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -2507,7 +2507,7 @@ jobs:
 
       # See the linux-all-features job: the QML renderer needs Qt 6.5+.
       - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets

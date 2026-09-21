@@ -48,7 +48,7 @@ jobs:
       # aqtinstall gives a matched host + wasm Qt pair (same cmake glue), so no
       # host/target version skew.
       - name: Install Qt (host desktop)
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           host: linux
@@ -59,7 +59,7 @@ jobs:
       # Qt 6.7+ ships WebAssembly under host=all_os / target=wasm (not
       # linux/desktop). The matching host desktop Qt above provides the tools.
       - name: Install Qt (wasm, single-threaded)
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           host: all_os
