@@ -392,12 +392,27 @@ natively](#the-structural-registration-surface-natively).
 
   Two limits are deliberate rather than overlooked. A task that settles first
   wins, because its completion was not still pending — the same race
-  `LocalBackend::cancelPending` has always had. And a task already **queued**
-  on `_control` still runs its blocking control call against the wrapped
-  backend after `cancelPending` returns: the caller is told the bind was
-  cancelled while the registration may still go through. Stopping that is a
-  different change — it needs the task to check before calling `op()`, not the
-  promise to be settled after it — and is tracked as morph#636.
+  `LocalBackend::cancelPending` has always had. And a task already *inside*
+  `op()` cannot be recalled: the adapter has no way to interrupt a blocking
+  verb it does not implement.
+- **It stops a control call the strand has not started yet** (morph#636).
+  Settling the promise is only half of the cancellation, because it says
+  nothing about the *work* behind it: a task still queued on `_control` used to
+  reach the head of the strand after `cancelPending` returned and make its
+  blocking control call anyway — an actual `registerModelWithContext` /
+  `registerModelShared` / `attachModel` on the wrapped backend, whose `resolve`
+  then found the state already rejected and did nothing. The caller was told
+  the bind was cancelled while the registration went through, leaving a live
+  instance on a backend whose `Bridge` is gone (`~Bridge`) or which
+  `switchBackend` has just replaced — one nothing will ever `deregisterModel`,
+  because no caller ever learned its id. So each dispatched task carries a
+  `PendingControl` record — its promise plus an `atomic_bool cancelled` — and
+  checks that flag before calling `op()`; `cancelPending` sets it (release)
+  before rejecting. What this closes is exactly the queued-but-not-started
+  window, which is all this adapter *can* close; the preceding bullet's
+  already-running case is unchanged, and a task that reads the flag a few
+  instructions before the store registers exactly as one already inside `op()`
+  would.
 - **Control calls are serialised** onto one strand, so the wrapped backend sees
   them one at a time, as it did when the blocking call itself serialised
   callers. `~SynchronousBackendAdapter` waits for any in-flight control call, so
@@ -2217,7 +2232,7 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `bindModel(request, cbExec)` | Posts `inner->bindModelBlocking(request)` onto the control strand; settles the returned `Completion` on `cbExec`. Never blocks the caller. |
 | `bindWaitPolicy()` | `BindWait::kCallerMustNotBlock`, always. Not forwarded: it describes the two verbs the adapter reshapes. |
 | `promoteModel(request, cbExec)` | Posts `inner->assignPrimary(...)` onto the control strand; resolves with `request.mid`. |
-| `cancelPending(exc)` | Rejects the adapter's own still-unsettled `bindModel`/`promoteModel` promises with `exc`, **then** forwards to `inner`. Not a plain forward: those promises are settled from `_control` tasks the wrapped backend has never heard of (morph#619). |
+| `cancelPending(exc)` | Sets each still-unsettled `bindModel`/`promoteModel` record's `cancelled` flag and rejects its promise with `exc`, **then** forwards to `inner`. Not a plain forward: those promises are settled from `_control` tasks the wrapped backend has never heard of (morph#619). The flag is what stops a task still *queued* on `_control` from making its blocking control call after the caller was told the bind was cancelled (morph#636); a task already inside that call is unaffected. |
 | every other `IBackend` verb | Forwarded to `inner` unchanged. Since morph#571 those are the synchronous verbs only: the one verb that could carry a non-blocking path is `bindModel`, which this adapter reshapes. |
 
 ### Error types
