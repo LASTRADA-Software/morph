@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QString>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 
@@ -83,14 +84,19 @@ inline constexpr double kMinorUnitsBound = 0x1p63;
 /// "reject this input", so the out-of-range cases join the ones that were
 /// already rejected rather than needing new handling.
 ///
-/// The range check is what stops the conversion below being undefined
-/// behaviour: converting a `double` whose truncated value is outside the
-/// destination's range is UB ([conv.fpint]), and `QString::toDouble` happily
-/// accepts `1e30` from a QML text field with no validator (morph#663). The
-/// check is on the *scaled* value rather than on @p text's value, because only
-/// the scaled value is what gets converted -- `double` arithmetic itself
-/// cannot trap here, so computing it first costs nothing and removes the need
-/// to reason about how dividing the bound by @p scale rounds.
+/// The range check is what makes the rounding below defined: `std::llround`
+/// on a value whose result is outside `long long` raises a domain error and
+/// returns an unspecified value, exactly as converting one directly was UB
+/// ([conv.fpint]) before it, and `QString::toDouble` happily accepts `1e30`
+/// from a QML text field with no validator (morph#663). The check is on the
+/// *scaled* value rather than on @p text's value, because only the scaled
+/// value is what gets rounded -- `double` arithmetic itself cannot trap here,
+/// so computing it first costs nothing and removes the need to reason about
+/// how dividing the bound by @p scale rounds.
+///
+/// Rounding is to nearest, halves away from zero. It is `std::llround` rather
+/// than a `+ 0.5` and a truncation, which is not the same function: the two
+/// disagree on the double immediately below one half (morph#678).
 ///
 /// @param text     the user-entered amount, in major units
 /// @param decimals the number of minor-unit digits of the target currency
@@ -104,14 +110,26 @@ inline std::optional<std::int64_t> parseMinor(const QString& text, int decimals 
     }
     // Reuse the core scale primitive so parse and format share one source.
     const auto scale = static_cast<double>(bank::pow10i(decimals));
-    const double minor = (major * scale) + 0.5;
-    // Negated rather than written as `minor >= kMinorUnitsBound`, so that a
+    const double scaled = major * scale;
+    // Negated rather than written as `scaled >= kMinorUnitsBound`, so that a
     // NaN -- which compares false against everything, and which reaches here
     // because `nan < 0.0` is false -- is rejected rather than let through.
-    if (!(minor < kMinorUnitsBound)) {
+    //
+    // The guard is still what makes the line below defined, and it still runs
+    // first (morph#663). It bounds the *unrounded* value, which is the
+    // stronger of the two: every `double` strictly below 2^63 is at most
+    // 2^63-1024, so its rounding is inside `std::int64_t` with room to spare,
+    // and the bound stays the one form that is exact.
+    if (!(scaled < kMinorUnitsBound)) {
         return std::nullopt;
     }
-    return static_cast<std::int64_t>(minor);
+    // `std::llround`, not `(major * scale) + 0.5` truncated: the two disagree
+    // on the double immediately below one half. 0.49999999999999994 + 0.5 is
+    // exactly 1.0 in IEEE-754 -- the sum is not representable and rounds up --
+    // so truncating it charged a whole minor unit for an amount below half of
+    // one (morph#678). `llround` rounds to nearest with halves away from zero,
+    // which is what the `+ 0.5` was reaching for.
+    return static_cast<std::int64_t>(std::llround(scaled));
 }
 
 }  // namespace bankgui::fmt
