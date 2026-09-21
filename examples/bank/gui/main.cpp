@@ -11,9 +11,9 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QStringList>
 #include <QThread>
 #include <QVariantMap>
-#include <cstdlib>
 #include <filesystem>
 #include <string>
 
@@ -27,8 +27,8 @@
 #include "controllers/TransactionController.hpp"
 
 int main(int argc, char* argv[]) {
-    QGuiApplication app{argc, argv};
-    app.setApplicationName(QStringLiteral("Morph Bank"));
+    const QGuiApplication app{argc, argv};
+    QGuiApplication::setApplicationName(QStringLiteral("Morph Bank"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));  // so our custom styling applies
 
     const auto dbPath = std::filesystem::temp_directory_path() / "morph_bank_gui.db";
@@ -57,13 +57,15 @@ int main(int argc, char* argv[]) {
     }
 
     // Headless screenshot smoke test: seed data, sign in, and grab each page.
-    if (const char* outEnv = std::getenv("BANK_GUI_SMOKE")) {
+    // qgetenv rather than std::getenv: the latter is concurrency-mt-unsafe, and
+    // the two seed variables below already read the environment the Qt way.
+    if (const QByteArray outEnv = qgetenv("BANK_GUI_SMOKE"); !outEnv.isEmpty()) {
         const QString out = QString::fromUtf8(outEnv);
         auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
-        const auto pump = [](int ms) {
+        const auto pump = [](int milliseconds) {
             QElapsedTimer timer;
             timer.start();
-            while (timer.elapsed() < ms) {
+            while (timer.elapsed() < milliseconds) {
                 QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
                 QThread::msleep(5);
             }
@@ -74,7 +76,7 @@ int main(int argc, char* argv[]) {
         };
 
         pump(400);
-        if (window) {
+        if (window != nullptr) {
             window->grabWindow().save(out + "/qml_login.png");
         }
 
@@ -97,17 +99,18 @@ int main(int argc, char* argv[]) {
         payeeController.addPayee("City Power", "DE89370400440532013000", "Stadtbank");
         pump(400);
 
-        if (auto* shell = window ? window->findChild<QObject*>("appShell") : nullptr) {
+        if (auto* shell = window != nullptr ? window->findChild<QObject*>("appShell") : nullptr) {
             accountController.refresh();  // page 0 is already current; force its data to reload
-            const char* names[] = {"accounts", "move-money", "cards", "payees", "loans"};
-            for (int page = 0; page < 5; ++page) {
+            const QStringList names{QStringLiteral("accounts"), QStringLiteral("move-money"), QStringLiteral("cards"),
+                                    QStringLiteral("payees"), QStringLiteral("loans")};
+            for (int page = 0; page < names.size(); ++page) {
                 shell->setProperty("current", page);
                 pump(500);
-                window->grabWindow().save(out + QStringLiteral("/qml_%1.png").arg(names[page]));
+                window->grabWindow().save(out + QStringLiteral("/qml_%1.png").arg(names.at(page)));
             }
         }
         return 0;
     }
 
-    return app.exec();
+    return QGuiApplication::exec();
 }

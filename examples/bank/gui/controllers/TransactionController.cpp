@@ -19,7 +19,7 @@ TransactionController::TransactionController(BankClient& client, QObject* parent
 
 void TransactionController::refresh() {
     _accountModel.execute(bank::dto::ListAccounts{})
-        .then([this](bank::dto::AccountList list) {
+        .then([this](const bank::dto::AccountList& list) {
             _accounts.clear();
             bool stillPresent = false;
             for (const auto& account : list.accounts) {
@@ -27,10 +27,10 @@ void TransactionController::refresh() {
                     continue;
                 }
                 QVariantMap map;
-                map[QStringLiteral("id")] = static_cast<qlonglong>(account.id);
-                map[QStringLiteral("label")] = fmt::last4(account.number) + QStringLiteral("  ·  ") +
-                                               fmt::money(account.balanceMinor, account.currency);
-                map[QStringLiteral("currency")] = account.currency;
+                map.insert(QStringLiteral("id"), static_cast<qlonglong>(account.id));
+                map.insert(QStringLiteral("label"), fmt::last4(account.number) + QStringLiteral("  ·  ") +
+                                                        fmt::money(account.balanceMinor, account.currency));
+                map.insert(QStringLiteral("currency"), account.currency);
                 _accounts.append(map);
                 if (account.id == _selected) {
                     stillPresent = true;
@@ -48,14 +48,14 @@ void TransactionController::refresh() {
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
 
-void TransactionController::selectAccount(qlonglong id) {
-    if (_selected == id) {
+void TransactionController::selectAccount(qlonglong accountId) {
+    if (_selected == accountId) {
         return;
     }
-    _selected = id;
+    _selected = accountId;
     for (const auto& entry : std::as_const(_accounts)) {
         const auto map = entry.toMap();
-        if (map.value(QStringLiteral("id")).toLongLong() == id) {
+        if (map.value(QStringLiteral("id")).toLongLong() == accountId) {
             _selectedCurrency = map.value(QStringLiteral("currency")).toInt();
         }
     }
@@ -72,16 +72,16 @@ void TransactionController::reloadHistory() {
         return;
     }
     _txnModel.execute(bank::dto::History{.accountId = _selected, .limit = 50})
-        .then([this](bank::dto::HistoryPage page) {
+        .then([this](const bank::dto::HistoryPage& page) {
             _history.clear();
             for (const auto& entry : page.entries) {
                 const bool credit = entry.direction == static_cast<int>(bank::TxnDirection::Credit);
                 QVariantMap map;
-                map[QStringLiteral("kind")] = fmt::txnKind(entry.kind);
-                map[QStringLiteral("amountText")] = (credit ? QStringLiteral("+") : QStringLiteral("−")) +
-                                                    fmt::money(entry.amountMinor, entry.currency);
-                map[QStringLiteral("isCredit")] = credit;
-                map[QStringLiteral("balanceText")] = fmt::money(entry.balanceAfterMinor, entry.currency);
+                map.insert(QStringLiteral("kind"), fmt::txnKind(entry.kind));
+                map.insert(QStringLiteral("amountText"), (credit ? QStringLiteral("+") : QStringLiteral("−")) +
+                                                             fmt::money(entry.amountMinor, entry.currency));
+                map.insert(QStringLiteral("isCredit"), credit);
+                map.insert(QStringLiteral("balanceText"), fmt::money(entry.balanceAfterMinor, entry.currency));
                 _history.append(map);
             }
             emit historyChanged();
@@ -96,7 +96,7 @@ void TransactionController::deposit(const QString& amount) {
         return;
     }
     _txnModel.execute(bank::dto::Deposit{.accountId = _selected, .amountMinor = *minor})
-        .then([this](bank::dto::TxnInfo) {
+        .then([this](const bank::dto::TxnInfo&) {
             emit posted();
             refresh();
         })
@@ -110,7 +110,7 @@ void TransactionController::withdraw(const QString& amount) {
         return;
     }
     _txnModel.execute(bank::dto::Withdraw{.accountId = _selected, .amountMinor = *minor})
-        .then([this](bank::dto::TxnInfo) {
+        .then([this](const bank::dto::TxnInfo&) {
             emit posted();
             refresh();
         })

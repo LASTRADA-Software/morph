@@ -25,15 +25,15 @@ void PayeeController::refresh() {
 
 void PayeeController::reloadAccounts() {
     _accountModel.execute(bank::dto::ListAccounts{})
-        .then([this](bank::dto::AccountList list) {
+        .then([this](const bank::dto::AccountList& list) {
             _accounts.clear();
             for (const auto& account : list.accounts) {
                 if (account.status == static_cast<int>(bank::AccountStatus::Closed)) {
                     continue;
                 }
                 QVariantMap map;
-                map[QStringLiteral("id")] = static_cast<qlonglong>(account.id);
-                map[QStringLiteral("label")] = fmt::last4(account.number);
+                map.insert(QStringLiteral("id"), static_cast<qlonglong>(account.id));
+                map.insert(QStringLiteral("label"), fmt::last4(account.number));
                 _accounts.append(map);
             }
             emit accountsChanged();
@@ -43,13 +43,13 @@ void PayeeController::reloadAccounts() {
 
 void PayeeController::reloadPayees() {
     _payeeModel.execute(bank::dto::ListPayees{})
-        .then([this](bank::dto::PayeeList list) {
+        .then([this](const bank::dto::PayeeList& list) {
             _payees.clear();
             for (const auto& payee : list.payees) {
                 QVariantMap map;
-                map[QStringLiteral("id")] = static_cast<qlonglong>(payee.id);
-                map[QStringLiteral("name")] = QString::fromStdString(payee.name);
-                map[QStringLiteral("iban")] = QString::fromStdString(payee.iban);
+                map.insert(QStringLiteral("id"), static_cast<qlonglong>(payee.id));
+                map.insert(QStringLiteral("name"), QString::fromStdString(payee.name));
+                map.insert(QStringLiteral("iban"), QString::fromStdString(payee.iban));
                 _payees.append(map);
             }
             emit payeesChanged();
@@ -61,13 +61,13 @@ void PayeeController::addPayee(const QString& name, const QString& iban, const Q
     _payeeModel
         .execute(bank::dto::AddPayee{
             .name = name.toStdString(), .iban = iban.trimmed().toStdString(), .bankName = bank.toStdString()})
-        .then([this](bank::dto::PayeeInfo) { reloadPayees(); })
+        .then([this](const bank::dto::PayeeInfo&) { reloadPayees(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
 
-void PayeeController::removePayee(qlonglong id) {
-    _payeeModel.execute(bank::dto::RemovePayee{.id = id})
-        .then([this](bank::dto::CommandResult) { reloadPayees(); })
+void PayeeController::removePayee(qlonglong payeeId) {
+    _payeeModel.execute(bank::dto::RemovePayee{.id = payeeId})
+        .then([this](const bank::dto::CommandResult&) { reloadPayees(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
 
@@ -78,7 +78,7 @@ void PayeeController::payBill(qlonglong accountId, qlonglong payeeId, const QStr
         return;
     }
     _paymentModel.execute(bank::dto::PayBill{.fromAccountId = accountId, .payeeId = payeeId, .amountMinor = *minor})
-        .then([this](bank::dto::PaymentInfo) { emit paid(); })
+        .then([this](const bank::dto::PaymentInfo&) { emit paid(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
 

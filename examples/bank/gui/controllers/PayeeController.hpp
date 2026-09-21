@@ -32,7 +32,7 @@ public:
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void addPayee(const QString& name, const QString& iban, const QString& bank);
-    Q_INVOKABLE void removePayee(qlonglong id);
+    Q_INVOKABLE void removePayee(qlonglong payeeId);
     Q_INVOKABLE void payBill(qlonglong accountId, qlonglong payeeId, const QString& amount);
 
 signals:

@@ -298,6 +298,49 @@ jobs:
       - name: Self-test the AUTOMOC-include checker
         run: bash scripts/test_check_automoc_includes.sh
 
+  # ── Q_OBJECT headers vs. the source lists that get them mocced (#659) ──
+  # The complement of the AUTOMOC-include gate above: that one checks the
+  # includes moc *writes*, this one checks that moc runs on the header at all.
+  #
+  # AUTOMOC finds a Q_OBJECT header two ways -- beside a translation unit of
+  # the same basename, or named in a target's own source list -- and when
+  # neither holds it silently generates nothing. The .cpp compiles, the static
+  # library archives, and the first signal is a linker error about a missing
+  # vtable, in every leg that links the target. On #657 that was six red legs
+  # at once, the fastest at 4m03s.
+  #
+  # The repository had already met this, diagnosed it and written it down, in
+  # cmake/morph_add_rung.cmake's own comment on its _lib_headers glob
+  # ("pastebin::app::App, hit the moment ladder_pastebin_tests linked it").
+  # #652 then hit it again in a different CMakeLists, because nothing reads a
+  # comment in a file you are not editing. That is the argument for the gate:
+  # a known failure mode with no control recurs on schedule.
+  #
+  # It belongs in this file rather than behind a build because it checks the
+  # *pairing*, not the moc output. A build tree only covers what its configure
+  # enabled, so an output check would false-positive on every header behind an
+  # off-by-default option; a pairing check is configure-independent, needs no
+  # Qt and no compiler, and runs in under a second.
+  #
+  # The self-test runs first and drives the mutation the issue named as its
+  # close condition -- testkit/fault_proxy.hpp removed from
+  # morph_ladder_testkit's source list, against a copy of the real
+  # examples/common/CMakeLists.txt -- because the tree is clean today, so this
+  # gate ships already green and a broken scan would look exactly like a
+  # healthy one. The gate itself also refuses to pass when it found no
+  # Q_OBJECT header at all.
+  qobject-moc-pairing-lint:
+    name: Q_OBJECT headers vs. AUTOMOC source lists
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the Q_OBJECT moc-pairing checker
+        run: python3 scripts/check_qobject_moc_pairing.py --self-test
+
+      - name: Check every Q_OBJECT header is one AUTOMOC will scan
+        run: python3 scripts/check_qobject_moc_pairing.py
+
   # ── The duplicate-ctest-name gate's own self-test ──────────────────────
   # The gate itself (scripts/check_ctest_name_collisions.sh) runs after the
   # build in ci.yml's ladder-tests job, because it asks ctest what it would

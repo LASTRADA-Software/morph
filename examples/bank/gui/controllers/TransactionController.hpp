@@ -32,7 +32,7 @@ public:
     [[nodiscard]] qlonglong selectedAccount() const { return _selected; }
 
     Q_INVOKABLE void refresh();
-    Q_INVOKABLE void selectAccount(qlonglong id);
+    Q_INVOKABLE void selectAccount(qlonglong accountId);
     Q_INVOKABLE void deposit(const QString& amount);
     Q_INVOKABLE void withdraw(const QString& amount);
     Q_INVOKABLE void transfer(qlonglong toId, const QString& amount);

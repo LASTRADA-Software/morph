@@ -66,12 +66,14 @@ TEST_CASE("Every bank controller exposes exactly the surface gui/qml binds, and 
     const auto dbPath = std::filesystem::temp_directory_path() / "morph_bank_qml_surface.db";
     bankgui::BankClient client{"DRIVER=SQLite3;Database=" + dbPath.string()};
 
-    bankgui::AppController appController{client};
-    bankgui::AccountController accountController{client};
-    bankgui::TransactionController transactionController{client};
-    bankgui::CardController cardController{client};
-    bankgui::PayeeController payeeController{client};
-    bankgui::LoanController loanController{client};
+    // const: `QmlSurfaceAudit::bind` takes `const QObject&`, and nothing here
+    // drives a controller -- the audit reads metaobjects and QML text.
+    const bankgui::AppController appController{client};
+    const bankgui::AccountController accountController{client};
+    const bankgui::TransactionController transactionController{client};
+    const bankgui::CardController cardController{client};
+    const bankgui::PayeeController payeeController{client};
+    const bankgui::LoanController loanController{client};
 
     QmlSurfaceAudit audit{QStringLiteral(MORPH_LADDER_SOURCE_ROOT "/examples/bank/gui/qml")};
     audit.bind(QStringLiteral("app"), appController);

@@ -16,16 +16,16 @@ namespace {
 QVariantMap toMap(const bank::dto::AccountInfo& account) {
     const bool closed = account.status == static_cast<int>(bank::AccountStatus::Closed);
     QVariantMap map;
-    map[QStringLiteral("id")] = static_cast<qlonglong>(account.id);
-    map[QStringLiteral("kind")] = fmt::accountKind(account.kind);
-    map[QStringLiteral("number")] = fmt::last4(account.number);
-    map[QStringLiteral("balanceText")] = fmt::money(account.balanceMinor, account.currency);
-    map[QStringLiteral("statusText")] = closed ? QStringLiteral("Closed") : QStringLiteral("Open");
-    map[QStringLiteral("statusKind")] = closed ? QStringLiteral("neutral") : QStringLiteral("good");
-    map[QStringLiteral("closed")] = closed;
-    map[QStringLiteral("hasOverdraft")] = account.overdraftMinor > 0;
-    map[QStringLiteral("overdraftText")] =
-        QStringLiteral("Overdraft ") + fmt::money(account.overdraftMinor, account.currency);
+    map.insert(QStringLiteral("id"), static_cast<qlonglong>(account.id));
+    map.insert(QStringLiteral("kind"), fmt::accountKind(account.kind));
+    map.insert(QStringLiteral("number"), fmt::last4(account.number));
+    map.insert(QStringLiteral("balanceText"), fmt::money(account.balanceMinor, account.currency));
+    map.insert(QStringLiteral("statusText"), closed ? QStringLiteral("Closed") : QStringLiteral("Open"));
+    map.insert(QStringLiteral("statusKind"), closed ? QStringLiteral("neutral") : QStringLiteral("good"));
+    map.insert(QStringLiteral("closed"), closed);
+    map.insert(QStringLiteral("hasOverdraft"), account.overdraftMinor > 0);
+    map.insert(QStringLiteral("overdraftText"),
+               QStringLiteral("Overdraft ") + fmt::money(account.overdraftMinor, account.currency));
     return map;
 }
 
@@ -36,10 +36,10 @@ AccountController::AccountController(BankClient& client, QObject* parent)
 
 void AccountController::refresh() {
     _model.execute(bank::dto::ListAccounts{})
-        .then([this](bank::dto::AccountList list) {
+        .then([this](const bank::dto::AccountList& list) {
             _accounts.clear();
             std::int64_t total = 0;
-            int currency = list.accounts.empty() ? 0 : list.accounts.front().currency;
+            const int currency = list.accounts.empty() ? 0 : list.accounts.front().currency;
             bool sameCurrency = true;
             _openCount = 0;
             for (const auto& account : list.accounts) {
@@ -62,7 +62,7 @@ void AccountController::refresh() {
 void AccountController::openAccount(int kind, int currency, const QString& overdraft) {
     const auto minor = overdraft.trimmed().isEmpty() ? 0 : fmt::parseMinor(overdraft).value_or(0);
     _model.execute(bank::dto::OpenAccount{.kind = kind, .currency = currency, .overdraftMinor = minor})
-        .then([this](bank::dto::AccountInfo) { refresh(); })
+        .then([this](const bank::dto::AccountInfo&) { refresh(); })
         .onError([this](const std::exception_ptr& err) { emit error(errorText(err)); });
 }
 
