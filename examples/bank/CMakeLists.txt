@@ -381,6 +381,24 @@ if(MORPH_BUILD_TESTS)
             # never looks at a pixel -- it reads property values off the items
             # the engine created. The same variable the ladder's own GUI legs
             # set for ctest (examples/TESTING.md).
+            #
+            # It does not cover the *discovery* run, and that gap cost this
+            # repository a permanently red CI leg (morph#690). PROPERTIES are
+            # set on the tests Catch2 registers; the run that finds out what
+            # those tests are happens first, and under DISCOVERY_MODE PRE_TEST
+            # it happens inside ctest rather than inside the build. Catch2's
+            # CatchAddTests.cmake execute_process() forwards only DL_PATHS and
+            # DL_FRAMEWORK_PATHS into that run -- never the ENVIRONMENT
+            # property -- so `<binary> --list-tests` starts under whatever
+            # environment invoked ctest. This main constructs a QGuiApplication
+            # before Catch2 parses the flag (examples/common/testkit/
+            # testkit_main.cpp), so with no display and no QT_QPA_PLATFORM it
+            # aborts, CatchAddTests raises message(FATAL_ERROR), and *every*
+            # suite in the tree vanishes from `ctest --show-only` -- the whole
+            # listing fails, not this target's share of it. Anything that
+            # enumerates this build tree headless therefore has to set
+            # QT_QPA_PLATFORM itself; ci.yml's bank-ubsan sweep step carries
+            # the worked example and the measurement.
             catch_discover_tests(bank_gui_qml_tests
                 DISCOVERY_MODE PRE_TEST
                 PROPERTIES

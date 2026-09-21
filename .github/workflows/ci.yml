@@ -1140,8 +1140,12 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       # QT_QPA_PLATFORM=offscreen at build time as well as test time: Catch2's
-      # catch_discover_tests() runs each Qt-linked test binary once during the
-      # build to enumerate its cases — see ladder-tests' own Build step.
+      # catch_discover_tests() runs each POST_BUILD-discovered Qt-linked test
+      # binary once during the build to enumerate its cases — see ladder-tests'
+      # own Build step. In this configure that is morph_qt_tests
+      # (tests/qt/CMakeLists.txt:91); it is *not* bank's three suites, which
+      # are PRE_TEST and therefore enumerate at ctest time instead. The step
+      # below is where that matters (morph#690).
       - name: Build
         env:
           QT_QPA_PLATFORM: offscreen
@@ -1159,7 +1163,52 @@ jobs:
       #
       # naming bank_tests, bank_gui_tests and bank_gui_qml_tests. With the
       # blocks in place the same sweep reports 9 of 9.
+      #
+      # QT_QPA_PLATFORM=offscreen, and this is the step that cannot do without
+      # it (morph#690 — this job was red on every run from the day it landed,
+      # here). The sweep's first act is `ctest --show-only=json-v1`, and ctest
+      # is exactly where bank's PRE_TEST discovery runs: listing the tests
+      # *executes* `bank_gui_qml_tests --list-tests`, whose main constructs a
+      # QGuiApplication (examples/common/testkit/testkit_main.cpp) before
+      # Catch2 ever sees the flag. With no display and no QT_QPA_PLATFORM that
+      # aborts; Catch2's CatchAddTests.cmake raises a message(FATAL_ERROR) on a
+      # nonzero discovery, and ctest then exits 8 having printed no JSON at all
+      # — not bank's entries missing, the entire listing, every other suite
+      # included. The sweep correctly refused to pass having examined nothing
+      # (morph#675's floor), so the symptom was the guard and the cause was
+      # this missing line. The Test step below already declares the same value,
+      # which is the point: this sweep's subject is the binaries that step will
+      # run, so it has to enumerate them in that step's environment.
+      #
+      # Reproduced locally against this very configure (clang 22.1.8, Catch2
+      # 3.16.0, Qt 6.11.2 — the runner's versions differ, the code path does
+      # not), by emulating the runner's one distinguishing property, a headless
+      # session:
+      #
+      #     $ env -u DISPLAY -u WAYLAND_DISPLAY \
+      #           bash scripts/check_sanitizer_instrumentation.sh \
+      #                build/clang-ubsan ubsan
+      #     ::error::check_sanitizer_instrumentation: ctest listed no tests in
+      #     build/clang-ubsan -- this check would pass having examined nothing
+      #     `ctest --show-only=json-v1` exited 8 and wrote 0 bytes of stdout.
+      #       | CMake Error at .../CatchAddTests.cmake:307 (message):
+      #       |   Error listing tests from executable
+      #       |   '.../examples/bank/bank_gui_qml_tests':
+      #       |     Result: Subprocess aborted
+      #
+      #     $ env -u DISPLAY -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen \
+      #           bash scripts/check_sanitizer_instrumentation.sh \
+      #                build/clang-ubsan ubsan
+      #     check_sanitizer_instrumentation: 9 ctest binaries all carry
+      #     __ubsan_ symbols (0 allowlisted).
+      #
+      # Same tree, same build, one environment variable apart. That is also
+      # why the two earlier attempts to reproduce this job's failure locally
+      # could not: a workstation has a display, so the same command enumerates
+      # all nine there whether or not the variable is set.
       - name: Every ctest binary is instrumented
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: bash scripts/check_sanitizer_instrumentation.sh build/clang-ubsan ubsan
 
       # -L bank, not the whole suite: this configure also builds morph_tests
