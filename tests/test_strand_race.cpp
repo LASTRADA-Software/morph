@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstddef>
 #include <morph/core/executor.hpp>
 #include <morph/core/strand.hpp>
 #include <thread>
@@ -19,10 +21,26 @@
 // both strands dispatched tasks for that key concurrently — breaking the
 // per-model serialisation guarantee.
 //
-// The test hammers post() on a single key from many threads. Every task bumps a
-// per-key in-flight counter on entry and drops it on exit; if two tasks for the
-// same key ever run concurrently the counter exceeds 1 and the test fails. Very
-// short tasks maximise the drain/re-arm interleaving that triggered the bug.
+// This file holds two cases, and they cover different things. This first one is
+// a *load* test: it hammers post() on a single key from many threads, and every
+// task bumps a per-key in-flight counter on entry and drops it on exit, so if
+// two tasks for the same key ever run concurrently the counter exceeds 1 and the
+// test fails.
+//
+// What it does **not** cover is the drain-and-erase boundary the bug above lives
+// on. The erase only fires when a drain finds the pending queue empty, and eight
+// threads posting 3200 tasks back-to-back onto one key keep it non-empty almost
+// throughout: the quiet moment the defect needs never arrives. Measured, not
+// assumed -- with the pre-fix two-step drain restored in `scheduleNext` (flip
+// `running` under `strand->mtx`, release it, then erase under `_mapMtx` in a
+// separate critical section), this case passed 10/10 under ThreadSanitizer on
+// x86-64 Linux / clang 22.1.8 (morph#668). Short tasks maximise *re-arm*; they do
+// not produce a drain. Turning the thread or post counts up makes that worse,
+// not better.
+//
+// The second case below produces the shape this one cannot, and is the one that
+// fails against that mutant. Keep both: saturation and the drain boundary are
+// different failure modes of the same invariant.
 TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under contention", "[strand][race]") {
     constexpr int kThreads = 8;
     constexpr int kPostsPerThread = 400;
@@ -111,6 +129,169 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
         // This one is a `REQUIRE` -- a value above 1 means two strands ran the
         // same key's tasks concurrently, which is the race this file regresses
         // and not something to keep iterating past.
+        REQUIRE(maxInFlight.load() == 1);
+    }
+}
+
+// The drain-and-re-arm boundary (morph#668), which the case above never reaches.
+//
+// Shape, not volume. The defect needs a strand to reach *empty* while a post is
+// arriving, so this case manufactures that rendezvous instead of hoping for it:
+//
+//   1. A pilot task is posted alone on the key. Its last act is to publish the
+//      round number, so the chaser threads learn the strand is about to drain.
+//   2. `kChasers` threads spin on that publication and post the instant it
+//      flips -- that is, while the drain block following the pilot's body is
+//      deciding "keep running vs. erase". A per-thread stagger walks each post
+//      across the handful of instructions that decision spans, so the window is
+//      sampled at many offsets rather than one.
+//   3. The round ends only once every one of its tasks has run, so the strand
+//      really does empty before the next pilot. The gap is the point of the
+//      test, and is exactly what sustained saturation destroys.
+//
+// Three detectors, because the defect and its symptom are not the same event:
+//
+//   * `maxInFlight` -- the *symptom*, as in the case above: two tasks for one
+//     key running at the same wall-clock moment.
+//   * plain, non-atomic state touched by every task -- the *defect*. Two strands
+//     for one key leave those accesses unordered by any happens-before edge,
+//     which ThreadSanitizer reports whether or not the two tasks ever overlap in
+//     wall clock. Lost updates to the same state are visible without a sanitizer
+//     at all, which is why the cells are checked as well as raced on.
+//   * per-producer FIFO -- a strand orphaned mid-burst can run one producer's
+//     later task before its earlier one, and an ordinary build sees that too.
+//
+// The tasks deliberately do a little plain work rather than none: an empty task
+// gives an overlap a window a few instructions wide, which is why the case above
+// can be wrong about serialisation and still report `maxInFlight == 1`.
+TEST_CASE("StrandExecutor keeps one strand per key when a post races the drain", "[strand][race]") {
+    constexpr int kChasers = 4;
+    constexpr int kBurst = 3;
+    constexpr int kRounds = 600;
+    constexpr int kIterations = 6;
+    constexpr int kCells = 24;
+    constexpr int kPerRound = 1 + (kChasers * kBurst);
+
+    morph::exec::detail::ModelId const key{7};
+
+    for (int iter = 0; iter < kIterations; ++iter) {
+        // Same ordering rule as the case above: the pool outlives the strand.
+        morph::exec::ThreadPoolExecutor pool{4};
+
+        // Deliberately plain -- no atomic, no mutex. Under the invariant this
+        // file exists for, the strand *is* the synchronisation: every handoff
+        // between two tasks for one key passes through `_mapMtx`/`strand->mtx`,
+        // so each task's writes happen-before the next task's reads and these
+        // are data-race-free. A second strand for the same key breaks that
+        // chain, and then they are not.
+        std::vector<int> cells(static_cast<std::size_t>(kCells), 0);
+        std::vector<int> lastSeq(static_cast<std::size_t>(kChasers) + 1, -1);
+        long long executedPlain = 0;
+
+        std::atomic<int> inFlight{0};
+        std::atomic<int> maxInFlight{0};
+        std::atomic<int> outOfOrder{0};
+        std::atomic<int> completed{0};
+        // Round number whose pilot task has finished its body. Release/acquire:
+        // the chasers must not start posting for round r before it is set.
+        std::atomic<int> gate{0};
+
+        auto body = [&](int producer, int seq) {
+            int const cur = inFlight.fetch_add(1) + 1;
+            int prev = maxInFlight.load();
+            while (cur > prev && !maxInFlight.compare_exchange_weak(prev, cur)) {
+            }
+            auto const slot = static_cast<std::size_t>(producer);
+            if (seq <= lastSeq[slot]) {
+                outOfOrder.fetch_add(1);
+            }
+            lastSeq[slot] = seq;
+            for (auto& cell : cells) {
+                cell += 1;
+            }
+            ++executedPlain;
+            inFlight.fetch_sub(1);
+            completed.fetch_add(1, std::memory_order_release);
+        };
+
+        {
+            morph::exec::detail::StrandExecutor strand{pool};
+
+            std::vector<std::thread> chasers;
+            chasers.reserve(kChasers);
+            for (int chaser = 0; chaser < kChasers; ++chaser) {
+                chasers.emplace_back([&, chaser] {
+                    int const producer = chaser + 1;
+                    // Per-thread LCG, so the stagger below differs per thread
+                    // and per round without pulling in <random> or a shared
+                    // engine that would itself synchronise the threads.
+                    auto rng = (static_cast<unsigned>(chaser) * 2654435761U) + 1U;
+                    for (int round = 0; round < kRounds; ++round) {
+                        // Spin rather than yield: the window this case aims at
+                        // is a few instructions wide, and a yield overshoots it
+                        // by orders of magnitude. The periodic yield is only a
+                        // starvation guard for hosts with fewer cores than this
+                        // case has threads (a CI runner has four); it fires once
+                        // per 4096 spins, so it costs the rendezvous nothing.
+                        for (unsigned spins = 0; gate.load(std::memory_order_acquire) <= round; ++spins) {
+                            if ((spins & 0xFFFU) == 0xFFFU) {
+                                std::this_thread::yield();
+                            }
+                        }
+                        for (int post = 0; post < kBurst; ++post) {
+                            rng = (rng * 1664525U) + 1013904223U;
+                            int const stagger = static_cast<int>((rng >> 16U) & 0x3FU);
+                            for (int step = 0; step < stagger; ++step) {
+                                // Busy work, folded back into `rng` so it cannot
+                                // be optimised away, walking this post to a
+                                // different offset inside the drain window.
+                                rng = (rng * 1103515245U) + 12345U;
+                            }
+                            int const seq = (round * kBurst) + post;
+                            strand.post(key, [&body, producer, seq] { body(producer, seq); });
+                        }
+                    }
+                });
+            }
+
+            for (int round = 0; round < kRounds; ++round) {
+                strand.post(key, [&body, &gate, round] {
+                    body(0, round);
+                    // Published last: the chasers' posts have to arrive while
+                    // the drain that follows this body is running, not before.
+                    gate.store(round + 1, std::memory_order_release);
+                });
+                // Wait out the round rather than pipelining it. This is the
+                // quiet moment -- the strand drains to empty here, which is the
+                // only state from which the erase can fire at all.
+                while (completed.load(std::memory_order_acquire) < (round + 1) * kPerRound) {
+                    std::this_thread::yield();
+                }
+            }
+
+            for (auto& chaser : chasers) {
+                chaser.join();
+            }
+            // Closing this scope runs `~StrandExecutor`, which blocks until
+            // `_inFlight == 0`; see the case above for why that is a complete
+            // drain and not a deadline.
+        }
+
+        constexpr int kExpected = kRounds * kPerRound;
+        INFO("iteration " << iter << ": completed " << completed.load() << " of " << kExpected);
+        // `CHECK`, not `REQUIRE`, for everything but the last line: each of
+        // these answers a different question about the same run and stopping at
+        // the first one would hide the others (see the case above).
+        CHECK(completed.load() == kExpected);
+        // Lost updates to the plain state: the sanitizer-free reading of the
+        // same defect the TSan legs see as a data race on it.
+        CHECK(executedPlain == static_cast<long long>(kExpected));
+        auto const [lowest, highest] = std::minmax_element(cells.begin(), cells.end());
+        CHECK(*lowest == kExpected);
+        CHECK(*highest == kExpected);
+        // FIFO per key is part of the contract, and an orphaned strand breaks it
+        // without any two tasks having to overlap.
+        CHECK(outOfOrder.load() == 0);
         REQUIRE(maxInFlight.load() == 1);
     }
 }
