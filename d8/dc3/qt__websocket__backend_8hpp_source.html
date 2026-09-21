@@ -505,8 +505,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dc3/qt__web
 <div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span><span class="comment">    /// `Config::asyncRegistrationEnabled`: promotion happens from inside the</span></div>
 <div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span><span class="comment">    /// result `Completion`&#39;s callback chain, where no caller is left blocked</span></div>
 <div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span><span class="comment">    /// waiting for it either way, so there is no synchronous guarantee to</span></div>
-<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span><span class="comment">    /// preserve — which is why `assignPrimaryAsync`, the verb this replaces,</span></div>
-<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span><span class="comment">    /// had no opt-in gate either.</span></div>
+<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span><span class="comment">    /// preserve — which is why the optional non-blocking promote this</span></div>
+<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span><span class="comment">    /// replaces (removed by morph#571) had no opt-in gate either.</span></div>
 <div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span><span class="comment">    ///</span></div>
 <div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span><span class="comment">    /// The documented no-op cases (empty `primary`, zero `mid`) resolve with</span></div>
 <div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span><span class="comment">    /// @p request&#39;s `mid` without sending anything, matching</span></div>
