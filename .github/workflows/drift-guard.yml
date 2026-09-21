@@ -8,8 +8,14 @@ name: Drift guard
 # which is the same shape of defect one level down: a control that parses, looks
 # applied, and measures nothing.
 #
-# Sections below: the spec <-> code gates and the NOLINT-directive gate, the
-# ladder rung-list gate, then the scenario-coverage gate.
+# And one for the class below that again: a character that is not there to be
+# read at all (the raw-bidi-control scan, #628). Same family -- a file that
+# looks correct to every reader while saying something else -- which is why it
+# rides prose-lint alongside the NOLINT scan rather than living elsewhere.
+#
+# Sections below: the spec <-> code gates, the NOLINT-directive gate and the
+# raw-bidi-control gate, the ladder rung-list gate, then the scenario-coverage
+# gate.
 #
 # Two independent gates for the "spec <-> code drift" class of bug (a
 # docs/spec/*.md file stating a mechanical fact -- an enum cardinality, a
@@ -201,6 +207,45 @@ jobs:
 
       - name: Check every NOLINTNEXTLINE annotates a line of code
         run: bash scripts/check_nolint_directives.sh
+
+      # ── Raw bidi control characters in first-party files (#628) ───────────
+      # A bidirectional control renders as nothing and occupies no column, so a
+      # diff containing one looks exactly like a diff that does not. In a
+      # string literal that is a silently wrong assertion (#610's subject: nine
+      # lines of src/qt/forms/tests/tst_i18n.qml whose expected values held raw
+      # U+200E / U+200F / U+061C). In a comment it is source that stops saying
+      # what it means -- #628 reproduced that on itself, typing the six
+      # characters of a U+061C escape through a JSON-payload tool that
+      # decoded it before the file was written, twice, in two files. This
+      # very comment made it a fourth time, and the gate below caught it
+      # before the branch was pushed. Between them lies the trojan-source
+      # shape, where an override or isolate makes a line render as a different
+      # program from the one that compiles.
+      #
+      # Review is not a control for this class, and that is the argument for a
+      # gate rather than a habit: #610 itself asked for this lint and deferred
+      # it, and the PR that closed #610 was reviewed by people who could not
+      # have seen a raw control had one survived, because the diff renders them
+      # as nothing.
+      #
+      # A fast, dependency-free text scan over every tracked file that compiles
+      # nothing, so it rides this job for the same reason the NOLINT-directive,
+      # CI-clang-pin and Catch2-name scans above do.
+      #
+      # This one ships already green -- 0 raw controls across 1244 tracked
+      # files -- which makes the self-test the whole of its evidence rather
+      # than a formality. "0 occurrences found" is exactly what a broken
+      # detector prints, so the checker probes its own detector against every
+      # declared codepoint before opening a file, treats a scan of zero files
+      # as a failure, and the self-test below holds its own independent list of
+      # the twelve and requires each to be found in tests/lint/bidi_controls/ --
+      # which is what notices a codepoint being deleted from the checker's
+      # table, something the checker's own probe cannot see.
+      - name: Self-test the raw-bidi-control checker
+        run: bash scripts/test_check_bidi_controls.sh
+
+      - name: Check no first-party file carries a raw bidi control
+        run: python3 scripts/check_bidi_controls.py
 
   # ── Ladder rung list <-> the CI filters that are supposed to track it ──
   # examples/rungs.txt is the ladder's single authoritative rung list, and
