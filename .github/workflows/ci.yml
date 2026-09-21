@@ -308,8 +308,36 @@ jobs:
       - name: Install sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail`, and a file rather than a pipe into tar (morph#672). On
+          # 2026-09-21 both GCC legs of PR #671 died in this step with
+          #
+          #     gzip: stdin: not in gzip format
+          #     tar: Child returned status 1
+          #     tar: Error is not recoverable: exiting now
+          #
+          # The download host had served something that is not a tarball --
+          # an error page -- and plain `curl` reports an HTTP 4xx/5xx as a
+          # *successful* transfer of that page, exit 0, straight down the
+          # pipe. So the only diagnostic anyone saw named the decompressor,
+          # and the event that actually happened (the download failed, with a
+          # status) appeared nowhere in the log. The step could not be
+          # salvaged by `set -o pipefail` either: GitHub runs `run:` under
+          # `bash -e`, without pipefail, so the pipeline's status is tar's
+          # regardless of what curl did.
+          #
+          # `--fail` makes curl exit non-zero and print `curl: (22) The
+          # requested URL returned error: 503`; writing to a file means tar
+          # never runs at all when it does. This is not a retry policy and it
+          # does not make the outage less likely -- it makes the log name the
+          # thing that happened, which is the half of morph#672 that needs no
+          # CI-wide decision. The rest of that class -- a retry policy, or a
+          # marker that distinguishes "the environment failed" from "the
+          # change failed" in the check list, and the apt/PPA outages that
+          # are the other three quarters of the ticket -- is still open.
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache here on purpose: leaving the
       # launcher unset lets cmake/CompileCache.cmake's own auto-detection run,
@@ -459,8 +487,14 @@ jobs:
       - name: Install sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # morph::net and the SQLite offline queue are opt-in, but they are also
       # where the memory/threading/UB risk actually lives (raw sockets, an I/O
@@ -642,8 +676,14 @@ jobs:
 
       - name: Install sccache
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       - name: Configure
         run: |
@@ -832,8 +872,14 @@ jobs:
 
       - name: Install sccache
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # MORPH_LADDER_RUNGS=kanban (a single rung, not "all"): examples/CMakeLists.txt's
       # rung-selection loop (`if(MORPH_LADDER_RUNGS STREQUAL "all" OR _rung IN_LIST
@@ -955,8 +1001,14 @@ jobs:
 
       - name: Install sccache
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       - name: Configure (gcc-debug with MORPH_BUILD_QT=ON)
         run: |
@@ -1233,8 +1285,14 @@ jobs:
       - name: Install sccache
         if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
       # Configure steps for why leaving it unset is what lets fastcache-cc
@@ -1559,8 +1617,14 @@ jobs:
       - name: Install sccache
         if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
       # Configure steps for why leaving it unset is what lets fastcache-cc
@@ -1821,8 +1885,14 @@ jobs:
       - name: Install sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # MORPH_REQUIRE_VETTED_HMAC is deliberately combined with
       # MORPH_BUILD_TESTS=ON (the preset default). docs/spec/security.md
@@ -2032,8 +2102,14 @@ jobs:
 
       - name: Install sccache
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # morph::net and the SQLite queue are where the raw pointers, manual
       # buffers and C API calls live — precisely what memcheck is for — so they
