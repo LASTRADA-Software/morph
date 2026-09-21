@@ -24,6 +24,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <condition_variable>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <morph/core/backend.hpp>
@@ -572,18 +573,48 @@ public:
 // in this file self-fires this way.
 class SelfFiringAssignPrimaryBackend : public morph::backend::LocalBackend {
 public:
-    explicit SelfFiringAssignPrimaryBackend(morph::exec::IExecutor& pool) : LocalBackend{pool} {}
+    /// @p escapeSink must outlive the Bridge that owns this backend: the
+    /// destructor writes to it, and the destructor runs from inside
+    /// `switchBackend()`/`~Bridge`.
+    SelfFiringAssignPrimaryBackend(morph::exec::IExecutor& pool, std::exception_ptr& escapeSink)
+        : LocalBackend{pool}, _escapeSink{&escapeSink} {}
 
     SelfFiringAssignPrimaryBackend(const SelfFiringAssignPrimaryBackend&) = delete;
     SelfFiringAssignPrimaryBackend& operator=(const SelfFiringAssignPrimaryBackend&) = delete;
     SelfFiringAssignPrimaryBackend(SelfFiringAssignPrimaryBackend&&) = delete;
     SelfFiringAssignPrimaryBackend& operator=(SelfFiringAssignPrimaryBackend&&) = delete;
 
+    // Settling a Completion is not a non-throwing operation, and a destructor
+    // is implicitly noexcept -- so an escape here is std::terminate, taking
+    // the whole test binary down with no attribution, rather than a failed
+    // assertion. That is not hypothetical reasoning about
+    // `bugprone-exception-escape`; the check names the concrete path, and it
+    // is inside the framework rather than inside this double:
+    //
+    //   completion.hpp:108  CompletionState::setValue takes
+    //                       `this->shared_from_this()` to hand the saved
+    //                       continuations to the executor, and
+    //                       `shared_from_this()` throws std::bad_weak_ptr
+    //                       when the control block is already gone.
+    //
+    // Whether that particular throw is reachable is a separate question --
+    // the Promise holds a shared_ptr to the state, so in this test it is not.
+    // The destructor still must not let *anything* out, including whatever a
+    // continuation attached by `Bridge::assignHandlerPrimary` throws, which is
+    // ordinary caller code that setValue runs inline on this thread.
+    //
+    // So: catch, and record rather than swallow. The test reads the sink after
+    // the backend is gone, which turns "terminate, no message" into a failed
+    // CHECK naming the exception. A NOLINT would have turned it into silence.
     ~SelfFiringAssignPrimaryBackend() override {
-        if (_pending) {
-            auto pending = std::move(*_pending);
-            _pending.reset();
-            pending.promise->resolve(pending.mid);
+        try {
+            if (_pending) {
+                auto pending = std::move(*_pending);
+                _pending.reset();
+                pending.promise->resolve(pending.mid);
+            }
+        } catch (...) {
+            *_escapeSink = std::current_exception();
         }
     }
 
@@ -601,6 +632,7 @@ private:
         std::shared_ptr<ModelCompletion::Promise> promise;
     };
     std::optional<Pending> _pending;
+    std::exception_ptr* _escapeSink;
 };
 
 }  // namespace
@@ -1256,7 +1288,11 @@ TEST_CASE(
     // ever arrive while the backend that produced it is still alive to
     // deliver it.
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::bridge::Bridge bridge{std::make_unique<SelfFiringAssignPrimaryBackend>(pool)};
+    // Declared before `bridge`, so it outlives the backend whose destructor
+    // writes to it -- see SelfFiringAssignPrimaryBackend's own comment on why
+    // that destructor cannot be allowed to let an exception out.
+    std::exception_ptr escapedFromTeardown;
+    morph::bridge::Bridge bridge{std::make_unique<SelfFiringAssignPrimaryBackend>(pool, escapedFromTeardown)};
     SyncExec cbExec;
     morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
 
@@ -1276,6 +1312,12 @@ TEST_CASE(
     // The self-fired reply must be discarded exactly like any other stale
     // reply -- not promote the binding using a backend that no longer exists.
     CHECK_FALSE(handler.primary().has_value());
+
+    // ...and settling it must not have thrown. Without this the destructor's
+    // catch would be a swallow: the arm exists so an escape is a named test
+    // failure instead of a std::terminate, and nothing proves it stays quiet
+    // unless the test looks.
+    CHECK(escapedFromTeardown == nullptr);
 }
 
 TEST_CASE("Bridge::assignHandlerPrimary: an async reply for an already-promoted binding does not overwrite it",
