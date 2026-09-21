@@ -752,3 +752,89 @@ TEST_CASE("morph::backend::SynchronousBackendAdapter: cancelPending rejects the 
     REQUIRE(okRan.load() == 0);
     REQUIRE(errRan.load() == 1);
 }
+
+// ── cancelPending and the control call the strand has not started yet (#636) ─
+//
+// #619's case above is about the *completion*: it must be rejected. This one is
+// about the *work behind it*: a task still queued on `_control` when
+// `cancelPending` runs must never make its blocking control call at all.
+// Settling the promise cannot achieve that -- the task's own `resolve` being a
+// no-op afterwards says nothing about the `registerModelWithContext` it made on
+// the way there -- so the check has to be inside the task, before `op()`.
+//
+// The observation this case rests on is `GatedBackend::entered`, which the
+// wrapped backend increments on *entry* to a control call. Asserting only that
+// the completion was rejected would pass on the pre-#636 code and prove
+// nothing; asserting that the wrapped backend was never entered is what the
+// fix changes. Verified by mutation: with the `cancelled` check removed from
+// `SynchronousBackendAdapter::dispatch`'s task, this case fails on
+// `entered == 2` (it sees 3).
+
+TEST_CASE(
+    "morph::backend::SynchronousBackendAdapter: cancelPending stops a queued control call from ever reaching "
+    "the wrapped backend",
+    "[backend][registration-surface][threading]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::exec::MainThreadExecutor callerExec;
+    auto inner = std::make_shared<GatedBackend>();
+    SynchronousBackendAdapter adapter{inner, pool};
+
+    std::atomic<int> okRan{0};
+    std::atomic<int> errRan{0};
+
+    auto attach = [&](ModelCompletion completion) {
+        completion.then([&](ModelId /*mid*/) { okRan.fetch_add(1); }).onError([&](const std::exception_ptr& /*exc*/) {
+            errRan.fetch_add(1);
+        });
+    };
+
+    std::function<ModelCompletion()> dispatchOne;
+    SECTION("bind") {
+        dispatchOne = [&] {
+            return adapter.bindModel(
+                BindRequest{.typeId = std::string{kTypeId}, .factory = makeHolder, .contextKey = "ctx", .primary = {}},
+                callerExec);
+        };
+    }
+    SECTION("promote") {
+        dispatchOne = [&] {
+            return adapter.promoteModel(
+                PromoteRequest{.mid = ModelId{7}, .typeId = std::string{kTypeId}, .primary = "key"}, callerExec);
+        };
+    }
+
+    // Call 1 occupies the strand and blocks inside the wrapped backend, so
+    // call 2 is provably *queued and not started* -- the window this fix
+    // closes, rather than one the scheduler happened to give us.
+    attach(dispatchOne());
+    REQUIRE(morph::testing::waitUntil([&] { return inner->entered.load() == 1; }));
+    attach(dispatchOne());
+    REQUIRE(inner->entered.load() == 1);
+
+    adapter.cancelPending(std::make_exception_ptr(morph::backend::BridgeDestroyedError{}));
+    REQUIRE(morph::testing::waitUntil([&] {
+        callerExec.runOnce();
+        return errRan.load() == 2;
+    }));
+
+    // A third call, dispatched *after* the cancellation, is not one of the
+    // promises `cancelPending` snapshotted, so it runs. It is the probe: the
+    // strand is FIFO, so its arrival at the wrapped backend proves call 2's
+    // task has already run to completion and can no longer call anything.
+    std::atomic<int> probeOk{0};
+    dispatchOne().then([&](ModelId /*mid*/) { probeOk.fetch_add(1); });
+    inner->letGo();
+    REQUIRE(morph::testing::waitUntil([&] {
+        callerExec.runOnce();
+        return probeOk.load() == 1;
+    }));
+
+    // Two entries, not three: call 1 (already inside `op()` when the
+    // cancellation landed) and the probe. Call 2 never reached the wrapped
+    // backend, so nothing registered behind the caller's back.
+    CHECK(inner->entered.load() == 2);
+    CHECK(inner->finished.load() == 2);
+    CHECK(okRan.load() == 0);
+    CHECK(errRan.load() == 2);
+    CHECK(inner->cancels.load() == 1);
+}

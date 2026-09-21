@@ -884,23 +884,39 @@ public:
     /// after finds the promise settled, which `CompletionState::setValue`'s
     /// `if (ready) return;` makes a no-op.
     ///
-    /// **What this does not do:** a task already queued on `_control` still
-    /// runs its blocking control call against the wrapped backend after this
-    /// returns. The caller is told the bind was cancelled, but the registration
-    /// may still happen — morph#636, since stopping it needs the task to check
-    /// before calling `op()`, not the promise to be settled after it.
+    /// Settling the promise is only half of it, because it cannot stop work the
+    /// strand has already been handed. Each dispatched task therefore carries a
+    /// cancellation flag next to its promise, and this verb **sets that flag
+    /// before rejecting**: a task still queued on `_control` sees it when it
+    /// reaches the head of the strand and returns without calling `op()`, so
+    /// the blocking control call never reaches the wrapped backend at all
+    /// (morph#636). Without it the caller was told the bind was cancelled while
+    /// the registration went through anyway — a live instance on a backend
+    /// whose `Bridge` is gone, which nothing will ever `deregisterModel`.
+    ///
+    /// **What this still does not do:** a task already *inside* `op()` cannot
+    /// be recalled. Only the queued-but-not-started window is closed, which is
+    /// all this adapter can close — it has no way to interrupt a blocking verb
+    /// it does not implement. A task that wins the race by a few instructions
+    /// (flag read, then this store) registers exactly as one that had already
+    /// entered `op()`, and its completion stays rejected either way.
     /// @param exc Exception delivered to every still-pending completion, this
     ///            adapter's own and then the wrapped backend's.
     void cancelPending(const std::exception_ptr& exc) override {
-        std::vector<std::weak_ptr<BindPromise>> snapshot;
+        std::vector<std::weak_ptr<PendingControl>> snapshot;
         {
             std::scoped_lock const lock{_pendingMtx};
             snapshot.swap(_pending);
             _compactAt = kPendingCompactFloor;
         }
-        for (auto& weak : snapshot) {
-            if (auto promise = weak.lock()) {
-                promise->reject(exc);
+        for (auto& pendingWeak : snapshot) {
+            if (auto pending = pendingWeak.lock()) {
+                // Flag first, promise second. A task that reads the flag after
+                // this store declines to run; one that read it just before
+                // finds its promise already rejected by the line below, which
+                // is the pre-morph#636 outcome and the narrowest window left.
+                pending->cancelled.store(true, std::memory_order_release);
+                pending->promise.reject(exc);
             }
         }
         _inner->cancelPending(exc);
@@ -923,6 +939,35 @@ public:
     void setSession(::morph::session::Context session) override { _inner->setSession(std::move(session)); }
 
 private:
+    /// @brief One dispatched control call: its promise and its cancellation flag.
+    ///
+    /// The two travel together because `cancelPending` has to act on both, and
+    /// acting on only the promise is the defect morph#636 recorded — the queued
+    /// task went on to make the blocking control call the caller had just been
+    /// told was cancelled. The strand task holds the only `shared_ptr` to this
+    /// record; `_pending` holds `weak_ptr`s, so an entry expires by itself when
+    /// the task is destroyed.
+    struct PendingControl {
+        /// @brief Takes ownership of the dispatched call's promise.
+        /// @param dispatched Producer side of the `Completion` handed to the caller.
+        explicit PendingControl(BindPromise dispatched) : promise{std::move(dispatched)} {}
+
+        /// @brief Producer side of the completion this call settles.
+        ///
+        /// Touched by the strand task (resolve/reject) and by `cancelPending`
+        /// (reject); `Promise`'s own `CompletionState` is internally
+        /// synchronised, so no further lock is needed here.
+        BindPromise promise;
+
+        /// @brief Set by `cancelPending` before it rejects; read by the task
+        ///        before it calls `op()`.
+        ///
+        /// Atomic rather than guarded by `_pendingMtx`, so the strand task
+        /// never has to take a lock the caller's thread also takes just to
+        /// learn whether it should run.
+        std::atomic_bool cancelled{false};
+    };
+
     /// @brief Posts @p op to the control strand and settles a `Completion` with its outcome.
     ///
     /// The posted task captures the wrapped backend's `shared_ptr` and the
@@ -936,26 +981,36 @@ private:
     ::morph::async::Completion<::morph::exec::detail::ModelId> dispatch(::morph::exec::IExecutor& cbExec, Op op) {
         using Settled = ::morph::async::Completion<::morph::exec::detail::ModelId>;
         auto [completion, promise] = Settled::makeSettleable(&cbExec);
-        auto shared = std::make_shared<Settled::Promise>(std::move(promise));
+        auto pending = std::make_shared<PendingControl>(std::move(promise));
         // Tracked *before* the post, not after: a `cancelPending` that lands in
         // between would otherwise find an empty list and leave a completion
         // that is genuinely pending uncancelled. Rejecting a promise whose task
         // has not started yet is safe — the task's own `resolve` then finds the
         // state ready and returns (morph#619).
-        trackPending(shared);
-        _control.post(kControlStrand, [shared, op = std::move(op)]() mutable {
+        trackPending(pending);
+        _control.post(kControlStrand, [pending, op = std::move(op)]() mutable {
+            // Checked *before* `op()`, which is the whole of morph#636: a
+            // promise settled by `cancelPending` makes the reply a no-op but
+            // says nothing about the call, and this task is the last place that
+            // can decline to make it. Read with acquire against
+            // `cancelPending`'s release store, so a task that observes the flag
+            // also observes everything the cancelling thread did before setting
+            // it.
+            if (pending->cancelled.load(std::memory_order_acquire)) {
+                return;
+            }
             try {
-                shared->resolve(op());
+                pending->promise.resolve(op());
             } catch (...) {
-                shared->reject(std::current_exception());
+                pending->promise.reject(std::current_exception());
             }
         });
         return std::move(completion);
     }
 
-    /// @brief Records @p promise as cancellable until its task settles it.
+    /// @brief Records @p pending as cancellable until its task settles it.
     ///
-    /// The strand task holds the only `shared_ptr` to the promise, so an entry
+    /// The strand task holds the only `shared_ptr` to the record, so an entry
     /// here expires exactly when that task is destroyed — "still pending" needs
     /// no separate bookkeeping and no erase on the success path.
     ///
@@ -967,14 +1022,15 @@ private:
     /// so in practice the live count is one and the floor is never reached;
     /// without the sweep the list would still grow without bound on an adapter
     /// whose `cancelPending` is never called.
-    /// @param promise Promise to reject if `cancelPending` runs before its task settles it.
-    void trackPending(const std::shared_ptr<BindPromise>& promise) {
+    /// @param pending Record to cancel and reject if `cancelPending` runs before
+    ///                 its task settles it.
+    void trackPending(const std::shared_ptr<PendingControl>& pending) {
         std::scoped_lock const lock{_pendingMtx};
         if (_pending.size() >= _compactAt) {
             std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
             _compactAt = std::max(kPendingCompactFloor, _pending.size() * 2);
         }
-        _pending.emplace_back(promise);
+        _pending.emplace_back(pending);
     }
 
     /// @brief The single strand key every control call shares, so they run one
@@ -988,11 +1044,11 @@ private:
     std::shared_ptr<detail::IBackend> _inner;
     ::morph::exec::detail::StrandExecutor _control;
     mutable std::mutex _pendingMtx;
-    // Every `bindModel`/`promoteModel` promise handed to a `_control` task and
-    // not yet settled by it. Weak, so a settled task's promise drops out on its
+    // Every `bindModel`/`promoteModel` record handed to a `_control` task and
+    // not yet settled by it. Weak, so a settled task's record drops out on its
     // own; guarded by `_pendingMtx`, because `cancelPending` is called from
     // `Bridge`'s thread while `dispatch` runs on whichever thread called it.
-    std::vector<std::weak_ptr<BindPromise>> _pending;
+    std::vector<std::weak_ptr<PendingControl>> _pending;
     // Size at which `trackPending` next sweeps `_pending`; re-armed at twice
     // the surviving count. Guarded by `_pendingMtx` with `_pending` itself.
     std::size_t _compactAt = kPendingCompactFloor;

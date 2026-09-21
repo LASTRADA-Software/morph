@@ -392,12 +392,27 @@ natively](#the-structural-registration-surface-natively).
 
   Two limits are deliberate rather than overlooked. A task that settles first
   wins, because its completion was not still pending — the same race
-  `LocalBackend::cancelPending` has always had. And a task already **queued**
-  on `_control` still runs its blocking control call against the wrapped
-  backend after `cancelPending` returns: the caller is told the bind was
-  cancelled while the registration may still go through. Stopping that is a
-  different change — it needs the task to check before calling `op()`, not the
-  promise to be settled after it — and is tracked as morph#636.
+  `LocalBackend::cancelPending` has always had. And a task already *inside*
+  `op()` cannot be recalled: the adapter has no way to interrupt a blocking
+  verb it does not implement.
+- **It stops a control call the strand has not started yet** (morph#636).
+  Settling the promise is only half of the cancellation, because it says
+  nothing about the *work* behind it: a task still queued on `_control` used to
+  reach the head of the strand after `cancelPending` returned and make its
+  blocking control call anyway — an actual `registerModelWithContext` /
+  `registerModelShared` / `attachModel` on the wrapped backend, whose `resolve`
+  then found the state already rejected and did nothing. The caller was told
+  the bind was cancelled while the registration went through, leaving a live
+  instance on a backend whose `Bridge` is gone (`~Bridge`) or which
+  `switchBackend` has just replaced — one nothing will ever `deregisterModel`,
+  because no caller ever learned its id. So each dispatched task carries a
+  `PendingControl` record — its promise plus an `atomic_bool cancelled` — and
+  checks that flag before calling `op()`; `cancelPending` sets it (release)
+  before rejecting. What this closes is exactly the queued-but-not-started
+  window, which is all this adapter *can* close; the preceding bullet's
+  already-running case is unchanged, and a task that reads the flag a few
+  instructions before the store registers exactly as one already inside `op()`
+  would.
 - **Control calls are serialised** onto one strand, so the wrapped backend sees
   them one at a time, as it did when the blocking call itself serialised
   callers. `~SynchronousBackendAdapter` waits for any in-flight control call, so
@@ -634,8 +649,26 @@ double-claim guard. A `Completion` cannot be settled twice — `CompletionState`
 drops the second settle before any `Bridge` code sees it — so
 `tests/test_async_registration.cpp`'s `DoubleFiringBackend` now pins the
 observable contract ("exactly one `onDone`") while that guard inside
-`parkIfInFrame` is no longer reachable from a backend at all. The guard is kept
-because `parkIfInFrame` is also called from the dispatching frame.
+`parkIfInFrame` is no longer reachable from a backend at all.
+
+morph#648 settled what to do about the now-unreachable arm, and corrected the
+reason recorded here: this section used to say the guard was kept "because
+`parkIfInFrame` is also called from the dispatching frame", which is false —
+the dispatching frame calls `claimHandoff`/`awaitHandoff`, and all eight
+`parkIfInFrame` call sites are completion callbacks. That the arm is
+unreachable is *measured*, not read: replacing its `return true` with an
+`abort()` and running `morph_tests` (1556 cases) and `morph_net_tests` (191)
+fires it zero times. It is kept anyway, for a different reason than the one
+that was written down — the invariant that makes it dead is a property of every
+current *caller*, not of the function, so a ninth site that does not park a
+single `Completion`'s outcome would resurrect it — and it is now pinned by a
+test that calls `parkIfInFrame` directly, twice on one handoff, rather than
+left as an arm whose deletion nothing would detect. The neighbouring
+`try`/`catch (...)` around the dispatch was decided separately and left alone:
+it is reachable by any out-of-tree `IBackend` override that throws out of
+`bindModel`, `IBackend` is a public extension point, and
+`ThrowingDispatchBackend` already exercises it — so it is covered defensive
+code, not dead code.
 
 `Bridge::installReconnectHandler` and `Bridge::switchBackend`'s phase 1 were
 the two dispatch sites morph#568 did **not** move: both still called the
@@ -2217,7 +2250,7 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `bindModel(request, cbExec)` | Posts `inner->bindModelBlocking(request)` onto the control strand; settles the returned `Completion` on `cbExec`. Never blocks the caller. |
 | `bindWaitPolicy()` | `BindWait::kCallerMustNotBlock`, always. Not forwarded: it describes the two verbs the adapter reshapes. |
 | `promoteModel(request, cbExec)` | Posts `inner->assignPrimary(...)` onto the control strand; resolves with `request.mid`. |
-| `cancelPending(exc)` | Rejects the adapter's own still-unsettled `bindModel`/`promoteModel` promises with `exc`, **then** forwards to `inner`. Not a plain forward: those promises are settled from `_control` tasks the wrapped backend has never heard of (morph#619). |
+| `cancelPending(exc)` | Sets each still-unsettled `bindModel`/`promoteModel` record's `cancelled` flag and rejects its promise with `exc`, **then** forwards to `inner`. Not a plain forward: those promises are settled from `_control` tasks the wrapped backend has never heard of (morph#619). The flag is what stops a task still *queued* on `_control` from making its blocking control call after the caller was told the bind was cancelled (morph#636); a task already inside that call is unaffected. |
 | every other `IBackend` verb | Forwarded to `inner` unchanged. Since morph#571 those are the synchronous verbs only: the one verb that could carry a non-blocking path is `bindModel`, which this adapter reshapes. |
 
 ### Error types
