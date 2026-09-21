@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Usage: git diff --name-only <base> HEAD | bash scripts/check_spec_sync.sh
+#        bash scripts/check_spec_sync.sh --allow-empty   # silence must be asked for
 #
 # The header <-> spec sync gate .github/workflows/spec-sync.yml enforces: a
 # change to a header sub-domain must come with a change to the docs that
@@ -34,7 +35,46 @@
 # part that stops this recurring -- every directory under include/morph/ must
 # appear either in that table or in the exempt list below. A new sub-domain is
 # now a failure that names itself, instead of a silent exemption.
+#
+# ── Why empty input is an error unless asked for (morph#655) ────────────────
+#
+# This gate reads a list of paths from stdin, so the question "what happens
+# when the list is empty?" is the question "what happens when whatever
+# produced it broke?". It used to answer `Spec sync OK: the change touches no
+# files.` and exit 0. The sentence is honest -- it claims nothing was checked,
+# rather than claiming a check passed -- but nobody reads the sentence, and a
+# broken upstream then produces a green tick.
+#
+# Measured on 4563aff3, before the flag below existed. CI's own invocation was
+# never exposed: .github/workflows/spec-sync.yml assigns the diff to a
+# variable under `set -euo pipefail` and pipes a `printf`, so a failing
+# `git diff` aborts the step with status 128 before this script is reached.
+# The documented manual invocation, in a shell with neither -e nor pipefail --
+# an interactive one, or a pre-push hook -- is exposed exactly as filed:
+#
+#     $ git diff --name-only <a bad ref> HEAD | bash scripts/check_spec_sync.sh
+#     fatal: bad object <a bad ref>
+#     Spec sync OK: the change touches no files.
+#     pipeline exit=0
+#
+# So the fix is a flag rather than a hard error: "this change touches no
+# headers" is a real and common outcome the gate must still pass, and the
+# whole point is to make the empty case something a caller states rather than
+# something it falls into. Without --allow-empty, empty input is a failure.
 set -euo pipefail
+
+allow_empty=0
+for argument in "$@"; do
+    case "$argument" in
+        --allow-empty) allow_empty=1 ;;
+        *)
+            printf 'error: unrecognised argument: %s\n' "$argument" >&2
+            printf 'usage: git diff --name-only <base> HEAD | %s [--allow-empty]\n' \
+                "${BASH_SOURCE[0]}" >&2
+            exit 2
+            ;;
+    esac
+done
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -81,8 +121,17 @@ exempt_subdomains="detail qt"
 changed="$(cat)"
 
 if [ -z "${changed//[[:space:]]/}" ]; then
-    echo "Spec sync OK: the change touches no files."
-    exit 0
+    if [ "${allow_empty}" -eq 1 ]; then
+        echo "Spec sync OK: the change touches no files (--allow-empty given)."
+        exit 0
+    fi
+    echo "::error::spec-sync: the path list on stdin is empty, and --allow-empty was not given."
+    echo "  This gate checks a list of changed paths. An empty list is indistinguishable"
+    echo "  from a broken producer -- a failed \`git diff\`, a mistyped base ref, a"
+    echo "  pipeline in a shell without \`set -o pipefail\` -- and answering OK to that"
+    echo "  is a green tick for a check that read nothing (morph#655)."
+    echo "  If the emptiness is genuine and expected, say so: pass --allow-empty."
+    exit 1
 fi
 
 fail=0

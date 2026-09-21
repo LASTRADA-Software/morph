@@ -92,4 +92,21 @@ jobs:
           # of paths, which is what lets scripts/test_check_spec_sync.sh drive
           # it against the commits it must reject rather than asserting it
           # works.
-          printf '%s\n' "$changed" | bash scripts/check_spec_sync.sh
+          #
+          # --allow-empty only when this step has *observed* the emptiness
+          # (morph#655). An empty path list is what a broken producer hands
+          # that script, and answering "OK, nothing to check" to it is a green
+          # tick for a check that read nothing -- so the script now refuses
+          # empty input unless the caller states it meant it. This step is
+          # entitled to state it: `set -euo pipefail` above means the
+          # `git diff` either produced this list or aborted the step, so an
+          # empty `$changed` here is a real net-zero diff (a pull request whose
+          # commits cancel out) and not a failure upstream. Passing the flag
+          # unconditionally would hand that entitlement back, and it is not the
+          # ordinary path anyway: every other run goes through the `else`.
+          if [ -z "$changed" ]; then
+              echo "The diff against the base is empty -- git diff succeeded and named no files."
+              printf '%s\n' "$changed" | bash scripts/check_spec_sync.sh --allow-empty
+          else
+              printf '%s\n' "$changed" | bash scripts/check_spec_sync.sh
+          fi

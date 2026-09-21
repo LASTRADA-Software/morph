@@ -59,6 +59,35 @@ expect_accepted() {
     fi
 }
 
+# The same two, for the cases that turn on an *argument* rather than on the
+# path list. Separate helpers rather than an extra parameter on the two above,
+# so that the fifteen existing call sites keep saying exactly what they say.
+expect_rejected_with_args() {
+    local description="$1" paths="$2" expected="$3"; shift 3
+    local output
+    if output="$(printf '%s\n' "$paths" | bash "$checker" "$@" 2>&1)"; then
+        fail "NOT caught: ${description} -- the gate passed an invocation it must reject"
+        return
+    fi
+    if printf '%s' "$output" | grep -qF "$expected"; then
+        note "rejected: ${description}"
+    else
+        fail "rejected for the WRONG reason: ${description} -- no diagnostic containing '${expected}':"
+        printf '%s\n' "$output" >&2
+    fi
+}
+
+expect_accepted_with_args() {
+    local description="$1" paths="$2"; shift 2
+    local output
+    if output="$(printf '%s\n' "$paths" | bash "$checker" "$@" 2>&1)"; then
+        note "accepted: ${description}"
+    else
+        fail "FALSE POSITIVE: ${description} -- the gate rejected an invocation it must accept:"
+        printf '%s\n' "$output" >&2
+    fi
+}
+
 # The live gap morph#560 reported, in its minimal form.
 expect_rejected "a morph::net header change with no spec change" \
     "include/morph/net/detail/ws_frame.hpp" \
@@ -109,6 +138,49 @@ expect_accepted "a qt and detail change with no spec change" \
 
 expect_accepted "a change touching no headers at all" \
     "$(printf 'README.md\ntests/test_bridge.cpp')"
+
+# ── Empty input: both paths pinned, because only one of them is obvious ─────
+#
+# morph#655. An empty path list is what a broken producer hands this gate -- a
+# failed `git diff`, a mistyped base ref, a pipeline in a shell without
+# `set -o pipefail`. It used to answer `Spec sync OK: the change touches no
+# files.` and exit 0, which is honest and still a green tick for a check that
+# read nothing. It is now an error unless the caller asks for it.
+#
+# Both directions are pinned here deliberately. Rejecting empty input is
+# useless if --allow-empty stops working, because every caller that
+# legitimately has nothing to check would then be wedged; and accepting it
+# with the flag is useless if the flag is the only path anyone tests, because
+# a gate that quietly went back to accepting silence would pass that test too.
+expect_rejected "an empty path list with no --allow-empty" \
+    "" \
+    "the path list on stdin is empty, and --allow-empty was not given"
+
+expect_accepted_with_args "an empty path list with --allow-empty" \
+    "" --allow-empty
+
+# Whitespace-only is the same case: `printf '%s\n' "$changed"` with an empty
+# `$changed` is exactly what .github/workflows/spec-sync.yml pipes, so the
+# rejection has to survive the newline that shape adds.
+expect_rejected "a path list of nothing but whitespace" \
+    "$(printf '  \n\t\n  ')" \
+    "the path list on stdin is empty, and --allow-empty was not given"
+
+# An unrecognised argument must not be silently ignored: a typo'd
+# `--allow_empty` that the gate shrugged off would fail every legitimately
+# empty invocation, and a typo'd anything-else would hide whatever the caller
+# meant to ask for.
+expect_rejected_with_args "an unrecognised argument" \
+    "README.md" \
+    "unrecognised argument: --allow_empty" \
+    --allow_empty
+
+# The flag must not become a way to pass a real violation. It governs the
+# empty case and nothing else.
+expect_rejected_with_args "--allow-empty over a real violation" \
+    "include/morph/net/detail/ws_frame.hpp" \
+    "include/morph/net/** changed but none of its spec paths did" \
+    --allow-empty
 
 # ── Cases that need a mutated tree ──────────────────────────────────────────
 #
