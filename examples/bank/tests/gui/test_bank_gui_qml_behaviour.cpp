@@ -49,12 +49,10 @@
 #include <QVariantMap>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
-#include <filesystem>
 #include <initializer_list>
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <string>
-#include <system_error>
 
 #include "BankClient.hpp"
 #include "Theme.hpp"
@@ -69,26 +67,12 @@
 #include "controllers/PayeeController.hpp"
 #include "controllers/TransactionController.hpp"
 #include "testkit/pump.hpp"
+#include "unique_test_database.hpp"
 
 using morph::ladder::testkit::awaitQt;
 using morph::ladder::testkit::pumpUntil;
 
 namespace {
-
-/// @brief A database of this suite's own -- its own file, not the one
-///        `bank_tests` or the surface audit uses, so the binaries can run
-///        concurrently -- wiped once per process rather than once per case, so
-///        a later case cannot delete the file an earlier one still has open.
-/// @return The ODBC connection string for it.
-[[nodiscard]] std::string connectionString() {
-    static const std::string connection = [] {
-        const auto path = std::filesystem::temp_directory_path() / "morph_bank_gui_qml.db";
-        std::error_code err;
-        std::filesystem::remove(path, err);
-        return "DRIVER=SQLite3;Database=" + path.string();
-    }();
-    return connection;
-}
 
 /// @brief URL of one of the GUI's shipped `.qml` files in the source tree.
 /// @param fileName Basename, e.g. `"MoveMoneyPage.qml"`.
@@ -159,7 +143,7 @@ namespace {
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("MoveMoneyPage's picker keeps naming the account the next deposit will land in",
           "[bank][gui][qml][move-money]") {
-    bankgui::BankClient client{connectionString()};
+    bankgui::BankClient client{bank::testing::uniqueDatabaseConnection()};
 
     bankgui::AppController app{client};
     app.registerUser(QStringLiteral("gui-move-money"), QStringLiteral("hunter2demo"), QStringLiteral("Picker"));
@@ -267,7 +251,7 @@ TEST_CASE("MoveMoneyPage's picker keeps naming the account the next deposit will
 // run exits 1; with the directive back, the same diff is clean.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("Main.qml confirms a posted transaction and a paid bill in the toast", "[bank][gui][qml][toast]") {
-    bankgui::BankClient client{connectionString()};
+    bankgui::BankClient client{bank::testing::uniqueDatabaseConnection()};
 
     bankgui::AppController app{client};
     bankgui::AccountController accountsController{client};

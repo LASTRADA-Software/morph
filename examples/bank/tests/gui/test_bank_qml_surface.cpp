@@ -36,7 +36,6 @@
 #include <QString>
 #include <QStringList>
 #include <catch2/catch_test_macros.hpp>
-#include <filesystem>
 #include <initializer_list>
 #include <string>
 
@@ -48,6 +47,7 @@
 #include "controllers/PayeeController.hpp"
 #include "controllers/TransactionController.hpp"
 #include "testkit/qml_surface.hpp"
+#include "unique_test_database.hpp"
 
 namespace {
 
@@ -60,11 +60,10 @@ TEST_CASE("Every bank controller exposes exactly the surface gui/qml binds, and 
     // A real BankClient, because every controller holds `BridgeHandler`s
     // constructed from one. Nothing here dispatches an action — the audit reads
     // metaobjects and text — but `BankClient`'s constructor runs the schema
-    // migrations, so it needs a database like any other bank test does. Its own
-    // file, not the one `bank_tests` shares, so the two binaries can run
-    // concurrently.
-    const auto dbPath = std::filesystem::temp_directory_path() / "morph_bank_qml_surface.db";
-    bankgui::BankClient client{"DRIVER=SQLite3;Database=" + dbPath.string()};
+    // migrations, so it needs a database like any other bank test does. A file
+    // private to this process, so no other ctest case — in this binary or
+    // another — can be unlinking it while this one has it open (morph#682).
+    bankgui::BankClient client{bank::testing::uniqueDatabaseConnection()};
 
     // const: `QmlSurfaceAudit::bind` takes `const QObject&`, and nothing here
     // drives a controller -- the audit reads metaobjects and QML text.

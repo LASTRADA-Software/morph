@@ -6,7 +6,6 @@
 // queue and replays each action through the live bridge handler.
 
 #include <catch2/catch_test_macros.hpp>
-#include <filesystem>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/offline/offline_queue.hpp>
@@ -23,17 +22,8 @@
 
 using bank::testing::await;
 
-namespace {
-
-std::string testConnection() {
-    bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
-}
-
-}  // namespace
-
 TEST_CASE("Offline deposits are queued and replayed on reconnect", "[offline]") {
-    bank::app::App app{testConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("peter-offline");
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};

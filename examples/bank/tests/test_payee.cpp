@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
-#include <filesystem>
 #include <morph/core/bridge.hpp>
 #include <string>
 
@@ -15,17 +14,8 @@
 using bank::testing::await;
 using bank::testing::waitUntil;
 
-namespace {
-
-std::string testConnection() {
-    bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
-}
-
-}  // namespace
-
 TEST_CASE("PayeeModel add/list/remove scoped to the owner", "[payee]") {
-    bank::app::App app{testConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("grace-payee");
     morph::bridge::BridgeHandler<bank::PayeeModel> payees{app.bridge(), app.gui()};
 
@@ -58,7 +48,7 @@ TEST_CASE("PayeeModel add/list/remove scoped to the owner", "[payee]") {
 }
 
 TEST_CASE("PayeeModel notifies subscribers of the state it produces", "[payee][subscribe]") {
-    bank::app::App app{testConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("heidi-form");
     morph::bridge::BridgeHandler<bank::PayeeModel> payees{app.bridge(), app.gui()};
 

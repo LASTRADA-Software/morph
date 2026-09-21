@@ -11,7 +11,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
-#include <filesystem>
 #include <morph/core/bridge.hpp>
 #include <string>
 
@@ -30,11 +29,6 @@ using morph::bridge::BridgeHandler;
 
 namespace {
 
-std::string statefulTestConnection() {
-    bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
-}
-
 /// Opens a checking account for the logged-in principal and returns its id.
 std::int64_t openChecking(bank::app::App& app, BridgeHandler<bank::CustomerModel>& customer) {
     auto info = await(customer.execute(bank::dto::OpenAccount{
@@ -49,7 +43,7 @@ std::int64_t openChecking(bank::app::App& app, BridgeHandler<bank::CustomerModel
 }  // namespace
 
 TEST_CASE("two shared handlers on one account reach one instance", "[stateful-account]") {
-    bank::app::App app{statefulTestConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("sid-shared-instance");
 
     BridgeHandler<bank::CustomerModel> customer{app.bridge(), app.gui()};
@@ -71,7 +65,7 @@ TEST_CASE("two shared handlers on one account reach one instance", "[stateful-ac
 }
 
 TEST_CASE("a cached account re-hydrates after another model moves money", "[stateful-account]") {
-    bank::app::App app{statefulTestConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("tess-stale-cache");
 
     BridgeHandler<bank::CustomerModel> customer{app.bridge(), app.gui()};
@@ -92,7 +86,7 @@ TEST_CASE("a cached account re-hydrates after another model moves money", "[stat
 }
 
 TEST_CASE("a plain account handler keeps its own instance", "[stateful-account]") {
-    bank::app::App app{statefulTestConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("percy-private-instance");
 
     BridgeHandler<bank::CustomerModel> customer{app.bridge(), app.gui()};
@@ -110,7 +104,7 @@ TEST_CASE("a plain account handler keeps its own instance", "[stateful-account]"
 }
 
 TEST_CASE("closing through the cached instance still enforces the zero-balance rule", "[stateful-account]") {
-    bank::app::App app{statefulTestConnection()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login("cass-close-guard");
 
     BridgeHandler<bank::CustomerModel> customer{app.bridge(), app.gui()};

@@ -35,18 +35,9 @@
 
 using bank::testing::await;
 
-namespace {
-
-std::string dbConnectionForTests() {
-    bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
-}
-
-}  // namespace
-
 TEST_CASE("ORM relations: BelongsTo navigation and HasMany inverses", "[relations]") {
     const std::string principal = "rel-user";
-    bank::app::App app{dbConnectionForTests()};
+    bank::app::App app{bank::testing::connectionString()};
     app.login(principal);  // provisions the users row
 
     morph::bridge::BridgeHandler<bank::CustomerModel> accounts{app.bridge(), app.gui()};

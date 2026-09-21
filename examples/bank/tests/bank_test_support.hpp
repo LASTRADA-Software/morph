@@ -15,24 +15,34 @@
 #include "bank/db/database.hpp"
 #include "bank/db/entities.hpp"
 #include "bank/db/user_ops.hpp"
+#include "unique_test_database.hpp"
 
 /// @file
 /// Shared helpers for the bank example tests.
 
 namespace bank::testing {
 
-/// @brief Sets up the shared test database exactly once for the whole binary.
+/// @brief The ODBC connection string every test in this process shares.
 ///
-/// All tests run against one on-disk SQLite file (a single `:memory:`
-/// connection cannot be shared across the per-model DataMappers). Migrations
-/// are applied once; individual tests isolate themselves by using unique owner
-/// principals rather than by wiping tables.
+/// A path of this process's own, so two ctest cases running concurrently never
+/// name the same SQLite file (morph#682).
+///
+/// @return The connection string.
+[[nodiscard]] inline const std::string& connectionString() { return uniqueDatabaseConnection(); }
+
+/// @brief Sets up this process's test database exactly once.
+///
+/// All tests in one process run against one on-disk SQLite file (a single
+/// `:memory:` connection cannot be shared across the per-model DataMappers).
+/// Migrations are applied once; individual tests isolate themselves by using
+/// unique owner principals rather than by wiping tables.
+///
+/// The file is private to the process rather than a fixed path shared by every
+/// bank test binary -- see unique_test_database.hpp for why, and for what a
+/// fixed path cost under `ctest -j` (morph#682).
 inline void ensureDatabase() {
     static const bool once = [] {
-        const auto path = std::filesystem::temp_directory_path() / "morph_bank_tests.db";
-        std::error_code err;
-        std::filesystem::remove(path, err);
-        bank::db::setup("DRIVER=SQLite3;Database=" + path.string());
+        bank::db::setup(connectionString());
         return true;
     }();
     (void)once;
