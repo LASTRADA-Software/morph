@@ -1,5 +1,6 @@
 var NAVTREEINDEX1 =
 {
+"d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html":[1,0,0,6],
 "d3/deb/conceptmorph_1_1units_1_1Convertible.html":[1,0,2,5],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html":[2,0,0,16,2],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0708cfaed653e2ab9768f8a1524c9a5d":[2,0,0,16,2,10],
@@ -248,6 +249,5 @@ var NAVTREEINDEX1 =
 "d7/d1a/structmorph_1_1model_1_1ValidationError.html#a5d3ab41ea96c68f40e3637cedbd92874":[2,0,0,12,12,0],
 "d7/d20/outbox_8hpp_source.html":[3,0,0,3,3],
 "d7/d45/structmorph_1_1math_1_1Numerator.html":[2,0,0,11,1],
-"d7/d45/structmorph_1_1math_1_1Numerator.html#a5353d4a46c133873f2bc79822619eeab":[2,0,0,11,1,1],
-"d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7":[2,0,0,11,1,0]
+"d7/d45/structmorph_1_1math_1_1Numerator.html#a5353d4a46c133873f2bc79822619eeab":[2,0,0,11,1,1]
 };

@@ -1,5 +1,6 @@
 var NAVTREEINDEX2 =
 {
+"d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7":[2,0,0,11,1,0],
 "d7/d4a/datetime_8hpp.html":[3,0,0,9,0],
 "d7/d4a/datetime_8hpp_source.html":[3,0,0,9,0],
 "d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html":[2,0,0,23,3],
@@ -248,6 +249,5 @@ var NAVTREEINDEX2 =
 "db/dec/structmorph_1_1time_1_1Timestamp.html#a079027c7f4bae303dcb0bbba8b40542d":[2,0,0,19,2,6],
 "db/dec/structmorph_1_1time_1_1Timestamp.html#a41338eedad2939d26557c9161351df82":[2,0,0,19,2,4],
 "db/dec/structmorph_1_1time_1_1Timestamp.html#a41d879bad41b4e5b09f65b6cf56ce603":[2,0,0,19,2,3],
-"db/dec/structmorph_1_1time_1_1Timestamp.html#a55072b0f18766e9c598e28db21c6304f":[2,0,0,19,2,2],
-"db/dec/structmorph_1_1time_1_1Timestamp.html#a6f0011d4b7e6f830120f26ecf1e72158":[2,0,0,19,2,0]
+"db/dec/structmorph_1_1time_1_1Timestamp.html#a55072b0f18766e9c598e28db21c6304f":[2,0,0,19,2,2]
 };

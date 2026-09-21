@@ -29,7 +29,7 @@ var searchData=
   ['block_26',['&lt;span class=&quot;tt&quot;&gt;NetworkMonitor&lt;/span&gt; callbacks must not block',['../index.html#networkmonitor-callbacks-must-not-block',1,'']]],
   ['body_27',['body',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326',1,'morph::wire::Envelope']]],
   ['boxes_28',['&lt;span class=&quot;tt&quot;&gt;morph::time::Timestamp&lt;/span&gt; and &lt;span class=&quot;tt&quot;&gt;morph::forms::Choice&lt;/span&gt; — dates and combo boxes',['../index.html#morphtimetimestamp-and-morphformschoice--dates-and-combo-boxes',1,'']]],
-  ['bridge_29',['Bridge',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html',1,'morph::bridge::Bridge'],['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6a0b4e661e796d6b2a12be4866c2d49d',1,'morph::bridge::Bridge::Bridge()']]],
+  ['bridge_29',['Bridge',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html',1,'morph::bridge::Bridge'],['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a5ea19b6acd4cd85ad798b776694624d7',1,'morph::bridge::Bridge::Bridge()']]],
   ['bridge_20backends_20wire_30',['&lt;span class=&quot;tt&quot;&gt;core/&lt;/span&gt; — async core, registry, bridge, backends, wire',['../index.html#core--async-core-registry-bridge-backends-wire',1,'']]],
   ['bridge_3a_3aswitchbackend_20must_20not_20be_20called_20from_20onbackendchanged_31',['&lt;span class=&quot;tt&quot;&gt;Bridge::switchBackend&lt;/span&gt; must not be called from &lt;span class=&quot;tt&quot;&gt;onBackendChanged&lt;/span&gt;',['../index.html#bridgeswitchbackend-must-not-be-called-from-onbackendchanged',1,'']]],
   ['bridge_5fkey_5ffrom_32',['BRIDGE_KEY_FROM',['../d1/dd8/model__key_8hpp.html#a79a6fa314d058ddd9e12101c176394cf',1,'model_key.hpp']]],

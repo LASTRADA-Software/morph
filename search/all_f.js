@@ -36,5 +36,6 @@ var searchData=
   ['protocol_33',['Wire protocol',['../index.html#wire-protocol',1,'']]],
   ['protocolrange_34',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
   ['protocolversion_35',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
-  ['publishresult_36',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
+  ['publishlatebindreply_36',['publishLateBindReply',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ae2e156bc6eff882ef94131bb7129c146',1,'morph::bridge::Bridge']]],
+  ['publishresult_37',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
 ];
