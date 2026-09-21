@@ -11,9 +11,12 @@
 # logical operator -- would defeat the expression decomposition that makes a
 # failing assertion print its two operands. Catch2 says so itself; the macro
 # definition carries `/* NOLINT(bugprone-chained-comparison) */` on that very
-# line in 3.15.3. The clang-tidy-diff job installs ubuntu-24.04's catch2,
-# 3.4.0, which predates that comment -- which is why the finding reaches CI
-# here and not on a workstation with a current Catch2.
+# line in 3.15.3. CI pins catch2 3.4.0 -- ubuntu-24.04's package, which
+# predates that comment -- which is why the finding reaches CI here and not on
+# a workstation with a current Catch2. That number is checked rather than
+# asserted: scripts/check_catch2_pin.sh reads the runner's installed version
+# back off the include path and fails this line and the clang-tidy-diff job
+# together if the package moves (morph#666).
 #
 # Directory-scoped, and no wider. clang-tidy resolves configuration by walking
 # up from the file it is analysing and offers no finer granularity than a
