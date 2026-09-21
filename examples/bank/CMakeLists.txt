@@ -206,6 +206,7 @@ if(MORPH_BUILD_TESTS)
         if(TARGET bank_gui_lib)
             add_executable(bank_gui_tests
                 tests/gui/test_bank_qml_surface.cpp
+                tests/gui/test_bank_gui_format.cpp
                 # QmlSurfaceAudit, compiled in rather than linked from
                 # morph::ladder_testkit. That library is only created by
                 # MORPH_BUILD_LADDER=ON, an option entirely independent of
