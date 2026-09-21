@@ -371,7 +371,7 @@ TEST_CASE("StrandExecutor recycles a drained strand under the key that asked for
                 producers.emplace_back([&, slot] {
                     // Distinct, non-zero ids: 0 is `ModelId`'s reserved
                     // "unbound" sentinel.
-                    morph::exec::detail::ModelId const key{static_cast<uint64_t>(100 + slot)};
+                    morph::exec::detail::ModelId const key{100 + slot};
                     for (int round = 0; round < kRounds; ++round) {
                         for (int post = 0; post < kBurst; ++post) {
                             int const seq = (round * kBurst) + post;
