@@ -73,6 +73,27 @@ jobs:
       - name: Assert UBSan halts instead of recovering
         run: bash scripts/check_sanitizer_can_fail.sh
 
+      # scripts/check_sanitizer_instrumentation.sh's own self-test, and the
+      # neighbouring half of the same question: that gate asserts every binary
+      # ctest runs on a sanitizer leg carries that sanitizer's symbols
+      # (morph#542), where the step above asserts the instrumentation can
+      # actually fail the process (morph#541). The gate itself needs a built,
+      # test-registered sanitizer tree and so runs in ci.yml's three sanitizer
+      # jobs; its self-test needs neither -- hand-written CTestTestfile.cmake
+      # documents and fixtures built by `cc` from two lines of C -- so it runs
+      # here, in seconds, and still reports when one of those 20-minute legs
+      # has gone blind.
+      #
+      # It is also the only thing holding morph#675's narrow `--binary` mode to
+      # its terms. That mode answers "is this one file instrumented?" and
+      # applies no floor, which is correct for a developer with a single-target
+      # build and would be a vacuous pass in a workflow step. The self-test
+      # pins both halves: the mode is refused under GITHUB_ACTIONS, and the
+      # sweep still rejects a one-binary tree on the floor. Both assertions
+      # were confirmed to fail against a mutated checker before being trusted.
+      - name: Self-test the sanitizer-instrumentation checker
+        run: bash scripts/test_check_sanitizer_instrumentation.sh
+
   dep-cache-selftest:
     name: Dependency-cache self-test
     runs-on: ubuntu-24.04

@@ -96,7 +96,12 @@ jobs:
       - name: Install Mull ${{ env.MULL_VERSION }} for LLVM ${{ env.MULL_LLVM_MAJOR }}
         run: |
           asset="Mull-${MULL_LLVM_MAJOR}-${MULL_VERSION}-LLVM-22.1.2-ubuntu-amd64-26.04.deb"
-          curl -sSLO "https://github.com/mull-project/mull/releases/download/${MULL_VERSION}/${asset}"
+          # `--fail`, for the reason ci.yml's Install sccache step gives at
+          # length (morph#672): without it an HTTP 503 is a successful
+          # transfer of an error page, curl exits 0, and the 64 bytes of HTML
+          # land in ${asset} -- so the first thing to complain is dpkg-deb,
+          # about the archive, rather than curl about the download.
+          curl -sSLO --fail "https://github.com/mull-project/mull/releases/download/${MULL_VERSION}/${asset}"
           mkdir -p "${PWD}/mull-${MULL_LLVM_MAJOR}"
           dpkg-deb -x "${asset}" "${PWD}/mull-${MULL_LLVM_MAJOR}"
           echo "MULL_PREFIX=${PWD}/mull-${MULL_LLVM_MAJOR}/usr" >> "$GITHUB_ENV"

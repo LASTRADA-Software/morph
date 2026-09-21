@@ -39,6 +39,13 @@ apply_bigobj(bank_gui_lib)
 # Note: deliberately NOT calling apply_warnings() here, for the same reason
 # bank_lib does not — this target includes the third-party ORM headers
 # transitively and they are not -Werror clean.
+#
+# apply_sanitizers() is not the same question and does apply — see bank_lib's
+# own block in ../CMakeLists.txt (morph#679). This is the library holding
+# controllers/Format.hpp, where morph#663's undefined conversion was.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(bank_gui_lib ${AF_SANITIZER})
+endif()
 
 # ── bank_gui: the desktop client ─────────────────────────────────────────────
 qt_add_executable(bank_gui
@@ -68,3 +75,6 @@ target_include_directories(bank_gui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bank_gui PRIVATE bank_gui_lib Qt6::Quick Qt6::Qml Qt6::QuickControls2)
 target_compile_features(bank_gui PRIVATE cxx_std_23)
 apply_bigobj(bank_gui)
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(bank_gui ${AF_SANITIZER})
+endif()

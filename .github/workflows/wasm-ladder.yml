@@ -91,7 +91,7 @@ jobs:
       # (examples/IMPLEMENTATION.md rule 4's WASM clause), so the transport is
       # not optional here the way it is for bank's local-only demo.
       - name: Install Qt (host desktop)
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           host: linux
@@ -101,7 +101,7 @@ jobs:
           dir: ${{ runner.temp }}/qt
 
       - name: Install Qt (wasm, single-threaded)
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           host: all_os

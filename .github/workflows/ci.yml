@@ -308,8 +308,36 @@ jobs:
       - name: Install sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail`, and a file rather than a pipe into tar (morph#672). On
+          # 2026-09-21 both GCC legs of PR #671 died in this step with
+          #
+          #     gzip: stdin: not in gzip format
+          #     tar: Child returned status 1
+          #     tar: Error is not recoverable: exiting now
+          #
+          # The download host had served something that is not a tarball --
+          # an error page -- and plain `curl` reports an HTTP 4xx/5xx as a
+          # *successful* transfer of that page, exit 0, straight down the
+          # pipe. So the only diagnostic anyone saw named the decompressor,
+          # and the event that actually happened (the download failed, with a
+          # status) appeared nowhere in the log. The step could not be
+          # salvaged by `set -o pipefail` either: GitHub runs `run:` under
+          # `bash -e`, without pipefail, so the pipeline's status is tar's
+          # regardless of what curl did.
+          #
+          # `--fail` makes curl exit non-zero and print `curl: (22) The
+          # requested URL returned error: 503`; writing to a file means tar
+          # never runs at all when it does. This is not a retry policy and it
+          # does not make the outage less likely -- it makes the log name the
+          # thing that happened, which is the half of morph#672 that needs no
+          # CI-wide decision. The rest of that class -- a retry policy, or a
+          # marker that distinguishes "the environment failed" from "the
+          # change failed" in the check list, and the apt/PPA outages that
+          # are the other three quarters of the ticket -- is still open.
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache here on purpose: leaving the
       # launcher unset lets cmake/CompileCache.cmake's own auto-detection run,
@@ -459,8 +487,14 @@ jobs:
       - name: Install sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # morph::net and the SQLite offline queue are opt-in, but they are also
       # where the memory/threading/UB risk actually lives (raw sockets, an I/O
@@ -627,7 +661,7 @@ jobs:
       # alongside aqtinstall's Qt, which would leave two Qt6 installs on the
       # same runner for find_package() to pick between.
       - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -642,8 +676,14 @@ jobs:
 
       - name: Install sccache
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       - name: Configure
         run: |
@@ -812,7 +852,7 @@ jobs:
       # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
       # every other job that builds the ladder on Linux already documents.
       - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -832,8 +872,14 @@ jobs:
 
       - name: Install sccache
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # MORPH_LADDER_RUNGS=kanban (a single rung, not "all"): examples/CMakeLists.txt's
       # rung-selection loop (`if(MORPH_LADDER_RUNGS STREQUAL "all" OR _rung IN_LIST
@@ -916,6 +962,195 @@ jobs:
           path: /home/runner/.cache/sccache
           key: sccache-clang-tsan-${{ github.sha }}
 
+  # ── Linux: the bank example under UndefinedBehaviorSanitizer ──────────
+  # Until morph#679, no sanitizer leg built the bank example at all. Measured
+  # on 5fc5e788: linux-sanitizers, kanban-tsan, ladder-sanitizers and valgrind
+  # set zero MORPH_BUILD_BANK_* flags, against eight places elsewhere in this
+  # file that set MORPH_BUILD_BANK_EXAMPLE=ON. Bank is not a rung (it is absent
+  # from examples/rungs.txt and never calls morph_add_rung(), for the reasons
+  # that file gives), so MORPH_BUILD_LADDER=ON does not reach it either, and
+  # nothing in those four jobs' comments argued for excluding it -- it was an
+  # option nobody turned on rather than a decision anybody made.
+  #
+  # The cost of that was paid in morph#663: an out-of-range double ->
+  # std::int64_t conversion in examples/bank/gui/controllers/Format.hpp, on the
+  # path of every amount typed into the bank GUI, found by a lane reading the
+  # code. Rebuilding that header as it stood before the fix, in this job's
+  # exact configuration, bank_gui_tests exits 1 with
+  #
+  #     examples/bank/gui/controllers/Format.hpp:76:38: runtime error:
+  #     9.2e+19 is outside the range of representable values of type 'long'
+  #
+  # -- but only because morph#663's fix also added the test that calls
+  # parseMinor with such a value. Measured too: with the pre-morph#663 header
+  # *and* the pre-morph#663 test set, this leg is green. The sanitizer gap was
+  # real and is what this job closes; it was not on its own what let morph#663
+  # survive, and this job's reach is bounded by how much of bank the suites
+  # actually drive.
+  #
+  # Why a job of its own rather than a flag on linux-sanitizers' clang-ubsan
+  # leg -- the shape the ticket proposed. Two measured reasons. (1) That leg
+  # builds no Qt, and its own comment reserves the matrix against GUI stacks;
+  # bank's GUI is where the UB was, so covering it means adding Qt there. (2)
+  # Cold, cacheless, 12 cores, clang 22.1.8: the leg's current shape
+  # (core + net + offline_sqlite, no Qt) is 36s configure / 144s build over 144
+  # ninja edges, and this job's shape is 64s / 391s over 287. Folding one into
+  # the other roughly triples the slowest leg of a three-leg matrix, whose
+  # duration is then the matrix's. Split out, the three existing legs are
+  # untouched -- their flags are not changed by morph#679 at all -- and this
+  # runs beside them. Same precedent, and the same argument, as kanban-tsan
+  # above.
+  #
+  # ubsan rather than asan: UBSan is the sanitizer that diagnoses morph#663's
+  # class, and an ASan run over a Qt GUI needs the detect_leaks=0 and
+  # suppression story ladder-sanitizers already carries, which this job would
+  # have to acquire before it could be believed. Bank under ASan is worth
+  # having and is not closed by this job.
+  #
+  # The first bill was measured before this landed, per morph#646 (84 findings)
+  # and morph#656 (97): turning bank on and instrumenting every one of its
+  # targets produced **zero** UBSan findings. bank_tests (145 assertions in 21
+  # cases), bank_gui_tests (19 in 5) and bank_gui_qml_tests (32 in 2) all pass
+  # clean, and so does the full 1696-test suite of this configure. Nothing is
+  # suppressed here and there is no allowlist entry.
+  bank-sanitizers:
+    name: Bank example / UBSan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-bank-ubsan-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-bank-ubsan-
+
+      - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
+        run: |
+          sudo apt-get update -q
+          # The same set kanban-tsan and ladder-sanitizers install, and for
+          # the same reasons: unixodbc-dev + libsqliteodbc because
+          # examples/bank/CMakeLists.txt fetches the Lightweight ORM, whose
+          # CMake runs `pkg_check_modules(ODBC REQUIRED odbc)` and whose
+          # fixtures open a real `DRIVER=SQLite3` connection at test time;
+          # libyaml-cpp-dev + libzip-dev because Lightweight's own
+          # CMakeLists.txt finds them as system CONFIG packages rather than
+          # through CPM; libgl1-mesa-dev for Qt's GL platform integration,
+          # which every job configuring MORPH_BUILD_QT=ON alongside a Qt GUI
+          # target installs.
+          sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
+            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+
+      # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
+      # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
+      # every other job that builds Qt on Linux already documents.
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4.3.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
+
+      # Keyed by preset alone (clang-ubsan), matching linux-sanitizers' cache:
+      # this job's clang-ubsan+Qt+bank build shares the same compiler and much
+      # of the same core-library object set as that job's clang-ubsan leg. See
+      # linux-compilers' identical comment for why sharing the key is safe.
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-clang-ubsan-${{ github.sha }}
+          restore-keys: sccache-clang-ubsan-
+
+      - name: Install sccache
+        run: |
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      # MORPH_BUILD_BANK_GUI=ON, not MORPH_BUILD_BANK_EXAMPLE alone: the
+      # controllers and Format.hpp -- where morph#663 was -- live in
+      # bank_gui_lib, which only exists when the GUI option adds gui/. Without
+      # it this job would instrument bank_lib and the ORM and miss the half of
+      # bank the defect was in. No MORPH_BUILD_LADDER: bank is not a rung, so
+      # it would add every rung's tree for nothing.
+      - name: Configure (clang-ubsan, bank example + GUI)
+        run: |
+          cmake --preset clang-ubsan \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_BANK_EXAMPLE=ON \
+            -DMORPH_BUILD_BANK_GUI=ON \
+            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      # QT_QPA_PLATFORM=offscreen at build time as well as test time: Catch2's
+      # catch_discover_tests() runs each Qt-linked test binary once during the
+      # build to enumerate its cases — see ladder-tests' own Build step.
+      - name: Build
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: cmake --build --preset clang-ubsan
+
+      # The same assertion linux-sanitizers, ladder-sanitizers and kanban-tsan
+      # make (morph#542). It is not a formality here: before morph#679, bank's
+      # targets carried no apply_sanitizers() call except ladder_bank_server's,
+      # and this sweep is what says so rather than letting the leg report a
+      # clean bank run over uninstrumented binaries. Measured on the tree as it
+      # stood, with bank configured on and the AF_SANITIZER blocks absent:
+      #
+      #     ::error::check_sanitizer_instrumentation: 3 of 9 ctest binaries
+      #     are not ubsan-instrumented
+      #
+      # naming bank_tests, bank_gui_tests and bank_gui_qml_tests. With the
+      # blocks in place the same sweep reports 9 of 9.
+      - name: Every ctest binary is instrumented
+        run: bash scripts/check_sanitizer_instrumentation.sh build/clang-ubsan ubsan
+
+      # -L bank, not the whole suite: this configure also builds morph_tests
+      # and morph_qt_tests, which linux-sanitizers' clang-ubsan leg already
+      # runs under the identical instrumentation -- 1696 tests and 212s
+      # measured locally, against 28 tests and 6s for bank's own three suites.
+      # The label is applied by examples/bank/CMakeLists.txt's
+      # catch_discover_tests calls; a filter that matched nothing would be this
+      # repository's named failure mode, and CMakePresets.json's base-test sets
+      # `noTestsAction: error` so it exits 8 with "No tests were found!!!"
+      # instead (confirmed against a tree built without bank).
+      - name: Test (bank's suites only)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          # halt_on_error, because apply_sanitizers()'s ubsan arm already
+          # passes -fno-sanitize-recover=undefined -- this makes the runtime
+          # agree with the compile line rather than leaving the two to differ,
+          # the same pair ladder-sanitizers' Test step sets.
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --preset clang-ubsan -L bank --output-on-failure
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical from
+      # the outside, and only the build-step duration hints at which one you
+      # have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master, for the cache-budget reason every other
+      # leg's identical step gives (morph#109).
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-clang-ubsan-${{ github.sha }}
+
   # ── Linux: Qt WebSocket backend build + tests ─────────────────────────
   linux-qt:
     name: Linux / Qt6 WebSockets
@@ -955,8 +1190,14 @@ jobs:
 
       - name: Install sccache
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       - name: Configure (gcc-debug with MORPH_BUILD_QT=ON)
         run: |
@@ -1208,7 +1449,7 @@ jobs:
       # (it is not gated on MORPH_BUILD_FORMS_QML), so the floor still bites here.
       - name: Install Qt ${{ env.QT_VERSION }}
         if: steps.filter.outputs.run == 'true'
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -1233,8 +1474,14 @@ jobs:
       - name: Install sccache
         if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
       # Configure steps for why leaving it unset is what lets fastcache-cc
@@ -1535,7 +1782,7 @@ jobs:
       # every other job that builds the ladder on Linux already documents.
       - name: Install Qt ${{ env.QT_VERSION }}
         if: steps.filter.outputs.run == 'true'
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -1559,8 +1806,14 @@ jobs:
       - name: Install sccache
         if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
       # Configure steps for why leaving it unset is what lets fastcache-cc
@@ -1795,7 +2048,7 @@ jobs:
       # floor in CMakeLists.txt) and Ubuntu 24.04 still ships 6.4.2, whose
       # QQmlApplicationEngine has no loadFromModule.
       - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets
@@ -1821,8 +2074,14 @@ jobs:
       - name: Install sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # MORPH_REQUIRE_VETTED_HMAC is deliberately combined with
       # MORPH_BUILD_TESTS=ON (the preset default). docs/spec/security.md
@@ -2032,8 +2291,14 @@ jobs:
 
       - name: Install sccache
         run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+          # `--fail` and a file rather than a pipe into tar: see
+          # linux-compilers' identical Install sccache step for why an
+          # unchecked download reported itself as "not in gzip format"
+          # (morph#672).
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # morph::net and the SQLite queue are where the raw pointers, manual
       # buffers and C API calls live — precisely what memcheck is for — so they
@@ -2242,7 +2507,7 @@ jobs:
 
       # See the linux-all-features job: the QML renderer needs Qt 6.5+.
       - name: Install Qt ${{ env.QT_VERSION }}
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
           modules: qtwebsockets

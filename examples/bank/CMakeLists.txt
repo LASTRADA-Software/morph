@@ -95,12 +95,40 @@ target_compile_features(bank_lib PUBLIC cxx_std_23)
 apply_bigobj(bank_lib)
 # Note: deliberately NOT calling apply_warnings() here — the third-party ORM
 # headers are not -Werror clean and would fail the build.
+#
+# apply_sanitizers() is a separate question and the answer is yes (morph#679).
+# Until this line, `ladder_bank_server` was the *only* bank target that carried
+# an AF_SANITIZER block, so a sanitizer configure with
+# -DMORPH_BUILD_BANK_EXAMPLE=ON built bank_lib, bank_cli and every bank test
+# binary with no instrumentation at all — and, worse than being uncovered,
+# would have failed scripts/check_sanitizer_instrumentation.sh, because those
+# test binaries *are* ctest commands. examples/TESTING.md states the
+# convention this now follows: every target gets the block, not just the ones
+# someone remembered.
+#
+# Instrumenting bank_lib does mean instrumenting the vendored Lightweight ORM
+# headers it compiles in. Measured rather than assumed: ci.yml's
+# `bank-sanitizers` job is the leg that runs this, and its banner records the
+# finding count (zero) and the build cost.
+#
+# All of the blocks below are required together, not one of them optional. An
+# instrumented bank_lib with an uninstrumented executable does not merely go
+# unchecked, it fails to link: measured by removing bank_tests' block alone,
+#
+#     undefined reference to `__ubsan_handle_type_mismatch_v1_abort'
+#     clang++: error: linker command failed with exit code 1
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(bank_lib ${AF_SANITIZER})
+endif()
 
 # ── CLI driver ───────────────────────────────────────────────────────────────
 add_executable(bank_cli src/cli/main.cpp)
 target_link_libraries(bank_cli PRIVATE bank_lib)
 target_compile_features(bank_cli PRIVATE cxx_std_23)
 apply_bigobj(bank_cli)
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(bank_cli ${AF_SANITIZER})
+endif()
 
 # ── ladder_bank_server: standalone server binary ─────────────────────────────
 # Named `ladder_bank_server` because that is the name the scenario tooling
@@ -186,10 +214,29 @@ if(MORPH_BUILD_TESTS)
         target_link_libraries(bank_tests PRIVATE bank_lib morph_test_main)
         target_compile_features(bank_tests PRIVATE cxx_std_23)
         apply_bigobj(bank_tests)
+        # A ctest command, so this block is not optional: without it the
+        # binary runs on a sanitizer leg carrying nothing, and
+        # scripts/check_sanitizer_instrumentation.sh fails the job rather than
+        # letting it report a clean run over an uninstrumented suite
+        # (morph#679).
+        if(DEFINED AF_SANITIZER)
+            apply_sanitizers(bank_tests ${AF_SANITIZER})
+        endif()
 
         list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
         include(Catch)
-        catch_discover_tests(bank_tests DISCOVERY_MODE PRE_TEST)
+        # LABELS "bank" on all three bank suites (morph#679). Bank is not a
+        # rung, so morph_add_rung()'s "ladder"/"ladder-<rung>" labels never
+        # reach it and nothing else distinguished a bank test from a core one
+        # -- which is what a leg that wants to run bank's suites and only
+        # bank's suites needs. Catch2 tags are not ctest labels (no
+        # catch_discover_tests call in this repository passes
+        # ADD_TAGS_AS_LABELS), so `-L bank` is the only selector available,
+        # and CMakePresets.json's base-test sets `noTestsAction: error`, so a
+        # label that stopped matching fails the leg instead of running nothing.
+        catch_discover_tests(bank_tests
+            DISCOVERY_MODE PRE_TEST
+            PROPERTIES LABELS "bank")
 
         # ── bank_gui_tests: the GUI's own suite ──────────────────────────────
         # A second binary rather than more sources in bank_tests: bank_tests
@@ -240,8 +287,19 @@ if(MORPH_BUILD_TESTS)
             target_compile_definitions(bank_gui_tests PRIVATE
                 MORPH_LADDER_SOURCE_ROOT="${PROJECT_SOURCE_DIR}")
             apply_bigobj(bank_gui_tests)
+            # This is the binary that would have caught morph#663: the
+            # out-of-range double -> int64_t conversion lived in
+            # gui/controllers/Format.hpp, which this suite compiles and drives
+            # directly (tests/gui/test_bank_gui_format.cpp) with Qt6::Core and
+            # no display. Uninstrumented it exercised the conversion on every
+            # run and said nothing (morph#679).
+            if(DEFINED AF_SANITIZER)
+                apply_sanitizers(bank_gui_tests ${AF_SANITIZER})
+            endif()
 
-            catch_discover_tests(bank_gui_tests DISCOVERY_MODE PRE_TEST)
+            catch_discover_tests(bank_gui_tests
+                DISCOVERY_MODE PRE_TEST
+                PROPERTIES LABELS "bank")
 
             # ── bank_gui_qml_tests: the QML layer, with a live engine ────────
             # A third binary, and the reason is the second one's defining
@@ -296,6 +354,11 @@ if(MORPH_BUILD_TESTS)
                 MORPH_LADDER_SOURCE_ROOT="${PROJECT_SOURCE_DIR}"
                 MORPH_LADDER_TESTKIT_GUI_APP)
             apply_bigobj(bank_gui_qml_tests)
+            # Also a ctest command, so also not optional -- see bank_tests
+            # above (morph#679).
+            if(DEFINED AF_SANITIZER)
+                apply_sanitizers(bank_gui_qml_tests ${AF_SANITIZER})
+            endif()
 
             # offscreen, because the runner may have no display and this suite
             # never looks at a pixel -- it reads property values off the items
@@ -303,7 +366,9 @@ if(MORPH_BUILD_TESTS)
             # set for ctest (examples/TESTING.md).
             catch_discover_tests(bank_gui_qml_tests
                 DISCOVERY_MODE PRE_TEST
-                PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+                PROPERTIES
+                    LABELS "bank"
+                    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         endif()
     endif()
 endif()
