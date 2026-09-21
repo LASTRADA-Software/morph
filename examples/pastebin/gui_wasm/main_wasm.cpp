@@ -74,9 +74,9 @@ int main(int argc, char** argv) {
     // Every handler is built from inside onReady(), never before it. A
     // registration issued before the socket is up no longer fails permanently:
     // `Remote` mode sets `asyncRegistrationEnabled`, and
-    // `QtWebSocketBackend::registerModelAsync()` queues such a registration and
-    // retries it once the connection comes up (`docs/spec/core/backend.md`,
-    // "Asynchronous registration"). Deferring to onReady() is kept because it
+    // `QtWebSocketBackend::bindModel()` queues such a private bind and sends
+    // it once the connection comes up (`docs/spec/core/backend.md`, "The
+    // structural registration surface"). Deferring to onReady() is kept because it
     // is simpler to reason about than the pre-connect queue — see
     // `examples/common/gui/app_context.hpp`'s "Readiness contract". What *is*
     // still a hard WASM constraint is how readiness is detected: AppContext

@@ -352,26 +352,30 @@ purposes, which the framework's opt-in discipline forbids.
 ## Async register-or-attach and attach
 
 No wire change: the three requests above are unchanged. What changed is that a
-backend may now answer them *without blocking the caller*, through two opt-in
-`IBackend` virtuals that mirror `registerModelAsync`'s established shape
-(see [backend.md](backend.md), "Asynchronous registration"):
+backend may now answer them *without blocking the caller*, through the one
+structural acquire verb (see [backend.md](backend.md), "The structural
+registration surface"):
 
-| Virtual | Synchronous counterpart | Preferred by |
+| `BindRequest` shape | Synchronous counterpart | Dispatched by |
 |---|---|---|
-| `registerModelSharedAsync(typeId, factory, identity, onRegistered, onError)` | `registerModelShared` | `Bridge::ensureBoundAsync` |
-| `attachModelAsync(typeId, factory, identity, current, onRegistered, onError)` | `attachModel` | `Bridge::attachHandlerAsync` |
+| `primary` non-empty, `current` zero | `registerModelShared` | `Bridge::ensureBoundAsync` |
+| `primary` non-empty, `current` non-zero | `attachModel` | `Bridge::attachHandlerAsync` |
 
-Both default to returning `false` without calling either callback; a backend
-that opts in sends the request, returns `true` immediately, and later invokes
-exactly one of `onRegistered(ModelId)` / `onError(message)` on its own thread.
-`QtWebSocketBackend` implements both, gated behind the *same*
-`QtWebSocketBackendConfig::asyncRegistrationEnabled` flag `registerModelAsync`
-already uses — there is no second knob. Their replies route through the
-existing `callId`-keyed pending-registration map, which is verb-agnostic:
-`register` (shared or not) and `attach` all reply `ok` with a `modelId`, or
-`err`. An empty `identity.primary` degrades to the private async path
-(`registerModelAsync`), mirroring the synchronous methods' own
-degrade-to-private behaviour rather than inventing new semantics.
+`IBackend::bindModel`'s default runs exactly the synchronous verb the shape
+names and settles before returning, so a backend that overrides nothing behaves
+as it always did. `QtWebSocketBackend` overrides it, gated behind
+`QtWebSocketBackendConfig::asyncRegistrationEnabled` — one knob for every
+shape. Replies route through the existing `callId`-keyed pending map, which is
+verb-agnostic: `register` (shared or not) and `attach` all reply `ok` with a
+`modelId`, or `err`. An empty `primary` degrades to a private bind, mirroring
+the synchronous methods' own degrade-to-private behaviour rather than inventing
+new semantics.
+
+Until morph#571 this was expressed as two *optional* `IBackend` virtuals
+(`registerModelSharedAsync`/`attachModelAsync`) returning `bool`, beside two
+more for the private bind and the promote. They are gone; the reasoning that
+survived them is in [backend.md](backend.md), "What was wrong with the old
+shape".
 
 **Why this exists.** `registerModelShared`/`attachModel` are synchronous, so on
 a wire backend they block in a nested `QEventLoop`, which a WASM main thread
@@ -386,11 +390,12 @@ a payload- or result-keyed action's attach/promote step never throws out of the
 call but resolves the returned `Completion`'s `.onError(...)` instead. Only
 *how* that promise is kept changed: `execute()` now routes its keyed dispatch
 through `Bridge::attachHandlerAsync` / `Bridge::ensureBoundAsync`, which use the
-async virtuals when the backend has them and otherwise run the identical
-synchronous attach inline and call back before returning. A backend that has not
-opted in behaves byte-for-byte as it did before. The one observable difference on
-a backend that *has* opted in is that the dispatch happens after the attach's
-reply arrives rather than on the calling stack — which is the point.
+dispatch `IBackend::bindModel`: a backend with a genuinely non-blocking bind
+settles it later, one without settles it inline, having run the identical
+synchronous attach before returning. A backend that has not overridden
+`bindModel` behaves byte-for-byte as it did before. The one observable
+difference on a backend that *has* is that the dispatch happens after the
+attach's reply arrives rather than on the calling stack — which is the point.
 
 **`attach()` stays synchronous.** The standalone `handler.attach(key)` is a
 `void` call with no `Completion` to route a failure through, so it still throws
@@ -408,12 +413,13 @@ action, and a result-keyed dispatch promotes its binding through
 `assignHandlerPrimary`, which takes `_attachMtx` itself. It is the same rule
 `registerHandlerImpl` already follows for `_mtx`.
 
-The rule holds unconditionally, including for a backend that completes its
-callback **inline** — synchronously, from inside `attachModelAsync` /
-`registerModelSharedAsync`, while the dispatching frame still holds the lock.
-`QtWebSocketBackend` does this today on its `!_connected` branch (it reports
-`onError("disconnected")` and returns `true`), and nothing in `IBackend`
-forbids a backend from doing it on the *success* path too. An inline callback
+The rule holds unconditionally, including for a backend that settles its
+completion **inline** — synchronously, from inside `bindModel`, while the
+dispatching frame still holds the lock (the executor those call sites name is
+`exec::detail::inlineExecutor()`, so an inline settle runs the continuation
+right there). `QtWebSocketBackend` does this today on its `!_connected` branch
+(it rejects with `"disconnected"`), and nothing in `IBackend` forbids a backend
+from doing it on the *success* path too. An inline callback
 therefore parks its outcome instead of acting on it, and the dispatching frame
 applies it after its own dispatch call returns: publish under the lock it
 already holds, release, then report. See
@@ -438,14 +444,14 @@ Until then, a caller should not fire the same keyed action twice back-to-back
 before the first settles.
 
 **The result-keyed *promote* step has since been covered too.** This section
-made the **bind** half of a result-keyed action async (`ensureBoundAsync` →
-`registerModelSharedAsync`). At the time of writing the **promote** half still
+made the **bind** half of a result-keyed action non-blocking
+(`ensureBoundAsync`). At the time of writing the **promote** half still
 called the synchronous `IBackend::assignPrimary` — a `sendSync`, and so a nested
 `QEventLoop`, on `QtWebSocketBackend` — which blocked and aborted a WASM page.
-That is no longer true: `IBackend::assignPrimaryAsync` exists
-([backend.md](backend.md#promotion--assignprimaryasync)),
-`QtWebSocketBackend` overrides it, and `Bridge::assignHandlerPrimary` prefers it,
-falling back to the synchronous call only when a backend returns `false`.
+That is no longer true: `IBackend::promoteModel` is its structural counterpart
+([backend.md](backend.md#the-structural-registration-surface--bindmodel-and-promotemodel)),
+`QtWebSocketBackend` overrides it, and `Bridge::assignHandlerPrimary` calls it
+unconditionally — there is no synchronous branch left to fall back to.
 
 ## Ownership and authorization
 
@@ -523,7 +529,7 @@ strictly reduces pressure on it.
 | `handler.primary()` | `std::optional<PrimaryKey>` | The handler's current primary; empty if unattached. |
 | `handler.instances()` | `Completion<std::vector<PrimaryKey>>` | Snapshot of live shared keys for this model type. |
 | `handler.execute(keyedAction)` | `Completion<R>` | Unchanged signature and contract. Its **attach** step (payload-keyed) and the **bind** step of the result-keyed path take the backend's async path when one exists, so neither blocks on a round-trip — visible only as *not aborting a WASM main thread*. The result-keyed path's **promote** step (`assignPrimary`) is still synchronous and still blocks. See [Async register-or-attach and attach](#async-register-or-attach-and-attach). |
-| `IBackend::registerModelSharedAsync` / `attachModelAsync` | `bool` | Opt-in non-blocking counterparts to `registerModelShared`/`attachModel`; `false` by default, and callers then fall back to the synchronous method unchanged. |
+| `IBackend::bindModel` | `Completion<ModelId>` | The one non-blocking acquire verb; its `BindRequest`'s shape selects private / register-or-attach / re-point. The default runs the synchronous verb that shape names and settles before returning, so a backend that overrides nothing is unchanged. |
 
 ## Design decisions
 

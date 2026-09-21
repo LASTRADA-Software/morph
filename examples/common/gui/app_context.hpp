@@ -58,12 +58,20 @@ struct Remote {
 /// `Remote` mode builds its `QtWebSocketBackend` with
 /// `Config{.asyncRegistrationEnabled = true}` (the plain synchronous
 /// `registerModel` nests a `QEventLoop` and aborts a WASM page —
-/// examples/TESTING.md, "WASM reality"). `QtWebSocketBackend::
-/// registerModelAsync()` queues a registration issued before the socket
-/// has finished connecting and retries it once the connection comes up
-/// (`docs/spec/core/backend.md`, "Asynchronous registration"), so
-/// building a `BridgeHandler` immediately after this constructor returns is
-/// no longer the correctness hazard it once was.
+/// examples/TESTING.md, "WASM reality").
+/// `QtWebSocketBackend::bindModel()` queues a *private* bind issued before
+/// the socket has finished connecting and sends it once the connection
+/// comes up (`docs/spec/core/backend.md`, "The structural registration
+/// surface"), so building a `BridgeHandler` immediately after this
+/// constructor returns is no longer the correctness hazard it once was.
+///
+/// What it does not do is make that handler *bound*. With
+/// `asyncRegistrationEnabled` the backend answers
+/// `BindWait::kCallerMustNotBlock`, so `Bridge::registerHandler` returns an
+/// unbound handler and a call issued through it before the reply lands
+/// fails "handler not bound" — gate on
+/// `BridgeHandler::whenBound()`/`isBound()` (`docs/spec/core/bridge.md`,
+/// "Registration readiness").
 ///
 /// This class still detects readiness with `setConnectHandler` — not
 /// `waitForConnected()`, which nests an event loop and hangs a WASM page —

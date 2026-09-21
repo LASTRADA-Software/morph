@@ -89,9 +89,10 @@ struct InlineExecutor : morph::exec::IExecutor {
 // all -- deliberately NOT morph::model::detail::ModelHolder<ClientOnlyFacadeModel>,
 // which would require ClientOnlyFacadeModel complete (it stores one by
 // value). LocalBackend::registerModel calls its factory SYNCHRONOUSLY inside
-// Bridge::registerHandler(binding) (registerModelWithContext has no async
-// path for LocalBackend -- see IBackend::registerModelAsync's doc comment),
-// so the factory must succeed and return a real holder rather than throw;
+// Bridge::registerHandler(binding) (LocalBackend does not override bindModel,
+// so IBackend's default runs registerModelWithContext inline -- see
+// IBackend::bindModel's doc comment), so the factory must succeed and return
+// a real holder rather than throw;
 // throwing here would escape BridgeHandler's pre-built-binding constructor
 // itself, uncaught, in this probe's main() -- not the MORPH_CLIENT_ONLY
 // dispatch-time throw this probe means to observe.

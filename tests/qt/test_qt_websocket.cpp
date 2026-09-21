@@ -2555,9 +2555,10 @@ int main(int argc, char* argv[]) {
 
 // ── morph#495: the non-blocking control paths must stamp the session too ──
 //
-// registerModelSharedAsync, attachModelAsync and assignPrimaryAsync each built
-// their envelope and encoded it with no `env.session = _session`, while all
-// three synchronous counterparts stamped it. RemoteServer authenticates and
+// The three optional non-blocking control verbs that existed then (the
+// register-or-attach, re-point and promote twins, all removed by morph#571)
+// each built their envelope and encoded it with no `env.session = _session`,
+// while all three synchronous counterparts stamped it. RemoteServer authenticates and
 // authorizes from env.session (remote.hpp: stampVerifiedPrincipal, and the
 // register/attach/assign authorization sites), so a client using the async path
 // -- which is the WASM path, and the only one a WASM main thread can use --

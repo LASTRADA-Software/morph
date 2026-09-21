@@ -81,7 +81,7 @@
         },
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1412,
+          "line": 1138,
           "mutants": 1,
           "mutator": "cxx_replace_scalar_call",
           "source": "aware.reserve(_changeAware.size());",
@@ -147,13 +147,13 @@
       "representative_sites": [
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1305,
+          "line": 1031,
           "source": "::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);",
           "reason": "The registerCount emission on LocalBackend::registerModel. Note for whoever refreshes this hint: the same statement appears character-for-character on the registerModelShared arm as well, so if this `line` ever drifts the gate will report the citation as ambiguous rather than printing a corrected line. That is the right outcome -- which of the two arms is meant is a question for a reader, not for a resolver -- and it is recorded here so the message is not a surprise."
         },
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1469,
+          "line": 1195,
           "source": "::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,",
           "reason": "The executeInFlight emission on the increment side of an execute. Its decrement twin inside the posted task is the same text after stripping, so the ambiguity note on the registerCount entry above applies here too."
         }
@@ -597,7 +597,8 @@
           "mutator": "cxx_init_const",
           "mutation": "bool started = false -> true",
           "result": "suite unchanged (21985 passing)",
-          "verdict": "genuinely equivalent -- the initialiser is dead, overwritten by `started = backend->attachModelAsync(...)` on the next statement"
+          "verdict": "genuinely equivalent -- the initialiser is dead, overwritten by `started = backend->attachModelAsync(...)` on the next statement",
+          "note": "Recorded 2026-09-09 and kept verbatim. morph#571 removed that verb and the `bool started` initialiser with it, so neither the line nor the statement exists in the tree any more. This is a record of what a sampling run measured on that revision, not a description of today's code; rewriting it to match would destroy the measurement."
         }
       ],
       "important": [

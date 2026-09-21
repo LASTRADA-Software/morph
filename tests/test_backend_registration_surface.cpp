@@ -101,43 +101,6 @@ struct RecordingBackend : IBackend {
         calls.emplace_back("assignPrimary:" + std::to_string(mid.v) + ":" + std::string{primary});
     }
 
-    // The four legacy `*Async` twins return `true` here — the opposite of
-    // `IBackend`'s default — so that a forwarding assertion cannot pass
-    // vacuously: if `SynchronousBackendAdapter` stopped forwarding one, the
-    // inherited default would answer `false` and the test would fail.
-    bool registerModelAsync(const std::string& /*typeId*/,
-                            std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
-                            std::string_view contextKey, std::function<void(ModelId)> /*onRegistered*/,
-                            std::function<void(const std::string&)> /*onError*/) override {
-        calls.emplace_back("registerModelAsync:" + std::string{contextKey});
-        return true;
-    }
-
-    // NOLINTBEGIN(performance-unnecessary-value-param) — the overridden signatures take these by value.
-    bool registerModelSharedAsync(const std::string& /*typeId*/,
-                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
-                                  InstanceIdentity identity, std::function<void(ModelId)> /*onRegistered*/,
-                                  std::function<void(const std::string&)> /*onError*/) override {
-        calls.emplace_back("registerModelSharedAsync:" + std::string{identity.primary});
-        return true;
-    }
-
-    bool attachModelAsync(const std::string& /*typeId*/,
-                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
-                          InstanceIdentity identity, ModelId current, std::function<void(ModelId)> /*onRegistered*/,
-                          std::function<void(const std::string&)> /*onError*/) override {
-        calls.emplace_back("attachModelAsync:" + std::string{identity.primary} + ":" + std::to_string(current.v));
-        return true;
-    }
-    // NOLINTEND(performance-unnecessary-value-param)
-
-    bool assignPrimaryAsync(ModelId mid, const std::string& /*typeId*/, std::string_view primary,
-                            std::function<void(ModelId)> /*onRegistered*/,
-                            std::function<void(const std::string&)> /*onError*/) override {
-        calls.emplace_back("assignPrimaryAsync:" + std::to_string(mid.v) + ":" + std::string{primary});
-        return true;
-    }
-
     std::vector<std::string> listInstances(const std::string& /*typeId*/) override {
         calls.emplace_back("listInstances");
         return {"listed"};
@@ -540,17 +503,6 @@ TEST_CASE(
     REQUIRE(adapter.attachModel(std::string{kTypeId}, makeHolder, {.contextKey = "ck", .primary = "pk"}, ModelId{5}) ==
             ModelId{4});
 
-    // The legacy `*Async` twins are forwarded, not swallowed: a wrapped backend
-    // that has a non-blocking path keeps it. `RecordingBackend` answers `true`
-    // where `IBackend`'s default answers `false`, so each of these would fail if
-    // the adapter stopped overriding the verb and inherited that default.
-    REQUIRE(adapter.registerModelAsync(std::string{kTypeId}, makeHolder, "ck", nullptr, nullptr));
-    REQUIRE(adapter.registerModelSharedAsync(std::string{kTypeId}, makeHolder, {.contextKey = "ck", .primary = "pk"},
-                                             nullptr, nullptr));
-    REQUIRE(adapter.attachModelAsync(std::string{kTypeId}, makeHolder, {.contextKey = "ck", .primary = "pk"},
-                                     ModelId{5}, nullptr, nullptr));
-    REQUIRE(adapter.assignPrimaryAsync(ModelId{1}, std::string{kTypeId}, "pk", nullptr, nullptr));
-
     adapter.assignPrimary(ModelId{6}, std::string{kTypeId}, "pk");
     REQUIRE(adapter.listInstances(std::string{kTypeId}) == std::vector<std::string>{"listed"});
     adapter.deregisterModel(ModelId{7});
@@ -564,11 +516,9 @@ TEST_CASE(
 
     REQUIRE(recording->calls ==
             std::vector<std::string>{"registerModel", "registerModelWithContext:ck", "registerModelShared:pk",
-                                     "attachModel:pk:5", "registerModelAsync:ck", "registerModelSharedAsync:pk",
-                                     "attachModelAsync:pk:5", "assignPrimaryAsync:1:pk", "assignPrimary:6:pk",
-                                     "listInstances", "deregisterModel:7", "execute:8", "notifyBackendChanged",
-                                     "cancelPending", "setReconnectHandler", "setConnectHandler",
-                                     "setDisconnectHandler", "setSession:pal"});
+                                     "attachModel:pk:5", "assignPrimary:6:pk", "listInstances", "deregisterModel:7",
+                                     "execute:8", "notifyBackendChanged", "cancelPending", "setReconnectHandler",
+                                     "setConnectHandler", "setDisconnectHandler", "setSession:pal"});
 }
 
 // ── `bindWaitPolicy`: the one bit `Completion` cannot carry (morph#593) ──────
@@ -592,10 +542,10 @@ constexpr auto kBindReplyDelay = std::chrono::milliseconds{200};
 /// @brief A backend whose bind reply arrives, later, from a thread the caller
 ///        does not own — `morph::net::SocketBackend`'s shape.
 ///
-/// Derives from `RecordingBackend` for the verbs `Bridge` needs it to have, but
-/// answers `false` to `registerModelAsync` (`RecordingBackend` answers `true`)
-/// so that `Bridge::registerHandlerImpl` reaches the structural surface rather
-/// than the legacy async verb morph#571 removes.
+/// Derives from `RecordingBackend` for the verbs `Bridge` needs it to have,
+/// and overrides `bindModel` so that `Bridge::registerHandlerImpl` gets an
+/// unsettled `Completion` instead of `RecordingBackend`'s inherited default,
+/// which settles inline off the synchronous verbs.
 struct TransportThreadBackend : RecordingBackend {
     /// @brief Policy this double reports; the thing under test.
     morph::backend::detail::BindWait policy = morph::backend::detail::BindWait::kCallerMayBlock;
@@ -616,13 +566,6 @@ struct TransportThreadBackend : RecordingBackend {
         if (transport.joinable()) {
             transport.join();
         }
-    }
-
-    bool registerModelAsync(const std::string& /*typeId*/,
-                            std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
-                            std::string_view /*contextKey*/, std::function<void(ModelId)> /*onRegistered*/,
-                            std::function<void(const std::string&)> /*onError*/) override {
-        return false;
     }
 
     ModelCompletion bindModel(BindRequest /*request*/, morph::exec::IExecutor& cbExec) override {

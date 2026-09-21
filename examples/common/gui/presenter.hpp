@@ -36,7 +36,7 @@ signals:
     ///        settles — i.e. once `Bridge::whenBound()`'s `Completion<bool>`
     ///        resolves, however it resolves. `Remote` mode's registration is
     ///        a round trip (`docs/spec/core/backend.md`,
-    ///        "Asynchronous registration"): a `BridgeHandler` built the
+    ///        "Why registration needs a non-blocking path"): a `BridgeHandler` built the
     ///        instant the socket connects is handed back *unbound*
     ///        (`currentId == 0`) and rejects every dispatch with "handler
     ///        not bound" until the register reply lands. A subclass that

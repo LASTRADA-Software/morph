@@ -288,11 +288,12 @@ struct StagedRebinds {
 ///
 /// `Bridge::attachHandlerAsync`/`ensureBoundAsync` dispatch to the backend while
 /// holding `_attachMtx`, and both promise to release it before invoking their
-/// `onDone`. A backend whose `attachModelAsync`/`registerModelSharedAsync`
-/// completed its callback *inline* — synchronously, before the dispatch call
-/// returned, as `QtWebSocketBackend` does on its `!_connected` error branch —
-/// would otherwise break that promise from inside the dispatch frame, with the
-/// lock still held.
+/// `onDone`. A backend whose `bindModel` settles its `Completion` *inline* —
+/// synchronously, before the dispatch call returned, as `QtWebSocketBackend`
+/// does on its `!_connected` error branch — would otherwise break that promise
+/// from inside the dispatch frame, with the lock still held (the executor
+/// those call sites name is `inlineExecutor()`, so an inline settle runs the
+/// continuation right there).
 ///
 /// So instead of acting, such a callback parks its outcome here and returns; the
 /// dispatching frame picks it up after the dispatch call returns, publishes it
@@ -604,9 +605,8 @@ public:
     ///        invokes @p onDone once attached (or failed), instead of blocking.
     ///
     /// Reaches the backend through `IBackend::bindModel` — the structural
-    /// registration surface — unless the backend still overrides the legacy
-    /// `attachModelAsync`, which is offered first and which morph#571 removes.
-    /// Either way there is exactly one dispatch and exactly one continuation: a
+    /// registration surface, and since morph#571 the only one. There is
+    /// exactly one dispatch and exactly one continuation: a
     /// backend with no non-blocking attach settles inside the `bindModel` call,
     /// having blocked for the same round trip the synchronous `attachHandler`
     /// would have, and @p onDone is then invoked from this thread before this
@@ -685,13 +685,14 @@ public:
                 return;  // Completed inline: the dispatching frame will finish this.
             }
             // This check and the `this` touch below it are two steps -- the
-            // morph#486 shape. Closed not by a gate but by
-            // `IBackend::registerModelAsync`'s threading contract (see its
-            // doc comment): an overriding backend must deliver `*Async`
-            // replies on a thread that cannot run `~Bridge` concurrently.
-            // Gating instead would block `~Bridge` behind `_attachMtx`,
-            // which `attachHandler` holds across a full `attachModel` round
-            // trip. See morph#489.
+            // morph#486 shape. Closed not by a gate but by the thread the
+            // continuation is delivered on. Before morph#571 that was a
+            // prose contract on every backend author; now it is the executor
+            // this call site names -- today `inlineExecutor()`, which keeps
+            // the pre-morph#568 delivery thread, so the window is unchanged
+            // rather than closed (morph#588). Gating instead would block
+            // `~Bridge` behind `_attachMtx`, which `attachHandler` holds
+            // across a full `attachModel` round trip. See morph#489.
             if (!weakLiveness.active()) {
                 return;  // The Bridge is gone; publishing this id would be pointless.
             }
@@ -742,41 +743,35 @@ public:
             onDone(failure);
         };
         try {
-            bool const started = backend->attachModelAsync(
-                binding->typeId, binding->modelFactory, {.contextKey = primaryCopy, .primary = primaryCopy}, previous,
-                onAttached, [onFailed](const std::string& message) {
-                    onFailed(std::make_exception_ptr(std::runtime_error(message)));
-                });
-            if (!started) {
-                // The structural surface (`IBackend::bindModel`). A backend
-                // with a genuinely non-blocking attach settles the returned
-                // `Completion` when its reply lands; one without settles it
-                // from inside this call, having blocked exactly as the
-                // synchronous `attachModel` this replaces did. Either way the
-                // continuation exists, so there is no third path below.
-                //
-                // `inlineExecutor()` because that is where the continuation ran
-                // before: on whichever thread the backend settled the reply on
-                // (`IBackend::registerModelAsync`'s prose contract). What is
-                // new is that this call site *names* it; see
-                // `exec::detail::InlineExecutor`. An inline settle therefore
-                // reaches `onAttached`/`onFailed` while `_attachMtx` is still
-                // held, which is precisely the case `handoff` exists for.
-                auto completion =
-                    backend->bindModel(::morph::backend::detail::BindRequest{.typeId = binding->typeId,
-                                                                             .factory = binding->modelFactory,
-                                                                             .contextKey = primaryCopy,
-                                                                             .primary = primaryCopy,
-                                                                             .current = previous},
-                                       ::morph::exec::detail::inlineExecutor());
-                completion.then(onAttached).onError(onFailed);
-            }
+            // The structural surface (`IBackend::bindModel`). A backend with a
+            // genuinely non-blocking attach settles the returned `Completion`
+            // when its reply lands; one without settles it from inside this
+            // call, having blocked exactly as the synchronous `attachModel`
+            // this replaces did. Either way the continuation exists, so there
+            // is no second path here.
+            //
+            // `inlineExecutor()` because that is where the continuation ran
+            // before morph#568: on whichever thread the backend settled the
+            // reply on, which the removed `*Async` twins could only ask for in
+            // prose. What is new is that this call site *names* it; see
+            // `exec::detail::InlineExecutor`. An inline settle therefore
+            // reaches `onAttached`/`onFailed` while `_attachMtx` is still
+            // held, which is precisely the case `handoff` exists for.
+            auto completion =
+                backend->bindModel(::morph::backend::detail::BindRequest{.typeId = binding->typeId,
+                                                                         .factory = binding->modelFactory,
+                                                                         .contextKey = primaryCopy,
+                                                                         .primary = primaryCopy,
+                                                                         .current = previous},
+                                   ::morph::exec::detail::inlineExecutor());
+            completion.then(onAttached).onError(onFailed);
         } catch (...) {
-            // A backend's own dispatch call can throw synchronously (e.g. a
-            // `wire::encode()` failing before send) -- report it like any other
-            // failure instead of letting it escape execute()'s documented
-            // never-throws contract. `bindModel` rejects rather than throws, so
-            // this now guards only the legacy `attachModelAsync` branch.
+            // `IBackend::bindModel`'s own default converts a throwing
+            // synchronous verb into a rejection, and every backend in the tree
+            // does the same. This guard is for an out-of-tree override that
+            // throws out of the dispatch call itself (e.g. a `wire::encode()`
+            // failing before send): report it like any other failure rather
+            // than let it escape execute()'s documented never-throws contract.
             lock.unlock();
             onDone(std::current_exception());
             return;
@@ -856,12 +851,14 @@ public:
             }
             // This check and the `this` touch below it are two steps -- the
             // morph#486 shape. Closed not by a gate but by delivering on a
-            // thread that cannot run `~Bridge` concurrently: the legacy
-            // `*Async` branch below leaves that to the backend (see
-            // `IBackend::registerModelAsync`'s doc comment), the `bindModel`
-            // branch names it as an executor. Gating instead would block
-            // `~Bridge` behind `_attachMtx`, which `attachHandler` holds
-            // across a full `attachModel` round trip. See morph#489.
+            // thread that cannot run `~Bridge` concurrently. Before morph#571
+            // that thread was the backend's choice, asked for in prose; now
+            // the `bindModel` call below names it as an executor -- today
+            // `inlineExecutor()`, which keeps the same delivery thread, so
+            // the window is unchanged rather than closed (morph#588). Gating
+            // instead would block `~Bridge` behind `_attachMtx`, which
+            // `attachHandler` holds across a full `attachModel` round trip.
+            // See morph#489.
             if (!weakLiveness.active()) {
                 return;  // The Bridge is gone; publishing this id would be pointless.
             }
@@ -898,29 +895,22 @@ public:
             onDone(failure);
         };
         try {
-            bool const started = backend->registerModelSharedAsync(
-                binding->typeId, binding->modelFactory, {.contextKey = binding->contextKey, .primary = {}}, onBound,
-                [onFailed](const std::string& message) {
-                    onFailed(std::make_exception_ptr(std::runtime_error(message)));
-                });
-            if (!started) {
-                // The structural surface; see `attachHandlerAsync`'s identical
-                // branch for why `inlineExecutor()` is the executor this call
-                // site names. An empty `primary` with a zero `current` is the
-                // request shape that means `registerModelShared` -- the very
-                // verb the synchronous `ensureBound` calls.
-                auto completion =
-                    backend->bindModel(::morph::backend::detail::BindRequest{.typeId = binding->typeId,
-                                                                             .factory = binding->modelFactory,
-                                                                             .contextKey = binding->contextKey,
-                                                                             .primary = {},
-                                                                             .current = {}},
-                                       ::morph::exec::detail::inlineExecutor());
-                completion.then(onBound).onError(onFailed);
-            }
+            // The structural surface; see `attachHandlerAsync`'s identical
+            // dispatch for why `inlineExecutor()` is the executor this call
+            // site names. An empty `primary` with a zero `current` is the
+            // request shape that means `registerModelShared` -- the very
+            // verb the synchronous `ensureBound` calls.
+            auto completion =
+                backend->bindModel(::morph::backend::detail::BindRequest{.typeId = binding->typeId,
+                                                                         .factory = binding->modelFactory,
+                                                                         .contextKey = binding->contextKey,
+                                                                         .primary = {},
+                                                                         .current = {}},
+                                   ::morph::exec::detail::inlineExecutor());
+            completion.then(onBound).onError(onFailed);
         } catch (...) {
-            // See attachHandlerAsync's identical guard: a backend's own legacy
-            // dispatch call can throw synchronously before send.
+            // See attachHandlerAsync's identical guard: an out-of-tree
+            // `bindModel` override can throw out of the dispatch call itself.
             lock.unlock();
             onDone(std::current_exception());
             return;
@@ -961,9 +951,8 @@ public:
     /// wire backends, a reply field) — tracked as a follow-up, not fixed
     /// here.
     /// Reaches the backend through `IBackend::promoteModel` — the structural
-    /// registration surface — unless it still overrides the legacy
-    /// `assignPrimaryAsync`, which is offered first and which morph#571
-    /// removes. The same "avoid a nested-event-loop block that aborts a WASM
+    /// registration surface, and since morph#571 the only one.
+    /// The same "avoid a nested-event-loop block that aborts a WASM
     /// main thread" rationale `Bridge::registerHandler()` follows for the
     /// initial bind step applies here: this method is invoked from inside the
     /// result `Completion`'s callback chain (`BridgeHandler::execute`'s
@@ -1005,12 +994,14 @@ public:
         auto onPromoted = [this, weakLiveness, weakBackend, weakBinding, primary](::morph::exec::detail::ModelId) {
             // This check and the `this` touch below it are two steps -- the
             // morph#486 shape. Closed not by a gate but by delivering on a
-            // thread that cannot run `~Bridge` concurrently: the legacy
-            // `assignPrimaryAsync` branch below leaves that to the backend (see
-            // `IBackend::registerModelAsync`'s doc comment), the `promoteModel`
-            // branch names it as an executor. Gating instead would block
-            // `~Bridge` behind `_attachMtx`, which `attachHandler` holds across
-            // a full `attachModel` round trip. See morph#489.
+            // thread that cannot run `~Bridge` concurrently. Before morph#571
+            // that thread was the backend's choice, asked for in prose; now
+            // the `promoteModel` call below names it as an executor -- today
+            // `inlineExecutor()`, which keeps the same delivery thread, so the
+            // window is unchanged rather than closed (morph#588). Gating
+            // instead would block `~Bridge` behind `_attachMtx`, which
+            // `attachHandler` holds across a full `attachModel` round trip.
+            // See morph#489.
             if (!weakLiveness.active()) {
                 return;  // The Bridge is gone; do not touch `this`.
             }
@@ -1040,26 +1031,22 @@ public:
         auto onFailed = [typeId = binding->typeId](const std::string& message) {
             ::morph::log::logError("[assignHandlerPrimary] async promotion of '" + typeId + "' failed: " + message);
         };
-        bool const started = backend->assignPrimaryAsync(::morph::exec::detail::ModelId{raw}, binding->typeId, primary,
-                                                         onPromoted, onFailed);
-        if (!started) {
-            // The structural surface (`IBackend::promoteModel`). A backend with
-            // no non-blocking promote settles the returned `Completion` from
-            // inside this call, having run the same synchronous `assignPrimary`
-            // this replaces; `inlineExecutor()` then delivers `onPromoted` on
-            // this thread, exactly where the synchronous branch used to publish.
-            // Unlike that branch, a failure is logged rather than thrown: this
-            // runs inside the result `Completion`'s callback chain, where an
-            // escaping exception is swallowed by `CompletionState` anyway, and
-            // `promoteModel` reports through the `Completion` by contract.
-            auto completion = backend->promoteModel(
-                ::morph::backend::detail::PromoteRequest{
-                    .mid = ::morph::exec::detail::ModelId{raw}, .typeId = binding->typeId, .primary = primary},
-                ::morph::exec::detail::inlineExecutor());
-            completion.then(onPromoted).onError([onFailed](const std::exception_ptr& failure) {
-                onFailed(detail::describeFailure(failure));
-            });
-        }
+        // The structural surface (`IBackend::promoteModel`). A backend with
+        // no non-blocking promote settles the returned `Completion` from
+        // inside this call, having run the same synchronous `assignPrimary`
+        // this replaces; `inlineExecutor()` then delivers `onPromoted` on
+        // this thread, exactly where the synchronous call used to publish.
+        // Unlike that call, a failure is logged rather than thrown: this runs
+        // inside the result `Completion`'s callback chain, where an escaping
+        // exception is swallowed by `CompletionState` anyway, and
+        // `promoteModel` reports through the `Completion` by contract.
+        auto completion = backend->promoteModel(
+            ::morph::backend::detail::PromoteRequest{
+                .mid = ::morph::exec::detail::ModelId{raw}, .typeId = binding->typeId, .primary = primary},
+            ::morph::exec::detail::inlineExecutor());
+        completion.then(onPromoted).onError([onFailed](const std::exception_ptr& failure) {
+            onFailed(detail::describeFailure(failure));
+        });
     }
 
     /// @brief Returns @p binding's current primary key, or empty if unattached.
@@ -1072,8 +1059,9 @@ public:
 
     /// @brief Whether @p binding currently has a live `ModelId`.
     ///
-    /// A binding constructed via the async registration path (see
-    /// `backend.md`, "Asynchronous registration") starts unbound and becomes
+    /// A binding constructed against a backend that answers
+    /// `BindWait::kCallerMustNotBlock` (see `backend.md`, "Waiting for a
+    /// bind") starts unbound and becomes
     /// bound only once `onRegistered` fires — this is the synchronous,
     /// point-in-time check; `whenBound()` below is the awaitable counterpart.
     /// @param binding Binding to inspect.
@@ -1085,8 +1073,9 @@ public:
     /// @brief Resolves once @p binding's initial registration settles.
     ///
     /// Closes the gap `executeVia`'s fast-fail leaves for a caller that
-    /// constructs a `BridgeHandler` through the async registration path (see
-    /// `backend.md`, "Asynchronous registration") and wants to dispatch the
+    /// constructs a `BridgeHandler` against a backend that answers
+    /// `BindWait::kCallerMustNotBlock` (see `backend.md`, "Waiting for a
+    /// bind") and wants to dispatch the
     /// moment registration completes, rather than failing fast with "handler
     /// not bound" or polling `isBound()` in a loop of its own devising.
     ///
@@ -1849,10 +1838,8 @@ private:
     }
 
     /// @brief Shared body of both `registerHandler()` overloads: binds through
-    ///        `IBackend::bindModel` — the structural registration surface —
-    ///        unless the backend still overrides the legacy
-    ///        `registerModelAsync`, which is offered first and which morph#571
-    ///        removes.
+    ///        `IBackend::bindModel`, the structural registration surface, and
+    ///        since morph#571 the only one.
     ///
     /// A backend with a non-blocking bind returns an unsettled `Completion` and
     /// the binding is returned unbound (see `IBackend::bindModel`'s doc comment
@@ -1916,12 +1903,6 @@ private:
         // registration attempt is over.
         auto [onRegistered, onFailed] = makeBindCallbacks(binding, backend, "[registerHandler]");
 
-        bool const started = backend->registerModelAsync(binding->typeId, binding->modelFactory, binding->contextKey,
-                                                         onRegistered, onFailed);
-        if (started) {
-            return;
-        }
-
         // The structural surface (`IBackend::bindModel`). An empty `primary`
         // with a zero `current` is the request shape that means
         // `registerModelWithContext` -- the verb this branch used to call
@@ -1974,8 +1955,8 @@ private:
         // event loop of this very thread, so waiting here is a deadlock, not a
         // delay -- on a WASM main thread it aborts the page (morph#568). Such a
         // backend's caller gets an unbound handler and must gate on
-        // `whenBound()`, exactly as the `*Async` path already required of it.
-        // See `IBackend::bindWaitPolicy` and morph#593.
+        // `whenBound()`, exactly as the removed `*Async` path already required
+        // of it. See `IBackend::bindWaitPolicy` and morph#593.
         auto parked = backend->bindWaitPolicy() == ::morph::backend::detail::BindWait::kCallerMayBlock
                           ? detail::awaitHandoff(*handoff)
                           : detail::claimHandoff(*handoff);
@@ -2613,10 +2594,11 @@ public:
             // returned Completion's onError, exactly like every other
             // dispatch failure — not as a synchronous throw out of execute().
             //
-            // The attach goes through Bridge::attachHandlerAsync, which uses
-            // the backend's `attachModelAsync` when it has one and otherwise
-            // runs the identical synchronous attach inline and calls back
-            // before returning — so a backend with no async attach path
+            // The attach goes through Bridge::attachHandlerAsync, which
+            // dispatches `IBackend::bindModel`: a backend with a genuinely
+            // non-blocking attach settles later, one without settles inline,
+            // having run the identical synchronous attach and called back
+            // before returning — so a backend with no non-blocking path
             // still behaves synchronously here, just through the async
             // interface.
             auto state = std::make_shared<::morph::async::detail::CompletionState<R>>();
@@ -2802,8 +2784,9 @@ public:
 
     /// @brief Whether this handler currently has a live backend instance.
     ///
-    /// A handler constructed through the async registration path (see
-    /// `backend.md`, "Asynchronous registration") starts unbound and only
+    /// A handler constructed against a backend that answers
+    /// `BindWait::kCallerMustNotBlock` (see `backend.md`, "Waiting for a
+    /// bind") starts unbound and only
     /// becomes bound once the deferred `onRegistered` fires; `execute()`
     /// fails fast with "handler not bound" for any call issued before that.
     /// This is the synchronous, point-in-time check; `whenBound()` below is

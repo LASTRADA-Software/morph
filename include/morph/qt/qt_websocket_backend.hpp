@@ -374,8 +374,8 @@ public:
     /// `Config::asyncRegistrationEnabled`: promotion happens from inside the
     /// result `Completion`'s callback chain, where no caller is left blocked
     /// waiting for it either way, so there is no synchronous guarantee to
-    /// preserve — which is why `assignPrimaryAsync`, the verb this replaces,
-    /// had no opt-in gate either.
+    /// preserve — which is why the optional non-blocking promote this
+    /// replaces (removed by morph#571) had no opt-in gate either.
     ///
     /// The documented no-op cases (empty `primary`, zero `mid`) resolve with
     /// @p request's `mid` without sending anything, matching

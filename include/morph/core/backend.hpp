@@ -93,8 +93,8 @@ struct InstanceIdentity {
 /// style preference: a bind may outlive the frame that issued it, so a
 /// `string_view` into the caller's stack is a dangling read waiting for a
 /// backend that copies its envelope after the dispatch call returns rather
-/// than before it. The legacy `*Async` verbs take views and are safe only
-/// because their one implementor happens to encode before returning.
+/// than before it. The synchronous verbs below take views and are safe only
+/// because they do not return until the backend has finished with them.
 struct BindRequest {
     /// @brief String type-id of the model to instantiate (from `ModelTraits`).
     std::string typeId;
@@ -218,133 +218,6 @@ struct IBackend {
         return registerModel(typeId, std::move(factory));
     }
 
-    /// @brief Optional non-blocking counterpart to `registerModelWithContext`.
-    ///
-    /// `registerModelWithContext`/`registerModel` are synchronous: a backend
-    /// whose registration requires a round-trip (a socket backend) can only
-    /// implement that by blocking the calling thread until the reply arrives —
-    /// `QtWebSocketBackend` does this via a nested `QEventLoop`. On a WASM main
-    /// thread, Qt refuses to spin a nested loop at all
-    /// (`WaitForMoreEvents is not supported on the main thread without asyncify`),
-    /// so that blocking call aborts the page — the very first `registerModel`
-    /// a WASM client makes.
-    ///
-    /// Overriding this lets such a backend register without blocking: send the
-    /// request and return `true` immediately, then invoke exactly one of
-    /// @p onRegistered / @p onError once the reply arrives, on the backend's own
-    /// thread (unless the backend is destroyed first, in which case neither
-    /// fires). `Bridge::registerHandler()` prefers this path when it is
-    /// available and falls back to the synchronous `registerModelWithContext`
-    /// otherwise, so every backend that has not opted in (every backend as of
-    /// this writing, other than `QtWebSocketBackend`) is unaffected.
-    ///
-    /// The default implementation offers no async path and returns `false`
-    /// without calling either callback — the caller (`Bridge::registerHandler`)
-    /// falls back to `registerModelWithContext` in that case, so a backend
-    /// with no override behaves synchronously.
-    ///
-    /// @note **Threading contract, shared by all four `*Async` hooks: the
-    ///       callback's thread must not be able to run `~Bridge` concurrently.**
-    ///       Three of the four `Bridge` continuations behind these hooks —
-    ///       `attachHandlerAsync`, `ensureBoundAsync` and `assignHandlerPrimary`
-    ///       in `core/bridge.hpp` — test `CallbackToken::active()` and then
-    ///       dereference `this`. Those are two steps, so a `~Bridge` that
-    ///       completes between them is morph#486's use-after-free.
-    ///       (`registerHandlerImpl`'s callback is the exception: it holds
-    ///       `detail::BridgeLifetime` across its whole touch of `this`, so it
-    ///       does not depend on this contract.)
-    ///
-    ///       Those three cannot take that same gate. It makes `~Bridge` *block*
-    ///       for the gated span, and each span acquires `_attachMtx` — which
-    ///       the synchronous `Bridge::attachHandler` holds across a full
-    ///       `attachModel` round trip, unbounded on a wire backend. What closes
-    ///       the window instead is delivery on the thread that owns the
-    ///       `Bridge`. `QtWebSocketBackend` — the only backend in the tree
-    ///       overriding any of these — satisfies that by construction: it must
-    ///       itself be used from the Qt event loop thread
-    ///       (`qt/qt_websocket_backend.hpp`), and every *reply-driven* callback
-    ///       fires from `onTextMessage` on that same thread, so check and use
-    ///       cannot straddle a destructor. Its two non-reply paths do not weaken
-    ///       this: a disconnected or no-op dispatch invokes the callback inline,
-    ///       still inside the caller's own frame (which `detail::parkIfInFrame`
-    ///       exists to handle), and `cancelPending` fires the remainder from
-    ///       `~Bridge` itself — which is not a *concurrent* destructor. **A backend that delivers these callbacks on
-    ///       a thread the `Bridge`'s owner does not control breaks this contract
-    ///       and reopens that use-after-free** — it is a contract break, not a
-    ///       latent race to be discovered. See morph#489 and
-    ///       docs/spec/concurrency_and_lifetimes.md.
-    ///
-    /// @note Scope: only `Bridge::registerHandler()`'s plain (non-shared)
-    ///       registration path — a `BridgeHandler`'s initial construction —
-    ///       uses this. Shared/keyed registration has its own opt-in async
-    ///       pair, `registerModelSharedAsync`/`attachModelAsync` below,
-    ///       preferred by `Bridge::ensureBoundAsync`/`attachHandlerAsync`.
-    ///       The re-registration `switchBackend()`/the reconnect handler
-    ///       perform after a backend swap remains synchronous; see
-    ///       docs/spec/core/backend.md.
-    /// @param typeId       String type-id of the model to instantiate.
-    /// @param factory      Callable that constructs the `IModelHolder` (local path only).
-    /// @param contextKey   Stable identity of the new instance; empty if none.
-    /// @param onRegistered Invoked with the assigned `ModelId` on success.
-    /// @param onError      Invoked with a diagnostic message on failure.
-    /// @return `true` if this backend accepted the request and will invoke
-    ///         exactly one callback later; `false` if it has no async path
-    ///         (neither callback is invoked in that case).
-    virtual bool registerModelAsync(const std::string& typeId,
-                                    std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-                                    std::string_view contextKey,
-                                    std::function<void(::morph::exec::detail::ModelId)> onRegistered,
-                                    std::function<void(const std::string&)> onError) {
-        (void)typeId;
-        (void)factory;
-        (void)contextKey;
-        (void)onRegistered;
-        (void)onError;
-        return false;
-    }
-
-    /// @brief Optional non-blocking counterpart to `registerModelShared`.
-    ///
-    /// Same rationale and shape as `registerModelAsync` (see its doc comment
-    /// immediately above): `registerModelShared`'s synchronous default
-    /// implementations block the calling thread until a reply arrives, which
-    /// aborts a WASM main thread the moment a shared/keyed handler makes its
-    /// first attach. A backend that overrides this sends the request and
-    /// returns `true` immediately, then invokes exactly one of
-    /// @p onRegistered / @p onError once the reply arrives, on the backend's
-    /// own thread (unless the backend is destroyed first, in which case
-    /// neither fires) — subject to `registerModelAsync`'s threading contract,
-    /// which applies here unchanged: that thread must not be able to run
-    /// `~Bridge` concurrently.
-    ///
-    /// The default implementation offers no async path and returns `false`
-    /// without calling either callback — the caller (`Bridge::ensureBoundAsync`)
-    /// falls back to the synchronous `registerModelShared` in that case, so a
-    /// backend with no override behaves synchronously.
-    ///
-    /// @param typeId     String type-id of the model.
-    /// @param factory    Callable that constructs the `IModelHolder` (local path only).
-    /// @param identity   Entity key for the action log plus the directory primary key.
-    /// @param onRegistered Invoked with the assigned/attached `ModelId` on success.
-    /// @param onError    Invoked with a diagnostic message on failure.
-    /// @return `true` if this backend accepted the request and will invoke
-    ///         exactly one callback later; `false` if it has no async path.
-    // NOLINTBEGIN(performance-unnecessary-value-param) — by-value matches
-    // registerModelAsync's signature exactly; overriding backends move the
-    // callbacks into their pending-reply map.
-    virtual bool registerModelSharedAsync(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        InstanceIdentity identity, std::function<void(::morph::exec::detail::ModelId)> onRegistered,
-        std::function<void(const std::string&)> onError) {
-        (void)typeId;
-        (void)factory;
-        (void)identity;
-        (void)onRegistered;
-        (void)onError;
-        return false;
-    }
-    // NOLINTEND(performance-unnecessary-value-param)
-
     /// @brief Registers or attaches to the shared instance holding @p primary.
     ///
     /// A *register-or-attach*: if an instance for `(typeId, primary)` is already
@@ -408,45 +281,6 @@ struct IBackend {
         return next;
     }
 
-    /// @brief Optional non-blocking counterpart to `attachModel`.
-    ///
-    /// Same rationale and shape as `registerModelSharedAsync` immediately
-    /// above (itself mirroring `registerModelAsync`) — see that doc comment
-    /// for the full opt-in/fallback contract, and `registerModelAsync`'s for
-    /// the threading contract the callback's delivery thread must satisfy.
-    ///
-    /// @note Unlike the synchronous `attachModel` default above, this method
-    ///       does *not* release @p current itself: an overriding backend is
-    ///       behind a wire protocol, whose single `attach` request re-points
-    ///       server-side and therefore leaves nothing to deregister — exactly
-    ///       the division of responsibility `QtWebSocketBackend::attachModel`
-    ///       already follows for a non-empty `identity.primary`. @p current is
-    ///       passed so that request can name what it is re-pointing from.
-    ///
-    /// @param typeId     String type-id of the model.
-    /// @param factory    Callable that constructs the `IModelHolder` (local path only).
-    /// @param identity   Entity key for the action log plus the directory primary key.
-    /// @param current    Instance currently held, or `ModelId{0}` if none.
-    /// @param onRegistered Invoked with the `ModelId` now attached to, on success.
-    /// @param onError    Invoked with a diagnostic message on failure.
-    /// @return `true` if this backend accepted the request and will invoke
-    ///         exactly one callback later; `false` if it has no async path.
-    // NOLINTBEGIN(performance-unnecessary-value-param) — see registerModelSharedAsync above.
-    virtual bool attachModelAsync(const std::string& typeId,
-                                  std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-                                  InstanceIdentity identity, ::morph::exec::detail::ModelId current,
-                                  std::function<void(::morph::exec::detail::ModelId)> onRegistered,
-                                  std::function<void(const std::string&)> onError) {
-        (void)typeId;
-        (void)factory;
-        (void)identity;
-        (void)current;
-        (void)onRegistered;
-        (void)onError;
-        return false;
-    }
-    // NOLINTEND(performance-unnecessary-value-param)
-
     /// @brief Enters an already-live instance into the directory under @p primary.
     ///
     /// The *promotion* half of keyed instances, and what makes a result-sourced
@@ -477,60 +311,6 @@ struct IBackend {
         (void)primary;
     }
 
-    /// @brief Optional non-blocking counterpart to `assignPrimary`.
-    ///
-    /// `assignPrimary` is synchronous: a backend whose promote step requires a
-    /// round-trip (a socket backend) can only implement that by blocking the
-    /// calling thread until the reply arrives — `QtWebSocketBackend` does this
-    /// via a nested `QEventLoop`, exactly the blocking shape
-    /// `registerModelAsync` exists to let a caller avoid for the bind step.
-    /// The promote step (the second half of a shared handler's result-keyed
-    /// `execute()`, after `Bridge::ensureBound`) reaches the same nested loop
-    /// on a single-threaded WASM build, which cannot spin one at all.
-    ///
-    /// Overriding this lets such a backend promote without blocking: send the
-    /// request and return `true` immediately, then invoke exactly one of
-    /// @p onRegistered / @p onError once the reply arrives, on the backend's
-    /// own thread (unless the backend is destroyed first, in which case
-    /// neither fires) — subject to `registerModelAsync`'s threading contract,
-    /// which applies here unchanged: that thread must not be able to run
-    /// `~Bridge` concurrently. `Bridge::assignHandlerPrimary` prefers this path when
-    /// it is available and falls back to the synchronous `assignPrimary`
-    /// otherwise, so every backend that has not opted in (every backend as of
-    /// this writing, other than `QtWebSocketBackend`) is unaffected.
-    ///
-    /// The default implementation offers no async path and returns `false`
-    /// without calling either callback — the caller (`Bridge::assignHandlerPrimary`)
-    /// falls back to `assignPrimary` in that case, so a backend with no
-    /// override behaves synchronously.
-    ///
-    /// @param mid          Live instance to promote.
-    /// @param typeId       Model type id — the directory's first key component.
-    /// @param primary      Canonical string encoding of the key to file it under.
-    /// @param onRegistered Invoked with @p mid (echoed back, for symmetry with
-    ///                     `registerModelAsync`'s callback shape) on success —
-    ///                     including the no-op cases `assignPrimary` documents
-    ///                     (empty primary, dead `mid`, key already taken, `mid`
-    ///                     already keyed differently): those are not backend
-    ///                     failures, so they resolve `onRegistered` exactly as
-    ///                     the synchronous path returns normally for them.
-    /// @param onError      Invoked with a diagnostic message on a genuine
-    ///                     backend/transport failure.
-    /// @return `true` if this backend accepted the request and will invoke
-    ///         exactly one callback later; `false` if it has no async path
-    ///         (neither callback is invoked in that case).
-    virtual bool assignPrimaryAsync(::morph::exec::detail::ModelId mid, const std::string& typeId,
-                                    std::string_view primary,
-                                    std::function<void(::morph::exec::detail::ModelId)> onRegistered,
-                                    std::function<void(const std::string&)> onError) {
-        (void)mid;
-        (void)typeId;
-        (void)primary;
-        (void)onRegistered;
-        (void)onError;
-        return false;
-    }
-
     // ── The structural registration surface ──────────────────────────────
     //
     // `bindModel`/`promoteModel` are what the five verbs above become once the
@@ -559,9 +339,12 @@ struct IBackend {
     //   2. **The delivery thread is a parameter.** `Completion<T>` posts its
     //      handlers to the executor it was built with, so the continuation runs
     //      where @p cbExec says and nowhere else — the backend does not choose.
-    //      That is the whole of the threading contract the four `*Async` verbs
-    //      could only state in prose (see `registerModelAsync`'s `@note`, and
-    //      docs/spec/core/backend.md, "The structural registration surface").
+    //      That is the whole of the threading contract the four `*Async`
+    //      twins morph#571 removed could only state in prose: they asked
+    //      every backend author to deliver on a thread from which `~Bridge`
+    //      could not run concurrently, and nothing could check it. See
+    //      docs/spec/core/backend.md, "The threading contract, and the half
+    //      the surface does not close".
     //      It does not by itself make a `~Bridge` race impossible: it moves the
     //      choice of delivery thread from fifteen backend implementors, none of
     //      which knows what the caller's teardown looks like, to the one caller
@@ -569,8 +352,13 @@ struct IBackend {
     //      nowhere" cannot be expressed — a null executor would silently drop
     //      every continuation (see `Completion`'s constructor).
     //
-    // Retiring the five older verbs is morph#571; until then both surfaces
-    // exist and nothing in the tree has moved off the old one.
+    // morph#571 retired the four optional `*Async` twins. The synchronous
+    // verbs above remain, but no longer as a surface any caller chooses:
+    // they are what `bindModelBlocking` — and therefore the *default*
+    // `bindModel` — dispatches to, one request shape at a time. Nothing in
+    // the tree calls them directly any more, which is why a backend that
+    // overrides only `registerModel` still works through `bindModel`
+    // unchanged.
 
     /// @brief Acquires a model instance: the structural counterpart of
     ///        `registerModelWithContext` / `registerModelShared` / `attachModel`.
@@ -612,11 +400,11 @@ struct IBackend {
     ///        counterpart of `assignPrimary`.
     ///
     /// The default implementation calls `assignPrimary` and settles the
-    /// returned `Completion` from this thread, echoing @p request's `mid` back
-    /// exactly as `assignPrimaryAsync` documents — including for every
-    /// documented no-op case (empty primary, dead `mid`, key already taken,
-    /// `mid` already keyed differently), which are not backend failures and
-    /// therefore resolve rather than reject.
+    /// returned `Completion` from this thread, echoing @p request's `mid`
+    /// back — including for every no-op case `assignPrimary` documents
+    /// (empty primary, dead `mid`, key already taken, `mid` already keyed
+    /// differently), which are not backend failures and therefore resolve
+    /// rather than reject.
     ///
     /// @param request Owning promote request. By value, matching `bindModel`,
     ///                so an overriding backend can move it into its pending
@@ -991,9 +779,12 @@ public:
 
     // ── Everything else is forwarded unchanged ───────────────────────────
     //
-    // A decorator has to forward every verb it does not reshape, including the
-    // four legacy `*Async` twins: wrapping a backend that *does* have a
-    // non-blocking path must not quietly take it away.
+    // A decorator has to forward every verb it does not reshape. Since
+    // morph#571 those are the synchronous verbs only: a wrapped backend has
+    // no non-blocking path of its own left to forward, because the one verb
+    // that could carry one — `bindModel` — is the verb this adapter
+    // reshapes, and a backend that already has a non-blocking `bindModel`
+    // has no reason to be wrapped.
 
     /// @brief Forwards to the wrapped backend.
     /// @param typeId  String type-id of the model to instantiate.
@@ -1040,77 +831,12 @@ public:
     }
 
     /// @brief Forwards to the wrapped backend.
-    /// @param typeId       String type-id of the model to instantiate.
-    /// @param factory      Callable that constructs the `IModelHolder`.
-    /// @param contextKey   Stable identity of the new instance; empty if none.
-    /// @param onRegistered Invoked with the assigned `ModelId` on success.
-    /// @param onError      Invoked with a diagnostic message on failure.
-    /// @return Whatever the wrapped backend returned.
-    bool registerModelAsync(const std::string& typeId,
-                            std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-                            std::string_view contextKey,
-                            std::function<void(::morph::exec::detail::ModelId)> onRegistered,
-                            std::function<void(const std::string&)> onError) override {
-        return _inner->registerModelAsync(typeId, std::move(factory), contextKey, std::move(onRegistered),
-                                          std::move(onError));
-    }
-
-    // NOLINTBEGIN(performance-unnecessary-value-param) — the overridden
-    // signatures take these by value; see `IBackend::registerModelSharedAsync`.
-    /// @brief Forwards to the wrapped backend.
-    /// @param typeId       String type-id of the model.
-    /// @param factory      Callable that constructs the `IModelHolder`.
-    /// @param identity     Entity key for the action log plus the directory primary key.
-    /// @param onRegistered Invoked with the assigned/attached `ModelId` on success.
-    /// @param onError      Invoked with a diagnostic message on failure.
-    /// @return Whatever the wrapped backend returned.
-    bool registerModelSharedAsync(const std::string& typeId,
-                                  std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-                                  detail::InstanceIdentity identity,
-                                  std::function<void(::morph::exec::detail::ModelId)> onRegistered,
-                                  std::function<void(const std::string&)> onError) override {
-        return _inner->registerModelSharedAsync(typeId, std::move(factory), identity, std::move(onRegistered),
-                                                std::move(onError));
-    }
-
-    /// @brief Forwards to the wrapped backend.
-    /// @param typeId       String type-id of the model.
-    /// @param factory      Callable that constructs the `IModelHolder`.
-    /// @param identity     Entity key for the action log plus the directory primary key.
-    /// @param current      Instance currently held, or `ModelId{0}` if none.
-    /// @param onRegistered Invoked with the `ModelId` now attached to, on success.
-    /// @param onError      Invoked with a diagnostic message on failure.
-    /// @return Whatever the wrapped backend returned.
-    bool attachModelAsync(const std::string& typeId,
-                          std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-                          detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current,
-                          std::function<void(::morph::exec::detail::ModelId)> onRegistered,
-                          std::function<void(const std::string&)> onError) override {
-        return _inner->attachModelAsync(typeId, std::move(factory), identity, current, std::move(onRegistered),
-                                        std::move(onError));
-    }
-    // NOLINTEND(performance-unnecessary-value-param)
-
-    /// @brief Forwards to the wrapped backend.
     /// @param mid     Live instance to promote.
     /// @param typeId  Model type id — the directory's first key component.
     /// @param primary Canonical string encoding of the key to file it under.
     void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
                        std::string_view primary) override {
         _inner->assignPrimary(mid, typeId, primary);
-    }
-
-    /// @brief Forwards to the wrapped backend.
-    /// @param mid          Live instance to promote.
-    /// @param typeId       Model type id — the directory's first key component.
-    /// @param primary      Canonical string encoding of the key to file it under.
-    /// @param onRegistered Invoked with @p mid on success.
-    /// @param onError      Invoked with a diagnostic message on failure.
-    /// @return Whatever the wrapped backend returned.
-    bool assignPrimaryAsync(::morph::exec::detail::ModelId mid, const std::string& typeId, std::string_view primary,
-                            std::function<void(::morph::exec::detail::ModelId)> onRegistered,
-                            std::function<void(const std::string&)> onError) override {
-        return _inner->assignPrimaryAsync(mid, typeId, primary, std::move(onRegistered), std::move(onError));
     }
 
     /// @brief Forwards to the wrapped backend.

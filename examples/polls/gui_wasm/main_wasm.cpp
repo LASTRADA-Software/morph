@@ -133,7 +133,7 @@
 /// papers over a real gap:
 ///  - Pastebin's/bookmarks' plain (`NoSharing`) handlers each call
 ///    `Bridge::registerHandler(binding)` at construction, which — via
-///    `registerHandlerImpl` — issues a real `registerModelAsync` round trip
+///    `registerHandlerImpl` — issues a real `IBackend::bindModel` round trip
 ///    to the backend. Until that reply lands, any call through the handler
 ///    fails "handler not bound"; that window is exactly why those two
 ///    rungs' bridges expose a `bound` signal their QML gates the first
@@ -249,10 +249,10 @@ int main(int argc, char** argv) {
     // contract, `examples/common/gui/app_context.hpp`). The two halves are not
     // symmetric: a plain *registration* issued before the socket is up is
     // queued and sent once it connects, but a keyed *attach* is not —
-    // `QtWebSocketBackend::attachModelAsync()` fails one immediately with
-    // "disconnected" and never retries it
-    // (`docs/spec/core/backend.md`, "Asynchronous registration",
-    // "Shared/keyed registration"). Identical to bookmarks'/pastebin's own
+    // `QtWebSocketBackend::bindModel()` rejects a bind carrying a non-empty
+    // `primary` immediately with "disconnected" and never retries it
+    // (`docs/spec/core/backend.md`, "The structural registration surface").
+    // Identical to bookmarks'/pastebin's own
     // Remote clients, and — per this file's header comment — load-bearing for
     // a second, distinct reason: `PollBridge`'s handler's *first* network
     // call is `OpenPoll`'s async attach itself, with no prior "registration"

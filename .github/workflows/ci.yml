@@ -2458,8 +2458,141 @@ jobs:
           # raised is the file not being there, not the directory. That is what
           # the AUTOMOC step above generates, and why this job now builds two
           # targets (morph#624).
-          if ! git diff -U0 "$BASE_SHA" | \
-            python3 "$CLANG_TIDY_DIFF" \
+          # And it is not sufficient for a source this configure does not
+          # build at all. That is the third instance of one structural
+          # problem, after morph#624 (a generated header) and morph#650
+          # (tests/lint/ text fixtures): clang-tidy-diff.py analyses every
+          # changed C/C++ line, a changed *comment* line is a changed line,
+          # and clang tooling does not skip a file it has no compile command
+          # for -- it interpolates a neighbouring entry's command. What comes
+          # back is a clang-diagnostic-error about this job's configure, not a
+          # lint finding about the diff, and WarningsAsErrors:"*" makes it a
+          # failed job. Measured on morph#649's branch, which edits five such
+          # sources in comments only: 21 clang-diagnostic-errors from the four
+          # WASM mains (no Emscripten/Qt-WASM toolchain here) and from
+          # tests/compile_checks/client_only_facade_no_model_header.cpp (built
+          # by a configure-time try_run() with -DMORPH_CLIENT_ONLY, and
+          # deliberately incomplete without it).
+          #
+          # Reverting the comment edits is not a general answer and in that
+          # case was not even a local one: those four comments cite a
+          # docs/spec/core/backend.md section the same branch renames, so
+          # leaving them alone turns the spec-citation gate red instead
+          # (reproduced -- four "dangling section citation" errors).
+          #
+          # So the diff is filtered first: a changed *source* with no entry in
+          # compile_commands.json is dropped, and every drop is printed. A
+          # changed *header* is never dropped -- a header is never a
+          # translation unit, so -only-check-in-db's literal membership test
+          # would silently discard all of include/morph/**, which is
+          # morph#479's own defect one directory over (see above). The filter
+          # refuses to run at all unless the database is still the wide one
+          # the Configure step builds, because a filter consulting a narrowed
+          # database would quietly stop analysing everything the narrowing
+          # dropped.
+          cat > /tmp/filter-unbuilt-sources.py <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+
+          # Only *sources* are filtered out. A header is never a translation
+          # unit, so it is never in compile_commands.json.
+          SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".c++", ".cl", ".m", ".mm"}
+
+          # Floors, not equalities. This filter is only trustworthy while the
+          # database it consults is the wide one the Configure step builds: if
+          # that configure regresses -- MORPH_BUILD_LADDER back to its OFF
+          # default is the concrete way, morph#481 -- every examples/ source
+          # would silently become "not built by this configure" and stop being
+          # analysed, and this gate would go green having read 40% less code.
+          # The floor is what makes that loud. Counted over entries whose file
+          # resolves *inside the workspace*, so a resolution mismatch (a
+          # symlinked checkout, a path this script fails to normalise the same
+          # way) trips it too instead of silently skipping everything.
+          #
+          # Measured with this job's own configure flags and clang 22: 703
+          # entries naming 695 distinct in-workspace sources, 270 of them under
+          # examples/. CI measured 690/276 at morph#481's revision. Both floors
+          # sit under both pairs with room for ordinary churn, and the
+          # regression they exist to catch takes examples/ to 16, not to 199.
+          MIN_ENTRIES = 600
+          MIN_EXAMPLES_ENTRIES = 200
+
+          root = pathlib.Path.cwd().resolve()
+          database = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          compiled = {pathlib.Path(entry["file"]).resolve() for entry in database}
+          inside = {f for f in compiled if f.is_relative_to(root)}
+          examples = {f for f in inside if f.is_relative_to(root / "examples")}
+
+          if len(inside) < MIN_ENTRIES or len(examples) < MIN_EXAMPLES_ENTRIES:
+              print(
+                  f"::error::compile_commands.json names {len(inside)} "
+                  f"in-workspace source(s) ({len(examples)} under examples/), "
+                  f"below the floors {MIN_ENTRIES}/{MIN_EXAMPLES_ENTRIES}. This "
+                  f"configure has stopped covering what the changed-source "
+                  f"filter assumes it covers -- fix the configure, do not lower "
+                  f"the floor."
+              )
+              sys.exit(1)
+
+          sections = []
+          current = None
+          for line in pathlib.Path(sys.argv[2]).read_text(errors="replace").splitlines(keepends=True):
+              if line.startswith("diff --git "):
+                  current = []
+                  sections.append(current)
+              if current is None:
+                  continue
+              current.append(line)
+
+          kept = []
+          skipped = []
+          for section in sections:
+              name = None
+              for line in section:
+                  match = re.match(r'^\+\+\+ (?:"?b/)?([^\t\n"]*)', line)
+                  if match:
+                      name = match.group(1)
+                      break
+              # A whole section is kept or dropped together, never just its
+              # hunks: clang-tidy-diff.py attributes `@@` lines to the last
+              # `+++` it saw, so dropping a `+++` while keeping its hunks would
+              # charge them to the previous file.
+              #
+              # No destination path (a pure deletion) leaves nothing to
+              # analyse, and clang-tidy-diff.py's extension filter drops it.
+              if name is None or name == "/dev/null":
+                  kept.append(section)
+                  continue
+              path = root / name
+              if path.suffix.lower() in SOURCE_SUFFIXES and path.resolve() not in compiled:
+                  skipped.append(name)
+                  continue
+              kept.append(section)
+
+          pathlib.Path(sys.argv[3]).write_text("".join(line for section in kept for line in section))
+
+          for name in skipped:
+              print(
+                  f"::warning file={name}::not analysed by clang-tidy-diff: this "
+                  f"configure builds no translation unit for it, so clang-tidy "
+                  f"would interpolate a neighbouring entry's compile command and "
+                  f"report only clang-diagnostic-errors about that."
+              )
+          print(
+              f"ok: compile database names {len(inside)} in-workspace source(s) "
+              f"({len(examples)} under examples/); {len(kept)} of {len(sections)} "
+              f"changed file section(s) analysed, {len(skipped)} source(s) "
+              f"skipped as unbuilt here"
+          )
+          PY
+
+          git diff -U0 "$BASE_SHA" > /tmp/changed.diff
+          python3 /tmp/filter-unbuilt-sources.py \
+            build/clang-debug/compile_commands.json /tmp/changed.diff /tmp/analysed.diff
+
+          if ! python3 "$CLANG_TIDY_DIFF" \
               -path build/clang-debug \
               -clang-tidy-binary clang-tidy-${{ env.CLANG_VERSION }} \
               -p1 \
@@ -2467,6 +2600,7 @@ jobs:
               -extra-arg=-std=c++23 \
               -extra-arg=-Wno-missing-include-dirs \
               -quiet \
+              < /tmp/analysed.diff \
               2>&1 | tee clang-tidy-report.txt; then
             echo "::error::clang-tidy reported findings on changed lines -- see the log above and the clang-tidy-report artifact"
             exit 1

@@ -14,9 +14,10 @@
 // directory's README.md for how the nightly Playwright smoke wires that up).
 //
 // IMPORTANT ordering constraint discovered while building this spike:
-// QtWebSocketBackend::registerModelAsync() now queues a registration issued
-// before the socket has connected and retries it once the connection comes
-// up (docs/spec/core/backend.md, "Asynchronous registration") -- but the
+// QtWebSocketBackend::bindModel() queues a private bind issued before the
+// socket has connected and sends it once the connection comes up
+// (docs/spec/core/backend.md, "The structural registration surface") -- but
+// the
 // *reconnect* handler Bridge installs only fires on a *subsequent*
 // reconnect, never on the first connect, so this spike still defers to
 // setConnectHandler rather than relying on the pre-connect queue. The

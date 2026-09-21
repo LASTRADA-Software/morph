@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
     // readiness contract, gui/app_context.hpp): a registration issued before
     // the socket connects is queued, and the handler it belongs to stays
     // unbound until the register reply lands
-    // (`docs/spec/core/backend.md`, "Asynchronous registration").
+    // (`docs/spec/core/backend.md`, "Why registration needs a non-blocking path").
     ::morph::ladder::gui::AppContext ctx{
         serverUrl ? ::morph::ladder::gui::AppContext::Mode{::morph::ladder::gui::Remote{.url = *serverUrl}}
                   : ::morph::ladder::gui::AppContext::Mode{::morph::ladder::gui::Local{.workers = 4}}};
