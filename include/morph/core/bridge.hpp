@@ -2108,16 +2108,14 @@ private:
                 // delivery morph#588 gives the bridge's executor. The
                 // in-frame outcome below is published by this frame instead,
                 // on this thread, whatever executor the bridge holds.
-                detail::deliverLate(bridgeExec,
-                                    [onRegistered = std::move(onRegistered), newId] { onRegistered(newId); });
+                detail::deliverLate(bridgeExec, [registered = std::move(onRegistered), newId] { registered(newId); });
             })
             .onError([onFailed, handoff, bridgeExec](const std::exception_ptr& failure) mutable {
                 if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
                     return;
                 }
-                detail::deliverLate(bridgeExec, [onFailed = std::move(onFailed), failure] {
-                    onFailed(detail::describeFailure(failure));
-                });
+                detail::deliverLate(
+                    bridgeExec, [failed = std::move(onFailed), failure] { failed(detail::describeFailure(failure)); });
             });
         // `registerHandler` is a synchronous entry point: its caller
         // constructs a `BridgeHandler` and uses it on the next line, and
@@ -2294,15 +2292,14 @@ private:
                 // `_mtx`/`_attachMtx` that this continuation re-takes; it is
                 // also the delivery whose thread morph#588 lets the bridge
                 // choose. See `detail::deliverLate`.
-                detail::deliverLate(bridgeExec, [onBound = std::move(onBound), newId] { onBound(newId); });
+                detail::deliverLate(bridgeExec, [bound = std::move(onBound), newId] { bound(newId); });
             })
             .onError([onFailed, handoff, bridgeExec](const std::exception_ptr& failure) mutable {
                 if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
                     return;
                 }
-                detail::deliverLate(bridgeExec, [onFailed = std::move(onFailed), failure] {
-                    onFailed(detail::describeFailure(failure));
-                });
+                detail::deliverLate(
+                    bridgeExec, [failed = std::move(onFailed), failure] { failed(detail::describeFailure(failure)); });
             });
         return mayBlock ? detail::awaitHandoff(*handoff) : detail::claimHandoff(*handoff);
     }
