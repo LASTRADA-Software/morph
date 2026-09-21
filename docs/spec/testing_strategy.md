@@ -221,6 +221,34 @@ file scope, not inside the file's anonymous namespace with its other local
 helpers — Glaze's reflection needs external linkage to mangle the type name,
 the same requirement `tests/fuzz/`'s harness fixtures document.
 
+### Allocation census (`bench_dispatch_allocations.cpp`, target `morph_bench_alloc`)
+
+A second binary under the same option, and deliberately **not** a second case
+in `morph_bench`: it replaces the global `operator new`/`delete`, which is
+process-wide and would perturb any other measurement sharing the binary. It
+counts the heap allocations one `Ping -> Pong` round trip costs through
+`LocalBackend` — 50 warm-up calls excluded, every call waited out, no JSON and
+no socket — and prints the total, the bytes, and (with `--attribute`) the size
+of every allocation in one steady-state call.
+
+It exists because morph#572 is scoped by a number that three later pull
+requests invalidated, and re-deriving such a number from a prose description of
+how it was once taken is how a fix ends up built against a figure nobody
+re-checked.
+
+**It is an instrument, not a control, and the distinction is the point here.**
+It is not registered with ctest and asserts nothing unless `--budget=<n>` is
+passed: an allocation count is standard-library and allocator specific, so a
+ceiling that holds on libstdc++ would be wrong on libc++ or MSVC, and a gate
+that cannot be satisfied everywhere is worse than none. A green run of it
+proves nothing; the number it prints is the output. Turning it into a CI gate
+means giving it a per-toolchain budget first.
+
+Measured with it on `f24e225a`, x86-64 Linux, GCC 16.2.1 / libstdc++, `-O2
+-DNDEBUG`: **20.9 allocations and 1995 bytes per local round trip**, 21
+allocations in the recorded steady-state call. See morph#572 for the
+per-line attribution and what it says about that ticket's scope.
+
 ## Adversarial cross-socket run (`tests/qt/test_qt_websocket_adversarial.cpp`)
 
 Built under the existing `MORPH_BUILD_QT=ON` option (no new option — it's one

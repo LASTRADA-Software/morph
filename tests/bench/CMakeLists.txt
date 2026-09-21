@@ -19,3 +19,27 @@ endif()
 
 include(Catch)
 catch_discover_tests(morph_bench DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 60 LABELS "bench")
+
+# Allocation census for one local dispatch (morph#572). A binary of its own,
+# not a case in morph_bench, because it replaces the global operator new: the
+# replacement is process-wide and would perturb every other measurement in the
+# same binary. Deliberately **not** registered with ctest -- it asserts nothing
+# by default (an allocation count is toolchain-specific, so no ceiling is right
+# everywhere), and a test that cannot fail is noise in a suite. Run it by hand:
+#   ./build/tests/bench/morph_bench_alloc [--attribute]
+# See the file's own header comment for the method, and
+# docs/spec/testing_strategy.md.
+add_executable(morph_bench_alloc bench_dispatch_allocations.cpp)
+target_link_libraries(morph_bench_alloc PRIVATE morph::morph)
+apply_warnings(morph_bench_alloc)
+# -Wmismatched-new-delete pairs a `new` the compiler inlined with the
+# `std::free` inside the *replaced* `operator delete` and calls it a mismatch.
+# It is not one: replacing the global allocation functions is this program's
+# entire purpose, and forwarding them to malloc/free is how such a replacement
+# is written. Scoped to this one target rather than relaxed anywhere else.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(morph_bench_alloc PRIVATE -Wno-mismatched-new-delete)
+endif()
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_bench_alloc ${AF_SANITIZER})
+endif()
