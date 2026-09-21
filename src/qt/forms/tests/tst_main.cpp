@@ -15,6 +15,8 @@
 
 Q_IMPORT_QML_PLUGIN(MorphFormsPlugin)
 
+namespace {
+
 /// @brief Publishes the two shared test corpora to the QML engine.
 ///
 /// Each corpus is one file with two readers — a C++ suite and a QML one:
@@ -35,13 +37,21 @@ Q_IMPORT_QML_PLUGIN(MorphFormsPlugin)
 class MorphFormsQmlTestSetup : public QObject {
     Q_OBJECT
 
-public:
-    MorphFormsQmlTestSetup() = default;
-
 public Q_SLOTS:
     /// @brief Injects `ruleCorpusJson` and `instanceBoundsJson` into the QML
     ///        root context.
     /// @param engine The engine Qt Quick Test just created.
+    //
+    // The body never touches the object, so
+    // `readability-convert-member-functions-to-static` offers to make it
+    // static. Declined: this is not our call to make. QUICK_TEST_MAIN_WITH_SETUP
+    // constructs a `MorphFormsQmlTestSetup` and hands Qt Quick Test its address
+    // as a `QObject*` (quicktest.h), and Qt finds this hook on that instance's
+    // metaobject by name -- the signature is a contract with Qt, which
+    // documents the hook as a slot, not a shape this file is free to change.
+    // A slot is a member function by definition; `static` would say something
+    // about the fixture that is not true of the interface it implements.
+    // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
     void qmlEngineAvailable(QQmlEngine* engine) {
         // An unreadable file lands as an empty string, which the QML side fails
         // on explicitly rather than silently running zero rows.
@@ -63,6 +73,8 @@ private:
         return QString::fromUtf8(file.readAll());
     }
 };
+
+}  // namespace
 
 QUICK_TEST_MAIN_WITH_SETUP(morph_forms_qml_tests, MorphFormsQmlTestSetup)
 
