@@ -949,8 +949,8 @@ private:
     /// the task is destroyed.
     struct PendingControl {
         /// @brief Takes ownership of the dispatched call's promise.
-        /// @param p Producer side of the `Completion` handed to the caller.
-        explicit PendingControl(BindPromise p) : promise{std::move(p)} {}
+        /// @param dispatched Producer side of the `Completion` handed to the caller.
+        explicit PendingControl(BindPromise dispatched) : promise{std::move(dispatched)} {}
 
         /// @brief Producer side of the completion this call settles.
         ///
