@@ -710,6 +710,100 @@ public:
         binding->currentId.store(newId.v);
     }
 
+    /// @brief Applies an out-of-frame bind reply to a binding and reports the
+    ///        outcome, under the guards every such reply needs.
+    ///
+    /// The one shape `attachHandlerAsync` and `ensureBoundAsync` share, and
+    /// the reason it is here rather than written twice: both dispatch through
+    /// `IBackend::bindModel`, both park an in-frame reply, and both are left
+    /// with the same four-step job when the reply instead arrives *after* the
+    /// dispatching frame has gone -- is the `Bridge` still there, is the
+    /// binding still there, is the backend that answered still the active one,
+    /// and report through `onDone` either way. They differ only in what a
+    /// successful reply publishes, which is what @p publish is.
+    ///
+    /// `assignHandlerPrimary`'s continuation deliberately does **not** go
+    /// through here. It has no `onDone` -- a stale reply there is dropped
+    /// silently, because no caller is waiting on it -- so routing it through a
+    /// helper whose contract is "report exactly once" would mean giving that
+    /// helper a second mode, and the two behaviours are different on purpose.
+    ///
+    /// @par The liveness check and the `this` touch are two steps
+    /// That is the morph#486 shape, and it is closed not by a gate but by the
+    /// thread this body runs on. Before morph#571 that was a prose contract on
+    /// every backend author; morph#568 made it the executor the dispatch site
+    /// names, which is `inlineExecutor()` and so left the window unchanged;
+    /// morph#588 moved the choice to the bridge's own executor, where a
+    /// non-null one running `~Bridge`'s thread closes it, and the null default
+    /// keeps the pre-morph#588 thread exactly. Gating instead would block
+    /// `~Bridge` behind `_attachMtx`, which `attachHandler` holds across a full
+    /// `attachModel` round trip. See morph#489.
+    ///
+    /// @par Locking
+    /// @p publish runs under `_attachMtx`, because `contextKey`/`primary` are
+    /// plain `std::string`s that every other site reads under that lock --
+    /// publishing them without it would be a data race, not merely a stale
+    /// read. (`registerHandlerImpl`'s read during registration is the one
+    /// documented carve-out; see its own comment, and morph#505.) @p onDone is
+    /// invoked **after** the lock is released, on every path that invokes it at
+    /// all: what a caller does from inside it is dispatch the action, which can
+    /// re-enter `_attachMtx` through `assignHandlerPrimary`.
+    ///
+    /// @tparam Publish Callable taking `detail::HandlerBinding&`. Runs under
+    ///                 `_attachMtx` on success only. May throw: the exception
+    ///                 is caught and reported through @p onDone rather than
+    ///                 escaping onto an executor's thread.
+    /// @param liveness    Token for the `Bridge`; nothing is touched once it
+    ///                    reports inactive.
+    /// @param weakBinding Binding the reply belongs to. A expired one means the
+    ///                    `BridgeHandler` is gone and there is nothing to
+    ///                    publish to, so @p onDone is not called.
+    /// @param weakBackend Backend the reply came from, compared against the
+    ///                    active one before anything is published.
+    /// @param onDone      Caller's continuation: `nullptr` on success, a
+    ///                    non-null `exception_ptr` on failure. Invoked at most
+    ///                    once, outside `_attachMtx`.
+    /// @param publish     Applies the reply to the binding. See @p Publish.
+    template <typename Publish>
+    void publishLateBindReply(const ::morph::async::CallbackToken& liveness,
+                              const std::weak_ptr<detail::HandlerBinding>& weakBinding,
+                              const std::weak_ptr<::morph::backend::detail::IBackend>& weakBackend,
+                              const std::function<void(std::exception_ptr)>& onDone, Publish&& publish) {
+        if (!liveness.active()) {
+            return;  // The Bridge is gone; publishing this id would be pointless.
+        }
+        auto strongBinding = weakBinding.lock();
+        if (!strongBinding) {
+            return;  // The BridgeHandler (and its binding) is gone.
+        }
+        std::exception_ptr failure;
+        {
+            std::scoped_lock const guard{_attachMtx};
+            auto pinned = weakBackend.lock();
+            if (!pinned || pinned != loadBackend()) {
+                // A switchBackend() already moved past this reply (see
+                // registerHandlerImpl's identical guard) and its own
+                // re-registration loop already handled this binding on the
+                // *new* backend -- applying the stale reply now would
+                // overwrite that with a dangling id from a backend nothing
+                // uses any more. Unlike registerHandlerImpl's fire-and-forget
+                // re-registration, a real execute() call is synchronously
+                // waiting on `onDone` here, so the stale reply must still be
+                // reported -- silently dropping it would hang that caller
+                // forever.
+                failure = std::make_exception_ptr(
+                    std::runtime_error("attach reply arrived from a backend switchBackend() already replaced"));
+            } else {
+                try {
+                    std::forward<Publish>(publish)(*strongBinding);
+                } catch (...) {
+                    failure = std::current_exception();
+                }
+            }
+        }
+        onDone(failure);  // Outside the lock -- see @par Locking.
+    }
+
     /// @brief Async counterpart to `attachHandler`: dispatches the attach and
     ///        invokes @p onDone once attached (or failed), instead of blocking.
     ///
@@ -809,60 +903,17 @@ public:
             // so the capture itself is const.
             detail::deliverLate(bridgeExec, [this, weakBackend, weakLiveness, weakBinding,
                                              primaryCopy = std::move(primaryCopy), onDone, newId] {
-                // This check and the `this` touch below it are two steps --
-                // the morph#486 shape. Closed not by a gate but by the thread
-                // this body runs on. Before morph#571 that was a prose
-                // contract on every backend author; morph#568 made it the
-                // executor the dispatch site names, which is
-                // `inlineExecutor()` and so left the window unchanged;
-                // morph#588 moved the choice here, where a non-null
-                // `bridgeExec` running `~Bridge`'s own thread closes it, and
-                // the null default keeps the pre-morph#588 thread exactly.
-                // Gating instead would block `~Bridge` behind `_attachMtx`,
-                // which `attachHandler` holds across a full `attachModel`
-                // round trip. See morph#489.
-                if (!weakLiveness.active()) {
-                    return;  // The Bridge is gone; publishing this id would be pointless.
-                }
-                auto strongBinding = weakBinding.lock();
-                if (!strongBinding) {
-                    return;  // The BridgeHandler (and its binding) is gone.
-                }
-                std::exception_ptr failure;
-                {
-                    // contextKey/primary are plain std::strings that every
-                    // other site reads under `_attachMtx`; publishing them
-                    // without it would be a data race, not just a stale
-                    // read. (`registerHandlerImpl`'s read during
-                    // registration is the one documented carve-out -- see
-                    // its own comment, and morph#505.)
-                    std::scoped_lock const guard{_attachMtx};
-                    auto pinned = weakBackend.lock();
-                    if (!pinned || pinned != loadBackend()) {
-                        // A switchBackend() already moved past this attach
-                        // (see registerHandlerImpl's identical guard) and
-                        // its own re-registration loop already handled
-                        // `binding` on the *new* backend -- applying this
-                        // stale reply now would overwrite that with a
-                        // dangling id from a backend nothing uses any
-                        // more. Unlike registerHandlerImpl's fire-and-
-                        // forget re-registration, a real execute() call is
-                        // synchronously waiting on `onDone` here, so the
-                        // stale reply must still be reported -- silently
-                        // dropping it would hang that caller forever.
-                        failure = std::make_exception_ptr(std::runtime_error(
-                            "attach reply arrived from a backend switchBackend() already replaced"));
-                    } else {
-                        try {
-                            strongBinding->contextKey = primaryCopy;
-                            strongBinding->primary = primaryCopy;
-                            strongBinding->currentId.store(newId.v);
-                        } catch (...) {
-                            failure = std::current_exception();
-                        }
-                    }
-                }
-                onDone(failure);  // Outside the lock -- see @par Locking.
+                // Guards, locking and the morph#486 reasoning all live in
+                // `publishLateBindReply`, which `ensureBoundAsync` shares.
+                // What is this site's own is the three fields a successful
+                // attach publishes -- and that they can throw, which is why
+                // the helper wraps this in a try/catch.
+                publishLateBindReply(weakLiveness, weakBinding, weakBackend, onDone,
+                                     [&primaryCopy, newId](detail::HandlerBinding& target) {
+                                         target.contextKey = primaryCopy;
+                                         target.primary = primaryCopy;
+                                         target.currentId.store(newId.v);
+                                     });
             });
         };
         auto onFailed = [onDone, handoff, bridgeExec](const std::exception_ptr& failure) {
@@ -987,42 +1038,15 @@ public:
             // `attachHandlerAsync`'s identical shape spells out. See
             // `detail::deliverLate`.
             detail::deliverLate(bridgeExec, [this, weakBackend, weakLiveness, weakBinding, onDone, newId] {
-                // This check and the `this` touch below it are two steps --
-                // the morph#486 shape. Closed not by a gate but by the thread
-                // this body runs on, which morph#588 made the bridge's own
-                // choice; the null default is the pre-morph#588 thread,
-                // whichever one the backend settled on, so the window is
-                // unchanged there rather than closed. Gating instead would
-                // block `~Bridge` behind `_attachMtx`, which `attachHandler`
-                // holds across a full `attachModel` round trip. See morph#489.
-                if (!weakLiveness.active()) {
-                    return;  // The Bridge is gone; publishing this id would be pointless.
-                }
-                auto strongBinding = weakBinding.lock();
-                if (!strongBinding) {
-                    return;  // The BridgeHandler (and its binding) is gone.
-                }
-                std::exception_ptr failure;
-                {
-                    // Brief `_attachMtx` window purely to serialise this
-                    // check against a concurrent switchBackend() (which
-                    // takes the same lock) -- `currentId` itself is an
-                    // atomic and needs no lock to store.
-                    std::scoped_lock const guard{_attachMtx};
-                    auto pinned = weakBackend.lock();
-                    if (!pinned || pinned != loadBackend()) {
-                        // See attachHandlerAsync's identical guard: a
-                        // stale reply from a backend switchBackend()
-                        // already replaced must still resolve `onDone`
-                        // (a real execute() call is waiting), not be
-                        // silently dropped.
-                        failure = std::make_exception_ptr(std::runtime_error(
-                            "attach reply arrived from a backend switchBackend() already replaced"));
-                    } else {
-                        strongBinding->currentId.store(newId.v);
-                    }
-                }
-                onDone(failure);
+                // Same helper, same guards, as `attachHandlerAsync`. This
+                // site's difference is the whole of what it publishes:
+                // `currentId` alone, which is a `std::atomic` and so needs
+                // neither `_attachMtx` of its own nor the helper's try/catch
+                // (an integral `store` is `noexcept`). It still runs under the
+                // lock the helper takes, which is what serialises it against a
+                // concurrent `switchBackend()`.
+                publishLateBindReply(weakLiveness, weakBinding, weakBackend, onDone,
+                                     [newId](detail::HandlerBinding& target) { target.currentId.store(newId.v); });
             });
         };
         auto onFailed = [onDone, handoff, bridgeExec](const std::exception_ptr& failure) {

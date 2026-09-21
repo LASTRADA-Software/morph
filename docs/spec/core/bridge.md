@@ -896,7 +896,17 @@ never reach the callback body, `attachHandlerAsync`'s out-of-frame success
 callback is free to re-acquire `_attachMtx` for the two `std::string` fields it
 publishes (`HandlerBinding::contextKey`/`primary`, which every other reader
 takes that lock for); `ensureBoundAsync`'s publishes only the atomic
-`currentId` and needs no lock at all.
+`currentId` and needs no lock to store it.
+
+Both out-of-frame callbacks reach those publishes through one private helper,
+`publishLateBindReply`, which holds the four steps they share — the liveness
+check, the binding lock, the stale-backend comparison under `_attachMtx`, and
+the single `onDone` outside it — and takes what to publish as a callable. It is
+a template rather than a `std::function` parameter so the late path
+type-erases and allocates nothing. `assignHandlerPrimary`'s continuation
+deliberately does not use it: having no `onDone`, it drops a stale reply
+silently instead of reporting it, and that difference is intended rather than
+incidental.
 
 `whenBound()` synchronises on the *binding's* `registrationMtx`, never on a
 `Bridge` mutex, and never holds it across a callback: the resolver swaps the
