@@ -185,8 +185,38 @@ if output="$(run_checker "$dir" ubsan 2>&1)"; then
 elif ! mentions 'listed no tests' "$output"; then
     fail "the empty test list was rejected, but not for being empty:"
     printf '%s\n' "$output" >&2
+elif ! mentions 'genuinely registers no tests' "$output"; then
+    fail "the empty test list was rejected, but the message does not say ctest succeeded -- it reads the same as a listing that failed, which is morph#690:"
+    printf '%s\n' "$output" >&2
 else
-    note "ok: an empty ctest test list is rejected rather than passing vacuously"
+    note "ok: an empty ctest test list is rejected rather than passing vacuously, and named as empty rather than broken"
+fi
+
+# ── 3b. sweep: ctest *fails* to list -> the reason is printed (morph#690) ───
+# The distinction case 3 cannot make on its own, and the one that cost three CI
+# runs: "ctest enumerated a tree with no tests" and "ctest died before printing
+# any JSON" both arrive here as an empty list. On the bank-ubsan leg it was the
+# second -- one DISCOVERY_MODE PRE_TEST suite's binary aborted at listing time,
+# ctest exited 8 with an empty stdout and a CMake FATAL_ERROR on stderr, and
+# the checker's `2>/dev/null` threw that sentence away.
+#
+# The fixture reproduces the shape rather than the cause: a CTestTestfile.cmake
+# that fails while being read makes ctest exit nonzero with nothing on stdout,
+# which is exactly the state the checker has to tell apart. Asserting on the
+# fixture's own marker string, not on ctest's wording, is what makes this a
+# test of the pass-through rather than of ctest.
+dir="$(case_dir sweep_listing_failed)"
+printf 'message(FATAL_ERROR "morph690_fixture_marker: listing deliberately failed")\n' \
+    > "${dir}/CTestTestfile.cmake"
+
+if output="$(run_checker "$dir" ubsan 2>&1)"; then
+    fail "a ctest listing that failed outright was reported as clean:"
+    printf '%s\n' "$output" >&2
+elif ! mentions 'morph690_fixture_marker' "$output"; then
+    fail "the failed listing was rejected, but ctest's own reason was discarded -- the caller is left with 'listed no tests' and no cause, which is morph#690:"
+    printf '%s\n' "$output" >&2
+else
+    note "ok: a ctest listing that failed prints the reason it failed"
 fi
 
 # ── 4. narrow: an instrumented binary -> pass, reporting the count ──────────
