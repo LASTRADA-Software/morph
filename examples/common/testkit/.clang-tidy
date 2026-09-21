@@ -24,6 +24,41 @@
 # keeps every other check the repository-root .clang-tidy enables: exactly one
 # entry is subtracted, and only here.
 #
+# ── What "only here" is worth, and how it is kept true (morph#652) ───────────
+#
+# That sentence was false for two years' worth of commits, in the way this
+# repository finds hardest to notice: the directory held the testkit *library*
+# as well as the testkit's tests. `fault_proxy.cpp` and `qml_surface.cpp` --
+# the two translation units of `morph_ladder_testkit`, neither containing a
+# single REQUIRE -- resolved their configuration from this file, so the check
+# was off for them on the strength of an argument about Catch2 that did not
+# apply to them at all. "The code under test" was in the directory with the
+# test, which is exactly the case the paragraph above says cannot happen.
+#
+# They now live in `examples/common/testkit_src/`, one directory up and
+# outside this file's reach, so the claim holds by construction. It is not
+# left to hold by assertion either: scripts/check_rung_filters.sh fails if any
+# .cpp in a directory carrying this suppression is not a Catch2 translation
+# unit -- no TEST_CASE, no SCENARIO, no catch2/ include -- which is the shape
+# a second library source arriving here would have. That check is the reason
+# the claim above can be read as a fact rather than an intention.
+#
+# What is *not* narrowed, and cannot be: the reusable headers beside the tests
+# (backend_rig.hpp, pump.hpp, db_fixture.hpp, ...) are library code too, and a
+# header reached from a TU under this directory is analysed with that TU's
+# configuration, not its own (morph#632 measured the same effect for
+# tests/.clang-tidy: 333 findings inside include/morph/** hidden across 25
+# headers). So a chained comparison written by hand in one of those headers is
+# unreported whenever the reaching TU is one of this directory's tests -- and
+# since every other consumer is a rung's test binary, reaching them from an
+# examples/<rung>/tests/ that carries its own copy of this same one entry, in
+# practice it is unreported from everywhere. That is the residue, stated
+# rather than narrowed, for morph#632's reason: a suppression whose reach is
+# written down is auditable, and one whose reach is guessed is not. It is
+# bounded by what the check is -- `clang-diagnostic-parentheses`, which this
+# file does not subtract, reports the same `a < b < c` shape independently
+# and was observed doing so on the probe morph#652 was measured with.
+#
 # One copy per test directory rather than one shared file, because no directory
 # contains every example's tests and nothing else. scripts/check_rung_filters.sh
 # fails if a test directory on the application ladder has no such file, so a new

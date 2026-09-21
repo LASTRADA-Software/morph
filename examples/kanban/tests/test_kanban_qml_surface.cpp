@@ -156,7 +156,7 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     //          on each banner's `visible` is the probe; the `visible ? ... :
     //          ""` ternary on each `text` is the use). The audit treats a
     //          property's NOTIFY signal as covered by reading the property --
-    //          testkit/qml_surface.cpp's signal sweep does model this -- so
+    //          testkit_src/qml_surface.cpp's signal sweep does model this -- so
     //          the signal needs no exemption here, and claiming one would
     //          misdescribe a guard that is already doing its job.
     //   * OFF: neither property is compiled in, so no property read can cover

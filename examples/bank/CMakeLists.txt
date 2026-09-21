@@ -219,7 +219,13 @@ if(MORPH_BUILD_TESTS)
                 # while the audit itself needs Qt6::Core and nothing more.
                 # This is the same translation unit, not a copy of it, so the
                 # audit still has exactly one implementation.
-                ${PROJECT_SOURCE_DIR}/examples/common/testkit/qml_surface.cpp
+                #
+                # testkit_src/, not testkit/: the TU sits one directory up
+                # from its own header so that testkit/.clang-tidy's Catch2
+                # suppression cannot reach it (morph#652). The
+                # ${PROJECT_SOURCE_DIR}/examples/common include directory
+                # below is what resolves its <testkit/qml_surface.hpp>.
+                ${PROJECT_SOURCE_DIR}/examples/common/testkit_src/qml_surface.cpp
             )
             target_include_directories(bank_gui_tests PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests

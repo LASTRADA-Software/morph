@@ -234,7 +234,7 @@ for _rung in "${RUNG_TEST_EXES[@]}"; do
     done
 done
 
-# examples/common/testkit/ mixes real, reusable test-support headers/.cpp
+# examples/common/testkit/ mixes real, reusable test-support headers
 # (backend_rig.hpp, db_fixture.hpp, strand_interleaver.hpp, ...) with actual
 # Catch2 test files (test_event_poller.cpp, test_presenter.cpp, ...) in the
 # same directory — unlike include/morph and examples/pastebin's SOURCES
@@ -246,6 +246,10 @@ done
 # project has repeatedly had to hand-verify file by file. Test files
 # genuinely are not part of what examples/IMPLEMENTATION.md rule 5's 100%
 # bar means to hold to that standard — only the real testkit/GUI code is.
+# The library's own two TUs are not in that directory at all any more: they
+# live in examples/common/testkit_src/ so that testkit/.clang-tidy's Catch2
+# suppression cannot reach them (morph#652). They stay measured -- SOURCES
+# names examples/common, and this regex matches only testkit/test_*.cpp.
 IGNORE_REGEX='.*/testkit/test_[^/]+\.cpp$'
 
 ${LLVM_PROFDATA} merge -sparse "${PROFILES[@]}" -o "$MERGED"

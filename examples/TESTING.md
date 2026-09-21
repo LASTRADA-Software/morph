@@ -626,7 +626,15 @@ root `CMakeLists.txt` — don't repeat that eight times):
   too. There is deliberately **no** `examples/.clang-tidy`: one file there
   would cover every rung's `src/`, `include/` and `gui_lib/` as well, where a
   hand-written `a < b < c` is a real defect — `check_rung_filters.sh` fails if
-  one appears.
+  one appears. It also fails if any `.cpp` in one of those directories is not
+  a Catch2 translation unit: clang-tidy resolves configuration from the TU's
+  path, so a library source living beside the tests gets a suppression argued
+  as Catch2 idiom without being Catch2 at all. `morph_ladder_testkit`'s own
+  two TUs are in `examples/common/testkit_src/` rather than beside their
+  headers for exactly that reason. The headers themselves stay in
+  `testkit/` and are listed as sources of `morph_ladder_testkit`, which is
+  the only thing that keeps AUTOMOC seeing `fault_proxy.hpp`'s `Q_OBJECT`
+  once the same-basename pairing is gone.
 - `examples/common/` declares exactly three consumable targets:
   `morph_ladder_testkit` (morph + Catch2 + Qt), `morph_ladder_gui` (STATIC,
   `Qt6::Core` only, **no Catch2**, **no `Qt6::WebSockets`** — presenter rule

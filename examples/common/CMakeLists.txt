@@ -181,9 +181,47 @@ endif()
 # regex/QMetaObject walker with no reason to be inlined into every rung's test
 # TU, and it deliberately stays out of apply_warnings()' reach by living in
 # this target (see the note below on Lightweight).
+#
+# Those two TUs live in testkit_src/ rather than beside their headers in
+# testkit/, and that is the whole of what morph#652 fixed. clang-tidy resolves
+# its configuration from the path of the translation unit it is analysing, and
+# testkit/.clang-tidy subtracts bugprone-chained-comparison on the argument
+# that the finding is Catch2's REQUIRE expansion rather than a defect. That
+# argument is true of the twenty-one Catch2 sources in that directory and says
+# nothing about a library TU with no REQUIRE in it -- yet while these two sat
+# there, the suppression covered them on the same terms, and the file's own
+# prose claimed it could not ("a hand-written `a < b < c` in the code under
+# test is still reported"). One directory up the suppression cannot reach
+# them, so the claim is true by construction instead of by assertion. The
+# headers stay in testkit/ because every consumer includes them as
+# <testkit/...>; only the two TUs moved.
+#
+# Which is why the two headers are listed as sources below, and they are not
+# there to be compiled. AUTOMOC finds a Q_OBJECT header two ways: next to the
+# .cpp of the same basename, or listed among the target's own sources. Moving
+# the TUs out of testkit/ broke the first, fault_proxy.hpp declares a QObject,
+# and nothing generated moc_fault_proxy.cpp any more -- a failure that is
+# invisible at compile time and that the static library archives happily. It
+# surfaces only at the first link that needs the vtable:
+#
+#   libmorph_ladder_testkit.a(fault_proxy.cpp.o): in function
+#     `morph::ladder::testkit::FaultProxy::FaultProxy(QUrl, QObject*)':
+#     undefined reference to `vtable for morph::ladder::testkit::FaultProxy'
+#     undefined reference to `...::FaultProxy::staticMetaObject'
+#     undefined reference to `typeinfo for ...::FaultProxy'
+#
+# Header entries are not compiled; they only join the AUTOMOC scan. This is
+# the same remedy, for the same reason, that cmake/morph_add_rung.cmake
+# already applies to every rung -- its _lib_headers glob exists because a
+# rung splits include/<rung>/app/app.hpp from src/app/app.cpp, and
+# pastebin::app::App is where this repository last hit it. Both headers are
+# listed rather than only the one carrying a Q_OBJECT today, so the move is
+# moc-neutral by construction instead of by which header happens to need moc.
 add_library(morph_ladder_testkit STATIC
-    testkit/fault_proxy.cpp
-    testkit/qml_surface.cpp
+    testkit_src/fault_proxy.cpp
+    testkit_src/qml_surface.cpp
+    testkit/fault_proxy.hpp
+    testkit/qml_surface.hpp
 )
 add_library(morph::ladder_testkit ALIAS morph_ladder_testkit)
 target_include_directories(morph_ladder_testkit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

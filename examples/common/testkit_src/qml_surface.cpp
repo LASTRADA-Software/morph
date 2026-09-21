@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include "qml_surface.hpp"
+#include "testkit/qml_surface.hpp"
 
 #include <QDir>
 #include <QDirIterator>
