@@ -207,6 +207,22 @@ Internally `StrandExecutor` maintains a map of `ModelId → shared_ptr<Strand>`
 mutex, a pending queue, and a `running` flag. The executor also tracks an
 `_inFlight` counter (guarded by the map mutex) that the destructor waits on.
 
+The pending queue is `StrandExecutor::PendingQueue`, not `std::queue`. It is a
+FIFO with the head task stored **inside** the `Strand` and a lazily constructed
+`std::deque` behind it, and it exists purely to make the common case cheaper:
+because the drain step below destroys the whole `Strand` as soon as the queue
+empties, a serial workload (one action at a time, each waited out) rebuilds the
+queue on every dispatch and puts exactly one task in it — and libstdc++'s
+`std::deque` allocates its node map *and* a 512-byte first buffer in its
+default constructor, whether or not anything is ever pushed. See
+[Lifetime & ownership](#lifetime--ownership) below for the measurement.
+`PendingQueue` does no locking of its own; every access is
+under the owning `Strand::mtx`, exactly as the `std::queue` it replaced was,
+and it tracks occupancy with a flag rather than by testing the callable, so an
+empty `std::function` is queued and dispatched like any other. It changes no
+lifetime or locking rule: the erase still fires when `empty()` becomes true,
+still under the `{_mapMtx, strand->mtx}` pair.
+
 **`_inFlight` is incremented with the *decision* to dispatch, not lazily.**
 `post()` increments `_inFlight` in the same `_mapMtx` critical section that flips
 `running` true and decides to schedule, before releasing the lock; the re-arm
@@ -323,9 +339,29 @@ The strand map is self-cleaning: when a strand drains (its `pending` queue is
 empty), `scheduleNext` clears `running` and erases the map entry under the
 combined `{_mapMtx, strand->mtx}` lock. Live memory therefore tracks the set of
 *currently active* models rather than every model ever seen — there is no
-per-model registration to leak. The cost is allocation churn: a model that is
-posted to in bursts allocates a fresh `Strand` each time its queue empties and
-refills, rather than keeping one long-lived strand per key.
+per-model registration to leak.
+
+**The cost is allocation churn, and it is bounded rather than removed.** A
+model posted to serially — one action at a time, each waited out — never has a
+task queued at the instant the previous one finishes, so it never keeps a
+strand: every dispatch takes `post()`'s `if (!slot)` branch and rebuilds the
+map node and the `Strand`. Measured on `7a343e6f` with
+`tests/bench/bench_dispatch_allocations.cpp` (see
+[testing_strategy.md](../testing_strategy.md)), x86-64 Linux, GCC 16.2.1 /
+libstdc++, `-O2`, that came to **4 allocations and 760 of the 1990 bytes** a
+local `execute` round trip cost — 38% of the bytes, for a strand that is
+rebuilt and thrown away. 576 of those bytes were not the strand at all but
+`std::queue`'s `std::deque` eagerly allocating a node map and a 512-byte first
+buffer in its default constructor. Replacing that container with
+`PendingQueue`, which holds the head task inline, cut the strand's share to **2
+allocations and 152 bytes** and the whole round trip to 18.9 allocations /
+1396 bytes (morph#660).
+
+The two allocations that remain — the map node and the `Strand` itself — are
+inherent to the erase: removing them means keeping the slot alive across the
+drain, which trades this churn for a per-model entry that nothing reclaims,
+since `StrandExecutor` has no deregistration hook. That trade is deliberately
+not made here; the erase is what bounds the map.
 
 ## Thread safety
 

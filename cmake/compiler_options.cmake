@@ -157,8 +157,54 @@ elseif(MORPH_COMPILER_FAMILY STREQUAL "Clang")
     # oversight this warning should flag.
     _morph_clang_suppression_if_supported(-Wno-missing-designated-field-initializers)
     _morph_clang_suppression_if_supported(-Wno-nrvo)  # not eliding a trivial-type copy on return
+    # -Wshadow-uncaptured-local does NOT mean "a lambda parameter shadowing an
+    # uncaptured local", which is what this line claimed until morph#662. It is
+    # clang's group for *any* declaration inside a lambda with no
+    # capture-default that shadows an enclosing local the lambda did not
+    # capture — the parameter case is one of four. Measured on clang 22.1.8,
+    # `clang++ -std=c++23 -fsyntax-only -Weverything`, one construct per
+    # function:
+    #
+    #   [](int value) { ... }                 shadows a local variable [-Wshadow-uncaptured-local]
+    #   [] { int value = 2; ... }             shadows a local variable [-Wshadow-uncaptured-local]
+    #   [value = 7] { ... }                   shadows a local variable [-Wshadow-uncaptured-local]
+    #   [first = first + 1] { ... }           shadows a structured binding [-Wshadow-uncaptured-local]
+    #   { int value = 2; }   (no lambda)      shadows a local variable [-Wshadow]
+    #   [value] { int value = inner; ... }    shadows a local variable [-Wshadow]
+    #
+    # So the init-capture cases — including the `[x = std::move(x)]` idiom this
+    # codebase uses throughout to move state into a continuation — are
+    # suppressed here, and the last two rows show what is still enforced:
+    # -Wshadow (GCC list below, and via -Weverything here) keeps every shadow
+    # that is not inside an uncapturing lambda.
+    #
+    # The group cannot be narrowed to the one construct the old comment named;
+    # clang has no finer flag, so the alternatives are all-or-nothing plus
+    # per-site suppressions. Dropping it entirely is a real cleanup, not a
+    # one-line diff: measured on this tree with every optional feature
+    # configured (clang 22.1.8, clang-debug + NET/QT/FORMS_QML/OFFLINE_SQLITE/
+    # LOAD_TESTS/HMAC_EXAMPLES/LADDER/BANK_EXAMPLE, -Werror off), removing this
+    # line yields **4856 diagnostics over 41 distinct sites in 16 first-party
+    # files** — the emission count is that much larger than the site count
+    # because 35 of the 41 are in headers, re-reported once per translation
+    # unit that includes them. By file: 8 each in core/backend.hpp and
+    # core/remote.hpp, 4 each in core/bridge.hpp and core/completion.hpp, 1
+    # each in core/registry.hpp, core/callback_scope.hpp, offline/
+    # sync_worker.hpp and qt/qt_executor.hpp, 3 across two tests/ files and 10
+    # across six examples/ files. No dependency is affected (they arrive via
+    # -isystem). That cleanup is tracked separately; do not fold it into an
+    # unrelated change.
+    #
+    # One consequence is recorded rather than fixed here (morph#662, still
+    # open): emsdk 3.1.56's older clang files `declaration shadows a structured
+    # binding` under plain -Wshadow instead, so the WASM leg is the only leg
+    # that enforces that one row of the table above. That statement is read off
+    # the CI log of run 35573507189, not reproduced locally — no emsdk
+    # toolchain is available here. It also currently enforces nothing in
+    # practice: morph#661 fixed the only four structured-binding shadows in the
+    # tree, and the measurement above found zero remaining.
     list(APPEND MORPH_WARNING_FLAGS
-        -Wno-shadow-uncaptured-local    # lambda param shadowing an uncaptured local
+        -Wno-shadow-uncaptured-local
         -Wno-documentation-unknown-command
         -Wno-unsafe-buffer-usage        # flags all pointer arithmetic; needs a hardened API
     )

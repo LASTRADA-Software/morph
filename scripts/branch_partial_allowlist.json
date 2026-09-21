@@ -74,7 +74,7 @@
     },
     {
       "file": "include/morph/core/strand.hpp",
-      "line": 192,
+      "line": 259,
       "source": "if (iter != _strands.end() && iter->second == strand) {",
       "reason": "Unreachable by construction given this class's lock discipline (core audit finding ST1, resolved to (b) by a concurrency-focused review pass after an initial (a)/(b)-undecided pass). `_strands` has exactly two mutation sites: `post()`'s insert-if-absent (this file, `if (!slot) { slot = make_shared<Strand>(); }`) and this exact block's own erase a few lines below, both under `_mapMtx`. At most one lambda per `Strand` runs at a time (`post()` only schedules when `!strand->running`, and re-arming happens only through this same lambda's own `more` branch), so dispatch for one `Strand` is strictly serial; and only a strand's own currently-running lambda can erase its map entry (the erase fires only in the `!more` branch for the entry this frame just found under `_mapMtx`, and a concurrent `post(key)` while this lambda runs can only push onto the existing `Strand`, never replace it). Together these force `_strands.find(key)` to yield this exact strand whenever this line runs, so `iter->second == strand` cannot be false. No stress test needed: one was considered, but given the strength of the lock-discipline argument it would spend CI time re-confirming an already-proven invariant rather than searching for an unknown one."
     },

@@ -3,13 +3,14 @@
 #pragma once
 #include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <queue>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "../attributes.hpp"
 #include "executor.hpp"
@@ -130,10 +131,77 @@ public:
     }
 
 private:
+    /// @brief FIFO of tasks queued on one strand, with the head task held inline.
+    ///
+    /// Behaviourally a `std::queue<std::function<void()>>` restricted to the
+    /// three operations the strand uses, and used under exactly the same
+    /// discipline: every call happens with the owning `Strand::mtx` held, so
+    /// this type does no locking of its own.
+    ///
+    /// It exists because of what the *container* cost, not what the strand
+    /// did with it. The drain-and-erase step in `scheduleNext` destroys the
+    /// whole `Strand` as soon as the queue empties, so a workload that
+    /// dispatches one action at a time against a model builds a fresh queue on
+    /// every call and puts exactly one task in it. libstdc++'s `std::deque`
+    /// allocates its node map *and* a first 512-byte buffer in its default
+    /// constructor, so that came to 576 bytes of the 760 the strand cost per
+    /// local dispatch (morph#660). Holding the head task in the strand makes
+    /// that case allocation-free; the overflow deque is constructed only when
+    /// a second task is genuinely queued behind a running one, after which the
+    /// cost is the deque's as before.
+    ///
+    /// This changes no lifetime or locking rule: the erase still happens when
+    /// `empty()` becomes true, still under the `{_mapMtx, strand->mtx}` pair.
+    class PendingQueue {
+    public:
+        /// @brief Reports whether the queue holds no task.
+        /// @return `true` when nothing is queued.
+        [[nodiscard]] bool empty() const noexcept { return !_hasHead; }
+
+        /// @brief Appends @p task to the back of the queue.
+        /// @param task Callable to queue. An *empty* `std::function` is queued
+        ///             and later dispatched like any other: occupancy is
+        ///             tracked by a separate flag rather than by testing the
+        ///             callable, so this type never silently drops one.
+        void push(std::function<void()>&& task) {
+            if (!_hasHead) {
+                _head = std::move(task);
+                _hasHead = true;
+                return;
+            }
+            if (!_overflow) {
+                _overflow = std::make_unique<std::deque<std::function<void()>>>();
+            }
+            _overflow->push_back(std::move(task));
+        }
+
+        /// @brief Removes the task at the front of the queue and returns it.
+        /// @return The front task.
+        /// @pre `!empty()`.
+        std::function<void()> pop() {
+            std::function<void()> task = std::move(_head);
+            if (_overflow && !_overflow->empty()) {
+                _head = std::move(_overflow->front());
+                _overflow->pop_front();
+            } else {
+                // A moved-from std::function is valid but unspecified; clear it
+                // explicitly so the slot holds no captured state while idle.
+                _head = nullptr;
+                _hasHead = false;
+            }
+            return task;
+        }
+
+    private:
+        std::function<void()> _head;
+        std::unique_ptr<std::deque<std::function<void()>>> _overflow;
+        bool _hasHead = false;
+    };
+
     struct Strand {
         IExecutor* base = nullptr;
         std::mutex mtx;
-        std::queue<std::function<void()>> pending;
+        PendingQueue pending;
         bool running = false;
     };
 
@@ -151,8 +219,7 @@ private:
             std::function<void()> task;
             {
                 std::scoped_lock const lock{strand->mtx};
-                task = std::move(strand->pending.front());
-                strand->pending.pop();
+                task = strand->pending.pop();
             }
             try {
                 task();
