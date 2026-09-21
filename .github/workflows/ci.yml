@@ -278,7 +278,34 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y ninja-build catch2
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          # Download, check, then execute -- not
+          # `wget -qO- https://apt.llvm.org/llvm.sh | sudo bash` (morph#681).
+          # `wget -q` writes no error document, so on an HTTP 4xx/5xx it exits
+          # 8 having written zero bytes. `bash` then reads an empty script,
+          # does nothing, and exits 0 -- and GitHub runs `run:` under `bash -e`
+          # without pipefail, so the pipeline's status is bash's, not wget's.
+          # The step therefore reported success having installed no compiler,
+          # and the leg went red several steps later at Configure, naming a
+          # missing compiler rather than the download that never happened.
+          #
+          # Measured against apt.llvm.org itself, on a path that 404s:
+          #
+          #     $ curl -sSL -o llvm.sh https://apt.llvm.org/does-not-exist.sh
+          #     exit=0   564 bytes of error page
+          #     $ curl -sSL --fail -o llvm.sh https://apt.llvm.org/does-not-exist.sh
+          #     curl: (22) The requested URL returned error: 404
+          #     exit=22
+          #
+          # Same three lines as the `Install sccache` steps (morph#672), so the
+          # repository has one download idiom rather than two: `--fail` so the
+          # download reports its own failure, a file so nothing downstream runs
+          # when it does, and `test -s` for the 200-with-empty-body case that
+          # `--fail` cannot see. This is not a retry policy and it does not make
+          # an apt.llvm.org outage less likely -- it makes the step that failed
+          # be the step the log names.
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
       # Keyed by preset alone, not this job's name: gcc-debug/clang-debug's
       # object files are the same ones linux-qt, ladder-tests, valgrind (for
@@ -464,7 +491,12 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
+          # bash`: see linux-compilers' identical install step for why the piped
+          # form reported success having installed nothing (morph#681).
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
       # Keyed by preset alone, matching linux-compilers' cache above: this
       # matrix's clang-asan/clang-tsan legs share the same preset name (and
@@ -627,7 +659,12 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
+          # bash`: see linux-compilers' identical install step for why the piped
+          # form reported success having installed nothing (morph#681).
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
       # examples/common's hand-written GUI/testkit code is real coverage of
       # morph's client stack (Bridge, backends, QtExecutor, completions --
@@ -846,7 +883,12 @@ jobs:
           # test run itself stays off-GUI.
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
+          # bash`: see linux-compilers' identical install step for why the piped
+          # form reported success having installed nothing (morph#681).
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
       # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
       # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
@@ -1041,7 +1083,12 @@ jobs:
           # target installs.
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
+          # bash`: see linux-compilers' identical install step for why the piped
+          # form reported success having installed nothing (morph#681).
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
       # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
       # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
@@ -1775,7 +1822,12 @@ jobs:
           # same set every other ladder-building Linux job installs.
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
+          # bash`: see linux-compilers' identical install step for why the piped
+          # form reported success having installed nothing (morph#681).
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
       # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
       # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
@@ -2041,7 +2093,12 @@ jobs:
             sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
             sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
           else
-            wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+            # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
+            # bash`: see linux-compilers' identical install step for why the piped
+            # form reported success having installed nothing (morph#681).
+            curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+            test -s /tmp/llvm.sh
+            sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
           fi
 
       # Not the distro's Qt: MORPH_BUILD_FORMS_QML needs 6.5+ (see the version
@@ -2396,7 +2453,12 @@ jobs:
 
       - name: Install clang-format ${{ env.CLANG_VERSION }}
         run: |
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
+          # bash`: see linux-compilers' identical install step for why the piped
+          # form reported success having installed nothing (morph#681).
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
           sudo apt-get install -y clang-format-${{ env.CLANG_VERSION }}
 
       - name: Check every tracked C++ file against .clang-format
@@ -2463,7 +2525,12 @@ jobs:
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev \
             libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
             libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
+          # bash`: see linux-compilers' identical install step for why the piped
+          # form reported success having installed nothing (morph#681).
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
           sudo apt-get install -y clang-tidy-${{ env.CLANG_VERSION }}
 
       # Here rather than in a lint job of its own because this is the only job

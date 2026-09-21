@@ -76,7 +76,12 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y ninja-build catch2
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
+          # bash`: see ci.yml's linux-compilers install step for why the piped
+          # form reported success having installed nothing (morph#681).
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
 
       # Not automated inside scripts/mutation.sh itself on purpose (that
       # script's own header: "a script that downloads a toolchain behind your
