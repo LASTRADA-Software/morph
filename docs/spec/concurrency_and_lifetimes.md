@@ -104,7 +104,11 @@ turns it into a set of per-key serial queues:
   may run concurrently on different pool threads. This is what removes the need
   for per-model mutexes.
 - Each strand is a `shared_ptr<Strand>` in a map guarded by `_mapMtx`. When a
-  strand's queue drains, the map entry is erased. The invariant is: **at most one
+  strand's queue drains, the map entry is removed — `extract`ed into a
+  single-slot `_spare` the next miss re-keys, which recycles the node's memory
+  without changing when the entry leaves the map (see
+  [`core/executor.md`](core/executor.md), "Lifetime & ownership"). The
+  invariant is: **at most one
   live strand per `ModelId`, and any `running` strand is the one currently in the
   map** — that is what keeps a key's tasks from overlapping. Both sides that can
   break it hold `_mapMtx` across their *whole* decision: `post()` takes `_mapMtx`,

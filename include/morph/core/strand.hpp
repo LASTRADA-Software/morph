@@ -102,12 +102,11 @@ public:
             // is uncontended; an existing strand's mtx can only be held
             // elsewhere under the same _mapMtx-first order, so no deadlock.
             std::scoped_lock const mapLock{_mapMtx};
-            auto& slot = _strands[key];
-            if (!slot) {
-                slot = std::make_shared<Strand>();
-                slot->base = _base;
+            auto slotIter = _strands.find(key);
+            if (slotIter == _strands.end()) {
+                slotIter = installStrand(key);
             }
-            strand = slot;
+            strand = slotIter->second;
             std::scoped_lock const strandLock{strand->mtx};
             strand->pending.push(std::move(task));
             if (!strand->running) {
@@ -126,7 +125,7 @@ public:
             }
         }
         if (schedule) {
-            scheduleNext(strand, key);
+            scheduleNext(std::move(strand), key);
         }
     }
 
@@ -205,6 +204,64 @@ private:
         bool running = false;
     };
 
+    /// @brief The `ModelId` → strand map. Named so the recycled node type can be.
+    using StrandMap = std::unordered_map<ModelId, std::shared_ptr<Strand>, ModelIdHash>;
+
+    /// @brief Returns an iterator to the strand for @p key, creating the entry.
+    ///
+    /// **Precondition:** the caller holds `_mapMtx` and has already
+    /// established that `key` has no entry.
+    ///
+    /// This is a pure allocation optimisation and changes no lifetime or
+    /// locking rule. The drain step in `scheduleNext` removes the whole map
+    /// entry as soon as the queue empties, so a workload that dispatches one
+    /// action at a time against a model paid for a fresh map node *and* a
+    /// fresh `make_shared<Strand>` on every call — the 2 allocations / 152
+    /// bytes that were left after morph#660 took the container's share.
+    /// Rather than keep the slot alive across the drain (which would need a
+    /// deregistration hook and would trade this churn for a per-model entry
+    /// nothing reclaims), the drain `extract`s the node instead of erasing it
+    /// and parks it in `_spare`, and this re-keys and re-inserts that one
+    /// node. The entry still leaves the map at the same point under the same
+    /// locks, so the map is bounded exactly as before; `_spare` holds at most
+    /// one node and is freed with the executor.
+    ///
+    /// Reusing the parked node's `Strand` as well is guarded by sole
+    /// ownership. `use_count() == 1` means the recycled node holds the only
+    /// reference, so nothing else can reach the object and reusing it is
+    /// indistinguishable from constructing a new one. That is the whole
+    /// argument, and it is deliberately not "the previous owner makes no
+    /// further access": a strand lambda that is still finishing does hold a
+    /// reference, and when it does, this constructs a fresh `Strand` exactly
+    /// as before and recycles only the node.
+    ///
+    /// The parked strand needs no reset. It is only ever extracted from a
+    /// strand observed `!running` with an empty `pending` under
+    /// `{_mapMtx, strand->mtx}`, which is the state a fresh one is in. A
+    /// runtime re-check of that here would be an arm nothing can take, so it
+    /// is written down rather than branched on.
+    /// @param key Model identifier to install a strand for.
+    /// @return Iterator to the entry for @p key.
+    StrandMap::iterator installStrand(ModelId key) {
+        if (!_spare) {
+            auto const iter = _strands.emplace(key, std::make_shared<Strand>()).first;
+            iter->second->base = _base;
+            return iter;
+        }
+        _spare.key() = key;
+        auto& reused = _spare.mapped();
+        if (reused.use_count() != 1) {
+            reused = std::make_shared<Strand>();
+        }
+        reused->base = _base;
+        // `insert` consumes the node. Were the precondition ever violated it
+        // would instead hand the node back inside the returned object, which
+        // frees it — the same fate the old `erase` gave it — and `position`
+        // would name the existing entry, so the caller is right either way
+        // and there is nothing to branch on.
+        return _strands.insert(std::move(_spare)).position;
+    }
+
     /// @brief Dispatches one strand lambda onto the base executor.
     ///
     /// **Precondition:** the caller must have already incremented `_inFlight`
@@ -214,8 +271,15 @@ private:
     /// with the *decision* (rather than here) closes the window where
     /// `~StrandExecutor` could observe `_inFlight == 0` between the decision and
     /// this dispatch and destroy `_strands` out from under us.
-    void scheduleNext(const std::shared_ptr<Strand>& strand, ModelId key) {
-        strand->base->post([this, strand, key] {
+    void scheduleNext(std::shared_ptr<Strand> strand, ModelId key) {
+        // Read `base` out before the capture list moves `strand` into the
+        // lambda: `strand->base` and the lambda's construction are
+        // unsequenced within one call expression, so reading through the
+        // moved-from pointer would be a real hazard rather than a stylistic
+        // one. The lambda's capture is non-const (hence `mutable` and the
+        // by-value parameter) so the drain below can release it early.
+        IExecutor* const base = strand->base;
+        base->post([this, strand = std::move(strand), key]() mutable {
             std::function<void()> task;
             {
                 std::scoped_lock const lock{strand->mtx};
@@ -257,7 +321,19 @@ private:
                     strand->running = false;
                     auto iter = _strands.find(key);
                     if (iter != _strands.end() && iter->second == strand) {
-                        _strands.erase(iter);
+                        // `extract`, not `erase`: same removal, same moment,
+                        // same locks — the entry leaves the map here exactly as
+                        // before, and every reason the erase had to happen
+                        // under {_mapMtx, strand->mtx} still applies unchanged.
+                        // The difference is only that the detached node's
+                        // memory is parked for `installStrand` to re-key
+                        // instead of being returned to the allocator. Any node
+                        // already parked is freed by this assignment, so at
+                        // most one is ever held. Freeing it runs no user code
+                        // under these locks: a parked strand was parked
+                        // because its pending queue was empty, so there is no
+                        // captured task left to destroy.
+                        _spare = _strands.extract(iter);
                     }
                 } else {
                     // Account for the re-armed dispatch *before* releasing
@@ -271,6 +347,24 @@ private:
             }
             if (more) {
                 scheduleNext(strand, key);
+            } else {
+                // Drop this run's co-ownership here rather than leaving it to
+                // the lambda's destruction a few lines below. Nothing after
+                // this point touches the strand, and releasing it early is
+                // what lets `installStrand` see `use_count() == 1` on the
+                // node just parked in `_spare`: the next post() for this key
+                // is typically already blocked on _mapMtx when the block above
+                // releases it, so a reference held until the lambda dies would
+                // usually still be there when that post looks. This only
+                // affects *whether the object is recycled*, never whether the
+                // recycling is safe — a post that looks too early simply sees
+                // two owners and constructs a fresh Strand.
+                //
+                // Safe to be the last owner here: no lock is held (the block
+                // above released both), so this never destroys a mutex it is
+                // standing on. If the extract above did run, `_spare` owns the
+                // strand and this merely decrements.
+                strand.reset();
             }
             // Decrement after all map access is done; wake destructor if it is waiting.
             {
@@ -286,7 +380,14 @@ private:
     std::mutex _mapMtx;
     std::condition_variable _cv;
     int _inFlight{0};
-    std::unordered_map<ModelId, std::shared_ptr<Strand>, ModelIdHash> _strands;
+    StrandMap _strands;
+    /// @brief The one detached map node kept for reuse. Guarded by `_mapMtx`.
+    ///
+    /// Declared after `_strands` so it is destroyed first: the node owns
+    /// storage obtained from the map's allocator, and returning it before the
+    /// container goes away keeps that ordering obvious even though the default
+    /// allocator is stateless.
+    StrandMap::node_type _spare;
 };
 
 }  // namespace morph::exec::detail

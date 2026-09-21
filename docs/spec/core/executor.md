@@ -205,14 +205,18 @@ lifetime of the model. It supports three-way comparison and can be used as an
 Internally `StrandExecutor` maintains a map of `ModelId → shared_ptr<Strand>`
 (shared state per key). A `Strand` holds a pointer to the base `IExecutor`, a
 mutex, a pending queue, and a `running` flag. The executor also tracks an
-`_inFlight` counter (guarded by the map mutex) that the destructor waits on.
+`_inFlight` counter (guarded by the map mutex) that the destructor waits on,
+and a single-slot `_spare` node handle (also guarded by the map mutex) that
+recycles one detached map entry — see
+[Lifetime & ownership](#lifetime--ownership).
 
 The pending queue is `StrandExecutor::PendingQueue`, not `std::queue`. It is a
 FIFO with the head task stored **inside** the `Strand` and a lazily constructed
 `std::deque` behind it, and it exists purely to make the common case cheaper:
-because the drain step below destroys the whole `Strand` as soon as the queue
-empties, a serial workload (one action at a time, each waited out) rebuilds the
-queue on every dispatch and puts exactly one task in it — and libstdc++'s
+because the drain step below detaches the whole map entry as soon as the queue
+empties, a serial workload (one action at a time, each waited out) starts from
+an empty queue on every dispatch and puts exactly one task in it — and
+libstdc++'s
 `std::deque` allocates its node map *and* a 512-byte first buffer in its
 default constructor, whether or not anything is ever pushed. See
 [Lifetime & ownership](#lifetime--ownership) below for the measurement.
@@ -220,7 +224,7 @@ default constructor, whether or not anything is ever pushed. See
 under the owning `Strand::mtx`, exactly as the `std::queue` it replaced was,
 and it tracks occupancy with a flag rather than by testing the callable, so an
 empty `std::function` is queued and dispatched like any other. It changes no
-lifetime or locking rule: the erase still fires when `empty()` becomes true,
+lifetime or locking rule: the removal still fires when `empty()` becomes true,
 still under the `{_mapMtx, strand->mtx}` pair.
 
 **`_inFlight` is incremented with the *decision* to dispatch, not lazily.**
@@ -336,16 +340,15 @@ data race the `_inFlight` wait exists to prevent. Callers must ensure all task
 sources are shut down before the `StrandExecutor` is destroyed.
 
 The strand map is self-cleaning: when a strand drains (its `pending` queue is
-empty), `scheduleNext` clears `running` and erases the map entry under the
+empty), `scheduleNext` clears `running` and removes the map entry under the
 combined `{_mapMtx, strand->mtx}` lock. Live memory therefore tracks the set of
 *currently active* models rather than every model ever seen — there is no
 per-model registration to leak.
 
-**The cost is allocation churn, and it is bounded rather than removed.** A
-model posted to serially — one action at a time, each waited out — never has a
-task queued at the instant the previous one finishes, so it never keeps a
-strand: every dispatch takes `post()`'s `if (!slot)` branch and rebuilds the
-map node and the `Strand`. Measured on `7a343e6f` with
+**The cost was allocation churn.** A model posted to serially — one action at
+a time, each waited out — never has a task queued at the instant the previous
+one finishes, so it never keeps a strand: every dispatch missed in the map and
+rebuilt the map node and the `Strand`. Measured on `7a343e6f` with
 `tests/bench/bench_dispatch_allocations.cpp` (see
 [testing_strategy.md](../testing_strategy.md)), x86-64 Linux, GCC 16.2.1 /
 libstdc++, `-O2`, that came to **4 allocations and 760 of the 1990 bytes** a
@@ -357,11 +360,35 @@ buffer in its default constructor. Replacing that container with
 allocations and 152 bytes** and the whole round trip to 18.9 allocations /
 1396 bytes (morph#660).
 
-The two allocations that remain — the map node and the `Strand` itself — are
-inherent to the erase: removing them means keeping the slot alive across the
-drain, which trades this churn for a per-model entry that nothing reclaims,
-since `StrandExecutor` has no deregistration hook. That trade is deliberately
-not made here; the erase is what bounds the map.
+**The remaining two allocations — the map node and the `Strand` itself — are
+recycled rather than removed (morph#670).** They looked inherent to the erase:
+removing them appeared to mean keeping the slot alive across the drain, which
+would trade the churn for a per-model entry nothing reclaims, since
+`StrandExecutor` has no deregistration hook. That framing turned out to be
+avoidable. The entry still leaves the map at exactly the same moment, under
+exactly the same locks; the drain simply calls `extract` instead of `erase` and
+parks the detached node in a single-slot `_spare` member, and the next
+`post()` that misses re-keys that node and inserts it back. The map is still
+bounded by the removal — `_spare` holds **at most one** node, is guarded by
+`_mapMtx` like the map itself, and is freed with the executor.
+
+Reusing the parked node's `Strand` object is guarded additionally by
+`use_count() == 1`: the recycled node is then the only owner, so no strand task
+can still reach the object and reusing it is indistinguishable from
+constructing a new one. When that guard fails — a finishing strand lambda still
+holds its `shared_ptr` when the next `post()` looks — a fresh `Strand` is
+constructed exactly as before and only the node is recycled. To make the guard
+usually hold, the strand lambda drops its `shared_ptr` immediately after the
+drain block rather than at its own destruction; nothing after that point
+touches the strand. That timing affects *whether* the object is recycled, never
+whether the recycling is safe.
+
+Re-measured on `7d4ca453` (this change's base) with the same instrument,
+x86-64 Linux, **clang 22.1.8 / libstdc++ 16.2.1, Release**: the round trip went
+from **18.90 allocations / 1394.8 bytes** to **16.95 / 1244.6** — the full 2
+allocations and ~150 bytes the strand had left. Six alternating runs of each
+binary; spread within 0.1 allocations and 2 bytes per call. The magnitude is
+libstdc++-specific, as it was for morph#660.
 
 ## Thread safety
 
@@ -375,8 +402,9 @@ concurrently.
 - `MainThreadExecutor` guards its queue with `_m`. `post()` may be called from
   any thread, but `runFor()` must be called only from the single owning
   ("main") thread; concurrent `runFor()` calls are not supported.
-- `StrandExecutor` uses two lock levels: `_mapMtx` protects the `_strands` map
-  and the `_inFlight` counter, and each `Strand::mtx` protects that strand's
+- `StrandExecutor` uses two lock levels: `_mapMtx` protects the `_strands` map,
+  the `_spare` recycled node and the `_inFlight` counter, and each
+  `Strand::mtx` protects that strand's
   `pending` queue and `running` flag. Both operations that can break the
   per-key invariant hold `_mapMtx` across their whole decision: `post()` takes
   `_mapMtx`, does the slot lookup/create, and then — still holding `_mapMtx` —

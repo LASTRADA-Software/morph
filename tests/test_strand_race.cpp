@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <morph/core/executor.hpp>
 #include <morph/core/strand.hpp>
 #include <thread>
@@ -21,7 +23,7 @@
 // both strands dispatched tasks for that key concurrently — breaking the
 // per-model serialisation guarantee.
 //
-// This file holds two cases, and they cover different things. This first one is
+// This file holds three cases, and they cover different things. This first one is
 // a *load* test: it hammers post() on a single key from many threads, and every
 // task bumps a per-key in-flight counter on entry and drops it on exit, so if
 // two tasks for the same key ever run concurrently the counter exceeds 1 and the
@@ -39,7 +41,9 @@
 // not better.
 //
 // The second case below produces the shape this one cannot, and is the one that
-// fails against that mutant. Keep both: saturation and the drain boundary are
+// fails against that mutant. The third covers the node the drain now recycles
+// (morph#670), which neither of the first two can be wrong about. Keep all
+// three: saturation, the drain boundary, and the recycled node's key are
 // different failure modes of the same invariant.
 TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under contention", "[strand][race]") {
     constexpr int kThreads = 8;
@@ -293,6 +297,138 @@ TEST_CASE("StrandExecutor keeps one strand per key when a post races the drain",
         // without any two tasks having to overlap.
         CHECK(outOfOrder.load() == 0);
         REQUIRE(maxInFlight.load() == 1);
+    }
+}
+
+// The recycled map node (morph#670), which neither case above can be wrong
+// about.
+//
+// When a strand drains, `scheduleNext` no longer `erase`s the map entry: it
+// `extract`s it into a single-slot `_spare`, and the next `post()` that misses
+// re-keys that node and inserts it back. Re-keying is the new step, and it is
+// the one a functional test does not see. An entry left under the *previous*
+// key still serialises every task that reaches it, still runs them in order,
+// and still completes them all; what it corrupts is which key the map answers
+// for, and that only becomes a serialisation failure two posts later:
+//
+//   1. Key A drains, parking a node still keyed A.
+//   2. Key B misses and takes that node -- which, unkeyed, goes back into the
+//      map under A. B's first task starts running on a strand the map calls A,
+//      so `find(B)` still misses.
+//   3. B's *next* post therefore misses too, and installs a second strand for
+//      B while the first is still running its task. Two strands for one key:
+//      the invariant the two cases above exist for, reached through a door
+//      neither of them opens.
+//
+// Step 3 is what the shape below is for, and it is why this case is not simply
+// "post to several keys and let them drain". The mis-key is only observable
+// while a task is *still running* on the mis-keyed strand, so each round posts
+// a short burst back-to-back -- the second and third posts of a burst arrive
+// while the first is running, which on the correct code is an ordinary re-arm
+// and on the mutant is a second strand. Between rounds the key is allowed to
+// go quiet, which is what produces the drain step 1 needs; several keys
+// running this cycle out of phase is what carries a parked node from one key
+// to another. Measured, not assumed: with `_spare.key() = key;` deleted, this
+// case fails 10/10 under ThreadSanitizer, while a variant that drained between
+// every single post (no burst) passed 10/10 against the same mutant.
+//
+// Same three detectors as the case above, kept per key: an in-flight counter
+// for the symptom, plain (non-atomic) per-key state for the data race a
+// sanitizer sees whether or not the two tasks overlap in wall clock, and a
+// per-key FIFO check for an ordering break that needs no overlap at all.
+TEST_CASE("StrandExecutor recycles a drained strand under the key that asked for it", "[strand][race]") {
+    constexpr std::size_t kKeys = 3;
+    constexpr int kBurst = 4;
+    constexpr int kRounds = 900;
+    constexpr int kIterations = 6;
+    constexpr std::size_t kCells = 24;
+
+    for (int iter = 0; iter < kIterations; ++iter) {
+        // Same ordering rule as the cases above: the pool outlives the strand.
+        morph::exec::ThreadPoolExecutor pool{4};
+
+        // Declared outside the strand's scope so the drain in `~StrandExecutor`
+        // runs their final updates against live objects.
+        std::array<std::atomic<int>, kKeys> inFlight{};
+        std::array<std::atomic<int>, kKeys> maxInFlight{};
+        std::array<std::atomic<int>, kKeys> completed{};
+        std::array<std::atomic<int>, kKeys> outOfOrder{};
+        // Plain, per key, and touched only by that key's tasks: distinct
+        // objects, so a sanitizer report here means two tasks for the *same*
+        // key raced, never two keys sharing a cache line. Under the invariant
+        // this file exists for, the strand is the synchronisation and these
+        // accesses are data-race-free.
+        std::array<std::array<int, kCells>, kKeys> cells{};
+        std::array<int, kKeys> lastSeq{};
+
+        {
+            morph::exec::detail::StrandExecutor strand{pool};
+
+            std::vector<std::thread> producers;
+            producers.reserve(kKeys);
+            for (std::size_t slot = 0; slot < kKeys; ++slot) {
+                lastSeq.at(slot) = -1;
+                producers.emplace_back([&, slot] {
+                    // Distinct, non-zero ids: 0 is `ModelId`'s reserved
+                    // "unbound" sentinel.
+                    morph::exec::detail::ModelId const key{static_cast<uint64_t>(100 + slot)};
+                    for (int round = 0; round < kRounds; ++round) {
+                        for (int post = 0; post < kBurst; ++post) {
+                            int const seq = (round * kBurst) + post;
+                            strand.post(key, [&, slot, seq] {
+                                int const cur = inFlight.at(slot).fetch_add(1) + 1;
+                                int prev = maxInFlight.at(slot).load();
+                                while (cur > prev && !maxInFlight.at(slot).compare_exchange_weak(prev, cur)) {
+                                }
+                                if (seq <= lastSeq.at(slot)) {
+                                    outOfOrder.at(slot).fetch_add(1);
+                                }
+                                lastSeq.at(slot) = seq;
+                                // A little plain work rather than none: an
+                                // empty task gives an overlap a window a few
+                                // instructions wide, which is how a broken
+                                // strand can still report `maxInFlight == 1`.
+                                for (auto& cell : cells.at(slot)) {
+                                    cell += 1;
+                                }
+                                inFlight.at(slot).fetch_sub(1);
+                                completed.at(slot).fetch_add(1, std::memory_order_release);
+                            });
+                        }
+                        // Let this key go quiet before the next burst: the
+                        // drain that parks a node in `_spare` only fires from
+                        // an empty pending queue, and without this gap every
+                        // post after the first re-arms a strand that is
+                        // already in the map and the install path is never
+                        // reached at all.
+                        while (completed.at(slot).load(std::memory_order_acquire) < (round + 1) * kBurst) {
+                            std::this_thread::yield();
+                        }
+                    }
+                });
+            }
+            for (auto& producer : producers) {
+                producer.join();
+            }
+            // Closing this scope runs `~StrandExecutor`, which blocks until
+            // `_inFlight == 0`; see the first case for why that is a complete
+            // drain and not a deadline.
+        }
+
+        constexpr int kPerKey = kRounds * kBurst;
+        for (std::size_t slot = 0; slot < kKeys; ++slot) {
+            INFO("iteration " << iter << ", key slot " << slot << ": completed " << completed.at(slot).load() << " of "
+                              << kPerKey);
+            // `CHECK` for the counts, `REQUIRE` for the invariant: they answer
+            // different questions and stopping at the first would hide the
+            // others (see the first case).
+            CHECK(completed.at(slot).load() == kPerKey);
+            auto const [lowest, highest] = std::ranges::minmax_element(cells.at(slot));
+            CHECK(*lowest == kPerKey);
+            CHECK(*highest == kPerKey);
+            CHECK(outOfOrder.at(slot).load() == 0);
+            REQUIRE(maxInFlight.at(slot).load() == 1);
+        }
     }
 }
 
