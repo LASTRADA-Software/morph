@@ -212,7 +212,7 @@ Static Public Member Functions</h2></td></tr>
 <p><span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> owns exactly one active backend at a time. It tracks all registered <span class="tt">HandlerBinding</span> instances and re-registers them automatically when <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span> is called, enabling seamless local ↔ remote transitions.</p>
 <dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe. <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> takes a short snapshot of the backend <span class="tt">shared_ptr</span> under the dedicated <span class="tt">_backendMtx</span> (never <span class="tt">_mtx</span>), so it does not block <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00469">469</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a6a0b4e661e796d6b2a12be4866c2d49d" name="a6a0b4e661e796d6b2a12be4866c2d49d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6a0b4e661e796d6b2a12be4866c2d49d">&#9670;&#160;</a></span>Bridge()</h2>
@@ -246,7 +246,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00478">478</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00495">495</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -279,7 +279,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The <b>first</b> statement retires the lifetime gate (<span class="tt">detail::BridgeLifetime</span>), and it has to stay first: everything below it — clearing the reconnect handler, cancelling pending completions, and then the implicit destruction of every member — is state a concurrently-destroyed <span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a></span> would otherwise still be walking. <span class="tt">closeLifetime()</span> both publishes "this bridge is
 retired" and <b>waits out</b> any deregistration already inside the gate, so this destructor never overlaps one. That wait is bounded and cannot deadlock: see <span class="tt">detail::BridgeLifetime</span>. Issue #486. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00527">527</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -318,7 +318,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the new binding. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00529">529</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -353,7 +353,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00543">543</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00560">560</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -392,7 +392,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the new, unattached binding. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00556">556</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00573">573</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -442,7 +442,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00581">581</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00598">598</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -501,7 +501,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00667">667</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00684">684</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -536,7 +536,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00810">810</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00827">827</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -576,7 +576,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00834">834</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00851">851</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -628,7 +628,7 @@ main thread" rationale <span class="tt"><a class="el" href="#a4075023106e7be2251
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00980">980</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00997">997</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -664,7 +664,7 @@ main thread" rationale <span class="tt"><a class="el" href="#a4075023106e7be2251
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Canonical key string, or an empty string when unattached. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01055">1055</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01072">1072</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -701,7 +701,7 @@ bind") starts unbound and becomes bound only once <span class="tt">onRegistered<
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <span class="tt">currentId != 0</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01069">1069</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01086">1086</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -750,7 +750,7 @@ not bound" or polling <span class="tt"><a class="el" href="#aa13d46f5383cf39280c
 </li>
 </ul>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01100">1100</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01117">1117</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -788,7 +788,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Canonical key strings, in unspecified order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01132">1132</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01149">1149</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -841,7 +841,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01150">1150</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01167">1167</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -881,7 +881,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01160">1160</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01177">1177</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -912,7 +912,7 @@ template&lt;typename Model&gt; </div>
 <p>A single relaxed atomic load, so the overwhelmingly common case — a process with no subscribers at all — pays nothing per result. Without this, every successful action would build a <span class="tt">std::type_index</span>, copy its result into a <span class="tt">std::any</span>, take a lock and walk the (empty) subscription list before its <span class="tt">Completion</span> could resolve: a throughput regression for every existing caller, on the hot path, to serve a feature they are not using.</p>
 <p>Forwards to <span class="tt">_subscriptions</span> (<span class="tt">detail::SubscriptionRegistry</span>). </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if at least one subscription exists. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01176">1176</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01193">1193</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -961,7 +961,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01196">1196</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01213">1213</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -998,7 +998,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01211">1211</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01228">1228</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1037,7 +1037,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01253">1253</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01270">1270</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1067,7 +1067,7 @@ template&lt;typename Model&gt; </div>
 <p>Returns the currently installed client-side execute deadline. </p>
 <dl class="section return"><dt>Returns</dt><dd>The deadline; <span class="tt">std::chrono::milliseconds{0}</span> when disabled. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01263">1263</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01280">1280</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1097,7 +1097,7 @@ template&lt;typename Model&gt; </div>
 <p>Returns a copy of the currently installed default session. Thread-safe. </p>
 <dl class="section return"><dt>Returns</dt><dd>Snapshot of the default <span class="tt">Context</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01270">1270</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01287">1287</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1132,7 +1132,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01288">1288</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01305">1305</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1162,7 +1162,7 @@ template&lt;typename Model&gt; </div>
 <p>Returns a copy of the currently installed <span class="tt">Principal</span>. Thread-safe. </p>
 <p>Default-constructed (empty <span class="tt">id</span>, no <span class="tt">roles</span>) if <span class="tt"><a class="el" href="#aaa5a8eb690678014ee8403bfcdca07df" title="Installs the verified Principal for this Bridge. Thread-safe.">setPrincipal</a></span> was never called or the application signed out by clearing it. </p><dl class="section return"><dt>Returns</dt><dd>Snapshot of the installed <span class="tt">Principal</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01298">1298</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01315">1315</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1194,7 +1194,7 @@ template&lt;typename Model&gt; </div>
 loading" indicator or gate a feature on quiescence, without hand-rolling its own counter around every <span class="tt">execute()</span> call site. A single relaxed atomic load/increment/decrement: cheap enough to read on every frame of a UI loading spinner.</p>
 <dl class="section return"><dt>Returns</dt><dd>Count of actions dispatched but not yet resolved. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01320">1320</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01337">1337</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1242,7 +1242,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01351">1351</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01368">1368</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1278,7 +1278,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01363">1363</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01380">1380</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1313,7 +1313,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01439">1439</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01456">1456</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1377,7 +1377,7 @@ template&lt;typename Model, typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the typed result or an exception (including <span class="tt">ValidationError</span> on <span class="tt">LocalBackend</span> when the action fails its validator). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01495">1495</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01512">1512</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

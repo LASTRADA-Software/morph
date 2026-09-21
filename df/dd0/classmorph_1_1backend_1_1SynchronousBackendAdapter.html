@@ -806,14 +806,15 @@ Public Member Functions</h2></td></tr>
 <p>Not a plain forward, unlike everything else in this block, and for the same reason <span class="tt"><a class="el" href="#a239b4766ae16c0cc014d209da8737a43" title="This adapter&#39;s whole purpose is that the caller does not block.">bindWaitPolicy()</a></span> is not: the two verbs this adapter reshapes produce completions the wrapped backend has never heard of. A <span class="tt"><a class="el" href="#ac65e916ae8ff43ddcc165f42492960fc" title="Acquires a model instance without blocking the calling thread.">bindModel</a></span> here settles from a task on <span class="tt">_control</span>, so <span class="tt">_inner-&gt;<a class="el" href="#a0e2736666c6da8838faee69226b1083b" title="Rejects the completions this adapter produced, then forwards.">cancelPending</a></span> reaches nothing of it — before morph#619 a bind dispatched through this adapter went on to resolve <b>successfully</b> after cancellation, which is the exact opposite of what <span class="tt">IBackend::cancelPending</span> promises ("after this call, any later
 `setValue`/`setException` on those states is a no-op").</p>
 <p>The adapter's own promises are rejected first and the forward happens second: the strand task is still running <span class="tt">op()</span> while this executes, and rejecting before handing control to the wrapped backend keeps that window as short as the caller's own call. A task that finished first wins — its completion was not "still pending" — and a task that finishes after finds the promise settled, which <span class="tt">CompletionState::setValue</span>'s <span class="tt">if (ready) return;</span> makes a no-op.</p>
-<p><b>What this does not do:</b> a task already queued on <span class="tt">_control</span> still runs its blocking control call against the wrapped backend after this returns. The caller is told the bind was cancelled, but the registration may still happen — morph#636, since stopping it needs the task to check before calling <span class="tt">op()</span>, not the promise to be settled after it. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Settling the promise is only half of it, because it cannot stop work the strand has already been handed. Each dispatched task therefore carries a cancellation flag next to its promise, and this verb <b>sets that flag before rejecting</b>: a task still queued on <span class="tt">_control</span> sees it when it reaches the head of the strand and returns without calling <span class="tt">op()</span>, so the blocking control call never reaches the wrapped backend at all (morph#636). Without it the caller was told the bind was cancelled while the registration went through anyway — a live instance on a backend whose <span class="tt">Bridge</span> is gone, which nothing will ever <span class="tt"><a class="el" href="#ae493b39c8e6166f99773b78e64b36d92" title="Forwards to the wrapped backend.">deregisterModel</a></span>.</p>
+<p><b>What this still does not do:</b> a task already <em>inside</em> <span class="tt">op()</span> cannot be recalled. Only the queued-but-not-started window is closed, which is all this adapter can close — it has no way to interrupt a blocking verb it does not implement. A task that wins the race by a few instructions (flag read, then this store) registers exactly as one that had already entered <span class="tt">op()</span>, and its completion stays rejected either way. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">exc</td><td>Exception delivered to every still-pending completion, this adapter's own and then the wrapped backend's. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00894">894</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00905">905</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -848,7 +849,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00911">911</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00927">927</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -883,7 +884,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00915">915</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00931">931</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -918,7 +919,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00919">919</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00935">935</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -953,7 +954,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00923">923</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00939">939</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
