@@ -333,8 +333,20 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   morph#571 deleted the twins, so there is no such contract left to state — but
   the three sites name `exec::detail::inlineExecutor()` as the delivery
   executor, which reproduces the old delivery thread exactly: the continuation
-  runs wherever the backend settled. **The window is therefore unchanged, not
-  closed.** `QtWebSocketBackend` is still safe for the reason it always was: it
+  runs wherever the backend settled.
+
+  **Since morph#588 the window is closed for a `Bridge` that was given an
+  executor, and unchanged for one that was not.** The `bindModel`/
+  `promoteModel` argument is still `inlineExecutor()` — deliberately, because a
+  reply that settles inside the dispatch frame must reach `parkIfInFrame`
+  there, or `registerHandler()` stops being synchronous and `awaitHandoff`
+  deadlocks against its own executor's thread. What moved is the *late* reply,
+  the only one that has a thread left to choose: `detail::deliverLate` posts it
+  to the `bridgeExec` the constructor was given, so for an embedder whose
+  executor runs on the thread that also runs `~Bridge`, the check and the
+  destructor are two tasks on one thread and cannot interleave at all. With the
+  default null executor the delivery is inline and the window is exactly what
+  it was. `QtWebSocketBackend` is still safe for the reason it always was: it
   must itself be used from the Qt event loop thread and settles every reply
   from `onTextMessage` on that same thread, so the check and the use cannot
   straddle a destructor. Gating these instead would make `~Bridge` block behind
@@ -344,27 +356,32 @@ that bounded wait into an unbounded one. Four dispositions, by site:
 
   **What changed with the removal is who could get it wrong, not whether it can
   be wrong.** A backend that settles a `bindModel` completion on its own
-  transport thread would still reopen morph#486's use-after-free here; the
-  difference is that the delivery thread is now a value one call site produces
-  rather than an obligation on fifteen backend authors, so closing it is a
-  change in one place. That change — giving `Bridge` an executor of its own —
-  is morph#588 and has not been made.
+  transport thread reopens morph#486's use-after-free here for a bridge with no
+  `bridgeExec`; the difference morph#571 made is that the delivery thread is a
+  value one call site produces rather than an obligation on fifteen backend
+  authors, so closing it was a change in one place. morph#588 made it: the
+  choice is a constructor argument, and the residual exposure is the embedder's
+  own — supplying an executor on a thread unrelated to teardown satisfies the
+  type and closes nothing, which is stated where the argument is documented
+  rather than left to be discovered.
 
   The structural surface that replaces these four hooks —
   `IBackend::bindModel`/`promoteModel` — takes the executor the continuation is
   delivered on as an argument, so the delivery thread is chosen by the caller,
   which knows what its own teardown looks like, instead of by the backend, which
-  does not. `Bridge` now reaches it at all four sites (morph#568). **That does
-  not close the window above, and morph#568 does not claim it does**: `Bridge`
-  owns no event loop, so the executor it names is
+  does not. `Bridge` now reaches it at all five sites (morph#568, morph#615).
+  **That does not close the window above, and morph#568 does not claim it
+  does**: `Bridge` owns no event loop, so the executor it names is
   `exec::detail::inlineExecutor()` — "deliver wherever you settled", which is
   what the prose contract already required. What changed is where the decision
-  lives: one value produced at four `Bridge` call sites, rather than a
-  documented obligation on every `IBackend` implementor. Closing the window
-  means giving `Bridge` an executor bound to the thread that runs `~Bridge` and
-  naming that instead; nothing in the morph#522 set does that. See
-  [core/backend.md](core/backend.md#the-structural-registration-surface--bindmodel-and-promotemodel)
-  and morph#522.
+  lives: one value produced at five `Bridge` call sites, rather than a
+  documented obligation on every `IBackend` implementor. morph#588 then gave
+  `Bridge` an executor of its own and used it for the late replies — not in
+  place of the `inlineExecutor()` argument, which the in-frame settle needs, so
+  the two cases are now told apart by the handoff rather than by the executor.
+  See
+  [core/backend.md](core/backend.md#the-structural-registration-surface--bindmodel-and-promotemodel),
+  [core/bridge.md](core/bridge.md) and morph#522.
 
 `switchBackend()` and `whenBound()` were audited for the same shape and do not
 have it. Both are ordinary synchronous member functions called by the bridge's

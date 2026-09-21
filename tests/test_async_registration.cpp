@@ -2410,3 +2410,126 @@ TEST_CASE(
     CHECK(binding->currentId.load() != 0U);
     CHECK(binding->primary.empty());
 }
+
+// ── morph#588: the bridge's own executor for late registration replies ──────
+//
+// Every Bridge dispatch site names `inlineExecutor()` on the `bindModel`/
+// `promoteModel` call, so a reply that arrives after the dispatching frame has
+// gone used to be published on whichever thread the backend settled it on --
+// the morph#486 thread. `Bridge`'s optional `bridgeExec` constructor argument
+// is where that decision lives now. The three cases below pin the three halves
+// of the contract: a late reply goes through the executor, an in-frame reply
+// does not, and no executor means exactly the old behaviour.
+
+namespace {
+
+// Queues everything posted to it and runs nothing until drain() is called.
+// Deliberately never runs a task inside post(): a test that drains explicitly
+// can tell "the bridge posted this" from "the bridge ran it inline", which an
+// executor that ran tasks eagerly could not.
+class QueuedExecutor : public morph::exec::IExecutor {
+public:
+    void post(std::function<void()> task) override {
+        std::scoped_lock const lock{_mtx};
+        _queued.push_back(std::move(task));
+    }
+
+    [[nodiscard]] std::size_t queued() const {
+        std::scoped_lock const lock{_mtx};
+        return _queued.size();
+    }
+
+    // Runs every queued task on the calling thread, outside the mutex: a task
+    // is free to post another one.
+    std::size_t drain() {
+        std::vector<std::function<void()>> ready;
+        {
+            std::scoped_lock const lock{_mtx};
+            ready.swap(_queued);
+        }
+        for (auto& task : ready) {
+            task();
+        }
+        return ready.size();
+    }
+
+private:
+    mutable std::mutex _mtx;
+    std::vector<std::function<void()>> _queued;
+};
+
+}  // namespace
+
+TEST_CASE("Bridge(bridgeExec): a registration reply that misses its dispatch frame is published on that executor",
+          "[bridge][registration][issue588]") {
+    QueuedExecutor bridgeExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend), &bridgeExec};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AR_Model";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARModel>(); };
+    bridge.registerHandler(binding);
+    REQUIRE(rawBackend->pendingCount() == 1);
+    REQUIRE(binding->currentId.load() == 0U);
+    REQUIRE(bridgeExec.queued() == 0);
+
+    // The reply lands. Before morph#588 this published the id right here, on
+    // completeNext()'s own thread; now it is a task on the bridge's executor
+    // and nothing is published until that executor runs it. Restoring inline
+    // delivery makes the next two lines fail rather than merely not-prove.
+    rawBackend->completeNext();
+    CHECK(binding->currentId.load() == 0U);
+    REQUIRE(bridgeExec.queued() == 1);
+
+    CHECK(bridgeExec.drain() == 1);
+    CHECK(binding->currentId.load() != 0U);
+}
+
+TEST_CASE("Bridge(bridgeExec): a bind that settles inside the dispatch frame is still published by that frame",
+          "[bridge][registration][issue588]") {
+    // The other half of the contract, and the reason the `bindModel` call
+    // keeps naming `inlineExecutor()`: `registerHandler` is synchronous for a
+    // backend that binds inline, and must stay so even when the bridge holds
+    // an executor that will never run (a GUI executor whose loop is not
+    // pumping, or -- for `awaitHandoff` -- the very thread doing the waiting).
+    // This executor never drains, so anything routed through it is lost.
+    QueuedExecutor neverDrained;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), &neverDrained};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AR_KeyedModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARKeyedModel>(); };
+    bridge.registerHandler(binding);
+
+    CHECK(binding->currentId.load() != 0U);
+    CHECK(neverDrained.queued() == 0);
+
+    // Same for the keyed attach path, which publishes the primary before it
+    // returns so a caller reading `bindingPrimary()` on the next line sees it.
+    bridge.template attachHandler<ARKeyedModel>(binding, "k-588");
+    CHECK(bridge.bindingPrimary(binding) == "k-588");
+    CHECK(neverDrained.queued() == 0);
+}
+
+TEST_CASE("Bridge(): with no executor, a late registration reply is delivered inline, as before morph#588",
+          "[bridge][registration][issue588]") {
+    // The default. `Bridge`'s new argument must compose (framework invariant
+    // 2), so omitting it has to leave the pre-morph#588 behaviour byte for
+    // byte: the reply publishes on completeNext()'s own thread, with no
+    // executor anywhere in the path.
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AR_Model";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARModel>(); };
+    bridge.registerHandler(binding);
+    REQUIRE(binding->currentId.load() == 0U);
+
+    rawBackend->completeNext();
+    CHECK(binding->currentId.load() != 0U);
+}

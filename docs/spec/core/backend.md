@@ -311,12 +311,23 @@ event-loop thread passes that thread's executor and the two-step
 check-then-dereference can no longer straddle a destructor, by construction
 rather than by the backend author having read a `@note`.
 
-**And `Bridge` is not yet that caller.** Its four dispatch sites all name
-`exec::detail::inlineExecutor()`, which runs the continuation on whichever
-thread the backend settled on — deliberately the *old* delivery thread, so
-morph#568 and morph#571 change no observable threading. `Bridge` owns no event
-loop and has no thread of its own to name. So the window morph#486 describes is
-**unchanged, not closed**: the decision moved, the value did not. For
+**`Bridge` is that caller for half of it, since morph#588.** Its five dispatch
+sites still name `exec::detail::inlineExecutor()` on the `bindModel`/
+`promoteModel` call itself, and that is now a decision rather than an absence:
+an inline settle has to reach `Bridge::detail::parkIfInFrame` *inside* the
+dispatch frame, because that is what keeps `registerHandler()` synchronous for
+a backend that binds inline and what stops `detail::awaitHandoff` waiting on a
+task only the waiting thread could run. What morph#588 added is an executor for
+the other case — a reply that arrives after the dispatch frame has gone, which
+is the only one with a thread left to choose. `Bridge`'s constructor takes an
+optional `bridgeExec`, `detail::deliverLate` routes exactly those replies to
+it, and a null one (the default) runs them inline, where they ran before.
+
+So the window morph#486 describes is **closed for an embedder that supplies an
+executor whose thread also runs `~Bridge`** — the continuation and the
+destructor are then two tasks on one thread and cannot interleave — and
+**unchanged for one that does not**, which is every caller that has not been
+updated. What is no longer true is that `Bridge` has nothing to name. For
 `QtWebSocketBackend` the safety is the same by-construction safety it always
 had — it must itself be used from the Qt event loop thread and settles every
 reply from `onTextMessage` on that same thread, so the check and the use cannot
@@ -324,12 +335,13 @@ straddle a destructor. Its two non-reply paths do not weaken this either: a
 disconnected or no-op bind settles inline, inside the caller's own frame (which
 `Bridge::detail::parkIfInFrame` exists to handle), and `cancelPending` settles
 the remainder from `~Bridge` itself, which is not a *concurrent* destructor. A
-future backend that replied on its own transport thread would still reopen
-morph#486. Giving `Bridge` an executor of its own — which would change the
-window rather than merely move the decision — is **morph#588**, and is
-deliberately not part of morph#571: the guarantee this surface makes structural
-is a guarantee about *backends*, and for `Bridge`-mediated calls the delivery
-thread remains what the backend chose.
+future backend that replied on its own transport thread reopens morph#486 for
+a `Bridge` constructed without a `bridgeExec`, and does not for one constructed
+with a suitable one. That split is the whole of what morph#588 claims: the
+guarantee this surface makes structural is a guarantee about *backends*, and
+for `Bridge`-mediated calls the delivery thread is now the embedder's choice
+rather than the backend's — a contract one embedder can satisfy, instead of one
+every backend author must remember.
 
 `tests/test_backend_registration_surface.cpp` pins this: the backend settles
 from a thread that is asserted to be *not* the caller's, the caller's executor
@@ -692,11 +704,12 @@ The executor those call sites name is **`exec::detail::inlineExecutor()`**, whic
 runs the continuation on the thread that settled it. That is deliberately the
 *old* delivery thread, so neither morph#568 nor morph#571 changes observable
 *threading*: `Bridge` owns no event loop and has no thread of its own to name.
-Making it name a real one is the step that would turn the structural guarantee
-into a behaviour change, and it belongs to whichever ticket gives `Bridge` such
-an executor — see
+morph#588 left that argument alone — an inline settle must still be delivered
+inline, or `registerHandler()` stops being synchronous — and gave `Bridge` an
+optional executor for the replies that arrive *after* the dispatch frame
+instead. See
 [How the threading contract becomes structural](#how-the-threading-contract-becomes-structural)
-and morph#588.
+and [bridge.md](bridge.md), "The bridge's own executor".
 
 ## Error types
 

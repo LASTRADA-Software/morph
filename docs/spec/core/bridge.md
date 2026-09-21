@@ -12,6 +12,7 @@ that only know action names at runtime.
 - [Architecture overview](#architecture-overview)
 - [`HandlerBinding`](#handlerbinding)
 - [`Bridge`](#bridge)
+  - [The bridge's own executor](#the-bridges-own-executor)
 - [`BridgeHandler<Model>`](#bridgehandlermodel)
 - [Registration readiness — `isBound()` / `whenBound()`](#registration-readiness--isbound--whenbound)
 - [`ActionExecuteRegistry`](#actionexecuteregistry)
@@ -424,6 +425,62 @@ The bridge is the framework's own first consumer of the primitive every caller
 now gets (see [callback_scope.md](callback_scope.md)); it uses only the liveness
 half — it never calls `requestStop()`, so its tokens go inactive only when the
 `Bridge` is destroyed.
+
+### The bridge's own executor
+
+`Bridge`'s constructor takes an optional second argument, `IExecutor*
+bridgeExec` (morph#588). Every other completion in the framework is delivered
+on an executor its caller named — `BridgeHandler` supplies `guiExec`,
+`executeVia` takes a `cbExec`. The registrations the bridge issues *on its own
+behalf* had no such executor, and its five dispatch sites
+(`registerHandlerImpl`, `attachHandlerAsync`, `ensureBoundAsync`,
+`assignHandlerPrimary`, `rebindThroughSurface`) named
+`exec::detail::inlineExecutor()` instead: "deliver wherever the backend
+settled", written as a value rather than as a sentence in a doc comment.
+
+**What it is used for, and what it is not.** Exactly one thing: a registration
+reply that arrives *after* its dispatching frame has closed the
+`detail::AsyncDispatchHandoff` window (`detail::deliverLate`). A reply that
+settles while the dispatch call is still on the stack is parked by
+`detail::parkIfInFrame` and published by the dispatching frame itself, on the
+dispatching thread, whatever `bridgeExec` says.
+
+The `bindModel`/`promoteModel` calls therefore keep naming `inlineExecutor()`.
+That is a decision, not an omission left over from morph#568, and two things
+break if it is changed:
+
+- **`registerHandler()` stops being synchronous.** For every backend that binds
+  inline — `LocalBackend`, `SimulatedRemoteBackend`, any `kCallerMayBlock`
+  backend — the settle would become a task queued on `bridgeExec` rather than a
+  callback on this stack, so `claimHandoff` would find nothing parked and the
+  caller would get an unbound handler from a call that has always returned a
+  bound one.
+- **A `kCallerMayBlock` backend deadlocks.** `detail::awaitHandoff` stops the
+  dispatching thread until the reply is parked. If the reply is instead a task
+  on `bridgeExec` and the dispatching thread *is* the executor's thread — a GUI
+  embedder passing its GUI executor, which is the intended use — nothing will
+  ever run that task.
+
+**What the caller must guarantee.** `bridgeExec` is borrowed: it must outlive
+the bridge *and* every registration still in flight when the bridge is
+destroyed, because a late reply can land after `~Bridge` (the same requirement
+`BridgeHandler`'s `guiExec` already carries).
+
+**What it buys, stated exactly.** The morph#486 window in these callbacks is
+"check `CallbackToken::active()`, then touch the bridge". It is closed only if
+`bridgeExec` runs its tasks on a thread that cannot run `~Bridge` concurrently
+— for a Qt embedder, the GUI thread that both owns the `Bridge` and pumps the
+executor; the callback and the destructor are then two tasks on one thread and
+cannot interleave. An executor on some *other* thread satisfies the type and
+closes nothing. It makes nothing worse either: the callbacks' existing
+`CallbackToken`/`detail::BridgeLifetime` gates are unchanged, and with the null
+default the delivery is inline, byte for byte the pre-morph#588 behaviour.
+
+`tests/test_async_registration.cpp` pins all three halves: a late reply is
+queued on the executor and publishes nothing until it is drained (restoring
+inline delivery fails that case), an inline bind and a keyed attach still
+publish before `registerHandler`/`attachHandler` returns even when the executor
+never runs, and a bridge constructed without one behaves as it always did.
 
 ## `BridgeHandler<Model>`
 
@@ -839,7 +896,17 @@ never reach the callback body, `attachHandlerAsync`'s out-of-frame success
 callback is free to re-acquire `_attachMtx` for the two `std::string` fields it
 publishes (`HandlerBinding::contextKey`/`primary`, which every other reader
 takes that lock for); `ensureBoundAsync`'s publishes only the atomic
-`currentId` and needs no lock at all.
+`currentId` and needs no lock to store it.
+
+Both out-of-frame callbacks reach those publishes through one private helper,
+`publishLateBindReply`, which holds the four steps they share — the liveness
+check, the binding lock, the stale-backend comparison under `_attachMtx`, and
+the single `onDone` outside it — and takes what to publish as a callable. It is
+a template rather than a `std::function` parameter so the late path
+type-erases and allocates nothing. `assignHandlerPrimary`'s continuation
+deliberately does not use it: having no `onDone`, it drops a stale reply
+silently instead of reporting it, and that difference is intended rather than
+incidental.
 
 `whenBound()` synchronises on the *binding's* `registrationMtx`, never on a
 `Bridge` mutex, and never holds it across a callback: the resolver swaps the
@@ -948,7 +1015,7 @@ make teardown order-independent.)
 
 | Member | Signature | Notes |
 |---|---|---|
-| ctor | `explicit Bridge(unique_ptr<IBackend>)` | Installs reconnect handler on the backend, then pushes the (initially empty) default session via `setSession`. |
+| ctor | `explicit Bridge(unique_ptr<IBackend>, IExecutor* bridgeExec = nullptr)` | Installs reconnect handler on the backend, then pushes the (initially empty) default session via `setSession`. `bridgeExec` is where a registration reply that arrived after its dispatch frame is delivered; null (the default) delivers it inline, exactly as before morph#588. See [The bridge's own executor](#the-bridges-own-executor). |
 | dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
 | `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. Dispatches `IBackend::bindModel`; see `backend.md`. |
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
