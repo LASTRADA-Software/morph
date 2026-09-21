@@ -79,7 +79,7 @@ TEST_CASE("Every ledger bridge exposes exactly the surface gui/qml binds, and no
     //   * `busy` now gates a `BusyIndicator` in `LedgerView.qml`,
     //     `BudgetView.qml` and `RulesView.qml`. Its `busyChanged` NOTIFY needs
     //     no exemption of its own: the audit treats a property's NOTIFY as
-    //     covered by reading the property (testkit/qml_surface.cpp's signal
+    //     covered by reading the property (testkit_src/qml_surface.cpp's signal
     //     sweep), and that is exactly what these three views now do.
     //   * `ledgerBridge.refresh` is a "Refresh" button; `undoTransaction` is a
     //     journal-id field plus an "Undo" button, both in `LedgerView.qml`.

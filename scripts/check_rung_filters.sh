@@ -253,15 +253,33 @@ shopt -u nullglob
 # test file written afterwards failed the gate on 14 findings, every one of
 # them a REQUIRE.
 #
-# Two conditions, not one, and the second is the load-bearing one. The file
-# must subtract the check -- and it must carry `InheritParentConfig: true`,
-# because without that key clang-tidy *replaces* the parent configuration
-# instead of extending it: a directory holding `Checks:
-# '-bugprone-chained-comparison'` alone runs with no checks enabled whatsoever
-# and reports green while linting nothing. A suppression that silences more
-# than the false positive is worse than the finding it hides, so it is checked
-# here rather than left to review.
+# Three conditions, not one, and the second and third are the load-bearing
+# ones. The file must subtract the check -- and it must carry
+# `InheritParentConfig: true`, because without that key clang-tidy *replaces*
+# the parent configuration instead of extending it: a directory holding
+# `Checks: '-bugprone-chained-comparison'` alone runs with no checks enabled
+# whatsoever and reports green while linting nothing. A suppression that
+# silences more than the false positive is worse than the finding it hides, so
+# it is checked here rather than left to review.
+#
+# The third condition is morph#652: every .cpp the suppression reaches must
+# actually be a Catch2 translation unit. clang-tidy resolves configuration
+# from the TU's path, so a non-Catch2 source in one of these directories gets
+# the suppression on the strength of an argument -- "this finding is Catch2's
+# REQUIRE expansion" -- that is not true of it. That is not hypothetical:
+# examples/common/testkit/ held `fault_proxy.cpp` and `qml_surface.cpp`, the
+# two translation units of the morph_ladder_testkit *library*, neither with a
+# REQUIRE anywhere in it, while that directory's .clang-tidy told every reader
+# the suppression could not reach the code under test. They now live in
+# examples/common/testkit_src/, and this condition is what stops the next one
+# arriving unnoticed.
+#
+# "Catch2 translation unit" is read from the source rather than from any build
+# file, because no build file is available to the jobs that run this gate: a
+# TEST_CASE/SCENARIO macro, or an include of catch2/, or CATCH_CONFIG_* for a
+# Catch2 main such as testkit_main.cpp. A library TU has none of the three.
 readonly tidy_false_positive="bugprone-chained-comparison"
+readonly catch2_marker='TEST_CASE|SCENARIO|CATCH_CONFIG|catch2/'
 
 check_test_dir_tidy_config() {
     local dir="$1" why="$2"
@@ -287,6 +305,44 @@ check_test_dir_tidy_config() {
         return
     fi
     note "${dir}/.clang-tidy subtracts ${tidy_false_positive} and inherits every other check"
+
+    # morph#652. Recursive: the suppression reaches every subdirectory too
+    # (examples/bank/tests/gui/ is the live case), and clang-tidy walks up
+    # from the TU, so a nested source is governed exactly as a top-level one
+    # is.
+    local -a sources=()
+    local source
+    while IFS= read -r source; do
+        [ -n "$source" ] || continue
+        sources+=("$source")
+    done < <(find "${repo_root}/${dir}" -type f -name '*.cpp' | sort)
+
+    checks=$((checks + 1))
+    if [ "${#sources[@]}" -eq 0 ]; then
+        fail "${dir}/ carries the ${tidy_false_positive} suppression but holds no .cpp at all -- either the suppression is pointing at the wrong directory, or this scan has stopped seeing the tree. Both leave the check below examining nothing while reporting green."
+        return
+    fi
+
+    # One grep over the whole list rather than one per file: `-L` prints the
+    # files that did *not* match, which is exactly the set wanted here, and a
+    # per-file loop costs a process per source for no extra information.
+    local -a non_catch2=()
+    while IFS= read -r source; do
+        [ -n "$source" ] || continue
+        non_catch2+=("${source#"${repo_root}/"}")
+    done < <(grep -LE -- "$catch2_marker" "${sources[@]}")
+
+    if [ "${#non_catch2[@]}" -ne 0 ]; then
+        fail "${dir}/.clang-tidy subtracts ${tidy_false_positive} as *Catch2 idiom*, but ${#non_catch2[@]} of the ${#sources[@]} .cpp it governs contain no Catch2 at all:
+$(printf '    %s\n' "${non_catch2[@]}")
+    clang-tidy resolves configuration from the translation unit's path, so each
+    of these is analysed with the check off on the strength of an argument
+    about REQUIRE that does not apply to it -- morph#652. Move the source out
+    of this directory (examples/common/testkit_src/ is the precedent), or, if
+    it really is a test, give it the Catch2 include or macro that says so."
+        return
+    fi
+    note "all ${#sources[@]} .cpp under ${dir}/ are Catch2 translation units, so the suppression's own justification covers every file it reaches"
 }
 
 while IFS= read -r rung; do

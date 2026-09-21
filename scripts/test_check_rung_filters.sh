@@ -47,11 +47,28 @@ make_tree() {
     # the same "whatever the checker reads" rule as everything above -- the
     # directory has to exist for the check to fire at all, since a rung with no
     # tests/ yet is deliberately skipped.
+    #
+    # The .cpp files under each of those directories come too, because check 5
+    # now reads them: every source the suppression reaches must be a Catch2
+    # translation unit (morph#652). Copying the real ones rather than
+    # synthesising stand-ins keeps this self-test driving the gate against
+    # what the repository actually contains -- a synthetic corpus would go on
+    # passing after the real tree had grown a library source in one of these
+    # directories, which is the exact failure morph#652 records.
+    # Whole directory, in one `cp -r`, rather than the .clang-tidy alone: the
+    # sources beside it are read too now (check 5's third condition -- every
+    # .cpp the suppression reaches must be a Catch2 translation unit,
+    # morph#652). The real files rather than synthesised stand-ins, so this
+    # self-test keeps driving the gate against what the repository actually
+    # contains; a synthetic corpus would go on passing after the real tree had
+    # grown a library source in one of these directories, which is the exact
+    # failure morph#652 records. 2.3MB all told, and per-file copying here
+    # cost six thousand processes a run.
     for tidy in "${repo_root}"/examples/*/tests/.clang-tidy "${repo_root}"/examples/common/testkit/.clang-tidy; do
         [ -f "$tidy" ] || continue
         tidy_dir="$(dirname "${tidy#"${repo_root}/"}")"
-        mkdir -p "$dest/$tidy_dir"
-        cp "$tidy" "$dest/$tidy_dir/"
+        mkdir -p "$dest/$(dirname "$tidy_dir")"
+        cp -r "${repo_root}/${tidy_dir}" "$dest/${tidy_dir}"
     done
 }
 
@@ -190,6 +207,33 @@ expect_caught "a tests/.clang-tidy naming the check only in its comments" \
 expect_caught "a tests/.clang-tidy that replaces the root config instead of extending it" \
     "edit examples/lims/tests/.clang-tidy -e '/^InheritParentConfig:/d'" \
     "has no 'InheritParentConfig: true'"
+
+# morph#652's own defect, reintroduced: a library translation unit sharing a
+# directory with the Catch2 tests, so the suppression covers it on the
+# strength of an argument about REQUIRE that is not true of it. This is not a
+# hypothetical shape -- examples/common/testkit/ held morph_ladder_testkit's
+# two TUs for as long as that library existed, while the .clang-tidy beside
+# them told every reader the suppression could not reach the code under test.
+expect_caught "a non-Catch2 library source sharing the shared testkit's directory" \
+    "printf '// SPDX-License-Identifier: Apache-2.0\\nnamespace morph { int probe() { return 0; } }\\n' > examples/common/testkit/probe_library_tu.cpp" \
+    "examples/common/testkit/probe_library_tu.cpp"
+
+# The same shape one directory down, because the suppression reaches there
+# too: clang-tidy walks up from the translation unit, so a nested source is
+# governed exactly as a top-level one is. examples/bank/tests/gui/ is the live
+# case this generalises.
+expect_caught "a non-Catch2 library source in a subdirectory of a suppressed test directory" \
+    "mkdir -p examples/bank/tests/gui && printf '// SPDX-License-Identifier: Apache-2.0\\nnamespace bank { int probe() { return 0; } }\\n' > examples/bank/tests/gui/probe_library_tu.cpp" \
+    "examples/bank/tests/gui/probe_library_tu.cpp"
+
+# Vacuity guard on the scan that check 5's third condition runs. A directory
+# carrying the suppression and holding no .cpp at all means either the
+# suppression is pointing somewhere it does not belong, or this scan has
+# stopped seeing the tree -- and a scan that examines nothing reports "all
+# Catch2" exactly as loudly as one that examined everything.
+expect_caught "a suppressed test directory the .cpp scan finds nothing in" \
+    "find examples/common/testkit -name '*.cpp' -delete" \
+    "holds no .cpp at all"
 
 # The one-file shortcut that would satisfy every check above while taking the
 # check off every rung's src/, include/ and gui_lib/ as well.
