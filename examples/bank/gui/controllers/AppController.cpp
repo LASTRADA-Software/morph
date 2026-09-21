@@ -20,7 +20,7 @@ void AppController::adopt(const QString& principal, const QString& displayName) 
 
 void AppController::login(const QString& username, const QString& password) {
     _auth.execute(bank::dto::LoginRequest{.username = username.toStdString(), .password = password.toStdString()})
-        .then([this](bank::dto::AuthResult result) {
+        .then([this](const bank::dto::AuthResult& result) {
             if (result.ok) {
                 adopt(QString::fromStdString(result.principal), QString::fromStdString(result.displayName));
             } else {
@@ -35,7 +35,7 @@ void AppController::registerUser(const QString& username, const QString& passwor
         .execute(bank::dto::RegisterUser{.username = username.toStdString(),
                                          .password = password.toStdString(),
                                          .displayName = displayName.toStdString()})
-        .then([this](bank::dto::AuthResult result) {
+        .then([this](const bank::dto::AuthResult& result) {
             if (result.ok) {
                 adopt(QString::fromStdString(result.principal), QString::fromStdString(result.displayName));
             } else {

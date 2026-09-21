@@ -97,13 +97,13 @@ namespace {
     return QUrl::fromLocalFile(QStringLiteral(MORPH_LADDER_SOURCE_ROOT "/examples/bank/gui/qml/") + fileName);
 }
 
-/// @brief Index of @p id within a controller's published `accounts` list.
-/// @param accounts The `QVariantList` of account bags.
-/// @param id       Account id to locate.
+/// @brief Index of @p accountId within a controller's published `accounts` list.
+/// @param accounts  The `QVariantList` of account bags.
+/// @param accountId Account id to locate.
 /// @return Its index, or -1.
-[[nodiscard]] int indexOfAccount(const QVariantList& accounts, qlonglong id) {
+[[nodiscard]] int indexOfAccount(const QVariantList& accounts, qlonglong accountId) {
     for (int i = 0; i < accounts.size(); ++i) {
-        if (accounts.at(i).toMap().value(QStringLiteral("id")).toLongLong() == id) {
+        if (accounts.at(i).toMap().value(QStringLiteral("id")).toLongLong() == accountId) {
             return i;
         }
     }
@@ -112,6 +112,51 @@ namespace {
 
 }  // namespace
 
+// Both TEST_CASEs in this file carry a readability-function-cognitive-complexity
+// directive, and the argument for both of them is here.
+//
+// The check scores a whole TEST_CASE body and names it by what the macro
+// expands to -- Catch2's `dummyFunctionNN`. What it is scoring here is almost
+// entirely Catch2's assertion expansion rather than anything either test does:
+// REQUIRE/CHECK become
+// `do { ... try { ... } catch (...) { ... } } while ((void)0, (false) && ...)`,
+// and the metric charges +1 for the loop, +2 for the handler at nesting level 1
+// and +1 for the `&&` -- four points per assertion before a test has branched
+// on anything at all.
+//
+// Measured with the clang-tidy-diff job's own configure and its `-extra-arg`
+// pair, clang-tidy 22.1.8, threshold lowered to 1 so that both cases report
+// rather than only the one the job already fails on:
+//
+//     dummyFunction72, this case ......... 87, over 21 REQUIRE/CHECK
+//     dummyFunction76, the case below .... 45, over 11 REQUIRE/CHECK
+//
+// 21 x 4 = 84 and 11 x 4 = 44, so three points of the 87 and one of the 45 are
+// the whole of what the tests' own shape contributes -- the nested lambdas
+// here, the six-controller range-for there. Commenting a single CHECK out of
+// this case moves it 87 -> 83, so the four per assertion is measured rather
+// than arithmetic. Neither number is new: both are identical on this branch's
+// base, 7ab4c7a9. What is new is that the job reports one of them, because
+// clang-tidy-diff surfaces a finding when any of its notes lands on a changed
+// line, and the `balanceOf` lambda below is one of this finding's notes.
+//
+// Splitting is the alternative to a directive, and it cannot reach the
+// threshold. At four points an assertion, 25 means at most six assertions per
+// TEST_CASE; every fragment of this scenario has to re-register a user, open
+// two accounts, stand up a QQmlEngine, load MoveMoneyPage.qml and drive the
+// picker onto the savings account before it can assert anything of its own,
+// and that prologue is eight assertions -- 32 -- on its own. Hoisting it into a
+// helper moves the score into the helper instead of removing it. And morph#296's
+// defect *is* the sequence -- pick, deposit, still picked, deposit again, the
+// money followed the label -- which is the thing a split would scatter.
+//
+// Two per-case directives rather than one entry in
+// examples/bank/tests/.clang-tidy, which would subtract the check from every
+// bank test including the ones not written yet, and rather than a
+// NOLINTBEGIN/NOLINTEND span, which would also cover whatever is added between
+// them. Re-open this if either case's non-assertion residue stops being a
+// rounding error, or if an assertion ever stops costing four.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("MoveMoneyPage's picker keeps naming the account the next deposit will land in",
           "[bank][gui][qml][move-money]") {
     bankgui::BankClient client{connectionString()};
@@ -122,8 +167,8 @@ TEST_CASE("MoveMoneyPage's picker keeps naming the account the next deposit will
 
     morph::bridge::BridgeHandler<bank::CustomerModel> customer{client.bridge(), client.gui()};
     morph::bridge::BridgeHandler<bank::AccountModel> accountReads{client.bridge(), client.gui()};
-    const auto balanceOf = [&accountReads](qlonglong id) {
-        return awaitQt(accountReads.execute(bank::dto::GetAccount{.id = id})).balanceMinor;
+    const auto balanceOf = [&accountReads](qlonglong accountId) {
+        return awaitQt(accountReads.execute(bank::dto::GetAccount{.id = accountId})).balanceMinor;
     };
 
     // Two open accounts, so "the first one" and "the one the user picked" can
@@ -155,9 +200,10 @@ TEST_CASE("MoveMoneyPage's picker keeps naming the account the next deposit will
     REQUIRE(component.isReady());
     const std::unique_ptr<QObject> page{component.create()};
     REQUIRE(page != nullptr);
-    CHECK(firstWarning.toStdString() == std::string{});
+    INFO(firstWarning.toStdString());
+    CHECK(firstWarning.isEmpty());
 
-    QObject* picker = page->findChild<QObject*>(QStringLiteral("accountPicker"));
+    auto* picker = page->findChild<QObject*>(QStringLiteral("accountPicker"));
     REQUIRE(picker != nullptr);
 
     // ── AppShell's `Component.onCompleted: refreshCurrent()` ──────────────
@@ -207,6 +253,19 @@ TEST_CASE("MoveMoneyPage's picker keeps naming the account the next deposit will
     CHECK(balanceOf(checking) == 0);
 }
 
+// 45, over 11 REQUIRE/CHECK plus the six-controller range-for below. The
+// measurement, why that score is Catch2's expansion rather than a branch
+// thicket, why splitting cannot reach the threshold, and why this is a per-case
+// directive rather than an entry in examples/bank/tests/.clang-tidy, are all
+// set out above the first TEST_CASE in this file.
+//
+// This directive is armed rather than decorative, which the diff that
+// introduced it did not by itself show: the changed lines it shipped with never
+// reached this finding. Checked by deleting the directive and running
+// clang-tidy-diff over a one-line diff on the
+// `REQUIRE(pumpUntil([&app] { ... }))` line below -- the 45 is reported and the
+// run exits 1; with the directive back, the same diff is clean.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("Main.qml confirms a posted transaction and a paid bill in the toast", "[bank][gui][qml][toast]") {
     bankgui::BankClient client{connectionString()};
 
@@ -244,7 +303,7 @@ TEST_CASE("Main.qml confirms a posted transaction and a paid bill in the toast",
     const std::unique_ptr<QObject> window{component.create()};
     REQUIRE(window != nullptr);
 
-    QObject* toastText = window->findChild<QObject*>(QStringLiteral("toastText"));
+    auto* toastText = window->findChild<QObject*>(QStringLiteral("toastText"));
     REQUIRE(toastText != nullptr);
     const auto toastSays = [toastText] { return toastText->property("text").toString(); };
     REQUIRE(toastSays().isEmpty());

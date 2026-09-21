@@ -31,9 +31,9 @@ public:
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void issue(qlonglong accountId, int kind, const QString& limit);
-    Q_INVOKABLE void freeze(qlonglong id);
-    Q_INVOKABLE void unfreeze(qlonglong id);
-    Q_INVOKABLE void cancel(qlonglong id);
+    Q_INVOKABLE void freeze(qlonglong cardId);
+    Q_INVOKABLE void unfreeze(qlonglong cardId);
+    Q_INVOKABLE void cancel(qlonglong cardId);
 
 signals:
     void cardsChanged();
