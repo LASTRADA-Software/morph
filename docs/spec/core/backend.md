@@ -649,8 +649,26 @@ double-claim guard. A `Completion` cannot be settled twice — `CompletionState`
 drops the second settle before any `Bridge` code sees it — so
 `tests/test_async_registration.cpp`'s `DoubleFiringBackend` now pins the
 observable contract ("exactly one `onDone`") while that guard inside
-`parkIfInFrame` is no longer reachable from a backend at all. The guard is kept
-because `parkIfInFrame` is also called from the dispatching frame.
+`parkIfInFrame` is no longer reachable from a backend at all.
+
+morph#648 settled what to do about the now-unreachable arm, and corrected the
+reason recorded here: this section used to say the guard was kept "because
+`parkIfInFrame` is also called from the dispatching frame", which is false —
+the dispatching frame calls `claimHandoff`/`awaitHandoff`, and all eight
+`parkIfInFrame` call sites are completion callbacks. That the arm is
+unreachable is *measured*, not read: replacing its `return true` with an
+`abort()` and running `morph_tests` (1556 cases) and `morph_net_tests` (191)
+fires it zero times. It is kept anyway, for a different reason than the one
+that was written down — the invariant that makes it dead is a property of every
+current *caller*, not of the function, so a ninth site that does not park a
+single `Completion`'s outcome would resurrect it — and it is now pinned by a
+test that calls `parkIfInFrame` directly, twice on one handoff, rather than
+left as an arm whose deletion nothing would detect. The neighbouring
+`try`/`catch (...)` around the dispatch was decided separately and left alone:
+it is reachable by any out-of-tree `IBackend` override that throws out of
+`bindModel`, `IBackend` is a public extension point, and
+`ThrowingDispatchBackend` already exercises it — so it is covered defensive
+code, not dead code.
 
 `Bridge::installReconnectHandler` and `Bridge::switchBackend`'s phase 1 were
 the two dispatch sites morph#568 did **not** move: both still called the

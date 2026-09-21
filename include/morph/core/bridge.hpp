@@ -335,6 +335,20 @@ struct AsyncDispatchHandoff {
 ///         call is still on the dispatcher's stack (which owns the outcome from
 ///         here on) or because another callback already claimed this dispatch.
 ///         `false` if the caller owns the outcome and should deliver it itself.
+///
+/// @par Reachability of the double-claim arm
+/// No backend can reach it today, and that is a property of the callers rather
+/// than of this function (morph#648). Every one of the eight call sites below
+/// is a `.then`/`.onError` on one `Completion`, and a `CompletionState` settles
+/// once — the second `resolve`/`reject` is a documented no-op — so exactly one
+/// of the two lambdas runs, exactly once, and `fired` is always `false` on
+/// entry. Measured, not assumed: replacing the arm's `return true` with an
+/// `abort()` runs the whole suite (1556 cases) plus `morph_net_tests` (191)
+/// without firing. The arm is kept because the invariant that makes it dead is
+/// every *current* caller's, and a ninth site that does not park a single
+/// `Completion`'s outcome would need it again; `tests/test_async_registration.cpp`
+/// calls this function directly so the arm is pinned by a test rather than
+/// merely unreached.
 inline bool parkIfInFrame(AsyncDispatchHandoff& handoff, bool succeeded, ::morph::exec::detail::ModelId modelId,
                           std::exception_ptr failure) {
     bool inFrame = false;
@@ -342,7 +356,10 @@ inline bool parkIfInFrame(AsyncDispatchHandoff& handoff, bool succeeded, ::morph
         std::scoped_lock const guard{handoff.mtx};
         if (handoff.fired) {
             // A backend is contractually allowed exactly one callback per dispatch;
-            // swallow a second one rather than reporting twice.
+            // swallow a second one rather than reporting twice. Unreachable from
+            // a backend since morph#571 put every dispatch behind one
+            // `Completion` -- see @par Reachability above for what that rests on
+            // and why the arm stays.
             return true;
         }
         handoff.fired = true;

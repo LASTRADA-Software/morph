@@ -394,6 +394,8 @@ public:
 // settle before any Bridge code sees it -- so this double now pins the
 // *observable* contract ("exactly one onDone") while the guard inside
 // parkIfInFrame is no longer reachable from a backend. See the PR for morph#571.
+// The guard itself is pinned by a direct call to parkIfInFrame instead
+// (morph#648), next to the test case this double drives.
 class DoubleFiringBackend : public AsyncRegisterBackend {
 public:
     ModelCompletion bindModel(morph::backend::detail::BindRequest request, morph::exec::IExecutor& cbExec) override {
@@ -2156,11 +2158,17 @@ TEST_CASE("execute() surfaces a throwing ActionKeyTraits::key() through onError 
 
 TEST_CASE("attachHandlerAsync reports exactly once even when the backend fires its callback twice inline",
           "[bridge][registration][shared-instances][issue26]") {
-    // DoubleFiringBackend violates bindModel's documented one-settle
-    // contract on purpose: detail::parkIfInFrame's `handoff.fired` guard must
-    // swallow the second, already-claimed callback rather than letting
-    // attachHandlerAsync invoke onDone (and, downstream, publish the binding)
-    // twice for a single dispatch.
+    // DoubleFiringBackend violates bindModel's documented one-settle contract
+    // on purpose: attachHandlerAsync must still invoke onDone (and, downstream,
+    // publish the binding) exactly once for a single dispatch.
+    //
+    // What makes that hold is CompletionState, not detail::parkIfInFrame's
+    // `handoff.fired` guard -- this comment used to name the guard, and was
+    // wrong from morph#571 onwards (morph#648). The second promise.resolve()
+    // below is dropped by the already-settled state before any Bridge code
+    // sees it, so parkIfInFrame is entered once and its double-claim arm is
+    // never taken. That arm is pinned separately, by the direct-call case
+    // below this one; what this case pins is the observable contract.
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<DoubleFiringBackend>()};
     morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
@@ -2177,6 +2185,38 @@ TEST_CASE("attachHandlerAsync reports exactly once even when the backend fires i
     CHECK(completions == 1);
     CHECK(result.load() == 6);
     CHECK(handler.primary().value_or(-1) == 21);
+}
+
+TEST_CASE("parkIfInFrame swallows a second claim on the same handoff and keeps the first outcome",
+          "[bridge][registration][shared-instances][issue26]") {
+    // The arm the case above used to claim to exercise, driven where it can
+    // actually be reached: directly (morph#648).
+    //
+    // No backend reaches it any more -- every dispatch site parks one
+    // Completion's outcome, and a CompletionState settles once -- so without
+    // this case the arm is dead code whose deletion nothing would detect.
+    // Verified by mutation: with `if (handoff.fired) return true;` deleted from
+    // detail::parkIfInFrame, the whole suite still passes and only this case
+    // fails. parkIfInFrame is a free function in `detail`, and the invariant
+    // that makes the arm unreachable belongs to its callers, so its contract is
+    // pinned here rather than inferred from the callers that happen to exist.
+    morph::bridge::detail::AsyncDispatchHandoff handoff;
+    handoff.inFrame = false;  // The dispatching frame has already returned.
+
+    auto const first =
+        morph::bridge::detail::parkIfInFrame(handoff, true, morph::exec::detail::ModelId{41}, nullptr);
+    CHECK_FALSE(first);  // Out of frame: the first claimant owns the outcome.
+    CHECK(handoff.fired);
+
+    auto const second = morph::bridge::detail::parkIfInFrame(
+        handoff, false, morph::exec::detail::ModelId{}, std::make_exception_ptr(std::runtime_error("second")));
+    CHECK(second);  // Already claimed: the caller must not report it.
+
+    // ...and the second claim left the first outcome untouched, so a frame
+    // that had not yet called claimHandoff still picks up the real one.
+    CHECK(handoff.succeeded);
+    CHECK(handoff.modelId.v == 41U);
+    CHECK(handoff.failure == nullptr);
 }
 
 TEST_CASE("attachHandlerAsync's out-of-frame success callback is a genuine no-op once the binding itself is gone",
