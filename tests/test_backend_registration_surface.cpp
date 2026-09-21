@@ -770,9 +770,10 @@ TEST_CASE("morph::backend::SynchronousBackendAdapter: cancelPending rejects the 
 // `SynchronousBackendAdapter::dispatch`'s task, this case fails on
 // `entered == 2` (it sees 3).
 
-TEST_CASE("morph::backend::SynchronousBackendAdapter: cancelPending stops a queued control call from ever reaching "
-          "the wrapped backend",
-          "[backend][registration-surface][threading]") {
+TEST_CASE(
+    "morph::backend::SynchronousBackendAdapter: cancelPending stops a queued control call from ever reaching "
+    "the wrapped backend",
+    "[backend][registration-surface][threading]") {
     morph::exec::ThreadPoolExecutor pool{1};
     morph::exec::MainThreadExecutor callerExec;
     auto inner = std::make_shared<GatedBackend>();
@@ -797,9 +798,8 @@ TEST_CASE("morph::backend::SynchronousBackendAdapter: cancelPending stops a queu
     }
     SECTION("promote") {
         dispatchOne = [&] {
-            return adapter.promoteModel(PromoteRequest{.mid = ModelId{7}, .typeId = std::string{kTypeId},
-                                                       .primary = "key"},
-                                        callerExec);
+            return adapter.promoteModel(
+                PromoteRequest{.mid = ModelId{7}, .typeId = std::string{kTypeId}, .primary = "key"}, callerExec);
         };
     }
 

@@ -2203,13 +2203,12 @@ TEST_CASE("parkIfInFrame swallows a second claim on the same handoff and keeps t
     morph::bridge::detail::AsyncDispatchHandoff handoff;
     handoff.inFrame = false;  // The dispatching frame has already returned.
 
-    auto const first =
-        morph::bridge::detail::parkIfInFrame(handoff, true, morph::exec::detail::ModelId{41}, nullptr);
+    auto const first = morph::bridge::detail::parkIfInFrame(handoff, true, morph::exec::detail::ModelId{41}, nullptr);
     CHECK_FALSE(first);  // Out of frame: the first claimant owns the outcome.
     CHECK(handoff.fired);
 
-    auto const second = morph::bridge::detail::parkIfInFrame(
-        handoff, false, morph::exec::detail::ModelId{}, std::make_exception_ptr(std::runtime_error("second")));
+    auto const second = morph::bridge::detail::parkIfInFrame(handoff, false, morph::exec::detail::ModelId{},
+                                                             std::make_exception_ptr(std::runtime_error("second")));
     CHECK(second);  // Already claimed: the caller must not report it.
 
     // ...and the second claim left the first outcome untouched, so a frame
