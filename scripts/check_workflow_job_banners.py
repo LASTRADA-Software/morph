@@ -46,11 +46,19 @@ an error. An exemption has to be necessary to be allowed to stay.
 ## Scope
 
 Workflows that contain no banner at all are skipped, and that is derived from
-the file rather than listed here: docs.yml, mutation.yml, spec-sync.yml,
-suppression-guard.yml and the two wasm workflows are single-job files that have
-never used the banner style, and a gate that demanded they adopt it would be
-inventing a convention rather than enforcing one. A file that adopts its first
-banner opts into both rules for all of its jobs.
+the file rather than listed here: at the time of writing docs.yml,
+mutation.yml, spec-sync.yml and the two wasm workflows are single-job files
+that have never used the banner style, and a gate that demanded they adopt it
+would be inventing a convention rather than enforcing one. A file that adopts
+its first banner opts into both rules for all of its jobs.
+
+That list of five files is an illustration with a shelf life, not an input.
+Nothing reads it, the skip is recomputed from each file on every run, and a
+run prints one `no section banners, not in the banner style` line per skipped
+file -- that output, not this paragraph, is the current list. Deleting a
+workflow therefore cannot change what the gate does, only date this sentence,
+which is exactly what happened when morph#635 deleted suppression-guard.yml
+and left its name here (morph#643).
 
 Finding zero banners across the whole tree is a failure, not a pass -- a gate
 with nothing left to check reports green exactly as loudly as one that checked
