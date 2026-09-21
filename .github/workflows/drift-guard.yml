@@ -232,7 +232,7 @@ jobs:
       # nothing, so it rides this job for the same reason the NOLINT-directive,
       # CI-clang-pin and Catch2-name scans above do.
       #
-      # This one ships already green -- 0 raw controls across 1242 tracked
+      # This one ships already green -- 0 raw controls across 1244 tracked
       # files -- which makes the self-test the whole of its evidence rather
       # than a formality. "0 occurrences found" is exactly what a broken
       # detector prints, so the checker probes its own detector against every

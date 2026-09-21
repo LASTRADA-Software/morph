@@ -57,7 +57,7 @@ reorder rendered text rather than merely nudging a neighbouring run.
 
 A scan that reports "0 raw controls" is satisfied by a broken pattern exactly
 as well as by a clean tree, and the tree *is* clean today (0 occurrences across
-1242 tracked files), so this gate ships already green. It would therefore be
+1244 tracked files at f7c231df), so this gate ships already green. It would therefore be
 worth nothing unless both ways of going blind are closed:
 
   1. **The detector drifts away from the declared set.** Before scanning

@@ -5,7 +5,7 @@
 # bidirectional control characters out of first-party files (morph#628).
 #
 # This gate needs its own test more than most, for a reason its own subject
-# makes sharp. The tree is already clean -- 0 raw controls across 1242 tracked
+# makes sharp. The tree is already clean -- 0 raw controls across 1244 tracked
 # files -- so the gate passes on day one whether or not it can detect anything
 # at all, and the thing it would be failing to detect is by definition
 # invisible. "0 occurrences found" is exactly what a broken detector prints.

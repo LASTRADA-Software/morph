@@ -4,7 +4,14 @@
 // trojan-source characters: they change how the line renders relative to
 // how it compiles, so the reviewer and the compiler read different
 // programs.
+//
+// `inline` keeps clang-diagnostic-unused-const-variable off a fixture
+// nothing compiles; see invalid/arabic_letter_mark/.
 
-constexpr const char* kEmbed = "‪a‬";
-constexpr const char* kEmbedRtl = "‫a‬";
-constexpr const char* kOverride = "‭a‮b";
+inline constexpr const char* kEmbed = "‪a‬";
+inline constexpr const char* kEmbedRtl = "‫a‬";
+// LRE with no terminating PDF: misc-misleading-bidirectional reads the
+// string's *content* and is right about it. This gate reads the source
+// *bytes*, which is why the fixture has to keep them.
+// NOLINTNEXTLINE(misc-misleading-bidirectional)
+inline constexpr const char* kOverride = "‭a‮b";
