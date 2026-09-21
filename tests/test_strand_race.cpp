@@ -286,7 +286,7 @@ TEST_CASE("StrandExecutor keeps one strand per key when a post races the drain",
         // Lost updates to the plain state: the sanitizer-free reading of the
         // same defect the TSan legs see as a data race on it.
         CHECK(executedPlain == static_cast<long long>(kExpected));
-        auto const [lowest, highest] = std::minmax_element(cells.begin(), cells.end());
+        auto const [lowest, highest] = std::ranges::minmax_element(cells);
         CHECK(*lowest == kExpected);
         CHECK(*highest == kExpected);
         // FIFO per key is part of the contract, and an orphaned strand breaks it
