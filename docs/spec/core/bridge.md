@@ -152,7 +152,8 @@ action. Takes a short snapshot of the backend `shared_ptr` under the dedicated
 `_backendMtx` (never `_mtx`) plus a lock-free atomic read of the binding's
 `currentId`, so it never blocks on `switchBackend()`'s `_mtx`. If `currentId` is 0,
 completes immediately with `"handler not bound"`. Constructs an `ActionCall`
-with serialization/deserialization lambdas and a `localOp` that, on
+holding one `make_shared<Action>` and three stateless function pointers — the
+serialiser, the deserialiser, and a `localOp` that, on
 `LocalBackend`, first overwrites any declared computed fields from their
 inputs (`morph::forms::recomputeAll`, [forms.md](../forms/forms.md), a no-op
 for actions with no `computedFields`) — the authoritative recompute for
@@ -168,11 +169,21 @@ with; actions with no validator are unaffected (`ready()` defaults to
 `true`). No JSON is involved on this path, so there is no declared-precision
 reconciliation step here (that only applies to decoded wire payloads); the
 `Quantity` fields carry whatever precision the caller constructed them with.
+The `ActionCall` the two type ids are stamped onto holds them as
+`std::string_view`s of the `constexpr` literals `BRIDGE_REGISTER_MODEL` /
+`BRIDGE_REGISTER_ACTION` were given, and the three callables are plain function
+pointers reading the action out of `ActionCall::action`. Nothing in this block
+captures, so nothing in it allocates but the action itself — which matters
+because it runs on every call, including the `LocalBackend` calls that will
+never look at the two remote-path callables. See
+[backend.md](backend.md), "Why the callables are function pointers", for the
+measurement and for the borrow contract that shape carries.
+
 **`localOp` is compiled — and so needs `Model::execute`'s definition to
 link — every time `executeVia<Model, Action>` is instantiated, regardless of
 which backend ends up installed at runtime.** Only `LocalBackend::execute`
 ever actually calls `call.localOp`; every remote backend ignores it entirely.
-But the closure itself is still compiled into the instantiation, so a build
+But the function itself is still compiled into the instantiation, so a build
 that only ever installs a remote backend still forces the linker to resolve
 `Model::execute` — see `registry.md`, "`MORPH_CLIENT_ONLY`". When
 `MORPH_CLIENT_ONLY` is defined, `localOp`'s body is replaced with a

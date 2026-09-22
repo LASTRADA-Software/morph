@@ -273,9 +273,9 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: execute error reply is delive
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "Cov_RemoteModel";
     call.actionTypeId = "Cov_RemoteFail";
-    call.serializeAction = [] { return std::string{"{}"}; };
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
-    call.localOp = [](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> { return nullptr; };
+    call.localOp = [](morph::model::detail::IModelHolder&, void*) -> std::shared_ptr<void> { return nullptr; };
 
     auto comp = backend.execute(mid, std::move(call), &cb);
 
@@ -622,9 +622,9 @@ TEST_CASE("morph::backend::LocalBackend: execute with an unknown morph::exec::de
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "Cov_NotRegisteredModel";
     call.actionTypeId = "Cov_NotRegisteredAction";
-    call.serializeAction = [] { return std::string{"{}"}; };
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
-    call.localOp = [](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> { return nullptr; };
+    call.localOp = [](morph::model::detail::IModelHolder&, void*) -> std::shared_ptr<void> { return nullptr; };
 
     auto comp = backend.execute(morph::exec::detail::ModelId{9999U}, std::move(call), &cb);
     std::atomic<bool> errored{false};

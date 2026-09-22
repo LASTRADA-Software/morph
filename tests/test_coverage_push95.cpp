@@ -340,9 +340,9 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: empty err message surfaces as
     ::morph::backend::detail::ActionCall call;
     call.modelTypeId = "Cov_EmptyThrowModel";
     call.actionTypeId = "Cov_EmptyThrowAction";
-    call.serializeAction = [] { return std::string{"{}"}; };
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
-    call.localOp = [](::morph::model::detail::IModelHolder&) -> std::shared_ptr<void> { return nullptr; };
+    call.localOp = [](::morph::model::detail::IModelHolder&, void*) -> std::shared_ptr<void> { return nullptr; };
 
     auto comp = backend.execute(mid, std::move(call), &cb);
 
@@ -378,9 +378,9 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: cancelPending tolerates an ex
         ::morph::backend::detail::ActionCall call;
         call.modelTypeId = "Cov_EmptyThrowModel";
         call.actionTypeId = "Cov_EmptyThrowAction";
-        call.serializeAction = [] { return std::string{"{}"}; };
+        call.serializeAction = [](const void*) { return std::string{"{}"}; };
         call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
-        call.localOp = [](::morph::model::detail::IModelHolder&) -> std::shared_ptr<void> { return nullptr; };
+        call.localOp = [](::morph::model::detail::IModelHolder&, void*) -> std::shared_ptr<void> { return nullptr; };
 
         auto comp = backend.execute(mid, std::move(call), &cb);
         // Wait for the reply lambda to run so it releases its ref to the state.
@@ -412,9 +412,9 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: cancelPending resolves a stil
     ::morph::backend::detail::ActionCall call;
     call.modelTypeId = "Cov_EmptyThrowModel";
     call.actionTypeId = "Cov_SlowAction";
-    call.serializeAction = [] { return std::string{"{}"}; };
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
-    call.localOp = [](::morph::model::detail::IModelHolder&) -> std::shared_ptr<void> { return nullptr; };
+    call.localOp = [](::morph::model::detail::IModelHolder&, void*) -> std::shared_ptr<void> { return nullptr; };
 
     auto comp = backend.execute(mid, std::move(call), &cb);
 

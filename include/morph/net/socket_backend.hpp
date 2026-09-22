@@ -459,7 +459,7 @@ public:
         env.modelId = mid.v;
         env.modelType = call.modelTypeId;
         env.actionType = call.actionTypeId;
-        env.body = call.serializeAction();
+        env.body = call.serializeBody();
         env.session = std::move(call.session);
 
         // _connected is re-checked *inside* the table's lock, via insertIf's

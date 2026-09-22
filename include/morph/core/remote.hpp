@@ -2053,7 +2053,7 @@ public:
         env.modelId = mid.v;
         env.modelType = call.modelTypeId;
         env.actionType = call.actionTypeId;
-        env.body = call.serializeAction();
+        env.body = call.serializeBody();
         env.session = std::move(call.session);
         auto deser = std::move(call.deserializeResult);
 

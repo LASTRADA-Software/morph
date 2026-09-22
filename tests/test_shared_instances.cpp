@@ -1388,7 +1388,7 @@ TEST_CASE("an attach racing a failed first action out of the dispatch is not han
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SHI_CounterModel";
     call.actionTypeId = "SHI_HydrateFail";
-    call.localOp = [](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> {
+    call.localOp = [](morph::model::detail::IModelHolder&, void*) -> std::shared_ptr<void> {
         throw std::runtime_error("hydration failed");
     };
     std::atomic<bool> errored{false};
@@ -1507,7 +1507,7 @@ TEST_CASE("an instance evicted from its key as poisoned is never re-keyed by ass
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SHI_CounterModel";
     call.actionTypeId = "SHI_HydrateFail";
-    call.localOp = [](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> {
+    call.localOp = [](morph::model::detail::IModelHolder&, void*) -> std::shared_ptr<void> {
         throw std::runtime_error("hydration failed");
     };
     std::atomic<bool> errored{false};

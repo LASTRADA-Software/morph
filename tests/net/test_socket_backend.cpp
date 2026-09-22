@@ -457,7 +457,7 @@ TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not consumed b
     morph::backend::detail::ActionCall call{
         .modelTypeId = "SbEchoModel",
         .actionTypeId = "SbEchoAction",
-        .serializeAction = [] { return std::string{R"({"value":7})"}; },
+        .serializeAction = [](const void*) { return std::string{R"({"value":7})"}; },
         .deserializeResult =
             [](std::string_view body) { return std::static_pointer_cast<void>(std::make_shared<std::string>(body)); },
         .localOp = nullptr,
@@ -901,7 +901,7 @@ TEST_CASE("SocketBackend: an undecodable message from the server with no sync ca
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SbEchoModel";
     call.actionTypeId = "SbEchoAction";
-    call.serializeAction = [] { return std::string{"{}"}; };
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
 
     // Drain the outgoing "execute" request off the wire first, so the pending
@@ -964,7 +964,7 @@ TEST_CASE("SocketBackend: an execute reply with an unrecognized callId from the 
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SbEchoModel";
     call.actionTypeId = "SbEchoAction";
-    call.serializeAction = [] { return std::string{"{}"}; };
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
     call.deserializeResult = [](std::string_view body) -> std::shared_ptr<void> {
         return std::make_shared<int>(std::stoi(std::string{body}));
     };
@@ -995,7 +995,7 @@ TEST_CASE("SocketBackend: execute resolves with an exception when the server's o
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SbEchoModel";
     call.actionTypeId = "SbEchoAction";
-    call.serializeAction = [] { return std::string{"{}"}; };
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
     call.deserializeResult = [](std::string_view body) -> std::shared_ptr<void> {
         return std::make_shared<int>(std::stoi(std::string{body}));  // throws on non-numeric garbage
     };
@@ -1039,8 +1039,10 @@ TEST_CASE("SocketBackend: a send blocked past sendTimeout tears the connection d
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SbEchoModel";
     call.actionTypeId = "SbEchoAction";
-    std::string bigPayload(std::size_t{4} * 1024 * 1024, 'x');  // far past the shrunken receive buffer
-    call.serializeAction = [&] { return bigPayload; };
+    // The payload rides in `call.action` rather than in a capture:
+    // `serializeAction` is a function pointer, so it has nowhere to capture to.
+    call.action = std::make_shared<std::string>(std::size_t{4} * 1024 * 1024, 'x');  // far past the receive buffer
+    call.serializeAction = [](const void* payload) { return *static_cast<const std::string*>(payload); };
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
     (void)backend.execute(morph::exec::detail::ModelId{1}, std::move(call), nullptr);
 
@@ -1193,7 +1195,7 @@ TEST_CASE("SocketBackend: execute while disconnected resolves immediately with D
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SbEchoModel";
     call.actionTypeId = "SbEchoAction";
-    call.serializeAction = [] { return std::string{"{}"}; };
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
 
     std::atomic<bool> gotDisconnected{false};
@@ -1370,7 +1372,7 @@ TEST_CASE("SocketBackend: sendFrame-triggering calls racing a hard disconnect ne
                     morph::backend::detail::ActionCall call;
                     call.modelTypeId = "SbEchoModel";
                     call.actionTypeId = "SbEchoAction";
-                    call.serializeAction = [] { return std::string{"{}"}; };
+                    call.serializeAction = [](const void*) { return std::string{"{}"}; };
                     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
                     (void)backend.execute(mid, std::move(call), nullptr);
                     try {
@@ -2198,7 +2200,7 @@ TEST_CASE("SocketBackend: a private registration carries contextKey to the serve
         morph::backend::detail::ActionCall call{
             .modelTypeId = "SbEchoModel",
             .actionTypeId = "SbEchoAction",
-            .serializeAction = [] { return std::string{R"({"value":7})"}; },
+            .serializeAction = [](const void*) { return std::string{R"({"value":7})"}; },
             .deserializeResult =
                 [](std::string_view body) {
                     return std::static_pointer_cast<void>(std::make_shared<std::string>(body));

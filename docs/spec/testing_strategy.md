@@ -231,23 +231,65 @@ counts the heap allocations one `Ping -> Pong` round trip costs through
 no socket — and prints the total, the bytes, and (with `--attribute`) the size
 of every allocation in one steady-state call.
 
+It also runs a second, much narrower census: `ActionDispatcher::coalesce` and
+`requiredFieldsFor`, 200 times each, over two registered pairs whose ids sit on
+either side of libstdc++'s 15-character SSO buffer. Those two calls decode
+nothing and execute nothing, so what they allocate is exactly what looking a
+registry key up costs — which is what makes the figure a measurement of
+morph#572's Part C rather than of the JSON codec.
+
 It exists because morph#572 is scoped by a number that three later pull
 requests invalidated, and re-deriving such a number from a prose description of
 how it was once taken is how a fix ends up built against a figure nobody
 re-checked.
 
-**It is an instrument, not a control, and the distinction is the point here.**
-It is not registered with ctest and asserts nothing unless `--budget=<n>` is
-passed: an allocation count is standard-library and allocator specific, so a
-ceiling that holds on libstdc++ would be wrong on libc++ or MSVC, and a gate
-that cannot be satisfied everywhere is worse than none. A green run of it
-proves nothing; the number it prints is the output. Turning it into a CI gate
-means giving it a per-toolchain budget first.
+**It is both an instrument and a control, and which one it is at any moment
+depends on the flags.** Run bare, it asserts nothing and the number it prints
+is the whole output; a green run of it in that mode proves nothing. Given
+`--budget=<n>` and/or `--lookup-budget=<n>` it fails when the figure exceeds
+the ceiling, and it is registered with ctest in exactly that form, as
+`bench.alloc_budget`.
 
-Measured with it on `f24e225a`, x86-64 Linux, GCC 16.2.1 / libstdc++, `-O2
--DNDEBUG`: **20.9 allocations and 1995 bytes per local round trip**, 21
-allocations in the recorded steady-state call. See morph#572 for the
-per-line attribution and what it says about that ticket's scope.
+The reason it took a per-toolchain budget to get there is that an allocation
+count is standard-library specific, not only morph-specific: `std::function`'s
+inline buffer and `std::string`'s SSO threshold differ between libstdc++,
+libc++ and MSVC's STL. So the ceiling is the cache variable
+`MORPH_ALLOC_BUDGET_PER_CALL`, defaulted to a figure measured on the
+toolchains that actually build this target in CI (Linux `clang-debug` and
+`gcc-debug`), left unset on MSVC where nothing has measured it, and settable
+to 0 to disable the gate. `tests/bench/CMakeLists.txt` carries the
+measurements the default was chosen from and the headroom argument.
+
+The `--lookup-budget` half takes no headroom at all: after morph#572's Part C
+a registry lookup allocates *nothing*, for ids of any length, and that is a
+property which either holds or has regressed. The ctest case passes
+`--lookup-budget=0`.
+
+**Both halves were checked against a reverted fix rather than only against
+themselves** — see morph#572's pull request for the red runs. A budget that has
+never been seen to fail is the control-that-measures-nothing this document's
+own charter warns about.
+
+**The dispatch census pins a race, and without that pin it is not comparable
+between runs.** A dispatch and the handlers attached to it race: win, and each
+handler joins a vector the settle drains; lose, and each takes
+`CompletionState`'s attach-after-ready path, which costs differently. Before
+the benchmark gated its worker thread, that made the headline figure bimodal —
+measured, interleaved, 20 processes per configuration: **~16.95 on an idle
+machine, ~13.06 with the machine 16-way oversubscribed**, same binary. That is
+morph#687's instability with a cause attached. The benchmark now holds the
+worker across `execute()` and both attaches, so it always measures the
+attach-before-settle regime: the more expensive of the two, and the one a real
+GUI client is in.
+
+With the race pinned, measured on `a9cb5649` before morph#572's Parts A and C,
+x86-64 Linux, clang 22.1.8 / libstdc++ 16.2.1: **17.06 allocations per local
+round trip**, and 2.00 allocations per registry lookup for ids past the SSO
+buffer. After: **14.06** and 0.00 per lookup — exactly 3.00 removed, in every
+one of 40 processes, idle and loaded, on clang Release, clang Debug and gcc
+Debug alike. Note the "before" figure is not morph#572's own 19.2: that was
+taken at `4017228d`, before morph#689 changed the strand's map-node handling,
+and on an ungated benchmark. See morph#572 for the per-line attribution.
 
 ## Adversarial cross-socket run (`tests/qt/test_qt_websocket_adversarial.cpp`)
 

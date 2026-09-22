@@ -118,7 +118,11 @@ private:
     };
     struct KeyHash {
         std::size_t operator()(const Key& key) const noexcept {
-            std::size_t const modelHash = ::morph::model::detail::PairKeyHash{}({key.modelId, key.actionId});
+            // Spelled with the view type rather than a braced list: `PairKeyHash`
+            // is transparent now, so a braced `{modelId, actionId}` is equally
+            // convertible to both of its overloads and would be ambiguous.
+            std::size_t const modelHash =
+                ::morph::model::detail::PairKeyHash{}(::morph::model::detail::PairKeyView{key.modelId, key.actionId});
             return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));
         }
     };
@@ -1750,14 +1754,30 @@ public:
             }
         }
         ::morph::backend::detail::ActionCall call;
-        call.modelTypeId = std::string{::morph::model::ModelTraits<Model>::typeId()};
-        call.actionTypeId = std::string{::morph::model::ActionTraits<Action>::typeId()};
+        // Views of `constexpr` string literals, and stateless operations
+        // addressed rather than copied: this whole block allocates exactly
+        // once now (the action itself), where it used to allocate four times
+        // -- two `std::string` copies of compile-time constants and two
+        // `std::function`s whose `shared_ptr` capture defeats libstdc++'s
+        // small-object buffer -- on every call, including the `LocalBackend`
+        // calls that never look at `serializeAction` or `deserializeResult`.
+        // See `backend::detail::ActionCall` for the lifetime contract this
+        // shape carries and morph#572 for the measurement.
+        call.modelTypeId = ::morph::model::ModelTraits<Model>::typeId();
+        call.actionTypeId = ::morph::model::ActionTraits<Action>::typeId();
         auto sharedAction = std::make_shared<Action>(std::move(action));
-        call.serializeAction = [sharedAction] { return ::morph::model::ActionTraits<Action>::toJson(*sharedAction); };
+        call.action = sharedAction;
+        call.serializeAction = [](const void* actionPtr) {
+            return ::morph::model::ActionTraits<Action>::toJson(*static_cast<const Action*>(actionPtr));
+        };
         call.deserializeResult = [](std::string_view jsonStr) -> std::shared_ptr<void> {
             return std::make_shared<R>(::morph::model::ActionTraits<Action>::resultFromJson(jsonStr));
         };
-        call.localOp = [sharedAction](::morph::model::detail::IModelHolder& holder) -> std::shared_ptr<void> {
+        call.localOp = [](::morph::model::detail::IModelHolder& holder, void* actionPtr) -> std::shared_ptr<void> {
+            // The action `ActionCall::action` owns, handed back typed. The
+            // backend that invokes this keeps that handle alive across the
+            // call (LocalBackend carries it onto the strand with `localOp`).
+            Action& actionRef = *static_cast<Action*>(actionPtr);
             // Enforce the action's validator on the local execution path too, so
             // a caller that constructs an Action by hand and calls
             // BridgeHandler<Model>::execute<Action>() directly is rejected the
@@ -1781,8 +1801,8 @@ public:
             // inspecting a computed field sees the authoritative value, not
             // whatever the caller constructed the action with. No-op for actions
             // with no computedFields. See docs/spec/forms/forms.md.
-            ::morph::forms::recomputeAll(*sharedAction);
-            if (!::morph::model::ActionValidator<Action>::ready(*sharedAction)) {
+            ::morph::forms::recomputeAll(actionRef);
+            if (!::morph::model::ActionValidator<Action>::ready(actionRef)) {
                 throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
                                                       ::morph::model::ActionTraits<Action>::typeId()};
             }
@@ -1809,14 +1829,14 @@ public:
             // journal entry (a rejected/throwing execute must not leave the audit
             // trail silent) and why the exception is rethrown unchanged either way.
             try {
-                auto result = std::make_shared<R>(model.execute(*sharedAction));
+                auto result = std::make_shared<R>(model.execute(actionRef));
                 if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
                     if (holder.hasActionLog()) {
                         // entityKey/principal/timestampMs are filled in by recordIfAttached.
                         ::morph::model::detail::recordActionSuccess(
                             holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
                             std::string{::morph::model::ActionTraits<Action>::typeId()},
-                            ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
+                            ::morph::model::ActionTraits<Action>::toJson(actionRef),
                             ::morph::model::detail::actionPayloadSchema<Action>(),
                             ::morph::model::ActionTraits<Action>::resultToJson(*result));
                     }
@@ -1828,7 +1848,7 @@ public:
                         ::morph::model::detail::recordActionFailure(
                             holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
                             std::string{::morph::model::ActionTraits<Action>::typeId()},
-                            ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
+                            ::morph::model::ActionTraits<Action>::toJson(actionRef),
                             ::morph::model::detail::actionPayloadSchema<Action>(), exc.what());
                     }
                 }

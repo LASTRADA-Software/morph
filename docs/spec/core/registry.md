@@ -546,6 +546,32 @@ elsewhere — see its section below.
 Maps `(modelId, actionId)` pairs to type-erased runner functions. Used by
 `RemoteServer` to dispatch incoming JSON requests.
 
+**One map, looked up by view.** Everything registered under a pair lives in one
+`ActionEntry` record — `runner`, `coalesce`, `schema`, `describe` — in a single
+`unordered_map<pair<string, string>, ActionEntry, PairKeyHash, PairKeyEqual>`.
+Two things follow, both of them morph#572 Part C:
+
+- *No key is built to look one up.* `PairKeyHash` and `PairKeyEqual` are
+  transparent, so `find` takes a `detail::PairKeyView` — a pair of
+  `string_view`s — directly. Constructing the stored key instead cost two
+  `std::string`s per lookup, and reached the heap for any id past the
+  15-character SSO buffer. **Measured** with `morph_bench_alloc`
+  (clang 22.1.8 / libstdc++ 16.2.1): for a pair whose ids both exceed the
+  buffer, **2.00 → 0.00** allocations per lookup; for a pair whose ids both fit
+  it, **0.00 → 0.00** — which is the part morph#529 flagged as unverified and
+  is now measured. morph's real ids straddle that boundary, so the saving is
+  real but id-dependent: `"BenchAlloc_Model"` (16 characters) allocated,
+  `"BenchAlloc_Ping"` (15) did not.
+- *The four sub-maps cannot go out of step.* They were filled together by
+  `registerAction` and could not diverge in practice, but nothing said so.
+  `RemoteServer::handle` also reached three of them per request; that is now
+  three lookups of one map rather than three lookups of three.
+
+`PairKeyHash`'s two overloads both reduce to the `string_view` body. They are
+not allowed merely to agree by coincidence: a heterogeneous `find` whose lookup
+hash disagreed with its stored hash would miss the bucket and report a
+registered action as unknown, silently.
+
 ```cpp
 class ActionDispatcher {
     using Runner = std::function<std::string(IModelHolder&, std::string_view)>;
@@ -642,7 +668,7 @@ Three deliberate properties:
   the process before `main` rather than surface as an `err` reply.
 - **Cached in a function-local `static`** (`actionDescription<A>()`), like
   `forms::schemaJson<A>()`'s own cache: `RemoteServer` may answer `"schemas"`
-  on any pool thread, and every map `ActionDispatcher` fills is read-only by
+  on any pool thread, and the map `ActionDispatcher` fills is read-only by
   then, so the one piece of mutable state involved is the one C++ already
   guarantees is initialised exactly once. A throw leaves it uninitialised and a
   later call retries.
@@ -936,10 +962,10 @@ only the two registrar bodies above disappear.
 **The third registrar needed the same treatment, contrary to first
 appearances.** `registerActionExecutorOnce<M, A>` routes through
 `BridgeHandler<Model>::execute<Action>()` → `Bridge::executeVia<Model, Action>`
-— and `executeVia` unconditionally constructs an `ActionCall::localOp` closure
+— and `executeVia` unconditionally installs an `ActionCall::localOp` function
 that calls `Model::execute(...)` directly, *regardless of which backend ends
 up installed at runtime* (only `LocalBackend::execute` ever actually invokes
-`call.localOp`; every remote backend ignores it). That closure is compiled
+`call.localOp`; every remote backend ignores it). That function is compiled
 into `executeVia`'s instantiation the moment any code calls
 `BridgeHandler<Model>::execute<Action>()` — which the type-erased
 `ActionExecuteRegistry` executor `registerActionExecutorOnce` installs
@@ -949,8 +975,8 @@ uses `BridgeHandler::execute<Action>()` (the typed API) or `executeJson` (the
 type-erased API) at all — both routes reach the same `model.execute(...)`
 call inside `executeVia`.
 
-`Bridge::executeVia`'s `localOp` closure is therefore itself gated on
-`MORPH_CLIENT_ONLY` (`bridge.hpp`): under the macro, the closure throws
+`Bridge::executeVia`'s `localOp` is therefore itself gated on
+`MORPH_CLIENT_ONLY` (`bridge.hpp`): under the macro, its body throws
 `std::logic_error` instead of calling `Model::execute`, so nothing in the
 compiled program ever references its definition. This is *not* a
 per-registration-site choice like the two macros above — it lives inside
@@ -1110,7 +1136,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 
 | Symbol | Kind | Purpose |
 |---|---|---|
-| `ActionDispatcher` | class | Maps `(modelId, actionId)` → type-erased runner; server-side dispatch. Also files one `ActionDescription` thunk per action, behind `schemasJson()`/`requiredFieldsFor()`. |
+| `ActionDispatcher` | class | Maps `(modelId, actionId)` → one `ActionEntry` (runner, coalesce flag, payload fingerprint, `ActionDescription` thunk); server-side dispatch. Looked up by `PairKeyView`, so a lookup allocates nothing. |
 | `ActionDescription` | struct | `{schema, required}` for one action: `forms::schemaJson<A>()` plus `x-payloadFingerprint`/`x-payloadShape`, and the `required` names read back out of it. |
 | `actionDescription<A>()` | function template | The process-lifetime `ActionDescription` for `A`; `buildActionDescription<A>()` is the uncached builder behind it. |
 | `ModelRegistryFactory` | class | Maps `modelId` → factory; server-side model instantiation. |
@@ -1129,7 +1155,9 @@ correctly under `MORPH_CLIENT_ONLY`.
 
 | Symbol | Purpose |
 |---|---|
-| `PairKeyHash` | Hash functor for `std::pair<std::string, std::string>` keys. Used directly by `ActionDispatcher`, and as the string half of `ActionExecuteRegistry`'s own `KeyHash`, which mixes the sharing policy's `type_index` into it. |
+| `PairKeyView` | `std::pair<std::string_view, std::string_view>` — the type a `(modelId, actionId)` pair is *looked up* with. The stored key remains a pair of `std::string`s. |
+| `PairKeyHash` | Transparent hash functor for `(modelId, actionId)` keys. Both overloads reduce to the `string_view` body, so lookup and stored hashes agree by construction. Used with `PairKeyEqual` by `ActionDispatcher`, and as the string half of `ActionExecuteRegistry`'s own `KeyHash`, which mixes the sharing policy's `type_index` into it. |
+| `PairKeyEqual` | Transparent equality functor for the same keys. `unordered_map` enables heterogeneous lookup only when the hash *and* the equality are both transparent. |
 | `actionLoggable<A>()` | Returns `ActionTraits<A>::loggable` if present, else `Loggable::Yes`. |
 | `actionPayloadSchema<A>()` | Returns `ActionTraits<A>::payloadSchema()` if present, else `""` (unstamped). |
 | `ParseError` | `std::runtime_error` subclass thrown on JSON codec failure. |
@@ -1151,6 +1179,8 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `ModelFactory::create` attaches the default log | **Single construction path for all topologies** | "Set the log once in `main()`" works uniformly across local and remote topologies. Callers that need a specific identity call `attachActionLog` again afterward. |
 | `setOutboxManaged` opt-out | **Suppress `recordIfAttached`, not `hasActionLog()`** | A store-backed model that logs inside its own transaction (see `journal.md`'s transactional outbox) must stop the framework's auto-append without losing "a log is attached" as a fact holders can still query. |
 | `coalesce` defaults to `false` | **Every execution is a distinct, permanent fact** | The right default for anything resembling a business event. Only actions where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via `morph::flows::FlowSession::set`) opt in. |
+| `ActionDispatcher` keeps one record per pair, not four maps | **`ActionEntry` in a single `unordered_map`** | The four sub-maps were keyed identically and filled by one function, so the lockstep was real but unstated; and `RemoteServer::handle` reached three of them per request. One record makes the invariant structural and the three reads one table each (morph#572, Part C). |
+| Registry lookups are heterogeneous | **Transparent `PairKeyHash`/`PairKeyEqual`, `find(PairKeyView)`** | Every caller already holds `string_view`s; materialising the stored `pair<string, string>` to hash it allocated for any id past the SSO buffer, measured at 2 allocations per lookup. The transparent hash routes both overloads through one `string_view` body so lookup and stored hashes cannot drift apart — a drift that would report a registered action as unknown with no diagnostic. |
 
 ## Thread safety
 
@@ -1180,7 +1210,7 @@ quiesced with respect to dispatch, before exposing them.
 
 | Situation | Behaviour | Where |
 |---|---|---|
-| Two registrations for the same `(modelId, actionId)` (or same `modelId`) | **Silent last-write-wins.** `ActionDispatcher::registerAction` does `_runners[key] = ...` and `_coalesce[key] = ...`; `ModelRegistryFactory::registerModel` does `insert_or_assign`. No diagnostic; the surviving entry is whichever initialiser ran last, and static-init order across TUs is unspecified. | `registry.hpp` |
+| Two registrations for the same `(modelId, actionId)` (or same `modelId`) | **Silent last-write-wins.** `ActionDispatcher::registerAction` overwrites the whole `ActionEntry` under the key; `ModelRegistryFactory::registerModel` does `insert_or_assign`. No diagnostic; the surviving entry is whichever initialiser ran last, and static-init order across TUs is unspecified. | `registry.hpp` |
 | Two **distinct C++ types** registered under one string id | Same silent overwrite — the string id, not the type, is the key. The second type's runner/factory shadows the first. This is the collision hazard behind the string-vocabulary limitation below. | `registry.hpp` |
 | `dispatch` / `execute` with an unknown key | Throws `std::runtime_error` **at runtime** — `"unknown action: …"` from `ActionDispatcher::dispatch` for an unknown `(modelId, actionId)`, `"unknown action for executeJson: …"` from `ActionExecuteRegistry::execute` for an unknown `(modelId, actionId, typeid(Sharing))` — which includes a *registered* action reached from a handler on a sharing tag other than `NoSharing`/`AllowShared`. The string-keyed remote path has **no compile-time completeness check** — a pair that was never registered is only discovered when a request for it arrives. | `ActionDispatcher::dispatch`, `ActionExecuteRegistry::execute` |
 | `dispatch` when the decoded action fails `ActionValidator<Action>::ready(...)` | Throws `morph::model::ValidationError` (a `std::runtime_error` subclass) **before** `Model::execute` runs — the action is never executed. Actions with no validator (the common case) are unaffected: `ready()` defaults to `true`. | `ActionDispatcher::registerAction`'s runner |
@@ -1220,13 +1250,14 @@ testing obligation, not a compile-time guarantee.
   next, and last-write-wins means test ordering can change behaviour. Contrast
   `journal::ScopedActionLog`, which deliberately provides scoped install/restore
   for exactly this reason; the registries have no equivalent.
-- **Per-call heap allocation on the hot path.** Every `dispatch`, `create`,
-  `coalesce`, and `execute` constructs a `std::string` (or a
-  `std::pair<std::string, std::string>`) key from its `string_view` arguments
-  purely to probe the map — an allocation per lookup on what is the request hot
-  path. Heterogeneous lookup (a transparent hash/equality over `string_view`,
-  C++20 `unordered_map` `find` with `is_transparent`) would remove the
-  allocation entirely; the maps are keyed on owning `std::string` today.
+- **Per-call heap allocation on the hot path — fixed for `ActionDispatcher`,
+  still open for the other two.** `ActionDispatcher`'s lookups are
+  heterogeneous now (`PairKeyHash`/`PairKeyEqual` are transparent, and `find`
+  is given a `PairKeyView`), so `dispatch`, `coalesce`, `schemaFor` and
+  `requiredFieldsFor` build no key at all. `ModelRegistryFactory::create` and
+  `ActionExecuteRegistry::execute` still construct their keys to probe the map;
+  `ActionExecuteRegistry`'s key carries a `type_index` as well as the two ids,
+  so it is not the same change.
 - **The `ActionDispatcher` / `ActionExecuteRegistry` split can silently
   diverge.** A single `BRIDGE_REGISTER_ACTION` populates both registries (one
   initialiser each). But they are independent maps consulted by different

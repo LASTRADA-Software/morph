@@ -234,7 +234,7 @@ public:
             state->setException(std::make_exception_ptr(std::runtime_error("no such model")));
             return comp;
         }
-        state->setValue(call.localOp(*iter->second));
+        state->setValue(call.localOp(*iter->second, call.action.get()));
         return comp;
     }
     void notifyBackendChanged() override {}

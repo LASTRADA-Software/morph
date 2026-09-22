@@ -40,11 +40,11 @@ Model::execute(action) throws
 The strand task (`LocalBackend::execute`) is:
 
 ```cpp
-_strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder),
+_strand.post(mid, [localOp, action = std::move(action), holder = std::move(holder),
                    compState, session = std::move(session)]() mutable {
     try {
         ::morph::session::detail::ScopedContext const scoped{session};
-        compState->setValue(localOp(*holder));   // happy path
+        compState->setValue(localOp(*holder, action.get()));   // happy path
     } catch (...) {
         compState->setException(std::current_exception());  // error path
     }

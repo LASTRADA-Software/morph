@@ -304,7 +304,7 @@ TEST_CASE("LimitPolicy: executeTimeout surfaces as backend::TimeoutError through
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "LP_SlowModel";
     call.actionTypeId = "LP_SlowAction";
-    call.serializeAction = [] { return std::string{R"({"ms":300})"}; };
+    call.serializeAction = [](const void*) { return std::string{R"({"ms":300})"}; };
     call.deserializeResult = [](std::string_view json) -> std::shared_ptr<void> {
         auto result = std::make_shared<int>(0);
         (void)glz::read_json(*result, json);

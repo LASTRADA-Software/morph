@@ -26,6 +26,8 @@ and react to backend changes.
 ## Contents
 
 - [The dispatch struct — `ActionCall`](#the-dispatch-struct--actioncall)
+  - [Why the callables are function pointers (morph#572)](#why-the-callables-are-function-pointers-morph572)
+  - [Lifetime contract](#lifetime-contract)
 - [The abstract interface — `IBackend`](#the-abstract-interface--ibackend)
 - [Connect/disconnect notifications](#connectdisconnect-notifications)
 - [Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy)
@@ -62,12 +64,61 @@ used locally or serialised for a remote round-trip:
 
 | Field | Type | Purpose |
 |---|---|---|
-| `modelTypeId` | `std::string` | String id of the target model type (from `ModelTraits`). |
-| `actionTypeId` | `std::string` | String id of the action type (from `ActionTraits`). |
-| `serializeAction` | `std::function<std::string()>` | Serialises the action to JSON. Only called on the remote path. |
-| `deserializeResult` | `std::function<std::shared_ptr<void>(std::string_view)>` | Deserialises a JSON reply into the opaque result. Only called on the remote path. |
-| `localOp` | `std::function<std::shared_ptr<void>(IModelHolder&)>` | Executes the action directly against a model holder. Only called on the local path. |
+| `modelTypeId` | `std::string_view` | String id of the target model type (from `ModelTraits`). |
+| `actionTypeId` | `std::string_view` | String id of the action type (from `ActionTraits`). |
+| `action` | `std::shared_ptr<void>` | Type-erased owner of the action object the two callables below read. |
+| `serializeAction` | `std::string (*)(const void* action)` | Serialises `action` to JSON. Only called on the remote path. |
+| `deserializeResult` | `std::shared_ptr<void> (*)(std::string_view)` | Deserialises a JSON reply into the opaque result. Only called on the remote path. Never reads the action. |
+| `localOp` | `std::shared_ptr<void> (*)(IModelHolder&, void* action)` | Executes `action` directly against a model holder. Only called on the local path. |
 | `session` | `morph::session::Context` | Session context. Local backends thread it through a thread-local before invoking `localOp`; remote backends serialise it into the wire envelope. |
+
+There is one member function, `serializeBody()`, which pairs
+`serializeAction` with the `action` it reads and throws
+`std::runtime_error` if `serializeAction` is null. Every remote backend calls
+it rather than invoking the pointer itself, so the borrow is closed in one
+place instead of three.
+
+### Why the callables are function pointers (morph#572)
+
+`Bridge::executeVia` builds an `ActionCall` on **every** call, including calls
+a `LocalBackend` serves and that therefore never touch `serializeAction` or
+`deserializeResult`. The earlier shape — three `std::function`s, each capturing
+a `shared_ptr<Action>` — made that apparatus cost heap allocations whichever
+path the call took: libstdc++'s small-object buffer is available only to a
+trivially copyable target, and a captured `shared_ptr` is not one, so each
+stateful callable allocated. The two type ids were `std::string` copies of
+compile-time constants and allocated whenever an id exceeded the 15-character
+SSO threshold.
+
+The behaviour of each callable is a constant of `(Model, Action)`, not of the
+call, so it is *addressed* rather than copied: a stateless function pointer,
+parameterised on the action it operates on. The action object itself still
+needs a home — it is the one genuinely per-call thing — and that home is
+`action`, a single `make_shared<Action>`, which the type erasure needed anyway.
+
+**Measured** on `master` @ `a9cb5649` with `tests/bench/bench_dispatch_allocations.cpp`
+(`morph_bench_alloc`, clang 22.1.8 / libstdc++ 16.2.1, Release, 15 processes
+per configuration): a local `Ping -> Pong` round trip fell from a median of
+**16.98** heap allocations per call (range 16.89–17.05) to **13.79**
+(range 13.71–14.03), and from 1245.7 to 1151.1 bytes per call. The three
+allocations removed are the `modelTypeId` string and the `serializeAction` and
+`localOp` closure targets.
+
+### Lifetime contract
+
+`serializeAction` and `localOp` **borrow** the action; `action` owns it.
+A backend that defers either call beyond the `ActionCall`'s own lifetime must
+carry a copy of the `action` handle with it — `LocalBackend::execute` moves it
+onto the strand alongside `localOp` for exactly that reason.
+`deserializeResult` never reads the action, which is what lets
+`SocketBackend` and `QtWebSocketBackend` park it in their pending-reply tables
+long after the `ActionCall` is gone.
+
+`modelTypeId` and `actionTypeId` are views, so their referents must outlive the
+dispatch. The production path satisfies this by construction:
+`ModelTraits<M>::typeId()` is `constexpr` and returns a view of the string
+literal `BRIDGE_REGISTER_MODEL` was given. A hand-built `ActionCall` must use a
+literal or a string that outlives the call, not a temporary.
 
 ## The abstract interface — `IBackend`
 
@@ -2208,12 +2259,14 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 
 | Member | Type | Notes |
 |---|---|---|
-| `modelTypeId` | `std::string` | Target model type id. |
-| `actionTypeId` | `std::string` | Target action type id. |
-| `serializeAction` | `std::function<std::string()>` | JSON serialiser; remote path only. |
-| `deserializeResult` | `std::function<std::shared_ptr<void>(std::string_view)>` | JSON deserialiser; remote path only. |
-| `localOp` | `std::function<std::shared_ptr<void>(IModelHolder&)>` | Direct execution; local path only. |
+| `modelTypeId` | `std::string_view` | Target model type id. Referent must outlive the dispatch. |
+| `actionTypeId` | `std::string_view` | Target action type id. Referent must outlive the dispatch. |
+| `action` | `std::shared_ptr<void>` | Owns the action object; may be null when the callables ignore it. |
+| `serializeAction` | `std::string (*)(const void*)` | JSON serialiser; remote path only. Borrows `action`. |
+| `deserializeResult` | `std::shared_ptr<void> (*)(std::string_view)` | JSON deserialiser; remote path only. Does not read `action`. |
+| `localOp` | `std::shared_ptr<void> (*)(IModelHolder&, void*)` | Direct execution; local path only. Borrows `action`. |
 | `session` | `morph::session::Context` | Session context for the call. |
+| `serializeBody()` | `std::string serializeBody() const` | Calls `serializeAction(action.get())`; throws `std::runtime_error` if the pointer is null. |
 
 ### `detail::IBackend`
 
@@ -2428,6 +2481,8 @@ not a behavior change to the existing loopback-only default.
 | Decision | Choice | Why |
 |---|---|---|
 | Dual-path `ActionCall` | Three callables: `localOp`, `serializeAction`, `deserializeResult` | The same `ActionCall` struct works for both local and remote execution without an `if (isRemote)` branch at the call site — each backend uses the field(s) it needs. |
+| Callables are function pointers, not `std::function`s | `std::string (*)(const void*)` etc., with the action in `ActionCall::action` | Every call builds all three, whichever path it takes, so a stateful callable charges an allocation to calls that never invoke it. The behaviour is a constant of `(Model, Action)`; only the action is per-call. Measured at 3 allocations per local round trip (morph#572, Part A). The cost is an explicit borrow: see [Lifetime contract](#lifetime-contract). |
+| Type ids are `string_view`s, not `std::string`s | `modelTypeId`, `actionTypeId` | They are always views of `constexpr` string literals from the registration macros, so copying them into a `std::string` bought nothing and allocated whenever an id exceeded the SSO threshold (`"CreateSwimlane"` is 14 characters; the margin is one character wide). |
 | `registerModelWithContext` | Virtual with a default that drops `contextKey` | `LocalBackend`'s factory closure already captures identity, so there is nothing to forward — which is why the default drops the key rather than being pure virtual. A backend whose instances are constructed on the far side of a wire protocol has no such closure, so the envelope is the only channel the identity has: `SimulatedRemoteBackend` and `SocketBackend` both override it so the server's `LogProvider` can attach an action log. The default being *permissive* is what let `SocketBackend` ship without an override and silently stop journalling private registrations (morph#587); the price of that permissiveness is that "is this a wire backend?" has to be answered by hand for each new transport. |
 | `RemoteServer` heap requirement | `std::enable_shared_from_this` | `handle()` posts to the worker pool capturing `shared_from_this()` — the server must outlive any in-flight message. |
 | `handleInline` | Synchronous; caller-restricted to control messages | Safe to call from a worker-pool thread (e.g. from a `BridgeHandler` constructor). It is meant for `register`/`deregister` only; an `execute` envelope is rejected with an `err` reply, because `dispatchExecute` posts to the strand and would reply after `handleInline` returns (writing into an already-destroyed reply buffer). The rejection is now enforced by the code, matching the documented intent. |
