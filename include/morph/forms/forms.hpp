@@ -2311,6 +2311,57 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
     }
 }
 
+/// @brief The member of @p node named @p key, or `nullptr` when there is none.
+///
+/// The checked read over a `glz::generic_u64` object node, and morph's own
+/// because glaze has no such thing. `generic_json::at(key)` is defined as
+/// `{ return operator[](key); }` for *both* overloads (glaze v7.4.0,
+/// `glaze/json/generic.hpp:320` and `:322`), and the non-const `operator[]`
+/// it forwards to **inserts** a default-constructed member for a missing key
+/// (`generic.hpp:201-211`). So on the mutating DOM walks below, `at()` is not
+/// a bounds-safe alternative to `operator[]` -- it is the same function, and
+/// on a missing key it turns a read into a write to the schema being emitted.
+/// The const `operator[]` does check, by calling `glaze_error("Key not
+/// found.")`, i.e. by throwing. Which of the two a call gets is decided by the
+/// constness of the DOM, not by the spelling, which is why the remedy
+/// `cppcoreguidelines-pro-bounds-avoid-unchecked-container-access` suggests
+/// cannot be adopted mechanically here (morph#706).
+///
+/// This returns a pointer instead: absence is a value the caller branches on,
+/// a read never grows the document, and nothing throws. It also replaces the
+/// `contains(key)` + `operator[](key)` pair every read site used to spell,
+/// which probed the same map twice for one answer.
+///
+/// Only *reads* belong here. A site that means to create the member --
+/// `property["x-order"] = ...` building the schema -- wants `operator[]`'s
+/// insert and keeps it; converting one of those to a null check would change
+/// behaviour, not make it safe. See `docs/spec/forms/forms.md`, "Reading the
+/// DOM with `findMember`".
+///
+/// The returned pointer is into @p node's own object storage and is
+/// invalidated by any insertion into @p node, exactly as the reference
+/// `operator[]` returns is.
+///
+/// @tparam Node `glz::generic_u64` or `const glz::generic_u64`, deduced from
+///               the argument, so a const DOM yields a const member and no
+///               `const_cast` is needed to offer both.
+/// @param node  The node to read. A node that is not an object -- including a
+///               null one -- has no members and yields `nullptr`, rather than
+///               being turned into an object as `operator[]` would.
+/// @param key   Wire name of the member to find.
+/// @return A pointer to the member, or `nullptr` when @p node is not an object
+///         or holds no such key.
+template <typename Node>
+    requires std::same_as<std::remove_const_t<Node>, glz::generic_u64>
+[[nodiscard]] Node* findMember(Node& node, std::string_view key) {
+    auto* const object = node.template get_if<glz::generic_u64::object_t>();
+    if (object == nullptr) {
+        return nullptr;
+    }
+    auto* const entry = object->find(key);
+    return (entry == object->end()) ? nullptr : &entry->second;
+}
+
 /// @brief How many nested-aggregate levels below the action type the schema
 ///        generator will descend before refusing to instantiate any deeper.
 ///
@@ -2453,15 +2504,14 @@ void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& propert
                           "acyclic and really is this deep, raise kMaxNestDepth in forms.hpp -- the limit "
                           "is there to turn a runaway instantiation into this message, not to cap "
                           "legitimate nesting.");
-        } else if (property.contains("items")) {
-            // Pre-existing indexing, verbatim the same at a9cb5649:2380 and
-            // billed to this branch only because the line changed (morph#677).
-            // The `contains("items")` guard directly above is what makes it
-            // safe; glaze's `at(key)` is `{ return operator[](key); }`
-            // (glaze/json/generic.hpp:320), so the alternative the check names
-            // would insert on a missing key exactly as this does.
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-            annotateNestedAggregateRef<ItemType, Depth + 1>(dom, property["items"], visited);
+        } else if (auto* const items = findMember(property, "items")) {
+            // A read, so it goes through findMember: a `std::vector<Sub>`
+            // property glaze emitted without an `items` node is left alone
+            // rather than given an empty one. The `contains` + `operator[]`
+            // pair this replaces probed the same map twice and needed a
+            // standing suppression to say why the subscript was safe
+            // (morph#706).
+            annotateNestedAggregateRef<ItemType, Depth + 1>(dom, *items, visited);
         }
     }
 }
@@ -2546,8 +2596,8 @@ void annotateNestedAggregate(SchemaDomRef dom, glz::generic_u64& node, NestedDef
 template <typename Sub, std::size_t Depth>
 void annotateNestedAggregateRef(SchemaDomRef dom, glz::generic_u64& propertyOrItems, NestedDefsVisited& visited) {
     constexpr std::string_view kDefsPrefix = "#/$defs/";
-    if (propertyOrItems.contains("$ref")) {
-        if (auto const* ref = propertyOrItems["$ref"].get_if<std::string>()) {
+    if (auto* const refNode = findMember(propertyOrItems, "$ref")) {
+        if (auto const* ref = refNode->get_if<std::string>()) {
             if (std::string_view{*ref}.starts_with(kDefsPrefix)) {
                 auto const key = std::string{ref->substr(kDefsPrefix.size())};
                 // Checked, not indexed-and-hope: glz::generic_u64's object
@@ -2558,29 +2608,18 @@ void annotateNestedAggregateRef(SchemaDomRef dom, glz::generic_u64& propertyOrIt
                 // same $defs map. Well-formed glaze output never names a
                 // $defs key that doesn't exist, so this only changes behavior
                 // for malformed input, which is left untouched instead.
+                // findMember is what states that in the type system rather
+                // than in a comment beside a subscript (morph#706).
+                auto* const defs = findMember(dom.value(), "$defs");
+                auto* const entry = (defs == nullptr) ? nullptr : findMember(*defs, key);
                 // `visited.insert(...).second` is the first-arrival test: it
                 // reports whether this call is the one that inserted the key,
                 // so exactly one of the routes that reach a shared $defs entry
                 // annotates it. It is evaluated last, so a key that fails
-                // either check above is never recorded as done.
-                //
-                // The two `$defs` indexings below are pre-existing: they read
-                // verbatim the same at a9cb5649:2465-2466 and are billed to
-                // this branch only because the line around them changed, which
-                // is all clang-tidy-diff ever sees (morph#677). The `contains`
-                // guards in the same condition are what make them safe, and the
-                // bounds-safe alternative the check names does not exist on this
-                // type -- glaze defines `generic_json::at(key)` as
-                // `{ return operator[](key); }` (glaze/json/generic.hpp:320), so
-                // it inserts on a missing key exactly as `operator[]` does.
-                // Adopting it would silence the check while changing nothing it
-                // warns about, so the disposition is recorded here instead.
-                // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-                if (dom.value().contains("$defs") && dom.value()["$defs"].contains(key) &&
-                    visited.insert(key).second) {
-                    annotateNestedAggregate<Sub, Depth>(dom, dom.value()["$defs"][key], visited);
+                // the lookup above is never recorded as done.
+                if (entry != nullptr && visited.insert(key).second) {
+                    annotateNestedAggregate<Sub, Depth>(dom, *entry, visited);
                 }
-                // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             }
         }
         return;
@@ -2771,6 +2810,25 @@ void rejectUnsatisfiableRules(const glz::generic_u64::array_t& xRules,
     }
 }
 
+/// @brief Which declared bound `annotateExactBound` is to give an exact
+///        companion -- and so both schema keys it touches.
+///
+/// One enumerator rather than the `(key, textKey)` pair of adjacent
+/// `const std::string&`s this used to take. Those were transposable at a call
+/// site with no diagnostic of any kind -- `annotateExactBound(node,
+/// "x-exactMinimum", "minimum")` compiles and writes the bound into the
+/// companion -- and `bugprone-easily-swappable-parameters` reported them the
+/// moment the body stopped using the two in the same way (the read now goes
+/// through `findMember`, the write still through `operator[]`). This is the
+/// remedy `SchemaDomRef` above applies to the same defect shape: make the
+/// transposition a compile error rather than suppress the warning about it.
+/// It also leaves exactly one place where `minimum` is paired with
+/// `x-exactMinimum`.
+enum class ExactBoundKind : std::uint8_t {
+    Minimum,
+    Maximum,
+};
+
 /// @brief Adds an exact decimal-string companion for one numeric bound, when
 ///        the bound is too large for a double to hold exactly.
 ///
@@ -2786,25 +2844,35 @@ void rejectUnsatisfiableRules(const glz::generic_u64::array_t& xRules,
 /// Emitted only above `kExactDoubleLimit`: an ordinary bound loses nothing to a
 /// double, so schemas that do not need this are byte-for-byte unchanged.
 ///
-/// @param node    Schema node to annotate in place (a property or a `$defs` entry).
-/// @param key     Bound to read: `"minimum"` or `"maximum"`.
-/// @param textKey Companion key to write: `"x-exactMinimum"` or `"x-exactMaximum"`.
-// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
-inline void annotateExactBound(glz::generic_u64& node, const std::string& key, const std::string& textKey) {
-    if (!node.contains(key)) {
+/// @param node Schema node to annotate in place (a property or a `$defs` entry).
+/// @param kind Which declared bound to give a companion; see `ExactBoundKind`.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- the two writes below intend the insert
+inline void annotateExactBound(glz::generic_u64& node, ExactBoundKind kind) {
+    bool const isMinimum = (kind == ExactBoundKind::Minimum);
+    std::string_view const key = isMinimum ? "minimum" : "maximum";
+    std::string_view const textKey = isMinimum ? "x-exactMinimum" : "x-exactMaximum";
+    // A read, so it is checked: findMember yields nullptr for a node with no
+    // such bound instead of fabricating a null one (morph#706). The two
+    // `node[textKey] =` writes further down are the opposite case -- the
+    // companion key is *meant* to be created -- and keep `operator[]`, which
+    // is what the suppression above is still for.
+    auto const* const bound = findMember(node, key);
+    if (bound == nullptr) {
         return;
     }
-    auto const& bound = node[key];
     // std::cmp_* rather than a cast: the two bounds arrive in different
     // signednesses and the limit is unsigned, so a cast would be the very
     // sign-mismatch this comparison exists to get right.
-    if (bound.template holds<std::uint64_t>()) {
-        auto const value = bound.template get<std::uint64_t>();
+    //
+    // `bound` is read out into `value` before either write: inserting
+    // `textKey` reallocates `node`'s object storage and invalidates it.
+    if (bound->template holds<std::uint64_t>()) {
+        auto const value = bound->template get<std::uint64_t>();
         if (std::cmp_greater(value, kExactDoubleLimit)) {
             node[textKey] = std::to_string(value);
         }
-    } else if (bound.template holds<std::int64_t>()) {
-        auto const value = bound.template get<std::int64_t>();
+    } else if (bound->template holds<std::int64_t>()) {
+        auto const value = bound->template get<std::int64_t>();
         if (std::cmp_greater(value, kExactDoubleLimit) || std::cmp_less(value, -kExactDoubleLimitSigned)) {
             node[textKey] = std::to_string(value);
         }
@@ -2823,8 +2891,8 @@ inline void annotateExactBound(glz::generic_u64& node, const std::string& key, c
 // NOLINTNEXTLINE(misc-no-recursion) -- walking a JSON tree is inherently recursive
 inline void annotateExactNumericBounds(glz::generic_u64& node) {
     if (node.is_object()) {
-        annotateExactBound(node, "minimum", "x-exactMinimum");
-        annotateExactBound(node, "maximum", "x-exactMaximum");
+        annotateExactBound(node, ExactBoundKind::Minimum);
+        annotateExactBound(node, ExactBoundKind::Maximum);
         for (auto& [childKey, child] : node.get_object()) {
             annotateExactNumericBounds(child);
         }
