@@ -289,7 +289,8 @@ TEST_CASE("FlowSession: every set<> that leaves the draft ready dispatches again
     // Now deliver all five replies, and only then leave the scope. The loop
     // ends once a full budget passes with the queue empty, which is what makes
     // "nothing is still in flight" an observation rather than an assumption.
-    while (morph::testing::waitUntil([&] { return cbExec.pending() > 0; }, std::chrono::milliseconds{250})) {
+    while (morph::testing::waitUntil([&] { return cbExec.pending() > 0; },
+                                     morph::testing::WaitBudget{std::chrono::milliseconds{250}})) {
         cbExec.runAll();
     }
     CHECK(flow.ready());  // every one of the five replies landed

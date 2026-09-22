@@ -676,7 +676,7 @@ TEST_CASE(
     // under test, so a correctly configured queue is still blocked when it
     // elapses.
     CHECK_FALSE(morph::testing::waitUntil([&] { return enqueueSucceeded.load() || enqueueThrew.load(); },
-                                          std::chrono::milliseconds{500}));
+                                          morph::testing::WaitBudget{std::chrono::milliseconds{500}}));
 
     REQUIRE(sqlite3_exec(second, "COMMIT;", nullptr, nullptr, &err) == SQLITE_OK);
     writer.join();

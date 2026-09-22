@@ -1416,7 +1416,7 @@ TEST_CASE(
     // race (caught by this file's own TSan CI leg the first time this test
     // was written this way).
     REQUIRE(morph::testing::waitUntil([&] { return replyA.ready.load() || replyB.ready.load(); },
-                                      std::chrono::milliseconds{2000}));
+                                      morph::testing::WaitBudget{std::chrono::milliseconds{2000}}));
 
     const bool aErr = replyA.ready.load() && replyA.env.kind == "err";
     const bool bErr = replyB.ready.load() && replyB.env.kind == "err";

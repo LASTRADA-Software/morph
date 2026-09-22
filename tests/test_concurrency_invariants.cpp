@@ -114,7 +114,7 @@ TEST_CASE("morph::exec::detail::StrandExecutor: cross-key concurrency saturates 
             done.fetch_add(1);
         });
     }
-    REQUIRE(waitUntil([&] { return done.load() == numKeys; }, 5s));
+    REQUIRE(waitUntil([&] { return done.load() == numKeys; }, morph::testing::WaitBudget{5s}));
 
     REQUIRE(peak.load() <= static_cast<int>(poolSize));
     REQUIRE(peak.load() == static_cast<int>(poolSize));
@@ -133,7 +133,7 @@ TEST_CASE("morph::exec::detail::StrandExecutor: churn across thousands of distin
     for (int key = 1; key <= numKeys; ++key) {
         strand.post(morph::exec::detail::ModelId{static_cast<uint64_t>(key)}, [&] { done.fetch_add(1); });
     }
-    REQUIRE(waitUntil([&] { return done.load() == numKeys; }, 10s));
+    REQUIRE(waitUntil([&] { return done.load() == numKeys; }, morph::testing::WaitBudget{10s}));
 
     // Post once more after the churn — confirms the cleanup path left the
     // strand executor in a usable state (regression target for map corruption).
@@ -297,7 +297,7 @@ TEST_CASE(
         thr.join();
     }
 
-    REQUIRE(waitUntil([&] { return resolved.load() == totalActions; }, 10s));
+    REQUIRE(waitUntil([&] { return resolved.load() == totalActions; }, morph::testing::WaitBudget{10s}));
     stopSwitch.store(true);
     switcher.join();
 
@@ -316,7 +316,7 @@ TEST_CASE(
     for (int idx = 0; idx < settledActions; ++idx) {
         handler.execute(LoadCountAction{1}).then([&](int) { afterSwitching.fetch_add(1); });
     }
-    REQUIRE(waitUntil([&] { return afterSwitching.load() == settledActions; }, 10s));
+    REQUIRE(waitUntil([&] { return afterSwitching.load() == settledActions; }, morph::testing::WaitBudget{10s}));
 }
 
 // ── morph::offline::NetworkMonitor: stop() called from onOnline does not deadlock ─────────────
@@ -342,7 +342,7 @@ TEST_CASE("morph::offline::NetworkMonitor: stop() called from onOnline callback 
         morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 2, .onlineThreshold = 1});
     monitorPtr.store(monitor.get());
 
-    REQUIRE(waitUntil([&] { return onlineFired.load(); }, 2s));
+    REQUIRE(waitUntil([&] { return onlineFired.load(); }, morph::testing::WaitBudget{2s}));
     REQUIRE_NOTHROW(monitor.reset());
 }
 
@@ -368,7 +368,7 @@ TEST_CASE("morph::offline::NetworkMonitor: probe that calls isOnline() does not 
         morph::offline::NetworkMonitor::Config{.probeInterval = 10ms, .failureThreshold = 1, .onlineThreshold = 1});
     monitorPtr.store(monitor.get());
 
-    REQUIRE(waitUntil([&] { return probeCount.load() >= 5; }, 2s));
+    REQUIRE(waitUntil([&] { return probeCount.load() >= 5; }, morph::testing::WaitBudget{2s}));
     REQUIRE(onlineSeen.load() >= 1);
     REQUIRE_NOTHROW(monitor->stop());
 }

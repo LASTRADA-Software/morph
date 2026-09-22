@@ -401,7 +401,8 @@ TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the
                 nullptr));
         }
         REQUIRE(morph::testing::waitUntil([&] { return churnSettled.load(std::memory_order_relaxed) >= target; },
-                                          std::chrono::milliseconds{5000}, std::chrono::milliseconds{1}));
+                                          morph::testing::WaitBudget{std::chrono::milliseconds{5000}},
+                                          morph::testing::WaitStep{std::chrono::milliseconds{1}}));
         churn.clear();
     }
 
@@ -424,7 +425,7 @@ TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the
     // `CHECK` that fires mid-teardown should not leave that to chance.
     gate.store(true, std::memory_order_release);
     REQUIRE(morph::testing::waitUntil([&] { return parkedRan.load(std::memory_order_relaxed) == kRounds; },
-                                      std::chrono::milliseconds{10000}));
+                                      morph::testing::WaitBudget{std::chrono::milliseconds{10000}}));
     live.clear();
 
     CHECK(cancelledCount == kRounds);

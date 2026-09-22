@@ -137,7 +137,7 @@ TEST_CASE("Issue 5: morph::offline::NetworkMonitor probe that throws is treated 
         [&] { offlineCount.fetch_add(1); }, [] {},
         morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 2, .onlineThreshold = 1}};
 
-    REQUIRE(waitUntil([&] { return offlineCount.load() >= 1; }, 1s));
+    REQUIRE(waitUntil([&] { return offlineCount.load() >= 1; }, morph::testing::WaitBudget{1s}));
     REQUIRE(monitor.isOnline() == false);
     REQUIRE_NOTHROW(monitor.stop());
 }
@@ -152,7 +152,7 @@ TEST_CASE("Issue 5: morph::offline::NetworkMonitor probe that always throws trea
         [&] { onlineCount.fetch_add(1); },
         morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 1, .onlineThreshold = 1}};
 
-    REQUIRE(waitUntil([&] { return offlineCount.load() >= 1; }, 1s));
+    REQUIRE(waitUntil([&] { return offlineCount.load() >= 1; }, morph::testing::WaitBudget{1s}));
     std::this_thread::sleep_for(80ms);
     REQUIRE(onlineCount.load() == 0);
     REQUIRE_NOTHROW(monitor.stop());
@@ -179,7 +179,7 @@ TEST_CASE("Issue 6: morph::offline::NetworkMonitor stop() called from onOffline 
         morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 1, .onlineThreshold = 1});
     monitorPtr.store(monitor.get());
 
-    REQUIRE(waitUntil([&] { return callbackFired.load(); }, 1s));
+    REQUIRE(waitUntil([&] { return callbackFired.load(); }, morph::testing::WaitBudget{1s}));
     REQUIRE_NOTHROW(monitor.reset());
 }
 
