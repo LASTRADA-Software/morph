@@ -263,25 +263,29 @@ public:
         if (glz::read_json(dom, schema)) {
             return schema;
         }
-        if (!dom.contains("properties")) {
+        // Reads go through findMember, which answers "is it there?" and "where
+        // is it?" in one probe and cannot grow the document on a miss; the
+        // `x-*` writes below intend `operator[]`'s insert and keep it, which
+        // is what the suppression above is still for (morph#706).
+        auto* const properties = detail::findMember(dom, "properties");
+        if (properties == nullptr) {
             return schema;
         }
-        auto& properties = dom["properties"];
         glz::generic_u64::array_t decorated{};
         for (const auto& entry : _fields) {
-            if (!properties.contains(entry.field)) {
+            auto* const property = detail::findMember(*properties, entry.field);
+            if (property == nullptr) {
                 continue;  // names a field the action does not have: ignored, never thrown
             }
-            auto& property = properties[entry.field];
             if (entry.decimalPlaces.has_value()) {
-                property["x-decimalPlaces"] =
+                (*property)["x-decimalPlaces"] =
                     static_cast<std::uint64_t>(math::detail::clampWireDecimalPlaces(*entry.decimalPlaces));
             }
             if (entry.minimum.has_value()) {
-                property["x-minimum"] = detail::boundNode(*entry.minimum);
+                (*property)["x-minimum"] = detail::boundNode(*entry.minimum);
             }
             if (entry.maximum.has_value()) {
-                property["x-maximum"] = detail::boundNode(*entry.maximum);
+                (*property)["x-maximum"] = detail::boundNode(*entry.maximum);
             }
             decorated.emplace_back(entry.field);
         }
