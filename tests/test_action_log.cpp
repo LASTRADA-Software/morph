@@ -19,6 +19,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/journal/action_log.hpp>
+#include <morph/journal/action_log_json.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 #include <mutex>

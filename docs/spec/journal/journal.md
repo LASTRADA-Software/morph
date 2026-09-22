@@ -5,11 +5,13 @@ against a model instance. It is the audit trail and the raw material for
 state reconstruction — the journal, not the live model, is the source of truth
 for "what happened."
 
-Three concerns live here, spread across three headers (`action_log.hpp`,
-`file_action_log.hpp`, and `journal.hpp`):
+Three concerns live here, spread across four headers (`action_log.hpp`,
+`action_log_json.hpp`, `file_action_log.hpp`, and `journal.hpp`):
 
 1. **The log entry format** — `LogEntry`, a flat struct of what one action
-   execution produced, plus `toJson`/`fromJson` for wire/file encoding.
+   execution produced (`action_log.hpp`), plus `toJson`/`fromJson` for wire/file
+   encoding, which live **separately** in `action_log_json.hpp` — see
+   [Why the codec is a separate header](#why-the-codec-is-a-separate-header).
 2. **The storage interface** — `IActionLog`, plus three implementations:
    `InMemoryActionLog` (`action_log.hpp`), `FileActionLog` (`file_action_log.hpp`),
    and `SessionLog` (`journal.hpp`).
@@ -26,6 +28,7 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 
 - [LogEntry — one recorded action execution](#logentry--one-recorded-action-execution)
 - [Serialization](#serialization)
+  - [Why the codec is a separate header](#why-the-codec-is-a-separate-header)
 - [Line-format version (`v`)](#line-format-version-v)
 - [Payload schema fingerprint](#payload-schema-fingerprint)
 - [Data-at-rest contract](#data-at-rest-contract)
@@ -83,6 +86,51 @@ the journal gains an entry it previously lacked.
 
 ## Serialization
 
+### Why the codec is a separate header
+
+`toJson`, `fromJson`, `glz::meta<Outcome>` and the two `detail` helpers behind
+them live in **`journal/action_log_json.hpp`**, not in `action_log.hpp`.
+
+`action_log.hpp` is on `core/model.hpp`'s include path — `model.hpp` needs
+`IActionLog` for the holder's log slot and nothing else — so while the codec
+sat there, **every consumer that reached a model compiled
+`<glaze/glaze.hpp>`**, whether or not it ever serialised anything. That is the
+cliff morph#521 measured and morph#573 step 4 names. Measured on
+`master` @ c6f6d953, clang 22.1.8, `-O2 -fsyntax-only`, one translation unit per
+header, best of three:
+
+| header | before | after |
+|---|---|---|
+| `journal/action_log.hpp` | 2.67 CPU-s, 252,559 preprocessed lines | **0.39 CPU-s, 70,568 lines** |
+| `core/model.hpp` | 2.86 CPU-s, 256,954 lines | **1.30 CPU-s, 135,367 lines** |
+| `core/strand.hpp` (the floor, for scale) | 1.20 CPU-s, 127,217 lines | unchanged |
+
+`model.hpp` is now within 0.10 CPU-s of the async primitives it sits beside,
+where it used to cost more than twice as much.
+
+**What this costs.** Dropping a transitive include from a header-only library is
+a source-breaking change for consumers, and this one is: a translation unit that
+included `action_log.hpp` and called `journal::toJson` must now also include
+`action_log_json.hpp`. Inside morph exactly one header does
+(`file_action_log.hpp`); four tests and one ladder-rung test did. That price was
+judged worth paying here and *not* worth paying for `model.hpp`'s
+`strand.hpp` include (see that file's comment), and the difference is the
+measurement above: `strand.hpp` is a transitive include that costs a consumer
+nothing, and this one cost 1.56 CPU-s per translation unit.
+
+**What it does not buy, stated plainly.** The build-level figure morph#573 step 4
+is argued over — ~90 CPU-s, ~8.7% of a kanban rung — is **not** realised by this
+change alone, and this comment should not be read as claiming it. Inside morph,
+every path to a `Bridge` goes through `core/registry.hpp`, which includes
+`forms/forms.hpp`, which includes glaze regardless; a TU that dispatches still
+pays. What this change does is make the *model-only* and *journal-only* include
+paths cheap, which is a precondition for that figure rather than a down payment
+on it. The remaining half — splitting `forms/forms.hpp` — is untouched.
+
+`SerializationError` deliberately stays in `action_log.hpp`: a caller catching
+it needs only `<stdexcept>`, and making that catch drag in glaze would put the
+surcharge back on the consumers the split exists to spare.
+
 ### `toJson(LogEntry const&) -> std::string`
 
 Encodes a `LogEntry` as JSON via Glaze, writing with `detail::EscapingWriteOpts`
@@ -92,7 +140,7 @@ producing invalid JSON — or, when the same string also holds an escaped `\`/`"
 silently corrupted JSON (glaze's chunked writer path rewrites the control byte
 as two `0x00` bytes in that case). Mirrors `morph::wire::detail::EscapingWriteOpts`
 (`core/wire.hpp`) exactly; duplicated locally rather than shared so this header
-stays free of a `core/` dependency. Throws `SerializationError` on failure (not
+stays free of a `core/` dependency. Defined in `action_log_json.hpp`. Throws `SerializationError` on failure (not
 realistically reachable for a flat struct of strings/integers — see
 `detail::throwOnGlazeError`).
 

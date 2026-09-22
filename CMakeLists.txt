@@ -191,6 +191,7 @@ target_sources(morph
         include/morph/core/strand.hpp
         include/morph/core/completion.hpp
         include/morph/core/callback_scope.hpp
+        include/morph/core/async.hpp
         include/morph/core/timeout_scheduler.hpp
         include/morph/core/model.hpp
         include/morph/core/registry.hpp
@@ -199,6 +200,7 @@ target_sources(morph
         include/morph/core/bridge.hpp
         include/morph/core/wire.hpp
         include/morph/journal/action_log.hpp
+        include/morph/journal/action_log_json.hpp
         include/morph/journal/journal.hpp
         include/morph/journal/file_action_log.hpp
         include/morph/offline/network_monitor.hpp

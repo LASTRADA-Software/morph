@@ -24,6 +24,7 @@ than vanishing (see [Failure modes](#failure-modes)).
 - [Empty state](#empty-state)
 - [API reference](#api-reference)
 - [`detail::ISettleSink`](#detailisettlesink--where-a-backend-settles-one-dispatch)
+- [`morph/core/async.hpp` — the cheap include](#morphcoreasynchpp--the-cheap-include)
 - [Design decisions](#design-decisions)
 - [Limitations](#limitations)
 - [Cross-references](#cross-references)
@@ -589,6 +590,31 @@ the two calls a backend actually makes on the completion it produced.
 See [`backend.md`, `IBackend::executeInto`](backend.md#executeinto--settling-the-callers-own-completion) and
 [`bridge.md`, "`BridgeSink`"](bridge.md#bridgesink--the-typed-state-the-backend-settles)
 (morph#572, Part B).
+
+## `morph/core/async.hpp` — the cheap include
+
+`Completion`, `IExecutor`, `StrandExecutor` and `CallbackScope` are usable
+without a model, a registry, a wire envelope or a schema, and none of them
+reaches glaze. `core/async.hpp` is a facade over the four headers that carry
+them — it declares nothing of its own, so including it is exactly equivalent to
+including all four.
+
+It exists because the obvious header to reach for is `bridge.hpp`, and that
+costs roughly three times as much. Measured on `master` @ c6f6d953, clang
+22.1.8, `-O2 -fsyntax-only`, one translation unit per header, best of three:
+
+| header | CPU s | preprocessed lines |
+|---|---|---|
+| `core/executor.hpp` | 1.16 | 124,855 |
+| `core/completion.hpp` | 1.20 | 127,450 |
+| `core/strand.hpp` | 1.20 | 127,217 |
+| **`core/async.hpp`** (all four) | **1.23** | **127,675** |
+| `core/bridge.hpp` | 3.76 | 267,827 |
+
+The whole async surface costs what one of its headers costs, because they
+already share almost all of their own includes. See morph#573, step 4, and
+[`journal.md`, "Why the codec is a separate header"](../journal/journal.md#why-the-codec-is-a-separate-header)
+for the other half of that step.
 
 ## Design decisions
 

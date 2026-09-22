@@ -15,6 +15,7 @@
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
+#include <morph/journal/action_log_json.hpp>
 #include <morph/journal/file_action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <string>
