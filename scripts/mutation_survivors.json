@@ -65,15 +65,15 @@
       "entries": [
         {
           "file": "include/morph/core/registry.hpp",
-          "line": 54,
+          "line": 79,
           "mutants": 3,
           "mutator": "cxx_add_to_sub",
-          "source": "seed ^= std::hash<std::string>{}(key.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);",
-          "reason": "The golden-ratio hash_combine mix. Every one of its three additions feeds a value used only as an unordered_map bucket index -- PairKeyHash is never serialised, never compared to a constant, and never pinned in docs/spec/pinned_facts.toml. Turning an addition into a subtraction yields a different hash, and an unordered container is required by the standard to behave correctly under any hash function, so no observable behaviour changes. What a test could assert -- that equal keys hash equally -- the mutant preserves, because it mutates the mixing arithmetic and not the inputs."
+          "source": "seed ^= std::hash<std::string_view>{}(key.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);",
+          "reason": "The golden-ratio hash_combine mix. Every one of its three additions feeds a value used only as an unordered_map bucket index -- PairKeyHash is never serialised, never compared to a constant, and never pinned in docs/spec/pinned_facts.toml. Turning an addition into a subtraction yields a different hash, and an unordered container is required by the standard to behave correctly under any hash function, so no observable behaviour changes. What a test could assert -- that equal keys hash equally -- the mutant preserves, because it mutates the mixing arithmetic and not the inputs. Re-cited in morph#700 (morph#572 Part C): the mix moved from line 54 to line 79 and its text changed, because PairKeyHash became transparent and now hashes `std::string_view` rather than `std::string`. The mutant moved, it did not cease to exist -- the same three additions in the same mix are still there, on one line, still cxx_add_to_sub targets. Transparency adds one clause to the disposition rather than removing it: the `const std::pair<std::string, std::string>&` overload delegates to the `PairKeyView` body instead of hashing separately, so a mutation of these additions applies identically to the stored-key hash and the lookup hash. It cannot desynchronise the two and make a transparent `find()` miss a registered action -- the failure the functor's own doc comment names. Verified by reading the code at line 79 on this branch; the mutant count was not re-measured, the campaign being scheduled rather than per-PR."
         },
         {
           "file": "include/morph/core/bridge.hpp",
-          "line": 122,
+          "line": 126,
           "mutants": 3,
           "mutator": "cxx_add_to_sub",
           "source": "return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));",
@@ -81,7 +81,7 @@
         },
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1194,
+          "line": 1256,
           "mutants": 1,
           "mutator": "cxx_replace_scalar_call",
           "source": "aware.reserve(_changeAware.size());",
@@ -147,15 +147,15 @@
       "representative_sites": [
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1087,
+          "line": 1149,
           "source": "::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);",
-          "reason": "The registerCount emission on LocalBackend::registerModel. Note for whoever refreshes this hint: the same statement appears character-for-character on the registerModelShared arm as well, so if this `line` ever drifts the gate will report the citation as ambiguous rather than printing a corrected line. That is the right outcome -- which of the two arms is meant is a question for a reader, not for a resolver -- and it is recorded here so the message is not a surprise."
+          "reason": "The registerCount emission on LocalBackend::registerModel. Note for whoever refreshes this hint: the same statement appears character-for-character on the registerModelShared arm as well, so if this `line` ever drifts the gate will report the citation as ambiguous rather than printing a corrected line. That is the right outcome -- which of the two arms is meant is a question for a reader, not for a resolver -- and it is recorded here so the message is not a surprise. That happened in morph#700 (morph#572 Parts A and C), which reported lines [1149, 1168] and neither equal to the old hint 1087. Resolved by reading, not by guessing: at a9cb5649 line 1087 sat inside `registerModel(const std::string&, std::function<...>)`, and on this branch that same emission is line 1149, while 1168 is the `registerModelShared` twin. The disposition is unchanged -- neither arm's emission was touched by this branch."
         },
         {
           "file": "include/morph/core/backend.hpp",
-          "line": 1251,
+          "line": 1318,
           "source": "::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,",
-          "reason": "The executeInFlight emission on the increment side of an execute. Its decrement twin inside the posted task is the same text after stripping, so the ambiguity note on the registerCount entry above applies here too."
+          "reason": "The executeInFlight emission on the increment side of an execute. Its decrement twin inside the posted task is the same text after stripping, so the ambiguity note on the registerCount entry above applies here too -- and did, in morph#700, which reported lines [1318, 1371] against the old hint 1251. Resolved by reading: at a9cb5649 line 1251 was the emission immediately after `inFlightCounter->fetch_add(...)`, and on this branch that emission is line 1318, while 1371 is the post-`fetch_sub` twin inside the strand task. The disposition is unchanged -- this branch moved the surrounding `_strand.post` capture list, not the emission."
         }
       ]
     },
