@@ -126,14 +126,46 @@ build_dir="${target}"
 #   so its documented exemption at CMakeLists.txt:582 does not reach here.)
 allowlist=()
 
+# stderr goes to a file rather than /dev/null, and the exit status is kept.
+#
+# `2>/dev/null` made the two ways this list can come back empty
+# indistinguishable: "ctest enumerated the tree and it registers no tests" and
+# "ctest itself failed before printing any JSON". morph#690 was the second one,
+# and it cost three CI runs and two local sessions to name, because the
+# sentence that named it was being discarded one pipe away from the error
+# message. What ctest actually wrote, reproduced locally against a
+# DISCOVERY_MODE PRE_TEST suite whose binary aborts at listing time:
+#
+#     CMake Error at .../CatchAddTests.cmake:307 (message):
+#       Error listing tests from executable '.../gui_tests':
+#         Result: Subprocess aborted
+#
+# with an exit status of 8 and an entirely empty stdout -- one suite's failed
+# discovery takes the whole listing down, not just its own entries. The stream
+# still has to be kept off stdout (it is not JSON and jq would choke on it),
+# so it is captured and printed only on the path that needs it.
+ctest_stderr="$(mktemp)"
+ctest_stdout="$(mktemp)"
+trap 'rm -f "${ctest_stderr}" "${ctest_stdout}"' EXIT
+
+ctest_status=0
+ctest --test-dir "${build_dir}" --show-only=json-v1 \
+    >"${ctest_stdout}" 2>"${ctest_stderr}" || ctest_status=$?
+
 mapfile -t commands < <(
-    ctest --test-dir "${build_dir}" --show-only=json-v1 2>/dev/null \
-        | jq -r '.tests[]?.command[0]? // empty' \
+    jq -r '.tests[]?.command[0]? // empty' <"${ctest_stdout}" 2>/dev/null \
         | sort -u
 )
 
 if [ "${#commands[@]}" -eq 0 ]; then
     echo "::error::check_sanitizer_instrumentation: ctest listed no tests in ${build_dir} -- this check would pass having examined nothing"
+    echo "check_sanitizer_instrumentation: \`ctest --show-only=json-v1\` exited ${ctest_status} and wrote $(wc -c <"${ctest_stdout}") bytes of stdout."
+    if [ -s "${ctest_stderr}" ]; then
+        echo "check_sanitizer_instrumentation: its stderr follows -- a non-empty stderr here means the listing *failed*, not that the tree registers no tests:"
+        sed 's/^/    | /' "${ctest_stderr}"
+    else
+        echo "check_sanitizer_instrumentation: it wrote nothing to stderr, so this is a build tree that genuinely registers no tests rather than a listing that failed."
+    fi
     exit 1
 fi
 
