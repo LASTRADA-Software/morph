@@ -8,11 +8,33 @@
 
 // ASan/TSan already define their own operator new/operator new[]/operator
 // delete/operator delete[] inside their runtime (libclang_rt.{asan,tsan}_cxx.a)
-// to track allocations for their own instrumentation. Defining this file's
-// own overloads under either sanitizer fails at *link* time with "multiple
-// definition of `operator new(unsigned long)'" against that runtime archive
-// -- ctest-level test exclusion (see .github/workflows/ci.yml) cannot help
-// here, since the conflict happens before any test ever runs.
+// to track allocations for their own instrumentation. So this file's own
+// overloads are *compiled out* under either sanitizer, by the guard a few
+// lines below, rather than linked beside that runtime's.
+//
+// Which means -- and an earlier version of this comment said the opposite, in
+// a form confident enough to act on (morph#718) -- there is no link failure
+// and no "multiple definition of `operator new(unsigned long)'". Measured with
+// clang 22.1.8, the major CI pins: `clang++ -std=c++23 -fsanitize=address
+// tests/oom_injector.cpp` links, and `nm -C --defined-only` finds eight
+// operator new/delete symbols in a plain object and zero in the ASan one.
+//
+// What happens instead is a *runtime* failure. OomInjector's constructor
+// throws under the guard (see the #ifdef in it), so every test that constructs
+// one fails when it runs, with
+//
+//     OomInjector: unusable under ASan/TSan (operator new/delete overrides are
+//     compiled out -- see oom_injector.cpp)
+//
+// ctest-level test exclusion is therefore exactly the remedy for it, and is
+// the one in use: .github/workflows/ci.yml excludes `OomInjector|morph#108` by
+// name on the clang-asan and clang-tsan legs. With that filter bypassed,
+// morph#719's lane measured six tests failing on each of the two legs. Deleting
+// the exclusion on the strength of the old comment turns both legs red.
+//
+// The link failure the old comment described was presumably real before the
+// guard below existed -- it is why the guard exists -- and the comment was not
+// updated when the guard landed.
 //
 // Detected via nested #ifdef/#if blocks (not one combined boolean
 // expression): MSVC's preprocessor does not define __has_feature at all, and
@@ -28,6 +50,18 @@
 // covers this repo's own clang-asan/clang-tsan presets without needing
 // __has_feature at all; the __has_feature branch below only matters for a
 // Clang invocation that enables a sanitizer through some other means.
+//
+// No CI leg escapes the first branch, which is what makes the paragraph above
+// true of CI and not merely of this machine: every sanitizer build in this
+// repository is clang (linux-sanitizers' clang-asan/clang-tsan/clang-ubsan
+// matrix, ladder-sanitizers, kanban-tsan and the bank leg), the Windows legs
+// (cl-*, clangcl-*) enable no sanitizer at all, and clang 22 -- the major
+// ci.yml's CLANG_VERSION pins -- defines both macros. Verified by compiling a
+// probe carrying this exact #if/#elif chain with clang++ 22.1.8: it reports
+// `guard FIRES via defined(__SANITIZE_ADDRESS__)/(__SANITIZE_THREAD__)` under
+// -fsanitize=address and under -fsanitize=thread, and does not fire under
+// -fsanitize=undefined or with no sanitizer, which is correct -- the overrides
+// work normally on the ubsan leg, and that leg is not excluded.
 #if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
 #define MORPH_TESTKIT_UNDER_ASAN_OR_TSAN
 #elif defined(__has_feature)
