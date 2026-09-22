@@ -85,7 +85,12 @@ env:
   # the cache itself -- jobs still read each other's entries.
   FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   CLANG_VERSION: "22"
-  # The Catch2 the clang-tidy-diff job analyses against. Not a version this
+  # The Catch2 the `clang-tidy` job analyses against, through the
+  # clang-tidy-diff.py run inside it. (Until morph#645 this sentence named
+  # clang-tidy-diff.py where the job id belongs -- the same substitution
+  # morph#637 was, and the one live reference
+  # scripts/check_workflow_job_references.py found when it landed.) Not a
+  # version this
   # workflow installs -- `apt-get install -y catch2` takes whatever
   # ubuntu-24.04 ships -- but a record of what that has been measured to be,
   # which the "Assert the Catch2 this job analyses against" step below reads
@@ -3279,6 +3284,45 @@ jobs:
 
       - name: Check every workflow section banner introduces its job
         run: python3 scripts/check_workflow_job_banners.py .
+
+  # ── A workflow comment may not name a job that does not exist ───────
+  #
+  # Its own job for the same reason banner-lint above is: it reads workflow
+  # text and builds nothing, so it answers in seconds instead of riding on a
+  # leg that takes 26-74 minutes to say the same thing.
+  #
+  # morph#637 was a comment in this file that named the script
+  # check_workflow_option_coverage.py where the job id `option-coverage`
+  # belonged. YAML comments are inert, so nothing could notice, and a reader
+  # searching the workflows for that name found nothing.
+  #
+  # The rule is narrow on purpose and the narrowness is measured: a token before
+  # the word "job" must resolve to a declared job id, but only if it is
+  # lowercase and hyphenated. This file's comments contain 207 occurrences of
+  # "<token> job", 193 of which are English ("this job", "a sanitizer job"); the
+  # hyphen is what separates the 13 references from the prose. The cost is that
+  # a stale reference to a single-word id -- `valgrind`, `windows` -- stays
+  # invisible, which the checker's header states rather than leaves to be found.
+  #
+  # It was not vacuous on arrival: the CLANG_VERSION block at the top of this
+  # file named clang-tidy-diff.py where `clang-tidy` belonged, which is
+  # morph#637's defect still live. Rewording that is part of the same commit.
+  job-reference-lint:
+    name: Workflow comments name jobs that exist
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # See scripts/test_check_workflow_job_references.sh's own comment: this
+      # gate reads prose, so the case that decides whether it measures anything
+      # is not a wrong reference but a tree whose comments have drifted out of
+      # the one phrase shape it reads -- which it would pass, silently, having
+      # matched nothing.
+      - name: Self-test the job-reference checker
+        run: bash scripts/test_check_workflow_job_references.sh
+
+      - name: Check every job named in a workflow comment exists
+        run: python3 scripts/check_workflow_job_references.py .
 
   # ── Install / export: find_package(morph CONFIG) must work ─────────────
   #
