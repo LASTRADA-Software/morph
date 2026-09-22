@@ -283,6 +283,63 @@ set_tests_properties(journal_skew_new_build_replays PROPERTIES
     FIXTURES_REQUIRED morph_journal_skew_fixture
     TIMEOUT 120)
 
+# ── forms: schema generation must not be route-count sensitive (morph#573) ───
+# The Part B regression guard. compile_checks/forms_dag_probe.cpp is compiled
+# twice — once as a type graph with one route to each node, once as a DAG with
+# 6,561 routes through the same number of types at the same depth — and
+# compile_checks/forms_dag_budget.cmake asserts the second costs no more than
+# MAX_RATIO_PERCENT of the first. Both files' headers say why it is a ratio and
+# what was measured; the short version is that this fixture took 26.8 CPU-s at
+# master @ a9cb5649 and 3.0 with the fix, against a 2.7-second control that the
+# fix leaves alone.
+#
+# A ctest case rather than a configure-time try_compile: it costs ~12 seconds of
+# compiling, which does not belong in every configure, and unlike the
+# MORPH_CLIENT_ONLY gates it asserts nothing about whether a program builds —
+# only about how long it takes, which is a thing to measure when someone asks
+# for test results, not when they ask for a build system.
+#
+# Gated on a GCC/Clang driver: the script passes `-I`, `-std=` and
+# `-fsyntax-only` literally, which clang-cl and MSVC spell differently. The
+# pathology is compiler-independent (it is an instantiation count), so one
+# front end proving it is enough; nothing here is skipped silently, because a
+# skipped case reports as "Not Run" rather than as a pass.
+if(CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$" AND NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    # Genex-free include list: this runs under `cmake -P`, where nothing expands
+    # a $<BUILD_INTERFACE:...>. morph's own include directory is named directly
+    # rather than unwrapped from the target, so a change to how that target is
+    # declared cannot quietly leave this pointing at an installed copy.
+    set(MORPH_FORMS_DAG_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/include")
+    get_target_property(_morph_forms_dag_glaze_includes glaze::glaze INTERFACE_INCLUDE_DIRECTORIES)
+    foreach(_dir IN LISTS _morph_forms_dag_glaze_includes)
+        string(REGEX REPLACE "^\\$<BUILD_INTERFACE:(.*)>$" "\\1" _dir "${_dir}")
+        if(NOT _dir MATCHES "\\$<")
+            list(APPEND MORPH_FORMS_DAG_INCLUDE_DIRS "${_dir}")
+        endif()
+    endforeach()
+    unset(_dir)
+    unset(_morph_forms_dag_glaze_includes)
+    # Pipe-joined: a `;` inside one add_test() argument is an argument separator.
+    string(REPLACE ";" "|" MORPH_FORMS_DAG_INCLUDE_DIRS "${MORPH_FORMS_DAG_INCLUDE_DIRS}")
+
+    add_test(NAME forms_schema_generation_is_not_route_count_sensitive
+        COMMAND ${CMAKE_COMMAND}
+            "-DMORPH_DAG_CXX=${CMAKE_CXX_COMPILER}"
+            "-DMORPH_DAG_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/forms_dag_probe.cpp"
+            "-DMORPH_DAG_INCLUDES=${MORPH_FORMS_DAG_INCLUDE_DIRS}"
+            "-DMORPH_DAG_FLAGS=-std=c++23|-fsyntax-only"
+            "-DMORPH_DAG_MAX_RATIO_PERCENT=300"
+            "-DMORPH_DAG_RUNS=2"
+            "-DMORPH_DAG_MIN_CONTROL_MS=250"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/forms_dag_budget.cmake")
+    # Generous enough that a regression reports the ratio it measured rather
+    # than dying as a timeout: the unfixed fixture took ~27 s per run here, and
+    # a slow shared runner can be several times that.
+    set_tests_properties(forms_schema_generation_is_not_route_count_sensitive PROPERTIES
+        TIMEOUT 900
+        RUN_SERIAL TRUE)
+endif()
+
 # ── MORPH_REQUIRE_VETTED_HMAC guard check ────────────────────────────────────
 # Configure-time proof that the default-argument-removal mechanism in
 # session_auth.hpp (TokenIssuer/TokenVerifier/SigningAuthorizer) actually
