@@ -247,6 +247,77 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
 
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
+/// @brief A place a backend settles one dispatch, without naming its type.
+///
+/// The narrow half of `CompletionState<std::shared_ptr<void>>`: the two calls a
+/// backend actually makes on the completion it produced. Splitting them out is
+/// what lets `Bridge` hand the backend a sink that *is* the caller's typed
+/// completion state, instead of a second, erased completion whose only job is
+/// to be forwarded into the first.
+///
+/// That forwarding cost six heap allocations per dispatch — the erased state,
+/// the `.then` and `.onError` closures, their two handler vectors, and one of
+/// the two posted settle tasks — of the 14.06 a local round trip took. Through
+/// a sink it is one (morph#572, Part B).
+///
+/// @par Contract for implementers
+/// - **Settle once.** `settleValue` and `settleException` are mutually
+///   exclusive and each may be called at most once *in effect*; an
+///   implementation must tolerate extra calls and ignore them, because
+///   `IBackend::cancelPending` settles a sink that a reply may be racing to
+///   settle at the same moment. `CompletionState` is already first-result-wins,
+///   but anything an implementation does *besides* forwarding — decrementing a
+///   counter, cancelling a timer — needs its own latch.
+/// - **Do not let an exception escape** where one can be avoided. A sink is
+///   settled from a strand task or a transport thread whose only handler is the
+///   one the backend wrote around the call. The methods are deliberately *not*
+///   `noexcept`: `CompletionState::setValue` is not either (it builds a
+///   `std::function` for the posted callback), and promising more here would
+///   turn a `bad_alloc` into a `std::terminate` that today it is not.
+class ISettleSink {
+public:
+    ISettleSink() = default;
+    ISettleSink(const ISettleSink&) = delete;
+    ISettleSink(ISettleSink&&) = delete;
+    ISettleSink& operator=(const ISettleSink&) = delete;
+    ISettleSink& operator=(ISettleSink&&) = delete;
+    virtual ~ISettleSink() = default;
+
+    /// @brief Settles the dispatch with its opaque result.
+    /// @param value The result, as the backend produced it.
+    virtual void settleValue(std::shared_ptr<void> value) = 0;
+
+    /// @brief Settles the dispatch with a failure.
+    /// @param exc The exception to deliver.
+    virtual void settleException(const std::exception_ptr& exc) = 0;
+};
+
+/// @brief The `ISettleSink` that simply is a `CompletionState<std::shared_ptr<void>>`.
+///
+/// The adapter for every caller that wants the old shape: `IBackend::execute`
+/// returns a `Completion<std::shared_ptr<void>>`, so a backend implementing
+/// `executeInto` can serve `execute` by wrapping its own state in one of these.
+/// Nothing but forwarding happens here, so it needs no settle-once latch of its
+/// own — `CompletionState` already has one.
+class CompletionSettleSink final : public ISettleSink {
+public:
+    /// @brief Binds the sink to @p state.
+    /// @param state The completion state to settle. Must not be null.
+    explicit CompletionSettleSink(std::shared_ptr<CompletionState<std::shared_ptr<void>>> state)
+        : _state{std::move(state)} {}
+
+    /// @brief Forwards to `CompletionState::setValue`.
+    /// @param value The result to store.
+    void settleValue(std::shared_ptr<void> value) override { _state->setValue(std::move(value)); }
+
+    /// @brief Forwards to `CompletionState::setException`.
+    /// @param exc The exception to store.
+    void settleException(const std::exception_ptr& exc) override { _state->setException(exc); }
+
+private:
+    std::shared_ptr<CompletionState<std::shared_ptr<void>>> _state;
+};
+
 }  // namespace detail
 
 /// @brief Move-only handle representing the eventual result of an asynchronous operation.

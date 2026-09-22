@@ -23,6 +23,7 @@ than vanishing (see [Failure modes](#failure-modes)).
 - [Lifetime and stop gating](#lifetime-and-stop-gating)
 - [Empty state](#empty-state)
 - [API reference](#api-reference)
+- [`detail::ISettleSink`](#detailisettlesink--where-a-backend-settles-one-dispatch)
 - [Design decisions](#design-decisions)
 - [Limitations](#limitations)
 - [Cross-references](#cross-references)
@@ -550,6 +551,44 @@ that will never signal.
 | `attachThen(function<void(const T&)>)` | `void attachThen(std::function<void(const T&)>)` | Consumer-side; fires immediately (this handler only) if ready with value, else appends to the stored handler list. |
 | `attachOnError(function<void(exception_ptr)>)` | `void attachOnError(std::function<void(std::exception_ptr)>)` | Consumer-side; fires immediately (this handler only) if ready with error, appends to the stored handler list if not yet ready, no-op if ready with a value. Sets `onErrAttached = (cbExec != nullptr)`, so orphan logging is suppressed only when an executor exists to deliver on. |
 | destructor | `~CompletionState()` | Orphan-detection: logs unhandled exceptions when destroyed with an error and no `onErr` attached. |
+
+## `detail::ISettleSink` — where a backend settles one dispatch
+
+`IBackend::execute` hands its caller a `Completion<std::shared_ptr<void>>`. For
+`Bridge::executeVia` that was never the shape it wanted: it already owns the
+typed `CompletionState<R>` its caller holds, so the erased completion existed
+only to be forwarded into the typed one by a `.then`/`.onError` pair. The
+forwarding cost six heap allocations of the 14.06 a local round trip took —
+the erased state, the two closures, their two handler vectors, and one of the
+two posted settle tasks.
+
+`ISettleSink` is the narrow half of `CompletionState<std::shared_ptr<void>>`:
+the two calls a backend actually makes on the completion it produced.
+
+| Symbol | Kind | Purpose |
+|---|---|---|
+| `detail::ISettleSink` | abstract class | `settleValue(std::shared_ptr<void>)` / `settleException(const std::exception_ptr&)`. Nothing else. |
+| `detail::CompletionSettleSink` | class | The adapter that *is* a `CompletionState<std::shared_ptr<void>>`, for callers that still want the `Completion`-returning shape. `LocalBackend::execute` uses one to serve itself from `executeInto`. |
+
+### Contract for implementers
+
+- **Settle once.** `settleValue` and `settleException` are mutually exclusive
+  and each takes effect at most once. An implementation must *tolerate* extra
+  calls and ignore them: `IBackend::cancelPending` settles a sink that a reply
+  may be racing to settle at the same moment. `CompletionState` is already
+  first-result-wins, so forwarding is safe by itself — but anything an
+  implementation does **besides** forwarding (decrementing a counter,
+  cancelling a timer) needs its own latch. `bridge::detail::BridgeSink` carries
+  one, and `test_bridge_pending_calls.cpp` pins it: without the latch, a
+  `cancelPending` followed by the real reply decrements `Bridge::pendingCalls()`
+  twice and the `std::size_t` counter reads `18446744073709551615`.
+- **Deliberately not `noexcept`.** `CompletionState::setValue` is not either —
+  it builds a `std::function` for the posted callback — and promising more here
+  would turn a `bad_alloc` into a `std::terminate` that today it is not.
+
+See [`backend.md`, `IBackend::executeInto`](backend.md#executeinto--settling-the-callers-own-completion) and
+[`bridge.md`, "`BridgeSink`"](bridge.md#bridgesink--the-typed-state-the-backend-settles)
+(morph#572, Part B).
 
 ## Design decisions
 

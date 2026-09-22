@@ -578,7 +578,236 @@ struct BridgeLifetime {
     bool alive = true;
 };
 
+/// @brief The typed completion state a backend settles directly.
+///
+/// `Bridge::executeVia` used to create two completions per dispatch: the typed
+/// one it hands the caller, and the erased
+/// `Completion<std::shared_ptr<void>>` the backend produced, with a `.then` /
+/// `.onError` pair forwarding one into the other. Everything the forwarding
+/// block did — disarm the deadline, decrement `_pendingCalls`, run `onResult`
+/// and publish under one liveness snapshot, guard the value move — is a method
+/// on this class instead, and the backend settles it through `ISettleSink`.
+/// Six allocations per call become one (morph#572, Part B):
+///
+/// | what | before | after |
+/// |---|---|---|
+/// | typed `CompletionState<R>` | 1 | 1 (this object) |
+/// | erased `CompletionState<std::shared_ptr<void>>` | 1 | — |
+/// | `.then` / `.onError` forwarding closures | 2 | — |
+/// | their two handler vectors | 2 | — |
+///
+/// @par What had to be preserved, and where it now lives
+/// Each of these carries a comment naming the bug it came from; moving them
+/// was the risk in this change, so they are enumerated rather than left to be
+/// rediscovered.
+/// - **The deadline disarm happens first**, before any forwarding work, so a
+///   slow `onResult`/`publishResult` cannot give the timer a window to resolve
+///   this completion with `ClientTimeoutError` while the real result is in
+///   hand — `settleOnce`, called at the top of both settle methods (morph#620).
+/// - **`_pendingCalls` is decremented on exactly one of two mutually exclusive
+///   paths**, whether or not the forwarding that follows then throws —
+///   `settleOnce` again, which is now also what makes a `cancelPending`
+///   racing a reply decrement once rather than twice (morph#489).
+/// - **`lifetime->alive` is read once** under the gate and that one snapshot
+///   decides both `onResult` and `publishResult`, so the two cannot disagree
+///   (morph#486/#489).
+/// - **The value forwarding is guarded**, so a throwing move of `R` routes to
+///   this state's own error sink instead of escaping the callback executor,
+///   where `ThreadPoolExecutor` swallows it (hanging the completion) and
+///   `QtExecutor` lets it reach the event loop (morph#502).
+///
+/// @par Lifetime
+/// Everything this holds is pinned: `_pendingCalls`, `_subscriptions` and
+/// `_lifetime` are the `Bridge`'s own heap-allocated, shared members, and
+/// `_schedulerRef` is a private `shared_ptr` copy taken under
+/// `_executeDeadlineMtx`. Nothing here touches the `Bridge` itself, so a
+/// dispatch settling after `~Bridge` is safe by construction rather than by
+/// check — except `onResult`, which genuinely needs the current bridge and is
+/// therefore the one thing gated on `alive`.
+///
+/// @tparam R The action's result type.
+template <typename R>
+class BridgeSink final : public ::morph::async::detail::CompletionState<R>,
+                         public ::morph::async::detail::ISettleSink {
+public:
+    /// @brief Builds the sink for one dispatch.
+    /// @param mid          Instance id this dispatch targeted, for `publishResult`.
+    /// @param onResult     Optional observer run on the typed result before it is
+    ///                     moved into this state and before the caller's `.then`.
+    /// @param pendingCalls The bridge's pinned in-flight counter.
+    /// @param subscriptions The bridge's pinned subscription registry.
+    /// @param lifetime     The bridge's lifetime gate.
+    BridgeSink(::morph::exec::detail::ModelId mid, std::function<void(const R&)> onResult,
+               std::shared_ptr<std::atomic<std::size_t>> pendingCalls,
+               std::shared_ptr<SubscriptionRegistry<HandlerBinding>> subscriptions,
+               std::shared_ptr<BridgeLifetime> lifetime)
+        : _mid{mid},
+          _onResult{std::move(onResult)},
+          _pendingCalls{std::move(pendingCalls)},
+          _subscriptions{std::move(subscriptions)},
+          _lifetime{std::move(lifetime)} {}
+
+    /// @brief Hands the sink the deadline entry it must disarm when it settles.
+    ///
+    /// Called by `executeVia` *before* the dispatch, so the write is sequenced
+    /// before anything that could settle this sink on another thread. The
+    /// scheduler is held as a `shared_ptr` copy taken under the bridge's
+    /// `_executeDeadlineMtx`, never as `Bridge::_timeoutScheduler`: while any
+    /// copy is alive `~TimeoutScheduler` cannot run, which is what makes
+    /// `cancel()` safe from a callback that may outlive the bridge.
+    ///
+    /// @param handle    The scheduled entry.
+    /// @param scheduler The scheduler that owns it.
+    void armDeadline(::morph::async::detail::TimeoutScheduler::Handle handle,
+                     std::shared_ptr<::morph::async::detail::TimeoutScheduler> scheduler) {
+        _deadlineHandle = handle;
+        _schedulerRef = std::move(scheduler);
+    }
+
+    /// @brief Undoes `armDeadline` and the pending count for a dispatch that
+    ///        never started, because `IBackend::executeInto` threw.
+    ///
+    /// The `morph#502` path: a throw out of the backend left `_pendingCalls`
+    /// inflated — and `pendingCalls()` is documented as a quiescence gate — and
+    /// the timer entry stranded. Routed through `settleOnce` so it cannot
+    /// double-count against a sink the backend had already settled before it
+    /// threw.
+    void abandon() {
+        if (settleOnce()) {
+            _pendingCalls->fetch_sub(1, std::memory_order_relaxed);
+        }
+    }
+
+    /// @brief Settles with the backend's opaque result.
+    /// @param opaque The result, which must point at an `R`. Spelled
+    ///        `opaque` rather than `value` only because `CompletionState`
+    ///        already has a member of that name, and -Wshadow-field is on.
+    void settleValue(std::shared_ptr<void> opaque) override {
+        if (!settleOnce()) {
+            return;
+        }
+        _pendingCalls->fetch_sub(1, std::memory_order_relaxed);
+        // Guard the value-forwarding: if R's move/copy throws (or the cast is
+        // somehow wrong), route the exception to this state's own error sink
+        // rather than letting it escape into the strand task or transport
+        // thread that called us -- where ThreadPoolExecutor swallows it (and
+        // the completion then hangs forever) and QtExecutor lets it reach the
+        // event loop and std::terminate. Mirrors the forwarding guard in
+        // remote.hpp's SimulatedRemoteBackend::execute. See
+        // docs/spec/core/bridge.md.
+        try {
+            auto* const typedResult = static_cast<R*>(opaque.get());
+            // `bridgeAlive` is read once, fresh, under `_lifetime`'s own gate --
+            // the same `detail::BridgeLifetime` `~BridgeHandler` uses (see its
+            // doc comment for why a `CallbackToken` cannot carry this weight) --
+            // and reused below to decide whether to publish, so both decisions
+            // come from one consistent snapshot. Only `onResult` actually runs
+            // inside the gate: it is the one piece of this method that is not
+            // pinned and genuinely needs the *current* bridge/backend (for a
+            // result-keyed action it calls `assignHandlerPrimary`, which
+            // touches `_attachMtx` and `loadBackend()`) -- and it runs before
+            // the value is moved out and before the caller's own `.then`, so a
+            // result-sourced primary key is adopted before any user code
+            // observes the result. `assignHandlerPrimary`'s own synchronous
+            // path is non-blocking by construction (its doc comment: it prefers
+            // the backend's async registration precisely to avoid a
+            // nested-event-loop block), so holding the gate across it does not
+            // expose `~Bridge` to the unbounded-block hazard morph#489 names
+            // for the sites this does not mechanically apply to
+            // (installReconnectHandler, site 4).
+            bool bridgeAlive = false;
+            {
+                std::shared_lock const gate{_lifetime->mtx};
+                bridgeAlive = _lifetime->alive;
+                if (bridgeAlive && _onResult) {
+                    _onResult(*typedResult);
+                }
+            }
+            // Fan the result out to everything attached to this instance before
+            // the value is moved away. `_subscriptions` is pinned, so this call
+            // is safe regardless of the Bridge's lifetime
+            // (`SubscriptionRegistry` snapshots its own sinks under its own lock
+            // and invokes them outside it -- see that class -- so it cannot
+            // deadlock against a subscriber that re-enters, which is exactly
+            // the hazard that rules out gating this call the way `onResult`
+            // above is gated). Still conditioned on `bridgeAlive`: a Bridge
+            // already torn down should not go on fanning results out to its
+            // instance subscribers.
+            if constexpr (std::is_copy_constructible_v<R>) {
+                if (bridgeAlive && _subscriptions->hasSubscribers()) {
+                    _subscriptions->publishResult(_mid, std::type_index{typeid(R)}, std::any{*typedResult});
+                }
+            }
+            this->setValue(std::move(*typedResult));
+        } catch (...) {
+            this->setException(std::current_exception());
+        }
+    }
+
+    /// @brief Settles with a failure from the backend.
+    /// @param exc The exception to deliver to the caller's `.onError`.
+    void settleException(const std::exception_ptr& exc) override {
+        if (!settleOnce()) {
+            // Already settled -- but `CompletionState::setException` is
+            // first-result-wins and silently drops a late one, so calling it
+            // anyway costs nothing and keeps the behaviour identical to the
+            // pre-sink shape, where `cancelPending` reached the state directly.
+            this->setException(exc);
+            return;
+        }
+        _pendingCalls->fetch_sub(1, std::memory_order_relaxed);
+        this->setException(exc);
+    }
+
+private:
+    /// @brief Claims the one-time settle work; `true` for exactly one caller.
+    ///
+    /// Two things happen once per dispatch and must not happen twice: the
+    /// deadline disarm and the `_pendingCalls` decrement. Before this class
+    /// they were carried by the fact that `.then` and `.onError` are mutually
+    /// exclusive on one `CompletionState`. A sink has no such guarantee --
+    /// `IBackend::cancelPending` settles it from one thread while a reply may
+    /// be settling it from another -- so the latch is explicit.
+    ///
+    /// The deadline disarm rides along here rather than in the callers,
+    /// because "first" is exactly what it needs to be: it must happen before
+    /// any forwarding work, so a slow `onResult`/`publishResult` cannot give
+    /// the timer a window to fire and resolve this completion with
+    /// `ClientTimeoutError` while the real result is already in hand.
+    ///
+    /// @return `true` if this call claimed the settle, `false` if another did.
+    bool settleOnce() {
+        if (_settled.test_and_set(std::memory_order_acq_rel)) {
+            return false;
+        }
+        if (_deadlineHandle && _schedulerRef) {
+            try {
+                _schedulerRef->cancel(*_deadlineHandle);
+            } catch (...) {  // NOLINT(bugprone-empty-catch)
+                // Best-effort, by contract and not only on a throw:
+                // `TimeoutScheduler::cancel` stops an entry that has not
+                // started but returns without waiting for one that already has.
+                // A deadline callback already mid-flight still runs its
+                // `setException`, which this state discards as an already-ready
+                // one -- first result wins. That, not the disarm, is what makes
+                // the race harmless (morph#620).
+            }
+        }
+        return true;
+    }
+
+    ::morph::exec::detail::ModelId _mid;
+    std::function<void(const R&)> _onResult;
+    std::shared_ptr<std::atomic<std::size_t>> _pendingCalls;
+    std::shared_ptr<SubscriptionRegistry<HandlerBinding>> _subscriptions;
+    std::shared_ptr<BridgeLifetime> _lifetime;
+    std::optional<::morph::async::detail::TimeoutScheduler::Handle> _deadlineHandle;
+    std::shared_ptr<::morph::async::detail::TimeoutScheduler> _schedulerRef;
+    std::atomic_flag _settled = ATOMIC_FLAG_INIT;
+};
+
 }  // namespace detail
+
 
 /// @brief Central dispatcher that routes typed actions to an `IBackend`.
 ///
@@ -1752,12 +1981,19 @@ public:
         auto backend = loadBackend();
         uint64_t const raw = binding->currentId.load();
 
-        auto typedState = std::make_shared<::morph::async::detail::CompletionState<R>>();
-        ::morph::async::Completion<R> typed{typedState, cbExec};
+        // One allocation where there used to be six: this object *is* the
+        // typed completion state the caller gets, and is also the
+        // `ISettleSink` the backend settles -- so there is no second, erased
+        // completion and no `.then`/`.onError` pair forwarding one into the
+        // other. See `detail::BridgeSink` for what the forwarding block did and
+        // where each piece of it went (morph#572, Part B).
+        auto sink = std::make_shared<detail::BridgeSink<R>>(::morph::exec::detail::ModelId{raw}, std::move(onResult),
+                                                            _pendingCalls, _subscriptions, _lifetime);
+        ::morph::async::Completion<R> typed{sink, cbExec};
         if (raw == 0U) {
             // Resolved synchronously, before any dispatch -- never counted as
             // pending, so nothing to decrement here (see pendingCalls()).
-            typedState->setException(std::make_exception_ptr(std::runtime_error("handler not bound")));
+            sink->setException(std::make_exception_ptr(std::runtime_error("handler not bound")));
             return typed;
         }
         // Counted from here on: every path below either reaches the backend
@@ -1771,10 +2007,9 @@ public:
         // already resolved and needs no timer. Reading the deadline and arming
         // it happen under one lock so a concurrent setExecuteDeadline() cannot
         // interleave between the two.
-        std::optional<::morph::async::detail::TimeoutScheduler::Handle> deadlineHandle;
         // A private shared_ptr copy, obtained under the same lock as the
         // schedule() call -- not `this->_timeoutScheduler`, and not gated on
-        // `alive` -- so the two `.then()`/`.onError()` callbacks below can
+        // `alive` -- so the sink's own disarm can
         // call `cancel()` on a scheduler that is provably still alive,
         // regardless of whether ~Bridge() has run or is running concurrently
         // on another thread. `_executeDeadlineMtx` alone does not establish
@@ -1791,21 +2026,31 @@ public:
             std::scoped_lock const lock{_executeDeadlineMtx};
             if (_executeDeadline.count() > 0 && _timeoutScheduler) {
                 schedulerRef = _timeoutScheduler;
-                // The callback captures `typedState` alone -- never `this` -- so
+                // The callback captures the sink alone -- never `this` -- so
                 // it stays safe to fire even while ~Bridge() is running, and
                 // equally safe to fire *after* its own `cancel()`:
                 // `TimeoutScheduler::cancel` stops a callback that has not
                 // started but returns without waiting for one that already has
-                // (see that function's comment), so the disarms in the two
-                // continuations below are best-effort by contract and not only
+                // (see that function's comment), so the sink's disarm is
+                // best-effort by contract and not only
                 // when `cancel()` throws. A deadline callback that is already
                 // mid-flight when the real reply lands still runs its
                 // `setException`, which `CompletionState` discards on an
                 // already-ready state -- first result wins. That, not the
                 // disarm, is what makes the race harmless (morph#620).
-                deadlineHandle = schedulerRef->schedule(_executeDeadline, [typedState] {
-                    typedState->setException(std::make_exception_ptr(::morph::backend::ClientTimeoutError{}));
+                // The callback settles the *state*, not the sink: a deadline
+                // that fires is not one of the two mutually-exclusive
+                // resolution paths and must not decrement `_pendingCalls`,
+                // which stays inflated until the real reply lands. That is
+                // unchanged from the forwarding shape, where the timer
+                // likewise reached `typedState` directly.
+                auto const handle = schedulerRef->schedule(_executeDeadline, [sink] {
+                    sink->setException(std::make_exception_ptr(::morph::backend::ClientTimeoutError{}));
                 });
+                // Handed to the sink here, before the dispatch below, so the
+                // write is sequenced before anything that could settle it on
+                // another thread.
+                sink->armDeadline(handle, schedulerRef);
             }
         }
         ::morph::backend::detail::ActionCall call;
@@ -1923,141 +2168,16 @@ public:
         // which the class documents as a quiescence gate -- and stranding the
         // timer entry. Undo both, then let the exception continue to the caller
         // (morph#502).
-        ::morph::async::Completion<std::shared_ptr<void>> anyCompletion = [&] {
-            try {
-                return backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
-            } catch (...) {
-                _pendingCalls->fetch_sub(1, std::memory_order_relaxed);
-                if (deadlineHandle && schedulerRef) {
-                    schedulerRef->cancel(*deadlineHandle);
-                }
-                throw;
-            }
-        }();
-        anyCompletion
-            .then([typedState, onResult = std::move(onResult), raw, deadlineHandle, schedulerRef,
-                   pendingCalls = _pendingCalls, subscriptions = _subscriptions,
-                   lifetime = _lifetime](const std::shared_ptr<void>& vAny) {
-                // Disarm the client-side deadline first, before any of the
-                // forwarding work below: a slow onResult/publishResult callback
-                // must not give the timer a window to fire concurrently and
-                // resolve this completion with ClientTimeoutError while the real
-                // result is already in hand. Uses the `schedulerRef` copy
-                // captured above, not `this->_timeoutScheduler` -- see that
-                // capture's own comment for why: this callback can in principle
-                // run after ~Bridge(), and `schedulerRef` (not a liveness check)
-                // is what makes `cancel()` safe in that case, by keeping the
-                // scheduler alive for exactly as long as this callback needs it.
-                // Leaving the entry armed if it were never cancelled would be
-                // harmless (~TimeoutScheduler drops pending entries without
-                // firing them), but a thrown cancel() must not prevent the real
-                // result from resolving the completion below either.
-                if (deadlineHandle && schedulerRef) {
-                    try {
-                        schedulerRef->cancel(*deadlineHandle);
-                    } catch (...) {  // NOLINT(bugprone-empty-catch)
-                        // Best-effort: a failed cancel leaves the deadline's own
-                        // entry to fire later and find nothing (setValue/
-                        // setException below are idempotent), which is exactly
-                        // what an uncancelled entry already does.
-                    }
-                }
-                // A backend completion can in principle resolve after the
-                // Bridge is gone (see liveness()'s doc comment): the backend
-                // may be co-owned and outlive this Bridge, or this callback
-                // may already be running when ~Bridge() runs concurrently on
-                // another thread. This dispatch is resolving either way, so
-                // `pendingCalls` -- pinned above, independent of the Bridge --
-                // is decremented unconditionally (morph#489, site 1): one of
-                // the two mutually-exclusive resolution continuations for this
-                // dispatched call (the other is the .onError below), so exactly
-                // one of them decrements per call, whether the value-forwarding
-                // below then succeeds or itself throws and routes to
-                // setException.
-                pendingCalls->fetch_sub(1, std::memory_order_relaxed);
-                // Guard the value-forwarding: if R's move/copy throws (or the cast
-                // is somehow wrong), route the exception to the typed completion's
-                // error sink instead of letting it escape the callback executor —
-                // where ThreadPoolExecutor swallows it (the outer completion would
-                // then hang forever) and QtExecutor lets it reach the event loop
-                // and std::terminate. Mirrors the forwarding guard in remote.hpp's
-                // SimulatedRemoteBackend::execute. See docs/spec/core/bridge.md.
-                try {
-                    auto* const typedResult = static_cast<R*>(vAny.get());
-                    // `bridgeAlive` is read once, fresh, under `lifetime`'s own
-                    // gate -- the same `detail::BridgeLifetime` `~BridgeHandler`
-                    // uses (see its doc comment for why a `CallbackToken` cannot
-                    // carry this weight) -- and reused below to decide whether
-                    // to publish, so both decisions come from one consistent
-                    // snapshot, matching this function's behaviour before this
-                    // fix. Only `onResult` actually runs inside the gate: it is
-                    // the one piece of this continuation that is not pinned
-                    // above and genuinely needs the *current* bridge/backend
-                    // (for a result-keyed action, it calls
-                    // `assignHandlerPrimary`, which touches `_attachMtx` and
-                    // `loadBackend()`) -- runs before the value is moved out and
-                    // before the caller's own .then, so a result-sourced
-                    // primary key is adopted before any user code observes the
-                    // result. `assignHandlerPrimary`'s own synchronous path is
-                    // non-blocking by construction (its doc comment: it prefers
-                    // the backend's async registration precisely to avoid a
-                    // nested-event-loop block), so holding the gate across it
-                    // does not expose `~Bridge` to the unbounded-block hazard
-                    // morph#489 names for the sites this fix does not
-                    // mechanically apply to (installReconnectHandler, site 4).
-                    bool bridgeAlive = false;
-                    {
-                        std::shared_lock const gate{lifetime->mtx};
-                        bridgeAlive = lifetime->alive;
-                        if (bridgeAlive && onResult) {
-                            onResult(*typedResult);
-                        }
-                    }
-                    // Fan the result out to everything attached to this
-                    // instance before the value is moved away. `subscriptions`
-                    // is pinned above, so this call itself is safe regardless
-                    // of the Bridge's lifetime (`SubscriptionRegistry` snapshots
-                    // its own sinks under its own lock and invokes them outside
-                    // it -- see that class -- so it cannot deadlock against a
-                    // subscriber that re-enters, which is exactly the hazard
-                    // that rules out gating this call the way `onResult` above
-                    // is gated). Still conditioned on `bridgeAlive`, unchanged
-                    // from before this fix: a Bridge already torn down should
-                    // not go on fanning results out to its instance
-                    // subscribers.
-                    if constexpr (std::is_copy_constructible_v<R>) {
-                        if (bridgeAlive && subscriptions->hasSubscribers()) {
-                            subscriptions->publishResult(::morph::exec::detail::ModelId{raw},
-                                                         std::type_index{typeid(R)}, std::any{*typedResult});
-                        }
-                    }
-                    typedState->setValue(std::move(*typedResult));
-                } catch (...) {
-                    typedState->setException(std::current_exception());
-                }
-            })
-            .onError([typedState, deadlineHandle, schedulerRef,
-                      pendingCalls = _pendingCalls](const std::exception_ptr& err) {
-                // Same disarm-first reasoning (and the same schedulerRef-based
-                // safety) as the success branch above: a real error reply
-                // settles the completion, so the deadline must not also fire.
-                if (deadlineHandle && schedulerRef) {
-                    try {
-                        schedulerRef->cancel(*deadlineHandle);
-                    } catch (...) {  // NOLINT(bugprone-empty-catch)
-                        // Best-effort: a failed cancel leaves the deadline's own
-                        // entry to fire later and find nothing (setValue/
-                        // setException below are idempotent), which is exactly
-                        // what an uncancelled entry already does.
-                    }
-                }
-                // The other of the two mutually-exclusive resolution paths --
-                // see the .then continuation above. `pendingCalls` is pinned
-                // there too, so this needs no liveness check at all (morph#489,
-                // site 2) -- nothing else in this branch touches the Bridge.
-                pendingCalls->fetch_sub(1, std::memory_order_relaxed);
-                typedState->setException(err);
-            });
+        try {
+            backend->executeInto(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec, sink);
+        } catch (...) {
+            // Undoes the pending count and the deadline together -- see
+            // `BridgeSink::abandon`, which routes both through the same
+            // settle-once latch the resolution paths use, so a backend that
+            // settled the sink *and then* threw cannot be counted twice.
+            sink->abandon();
+            throw;
+        }
         return typed;
     }
 

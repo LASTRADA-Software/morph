@@ -24,6 +24,7 @@ using namespace std::chrono_literals;
 namespace {
 std::atomic<int> gPendingCallsSlowStarted{0};
 std::atomic<bool> gPendingCallsSlowRelease{false};
+std::atomic<int> gPendingCallsSlowFinished{0};
 }  // namespace
 
 struct PCFastAction {
@@ -44,6 +45,7 @@ struct PCModel {
         while (!gPendingCallsSlowRelease.load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
+        gPendingCallsSlowFinished.fetch_add(1, std::memory_order_relaxed);
         return 1;
     }
 };
@@ -172,13 +174,17 @@ TEST_CASE("Bridge: pendingCalls() does not increment for a synchronously-failed 
 // the quiescence gate this whole file exists to cover: pendingCalls() could
 // never return to 0 again for that bridge.
 namespace {
-/// Wraps LocalBackend and throws from execute(), the way an encode failure does.
+/// Wraps LocalBackend and throws from the dispatch, the way an encode failure does.
+///
+/// Overrides `executeInto`, not `execute`: `Bridge::executeVia` dispatches
+/// through the former, and `LocalBackend::execute` is `final` precisely so a
+/// double written the other way round is a compile error rather than a test
+/// that quietly stops intercepting anything (morph#572, Part B).
 struct ThrowingExecuteBackend : morph::backend::LocalBackend {
     using morph::backend::LocalBackend::LocalBackend;
 
-    morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId,
-                                                            morph::backend::detail::ActionCall,
-                                                            morph::exec::IExecutor*) override {
+    void executeInto(morph::exec::detail::ModelId, morph::backend::detail::ActionCall, morph::exec::IExecutor*,
+                     std::shared_ptr<morph::async::detail::ISettleSink>) override {
         throw std::runtime_error("serialize/encode failed");
     }
 };
@@ -198,4 +204,66 @@ TEST_CASE("Bridge: a throwing backend execute() leaves pendingCalls() at zero", 
     // And the bridge is still usable as a quiescence gate afterwards.
     REQUIRE_THROWS_AS(handler.execute(PCFastAction{.value = 1}), std::runtime_error);
     CHECK(bridge.pendingCalls() == 0);
+}
+
+// ── morph#572 Part B: cancelPending racing the real reply settles once ──
+//
+// Before Part B, "exactly one decrement per dispatch" was carried by the fact
+// that `.then` and `.onError` are mutually exclusive on one `CompletionState`:
+// `cancelPending` resolved the erased completion, the `.onError` forwarder
+// fired, and the later `setValue` from the strand found an already-ready state
+// and did nothing. There is no such guarantee on a sink -- `cancelPending`
+// settles it from the caller's thread while the strand task is about to settle
+// it from another -- so `BridgeSink` carries its own settle-once latch.
+//
+// Without that latch the second settle decrements `_pendingCalls` again, and
+// the counter is a `std::size_t`: a second decrement from zero does not read as
+// -1, it reads as 18446744073709551615, and `pendingCalls()` is documented as a
+// quiescence gate that a caller waits on.
+TEST_CASE("Bridge: cancelPending followed by the real reply decrements pendingCalls() once",
+          "[bridge][pending-calls][morph572]") {
+    gPendingCallsSlowStarted.store(0);
+    gPendingCallsSlowRelease.store(false);
+    gPendingCallsSlowFinished.store(0);
+
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    auto owned = std::make_unique<morph::backend::LocalBackend>(pool);
+    auto* const backend = owned.get();
+    morph::bridge::Bridge bridge{std::move(owned)};
+    morph::bridge::BridgeHandler<PCModel> handler{bridge, &cbExec};
+
+    std::atomic<int> errors{0};
+    std::atomic<int> results{0};
+    handler.execute(PCSlowAction{})
+        .then([&](int) { results.fetch_add(1); })
+        .onError([&](const std::exception_ptr&) { errors.fetch_add(1); });
+
+    for (int idx = 0; idx < 400 && gPendingCallsSlowStarted.load() == 0; ++idx) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    REQUIRE(gPendingCallsSlowStarted.load() == 1);
+    REQUIRE(bridge.pendingCalls() == 1);
+
+    // First settle: the backend cancels everything still in flight, exactly as
+    // switchBackend() and ~Bridge() do.
+    backend->cancelPending(std::make_exception_ptr(std::runtime_error("cancelled")));
+    CHECK(bridge.pendingCalls() == 0);
+    CHECK(errors.load() == 1);
+
+    // Second settle: the model finishes and the strand task settles the same
+    // sink with the real result. First result wins, so the caller still sees
+    // only the cancellation -- and the counter must not move again.
+    gPendingCallsSlowRelease.store(true);
+    for (int idx = 0; idx < 400 && gPendingCallsSlowFinished.load() == 0; ++idx) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    REQUIRE(gPendingCallsSlowFinished.load() == 1);
+    // The strand task settles after the model returns; give it room to land.
+    for (int idx = 0; idx < 100 && bridge.pendingCalls() == 0 && results.load() == 0; ++idx) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    CHECK(bridge.pendingCalls() == 0);
+    CHECK(errors.load() == 1);
+    CHECK(results.load() == 0);
 }
