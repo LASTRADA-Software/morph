@@ -147,18 +147,18 @@ struct ChildOutcome {
 // and its buffered stdio, and running atexit handlers (or Catch2's reporter)
 // from it would duplicate the parent's output and its exit status.
 ChildOutcome runRegistrarInChild(LatchState latch, Registrar which) {
-    std::fflush(nullptr);
+    (void)std::fflush(nullptr);
     pid_t const pid = fork();
     REQUIRE(pid >= 0);
     if (pid == 0) {
-        // Child. Both streams go to /dev/null: the assertion's own message is
+        // Child. Both streams are closed: the assertion's own message is
         // on stderr, and Catch2's fatal-condition handler -- which fields the
         // SIGABRT and re-raises it, so the wait status is unaffected -- writes
         // a partial test report to stdout that would otherwise interleave into
         // the parent's. The wait status, not the message, is what the parent
         // reads.
-        (void)std::freopen("/dev/null", "w", stderr);
-        (void)std::freopen("/dev/null", "w", stdout);
+        (void)::close(STDERR_FILENO);
+        (void)::close(STDOUT_FILENO);
         if (latch == LatchState::Closed) {
             morph::model::closeRegistrationPhase();
         } else {

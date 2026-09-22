@@ -583,12 +583,11 @@ struct WireCodecOps {
     /// @brief Serialises @p env into @p out. Mirrors the `glz::write` call
     ///        `encode` would otherwise make directly.
     /// @return Glaze's error context; falsy on success.
-    std::function<glz::error_ctx(const Envelope& env, std::string& out)> writeEnvelope =
-        [](const Envelope& env, std::string& out) {
-            std::array<std::string_view, detail::kOmittableEnvelopeKeys.size()> omitted{};
-            return glz::write_json_exclude<detail::EscapingWriteOpts{}>(env, detail::defaultValuedKeys(env, omitted),
-                                                                       out);
-        };
+    std::function<glz::error_ctx(const Envelope& env, std::string& out)> writeEnvelope = [](const Envelope& env,
+                                                                                            std::string& out) {
+        std::array<std::string_view, detail::kOmittableEnvelopeKeys.size()> omitted{};
+        return glz::write_json_exclude<detail::EscapingWriteOpts{}>(env, detail::defaultValuedKeys(env, omitted), out);
+    };
 };
 
 /// @brief The shared default `WireCodecOps`.

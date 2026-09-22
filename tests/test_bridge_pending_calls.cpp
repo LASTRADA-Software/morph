@@ -24,7 +24,14 @@ using namespace std::chrono_literals;
 namespace {
 std::atomic<int> gPendingCallsSlowStarted{0};
 std::atomic<bool> gPendingCallsSlowRelease{false};
-std::atomic<int> gPendingCallsSlowFinished{0};
+// A function-local static rather than a namespace-scope one, unlike its two
+// neighbours above: `cppcoreguidelines-avoid-non-const-global-variables` is on
+// for tests/ and fires on the latter. The two above predate the changed-lines
+// clang-tidy gate and are not reported (morph#677).
+std::atomic<int>& pcSlowFinished() {
+    static std::atomic<int> value{0};
+    return value;
+}
 }  // namespace
 
 struct PCFastAction {
@@ -45,7 +52,7 @@ struct PCModel {
         while (!gPendingCallsSlowRelease.load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        gPendingCallsSlowFinished.fetch_add(1, std::memory_order_relaxed);
+        pcSlowFinished().fetch_add(1, std::memory_order_relaxed);
         return 1;
     }
 };
@@ -224,7 +231,7 @@ TEST_CASE("Bridge: cancelPending followed by the real reply decrements pendingCa
           "[bridge][pending-calls][morph572]") {
     gPendingCallsSlowStarted.store(0);
     gPendingCallsSlowRelease.store(false);
-    gPendingCallsSlowFinished.store(0);
+    pcSlowFinished().store(0);
 
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
@@ -235,9 +242,9 @@ TEST_CASE("Bridge: cancelPending followed by the real reply decrements pendingCa
 
     std::atomic<int> errors{0};
     std::atomic<int> results{0};
-    handler.execute(PCSlowAction{})
-        .then([&](int) { results.fetch_add(1); })
-        .onError([&](const std::exception_ptr&) { errors.fetch_add(1); });
+    handler.execute(PCSlowAction{}).then([&](int) { results.fetch_add(1); }).onError([&](const std::exception_ptr&) {
+        errors.fetch_add(1);
+    });
 
     for (int idx = 0; idx < 400 && gPendingCallsSlowStarted.load() == 0; ++idx) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -255,10 +262,10 @@ TEST_CASE("Bridge: cancelPending followed by the real reply decrements pendingCa
     // sink with the real result. First result wins, so the caller still sees
     // only the cancellation -- and the counter must not move again.
     gPendingCallsSlowRelease.store(true);
-    for (int idx = 0; idx < 400 && gPendingCallsSlowFinished.load() == 0; ++idx) {
+    for (int idx = 0; idx < 400 && pcSlowFinished().load() == 0; ++idx) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
-    REQUIRE(gPendingCallsSlowFinished.load() == 1);
+    REQUIRE(pcSlowFinished().load() == 1);
     // The strand task settles after the model returns; give it room to land.
     for (int idx = 0; idx < 100 && bridge.pendingCalls() == 0 && results.load() == 0; ++idx) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));

@@ -990,6 +990,13 @@ inline ModelRegistryFactory& defaultRegistry() {
 /// @brief Static-init helper for `BRIDGE_REGISTER_MODEL`.
 template <typename Model>
 inline bool registerModelOnce(std::string_view modelId) noexcept {
+    // clang-tidy's misc-static-assert fires on any `assert(!f())` whose `f` takes no
+    // argument, whether or not `f` is constexpr -- and this one loads an atomic.
+    // Applying the check's own fix does not compile: `static_assert` on this
+    // condition is "static assertion expression is not an integral constant
+    // expression / non-constexpr function 'registrationPhaseClosed' cannot be used
+    // in a constant expression". Reported upstream of this repository in morph#742.
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
     assert(!::morph::model::registrationPhaseClosed() &&
            "registerModelOnce: registration after the registration phase closed. The process-level "
            "registries are unsynchronised and are read-only once dispatch begins -- registering now "
@@ -1002,6 +1009,13 @@ inline bool registerModelOnce(std::string_view modelId) noexcept {
 /// @brief Static-init helper for `BRIDGE_REGISTER_ACTION`.
 template <typename Model, typename Action>
 inline bool registerActionOnce(std::string_view modelId, std::string_view actionId) noexcept {
+    // clang-tidy's misc-static-assert fires on any `assert(!f())` whose `f` takes no
+    // argument, whether or not `f` is constexpr -- and this one loads an atomic.
+    // Applying the check's own fix does not compile: `static_assert` on this
+    // condition is "static assertion expression is not an integral constant
+    // expression / non-constexpr function 'registrationPhaseClosed' cannot be used
+    // in a constant expression". Reported upstream of this repository in morph#742.
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
     assert(!::morph::model::registrationPhaseClosed() &&
            "registerActionOnce: registration after the registration phase closed. The process-level "
            "registries are unsynchronised and are read-only once dispatch begins -- registering now "

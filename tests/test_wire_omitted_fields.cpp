@@ -86,9 +86,9 @@ TEST_CASE("morph::wire: every omittable field survives when it is not at its def
     const auto text = morph::wire::encode(fullyPopulated());
     for (const auto key : morph::wire::detail::kOmittableEnvelopeKeys) {
         INFO("key: " << key);
-        CHECK(text.find("\"" + std::string{key} + "\":") != std::string::npos);
+        CHECK(text.contains("\"" + std::string{key} + "\":"));
     }
-    CHECK(text.find(R"("kind":)") != std::string::npos);
+    CHECK(text.contains(R"("kind":)"));
 }
 
 TEST_CASE("morph::wire: the legacy all-keys form decodes to the same envelope as the short form",
@@ -140,7 +140,7 @@ TEST_CASE("morph::wire: an all-default session is omitted, a populated one is no
     morph::wire::Envelope env;
     env.kind = "execute";
     env.body = "{}";
-    CHECK(morph::wire::encode(env).find(R"("session":)") == std::string::npos);
+    CHECK_FALSE(morph::wire::encode(env).contains(R"("session":)"));
 
     // Each member on its own is enough to bring the whole object back — the
     // check is per-member, so a new member added to `session::Context` without
@@ -167,7 +167,7 @@ TEST_CASE("morph::wire: an all-default session is omitted, a populated one is no
         }
         INFO("session member index: " << which);
         const auto text = morph::wire::encode(probe);
-        CHECK(text.find(R"("session":)") != std::string::npos);
+        CHECK(text.contains(R"("session":)"));
         requireEqual(probe, morph::wire::decode(text));
     }
 }

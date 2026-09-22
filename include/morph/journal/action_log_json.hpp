@@ -90,6 +90,8 @@ struct EscapingWriteOpts : glz::opts {
 /// string field (`entityKey`, `payload`, `error`, `principal`, `idempotencyKey`)
 /// round-trips through `fromJson` instead of producing invalid or silently
 /// corrupted JSON — see that struct's doc comment.
+/// @param entry Entry to encode.
+/// @return The entry as a single line of JSON.
 /// @throws SerializationError on encode failure (see `detail::throwOnGlazeError`
 ///         for why this is not realistically reachable for `LogEntry`).
 inline std::string toJson(const LogEntry& entry) {
@@ -109,6 +111,8 @@ inline std::string toJson(const LogEntry& entry) {
 /// decode, also enforces the line-format version rule: `v <= kLogFormatVersion`
 /// decodes normally, `v` greater than this build's `kLogFormatVersion` throws
 /// — a build refuses to guess at a line format newer than any it has seen.
+/// @param json One JSON-encoded entry, as `toJson` wrote it.
+/// @return The decoded entry.
 /// @throws SerializationError if @p json is not valid JSON, does not decode
 ///         into a `LogEntry`, or decodes with `v` greater than
 ///         `kLogFormatVersion`.

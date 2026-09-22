@@ -610,7 +610,7 @@ struct IBackend {
         // uses.
         execute(mid, std::move(call), cbExec)
             .then([sink](const std::shared_ptr<void>& value) { sink->settleValue(value); })
-            .onError([sink](const std::exception_ptr& exc) { sink->settleException(exc); });
+            .onError([sink = std::move(sink)](const std::exception_ptr& exc) { sink->settleException(exc); });
     }
 
     /// @brief Called by `Bridge::switchBackend()` after all handlers are re-registered.
@@ -1395,68 +1395,68 @@ public:
         auto const inFlightAfterInc = inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
-        _strand.post(mid, [localOp, holder = std::move(holder), sink = std::move(sink), session = std::move(session),
-                           modelTypeId, actionTypeId, inFlightCounter, hydration,
-                           action = std::move(action)]() mutable {
-            auto const start = std::chrono::steady_clock::now();
-            auto const spanId = ::morph::observe::detail::beginSpan(session.requestId, modelTypeId, actionTypeId);
-            bool ok = false;
-            // Resolve `compState` only after every metric and `endSpan` below are
-            // recorded — nothing synchronizes a `.then()`/`.onError()` callback
-            // (delivered via `cbExec`, which may run inline/synchronously) with
-            // anything after `setValue`/`setException` returns, so resolving first
-            // would let the caller observe completion before these metrics are
-            // emitted. This is a real race, not just a theoretical one.
-            std::shared_ptr<void> value;
-            std::exception_ptr error;
-            try {
-                ::morph::session::detail::ScopedContext const scoped{session};
-                // Explicit, because `localOp` is a function pointer now and
-                // a null one is undefined behaviour rather than the
-                // `std::bad_function_call` an empty `std::function` used to
-                // raise. Same outcome for the caller -- the completion
-                // resolves through its error sink -- with a diagnostic that
-                // names the field instead of the library.
-                if (localOp == nullptr) {
-                    throw std::runtime_error{"ActionCall::localOp is null: nothing to execute"};
+        _strand.post(
+            mid, [localOp, holder = std::move(holder), sink = std::move(sink), session = std::move(session),
+                  modelTypeId, actionTypeId, inFlightCounter, hydration, action = std::move(action)]() mutable {
+                auto const start = std::chrono::steady_clock::now();
+                auto const spanId = ::morph::observe::detail::beginSpan(session.requestId, modelTypeId, actionTypeId);
+                bool succeeded = false;
+                // Resolve the sink only after every metric and `endSpan` below are
+                // recorded — nothing synchronizes a `.then()`/`.onError()` callback
+                // (delivered via `cbExec`, which may run inline/synchronously) with
+                // anything after `setValue`/`setException` returns, so resolving first
+                // would let the caller observe completion before these metrics are
+                // emitted. This is a real race, not just a theoretical one.
+                std::shared_ptr<void> value;
+                std::exception_ptr error;
+                try {
+                    ::morph::session::detail::ScopedContext const scoped{session};
+                    // Explicit, because `localOp` is a function pointer now and
+                    // a null one is undefined behaviour rather than the
+                    // `std::bad_function_call` an empty `std::function` used to
+                    // raise. Same outcome for the caller -- the completion
+                    // resolves through its error sink -- with a diagnostic that
+                    // names the field instead of the library.
+                    if (localOp == nullptr) {
+                        throw std::runtime_error{"ActionCall::localOp is null: nothing to execute"};
+                    }
+                    value = localOp(*holder, action.get());
+                    succeeded = true;
+                } catch (...) {
+                    error = std::current_exception();
                 }
-                value = localOp(*holder, action.get());
-                ok = true;
-            } catch (...) {
-                error = std::current_exception();
-            }
-            // Settle hydration the moment the first action's outcome is known —
-            // before `endSpan`, before any metric, and before the `Completion`
-            // resolves. Each of those hands control to host code that is free
-            // to attach to this instance's key, and an attacher reaching the
-            // directory while the outcome is known but unrecorded is handed an
-            // instance whose first action has already failed — exactly what
-            // docs/spec/core/shared_instances.md's Failure modes section says
-            // must not happen. Only the *first* action settles it; `settle` is
-            // a single compare-exchange and ignores every later call.
-            if (hydration) {
-                hydration->settle(ok);
-            }
-            ::morph::observe::detail::endSpan(spanId, ok);
-            auto const elapsedMs =
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-            std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
-                {{"modelType", modelTypeId}, {"actionType", actionTypeId}}};
-            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
-            if (!ok) {
-                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
-            }
-            auto const inFlightAfterDec = inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
-            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
-                                                 static_cast<double>(inFlightAfterDec));
-            // Resolve last: the sink is still settled exactly once, only its
-            // position relative to the now-recorded instrumentation moved.
-            if (ok) {
-                sink->settleValue(std::move(value));
-            } else {
-                sink->settleException(error);
-            }
-        });
+                // Settle hydration the moment the first action's outcome is known —
+                // before `endSpan`, before any metric, and before the `Completion`
+                // resolves. Each of those hands control to host code that is free
+                // to attach to this instance's key, and an attacher reaching the
+                // directory while the outcome is known but unrecorded is handed an
+                // instance whose first action has already failed — exactly what
+                // docs/spec/core/shared_instances.md's Failure modes section says
+                // must not happen. Only the *first* action settles it; `settle` is
+                // a single compare-exchange and ignores every later call.
+                if (hydration) {
+                    hydration->settle(succeeded);
+                }
+                ::morph::observe::detail::endSpan(spanId, succeeded);
+                auto const elapsedMs =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
+                    {{"modelType", modelTypeId}, {"actionType", actionTypeId}}};
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+                if (!succeeded) {
+                    ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
+                }
+                auto const inFlightAfterDec = inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                                     static_cast<double>(inFlightAfterDec));
+                // Resolve last: the sink is still settled exactly once, only its
+                // position relative to the now-recorded instrumentation moved.
+                if (succeeded) {
+                    sink->settleValue(std::move(value));
+                } else {
+                    sink->settleException(error);
+                }
+            });
     }
 
     /// @brief Resolves every still-pending completion this backend produced with @p exc.
