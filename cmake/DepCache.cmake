@@ -37,6 +37,69 @@ else()
     set(MORPH_DEP_CACHE_DIR "")
 endif()
 
+# morph_declare_dep below calls FetchContent_Declare, so this file no longer
+# works only beside an `include(FetchContent)` the caller remembered to write.
+# include() is idempotent; every call site already does this too.
+include(FetchContent)
+
+# ── Declaring and caching, split (morph#712) ─────────────────────────────────
+#
+# `morph_declare_dep` is what call sites use; `morph_cache_dep` below is the
+# caching half and is called only by it (and directly by
+# scripts/test_dep_cache.sh, which asserts that half's four properties on their
+# own before asserting that declaring survives all four).
+#
+# The split is not stylistic. `morph_cache_dep` has three early returns -- no
+# cache directory configured, no git, an explicit FETCHCONTENT_SOURCE_DIR_<NAME>
+# override -- and the first of them is the *common* configuration: a local build
+# opts out of the cache by default. So the caching half returns early on most
+# machines, and folding `FetchContent_Declare` into it would leave the
+# dependency undeclared on exactly those machines. Declaring is therefore
+# unconditional and every early return is confined to the caching half.
+#
+# Why this wrapper exists at all: before it, every dependency wrote its revision
+# twice -- once as `morph_cache_dep`'s `tag`, once as the `GIT_TAG` of the
+# `FetchContent_Declare` beside it -- and the two could disagree. The divergence
+# was asymmetric in the worst way: a warm cache served the first, an uncached
+# configure fetched the second, both successfully and with no diagnostic
+# anywhere. morph#693 added a gate that compared the two copies; this removes
+# the second copy, so there is nothing left to disagree.
+#
+# `GIT_REPOSITORY` and `GIT_TAG` are therefore refused in ARGN rather than
+# forwarded: passing either would re-create the second copy inside the one call
+# that was supposed to end it.
+#
+# Everything else in ARGN is forwarded to `FetchContent_Declare` verbatim.
+# Today that is only `GIT_SHALLOW` -- TRUE for glaze and Catch2 (tags, which a
+# shallow clone resolves), FALSE for both Lightweight sites (a commit SHA,
+# which it does not), and unset for doxygen-awesome-css -- but forwarding the
+# rest of the argument list rather than one named option means a site that
+# needs `SOURCE_SUBDIR` or `PATCH_COMMAND` next does not have to widen this
+# function to get it.
+function(morph_declare_dep name repository tag)
+    foreach(_argument IN LISTS ARGN)
+        if(_argument STREQUAL "GIT_REPOSITORY" OR _argument STREQUAL "GIT_TAG")
+            message(FATAL_ERROR
+                "morph_declare_dep(${name} ...) was passed ${_argument} as an extra "
+                "argument. The repository and the tag are this call's own second and "
+                "third arguments, and stating either of them twice is the divergence "
+                "this function exists to make unwritable (morph#712): the cache keys "
+                "on what it is handed, FetchContent fetches what it is handed, and a "
+                "warm cache would then build a different revision than a cold one, "
+                "both successfully.")
+        endif()
+    endforeach()
+
+    morph_cache_dep("${name}" "${repository}" "${tag}")
+
+    FetchContent_Declare(
+        ${name}
+        GIT_REPOSITORY ${repository}
+        GIT_TAG        ${tag}
+        ${ARGN}
+    )
+endfunction()
+
 # Points FetchContent at a cached checkout of @p name, populating the cache on
 # first use. A no-op when no cache directory is configured, or when the caller
 # already set FETCHCONTENT_SOURCE_DIR_<NAME> explicitly.

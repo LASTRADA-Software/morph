@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Fail when a dependency's pin is written twice and the two copies disagree.
+"""Fail when a dependency's pin can be written twice.
 
 Usage:
     python3 scripts/check_dep_pins.py [REPO_ROOT]
     python3 scripts/check_dep_pins.py --self-test
 
-Why this exists (morph#693)
----------------------------
-Every FetchContent dependency in this tree states its revision twice: once as
-`morph_cache_dep(<name> <url> <tag>)` and once as the `FetchContent_Declare()`
-that follows it.
+What this checked before, and why it does not any more (morph#693, morph#712)
+-----------------------------------------------------------------------------
+Every FetchContent dependency in this tree used to state its revision twice:
+once as `morph_cache_dep(<name> <url> <tag>)`, once as the `FetchContent_Declare`
+beside it.
 
     morph_cache_dep(glaze https://github.com/stephenberry/glaze.git v7.4.0)
     FetchContent_Declare(
@@ -20,71 +20,83 @@ that follows it.
         GIT_SHALLOW    TRUE
     )
 
-Nothing compared the two. cmake/DepCache.cmake was written against exactly this
-failure class and says so in its own words -- `tag` is part of the cache
-directory name, so "bumping a pin lands in a fresh directory instead of silently
-reusing the old revision -- the failure mode a cache keyed on name alone would
-have, and the one that is hardest to notice because everything still builds" --
-but it keys on the tag it is *handed*, not the tag FetchContent is handed. Split
-across two calls, the failure mode returns one level up.
+Nothing compared the two, and the divergence was asymmetric in the worst way:
+with a warm cache the build gets `morph_cache_dep`'s tag (it points
+FETCHCONTENT_SOURCE_DIR_<NAME> at a tree already checked out at it, and
+FetchContent skips the download); with no cache -- an ordinary local build,
+which opts out by default -- it gets `GIT_TAG`'s. A mismatch therefore compiled
+a different revision in CI than on the author's machine, with no diagnostic on
+either side and both builds succeeding.
 
-The divergence is asymmetric in the worst way. With a warm cache, the build gets
-`morph_cache_dep`'s tag (FETCHCONTENT_SOURCE_DIR_<NAME> points at a tree already
-checked out at it, and FetchContent skips the download); with no cache -- an
-ordinary local build, which opts out by default -- it gets `GIT_TAG`'s. So a
-mismatch compiles a different revision in CI than on the author's machine, with
-no diagnostic on either side and both builds succeeding.
+morph#693 added a gate that compared the two copies. morph#712 removed the
+second copy instead: `morph_declare_dep(<name> <url> <tag> [args...])` in
+cmake/DepCache.cmake takes the pin once and hands it to both the cache and
+`FetchContent_Declare`, and refuses `GIT_REPOSITORY`/`GIT_TAG` in its forwarded
+arguments so the second copy cannot be smuggled back into the one call that
+ended it.
 
-All five paired sites currently agree, so this is a preventive gate rather than
-a bug fix, and its acceptance test is therefore not "it passes on master" -- it
-would pass on master if it parsed nothing at all. It is "skew one pin and watch
-it fail, naming both lines". See the self-test, and the commit that added this
-file for the same thing done on the real tree.
+So the comparison this file used to make now has nothing to compare -- and a
+gate left reporting green over an invariant body is this repository's named
+failure mode. What replaced it is the invariant that makes the comparison
+unnecessary, which is a *stricter* thing than the comparison was:
 
-The alternative this does not do
---------------------------------
-`morph_cache_dep` could emit the `FetchContent_Declare` itself, so the pin
-cannot be written twice -- removing the failure mode instead of detecting it.
-That is a larger change to a load-bearing macro used by five call sites across
-four files, and it is not precluded by this gate. The gate is the cheap first
-step.
+  1. No `FetchContent_Declare` of a git repository anywhere outside
+     cmake/DepCache.cmake. That is the only shape in which a second pin can be
+     written, so forbidding it is what makes the divergence inexpressible
+     rather than merely undetected. It also keeps every dependency on the
+     shared source cache (morph#552): a hand-written declaration clones again
+     on every configure.
+  2. No direct `morph_cache_dep` call outside cmake/DepCache.cmake. It is the
+     caching half of the split and populates a directory nothing would read;
+     a call site reaching for it is a call site about to declare by hand.
+  3. No `GIT_REPOSITORY`/`GIT_TAG` among a `morph_declare_dep` call's forwarded
+     arguments -- the same refusal DepCache.cmake makes at configure time,
+     reported here without needing a configure.
+  4. Two trees declaring the same dependency must name the same revision.
+     examples/common and examples/bank both fetch Lightweight, either can be
+     built without the other, and FetchContent keeps the *first* declaration of
+     a name and ignores the rest -- so two disagreeing calls would build
+     whichever tree configured first while the other pin sat there as inert
+     text. That is the two-copy divergence one file apart, and it is the only
+     form of it the wrapper cannot make unwritable, because both call sites are
+     genuinely needed.
 
-Scope, and the vacuity rules
-----------------------------
-Reads CMake text only; configures nothing, clones nothing. A `morph_cache_dep`
-call this script cannot parse is an error rather than a skip, a
-`FetchContent_Declare` of a git repository with no `morph_cache_dep` beside it
-is an error (its pin is then guarded by nothing, and it clones on every
-configure -- the volume morph#552 was about), and finding zero pairs at all is
-an error. A gate with nothing left to check reports green exactly as loudly as
-one that checked everything.
+The vacuity rules are unchanged in spirit. A `morph_declare_dep` call this
+script cannot parse is an error rather than a skip, and finding zero calls at
+all is an error: a gate with nothing left to check reports green exactly as
+loudly as one that checked everything.
+
+Acceptance is not "it passes on master" -- it would pass on master if it parsed
+nothing. It is "write the old two-pin shape and watch it fail, naming the line".
+See the self-test, and the commit that narrowed this file for the same thing
+done on the real tree.
+
+Scope
+-----
+Reads CMake text only; configures nothing, clones nothing. A non-git
+`FetchContent_Declare` (URL, SOURCE_DIR, SVN) is not this gate's business: it
+carries no revision the cache keys on, and forcing it through a git-shaped
+wrapper would be inventing a rule rather than enforcing one.
 """
 
 from __future__ import annotations
 
-import collections
 import os
 import re
 import sys
 
-# `morph_cache_dep(name repository tag)` on one line, which is how all five call
-# sites are written. Anything else is reported rather than skipped; see
-# UNPARSED_CALL_RE below.
-CACHE_DEP_RE = re.compile(r"^\s*morph_cache_dep\(\s*([^\s()]+)\s+([^\s()]+)\s+([^\s()]+)\s*\)")
-UNPARSED_CALL_RE = re.compile(r"^\s*morph_cache_dep\(")
+# `morph_declare_dep(name repository tag [forwarded args...])`, which may span
+# lines -- the real call sites put the forwarded arguments on the next one.
+# Anything the token split cannot make sense of is reported, not skipped; see
+# below.
+DECLARE_DEP_OPEN_RE = re.compile(r"^\s*morph_declare_dep\(")
+CACHE_DEP_OPEN_RE = re.compile(r"^\s*morph_cache_dep\(")
 DECLARE_RE = re.compile(r"^\s*FetchContent_Declare\(\s*([^\s()]*)")
-ARGUMENT_RE = re.compile(r"^\s*(GIT_REPOSITORY|GIT_TAG)\s+(\S+)")
 
 SKIP_DIRECTORIES = {".git", "build", "out", "vcpkg_installed", "_deps", "node_modules"}
 
-# One FetchContent_Declare block: where it opens, and where each half of its pin
-# is written. The two line numbers are the payload of a failure message -- an
-# author who is told "these two lines disagree" fixes it without reading the
-# parser.
-Declared = collections.namedtuple(
-    "Declared", "declare_line url url_line tag tag_line")
-
-# The definition of the function itself, not a call site.
+# The definition of both functions, not a call site: it is the one place a
+# FetchContent_Declare and a morph_cache_dep call are supposed to appear.
 DEFINITION = "cmake/DepCache.cmake"
 
 
@@ -106,150 +118,181 @@ def is_comment(line):
     return line.lstrip().startswith("#")
 
 
-def parse_file(lines):
-    """({name: (line, url, tag)}, {name: Declared}, [unparsed lines]).
+def read_call(lines, index):
+    """The text of the call opening at `index`, and the line after it.
 
-    First mapping is the morph_cache_dep() calls, second the
-    FetchContent_Declare() blocks. A block's `url`/`tag` are None when it does
-    not state them, and each carries the line it was stated on so a failure can
-    name the two lines that disagree rather than the block they live in.
+    Comment lines inside the call are dropped, so a reason written between the
+    arguments is not mistaken for one. Returns (text, next_index), or
+    (None, next_index) when the parentheses never balance.
     """
-    cached, declared, unparsed = {}, {}, []
-    index = 0
+    depth = 0
+    collected = []
     while index < len(lines):
         line = lines[index]
-        if is_comment(line):
-            index += 1
-            continue
-
-        match = CACHE_DEP_RE.match(line)
-        if match:
-            cached[match.group(1)] = (index + 1, match.group(2), match.group(3))
-            index += 1
-            continue
-        if UNPARSED_CALL_RE.match(line):
-            unparsed.append(index + 1)
-            index += 1
-            continue
-
-        match = DECLARE_RE.match(line)
-        if match:
-            start = index + 1
-            name = match.group(1)
-            url = tag = None
-            url_line = tag_line = start
-            depth = line.count("(") - line.count(")")
-            index += 1
-            while index < len(lines) and depth > 0:
-                body = lines[index]
-                if not is_comment(body):
-                    if not name and body.strip():
-                        name = body.split()[0]
-                    argument = ARGUMENT_RE.match(body)
-                    if argument:
-                        if argument.group(1) == "GIT_REPOSITORY":
-                            url, url_line = argument.group(2), index + 1
-                        else:
-                            tag, tag_line = argument.group(2), index + 1
-                    depth += body.count("(") - body.count(")")
-                index += 1
-            declared[name] = Declared(start, url, url_line, tag, tag_line)
-            continue
-
+        if not is_comment(line):
+            collected.append(line)
+            depth += line.count("(") - line.count(")")
         index += 1
-    return cached, declared, unparsed
+        if collected and depth <= 0:
+            return " ".join(collected), index
+    return None, index
+
+
+def declare_dep_arguments(text):
+    """The argument tokens of a morph_declare_dep call, or None if unparsable."""
+    inside = text[text.index("(") + 1:]
+    inside = inside[:inside.rindex(")")] if ")" in inside else None
+    if inside is None:
+        return None
+    tokens = inside.split()
+    if len(tokens) < 3:
+        return None
+    return tokens
 
 
 def check(repo_root, out=sys.stdout):
     failures = []
-    pairs = 0
+    calls = 0
     checked = []
+    # name -> [(path, line, url, tag)]. Two trees may each need the same
+    # dependency -- examples/common and examples/bank both fetch Lightweight --
+    # and FetchContent *ignores* the second declaration of a name it already
+    # has. So the residue of the two-copy pin lives here: two calls naming one
+    # dependency at different revisions would build the first one silently,
+    # whichever tree configures first, and the second call's pin would be
+    # inert text. Collected across files rather than within one, because that
+    # is the only place this shape can occur.
+    by_name = {}
 
     for path in cmake_files(repo_root):
         if path == DEFINITION:
             continue
         with open(os.path.join(repo_root, path), encoding="utf-8") as handle:
             lines = handle.read().splitlines()
-        if "morph_cache_dep" not in "\n".join(lines) and "FetchContent_Declare" not in "\n".join(lines):
+        body = "\n".join(lines)
+        if ("morph_declare_dep" not in body and "morph_cache_dep" not in body
+                and "FetchContent_Declare" not in body):
             continue
 
-        cached, declared, unparsed = parse_file(lines)
-
-        for line in unparsed:
-            failures.append(
-                f"{path}:{line} calls morph_cache_dep() in a form this gate cannot "
-                f"parse, so its pin is compared against nothing. Write it as "
-                f"`morph_cache_dep(<name> <url> <tag>)` on one line, or teach this "
-                f"script the new form -- do not leave it unchecked.")
-
-        for name, block in sorted(declared.items()):
-            if block.url is None and block.tag is None:
-                continue  # not a git dependency: URL/SOURCE_DIR/SVN and friends
-            if name not in cached:
-                failures.append(
-                    f"{path}:{block.declare_line} declares FetchContent dependency "
-                    f"{name!r} with GIT_TAG {block.tag!r} and no morph_cache_dep() "
-                    f"beside it. Its pin is then guarded by nothing and every configure "
-                    f"clones it again (morph#552). Add the matching morph_cache_dep() "
-                    f"call.")
+        index = 0
+        while index < len(lines):
+            line = lines[index]
+            if is_comment(line):
+                index += 1
                 continue
-            cache_line, cache_url, cache_tag = cached[name]
-            pairs += 1
-            agreed = True
-            if block.tag is None:
-                agreed = False
-                failures.append(
-                    f"{path}:{block.declare_line} declares {name!r} with a "
-                    f"GIT_REPOSITORY and no GIT_TAG, while {path}:{cache_line} caches "
-                    f"it at {cache_tag!r}. The cache would serve that revision and an "
-                    f"uncached configure would take the default branch, which is the "
-                    f"same divergence with one side unwritten.")
-            elif block.tag != cache_tag:
-                agreed = False
-                failures.append(
-                    f"{name}'s pin is stated twice and the two disagree: "
-                    f"{path}:{cache_line} caches {cache_tag!r}, {path}:{block.tag_line} "
-                    f"fetches GIT_TAG {block.tag!r}. A configure with a warm cache "
-                    f"builds the first and one without builds the second, both "
-                    f"successfully and with no diagnostic (morph#693).")
-            if block.url is not None and block.url != cache_url:
-                agreed = False
-                failures.append(
-                    f"{name}'s repository is stated twice and the two disagree: "
-                    f"{path}:{cache_line} caches from {cache_url!r}, "
-                    f"{path}:{block.url_line} fetches GIT_REPOSITORY {block.url!r}. "
-                    f"The cache key names only the tag, so the cached tree would be "
-                    f"served for the other repository's revision.")
-            if agreed:
-                checked.append((path, name, cache_tag))
 
-        for name, (cache_line, _url, cache_tag) in sorted(cached.items()):
-            if name not in declared:
+            if DECLARE_DEP_OPEN_RE.match(line):
+                start = index + 1
+                text, index = read_call(lines, index)
+                if text is None:
+                    failures.append(
+                        f"{path}:{start} opens a morph_declare_dep() call whose "
+                        f"parentheses never close, so this gate cannot see what it "
+                        f"pins.")
+                    continue
+                tokens = declare_dep_arguments(text)
+                if tokens is None:
+                    failures.append(
+                        f"{path}:{start} calls morph_declare_dep() in a form this gate "
+                        f"cannot parse, so its pin is checked by nothing. Write it as "
+                        f"`morph_declare_dep(<name> <url> <tag> [args...])`, or teach "
+                        f"this script the new form -- do not leave it unchecked.")
+                    continue
+                name, url, tag = tokens[0], tokens[1], tokens[2]
+                calls += 1
+                by_name.setdefault(name, []).append((path, start, url, tag))
+                offenders = [token for token in tokens[3:]
+                             if token in ("GIT_REPOSITORY", "GIT_TAG")]
+                if offenders:
+                    failures.append(
+                        f"{path}:{start} passes {offenders[0]} to morph_declare_dep() "
+                        f"as a forwarded argument for {name!r}. The repository and the "
+                        f"tag are that call's own second and third arguments; stating "
+                        f"either twice re-creates the divergence the wrapper exists to "
+                        f"make unwritable -- the cache keys on what it is handed and "
+                        f"FetchContent fetches what it is handed, so a warm cache would "
+                        f"build a different revision than a cold one, both successfully "
+                        f"(morph#693, morph#712). cmake/DepCache.cmake refuses this at "
+                        f"configure time too.")
+                else:
+                    checked.append((path, start, name, tag))
+                continue
+
+            if CACHE_DEP_OPEN_RE.match(line):
+                start = index + 1
+                _text, index = read_call(lines, index)
                 failures.append(
-                    f"{path}:{cache_line} caches {name!r} at {cache_tag!r}, but nothing "
-                    f"in this file declares it to FetchContent. Either the declaration "
-                    f"moved -- and the cache call should follow it -- or this call "
-                    f"populates a cache directory nothing ever reads.")
+                    f"{path}:{start} calls morph_cache_dep() directly. That is the "
+                    f"caching half of the split in cmake/DepCache.cmake and declares "
+                    f"nothing: on its own it populates a cache directory nothing reads, "
+                    f"and beside a hand-written FetchContent_Declare it is the two-copy "
+                    f"pin morph#712 removed. Call morph_declare_dep() instead.")
+                continue
 
-    for path, name, tag in checked:
-        print(f"ok: {path}: {name} pinned at {tag} in both places", file=out)
+            match = DECLARE_RE.match(line)
+            if match:
+                start = index + 1
+                text, index = read_call(lines, index)
+                if text is None:
+                    failures.append(
+                        f"{path}:{start} opens a FetchContent_Declare() whose "
+                        f"parentheses never close.")
+                    continue
+                name = match.group(1) or (text.split("(", 1)[1].split() or [""])[0]
+                arguments = text[text.index("(") + 1:].replace(")", " ").split()
+                if not any(argument in ("GIT_REPOSITORY", "GIT_TAG")
+                           for argument in arguments):
+                    continue  # not a git dependency: URL/SOURCE_DIR/SVN and friends
+                failures.append(
+                    f"{path}:{start} declares the git dependency {name!r} with a "
+                    f"hand-written FetchContent_Declare. Its pin is then written here "
+                    f"and, if it is to be cached at all, a second time beside it -- the "
+                    f"two-copy shape whose halves could disagree with no diagnostic "
+                    f"(morph#693). Every configure would also clone it again, which is "
+                    f"the volume morph#552's shared source cache exists to cut. Use "
+                    f"`morph_declare_dep(<name> <url> <tag> [args...])` from "
+                    f"cmake/DepCache.cmake, which states the pin once and forwards the "
+                    f"rest (GIT_SHALLOW and anything else) verbatim.")
+                continue
 
-    if pairs == 0 and not failures:
+            index += 1
+
+    for name, sites in sorted(by_name.items()):
+        if len(sites) < 2:
+            continue
+        pins = {(url, tag) for _path, _line, url, tag in sites}
+        where = ", ".join(f"{path}:{line} at {tag!r}" for path, line, _u, tag in sites)
+        if len(pins) > 1:
+            failures.append(
+                f"{name!r} is declared {len(sites)} times and the declarations disagree: "
+                f"{where}. FetchContent keeps the first declaration of a name and ignores "
+                f"the rest, so the build would take whichever tree configures first and "
+                f"the other pin would be inert text -- the two-copy divergence morph#712 "
+                f"removed, one file apart. Both call sites are needed (either tree can be "
+                f"built alone), so make them agree rather than deleting one.")
+        else:
+            print(f"ok: {name} declared in {len(sites)} places, all at the same "
+                  f"revision ({where})", file=out)
+
+    for path, line, name, tag in checked:
+        print(f"ok: {path}:{line}: {name} pinned at {tag}", file=out)
+
+    if calls == 0 and not failures:
         failures.append(
-            "no morph_cache_dep()/FetchContent_Declare() pair was found anywhere in "
-            "the tree. Either every dependency stopped using the cache, or this "
-            "gate's parsing has stopped matching how they are written -- and a gate "
-            "with nothing left to check reports green exactly as loudly as one that "
-            "checked everything.")
+            "no morph_declare_dep() call was found anywhere in the tree. Either every "
+            "dependency stopped using the cache, or this gate's parsing has stopped "
+            "matching how they are written -- and a gate with nothing left to check "
+            "reports green exactly as loudly as one that checked everything.")
 
     if failures:
-        print(f"\nerror: {len(failures)} dependency pin problem(s):\n", file=out)
+        print(f"\nerror: {len(failures)} dependency declaration problem(s):\n", file=out)
         for failure in failures:
             print(f"  - {failure}", file=out)
         return 1
 
-    print(f"\nok: {pairs} dependency pin(s) agree with the FetchContent_Declare "
-          f"beside them.", file=out)
+    print(f"\nok: {calls} morph_declare_dep() call(s) over {len(by_name)} dependency/ies; "
+          f"each call states its pin once, and every dependency declared from more than "
+          f"one tree states the same revision in each.", file=out)
     return 0
 
 
@@ -284,106 +327,99 @@ def self_test():
             buffer = io.StringIO()
             return check(root, out=buffer), buffer.getvalue()
 
-        def tree(cache_tag="v7.4.0", declare_tag="v7.4.0",
-                 cache_url="https://example.invalid/glaze.git",
-                 declare_url="https://example.invalid/glaze.git"):
-            return (
-                f"morph_cache_dep(glaze {cache_url} {cache_tag})\n"
-                f"FetchContent_Declare(\n"
-                f"    glaze\n"
-                f"    GIT_REPOSITORY {declare_url}\n"
-                f"    GIT_TAG        {declare_tag}\n"
-                f"    GIT_SHALLOW    TRUE\n"
-                f")\n"
-            )
+        # The real call shape: the forwarded arguments are on the next line, so
+        # a one-line parser would see no pin at all and pass.
+        multiline = (
+            "morph_declare_dep(glaze https://example.invalid/glaze.git v7.4.0\n"
+            "    GIT_SHALLOW TRUE)\n"
+        )
 
-        # 1. Agreeing pins pass, and the pair is reported so a reader can see
-        #    the gate had something to compare.
-        write(tree())
+        # 1. A single-line call passes and is counted, so a reader can see the
+        #    gate had something to look at.
+        write("morph_declare_dep(docs https://example.invalid/docs.git v2.3.4)\n")
         code, output = run()
-        if code == 0 and "1 dependency pin(s) agree" in output:
-            note("ok: an agreeing pair passes, and is counted")
+        if code == 0 and "1 dependency pin(s)" in output:
+            note("ok: a single-line morph_declare_dep() passes, and is counted")
         else:
-            fail("an agreeing pin pair was rejected", output)
+            fail("a well-formed call was rejected", output)
 
-        # 2. THE CASE. One character apart, both lines named. Without this the
-        #    gate would pass on a tree where it cannot fire, which is the
-        #    pattern morph#693 is about.
-        write(tree(declare_tag="v7.4.1"))
+        # 2. And the shape every real call site actually uses.
+        write(multiline)
         code, output = run()
-        if code != 0 and "CMakeLists.txt:1 caches 'v7.4.0'" in output \
-                and "CMakeLists.txt:5 fetches GIT_TAG 'v7.4.1'" in output:
-            note("ok: a skewed tag fails, and the message names both lines")
+        if code == 0 and "glaze pinned at v7.4.0" in output:
+            note("ok: a call whose forwarded arguments wrap onto the next line is read")
         else:
-            fail("a skewed tag was accepted, or the message did not name both lines",
-                 output)
+            fail("a multi-line call was not parsed", output)
 
-        # 3. The repository is the other half of the same pin, and the cache key
-        #    does not contain it -- so a divergence there serves one project's
-        #    tree for another project's revision.
-        write(tree(declare_url="https://example.invalid/fork.git"))
+        # 3. THE CASE. The two-copy pin morph#712 removed, written back by hand.
+        #    Without this the gate would pass on a tree where it cannot fire,
+        #    which is the pattern it exists to prevent.
+        write(multiline
+              + "FetchContent_Declare(\n"
+                "    glaze\n"
+                "    GIT_REPOSITORY https://example.invalid/glaze.git\n"
+                "    GIT_TAG        v7.4.1\n"
+                ")\n")
         code, output = run()
-        if code != 0 and "repository is stated twice" in output:
-            note("ok: a skewed GIT_REPOSITORY fails too")
+        if code != 0 and "CMakeLists.txt:3 declares the git dependency" in output:
+            note("ok: a hand-written git FetchContent_Declare fails, naming its line")
         else:
-            fail("a skewed repository was accepted", output)
+            fail("a hand-written git FetchContent_Declare was accepted", output)
 
-        # 4. A declaration with no cache call beside it: the pin is guarded by
-        #    nothing, and it clones on every configure.
-        write("FetchContent_Declare(Catch2\n"
-              "    GIT_REPOSITORY https://example.invalid/catch2.git\n"
-              "    GIT_TAG        v3.8.1\n"
-              ")\n")
+        # 4. The same shape on one line, which is how examples/ used to write it.
+        write(multiline
+              + "FetchContent_Declare(Lightweight\n"
+                "    GIT_REPOSITORY https://example.invalid/lw.git\n"
+                "    GIT_TAG        abc123\n"
+                ")\n")
         code, output = run()
-        if code != 0 and "no morph_cache_dep() beside it" in output:
-            note("ok: a FetchContent_Declare with no cache call is reported")
+        if code != 0 and "Lightweight" in output:
+            note("ok: the name-on-the-open-line form is caught too")
         else:
-            fail("an unguarded FetchContent_Declare was accepted", output)
+            fail("a one-line-name FetchContent_Declare was accepted", output)
 
-        # 5. And the mirror: a cache call for something nothing declares, which
-        #    is what stops rule 4 being satisfiable by deleting the declaration.
-        write("morph_cache_dep(glaze https://example.invalid/glaze.git v7.4.0)\n")
+        # 5. The other half of the old shape: the caching call on its own. It
+        #    declares nothing, so on its own it fills a directory nothing reads.
+        write(multiline
+              + "morph_cache_dep(glaze https://example.invalid/glaze.git v7.4.0)\n")
         code, output = run()
-        if code != 0 and "nothing in this file declares it to FetchContent" in output:
-            note("ok: a cache call with no declaration is reported")
+        if code != 0 and "calls morph_cache_dep() directly" in output:
+            note("ok: a direct morph_cache_dep() call is reported")
         else:
-            fail("an orphan morph_cache_dep() was accepted", output)
+            fail("a direct morph_cache_dep() call was accepted", output)
 
-        # 6. A GIT_REPOSITORY with no GIT_TAG is the same divergence with one
-        #    side left unwritten: the cache serves a pinned tree, an uncached
-        #    configure takes the default branch.
-        write("morph_cache_dep(glaze https://example.invalid/glaze.git v7.4.0)\n"
-              "FetchContent_Declare(glaze\n"
-              "    GIT_REPOSITORY https://example.invalid/glaze.git\n"
-              ")\n")
+        # 6. The divergence smuggled into the wrapper itself. DepCache.cmake
+        #    refuses this at configure time; this is the same refusal without a
+        #    configure, so a reviewer sees it on the diff.
+        write("morph_declare_dep(glaze https://example.invalid/glaze.git v7.4.0\n"
+              "    GIT_SHALLOW TRUE GIT_TAG v9.9.9)\n")
         code, output = run()
-        if code != 0 and "no GIT_TAG" in output:
-            note("ok: a declaration with no GIT_TAG is reported")
+        if code != 0 and "passes GIT_TAG to morph_declare_dep()" in output:
+            note("ok: a second GIT_TAG inside the wrapper call is reported")
         else:
-            fail("an unpinned declaration was accepted", output)
+            fail("a second pin inside the wrapper call was accepted", output)
 
-        # 7. A commented-out call is not a call. Without this the gate could be
+        # 7. A commented-out call is not a call, and a reason written between a
+        #    call's arguments is not an argument. Without this the gate could be
         #    satisfied, or broken, by prose.
-        write("# morph_cache_dep(glaze https://example.invalid/glaze.git v9.9.9)\n"
-              + tree())
+        write("# FetchContent_Declare(glaze GIT_TAG v9.9.9)\n"
+              "# morph_cache_dep(glaze https://example.invalid/glaze.git v9.9.9)\n"
+              "morph_declare_dep(glaze https://example.invalid/glaze.git v7.4.0\n"
+              "    # GIT_SHALLOW FALSE would not resolve a SHA\n"
+              "    GIT_SHALLOW TRUE)\n")
         code, output = run()
-        if code == 0:
-            note("ok: a commented-out call is not read as a pin")
+        if code == 0 and "glaze pinned at v7.4.0" in output:
+            note("ok: comments are not read as calls or as arguments")
         else:
-            fail("a commented-out call was parsed as a real one", output)
+            fail("a comment was parsed as a call or an argument", output)
 
-        # 8. A morph_cache_dep() this script cannot parse is an error, not a
+        # 8. A morph_declare_dep() this script cannot parse is an error, not a
         #    silent skip -- a skip is how the gate would quietly stop covering a
         #    dependency someone reformatted.
-        write("morph_cache_dep(\n"
-              "    glaze https://example.invalid/glaze.git v7.4.0)\n"
-              "FetchContent_Declare(glaze\n"
-              "    GIT_REPOSITORY https://example.invalid/glaze.git\n"
-              "    GIT_TAG        v7.4.0\n"
-              ")\n")
+        write("morph_declare_dep(glaze)\n")
         code, output = run()
         if code != 0 and "cannot parse" in output:
-            note("ok: an unparsable morph_cache_dep() call fails rather than skipping")
+            note("ok: an unparsable morph_declare_dep() call fails rather than skipping")
         else:
             fail("an unparsable call was skipped silently", output)
 
@@ -392,14 +428,14 @@ def self_test():
         write("project(morph)\n")
         code, output = run()
         if code != 0 and "reports green exactly as loudly" in output:
-            note("ok: a tree with no pins at all is refused, not passed")
+            note("ok: a tree with no declarations at all is refused, not passed")
         else:
             fail("a tree with nothing to check reported success", output)
 
-        # 10. A non-git FetchContent_Declare (URL, SOURCE_DIR) is not this
-        #     gate's business and must not be forced into a pin it has no
-        #     concept of.
-        write(tree()
+        # 10. A non-git FetchContent_Declare (URL, SOURCE_DIR) carries no
+        #     revision the cache keys on, so it is not this gate's business and
+        #     must not be forced through a git-shaped wrapper.
+        write(multiline
               + "FetchContent_Declare(data\n"
                 "    URL https://example.invalid/data.tar.gz\n"
                 ")\n")
@@ -408,6 +444,62 @@ def self_test():
             note("ok: a non-git FetchContent_Declare is left alone")
         else:
             fail("a URL-based dependency was treated as a git pin", output)
+
+        # 11. The residue the wrapper cannot remove: one dependency, two trees.
+        #     FetchContent ignores the second declaration of a name, so two
+        #     calls that disagree build the first silently.
+        os.makedirs(os.path.join(root, "two"), exist_ok=True)
+        write(multiline)
+        with open(os.path.join(root, "two", "CMakeLists.txt"), "w",
+                  encoding="utf-8") as handle:
+            handle.write("morph_declare_dep(glaze https://example.invalid/glaze.git "
+                         "v7.4.1)\n")
+        code, output = run()
+        if code != 0 and "declared 2 times and the declarations disagree" in output:
+            note("ok: two trees pinning one dependency differently is reported")
+        else:
+            fail("a cross-file pin divergence was accepted", output)
+
+        with open(os.path.join(root, "two", "CMakeLists.txt"), "w",
+                  encoding="utf-8") as handle:
+            handle.write("morph_declare_dep(glaze https://example.invalid/glaze.git "
+                         "v7.4.0)\n")
+        code, output = run()
+        if code == 0 and "declared in 2 places, all at the same revision" in output:
+            note("ok: two trees pinning it identically pass, and are reported as two")
+        else:
+            fail("two agreeing declarations of one dependency were rejected", output)
+        os.remove(os.path.join(root, "two", "CMakeLists.txt"))
+
+        # 12. cmake/DepCache.cmake is where the one legitimate
+        #     FetchContent_Declare lives; exempting it must not exempt a file
+        #     that merely looks like it.
+        os.makedirs(os.path.join(root, "cmake"), exist_ok=True)
+        write(multiline)
+        with open(os.path.join(root, "cmake", "DepCache.cmake"), "w",
+                  encoding="utf-8") as handle:
+            handle.write("function(morph_declare_dep name repository tag)\n"
+                         "    morph_cache_dep(${name} ${repository} ${tag})\n"
+                         "    FetchContent_Declare(${name}\n"
+                         "        GIT_REPOSITORY ${repository}\n"
+                         "        GIT_TAG ${tag} ${ARGN})\n"
+                         "endfunction()\n")
+        code, output = run()
+        if code == 0:
+            note("ok: the definition itself is not read as a call site")
+        else:
+            fail("cmake/DepCache.cmake's own definition was reported", output)
+
+        with open(os.path.join(root, "cmake", "Other.cmake"), "w",
+                  encoding="utf-8") as handle:
+            handle.write("FetchContent_Declare(sneaky\n"
+                         "    GIT_REPOSITORY https://example.invalid/s.git\n"
+                         "    GIT_TAG v1)\n")
+        code, output = run()
+        if code != 0 and "sneaky" in output:
+            note("ok: the exemption is the one path, not any .cmake beside it")
+        else:
+            fail("a declaration in another cmake/ file was exempted too", output)
 
     finally:
         shutil.rmtree(work, ignore_errors=True)

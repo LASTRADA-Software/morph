@@ -142,13 +142,8 @@ find_package(glaze ${MORPH_GLAZE_VERSION} CONFIG QUIET)
 if(NOT glaze_FOUND)
     include(FetchContent)
     include(cmake/DepCache.cmake)
-    morph_cache_dep(glaze https://github.com/stephenberry/glaze.git v7.4.0)
-    FetchContent_Declare(
-        glaze
-        GIT_REPOSITORY https://github.com/stephenberry/glaze.git
-        GIT_TAG        v7.4.0
-        GIT_SHALLOW    TRUE
-    )
+    morph_declare_dep(glaze https://github.com/stephenberry/glaze.git v7.4.0
+        GIT_SHALLOW TRUE)
     set(glaze_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(glaze)
 endif()
@@ -561,13 +556,8 @@ if(MORPH_BUILD_TESTS)
     if(NOT Catch2_FOUND)
         include(FetchContent)
         include(cmake/DepCache.cmake)
-        morph_cache_dep(Catch2 https://github.com/catchorg/Catch2.git v3.8.1)
-        FetchContent_Declare(
-            Catch2
-            GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-            GIT_TAG        v3.8.1
-            GIT_SHALLOW    TRUE
-        )
+        morph_declare_dep(Catch2 https://github.com/catchorg/Catch2.git v3.8.1
+            GIT_SHALLOW TRUE)
         FetchContent_MakeAvailable(Catch2)
     endif()
 
