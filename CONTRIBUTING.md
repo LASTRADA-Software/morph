@@ -68,6 +68,10 @@ serialising independent rungs behind one file.
   `include/morph/net`) — see
   [`docs/spec/testing_charter.md`](docs/spec/testing_charter.md) before
   deciding what a change needs beyond an ordinary Catch2 case.
+- **Sanitizers:** the `clang-asan`/`clang-tsan`/`clang-ubsan` presets are what
+  CI's sanitizer matrix runs. Running them locally has two traps that cost more
+  to rediscover than to read about — see
+  [Running the sanitizer presets locally](#running-the-sanitizer-presets-locally).
 - **Doxygen is strict:** the Docs CI job runs with
   `WARN_AS_ERROR = FAIL_ON_WARNINGS` — every public symbol needs complete
   `@param`/`@tparam`/`@return` docs. Reproduce locally with
@@ -126,6 +130,93 @@ serialising independent rungs behind one file.
   If you change a pinned constant, enum cardinality, or canonical error
   string, update the code, `docs/spec/pinned_facts.toml`, and the spec prose
   that cites it together in the same commit.
+
+## Running the sanitizer presets locally
+
+Three presets build the tree under a sanitizer: `clang-asan` (ASan + UBSan),
+`clang-tsan` (TSan) and `clang-ubsan` (UBSan standalone). The whole recipe, for
+TSan — nothing else needs setting, and in particular **do not set
+`TSAN_OPTIONS` by hand**:
+
+```sh
+cmake --preset clang-tsan
+cmake --build --preset clang-tsan
+bash scripts/check_sanitizer_instrumentation.sh build/clang-tsan tsan
+ctest --preset clang-tsan
+```
+
+Substitute `clang-asan`/`asan` or `clang-ubsan`/`ubsan` throughout for the
+other two. Two things that recipe hides, both of which used to have to be
+rediscovered:
+
+- **The suppressions file is wired into the test preset, absolutely.**
+  `cmake/tsan.supp` holds the known-false-positive entries for libstdc++'s
+  refcounted exception teardown (morph#476); the file itself carries the
+  evidence for each. The `clang-tsan` **test** preset sets
+  `TSAN_OPTIONS=suppressions=${sourceDir}/cmake/tsan.supp`, so `ctest --preset
+  clang-tsan` resolves it from any working directory. Spelling it relatively —
+  `TSAN_OPTIONS=suppressions=cmake/tsan.supp`, which is what copying CI's line
+  by hand tends to produce — breaks test *discovery*, not the tests:
+  `catch_discover_tests` runs each binary with its own build directory as the
+  working directory, TSan cannot open the file, and it exits with its default
+  `exitcode=66` before Catch2 lists a single test. Catch2's
+  `CatchAddTests.cmake` then reports
+
+  ```text
+  CMake Error at .../CatchAddTests.cmake:307 (message):
+    Error listing tests from executable '.../examples/concepts/morph_concepts_tests':
+
+      Result: 66
+      Output:
+  ```
+
+  `Output:` is empty for *every* discovery failure — the listing is written to
+  a file via `--out`, so there is never anything on stdout to report — and the
+  binary named is simply the first one ctest enumerated, not the one you were
+  working on. The one real clue is a line of TSan's own, on stderr, printed
+  just above that error and not part of it:
+
+  ```text
+  ThreadSanitizer: failed to read suppressions file
+  '.../build/clang-tsan/examples/concepts/cmake/tsan.supp'
+  ```
+
+  — a path under the *build* tree that nobody wrote, which is the relative one
+  resolved against the discovery working directory. If you see any of this,
+  check your environment for a relative `TSAN_OPTIONS` rather than the named
+  binary. Note that a preset cannot
+  protect you here: a test preset's `environment` reaches the test processes,
+  not ctest's own process, so a bad `TSAN_OPTIONS` inherited from your shell
+  still reaches the discovery step.
+- **The OomInjector tests are excluded on the `clang-asan` and `clang-tsan`
+  presets.** `tests/oom_injector.cpp` overrides the process-wide `operator
+  new`/`delete`, which the ASan and TSan runtimes also define, so the file
+  compiles its overrides out under `__SANITIZE_ADDRESS__`/`__SANITIZE_THREAD__`
+  and every test that arms the injector then throws `OomInjector: unusable
+  under ASan/TSan`. Measured on both presets: five `OomInjector` cases plus the
+  morph#108 allocation-failure case. Both test presets carry
+  `filter.exclude.name` = `OomInjector|morph#108` so the plain `ctest --preset`
+  above is green; CI passes the same regex as `-E` explicitly, which overrides
+  the preset field with the same value. Every non-sanitizer leg runs those
+  tests normally.
+
+The `check_sanitizer_instrumentation.sh` line is not a formality. A sanitizer
+run over binaries that were never instrumented passes the whole suite and
+reports nothing, which reads exactly like a clean run (morph#542, morph#679).
+The sweep above walks every binary ctest will run and asserts each carries the
+mode's symbols:
+
+```text
+check_sanitizer_instrumentation: 4 ctest binaries all carry __tsan_ symbols (0 allowlisted).
+```
+
+If you built a single target rather than the whole preset, the sweep refuses
+(too few binaries for its floor to mean anything); ask the narrower question
+instead, which applies no floor and says so:
+
+```sh
+bash scripts/check_sanitizer_instrumentation.sh --binary build/clang-tsan/tests/morph_tests tsan
+```
 
 ## Security
 
