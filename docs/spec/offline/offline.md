@@ -267,6 +267,21 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 default can call it (and so can an application) without needing a non-`const`
 reference to the queue.
 
+**Enqueue order is the implementation's to keep; the id does not imply it.**
+`drain()` requires enqueue order, and `QueueItem::id` does not supply it. All
+three shipped implementations mint ids that increase with insertion — an
+in-memory counter, a file offset, SQLite's `INTEGER PRIMARY KEY
+AUTOINCREMENT` — so each satisfies `drain()` by presenting rows ordered by id.
+That is a property of those three stores, not of the type: `uint64_t` neither
+promises monotonicity nor rules out an id minted from a GUID, a content hash,
+or a sharded sequence, and a store that reuses the id of a removed row does not
+order correctly either. An implementation over such a store carries its own
+insertion sequence and orders on that. This is written down because an
+ORM-backed queue is the first implementation for which the choice was a
+*choice* rather than the only option available (morph#549); the ordering is
+asserted by `tests/offline_queue_conformance.hpp`, so getting it wrong fails
+there rather than in production.
+
 Both `enqueue` overloads, `drain`, `size`, and `maxDepth` are `[[nodiscard]]`
 on the interface and on every shipped override (`InMemoryOfflineQueue`,
 `FileOfflineQueue`, `SqliteOfflineQueue`) — each returns the one piece of

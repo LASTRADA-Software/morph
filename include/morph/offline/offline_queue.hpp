@@ -184,6 +184,21 @@ struct IOfflineQueue {
     /// Items remain in the queue until `markDone()` is called. It is safe to
     /// call `drain()` multiple times — items survive a crash between `drain()`
     /// and the corresponding `markDone()` call.
+    ///
+    /// @par Enqueue order is the implementation's to keep; the id does not imply it
+    /// "Enqueue order" is a property this method **requires** and that
+    /// `QueueItem::id` does not supply. Every implementation morph ships mints
+    /// ids that happen to increase with insertion — an in-memory counter, a
+    /// file offset, SQLite's `INTEGER PRIMARY KEY AUTOINCREMENT` — so each of
+    /// them satisfies this method by presenting rows ordered by id. That is a
+    /// property of those three stores, not of the type: a `uint64_t` neither
+    /// promises monotonicity nor rules out an id minted from a GUID, a content
+    /// hash, or a sharded sequence, and a store that reuses the id of a removed
+    /// row does not order correctly either. An implementation over such a store
+    /// must carry its own insertion sequence and order on *that*; ordering by
+    /// the id would compile, survive a casual smoke test, and replay a user's
+    /// actions out of order. `tests/offline_queue_conformance.hpp` asserts the
+    /// ordering, so an implementation that gets this wrong fails there.
     /// @return Snapshot of all pending items.
     [[nodiscard]] virtual std::vector<QueueItem> drain() const = 0;
 
