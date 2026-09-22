@@ -338,7 +338,7 @@ def self_test():
         #    gate had something to look at.
         write("morph_declare_dep(docs https://example.invalid/docs.git v2.3.4)\n")
         code, output = run()
-        if code == 0 and "1 dependency pin(s)" in output:
+        if code == 0 and "1 morph_declare_dep() call(s)" in output:
             note("ok: a single-line morph_declare_dep() passes, and is counted")
         else:
             fail("a well-formed call was rejected", output)

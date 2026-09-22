@@ -15,7 +15,7 @@
 // Which means -- and an earlier version of this comment said the opposite, in
 // a form confident enough to act on (morph#718) -- there is no link failure
 // and no "multiple definition of `operator new(unsigned long)'". Measured with
-// clang 22.1.8, the major CI pins: `clang++ -std=c++23 -fsanitize=address
+// clang 22.1.8: `clang++ -std=c++23 -fsanitize=address
 // tests/oom_injector.cpp` links, and `nm -C --defined-only` finds eight
 // operator new/delete symbols in a plain object and zero in the ASan one.
 //
