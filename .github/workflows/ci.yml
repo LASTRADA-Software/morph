@@ -943,7 +943,24 @@ jobs:
       # claim while proving nothing. Keyed on `__tsan_`, not `__asan_` — an
       # ASan-only assertion on a TSan leg is itself a control that measures
       # nothing.
+      #
+      # QT_QPA_PLATFORM=offscreen for the reason bank-sanitizers' copy of this
+      # step spells out at length (morph#690, morph#691). The sweep's first
+      # act is `ctest --show-only=json-v1`, and ctest re-enumerates any suite
+      # registered with `DISCOVERY_MODE PRE_TEST` by running the binary with
+      # `--list-tests` -- here, headless. Today every Qt-linked suite this job
+      # builds is POST_BUILD (cmake/morph_add_rung.cmake), so that enumeration
+      # already happened in the Build step above where the variable is set,
+      # and this step is green without it. That is a property of one CMake
+      # keyword rather than of this job: flip POST_BUILD to PRE_TEST there and
+      # the headless `--list-tests` aborts, which takes out the *entire* ctest
+      # listing and surfaces as `ctest listed no tests` with nothing else to
+      # go on. linux-sanitizers deliberately does not get this block -- it
+      # configures no Qt, so the line would protect nothing and only invite
+      # the next reader to work out what it was for.
       - name: Every ctest binary is instrumented
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: bash scripts/check_sanitizer_instrumentation.sh build/clang-tsan tsan
 
       # Every ladder ctest case only ever carries the "ladder"/"ladder-<rung>"
@@ -1943,8 +1960,19 @@ jobs:
       # reaches (morph#542). The shared script walks what ctest will actually
       # run instead of a pattern, so a suite added tomorrow is covered by
       # having been added.
+      #
+      # QT_QPA_PLATFORM=offscreen for the reason kanban-tsan's copy of this
+      # step gives, and bank-sanitizers' gives at length (morph#690,
+      # morph#691): the sweep starts with `ctest --show-only=json-v1`, which
+      # re-runs `--list-tests` on every suite registered `DISCOVERY_MODE
+      # PRE_TEST`, and a headless Qt binary aborts there. This job's Qt-linked
+      # suites are all POST_BUILD today, so it is green without this -- on the
+      # strength of a keyword in cmake/morph_add_rung.cmake, not of anything
+      # this step or this job does.
       - name: Every ctest binary is instrumented
         if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: bash scripts/check_sanitizer_instrumentation.sh build/clang-asan asan
 
       # detect_leaks=0: LeakSanitizer reports allocations the Qt platform
