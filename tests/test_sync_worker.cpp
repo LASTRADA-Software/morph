@@ -403,8 +403,8 @@ namespace {
 /// Records every `setAttempts` write so a test can prove the *durable* count
 /// is left alone, not merely the in-memory one.
 struct AttemptRecordingQueue : morph::offline::InMemoryOfflineQueue {
-    void setAttempts(uint64_t itemId, uint32_t attempts) override {
-        writes.emplace_back(itemId, attempts);
+    void setAttempts(uint64_t itemId, morph::offline::Attempts attempts) override {
+        writes.emplace_back(itemId, attempts.value());
         morph::offline::InMemoryOfflineQueue::setAttempts(itemId, attempts);
     }
     std::vector<std::pair<uint64_t, uint32_t>> writes;

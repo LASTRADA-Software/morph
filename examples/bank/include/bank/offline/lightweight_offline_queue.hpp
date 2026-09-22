@@ -170,7 +170,7 @@ public:
     /// after the item was marked done does not fail.
     /// @param itemId   Id of the item whose attempt count changed.
     /// @param attempts New cumulative attempt count to persist.
-    void setAttempts(std::uint64_t itemId, std::uint32_t attempts) override;
+    void setAttempts(std::uint64_t itemId, morph::offline::Attempts attempts) override;
 
 private:
     mutable std::mutex _mtx;

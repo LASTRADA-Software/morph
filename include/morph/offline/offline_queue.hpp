@@ -2,17 +2,75 @@
 
 #pragma once
 #include <algorithm>
+#include <concepts>
 #include <cstdint>
 #include <deque>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "../core/observability.hpp"
 
 namespace morph::offline {
+
+/// @brief A replay attempt count, as a type distinct from a queue item id.
+///
+/// `setAttempts(itemId, attempts)` takes two integers that mean entirely
+/// different things, and before this type existed both were plain unsigned
+/// integers, mutually convertible in either direction. Transposing them
+/// compiled, and — because `setAttempts()` on an unknown id is a documented
+/// no-op — it also *ran*: the real item's count never advanced, nothing threw,
+/// and the defect surfaced much later as a retry budget that never exhausts.
+///
+/// `Attempts` removes the hazard rather than suppressing the warning about it.
+/// It is implicitly constructible from a narrow integer, so `setAttempts(id, 3)`
+/// reads exactly as it did before, and **deliberately not constructible from a
+/// 64-bit integer**, which is what a `QueueItem::id` is — so the transposed
+/// call does not compile. A genuinely 64-bit count is still expressible, with
+/// the narrowing spelled out at the call site:
+/// `setAttempts(id, static_cast<std::uint32_t>(count))`.
+class Attempts {
+public:
+    /// @brief Constructs a zero attempt count.
+    constexpr Attempts() noexcept = default;
+
+    /// @brief Implicitly wraps a narrow integral attempt count.
+    ///
+    /// Constrained to integral types **strictly narrower than a queue item
+    /// id**, which is the whole point of the class: `uint64_t` (and any other
+    /// 64-bit integer) is rejected, so passing an item id where an attempt
+    /// count belongs is a compile error rather than a silent no-op. `bool` is
+    /// excluded because a boolean is never an attempt count.
+    ///
+    /// @tparam Count Integral type of the incoming count.
+    /// @param count The attempt count to wrap.
+    template <typename Count>
+        requires(std::integral<Count> && !std::same_as<std::remove_cv_t<Count>, bool> &&
+                 sizeof(Count) < sizeof(std::uint64_t))
+    constexpr Attempts(Count count) noexcept : _value{static_cast<std::uint32_t>(count)} {}
+
+    /// @brief Returns the wrapped count.
+    /// @return The attempt count as a plain `uint32_t`.
+    [[nodiscard]] constexpr std::uint32_t value() const noexcept { return _value; }
+
+    /// @brief Compares two attempt counts.
+    /// @param other The count to compare against.
+    /// @return `true` when both wrap the same value.
+    [[nodiscard]] constexpr bool operator==(const Attempts& other) const noexcept = default;
+
+private:
+    std::uint32_t _value{0};
+};
+
+static_assert(!std::is_constructible_v<Attempts, std::uint64_t>,
+              "Attempts must not be constructible from a queue item id, or setAttempts()'s two "
+              "parameters become mutually convertible again and a transposed call compiles.");
+static_assert(std::is_convertible_v<std::uint32_t, Attempts>,
+              "Attempts must stay implicitly constructible from a narrow count, so existing "
+              "setAttempts(id, n) call sites keep reading the way they did.");
 
 /// @brief An item stored in the offline queue.
 ///
@@ -234,8 +292,10 @@ struct IOfflineQueue {
     /// (`SyncWorker`'s own in-memory counter is then always authoritative,
     /// since `QueueItem::attempts` never advances).
     /// @param itemId   Id of the item whose attempt count changed.
-    /// @param attempts New cumulative attempt count to persist.
-    virtual void setAttempts([[maybe_unused]] uint64_t itemId, [[maybe_unused]] uint32_t attempts) {}
+    /// @param attempts New cumulative attempt count to persist. Typed, not a
+    ///        bare integer, so a transposed call does not compile — see
+    ///        `Attempts` for what that silently did before.
+    virtual void setAttempts([[maybe_unused]] uint64_t itemId, [[maybe_unused]] Attempts attempts) {}
 
 protected:
     /// @brief Stamps an idempotency key onto an already-enqueued item.
@@ -249,6 +309,18 @@ protected:
     virtual void setIdempotencyKey([[maybe_unused]] uint64_t itemId, [[maybe_unused]] std::string idempotencyKey) {}
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
+
+// The point of `Attempts`, stated as something the compiler checks rather than
+// as a comment. The second assertion is what keeps the first from being
+// vacuous: if `Attempts` were an alias for `uint32_t` the transposed call would
+// compile and the first assertion would fail, and if it were made explicit the
+// ordinary call would stop compiling and the second would fail. Both directions
+// have to hold.
+static_assert(!std::is_invocable_v<decltype(&IOfflineQueue::setAttempts), IOfflineQueue&, uint32_t, uint64_t>,
+              "setAttempts's parameters must not be transposable: writing an item id into an attempt count is "
+              "silent, because setAttempts on an unknown id is a documented no-op.");
+static_assert(std::is_invocable_v<decltype(&IOfflineQueue::setAttempts), IOfflineQueue&, uint64_t, uint32_t>,
+              "setAttempts must still accept a plain count in the right order.");
 
 // ── In-memory implementation ──────────────────────────────────────────────────
 
@@ -329,11 +401,11 @@ public:
     /// to simulate cross-restart dead-lettering in tests.
     /// @param itemId   Id of the item to update.
     /// @param attempts New attempt count to store.
-    void setAttempts(uint64_t itemId, uint32_t attempts) override {
+    void setAttempts(uint64_t itemId, Attempts attempts) override {
         std::scoped_lock const lock{_mtx};
         auto iter = std::ranges::find_if(_items, [itemId](const QueueItem& item) { return item.id == itemId; });
         if (iter != _items.end()) {
-            iter->attempts = attempts;
+            iter->attempts = attempts.value();
         }
     }
 

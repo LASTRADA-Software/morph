@@ -172,14 +172,13 @@ std::size_t LightweightOfflineQueue::size() const {
 
 std::optional<std::size_t> LightweightOfflineQueue::maxDepth() const { return _maxDepth; }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- the signature is IOfflineQueue's, not ours
-void LightweightOfflineQueue::setAttempts(std::uint64_t itemId, std::uint32_t attempts) {
+void LightweightOfflineQueue::setAttempts(std::uint64_t itemId, morph::offline::Attempts attempts) {
     const std::scoped_lock lock{_mtx};
     auto record = _mapper.QuerySingle<OfflineQueueRecord>(itemId);
     if (!record.has_value()) {
         return;
     }
-    record->attempts = attempts;
+    record->attempts = attempts.value();
     _mapper.Update(*record);
 }
 
