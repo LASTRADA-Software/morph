@@ -258,7 +258,7 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 | `enqueue` | `uint64_t enqueue(std::string payload, std::string idempotencyKey)` | Appends payload carrying the dedup key (stored on `QueueItem::idempotencyKey`). Virtual with a default that delegates to the one-arg `enqueue` then stamps the key via the protected `setIdempotencyKey`, so existing implementations keep working; the key is dropped by an implementation with no per-item storage that overrides neither. |
 | `drain` | `std::vector<QueueItem> drain()` | Returns all pending items in enqueue order, without removing them. Safe to call multiple times — items survive between `drain()` and the corresponding `markDone()`. |
 | `markDone` | `void markDone(uint64_t itemId)` | Removes the item identified by `itemId`. No-op if not found. |
-| `setAttempts` | `void setAttempts(uint64_t itemId, uint32_t attempts)` | Persists an updated attempt count for an item. **Public** (unlike `setIdempotencyKey`) because `SyncWorker` calls it from outside the queue after every failed replay. Default no-op; `InMemoryOfflineQueue` overrides it to update the in-deque item. A queue that overrides it to store the count durably makes `SyncWorker`'s retry budget survive a process restart. |
+| `setAttempts` | `void setAttempts(uint64_t itemId, Attempts attempts)` | Persists an updated attempt count for an item. **Public** (unlike `setIdempotencyKey`) because `SyncWorker` calls it from outside the queue after every failed replay. Default no-op; `InMemoryOfflineQueue` overrides it to update the in-deque item. A queue that overrides it to store the count durably makes `SyncWorker`'s retry budget survive a process restart. The count is an `Attempts`, not a bare `uint32_t` — see "`Attempts`: why the count has its own type" below. |
 | `size` | `std::size_t size() const` | Number of pending items, without removing them. Default calls `drain().size()` — correct but O(n) and allocates a full snapshot to answer a size query; every shipped implementation overrides it with a direct count. |
 | `maxDepth` | `std::optional<std::size_t> maxDepth() const` | The capacity `enqueue()` enforces, or `std::nullopt` if unbounded. Default: `std::nullopt` — preserves current behavior for any `IOfflineQueue` subclass written before this method existed. |
 | `setIdempotencyKey` (protected) | `void setIdempotencyKey(uint64_t itemId, std::string key)` | Hook the default two-arg `enqueue` uses to stamp the key onto an already-enqueued item. Default no-op; `InMemoryOfflineQueue` records the key directly instead. **A conflicting non-empty key is skipped, never raised** — an implementation that deduplicates leaves the item unkeyed rather than failing, because the default `enqueue` has already inserted by the time it stamps, so the row exists either way and an exception could not undo it. That path therefore yields an extra *unkeyed* item, not a dedup hit; a caller wanting dedup uses the virtual two-arg `enqueue` (see below). |
@@ -266,6 +266,45 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 `drain()` is `const` — it takes a snapshot and mutates nothing, so `size()`'s
 default can call it (and so can an application) without needing a non-`const`
 reference to the queue.
+
+### `Attempts`: why the count has its own type
+
+`setAttempts(uint64_t itemId, uint32_t attempts)` was two adjacent, mutually
+convertible unsigned integers, and `bugprone-easily-swappable-parameters` said
+so at every implementation — which meant every implementor, in this tree and
+out of it, hand-wrote a suppression for a hazard they did not choose. That is
+the framework exporting its lint bill to its consumers, and the suppression
+left the hazard in place.
+
+The hazard is not theoretical, and it is **silent in both directions**:
+`setAttempts()` on an unknown id is a documented no-op
+(`tests/test_offline_queue.cpp`, `tests/test_file_offline_queue.cpp`), so a
+transposed call writes an attempt count into an id nothing matches, returns
+normally, and throws nothing. The real item's count never advances. The defect
+surfaces much later, as a `SyncWorker` retry budget that never exhausts and a
+poison payload that replays forever.
+
+`morph::offline::Attempts` removes it rather than suppressing the warning
+about it:
+
+- **Implicit from a narrow integer**, so `setAttempts(id, 3)` and
+  `setAttempts(id, counter)` read exactly as before and no call site in the
+  tree changed.
+- **Not constructible from a 64-bit integer**, which is what a `QueueItem::id`
+  is. `setAttempts(attempts, itemId)` therefore does not compile.
+- A genuinely 64-bit count is still expressible, with the narrowing visible at
+  the call site: `setAttempts(id, static_cast<std::uint32_t>(count))`.
+
+`QueueItem::attempts` stays a plain `uint32_t`: it is a struct field, reached
+by name, with no adjacent same-typed field to transpose it with. The hazard was
+in the *parameter list*, and that is where the type went.
+
+Two `static_assert`s below `IOfflineQueue` hold the property in place, and they
+are written as a pair on purpose: one asserts the transposed call is **not**
+well-formed, the other that the ordinary call still is. Either alone would pass
+against a degenerate definition — an alias for `uint32_t` fails the first, an
+`explicit` constructor fails the second — so the pair is what makes the check
+mean something.
 
 **Enqueue order is the implementation's to keep; the id does not imply it.**
 `drain()` requires enqueue order, and `QueueItem::id` does not supply it. All

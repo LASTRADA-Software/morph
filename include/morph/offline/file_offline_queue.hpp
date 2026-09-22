@@ -283,7 +283,7 @@ public:
     /// @brief Persists an updated attempt count for @p itemId. No-op if not found.
     /// @param itemId   Id of the item whose count changed.
     /// @param attempts New cumulative attempt count to store.
-    void setAttempts(uint64_t itemId, uint32_t attempts) override {
+    void setAttempts(uint64_t itemId, Attempts attempts) override {
         std::scoped_lock const lock{_mtx};
         auto iter = _items.find(itemId);
         if (iter == _items.end()) {
@@ -294,9 +294,9 @@ public:
         // disk. Write from a copy so `_items` is only updated once the record is
         // durable.
         auto updated = iter->second;
-        updated.attempts = attempts;
+        updated.attempts = attempts.value();
         appendPut(updated);
-        iter->second.attempts = attempts;
+        iter->second.attempts = attempts.value();
     }
 
 protected:

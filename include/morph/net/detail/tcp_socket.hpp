@@ -109,6 +109,34 @@ public:
         std::string const portStr = std::to_string(static_cast<unsigned>(port));
         int const rc = ::getaddrinfo(host.c_str(), portStr.c_str(), &hints, &resolved);
         if (rc != 0 || resolved == nullptr) {
+            // `::gai_strerror`, and NOT `errnoMessage()`: `rc` is an `EAI_*`
+            // code, not an `errno`, so `std::system_category().message(rc)`
+            // would render a confidently wrong string (morph#641).
+            //
+            // It also stays here rather than going the way `std::strerror`
+            // went in morph#625, because it does not have `std::strerror`'s
+            // defect. This throw site runs on threads this subsystem spawns
+            // (see `errnoMessage` below), so the question was live; it was
+            // measured rather than assumed (morph#640).
+            //
+            // glibc 2.44, `gcc -O0`: `gai_strerror` returns a pointer to a
+            // string literal inside libc's own read-only data, distinct per
+            // code and stable across calls --
+            //
+            //   EAI_AGAIN ptr=0x7fa71e9b62f2 "Temporary failure in name resolution"
+            //   EAI_FAIL  ptr=0x7fa71e9b632e "Non-recoverable failure in name resolution"
+            //   dladdr -> /usr/lib/libc.so.6, anonymous (a literal in a data section)
+            //   7fa71e99f000-7fa71ea15000 r--p ... /usr/lib/libc.so.6
+            //
+            // The `r--p` mapping is the load-bearing part: a shared scratch
+            // buffer would have to be writable. Even an unrecognised code
+            // returns a constant ("Unknown error"), not a formatted one. The
+            // musl/emscripten implementation morph's WASM build uses is a
+            // `static const char msgs[]` table by inspection, same property.
+            // `TcpSocket` is POSIX-only (this file's own class comment), so
+            // Winsock's documented-unsafe `gai_strerrorA` never applies.
+            //
+            // Re-check if a platform with a different libc joins CI.
             throw std::runtime_error("TcpSocket::connect: getaddrinfo failed for " + host + ": " + ::gai_strerror(rc));
         }
         struct AddrInfoGuard {

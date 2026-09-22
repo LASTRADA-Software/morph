@@ -633,10 +633,33 @@ transport above is not a matter of degree:
   configuration this project tests, the two spellings render an `errno` to
   identical bytes. The property gained is that the guarantee now holds by
   specification rather than by the implementation happening to be safe.
-  `TcpSocket::connect`'s `::gai_strerror` is deliberately untouched: it renders
-  `EAI_*` resolver codes, which are not `errno` values, so
-  `std::system_category()` cannot describe them and no drop-in substitution
-  exists.
+  `TcpSocket::connect`'s `::gai_strerror` is deliberately untouched, for two
+  separate reasons that morph#640 asked to be kept apart. The first is that no
+  substitution exists: it renders `EAI_*` resolver codes, which are not `errno`
+  values, so `std::system_category().message()` would describe them
+  confidently and wrongly. The second is that it does not have
+  `std::strerror`'s defect in the first place — **measured**, not assumed. On
+  glibc 2.44 it returns a pointer to a string literal in libc's own read-only
+  mapping, distinct per code and stable across calls:
+
+  ```
+  EAI_AGAIN ptr=0x7fa71e9b62f2 "Temporary failure in name resolution"
+  EAI_FAIL  ptr=0x7fa71e9b632e "Non-recoverable failure in name resolution"
+  dladdr -> /usr/lib/libc.so.6, anonymous (a literal in a data section)
+  7fa71e99f000-7fa71ea15000 r--p ... /usr/lib/libc.so.6
+  ```
+
+  The `r--p` is the load-bearing part: a shared scratch buffer of the kind
+  `std::strerror` is permitted to return would have to be writable. Even an
+  unrecognised code yields a constant ("Unknown error") rather than a formatted
+  one, so there is no per-call buffer on any path. The musl implementation the
+  WASM build links is a `static const char msgs[]` table by inspection, with
+  the same property, and `TcpSocket` is POSIX-only, so Winsock's
+  documented-unsafe `gai_strerrorA` is never compiled. What is **not**
+  established: no other libc was checked, and POSIX itself is not read as
+  requiring this — so the entry is a measurement on the configurations morph
+  builds, not a portability guarantee. Re-check if a platform with a different
+  libc joins CI.
 
 ## Residual limitations & hardening checklist
 

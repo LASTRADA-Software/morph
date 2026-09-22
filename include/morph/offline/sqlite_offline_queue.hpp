@@ -464,10 +464,10 @@ public:
     /// @brief Persists an updated attempt count for @p itemId. No-op if absent.
     /// @param itemId   Id of the item whose count changed.
     /// @param attempts New cumulative attempt count to store.
-    void setAttempts(uint64_t itemId, uint32_t attempts) override {
+    void setAttempts(uint64_t itemId, Attempts attempts) override {
         std::scoped_lock const lock{_mtx};
         detail::StatementGuard const guard{prepare("UPDATE morph_offline_queue SET attempts = ? WHERE id = ?;")};
-        bindInt64(guard.get(), 1, static_cast<std::int64_t>(attempts));
+        bindInt64(guard.get(), 1, static_cast<std::int64_t>(attempts.value()));
         bindInt64(guard.get(), 2, static_cast<std::int64_t>(itemId));
         stepOrThrow(guard.get(), "setAttempts");
     }
