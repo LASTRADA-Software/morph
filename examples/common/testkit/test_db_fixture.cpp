@@ -20,6 +20,37 @@ struct LadderTestkitProbe {
     // Reflection's default table name is the (unqualified) struct name, i.e.
     // "LadderTestkitProbe" — explicit here so DataMapper targets the same
     // "ladder_testkit_probe" table the migration below creates.
+    //
+    // The spelling is Lightweight's, not a choice of ours, and the lint's
+    // suggested fix is a runtime data bug. `RecordTableNameImpl` in
+    // Lightweight/Utils.hpp reads the member *by name* —
+    // `if constexpr (requires { Record::TableName; })` — and otherwise falls
+    // back to `Reflection::TypeNameOf<Record>`. The repository-root
+    // .clang-tidy sets `readability-identifier-naming.VariableCase: camelBack`,
+    // so this line is reported as `invalid case style for variable
+    // 'TableName'` with `tableName` offered as the fix. That rename compiles
+    // and links: the `requires` clause goes false, the `else` branch runs, and
+    // this record silently maps to a table called "LadderTestkitProbe" that no
+    // migration ever creates. Suppressed rather than taken (morph#702).
+    //
+    // Per declaration, and deliberately not a directory .clang-tidy.
+    // examples/bank/include/.clang-tidy exempts the same spelling with
+    // `readability-identifier-naming.VariableIgnoredRegexp: '^TableName$'`,
+    // and its own reasoning is what argues against copying it here: that file
+    // covers twelve declarations in a header-only tree, reached as main files
+    // and nothing else. This directory is the opposite shape. It holds
+    // twenty-one Catch2 translation units (the count
+    // scripts/check_rung_filters.sh reads back) and exactly two of these
+    // declarations, and a .clang-tidy here is resolved for every one of them —
+    // including for the include/morph/** headers they reach, which *do* match
+    // the root `HeaderFilterRegex` (morph#632). It also already carries a
+    // .clang-tidy whose whole justification is "this finding is Catch2 idiom",
+    // a claim scripts/check_rung_filters.sh re-checks against every .cpp that
+    // file governs; `TableName` is ORM protocol rather than Catch2 idiom, so
+    // adding it there would put a second claim into a file whose gate
+    // validates only the first. Two directives subtract one check on one line
+    // each and reach nothing else.
+    // NOLINTNEXTLINE(readability-identifier-naming)
     static constexpr std::string_view TableName = "ladder_testkit_probe";
 
     Lightweight::Field<uint64_t, Lightweight::PrimaryKey::AutoAssign> id;

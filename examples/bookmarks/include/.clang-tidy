@@ -1,0 +1,95 @@
+# One identifier spelling exempted from readability-identifier-naming, inside
+# the bookmarks rung's own header tree: `TableName`, the member name the LASTRADA
+# Lightweight ORM reads a record's SQL table off. Nothing else is subtracted --
+# not a check, not a declaration kind, not a directory's worth of code.
+#
+# The long form of this argument, and the probe runs behind every claim below,
+# are in examples/bank/include/.clang-tidy, landed by morph#697. This file is
+# the same key applied to one more header tree (morph#702), with this rung's
+# own numbers rather than bank's. The short form:
+#
+#   * The repository-root .clang-tidy sets
+#     `readability-identifier-naming.VariableCase: camelBack`, and a Lightweight
+#     record has to declare `static constexpr std::string_view TableName`, so
+#     every record here is reported as
+#     `invalid case style for variable 'TableName'`, offering `tableName`.
+#
+#   * That rename is a runtime data bug, not a lint fix. `RecordTableNameImpl`
+#     in Lightweight/Utils.hpp reads the member by *spelling* --
+#     `if constexpr (requires { Record::TableName; })` -- and otherwise falls
+#     back to `Reflection::TypeNameOf<Record>`. `tableName` does not fail to
+#     compile and does not fail to link: the `requires` clause goes false, the
+#     `else` branch runs, and the record is mapped to a table named after the
+#     C++ type instead. The first thing that tells anyone is a missing table at
+#     run time.
+#
+#   * An ignore-by-name rather than `-readability-identifier-naming`, because
+#     subtracting the check for a directory would stop it measuring every other
+#     identifier here.
+#
+#   * `VariableIgnoredRegexp`, and deliberately not `ClassConstantIgnoredRegexp`
+#     or `ConstexprVariableIgnoredRegexp`, which read as more specific and are
+#     traps. Naming either of those kinds at all -- even only to set its
+#     IgnoredRegexp -- moves the declaration onto a kind with no `Case`
+#     configured, so every static constexpr member in reach stops being
+#     case-checked whatever it is called. Re-measured for this change with
+#     clang-tidy 22.1.8 against a probe header carrying three findings
+#     (`TableName`, a second static constexpr member `OtherThing`, and a local
+#     `BadLocal`), placed under a rung's include/ and analysed with this
+#     repository's real configuration:
+#
+#       no config here                    TableName, OtherThing, BadLocal
+#       VariableIgnoredRegexp             OtherThing, BadLocal
+#       ClassConstantIgnoredRegexp        BadLocal only
+#       ConstexprVariableIgnoredRegexp    BadLocal only
+#
+#     `Variable` is the kind the diagnostic itself names ("invalid case style
+#     for *variable*"), so setting its IgnoredRegexp changes nothing but the
+#     one spelling.
+#
+#   * `InheritParentConfig: true` is load-bearing, not decoration. Without it
+#     clang-tidy *replaces* the root configuration rather than extending it.
+#     Measured on the same probe with the key removed and nothing else changed:
+#     `Error: no checks enabled.`, exit 1, both from a direct clang-tidy run
+#     and through clang-tidy-diff.py -- which is louder than
+#     examples/bank/include/.clang-tidy records for the same mutation
+#     (morph#716).
+#
+# ── Scope, and why it is this directory ──────────────────────────────────────
+#
+# clang-tidy resolves configuration by walking up from the file it is
+# analysing and offers no finer granularity than a directory, so the only
+# choice is which directory. One up, at `examples/`, is refused outright by
+# scripts/check_rung_filters.sh, because a config there governs every rung's
+# src/, include/ and gui_lib/ together -- a narrow suppression in the shape
+# that quietly becomes a wide one.
+#
+# `examples/bookmarks/include/` is this rung's own header tree. It holds 23
+# .hpp and no .cpp at all, so this file governs declarations and nothing
+# else, and none of those headers matches the root `HeaderFilterRegex`
+# (`include/morph/.*`) -- so a `TableName` reached from some .cpp is
+# discarded as non-user code whatever this file says. The case that reaches
+# CI is clang-tidy-diff analysing a *changed header* as a main file, which is
+# the only way any of these declarations has ever been judged (morph#677).
+#
+# Reach on this revision: 5 of the repository's 71 `static constexpr
+# std::string_view TableName` declarations are under this directory, one each
+# in bookmarks/db/bookmark_entity.hpp, bookmark_tag_entity.hpp,
+# imported_op_entity.hpp, outbox_entity.hpp and tag_entity.hpp. Each is
+# reported by clang-tidy 22.1.8 without this file and clean with it, measured
+# through clang-tidy-diff.py over a real one-line edit. The other
+# subdirectories (app/, auth/, core/, dto/, import/, models/, units.hpp) are
+# in reach and contain no `TableName`; the ignore has nothing to do there and
+# does nothing.
+#
+# The residue, stated rather than intended: a local variable or ordinary member
+# spelled exactly `TableName`, written anywhere under this tree for some reason
+# unrelated to the ORM, is not case-checked. Nothing else about it is
+# suppressed, no other check is affected, and no other spelling is -- the probe
+# table above is the evidence for that.
+
+InheritParentConfig: true
+
+CheckOptions:
+  - key:   readability-identifier-naming.VariableIgnoredRegexp
+    value: '^TableName$'
