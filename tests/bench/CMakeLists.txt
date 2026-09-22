@@ -95,11 +95,24 @@ set(MORPH_ALLOC_BUDGET_PER_CALL "${_morph_alloc_budget_default}" CACHE STRING
 
 if(NOT MORPH_ALLOC_BUDGET_PER_CALL EQUAL 0)
     # --lookup-budget=0 is exact, not a ceiling with headroom: morph#572's
-    # Part C made `ActionDispatcher`'s key lookups allocate nothing at all, for
-    # ids of any length, and "nothing at all" is a property that either holds
-    # or has regressed. There is no toolchain on which a transparent lookup
+    # Part C made `ActionDispatcher`'s key lookups allocate nothing at all, and
+    # morph#699 did the same for `journal::PayloadMigrationRegistry::find`, for
+    # ids of any length. "Nothing at all" is a property that either holds or
+    # has regressed. There is no toolchain on which a transparent lookup
     # allocates, so this half needs no per-toolchain default.
+    #
+    # --id-length-budget covers morph#699's third registry,
+    # `ActionExecuteRegistry`, which cannot be probed on its own -- it
+    # dispatches whatever it finds -- so what is gated is the gap between an
+    # `executeJson` over ids past libstdc++'s SSO buffer and one over ids
+    # inside it. 0.5 rather than 0 is measured, not padded: the figure reads
+    # 0.01 because of a deterministic two-allocation one-off that follows
+    # census order rather than id length, and reverting either half of
+    # morph#699 takes it to 3.00. The binary's own comment at the check
+    # carries the measurement. Like the lookup half it is toolchain-independent
+    # -- it is a difference between two runs of the same build.
     add_test(NAME bench.alloc_budget
-             COMMAND morph_bench_alloc "--budget=${MORPH_ALLOC_BUDGET_PER_CALL}" "--lookup-budget=0")
+             COMMAND morph_bench_alloc "--budget=${MORPH_ALLOC_BUDGET_PER_CALL}" "--lookup-budget=0"
+                     "--id-length-budget=0.5")
     set_tests_properties(bench.alloc_budget PROPERTIES TIMEOUT 120 LABELS "bench")
 endif()

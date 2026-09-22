@@ -96,8 +96,8 @@ public:
     template <typename Sharing>
     [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string_view modelId, std::string_view actionId,
                                                                   void* handler, std::string_view bodyJson) const {
-        auto iter =
-            _executors.find(Key{std::string{modelId}, std::string{actionId}, std::type_index{typeid(Sharing)}});
+        auto iter = _executors.find(
+            KeyView{.modelId = modelId, .actionId = actionId, .sharing = std::type_index{typeid(Sharing)}});
         if (iter == _executors.end()) {
             throw std::runtime_error("unknown action for executeJson: " + std::string{modelId} + "/" +
                                      std::string{actionId});
@@ -110,14 +110,33 @@ public:
     static ActionExecuteRegistry& instance();
 
 private:
+    // The stored key: the registry owns its ids, because nothing else outlives
+    // a registration.
     struct Key {
         std::string modelId;
         std::string actionId;
         std::type_index sharing;
         bool operator==(const Key&) const = default;
     };
+    // The key a caller looks an entry up *with*. Every id reaching `execute`
+    // arrives as a `string_view` -- a schema-driven GUI's decoded action name,
+    // or a `constexpr` `ModelTraits<M>::typeId()` -- so materialising `Key`
+    // just to hash it charged every `executeJson` two `std::string`
+    // constructions (morph#699). Deliberately not
+    // `morph::model::detail::PairKeyView`: this key carries a `std::type_index`
+    // as well as the two ids, so it needs its own view type and its own
+    // functors rather than a reuse that would silently drop the sharing tag.
+    struct KeyView {
+        std::string_view modelId;
+        std::string_view actionId;
+        std::type_index sharing;
+    };
     struct KeyHash {
-        std::size_t operator()(const Key& key) const noexcept {
+        // Marks the functor transparent; `KeyEqual` below is the other half
+        // `unordered_map` needs before a heterogeneous `find` compiles at all.
+        using is_transparent = void;
+
+        std::size_t operator()(KeyView key) const noexcept {
             // Spelled with the view type rather than a braced list: `PairKeyHash`
             // is transparent now, so a braced `{modelId, actionId}` is equally
             // convertible to both of its overloads and would be ambiguous.
@@ -125,8 +144,33 @@ private:
                 ::morph::model::detail::PairKeyHash{}(::morph::model::detail::PairKeyView{key.modelId, key.actionId});
             return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));
         }
+
+        // Routed through the view body rather than hashing the stored strings
+        // separately, for the reason `PairKeyHash`'s own comment gives: two
+        // bodies that happen to agree are not a property a heterogeneous
+        // lookup may rest on. If they disagreed, a transparent `find()` would
+        // hash into the wrong bucket and report a registered action as
+        // unknown, with no diagnostic anywhere.
+        std::size_t operator()(const Key& key) const noexcept {
+            return (*this)(KeyView{.modelId = key.modelId, .actionId = key.actionId, .sharing = key.sharing});
+        }
     };
-    std::unordered_map<Key, Executor, KeyHash> _executors;
+    struct KeyEqual {
+        // Marks the functor transparent, enabling heterogeneous lookup. A
+        // transparent hash alone is not enough: `unordered_map` requires both
+        // (morph#699, which is the trap `journal::PayloadMigrationRegistry`
+        // fell into by naming a transparent hash and keeping the default
+        // equality).
+        using is_transparent = void;
+
+        // Accepts any mix of `Key` and `KeyView` on either side.
+        template <typename LhsT, typename RhsT>
+        bool operator()(const LhsT& lhs, const RhsT& rhs) const noexcept {
+            return lhs.sharing == rhs.sharing && std::string_view{lhs.modelId} == std::string_view{rhs.modelId} &&
+                   std::string_view{lhs.actionId} == std::string_view{rhs.actionId};
+        }
+    };
+    std::unordered_map<Key, Executor, KeyHash, KeyEqual> _executors;
 };
 
 inline ActionExecuteRegistry& ActionExecuteRegistry::instance() {
@@ -2999,8 +3043,14 @@ public:
         // doc comment): a NoSharing-only executor would static_cast `this`
         // to the wrong BridgeHandler<Model, Sharing> instantiation for a
         // shared handler, silently skipping its attach/promote step.
-        return ActionExecuteRegistry::instance().execute<Sharing>(
-            std::string{::morph::model::ModelTraits<Model>::typeId()}, actionType, this, bodyJson);
+        //
+        // `typeId()` is a `constexpr std::string_view` over a string literal,
+        // so it is passed straight through. It used to be copied into a
+        // `std::string` here, which allocated once per call for any model id
+        // past the SSO buffer -- the same allocation, on the same path, that
+        // the transparent lookup below it removes (morph#699).
+        return ActionExecuteRegistry::instance().execute<Sharing>(::morph::model::ModelTraits<Model>::typeId(),
+                                                                  actionType, this, bodyJson);
     }
 
     /// @brief Creates this handler's binding: deferred when shared, immediate otherwise.
