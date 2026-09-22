@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/d4f/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>Process-level registry mapping a view's string type-id to its <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#ae72992cc14431422228e8e34421d2625" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> provider, so a controller can enumerate every registered view by name — parallels <span class="tt">ActionExecuteRegistry</span> for actions (docs/spec/core/bridge.md), but a view registers no executor, only a schema provider.  
+<p>Process-level registry mapping a view's string type-id to its <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> provider, so a controller can enumerate every registered view by name — parallels <span class="tt">ActionExecuteRegistry</span> for actions (docs/spec/core/bridge.md), but a view registers no executor, only a schema provider.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>&gt;</code></p>
@@ -131,8 +131,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a1a70ac50b0df0b1eb655200cd27867ab" id="r_a1a70ac50b0df0b1eb655200cd27867ab"><td class="memTemplParams" colspan="2">template&lt;typename V&gt; </td></tr>
 <tr class="memitem:a1a70ac50b0df0b1eb655200cd27867ab template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1a70ac50b0df0b1eb655200cd27867ab">registerView</a> (std::string_view viewId)</td></tr>
 <tr class="memdesc:a1a70ac50b0df0b1eb655200cd27867ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers <code class="param">V's</code> schema provider under <code class="param">viewId</code>. A second registration for the same <code class="param">viewId</code> silently replaces the first (last-write-wins, the same policy <span class="tt">ActionDispatcher</span> and <span class="tt">ModelRegistryFactory</span> use — see docs/spec/core/registry.md).  <br /></td></tr>
-<tr class="memitem:a455d3b0652f6ce2d89cdda28ac665458" id="r_a455d3b0652f6ce2d89cdda28ac665458"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a455d3b0652f6ce2d89cdda28ac665458">schemaJson</a> (std::string_view viewId) const</td></tr>
-<tr class="memdesc:a455d3b0652f6ce2d89cdda28ac665458"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the cached <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#ae72992cc14431422228e8e34421d2625" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> for <code class="param">viewId</code>.  <br /></td></tr>
+<tr class="memitem:a7672b4ae83c805a6c5523326feedfb28" id="r_a7672b4ae83c805a6c5523326feedfb28"><td class="memItemLeft">const std::string &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a7672b4ae83c805a6c5523326feedfb28">schemaJson</a> (std::string_view viewId) const</td></tr>
+<tr class="memdesc:a7672b4ae83c805a6c5523326feedfb28"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the cached <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> for <code class="param">viewId</code>.  <br /></td></tr>
 <tr class="memitem:a1f9bd5ae1bf3f03177b847f9a17273ee" id="r_a1f9bd5ae1bf3f03177b847f9a17273ee"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1f9bd5ae1bf3f03177b847f9a17273ee">viewIds</a> () const</td></tr>
 <tr class="memdesc:a1f9bd5ae1bf3f03177b847f9a17273ee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns every registered view id, in unspecified order.  <br /></td></tr>
 </table><table class="memberdecls">
@@ -142,9 +142,9 @@ Static Public Member Functions</h2></td></tr>
 <tr class="memdesc:ab0babebfdea864fa9660957bd530194d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the process-level singleton registry.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Process-level registry mapping a view's string type-id to its <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#ae72992cc14431422228e8e34421d2625" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> provider, so a controller can enumerate every registered view by name — parallels <span class="tt">ActionExecuteRegistry</span> for actions (docs/spec/core/bridge.md), but a view registers no executor, only a schema provider. </p>
+<div class="textblock"><p>Process-level registry mapping a view's string type-id to its <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> provider, so a controller can enumerate every registered view by name — parallels <span class="tt">ActionExecuteRegistry</span> for actions (docs/spec/core/bridge.md), but a view registers no executor, only a schema provider. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00409">409</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a1a70ac50b0df0b1eb655200cd27867ab" name="a1a70ac50b0df0b1eb655200cd27867ab"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a1a70ac50b0df0b1eb655200cd27867ab">&#9670;&#160;</a></span>registerView()</h2>
@@ -185,12 +185,12 @@ template&lt;typename V&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00418">418</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00422">422</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a455d3b0652f6ce2d89cdda28ac665458" name="a455d3b0652f6ce2d89cdda28ac665458"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a455d3b0652f6ce2d89cdda28ac665458">&#9670;&#160;</a></span>schemaJson()</h2>
+<a id="a7672b4ae83c805a6c5523326feedfb28" name="a7672b4ae83c805a6c5523326feedfb28"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7672b4ae83c805a6c5523326feedfb28">&#9670;&#160;</a></span>schemaJson()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -199,7 +199,7 @@ template&lt;typename V&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::views::ViewRegistry::schemaJson </td>
+          <td class="memname">const std::string &amp; morph::views::ViewRegistry::schemaJson </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>viewId</em></span></td><td>)</td>
           <td> const</td>
@@ -212,16 +212,22 @@ template&lt;typename V&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Returns the cached <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#ae72992cc14431422228e8e34421d2625" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> for <code class="param">viewId</code>. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Returns the cached <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> for <code class="param">viewId</code>. </p>
+<p>Forwards the provider's reference through unchanged, so enumerating every registered view copies no schema text; the referent is <span class="tt"><a class="el" href="../../de/d49/views_8hpp.html#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span>'s process-lifetime cache. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">viewId</td><td>String type-id previously passed to <span class="tt"><a class="el" href="#a1a70ac50b0df0b1eb655200cd27867ab" title="Registers V&#39;s schema provider under viewId. A second registration for the same viewId silently replac...">registerView</a></span>. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The view-schema JSON. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Reference to the process-lifetime view-schema JSON registered under <code class="param">viewId</code>. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::runtime_error</td><td>if no view is registered under <code class="param">viewId</code>. </td></tr>
+  </table>
+  </dd>
+</dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00425">425</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00438">438</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 
 </div>
 </div>
@@ -251,7 +257,7 @@ template&lt;typename V&gt; </div>
 <p>Returns every registered view id, in unspecified order. </p>
 <dl class="section return"><dt>Returns</dt><dd>The registered view ids. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00435">435</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00448">448</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 
 </div>
 </div>
@@ -281,7 +287,7 @@ template&lt;typename V&gt; </div>
 <p>Returns the process-level singleton registry. </p>
 <dl class="section return"><dt>Returns</dt><dd>Reference to the singleton. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00446">446</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 
 </div>
 </div>

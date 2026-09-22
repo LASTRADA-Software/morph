@@ -154,7 +154,7 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aviews_3A_3AMasterDetailView" id="r_morph_3A_3Aviews_3A_3AMasterDetailView"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/dd6/structmorph_1_1views_1_1MasterDetailView.html">morph::views::MasterDetailView</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tag type: <span class="tt">V::kind</span> selects a list + inline/side editor screen. Introduces no JSON keys beyond <span class="tt"><a class="el" href="../../df/d26/structmorph_1_1views_1_1CollectionView.html" title="Tag type: V::kind selects a plain list/table screen.">CollectionView</a></span> — purely a rendering choice a conformant renderer may act on.  <a href="../../d7/dd6/structmorph_1_1views_1_1MasterDetailView.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aviews_3A_3AViewRegistry" id="r_morph_3A_3Aviews_3A_3AViewRegistry"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../db/d4f/classmorph_1_1views_1_1ViewRegistry.html">morph::views::ViewRegistry</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Process-level registry mapping a view's string type-id to its <span class="tt"><a class="el" href="#ae72992cc14431422228e8e34421d2625" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> provider, so a controller can enumerate every registered view by name — parallels <span class="tt">ActionExecuteRegistry</span> for actions (docs/spec/core/bridge.md), but a view registers no executor, only a schema provider.  <a href="../../db/d4f/classmorph_1_1views_1_1ViewRegistry.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Process-level registry mapping a view's string type-id to its <span class="tt"><a class="el" href="#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">viewSchemaJson</a>&lt;V&gt;()</span> provider, so a controller can enumerate every registered view by name — parallels <span class="tt">ActionExecuteRegistry</span> for actions (docs/spec/core/bridge.md), but a view registers no executor, only a schema provider.  <a href="../../db/d4f/classmorph_1_1views_1_1ViewRegistry.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-define-members" class="groupheader"><a id="define-members" name="define-members"></a>
 Macros</h2></td></tr>
@@ -173,13 +173,13 @@ Functions</h2></td></tr>
 <tr class="memitem:a2627b29c51eac4c8dbaafa90f4007e49" id="r_a2627b29c51eac4c8dbaafa90f4007e49"><td class="memTemplParams" colspan="2">template&lt;typename Action&gt; </td></tr>
 <tr class="memitem:a2627b29c51eac4c8dbaafa90f4007e49 template"><td class="memItemLeft">consteval <a class="el" href="../../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html">ActionDescriptor</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2627b29c51eac4c8dbaafa90f4007e49">morph::views::describeAction</a> (std::string_view label={}, <a class="el" href="#abd9fb59e8583b54ec23803a364b89799">ActionScope</a> scope=ActionScope::Row, std::span&lt; const <a class="el" href="../../d9/dea/structmorph_1_1views_1_1BindEntry.html">BindEntry</a> &gt; bind={}, bool confirm=false)</td></tr>
 <tr class="memdesc:a2627b29c51eac4c8dbaafa90f4007e49"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds an <span class="tt"><a class="el" href="../../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html" title="One action a view screen can fire — the row opener (v-rowAction) or an entry of v-actions.">ActionDescriptor</a></span> for <code class="param">Action</code>, resolving its wire type id from the real, registered <span class="tt">ActionTraits&lt;Action&gt;</span> rather than a hand-typed string.  <br /></td></tr>
-<tr class="memitem:ae72992cc14431422228e8e34421d2625" id="r_ae72992cc14431422228e8e34421d2625"><td class="memTemplParams" colspan="2">template&lt;typename V&gt; </td></tr>
-<tr class="memitem:ae72992cc14431422228e8e34421d2625 template"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ae72992cc14431422228e8e34421d2625">morph::views::viewSchemaJson</a> ()</td></tr>
-<tr class="memdesc:ae72992cc14431422228e8e34421d2625"><td class="mdescLeft">&#160;</td><td class="mdescRight">Generates the view-schema JSON document for view descriptor <code class="param">V</code>.  <br /></td></tr>
+<tr class="memitem:aff43064712eac746ff9ffc2a8f5a295e" id="r_aff43064712eac746ff9ffc2a8f5a295e"><td class="memTemplParams" colspan="2">template&lt;typename V&gt; </td></tr>
+<tr class="memitem:aff43064712eac746ff9ffc2a8f5a295e template"><td class="memItemLeft">const std::string &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aff43064712eac746ff9ffc2a8f5a295e">morph::views::viewSchemaJson</a> ()</td></tr>
+<tr class="memdesc:aff43064712eac746ff9ffc2a8f5a295e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Generates the view-schema JSON document for view descriptor <code class="param">V</code>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>View-schema generation: composes a registered query action's result rows with an optional row-opener action and row/collection action buttons into a list/table or master-detail <b>screen</b> descriptor. </p>
-<p>Where <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a0a0fb2658d155464d4688af38f09a25e" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">morph::forms::schemaJson</a>&lt;A&gt;()</span> describes <em>one action</em>, this header describes a <em>set</em> of related actions — a query, an edit, a delete — as a single, additional JSON document, <span class="tt"><a class="el" href="#ae72992cc14431422228e8e34421d2625" title="Generates the view-schema JSON document for view descriptor V.">morph::views::viewSchemaJson</a>&lt;V&gt;()</span>, emitted alongside (never merged into) the action schemas. See docs/spec/forms/views.md. </p>
+<p>Where <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a25cc82b6b279223af29633fa946095ca" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">morph::forms::schemaJson</a>&lt;A&gt;()</span> describes <em>one action</em>, this header describes a <em>set</em> of related actions — a query, an edit, a delete — as a single, additional JSON document, <span class="tt"><a class="el" href="#aff43064712eac746ff9ffc2a8f5a295e" title="Generates the view-schema JSON document for view descriptor V.">morph::views::viewSchemaJson</a>&lt;V&gt;()</span>, emitted alongside (never merged into) the action schemas. See docs/spec/forms/views.md. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 </div><a name="doc-define-members" id="doc-define-members"></a><h2 id="header-doc-define-members" class="groupheader">Macro Definition Documentation</h2>
@@ -208,7 +208,7 @@ Functions</h2></td></tr>
 <div class="line"><span class="keyword">namespace </span>{                                                                                        \</div>
 <div class="line">[[maybe_unused]] <span class="keyword">const</span> <span class="keywordtype">bool</span> bridge_view_reg_##V = morph::views::detail::registerViewOnce&lt;V&gt;(NAME); \</div>
 <div class="line">}</div>
-<div class="ttc" id="astructmorph_1_1views_1_1ViewTraits_html"><div class="ttname"><a href="../../db/db9/structmorph_1_1views_1_1ViewTraits.html">morph::views::ViewTraits</a></div><div class="ttdoc">Traits specialisation that maps a view descriptor type to its string type-id. Specialise via BRIDGE_R...</div><div class="ttdef"><b>Definition</b> <a href="../../de/d49/views_8hpp_source.html#l00402">views.hpp:402</a></div></div>
+<div class="ttc" id="astructmorph_1_1views_1_1ViewTraits_html"><div class="ttname"><a href="../../db/db9/structmorph_1_1views_1_1ViewTraits.html">morph::views::ViewTraits</a></div><div class="ttdoc">Traits specialisation that maps a view descriptor type to its string type-id. Specialise via BRIDGE_R...</div><div class="ttdef"><b>Definition</b> <a href="../../de/d49/views_8hpp_source.html#l00406">views.hpp:406</a></div></div>
 </div><!-- fragment -->
 <p>Registers view descriptor <code class="param">V</code> with the string id <code class="param">NAME</code>. </p>
 <p>Specialises <span class="tt"><a class="el" href="../../db/db9/structmorph_1_1views_1_1ViewTraits.html" title="Traits specialisation that maps a view descriptor type to its string type-id. Specialise via BRIDGE_R...">morph::views::ViewTraits</a>&lt;V&gt;</span> and registers <code class="param">V's</code> <span class="tt">viewSchemaJson&lt;V&gt;()</span> provider with the process-level <span class="tt">ViewRegistry</span> at static-init time — parallels <span class="tt">BRIDGE_REGISTER_ACTION</span> (<a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>), but a view has no dispatch path: it is metadata only, so this macro needs only <span class="tt">&lt;<a class="el" href="../../d1/da2/registry_8hpp_source.html">morph/core/registry.hpp</a>&gt;</span>, never <span class="tt">&lt;<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">morph/core/bridge.hpp</a>&gt;</span>. </p><dl class="params"><dt>Parameters</dt><dd>
@@ -219,7 +219,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00488">488</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00501">501</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 
 </div>
 </div>
@@ -312,8 +312,8 @@ template&lt;typename Action&gt; </div>
 
 </div>
 </div>
-<a id="ae72992cc14431422228e8e34421d2625" name="ae72992cc14431422228e8e34421d2625"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae72992cc14431422228e8e34421d2625">&#9670;&#160;</a></span>viewSchemaJson()</h2>
+<a id="aff43064712eac746ff9ffc2a8f5a295e" name="aff43064712eac746ff9ffc2a8f5a295e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aff43064712eac746ff9ffc2a8f5a295e">&#9670;&#160;</a></span>viewSchemaJson()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -324,7 +324,7 @@ template&lt;typename V&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::views::viewSchemaJson </td>
+          <td class="memname">const std::string &amp; morph::views::viewSchemaJson </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
@@ -338,15 +338,15 @@ template&lt;typename V&gt; </div>
 </div><div class="memdoc">
 
 <p>Generates the view-schema JSON document for view descriptor <code class="param">V</code>. </p>
-<p>A <b>new, separate top-level document</b> from <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a0a0fb2658d155464d4688af38f09a25e" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">morph::forms::schemaJson</a>&lt;A&gt;()</span> — never merged into any action schema. Computed once per type and cached, exactly like <span class="tt">schemaJson&lt;A&gt;()</span>. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+<p>A <b>new, separate top-level document</b> from <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a25cc82b6b279223af29633fa946095ca" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">morph::forms::schemaJson</a>&lt;A&gt;()</span> — never merged into any action schema. Computed once per type and cached, exactly like <span class="tt">schemaJson&lt;A&gt;()</span> — and, like it, returned <b>by reference</b>: the cache is created once per type per process, never mutated afterwards, and lives until the process exits, so the reference stays valid for as long as any caller could hold it. A caller that needs its own mutable copy asks for one (<span class="tt">std::string mine = viewSchemaJson&lt;V&gt;();</span>). </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">V</td><td>View descriptor: <span class="tt">using kind = CollectionView</span> (or <span class="tt">MasterDetailView</span>); <span class="tt">using query = &lt;registered query action&gt;</span>; optional <span class="tt">static constexpr std::string_view title</span>, <span class="tt">rowKey</span>, <span class="tt">std::array&lt;ColumnOverride, N&gt; columns</span>, <span class="tt">ActionDescriptor rowAction</span>, and <span class="tt">std::array&lt;ActionDescriptor, N&gt; actions</span>. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The view-schema JSON. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Reference to the process-lifetime view-schema JSON for <span class="tt">V</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 
 </div>
 </div>

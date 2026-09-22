@@ -141,6 +141,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/d11/forms_8
 <code>#include &lt;tuple&gt;</code><br />
 <code>#include &lt;type_traits&gt;</code><br />
 <code>#include &lt;unordered_map&gt;</code><br />
+<code>#include &lt;unordered_set&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
 <code>#include &quot;<a class="el" href="../../d9/db8/quantity_8hpp_source.html">../util/quantity.hpp</a>&quot;</code><br />
@@ -189,7 +190,7 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3ARuleList_3C_20Rules_20_3E" id="r_morph_3A_3Aforms_3A_3ARuleList_3C_20Rules_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d8b/structmorph_1_1forms_1_1RuleList.html">morph::forms::RuleList&lt; Rules &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Composed list of an action's declared cross-field rules — the value of <span class="tt">A::formRules</span>. Built by <span class="tt">ruleList(...)</span>; never constructed directly.  <a href="../../d3/d8b/structmorph_1_1forms_1_1RuleList.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AUnsatisfiableFormError" id="r_morph_3A_3Aforms_3A_3AUnsatisfiableFormError"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html">morph::forms::UnsatisfiableFormError</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Thrown by <span class="tt"><a class="el" href="#a0a0fb2658d155464d4688af38f09a25e" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">schemaJson</a>&lt;A&gt;()</span> when <span class="tt">A</span>'s declared <span class="tt">formRules</span> contradict <span class="tt">A</span>'s own derived <span class="tt">required</span> array so completely that no submission could satisfy both.  <a href="../../d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Thrown by <span class="tt"><a class="el" href="#a25cc82b6b279223af29633fa946095ca" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">schemaJson</a>&lt;A&gt;()</span> when <span class="tt">A</span>'s declared <span class="tt">formRules</span> contradict <span class="tt">A</span>'s own derived <span class="tt">required</span> array so completely that no submission could satisfy both.  <a href="../../d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AQuantityDecodeError" id="r_morph_3A_3Aforms_3A_3AQuantityDecodeError"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html">morph::forms::QuantityDecodeError</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Thrown when a decoded action has a <span class="tt">Quantity</span> field whose engaged value falls outside its unit's declared bounds (<span class="tt">UnitTraits&lt;E&gt;::bounds</span>).  <a href="../../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
@@ -313,9 +314,9 @@ requires (std::same_as&lt;detail::ConditionActionType&lt;Cond0&gt;, detail::Cond
 <tr class="memitem:a9cf203c8a58f1739c806a087c222b8b7" id="r_a9cf203c8a58f1739c806a087c222b8b7"><td class="memTemplParams" colspan="2">template&lt;typename A&gt; </td></tr>
 <tr class="memitem:a9cf203c8a58f1739c806a087c222b8b7 template"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a9cf203c8a58f1739c806a087c222b8b7">morph::forms::allFieldBoundsSatisfied</a> (const A &amp;action) noexcept</td></tr>
 <tr class="memdesc:a9cf203c8a58f1739c806a087c222b8b7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether every numeric member of <code class="param">action</code> satisfies the <span class="tt">minimum</span>/<span class="tt">maximum</span>/<span class="tt">multipleOf</span> its <span class="tt">A::fieldMetadata</span> entry declares.  <br /></td></tr>
-<tr class="memitem:a0a0fb2658d155464d4688af38f09a25e" id="r_a0a0fb2658d155464d4688af38f09a25e"><td class="memTemplParams" colspan="2">template&lt;typename A&gt; </td></tr>
-<tr class="memitem:a0a0fb2658d155464d4688af38f09a25e template"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a0a0fb2658d155464d4688af38f09a25e">morph::forms::schemaJson</a> ()</td></tr>
-<tr class="memdesc:a0a0fb2658d155464d4688af38f09a25e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Generates the JSON Schema for action type <code class="param">A</code>, ready for a client-side form renderer.  <br /></td></tr>
+<tr class="memitem:a25cc82b6b279223af29633fa946095ca" id="r_a25cc82b6b279223af29633fa946095ca"><td class="memTemplParams" colspan="2">template&lt;typename A&gt; </td></tr>
+<tr class="memitem:a25cc82b6b279223af29633fa946095ca template"><td class="memItemLeft">const std::string &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a25cc82b6b279223af29633fa946095ca">morph::forms::schemaJson</a> ()</td></tr>
+<tr class="memdesc:a25cc82b6b279223af29633fa946095ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">Generates the JSON Schema for action type <code class="param">A</code>, ready for a client-side form renderer.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
@@ -343,8 +344,7 @@ Variables</h2></td></tr>
 <li><b><span class="tt">x-computed</span> / <span class="tt">x-readonly</span></b> — for a member listed as the destination of an action's <span class="tt">computedFields</span> declaration: the field is derived from sibling inputs (named in <span class="tt">x-computed.inputs</span>) and must not be rendered as an editable control (<span class="tt">x-readonly: true</span>). See <span class="tt"><a class="el" href="#a04c972217f11f853d00b73780cb78f2f" title="Builds one computed-field declaration binding a destination member to its declared input members and ...">morph::forms::computed</a></span>, <span class="tt"><a class="el" href="#a0d45e4d3d8a0f1f02298bdbe65d417ed" title="Builds a ComputeList from one or more computed(...) declarations.">morph::forms::computeList</a></span>, and <span class="tt"><a class="el" href="#aa016aa6c3ca8641dbd3447046b287430" title="Recomputes every entry of A::computedFields in place on action.">morph::forms::recomputeAll</a></span>.</li>
 </ul>
 <p><span class="tt"><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html" title="An optionally-empty timestamp field.">morph::time::Timestamp</a></span> members need no extension keys: their schema carries the standard <span class="tt">"format": "date-time"</span> annotation.</p>
-<p><b>Nested aggregates (recursive, cycle-guarded).</b> A member whose type is itself a reflectable aggregate — a plain nested struct, or <span class="tt">std::vector&lt;Sub&gt;</span> — gets its own members annotated too: <span class="tt">x-order</span>, title/<span class="tt">FieldMeta</span>, <span class="tt">required</span>, and the <span class="tt">Quantity</span>/<span class="tt">Choice</span>/widget/ ranged-bounds rules above, applied against the nested type's own reflection. Unlike the top level, this recurses to whatever depth the type graph actually has, stopping only at a genuine cycle (a self- or mutually-referential nested-aggregate type), which is a compile-time <span class="tt">static_assert</span> rather than infinite recursion. Computed fields/ <span class="tt">formLayout</span>/<span class="tt">fieldSpans</span>/<span class="tt">formRules</span> remain top-level-only regardless of depth. See docs/spec/forms/forms.md, "Nested aggregates (recursive,
-cycle-guarded)", and <span class="tt">detail::annotateNestedAggregateRef</span>.</p>
+<p><b>Nested aggregates (recursive, depth-bounded).</b> A member whose type is itself a reflectable aggregate — a plain nested struct, or <span class="tt">std::vector&lt;Sub&gt;</span> — gets its own members annotated too: <span class="tt">x-order</span>, title/<span class="tt">FieldMeta</span>, <span class="tt">required</span>, and the <span class="tt">Quantity</span>/<span class="tt">Choice</span>/widget/ ranged-bounds rules above, applied against the nested type's own reflection. Unlike the top level, this recurses into the type graph, down to <span class="tt">detail::kMaxNestDepth</span> levels; anything deeper — including a cycle, which has no bottom at all — is a compile-time <span class="tt">static_assert</span> rather than infinite recursion. Computed fields/<span class="tt">formLayout</span>/<span class="tt">fieldSpans</span>/<span class="tt">formRules</span> remain top-level-only regardless of depth. See docs/spec/forms/forms.md, "Nested aggregates (recursive, depth-bounded)", and <span class="tt">detail::annotateNestedAggregateRef</span>.</p>
 <dl class="section user"><dt>Declaring optional fields</dt><dd>Required is the default. An action opts individual fields out with a static member list: <div class="fragment"><div class="line"><span class="keyword">struct </span>RecordMeasurement {</div>
 <div class="line">    std::int64_t sampleId = 0;</div>
 <div class="line">    Density density{};</div>
@@ -353,7 +353,7 @@ cycle-guarded)", and <span class="tt">detail::annotateNestedAggregateRef</span>.
 <div class="line">    <span class="keyword">static</span> <span class="keyword">constexpr</span> std::array optionalFields{std::string_view{<span class="stringliteral">&quot;moisture&quot;</span>}};</div>
 <div class="line">    [[nodiscard]] <span class="keywordtype">bool</span> validate()<span class="keyword"> const </span>{ <span class="keywordflow">return</span> <a class="code hl_function" href="#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a>(*<span class="keyword">this</span>); }</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l03169">forms.hpp:3169</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l03294">forms.hpp:3294</a></div></div>
 </div><!-- fragment --></dd></dl>
 <dl class="section user"><dt>Declaring computed fields</dt><dd>A derived, read-only field is declared with a <span class="tt">static constexpr</span> map from a destination member to its declared input members and a pure derivation: <div class="fragment"><div class="line"><span class="keyword">struct </span>LineItem {</div>
 <div class="line">    Quantity&lt;Units, 2&gt; qty;</div>
@@ -367,8 +367,8 @@ cycle-guarded)", and <span class="tt">detail::annotateNestedAggregateRef</span>.
 <div class="line">        <a class="code hl_function" href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed&lt;&amp;LineItem::total, &amp;LineItem::qty, &amp;LineItem::price&gt;</a>(</div>
 <div class="line">            [](<span class="keyword">const</span> <span class="keyword">auto</span>&amp; s) { <span class="keywordflow">return</span> s.qty * s.price; }));</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a04c972217f11f853d00b73780cb78f2f"><div class="ttname"><a href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed</a></div><div class="ttdeci">consteval auto computed(Fn fn) noexcept</div><div class="ttdoc">Builds one computed-field declaration binding a destination member to its declared input members and ...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02955">forms.hpp:2955</a></div></div>
-<div class="ttc" id="aforms_8hpp_html_a0d45e4d3d8a0f1f02298bdbe65d417ed"><div class="ttname"><a href="#a0d45e4d3d8a0f1f02298bdbe65d417ed">morph::forms::computeList</a></div><div class="ttdeci">consteval auto computeList(Fields... fields) noexcept</div><div class="ttdoc">Builds a ComputeList from one or more computed(...) declarations.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02968">forms.hpp:2968</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a04c972217f11f853d00b73780cb78f2f"><div class="ttname"><a href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed</a></div><div class="ttdeci">consteval auto computed(Fn fn) noexcept</div><div class="ttdoc">Builds one computed-field declaration binding a destination member to its declared input members and ...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l03080">forms.hpp:3080</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a0d45e4d3d8a0f1f02298bdbe65d417ed"><div class="ttname"><a href="#a0d45e4d3d8a0f1f02298bdbe65d417ed">morph::forms::computeList</a></div><div class="ttdeci">consteval auto computeList(Fields... fields) noexcept</div><div class="ttdoc">Builds a ComputeList from one or more computed(...) declarations.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l03093">forms.hpp:3093</a></div></div>
 </div><!-- fragment --> <span class="tt">schemaJson&lt;A&gt;()</span> then emits <span class="tt">x-computed</span>/<span class="tt">x-readonly</span> on <span class="tt">total</span> and excludes it from <span class="tt">required</span>; <span class="tt">recomputeAll&lt;A&gt;(action)</span> is the single evaluator the reactive <span class="tt">set&lt;&gt;</span> path and every dispatch path call to overwrite it authoritatively &ndash; see <span class="tt">bridge.md</span>/<span class="tt">registry.md</span>.</dd></dl>
 <dl class="section user"><dt>Readiness helper</dt><dd><span class="tt">allRequiredEngaged(action)</span> returns <span class="tt">true</span> when every <em>required</em> empty-capable member (<span class="tt">Quantity</span>, <span class="tt">Choice</span>, <span class="tt">Timestamp</span> — anything with a <span class="tt">hasValue()</span>) is engaged. Wire it up as the action's <span class="tt">validate()</span> (the existing <span class="tt">ActionValidator</span> machinery picks that method up automatically) so the same declaration drives the schema's <span class="tt">required</span> array, the client-side submit gate, and the fielded-action readiness check. Non-quantity members are not checked — a plain <span class="tt">int64_t</span> cannot express "not filled in"; use a <span class="tt">Quantity</span> (or a custom <span class="tt">validate()</span>) when that distinction matters. </dd></dl>
 
@@ -416,7 +416,7 @@ requires EngageableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00831">831</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00832">832</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -462,7 +462,7 @@ requires EngageableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00875">875</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00876">876</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -513,7 +513,7 @@ requires detail::ComparableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule/condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00938">938</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00939">939</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -564,7 +564,7 @@ requires detail::ComparableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule/condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00997">997</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00998">998</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -615,7 +615,7 @@ requires detail::ComparableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule/condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01056">1056</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01057">1057</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -666,7 +666,7 @@ requires detail::ComparableField&lt;V&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule/condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01115">1115</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01116">1116</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -718,7 +718,7 @@ requires ComparableAgainstLiteral&lt;V, L&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01271">1271</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01272">1272</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -771,7 +771,7 @@ requires ComparableAgainstLiteral&lt;V, detail::LiteralString&lt;N&gt;&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The condition node, with the literal stored inline. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01295">1295</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01296">1296</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -823,7 +823,7 @@ requires EngageableField&lt;V&gt; &amp;&amp; std::same_as&lt;detail::ConditionAc
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01349">1349</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01350">1350</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -869,7 +869,7 @@ requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01400">1400</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01401">1401</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -915,7 +915,7 @@ requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01451">1451</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01452">1452</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -961,7 +961,7 @@ requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01502">1502</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01503">1503</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1013,7 +1013,7 @@ requires std::same_as&lt;detail::ConditionActionType&lt;Cond&gt;, A&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01558">1558</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01559">1559</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1065,7 +1065,7 @@ requires std::same_as&lt;detail::ConditionActionType&lt;Cond&gt;, A&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rule node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01613">1613</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01614">1614</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1117,7 +1117,7 @@ requires (std::same_as&lt;detail::ConditionActionType&lt;Cond0&gt;, detail::Cond
 <dl class="section return"><dt>Returns</dt><dd>The compound condition node.</dd></dl>
 <p>The action type is recovered from <span class="tt">Cond0</span> alone, so every other operand is required to agree with it here rather than failing deep inside <span class="tt">std::tuple</span>'s instantiation: <span class="tt">andOf(engaged(&amp;C::x), engaged(&amp;B::y))</span> produced 153 lines whose first error was inside <span class="tt">&lt;type_traits&gt;</span> and which named the caller's own <span class="tt">formRules</span> line only near the end. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01675">1675</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01676">1676</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1168,7 +1168,7 @@ requires (std::same_as&lt;detail::ConditionActionType&lt;Cond0&gt;, detail::Cond
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The compound condition node. Constrained exactly as <span class="tt">andOf</span> is, and for the same reasons. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01730">1730</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01731">1731</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1212,7 +1212,7 @@ template&lt;Condition Cond&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The compound condition node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01776">1776</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01777">1777</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1256,7 +1256,7 @@ template&lt;typename... Rules&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The composed <span class="tt">RuleList&lt;Rules...&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01797">1797</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01798">1798</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1300,7 +1300,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when every validation rule holds (or there are none). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01857">1857</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01858">1858</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1349,7 +1349,7 @@ template&lt;auto Dst, auto... Inputs, typename Fn&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">detail::ComputedField&lt;Dst, Fn, Inputs...&gt;</span> value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02955">2955</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03080">3080</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1393,7 +1393,7 @@ template&lt;typename... Fields&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">detail::ComputeList&lt;Fields...&gt;</span> value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02968">2968</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03093">3093</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1436,7 +1436,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02986">2986</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03111">3111</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1481,7 +1481,7 @@ template&lt;auto MemberPtr&gt; </div>
 <div class="line">    <a class="code hl_function" href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe&lt;&amp;RecordMeasurement::sampleId&gt;</a>(<span class="stringliteral">&quot;Sample&quot;</span>, <span class="stringliteral">&quot;Which logged sample…&quot;</span>),</div>
 <div class="line">    <a class="code hl_function" href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe&lt;&amp;RecordMeasurement::moisture&gt;</a>().withReadOnly(),</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a3b81894e5b0752e560c4d21726af2731"><div class="ttname"><a href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe</a></div><div class="ttdeci">FieldMeta describe(std::string_view label={}, std::string_view help={}) noexcept</div><div class="ttdoc">Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l03026">forms.hpp:3026</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a3b81894e5b0752e560c4d21726af2731"><div class="ttname"><a href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe</a></div><div class="ttdeci">FieldMeta describe(std::string_view label={}, std::string_view help={}) noexcept</div><div class="ttdoc">Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l03151">forms.hpp:3151</a></div></div>
 </div><!-- fragment --> The plain <span class="tt">FieldMeta{.field = "sampleId", ...}</span> literal form has no such restriction and stays a single in-class <span class="tt">static constexpr</span> array. </dd></dl>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
@@ -1498,7 +1498,7 @@ template&lt;auto MemberPtr&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">FieldMeta</span> naming <code class="param">MemberPtr's</code> wire key, with <code class="param">label</code> and <code class="param">help</code> set. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03026">3026</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03151">3151</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1542,7 +1542,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03056">3056</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03181">3181</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1586,7 +1586,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wire name of the first out-of-bounds <span class="tt">Quantity</span> member encountered (in declaration order), or <span class="tt">std::nullopt</span> when every <span class="tt">Quantity</span> member is within its declared bounds (or the unit declares none). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03118">3118</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03243">3243</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1635,7 +1635,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03150">3150</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03275">3275</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1679,7 +1679,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when no required empty-capable field is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03169">3169</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03294">3294</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1725,12 +1725,12 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when no declared bound is violated, and trivially <span class="tt">true</span> for an action that declares no <span class="tt">fieldMetadata</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03214">3214</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03339">3339</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a0a0fb2658d155464d4688af38f09a25e" name="a0a0fb2658d155464d4688af38f09a25e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0a0fb2658d155464d4688af38f09a25e">&#9670;&#160;</a></span>schemaJson()</h2>
+<a id="a25cc82b6b279223af29633fa946095ca" name="a25cc82b6b279223af29633fa946095ca"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a25cc82b6b279223af29633fa946095ca">&#9670;&#160;</a></span>schemaJson()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1741,7 +1741,7 @@ template&lt;typename A&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::forms::schemaJson </td>
+          <td class="memname">const std::string &amp; morph::forms::schemaJson </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
@@ -1761,13 +1761,14 @@ template&lt;typename A&gt; </div>
 <li><span class="tt">x-order</span> (declaration index) on every property.</li>
 </ul>
 <p>The result is fixed per type, so it is computed once and cached. On any internal failure the unmerged glaze schema (or an empty string if even that failed) is returned rather than throwing — schema generation is a description facility, never worth crashing a server over.</p>
-<p>The single exception is a <b>self-contradicting declaration</b>. When an <span class="tt">A::formRules</span> entry caps engagement over two or more fields that <span class="tt">A</span> also makes <span class="tt">required</span>, the pair describes a form no submission can satisfy, and <span class="tt">UnsatisfiableFormError</span> is thrown. That is an author error in <span class="tt">A</span>, decidable at generation time, and every client would otherwise inherit an unsubmittable form (see <span class="tt">detail::rejectUnsatisfiableRules</span>). Because the cache is a function-local <span class="tt">static</span>, the throw leaves it uninitialised and a later call re-runs the check rather than serving a half-built schema. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+<p>The single exception is a <b>self-contradicting declaration</b>. When an <span class="tt">A::formRules</span> entry caps engagement over two or more fields that <span class="tt">A</span> also makes <span class="tt">required</span>, the pair describes a form no submission can satisfy, and <span class="tt">UnsatisfiableFormError</span> is thrown. That is an author error in <span class="tt">A</span>, decidable at generation time, and every client would otherwise inherit an unsubmittable form (see <span class="tt">detail::rejectUnsatisfiableRules</span>). Because the cache is a function-local <span class="tt">static</span>, the throw leaves it uninitialised and a later call re-runs the check rather than serving a half-built schema.</p>
+<p>Returned <b>by reference</b>, like <span class="tt">model::payloadFingerprint&lt;A&gt;()</span> and <span class="tt">model::payloadShapeString&lt;A&gt;()</span> (<span class="tt"><a class="el" href="../../dc/d50/payload__schema_8hpp.html" title="Structural fingerprint of an action payload&#39;s JSON shape.">core/payload_schema.hpp</a></span>), which cache the same way: the cached string is created once per type per process, is never mutated afterwards, and lives until the process exits, so the reference stays valid for as long as any caller could hold it. Returning it by value made every call — including the per-request ones on a server's descriptor path — an allocation plus a copy of the whole schema for a string the caller almost always only reads. A caller that genuinely needs its own mutable copy asks for one (<span class="tt">std::string mine = schemaJson&lt;A&gt;();</span>), which is what the by-value signature used to do unconditionally. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">A</td><td>Action type (a reflectable aggregate). </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The merged schema JSON. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Reference to the process-lifetime merged schema JSON for <span class="tt">A</span>. </dd></dl>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
     <tr><td class="paramname">UnsatisfiableFormError</td><td>if <span class="tt">A::formRules</span> declares a capping rule (<span class="tt">exactlyOneOf</span> / <span class="tt">mutuallyExclusive</span>) over two or more fields that are also in <span class="tt">A</span>'s derived <span class="tt">required</span> array. </td></tr>
@@ -1775,7 +1776,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03274">3274</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03410">3410</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1803,7 +1804,7 @@ template&lt;typename A&gt; </div>
 <p>The largest N such that <em>every</em> integer in <span class="tt">[0, N]</span> is exactly representable as an IEEE-754 double: 2^53. </p>
 <p>Not "the largest value a double holds exactly" — 2^60 is exact too. What stops at 2^53 is the <em>contiguous</em> range: past it, consecutive integers start sharing a representation, so an integer bound above it cannot be relied on to survive <span class="tt">JSON.parse</span> intact and needs an exact companion the renderer can read instead. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01179">1179</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01180">1180</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1829,7 +1830,7 @@ template&lt;typename A&gt; </div>
 
 <p>Signed spelling of <span class="tt">kExactDoubleLimit</span>, for the negative bound. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01182">1182</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01183">1183</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
