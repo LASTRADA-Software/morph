@@ -72,10 +72,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Clang ${{ env.CLANG_VERSION }}, ninja, catch2
+      - name: Install Clang ${{ env.CLANG_VERSION }}, ninja
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ninja-build catch2
+          sudo apt-get install -y ninja-build
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see ci.yml's linux-compilers install step for why the piped
           # form reported success having installed nothing (morph#681).

@@ -3,9 +3,13 @@
 ## Toolchain
 
 morph is a header-only C++23 library. You need a C++23 compiler, CMake with
-Ninja, and the dependencies declared in `vcpkg.json` (Glaze, Catch2; Qt 6 only
-when building the optional Qt integration, `-DMORPH_BUILD_QT=ON`). CMake
-presets are provided — `cmake --list-presets` shows the configured matrix; the
+Ninja, and the dependencies declared in `vcpkg.json` (Glaze; Qt 6 only when
+building the optional Qt integration, `-DMORPH_BUILD_QT=ON`). Catch2 is not
+among them and does not need installing: the build fetches one pinned version
+itself, on every platform, so that a local clang-tidy run and CI analyse the
+same `REQUIRE` expansion (morph#674).
+
+CMake presets are provided — `cmake --list-presets` shows the configured matrix; the
 README documents the full set of build options
 (`MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`, `MORPH_BUILD_QT`,
 `MORPH_BUILD_FORMS_QML`, …).

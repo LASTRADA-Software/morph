@@ -190,9 +190,16 @@ endif()
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 if(MORPH_BUILD_TESTS)
-    find_package(Catch2 3 CONFIG QUIET)
-    if(NOT Catch2_FOUND)
-        message(WARNING "Catch2 not found; bank example tests will not be built.")
+    # Catch2 is fetched by the root CMakeLists.txt above every
+    # add_subdirectory() in the tree (morph#674), so this is a build-system
+    # invariant rather than an environment question. It used to be a
+    # `find_package(Catch2 3 CONFIG QUIET)` with a message(WARNING) fallback,
+    # which meant a machine without the distro package configured fine and
+    # silently built no tests here at all.
+    if(NOT TARGET Catch2::Catch2WithMain)
+        message(FATAL_ERROR
+            "Catch2::Catch2WithMain does not exist; the root CMakeLists.txt's "
+            "Catch2 section must run before add_subdirectory(examples/bank).")
     else()
         add_executable(bank_tests
             tests/test_account.cpp
@@ -223,7 +230,6 @@ if(MORPH_BUILD_TESTS)
             apply_sanitizers(bank_tests ${AF_SANITIZER})
         endif()
 
-        list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
         include(Catch)
         # LABELS "bank" on all three bank suites (morph#679). Bank is not a
         # rung, so morph_add_rung()'s "ladder"/"ladder-<rung>" labels never

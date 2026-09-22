@@ -166,9 +166,10 @@ unset(_morph_saved_skip_install_rules)
 include(${PROJECT_SOURCE_DIR}/cmake/morph_demote_interface_includes.cmake)
 morph_demote_lightweight_odbc_includes()
 
-find_package(Catch2 3 CONFIG QUIET)
-if(NOT Catch2_FOUND)
-    message(FATAL_ERROR "Catch2 not found; MORPH_BUILD_TESTS=ON should have fetched it already (see root CMakeLists.txt).")
+# Fetched by the root CMakeLists.txt, unconditionally, above every
+# add_subdirectory() in the tree (morph#674) -- never found on the machine.
+if(NOT TARGET Catch2::Catch2WithMain)
+    message(FATAL_ERROR "Catch2::Catch2WithMain does not exist; MORPH_BUILD_TESTS=ON should have fetched it already (see root CMakeLists.txt).")
 endif()
 
 # ── morph_ladder_testkit: pump/fixtures/rig/fault-proxy/interleaver ─────────

@@ -31,24 +31,22 @@ if(MORPH_BUILD_HMAC_EXAMPLE_LIBSODIUM)
     # build (same rationale as examples/bank/CMakeLists.txt's ORM headers).
 
     if(MORPH_BUILD_TESTS)
-        # This directory is add_subdirectory()'d from the MORPH_BUILD_EXAMPLES
-        # block, which runs *before* the top-level MORPH_BUILD_TESTS block that
-        # find_package()s/FetchContent's Catch2 (see root CMakeLists.txt), so
-        # Catch2's `Catch` CMake module (needed by include(Catch) below) is not
-        # yet on CMAKE_MODULE_PATH here even though the Catch2::Catch2WithMain
-        # *target* itself resolves fine (CMake defers target_link_libraries()
-        # resolution). Same fix as examples/bank/CMakeLists.txt's tests block:
-        # look up Catch2 independently and extend CMAKE_MODULE_PATH from here.
-        find_package(Catch2 3 CONFIG QUIET)
-        if(NOT Catch2_FOUND)
-            message(WARNING "Catch2 not found; libsodium HMAC adapter tests will not be built.")
+        # Catch2 is fetched by the root CMakeLists.txt above every
+        # add_subdirectory() in the tree (morph#674), so this is a
+        # build-system invariant rather than an environment question. It used
+        # to be a `find_package(Catch2 3 CONFIG QUIET)` with a
+        # message(WARNING) fallback, which meant a machine without the distro
+        # package configured fine and silently built no tests here at all.
+        if(NOT TARGET Catch2::Catch2WithMain)
+            message(FATAL_ERROR
+                "Catch2::Catch2WithMain does not exist; the root CMakeLists.txt's "
+                "Catch2 section must run before add_subdirectory(examples/vetted_hmac).")
         else()
             add_executable(morph_vetted_hmac_libsodium_tests test_libsodium_adapter.cpp)
             target_link_libraries(morph_vetted_hmac_libsodium_tests
                 PRIVATE morph::morph PkgConfig::SODIUM morph_test_main)
             apply_bigobj(morph_vetted_hmac_libsodium_tests)
 
-            list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
             include(Catch)
             catch_discover_tests(morph_vetted_hmac_libsodium_tests DISCOVERY_MODE PRE_TEST)
         endif()
@@ -67,20 +65,17 @@ if(MORPH_BUILD_HMAC_EXAMPLE_OPENSSL)
     # build (same rationale as examples/bank/CMakeLists.txt's ORM headers).
 
     if(MORPH_BUILD_TESTS)
-        # See the matching comment in the libsodium block above: this
-        # directory is processed before the top-level MORPH_BUILD_TESTS block
-        # resolves Catch2, so its `Catch` CMake module isn't on
-        # CMAKE_MODULE_PATH yet here.
-        find_package(Catch2 3 CONFIG QUIET)
-        if(NOT Catch2_FOUND)
-            message(WARNING "Catch2 not found; OpenSSL HMAC adapter tests will not be built.")
+        # See the matching comment in the libsodium block above.
+        if(NOT TARGET Catch2::Catch2WithMain)
+            message(FATAL_ERROR
+                "Catch2::Catch2WithMain does not exist; the root CMakeLists.txt's "
+                "Catch2 section must run before add_subdirectory(examples/vetted_hmac).")
         else()
             add_executable(morph_vetted_hmac_openssl_tests test_openssl_adapter.cpp)
             target_link_libraries(morph_vetted_hmac_openssl_tests
                 PRIVATE morph::morph OpenSSL::Crypto morph_test_main)
             apply_bigobj(morph_vetted_hmac_openssl_tests)
 
-            list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
             include(Catch)
             catch_discover_tests(morph_vetted_hmac_openssl_tests DISCOVERY_MODE PRE_TEST)
         endif()

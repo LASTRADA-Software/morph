@@ -9,14 +9,33 @@
 # test source compares three things: the `<=` it objects to is Catch2's own
 # capture hook, and both fixes it suggests -- parenthesise, or split with a
 # logical operator -- would defeat the expression decomposition that makes a
-# failing assertion print its two operands. Catch2 says so itself; the macro
+# failing assertion print its two operands.
+#
+# Whether the finding reaches a build at all is a property of the Catch2
+# release rather than of this code. Catch2 says as much itself: the macro
 # definition carries `/* NOLINT(bugprone-chained-comparison) */` on that very
-# line in 3.15.3. CI pins catch2 3.4.0 -- ubuntu-24.04's package, which
-# predates that comment -- which is why the finding reaches CI here and not on
-# a workstation with a current Catch2. That number is checked rather than
-# asserted: scripts/check_catch2_pin.sh reads the runner's installed version
-# back off the include path and fails this line and the clang-tidy-diff job
-# together if the package moves (morph#666).
+# line in the release this repository pins, and older releases do not. Which
+# release that was used to be the machine's business -- the build took
+# whichever Catch2 happened to be installed, so one diff produced this finding
+# on a runner and not on a workstation, and scripts/check_catch2_pin.sh
+# existed to make that divergence loud (morph#666). The root CMakeLists.txt
+# now fetches one pinned Catch2 for every configure, found nowhere and
+# installed by nothing (morph#674), so the question the gate asked no longer
+# has per-machine answers and the gate went with it. The version lives in
+# exactly one place, `MORPH_CATCH2_TAG` in the root CMakeLists.txt, and is
+# deliberately not repeated here: nine copies of a number are nine chances to
+# be wrong about it.
+#
+# On that pin this entry subtracts nothing, and that is measured, not assumed:
+# with clang-tidy 22.1.8 against the fetched Catch2, bugprone-chained-
+# comparison reports zero findings in these suites whether this line is
+# present or absent, because the NOLINT above suppresses it first. It stays
+# anyway -- the reasoning above is about the macro, not about a release, and a
+# pin bump to a Catch2 without that NOLINT, or a clang-tidy that stops
+# honouring a NOLINT reached through a system include, puts the finding back
+# on every REQUIRE in the tree. An inert suppression whose inertness is
+# written down costs a paragraph; rediscovering why the finding is not a
+# defect costs a session.
 #
 # Directory-scoped, and no wider. clang-tidy resolves configuration by walking
 # up from the file it is analysing and offers no finer granularity than a

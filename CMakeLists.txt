@@ -370,8 +370,8 @@ unset(_morph_optional_components)
 # morph_forms_moduleplugin just below). The tests/offline_sqlite subdirectory
 # that also depends on MORPH_BUILD_OFFLINE_SQLITE stays deferred to its
 # original spot, after the "Tests" section, since it links
-# Catch2::Catch2WithMain and that target only exists once Catch2 has been
-# found/fetched there.
+# Catch2::Catch2WithMain and that target only exists once the "Catch2:
+# fetched, never found" section below has run.
 if(MORPH_BUILD_OFFLINE_SQLITE)
     find_package(SQLite3 REQUIRED)
 
@@ -488,7 +488,7 @@ endif()
 # point it is named). add_subdirectory(src/qt/forms) itself (which builds the
 # actual MorphForms module/plugin, plus a Catch2-linked test executable) is
 # deferred to just after the "Tests" section further below, since Catch2 is
-# only found/fetched there and its test executable names Catch2::Catch2
+# only fetched below this point and its test executable names Catch2::Catch2
 # directly.
 # Emscripten builds this too. MorphForms is a plain Qt Quick QML module over
 # header-only morph code — nothing in it is host-only — and a WASM ladder
@@ -526,6 +526,73 @@ if(MORPH_BUILD_FORMS_QML)
     )
 endif()
 
+# ── Catch2: fetched, never found (morph#674) ────────────────────────────────
+#
+# One Catch2, chosen here, for every configure of this repository -- CI,
+# workstation, and whatever a contributor happens to have installed. There is
+# deliberately no find_package() in front of this: a `find_package(Catch2)`
+# that succeeds hands the build the *machine's* Catch2, which is how
+# clang-tidy came to analyse `REQUIRE`/`TEST_CASE` expansions against a
+# different release on a runner than on a workstation, and to disagree about
+# what is a finding (morph#666, morph#674). Nothing in the tree records which
+# Catch2 a given build used, so that divergence is silent by construction.
+# Fetching unconditionally is what removes it; a gate over an unpinned apt
+# package could only report it.
+#
+# The mechanism was subtler than "the compile database records the runner's
+# include path" -- it records no Catch2 include path at all. An imported
+# target whose INTERFACE_INCLUDE_DIRECTORIES is /usr/include contributes
+# nothing to the command line, because CMake drops implicit compiler
+# directories. The header that got included was simply the one the compiler's
+# default system search path led to. Same divergence, one level lower.
+#
+# SYSTEM is load-bearing, not tidiness. A fetched dependency's include
+# directory arrives as `-I`, so clang-tidy classifies every Catch2 macro
+# expansion as user code and reports findings inside it: measured on
+# tests/test_executor.cpp, one TU went from 1 finding to 45 (21
+# cppcoreguidelines-avoid-do-while and 11 misc-use-anonymous-namespace out of
+# REQUIRE/TEST_CASE, plus the pre-existing one). With SYSTEM the same TU is
+# back at 1 -- the same finding. Removing this keyword turns the
+# clang-tidy-diff job permanently red across 134 tests/ TUs and every example
+# suite. CMake 3.25+; this project already requires 3.25.
+#
+# Placed *above* the examples below rather than in the Tests section, which is
+# where it used to live. examples/{concepts,bank,vetted_hmac} are
+# add_subdirectory()'d before that section and each one used to run its own
+# `find_package(Catch2 3 CONFIG QUIET)` with a message(WARNING) fallback -- so
+# on any machine without a system Catch2 those three suites were silently not
+# built, while the configure still succeeded. Nothing installs a system Catch2
+# any more, so leaving the fetch where it was would have skipped bank's and
+# concepts' suites on every leg of CI. They now test a target that already
+# exists.
+if(MORPH_BUILD_TESTS)
+    # One tag, used twice below. The dep cache keys its directory on the tag
+    # (cmake/DepCache.cmake), so the two must agree or a bumped pin reuses the
+    # old checkout -- the failure that still builds, which is the hardest kind
+    # to notice. A variable removes the disagreement instead of gating it.
+    set(MORPH_CATCH2_TAG v3.8.1)
+
+    include(FetchContent)
+    include(cmake/DepCache.cmake)
+    morph_cache_dep(Catch2 https://github.com/catchorg/Catch2.git ${MORPH_CATCH2_TAG})
+    FetchContent_Declare(
+        Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG        ${MORPH_CATCH2_TAG}
+        GIT_SHALLOW    TRUE
+        SYSTEM
+    )
+    FetchContent_MakeAvailable(Catch2)
+
+    # catch_discover_tests() lives in Catch2's extras/, which a fetched Catch2
+    # does not put on the module path for its consumer (an installed one does,
+    # via its package config directory). Appended once here, at the top level,
+    # rather than by each of the eleven directories that call include(Catch):
+    # CMAKE_MODULE_PATH is inherited by every subdirectory added after this
+    # point, and every one of those eleven is.
+    list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
+endif()
+
 # ── Demo executable ──────────────────────────────────────────────────────────
 if(MORPH_BUILD_EXAMPLES)
     # The console demo uses the thread-pool executor; skip it for the
@@ -557,20 +624,6 @@ endif()
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 if(MORPH_BUILD_TESTS)
-    find_package(Catch2 CONFIG QUIET)
-    if(NOT Catch2_FOUND)
-        include(FetchContent)
-        include(cmake/DepCache.cmake)
-        morph_cache_dep(Catch2 https://github.com/catchorg/Catch2.git v3.8.1)
-        FetchContent_Declare(
-            Catch2
-            GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-            GIT_TAG        v3.8.1
-            GIT_SHALLOW    TRUE
-        )
-        FetchContent_MakeAvailable(Catch2)
-    endif()
-
     # ── The `--log-level` gate, shared by every Catch2 suite ────────────────
     #
     # morph::log used to default to LogLevel::debug, so a plain `morph_tests`
@@ -618,19 +671,19 @@ endif()
 # ── Application ladder (optional) ───────────────────────────────────────────
 # Deferred to here (after the Tests section above), the same way
 # MORPH_BUILD_FORMS_QML's src/qt/forms subdirectory is deferred further below:
-# examples/common/CMakeLists.txt calls find_package(Catch2 3 CONFIG QUIET) and
-# treats "not found" as a hard FATAL_ERROR (its own Catch2 does not get
-# fetched -- it relies on MORPH_BUILD_TESTS=ON having already resolved one).
-# Adding examples/ before this point would let that find_package() run before
-# the Tests section's FetchContent fallback ever executes, breaking the
-# no-system-Catch2 case even though MORPH_BUILD_TESTS=ON.
+# the rungs' test binaries link morph_test_main, which the Tests section above
+# defines, and a plain (non-namespaced) target name has to exist before it is
+# named. Catch2 itself is no longer a reason -- it is fetched above the
+# examples, not here (see "Catch2: fetched, never found"), so
+# examples/common/CMakeLists.txt's guard is now a TARGET check that cannot
+# depend on what the machine has installed.
 if(MORPH_BUILD_LADDER)
     add_subdirectory(examples)
 endif()
 
 # ── Qt/QML forms renderer (optional) ─────────────────────────────────────────
 # The actual MorphForms module/plugin (src/qt/forms), deferred to here (after
-# Catch2 is found/fetched above) since its own CMakeLists.txt links a Catch2
+# Catch2 is fetched above) since its own CMakeLists.txt links a Catch2
 # test executable directly against Catch2::Catch2 when MORPH_BUILD_TESTS is
 # ON -- the same condition that guards both. Qt6 Quick/Qml was already found
 # and morph::qt_forms already created earlier (before "Demo executable"), so
@@ -756,7 +809,7 @@ endif()
 # "SQLite-backed durable offline queue: library target" above, before
 # "Application ladder"'s add_subdirectory(examples)) -- only this suite's own
 # subdirectory stays deferred to here, since it links Catch2::Catch2WithMain
-# and Catch2 is only found/fetched in the "Tests" section just above.
+# and morph_test_main, the latter defined in the "Tests" section just above.
 if(MORPH_BUILD_OFFLINE_SQLITE AND MORPH_BUILD_TESTS)
     add_subdirectory(tests/offline_sqlite)
 endif()

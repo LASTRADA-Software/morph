@@ -18,17 +18,16 @@ if(NOT TARGET morph::morph)
 endif()
 
 if(MORPH_BUILD_TESTS)
-    # This directory is add_subdirectory()'d from the MORPH_BUILD_EXAMPLES
-    # block, which runs *before* the top-level MORPH_BUILD_TESTS block that
-    # find_package()s/FetchContent's Catch2 (see root CMakeLists.txt), so
-    # Catch2's `Catch` CMake module (needed by include(Catch) below) is not
-    # yet on CMAKE_MODULE_PATH here even though the Catch2::Catch2WithMain
-    # *target* itself resolves fine (CMake defers target_link_libraries()
-    # resolution). Same fix as examples/vetted_hmac/CMakeLists.txt's tests
-    # block: look up Catch2 independently and extend CMAKE_MODULE_PATH from here.
-    find_package(Catch2 3 CONFIG QUIET)
-    if(NOT Catch2_FOUND)
-        message(WARNING "Catch2 not found; examples/concepts tests will not be built.")
+    # Catch2 is fetched by the root CMakeLists.txt above every
+    # add_subdirectory() in the tree (morph#674), so this is a build-system
+    # invariant rather than an environment question. It used to be a
+    # `find_package(Catch2 3 CONFIG QUIET)` with a message(WARNING) fallback,
+    # which meant a machine without the distro package configured fine and
+    # silently built no tests here at all.
+    if(NOT TARGET Catch2::Catch2WithMain)
+        message(FATAL_ERROR
+            "Catch2::Catch2WithMain does not exist; the root CMakeLists.txt's "
+            "Catch2 section must run before add_subdirectory(examples/concepts).")
     else()
         add_executable(morph_concepts_tests
             getting_started.cpp
@@ -51,7 +50,6 @@ if(MORPH_BUILD_TESTS)
             apply_sanitizers(morph_concepts_tests ${AF_SANITIZER})
         endif()
 
-        list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
         include(Catch)
         catch_discover_tests(morph_concepts_tests DISCOVERY_MODE PRE_TEST)
     endif()

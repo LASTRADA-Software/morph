@@ -85,27 +85,14 @@ env:
   # the cache itself -- jobs still read each other's entries.
   FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   CLANG_VERSION: "22"
-  # The Catch2 the clang-tidy-diff job analyses against. Not a version this
-  # workflow installs -- `apt-get install -y catch2` takes whatever
-  # ubuntu-24.04 ships -- but a record of what that has been measured to be,
-  # which the "Assert the Catch2 this job analyses against" step below reads
-  # back off the runner and fails on if it has moved.
-  #
-  # It is worth recording because it is load-bearing and invisible. Which
-  # Catch2 is on the include path decides whether
-  # readability-function-cognitive-complexity findings on a TEST_CASE body
-  # reach this job at all, so a workstation with a different one can run the
-  # same clang-tidy over the same diff with the same flags and exit 0 where
-  # this job exits 1 -- silently, reporting nothing rather than reporting less
-  # (morph#666). An unpinned package that decides a gate's outcome and moves
-  # without notice is the shape this repository keeps getting caught by.
-  #
-  # ubuntu-24.04's package is 3.4.0-1build1 (Launchpad, noble Release pocket),
-  # and the clang-tidy-report artifact of run 35581623269 prints
-  # `/usr/include/catch2/internal/catch_test_registry.hpp:121` with
-  # `INTERNAL_CATCH_TESTCASE2( INTERNAL_CATCH_UNIQUE_NAME( dummyFunction ) )`
-  # and no `, __VA_ARGS__` -- v3.4.0's text exactly, and not v3.5.3's.
-  CATCH2_VERSION: "3.4.0"
+  # No CATCH2_VERSION here any more, deliberately (morph#674). This workflow
+  # used to record which Catch2 the clang-tidy-diff job would find on the
+  # runner, because the distro package it installed pinned nothing and the
+  # answer decided which findings inside REQUIRE/TEST_CASE expansions
+  # reached the job. The build no longer asks the runner: the root
+  # CMakeLists.txt fetches one pinned Catch2 for every configure, with
+  # SYSTEM, and no job installs the distro package. The version is `MORPH_CATCH2_TAG` in the root
+  # CMakeLists.txt, which is also the only place it appears.
   # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
   QT_VERSION: "6.8.1"
 
@@ -269,7 +256,7 @@ jobs:
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
-          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2
+          sudo apt-get install -y gcc-15 g++-15 ninja-build
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
@@ -277,7 +264,7 @@ jobs:
         if: startsWith(matrix.preset, 'clang-')
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ninja-build catch2
+          sudo apt-get install -y ninja-build
           # Download, check, then execute -- not
           # `wget -qO- https://apt.llvm.org/llvm.sh | sudo bash` (morph#681).
           # `wget -q` writes no error document, so on an HTTP 4xx/5xx it exits
@@ -490,7 +477,7 @@ jobs:
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ninja-build catch2 libsqlite3-dev
+          sudo apt-get install -y ninja-build libsqlite3-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
           # form reported success having installed nothing (morph#681).
@@ -658,7 +645,7 @@ jobs:
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ninja-build catch2 libsqlite3-dev
+          sudo apt-get install -y ninja-build libsqlite3-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
           # form reported success having installed nothing (morph#681).
@@ -881,7 +868,7 @@ jobs:
           # coverage leg, ladder-tests, linux-all-features) for Qt's GL platform
           # integration; carried here for the same reason even though this leg's
           # test run itself stays off-GUI.
-          sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
+          sudo apt-get install -y ninja-build libsqlite3-dev \
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
@@ -1081,7 +1068,7 @@ jobs:
           # through CPM; libgl1-mesa-dev for Qt's GL platform integration,
           # which every job configuring MORPH_BUILD_QT=ON alongside a Qt GUI
           # target installs.
-          sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
+          sudo apt-get install -y ninja-build libsqlite3-dev \
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
@@ -1261,13 +1248,13 @@ jobs:
           key: apt-qt-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: apt-qt-
 
-      - name: Install GCC 15, ninja, catch2, Qt6 WebSockets
+      - name: Install GCC 15, ninja, Qt6 WebSockets
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
-          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
+          sudo apt-get install -y gcc-15 g++-15 ninja-build \
             qt6-base-dev qt6-websockets-dev qt6-tools-dev libgl1-mesa-dev
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
@@ -1506,7 +1493,7 @@ jobs:
           key: apt-qt-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: apt-qt-
 
-      - name: Install GCC 15, ninja, catch2
+      - name: Install GCC 15, ninja
         if: steps.filter.outputs.run == 'true'
         run: |
           sudo apt-get update -q
@@ -1530,7 +1517,7 @@ jobs:
           # the moment MORPH_BUILD_LADDER=ON pulls Lightweight in.
           # Qt itself is installed by the aqtinstall step below, not apt: see
           # that step's comment for why the distro package is unusable here.
-          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
+          sudo apt-get install -y gcc-15 g++-15 ninja-build \
             libsqlite3-dev libyaml-cpp-dev libzip-dev libgl1-mesa-dev \
             unixodbc-dev libsqliteodbc
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
@@ -1860,7 +1847,7 @@ jobs:
           key: apt-ladder-asan-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: apt-ladder-asan-
 
-      - name: Install Clang ${{ env.CLANG_VERSION }}, ninja, catch2, ODBC
+      - name: Install Clang ${{ env.CLANG_VERSION }}, ninja, ODBC
         if: steps.filter.outputs.run == 'true'
         run: |
           sudo apt-get update -q
@@ -1869,7 +1856,7 @@ jobs:
           # whose fixtures open a real `DRIVER=SQLite3` connection at test
           # time. libyaml-cpp-dev/libzip-dev/libgl1-mesa-dev round out the
           # same set every other ladder-building Linux job installs.
-          sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
+          sudo apt-get install -y ninja-build libsqlite3-dev \
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
@@ -2131,7 +2118,7 @@ jobs:
           # packages, not through CPM — without these, Lightweight's configure
           # fails with "could not find a package configuration file" the
           # moment MORPH_BUILD_LADDER=ON pulls it in here.
-          sudo apt-get install -y ninja-build catch2 \
+          sudo apt-get install -y ninja-build \
             libsqlite3-dev libsodium-dev libssl-dev \
             unixodbc-dev libsqliteodbc \
             libyaml-cpp-dev libzip-dev \
@@ -2375,13 +2362,13 @@ jobs:
           key: apt-valgrind-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: apt-valgrind-
 
-      - name: Install GCC 15, ninja, catch2, valgrind
+      - name: Install GCC 15, ninja, valgrind
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
-          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 valgrind
+          sudo apt-get install -y gcc-15 g++-15 ninja-build valgrind
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
@@ -2569,7 +2556,7 @@ jobs:
           # SQLite ODBC *driver* is not strictly exercised here; it is installed
           # alongside unixodbc-dev to keep the four-package set identical to the
           # jobs that do, rather than subtly divergent.
-          sudo apt-get install -y ninja-build catch2 \
+          sudo apt-get install -y ninja-build \
             libsqlite3-dev libsodium-dev libssl-dev \
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev \
             libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
@@ -2594,20 +2581,6 @@ jobs:
       # accident.
       - name: Self-test the clang-tidy suppression-scope checker
         run: bash scripts/test_check_tidy_suppression_scope.sh clang-tidy-${{ env.CLANG_VERSION }}
-
-      # The Catch2 on this runner's include path decides whether a
-      # readability-function-cognitive-complexity finding on a TEST_CASE body
-      # reaches this job, and `apt-get install -y catch2` above pins nothing.
-      # This step reads the version out of the headers the step above just
-      # installed and fails if it is not the one CATCH2_VERSION records, so a
-      # move in the runner image is a red job rather than a quiet change of
-      # what this gate measures (morph#666). Its self-test runs first, for the
-      # same reason the suppression-scope checker's does.
-      - name: Self-test the catch2-pin checker
-        run: bash scripts/test_check_catch2_pin.sh
-
-      - name: Assert the Catch2 this job analyses against
-        run: bash scripts/check_catch2_pin.sh . --strict
 
       # Catches morph#632's bug class: tests/.clang-tidy's thirteen
       # suppressions are argued as Catch2 and raw-syscall idiom, which is true

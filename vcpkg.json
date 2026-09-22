@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "dependencies": [
     "glaze",
-    "catch2",
     "yaml-cpp",
     "libzip",
     "openssl",
