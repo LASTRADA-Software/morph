@@ -77,19 +77,19 @@
 #include <array>
 #include <atomic>
 #include <condition_variable>
-#include <deque>
 #include <cstddef>
 #include <cstdlib>
+#include <deque>
 #include <exception>
 #include <format>
 #include <functional>
 #include <iostream>
 #include <memory>
-#include <mutex>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
+#include <mutex>
 #include <new>
 #include <span>
 #include <string>
@@ -205,7 +205,9 @@ struct BenchAllocLongIdPong {
     int y = 0;
 };
 struct BenchAllocLongIdModel {
-    BenchAllocLongIdPong execute(const BenchAllocLongIdPing& action) { return BenchAllocLongIdPong{.y = action.x * 2}; }
+    BenchAllocLongIdPong execute(const BenchAllocLongIdPing& action) {
+        return BenchAllocLongIdPong{.y = action.x * 2};
+    }
 };
 
 BRIDGE_REGISTER_MODEL(BenchAllocTinyModel, "BA_M")
@@ -423,14 +425,16 @@ int run(bool attribute, double budget, double lookupBudget) {
     if (lookupBudget >= 0.0) {
         double const worst = std::max(longIdLookups, shortIdLookups);
         if (worst > lookupBudget) {
-            std::cout << std::format("FAIL: {:.2f} allocations per dispatcher lookup exceeds "
-                                     "--lookup-budget={:.2f}\n",
-                                     worst, lookupBudget);
+            std::cout << std::format(
+                "FAIL: {:.2f} allocations per dispatcher lookup exceeds "
+                "--lookup-budget={:.2f}\n",
+                worst, lookupBudget);
             status = 1;
         } else {
-            std::cout << std::format("ok: {:.2f} allocations per dispatcher lookup within "
-                                     "--lookup-budget={:.2f}\n",
-                                     worst, lookupBudget);
+            std::cout << std::format(
+                "ok: {:.2f} allocations per dispatcher lookup within "
+                "--lookup-budget={:.2f}\n",
+                worst, lookupBudget);
         }
     }
     return status;
