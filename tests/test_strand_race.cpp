@@ -5,10 +5,14 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <morph/core/executor.hpp>
 #include <morph/core/strand.hpp>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -45,6 +49,125 @@
 // (morph#670), which neither of the first two can be wrong about. Keep all
 // three: saturation, the drain boundary, and the recycled node's key are
 // different failure modes of the same invariant.
+namespace {
+
+// ── The drain's diagnostic, and why it is a watchdog and not a deadline ──────
+//
+// morph#717 observed this case hang under ThreadSanitizer and be killed by
+// ctest's 120 s TIMEOUT having printed nothing but the Catch2 banner: no
+// assertion, no TSan report, no reason. That observation is weak and stays
+// weak -- 1 of 3 full-suite runs, 0 of 40 isolated, and this lane did not
+// reproduce it.
+//
+// The *structural* half of the issue is checkable by reading, and it holds.
+// `~StrandExecutor` waits on
+// `_cv.wait(lock, [this] { return _inFlight == 0; })`
+// (`include/morph/core/strand.hpp:64-66`) with no timeout, and morph#374
+// scoped the strand so that this wait *is* the drain.
+//
+// One correction to the issue's framing, because it decides the remedy. The
+// pre-#374 `2000 x 1 ms` budget was never a bound on the hang:
+// `~StrandExecutor` was unbounded then too and ran at the end of every
+// iteration regardless, so a lost wakeup hung the pre-#374 binary just as
+// thoroughly. What that budget bounded was the time to the *first diagnostic*
+// -- a failed `REQUIRE` naming `completed` against `kExpected`, printed before
+// the same unbounded wait was entered. morph#374 did not create the hang. It
+// removed the only thing that spoke before it.
+//
+// So restoring a deadline would be the wrong remedy twice over: it would not
+// bound the hang, and it would re-introduce precisely what morph#374 fixed --
+// a `REQUIRE` about how fast the host is, evaluated before the invariant this
+// file exists for. What is restored below is the diagnostic with no verdict
+// attached: a watchdog thread that says where the case is and whether it is
+// still moving, and that fails nothing. A slow host prints a few lines and
+// still passes. A wedged one prints the same lines with `completed` frozen,
+// and the ctest timeout that follows carries the evidence it used to lack.
+//
+// The `+N since the last report` field is the whole point: it separates "this
+// host is slow" from "this strand is stuck", which is the one thing morph#717
+// could not determine about its own observation.
+//
+// The period is `MORPH_STRAND_DRAIN_WATCHDOG_MS`, default 10000. Ten seconds
+// against a 0.4 s median for the whole case leaves about eleven reports inside
+// ctest's 120 s TIMEOUT, and the override is how the diagnostic is
+// demonstrated without waiting for a hang that may never come back.
+class DrainWatchdog {
+public:
+    /// @brief What the watchdog reads. Every field is written by the test
+    ///        thread and read by the watchdog thread, so all of it is atomic.
+    struct State {
+        std::atomic<int>* completed;
+        std::atomic<int>* inFlight;
+        std::atomic<int>* maxInFlight;
+        std::atomic<const char*> phase{"starting"};
+        int iteration{0};
+        int expected{0};
+    };
+
+    /// @brief Arms the watchdog. @p state must outlive it.
+    explicit DrainWatchdog(State& state) : _state{&state}, _thread{[this] { run(); }} {}
+
+    DrainWatchdog(const DrainWatchdog&) = delete;
+    DrainWatchdog(DrainWatchdog&&) = delete;
+    DrainWatchdog& operator=(const DrainWatchdog&) = delete;
+    DrainWatchdog& operator=(DrainWatchdog&&) = delete;
+
+    /// @brief Disarms and joins. Declared *before* the strand in the scope
+    ///        below, so reverse destruction order keeps it running across
+    ///        `~StrandExecutor` -- which is the wait it exists to report on.
+    ~DrainWatchdog() {
+        {
+            const std::scoped_lock lock{_mtx};
+            _stop = true;
+        }
+        _cv.notify_all();
+        _thread.join();
+    }
+
+private:
+    static std::chrono::milliseconds period() {
+        constexpr std::chrono::milliseconds kDefault{10000};
+        // NOLINTNEXTLINE(concurrency-mt-unsafe)
+        const char* raw = std::getenv("MORPH_STRAND_DRAIN_WATCHDOG_MS");
+        if (raw == nullptr) {
+            return kDefault;
+        }
+        const long parsed = std::strtol(raw, nullptr, 10);
+        return parsed > 0 ? std::chrono::milliseconds{parsed} : kDefault;
+    }
+
+    void run() {
+        const auto tick = period();
+        const auto armed = std::chrono::steady_clock::now();
+        int previous = _state->completed->load();
+        std::unique_lock lock{_mtx};
+        while (!_cv.wait_for(lock, tick, [this] { return _stop; })) {
+            const int current = _state->completed->load();
+            const auto elapsed =
+                std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - armed).count();
+            // Straight to `std::cerr`, never through Catch2: this runs on a
+            // second thread, where Catch2's macros are not safe to call, and
+            // the point is to emit something even when the process is about to
+            // be killed. Flushed per line so a SIGKILL cannot eat half a report.
+            std::cerr << "morph#717 strand-race watchdog: iteration " << _state->iteration << ", phase '"
+                      << _state->phase.load() << "', " << elapsed << " s into the iteration, completed " << current
+                      << "/" << _state->expected << " (+" << (current - previous)
+                      << " since the last report), inFlight " << _state->inFlight->load() << ", maxInFlight "
+                      << _state->maxInFlight->load() << '\n'
+                      << std::flush;
+            previous = current;
+        }
+    }
+
+    State* _state;
+    std::mutex _mtx;
+    std::condition_variable _cv;
+    bool _stop{false};
+    std::thread _thread;
+};
+
+}  // namespace
+
 TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under contention", "[strand][race]") {
     constexpr int kThreads = 8;
     constexpr int kPostsPerThread = 400;
@@ -76,7 +199,19 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
             completed.fetch_add(1);
         };
 
+        DrainWatchdog::State watched{.completed = &completed,
+                                     .inFlight = &inFlight,
+                                     .maxInFlight = &maxInFlight,
+                                     .phase = {"posting"},
+                                     .iteration = iter,
+                                     .expected = kExpected};
+
         {
+            // Declared before the strand, so reverse destruction order keeps
+            // it alive across `~StrandExecutor` -- the unbounded wait it
+            // exists to report on. See the note above `DrainWatchdog`.
+            const DrainWatchdog watchdog{watched};
+
             morph::exec::detail::StrandExecutor strand{pool};
 
             std::vector<std::thread> producers;
@@ -88,9 +223,11 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
                     }
                 });
             }
+            watched.phase.store("joining producers");
             for (auto& producer : producers) {
                 producer.join();
             }
+            watched.phase.store("draining (~StrandExecutor)");
             // Every producer has joined, so nothing else will post -- which is
             // also what the spec's "no post() may race or follow
             // ~StrandExecutor" corollary requires. Closing this scope runs
