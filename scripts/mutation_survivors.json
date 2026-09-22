@@ -215,7 +215,7 @@
             },
             {
               "file": "include/morph/forms/forms.hpp",
-              "line": 2653,
+              "line": 2692,
               "source": "if (offenderCount > 0) {",
               "reason": "The offender-list separator guard in requiredFieldsNamedBy -- the comparison that decides whether a comma is prepended. Closed: off the survivor list as of runs[1]."
             }
