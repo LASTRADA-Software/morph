@@ -2,6 +2,7 @@
 
 #pragma once
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <concepts>
 #include <cstdint>
@@ -39,7 +40,102 @@ struct ModelTraits;
 template <typename Action>
 struct ActionTraits;
 
+// ── The registration-phase latch ────────────────────────────────────────────
+//
+// The three process-level registries (`ActionDispatcher`,
+// `ModelRegistryFactory`, `ActionExecuteRegistry`) are unsynchronised
+// `unordered_map`s, and `docs/spec/core/registry.md` ("Thread safety") states
+// the precondition that makes that safe as a hard constraint: writes happen
+// during static initialisation, and after `main()` begins the maps are
+// read-only. Nothing detected a violation. A `dlopen`ed module registering on
+// a worker thread while another thread dispatches is undefined behaviour whose
+// only symptom is intermittent map corruption (morph#698).
+//
+// This latch makes that precondition checkable. It starts open, closes when
+// the program says the registration phase is over, and the three `register*Once`
+// helpers assert against it. Closing is one-way: nothing re-opens it outside
+// `detail::reopenRegistrationPhaseForTesting`.
+
 namespace detail {
+
+/// @brief The process-wide registration-phase flag.
+///
+/// A function-local `static` in an `inline` function, for the reason the
+/// registries themselves are: one instance per process with no header-level
+/// static-ordering problem. `std::atomic` because the whole point is that it
+/// is read from the threads the constraint is about.
+///
+/// @return Reference to the process-wide flag; `true` once the registration
+///         phase has closed.
+[[nodiscard]] inline std::atomic<bool>& registrationPhaseFlag() noexcept {
+    static std::atomic<bool> closed{false};
+    return closed;
+}
+
+}  // namespace detail
+
+/// @brief Declares the registration phase over: no further registration with
+///        the process-level registries is permitted.
+///
+/// Call it once, early in `main()`, before any thread is spawned. From that
+/// point a debug build asserts on every `registerModelOnce` /
+/// `registerActionOnce` / `registerActionExecutorOnce` — which is what a
+/// `dlopen`ed module's static initialisers run — turning the spec's hard
+/// constraint from advice into a diagnosable failure.
+///
+/// Calling it is optional: a **debug** build also closes the latch by itself on
+/// the first read of a process-level registry (`ActionDispatcher::dispatch`,
+/// `ModelRegistryFactory::create`, `ActionExecuteRegistry::execute` on the
+/// singleton instance), so an application that never calls this still gets the
+/// check from its first dispatch onwards. Calling it explicitly closes the
+/// window between `main()` and that first dispatch.
+///
+/// Idempotent, thread-safe, and a no-op after the first call.
+inline void closeRegistrationPhase() noexcept {
+    detail::registrationPhaseFlag().store(true, std::memory_order_release);
+}
+
+/// @brief Reports whether the registration phase has closed.
+///
+/// @return `true` once `closeRegistrationPhase` has been called, or — in a
+///         debug build only — once a process-level registry has been read.
+///         Release builds do not close the latch on their own, so this answers
+///         `false` there until the application closes it explicitly.
+[[nodiscard]] inline bool registrationPhaseClosed() noexcept {
+    return detail::registrationPhaseFlag().load(std::memory_order_acquire);
+}
+
+namespace detail {
+
+/// @brief Re-opens the registration-phase latch. **Test-only.**
+///
+/// The latch is one-way by design: an application that re-opens it has
+/// re-created exactly the hazard the latch exists to catch. It is exposed for
+/// morph's own suite, which must run a registrar on both sides of the latch in
+/// one process to prove the assertion fires for the right reason.
+inline void reopenRegistrationPhaseForTesting() noexcept {
+    registrationPhaseFlag().store(false, std::memory_order_release);
+}
+
+/// @brief Closes the latch on the first read of a process-level registry.
+///
+/// Debug builds only — in a release build this is an empty function and the
+/// latch closes only when the application calls `closeRegistrationPhase`. That
+/// asymmetry is deliberate: the auto-close exists to feed an `assert`, which a
+/// release build has already compiled out, and `ActionDispatcher::dispatch` is
+/// a per-request path that should not pay for a check nothing reads.
+///
+/// @param isProcessRegistry `true` when the registry being read is the
+///        process-level singleton. A locally constructed `ActionDispatcher` (as
+///        several tests own) is not covered by the constraint and must not
+///        close the latch for the whole program.
+inline void noteRegistryRead([[maybe_unused]] bool isProcessRegistry) noexcept {
+#ifndef NDEBUG
+    if (isProcessRegistry) {
+        ::morph::model::closeRegistrationPhase();
+    }
+#endif
+}
 
 /// @brief A `(modelId, actionId)` pair as a pair of views, for lookups.
 ///
@@ -613,6 +709,10 @@ public:
     /// @brief Dispatches an action against @p holder and returns the JSON-encoded result.
     std::string dispatch(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
                          std::string_view payload) {
+        // A dispatch means the maps are being read, which in the registration
+        // model means the registration phase is over (morph#698). Debug builds
+        // only; see `detail::noteRegistryRead`.
+        detail::noteRegistryRead(this == &defaultDispatcher());
         // Looked up by view. Building the stored `Key` to hash it cost two
         // `std::string` constructions per dispatch -- and two heap allocations
         // whenever an id passed the SSO threshold, which `"CreateSwimlane"`
@@ -846,6 +946,8 @@ public:
     ///                model its own key once, at construction, rather than
     ///                the model re-deriving it from every action's payload.
     std::unique_ptr<IModelHolder> create(std::string_view modelId, std::string_view primary = {}) {
+        // See `ActionDispatcher::dispatch` -- same latch, same reason.
+        detail::noteRegistryRead(this == &defaultRegistry());
         auto iter = _factories.find(std::string{modelId});
         if (iter == _factories.end()) {
             throw std::runtime_error("unknown model type: " + std::string{modelId});
@@ -874,9 +976,25 @@ inline ModelRegistryFactory& defaultRegistry() {
     return inst;
 }
 
+// The three `register*Once` helpers are `noexcept` while allocating, and that
+// is a decision rather than an oversight (morph#698). Their only caller is the
+// initialiser of a namespace-scope variable generated by `BRIDGE_REGISTER_*`,
+// and [basic.start.dynamic]/[except.terminate] already call `std::terminate`
+// when an exception escapes the dynamic initialisation of a non-local
+// variable. Dropping `noexcept` would therefore not change what an OOM during
+// static init does -- it would only move the `terminate` one frame outwards
+// and cost the callers an unwind path that can never be taken. The `noexcept`
+// says what the call site already guarantees. The assertions below are what
+// enforce that the call site really is the only one.
+
 /// @brief Static-init helper for `BRIDGE_REGISTER_MODEL`.
 template <typename Model>
 inline bool registerModelOnce(std::string_view modelId) noexcept {
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerModelOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups (morph#698; docs/spec/core/registry.md, "
+           "\"Thread safety\"). Load and register plugin modules before the first dispatch.");
     ModelRegistryFactory::instance().registerModel<Model>(modelId);
     return true;
 }
@@ -884,6 +1002,11 @@ inline bool registerModelOnce(std::string_view modelId) noexcept {
 /// @brief Static-init helper for `BRIDGE_REGISTER_ACTION`.
 template <typename Model, typename Action>
 inline bool registerActionOnce(std::string_view modelId, std::string_view actionId) noexcept {
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerActionOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups (morph#698; docs/spec/core/registry.md, "
+           "\"Thread safety\"). Load and register plugin modules before the first dispatch.");
     ActionDispatcher::instance().registerAction<Model, Action>(modelId, actionId);
     return true;
 }

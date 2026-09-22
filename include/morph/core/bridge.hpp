@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <any>
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <concepts>
 #include <condition_variable>
@@ -96,6 +97,10 @@ public:
     template <typename Sharing>
     [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string_view modelId, std::string_view actionId,
                                                                   void* handler, std::string_view bodyJson) const {
+        // See `ActionDispatcher::dispatch` -- the registration-phase latch,
+        // closed on the first read of a process-level registry so a later
+        // registration can assert (morph#698). Debug builds only.
+        ::morph::model::detail::noteRegistryRead(this == &instance());
         auto iter = _executors.find(
             KeyView{.modelId = modelId, .actionId = actionId, .sharing = std::type_index{typeid(Sharing)}});
         if (iter == _executors.end()) {
@@ -184,6 +189,12 @@ namespace morph::model::detail {
 
 template <typename Model, typename Action>
 inline bool registerActionExecutorOnce(std::string_view modelId, std::string_view actionId) noexcept {
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerActionExecutorOnce: registration after the registration phase closed. The "
+           "process-level registries are unsynchronised and are read-only once dispatch begins -- "
+           "registering now races their internals against concurrent lookups (morph#698; "
+           "docs/spec/core/registry.md, \"Thread safety\"). Load and register plugin modules before "
+           "the first dispatch.");
     ::morph::bridge::ActionExecuteRegistry::instance().registerAction<Model, Action>(modelId, actionId);
     return true;
 }
