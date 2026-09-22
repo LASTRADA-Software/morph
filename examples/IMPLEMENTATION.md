@@ -10,6 +10,14 @@ could have provided is a defect in the stress test.** If the framework can't
 provide it, that inability is a *finding* — record it per
 [`FINDINGS.md`](FINDINGS.md), don't quietly code around it.
 
+**Before you design around a Lightweight limitation, read
+[`docs/LIGHTWEIGHT-CONSTRAINTS.md`](../docs/LIGHTWEIGHT-CONSTRAINTS.md)** — one
+page, one entry per constraint, each with the pinned revision it was verified
+at and what would retire it. It exists because three rungs in a row
+rediscovered the same limits and recorded them in their own plan documents,
+where the next rung could not find them and where two of them quietly went
+stale. If you hit a new one, add it there rather than to your plan.
+
 **The promotion rule (rule-of-three, from the round-7 review):** an
 app-built answer to a framework gap (the polling helper with its timeout,
 an op-id ledger, epoch tokens, a recursive validator, redaction-on-serve)
