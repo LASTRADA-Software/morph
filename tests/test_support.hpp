@@ -206,6 +206,76 @@ private:
     std::deque<std::function<void()>> _queue;
 };
 
+// ── The wait primitives are for liveness. Never time across one (morph#708) ──
+//
+// `waitUntil` below, and `WaitReply::await` further down, answer *"did this
+// eventually happen?"*. They do not answer *"how long did this take?"*, and
+// they cannot be made to: the `sleep_for` in the loop quantises every wait they
+// return from up to a whole polling step, so an elapsed time taken across one
+// of these calls reports the step and not the thing being waited for. On an
+// idle machine that is the step almost exactly; on a busy one it is whatever
+// the first predicate check happened to observe. Neither is the measurement.
+//
+// This is not hypothetical. `tests/bench/bench_dispatch_latency.cpp` timed
+// `WaitReply::await()` around each of 2000 serial round trips and published a
+// p50 of 5074 us, while the same processes reported ~176k executes/sec at
+// concurrency 1 — a round trip of about 5.7 us. Three orders of magnitude, on
+// a figure that had a CI gate on it. morph#710 fixes that file by replacing
+// the waiter with a condition variable (`BlockingReply` there); copy that
+// shape if you need to time something.
+//
+// ── Audit, master @ 6f95f49a (morph#708) ─────────────────────────────────────
+//
+// 433 poll sites were classified: 211 direct `waitUntil(` invocations across 43
+// files, plus 222 `await()` invocations, which reach the same loop through
+// `WaitReply::await`. Exactly one block in the tree takes an elapsed time or
+// publishes a figure across one of them, and it is `bench_dispatch_latency.cpp`'s
+// single `TEST_CASE` — three sites: the latency `await()`s, and the throughput
+// drain, which sat *inside* the window it was divided into. Every other site is
+// a liveness assertion, where the step costs suite latency and never
+// correctness, and none of them were changed.
+//
+// Three sweeps produced that split, and re-running them is how to check the
+// claim has not rotted: every call site's enclosing block scanned for a timing
+// or figure construct; every duration subtraction anywhere in `tests/` and
+// `examples/` (22 of them) checked for a poll inside the interval it measures;
+// and every figure publisher — benchmark artifacts, Catch2 `BENCHMARK`, stdout
+// — checked for a poll upstream of its number. The near misses are worth
+// knowing, because each looks like a hit until the measured interval is read:
+// `tests/net/test_socket_server.cpp`'s four elapsed-time `REQUIRE`s bracket
+// `close()` and `~SocketServer()` directly, `tests/test_server_limits.cpp`'s
+// Catch2 `BENCHMARK` busy-waits on `yield()` rather than sleeping, and
+// `examples/common/testkit/test_fault_proxy.cpp`'s assertion across `pumpUntil`
+// is a *lower* bound, which quantisation can only ever make easier to satisfy.
+//
+// ── What the step costs a suite run, measured ────────────────────────────────
+//
+// morph#708 listed this as unmeasured. It is not free, and the bill reads the
+// same two independent ways. Measured on an otherwise-quiet 12-core Linux box
+// (clang 22.1.8, Release, load average 0.9-2.1), one binary instrumented to
+// take the step from the environment so that the two arms differ in nothing
+// else — not even code layout:
+//
+//     poll step | inside waitUntil | morph_tests wall | serial ctest
+//     ----------+------------------+------------------+---------------
+//        5 ms   | 17.27 s (n=3)    | 84.9 / 88.2 s    | 110.6 / 111.5 s
+//        1 ms   |  7.53 s (n=3)    | 75.2 / 77.5 s    | 102.0 / 104.3 s
+//
+// The call count is identical at both steps — 2691 calls, 3443 sleeps at 5 ms
+// against 7161 at 1 ms — so the 9.7 s between the first column's rows is the
+// quantisation and nothing else. It is not more waiting; it is the same waiting
+// rounded up. The wall-clock delta agrees with it, about 10 s on the binary and
+// about 8 s under `ctest`, which is how CI runs the suite. Roughly 11% of a
+// `morph_tests` run is this step.
+//
+// The step is nonetheless left at 5 ms, and lowering it is a separate change
+// that needs its own evidence. 433 call sites inherit this default, and the
+// first trials of the table above were taken while another build held this
+// machine at load 13-16, where 1 ms came out *slower* by 43 s rather than
+// faster by 10. A default that only wins on an idle machine is how a suite
+// becomes flaky on a shared runner rather than faster on one, and the runner is
+// the configuration that would have to be measured before changing it.
+
 /// @brief Default polling budget for `waitUntil`. Picked to cover the slowest
 ///        TSan/Valgrind runs without making green tests visibly slow.
 inline constexpr std::chrono::milliseconds kDefaultWaitBudget{2000};
@@ -214,6 +284,10 @@ inline constexpr std::chrono::milliseconds kDefaultWaitBudget{2000};
 inline constexpr std::chrono::milliseconds kDefaultWaitStep{5};
 
 /// @brief Polls @p pred until it returns `true` or @p budget elapses.
+///
+/// **Liveness only: never take an elapsed time across this call.** The step
+/// quantises what it returns from — see the audit above `kDefaultWaitBudget`
+/// for what that cost the one benchmark that tried.
 ///
 /// Returns `true` if the predicate eventually became `true`, `false` if the
 /// budget expired first. Sleeps for @p step between polls so we don't burn the
@@ -262,6 +336,12 @@ struct WaitReply {
     }
 
     /// @brief Blocks (polling) until the reply arrives or @p budget elapses.
+    ///
+    /// This is `waitUntil` under another name, and the "never time across one"
+    /// note above `kDefaultWaitBudget` counts this function's call sites too.
+    /// A round trip timed across `await()` reports the polling step.
+    ///
+    /// @param budget Longest time to wait for the reply.
     /// @return `true` if a reply arrived within the budget.
     bool await(std::chrono::milliseconds budget = kDefaultWaitBudget) {
         return waitUntil([this] { return ready.load(); }, budget);
