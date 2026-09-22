@@ -556,6 +556,18 @@ jobs:
       # which is the same "control that measures nothing" it exists to prevent.
       # This walks what ctest will actually run and keys the expected symbol on
       # the preset, so none of the three legs can pass on a blind build.
+      #
+      # No `QT_QPA_PLATFORM: offscreen` here, unlike the identical step in
+      # bank-sanitizers, kanban-tsan and ladder-sanitizers, and the absence is
+      # deliberate rather than an omission (morph#691). The sweep's first act is
+      # `ctest --show-only=json-v1`, which *executes* every DISCOVERY_MODE
+      # PRE_TEST binary to enumerate its cases; a Qt-linked one aborts headless
+      # and takes the whole listing with it. This matrix's Configure above sets
+      # neither MORPH_BUILD_QT nor MORPH_BUILD_LADDER, so it builds no Qt-linked
+      # suite for that to happen to, and its own Test step does not declare the
+      # variable either. Adding it for symmetry would be a line protecting
+      # against nothing, which invites the next reader to look for what it
+      # protects. Revisit the moment this matrix gains a Qt target.
       - name: Every ctest binary is instrumented
         run: |
           case "${{ matrix.preset }}" in
@@ -974,7 +986,21 @@ jobs:
       # claim while proving nothing. Keyed on `__tsan_`, not `__asan_` — an
       # ASan-only assertion on a TSan leg is itself a control that measures
       # nothing.
+      #
+      # QT_QPA_PLATFORM=offscreen, matching the Build step above and the Test
+      # step below, because this step sits between them and enumerates the same
+      # binaries they do (morph#691). The sweep begins with `ctest
+      # --show-only=json-v1`, and listing a DISCOVERY_MODE PRE_TEST suite *runs*
+      # its binary. Nothing this job builds is both Qt-linked and PRE_TEST
+      # today -- ladder_kanban_tests is POST_BUILD (cmake/morph_add_rung.cmake),
+      # so its enumeration already happened inside the Build step's environment
+      # -- which is why this step is green without the variable and not why it
+      # is safe. Changing one word to PRE_TEST on any Qt-linked rung suite would
+      # make this step fail with `ctest listed no tests`, naming neither Qt nor
+      # the display; that is morph#690, which cost three sessions over two days.
       - name: Every ctest binary is instrumented
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: bash scripts/check_sanitizer_instrumentation.sh build/clang-tsan tsan
 
       # Every ladder ctest case only ever carries the "ladder"/"ladder-<rung>"
@@ -1974,8 +2000,22 @@ jobs:
       # reaches (morph#542). The shared script walks what ctest will actually
       # run instead of a pattern, so a suite added tomorrow is covered by
       # having been added.
+      #
+      # QT_QPA_PLATFORM=offscreen, matching the Build step above and the Test
+      # step below, for the reason morph#691 gives: this sweep opens with `ctest
+      # --show-only=json-v1`, and listing a DISCOVERY_MODE PRE_TEST suite *runs*
+      # its binary -- so a Qt-linked PRE_TEST suite in this configure would
+      # abort headless and take the entire listing down, every other suite
+      # included. Today every Qt-linked suite this job builds is POST_BUILD
+      # (cmake/morph_add_rung.cmake, examples/common/CMakeLists.txt,
+      # tests/qt/CMakeLists.txt), so discovery already happened under the Build
+      # step's copy of this variable. That is an accident of one keyword, not a
+      # property of this step, and it is the accident bank-sanitizers did not
+      # have (morph#690).
       - name: Every ctest binary is instrumented
         if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: bash scripts/check_sanitizer_instrumentation.sh build/clang-asan asan
 
       # detect_leaks=0: LeakSanitizer reports allocations the Qt platform
