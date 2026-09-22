@@ -83,9 +83,9 @@ TEST_CASE("morph::backend::LocalBackend: execute after deregisterModel delivers 
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "BE_CounterModel";
     call.actionTypeId = "BE_CounterAction";
-    call.serializeAction = [] { return std::string{"{}"}; };
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return {}; };
-    call.localOp = [](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> { return {}; };
+    call.localOp = [](morph::model::detail::IModelHolder&, void*) -> std::shared_ptr<void> { return {}; };
 
     bool errorFired = false;
     backend.execute(mid, std::move(call), &cbExec)
@@ -192,7 +192,7 @@ TEST_CASE("morph::backend::LocalBackend: execute emits executeLatencyMs and togg
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "BE_CounterModel";
     call.actionTypeId = "BE_CounterAction";
-    call.localOp = [](morph::model::detail::IModelHolder& holder) -> std::shared_ptr<void> {
+    call.localOp = [](morph::model::detail::IModelHolder& holder, void*) -> std::shared_ptr<void> {
         auto& typed = static_cast<morph::model::detail::ModelHolder<CounterModel>&>(holder);
         return std::make_shared<int>(typed.model.execute(CounterAction{.delta = 3}));
     };
@@ -226,7 +226,7 @@ TEST_CASE("morph::backend::LocalBackend: an erroring action emits executeErrors"
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "BE_CounterModel";
     call.actionTypeId = "BE_CounterAction";
-    call.localOp = [](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> {
+    call.localOp = [](morph::model::detail::IModelHolder&, void*) -> std::shared_ptr<void> {
         throw std::runtime_error("boom");
     };
 
@@ -290,7 +290,7 @@ TEST_CASE("morph::backend::LocalBackend: one execute produces exactly one beginS
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "BE_CounterModel";
     call.actionTypeId = "BE_CounterAction";
-    call.localOp = [](morph::model::detail::IModelHolder& holder) -> std::shared_ptr<void> {
+    call.localOp = [](morph::model::detail::IModelHolder& holder, void*) -> std::shared_ptr<void> {
         auto& typed = static_cast<morph::model::detail::ModelHolder<CounterModel>&>(holder);
         return std::make_shared<int>(typed.model.execute(CounterAction{.delta = 1}));
     };
@@ -313,8 +313,12 @@ morph::backend::detail::ActionCall pendingCall(std::function<void()> op) {
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "BE_CounterModel";
     call.actionTypeId = "BE_CounterAction";
-    call.localOp = [op = std::move(op)](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> {
-        op();
+    // The op is the "action" this call carries: `localOp` is a function
+    // pointer with nowhere to capture it, and `ActionCall::action` is the slot
+    // the production path puts the action object in for exactly this reason.
+    call.action = std::make_shared<std::function<void()>>(std::move(op));
+    call.localOp = [](morph::model::detail::IModelHolder&, void* action) -> std::shared_ptr<void> {
+        (*static_cast<std::function<void()>*>(action))();
         return {};
     };
     return call;

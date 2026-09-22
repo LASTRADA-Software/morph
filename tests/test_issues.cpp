@@ -390,9 +390,9 @@ TEST_CASE("Issue 10: in-flight execute after deregisterModel completes without c
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "ISS10_Model";
     call.actionTypeId = "ISS10_Action";
-    call.serializeAction = [] { return R"({"delta":1})"; };
+    call.serializeAction = [](const void*) { return std::string{R"({"delta":1})"}; };
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return {}; };
-    call.localOp = [](morph::model::detail::IModelHolder& holder) -> std::shared_ptr<void> {
+    call.localOp = [](morph::model::detail::IModelHolder& holder, void*) -> std::shared_ptr<void> {
         auto& model = holder.into<Iss10Model>();
         return std::make_shared<int>(model.execute(Iss10Action{1}));
     };

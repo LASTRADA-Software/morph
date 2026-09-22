@@ -936,10 +936,10 @@ only the two registrar bodies above disappear.
 **The third registrar needed the same treatment, contrary to first
 appearances.** `registerActionExecutorOnce<M, A>` routes through
 `BridgeHandler<Model>::execute<Action>()` → `Bridge::executeVia<Model, Action>`
-— and `executeVia` unconditionally constructs an `ActionCall::localOp` closure
+— and `executeVia` unconditionally installs an `ActionCall::localOp` function
 that calls `Model::execute(...)` directly, *regardless of which backend ends
 up installed at runtime* (only `LocalBackend::execute` ever actually invokes
-`call.localOp`; every remote backend ignores it). That closure is compiled
+`call.localOp`; every remote backend ignores it). That function is compiled
 into `executeVia`'s instantiation the moment any code calls
 `BridgeHandler<Model>::execute<Action>()` — which the type-erased
 `ActionExecuteRegistry` executor `registerActionExecutorOnce` installs
@@ -949,8 +949,8 @@ uses `BridgeHandler::execute<Action>()` (the typed API) or `executeJson` (the
 type-erased API) at all — both routes reach the same `model.execute(...)`
 call inside `executeVia`.
 
-`Bridge::executeVia`'s `localOp` closure is therefore itself gated on
-`MORPH_CLIENT_ONLY` (`bridge.hpp`): under the macro, the closure throws
+`Bridge::executeVia`'s `localOp` is therefore itself gated on
+`MORPH_CLIENT_ONLY` (`bridge.hpp`): under the macro, its body throws
 `std::logic_error` instead of calling `Model::execute`, so nothing in the
 compiled program ever references its definition. This is *not* a
 per-registration-site choice like the two macros above — it lives inside

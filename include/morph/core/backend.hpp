@@ -36,27 +36,89 @@ namespace detail {
 ///
 /// Backends that execute locally use `localOp` directly. Remote backends
 /// serialize via `serializeAction` and deserialize replies via `deserializeResult`.
+///
+/// @par Why function *pointers*, and why the action travels beside them
+/// The three callables are plain function pointers and the action object they
+/// operate on rides in `action`, rather than each callable capturing its own
+/// handle to it. That is a deliberate allocation decision, not a style
+/// preference. `Bridge::executeVia` builds an `ActionCall` on **every** call,
+/// including one that a `LocalBackend` will serve and that will therefore never
+/// touch `serializeAction` or `deserializeResult`. A `std::function` whose
+/// target is not trivially copyable cannot use libstdc++'s small-object buffer,
+/// so a lambda capturing a `shared_ptr<Action>` heap-allocates — three captured
+/// callables cost up to three allocations per dispatch whichever path the call
+/// takes. Stateless operations parameterised on the action cost none: the
+/// per-`(Model, Action)` behaviour is a compile-time constant, addressed rather
+/// than copied. Measured on `master` @ `a9cb5649` with `morph_bench_alloc`,
+/// this shape and the two `string_view` ids below together removed 3 of 17
+/// allocations per local round trip (morph#572, Part A).
+///
+/// @par Lifetime contract for the callables
+/// `serializeAction` and `localOp` take the action as an opaque pointer and do
+/// **not** own it: `action` does. A backend that defers either call past the
+/// `ActionCall`'s own lifetime must carry a copy of the `action` handle with
+/// it — `LocalBackend::execute` does exactly that when it posts to the strand.
+/// `deserializeResult` never reads the action and so may outlive it, which is
+/// what lets the remote backends store it in their pending-reply table.
 struct ActionCall {
     /// @brief String id of the target model type (from `ModelTraits`).
-    std::string modelTypeId;
+    ///
+    /// A view, not a copy. `ModelTraits<Model>::typeId()` is `constexpr` and
+    /// returns a view of the string literal `BRIDGE_REGISTER_MODEL` was given,
+    /// so the referent has static storage duration and outlives every call.
+    /// A hand-built `ActionCall` must observe the same rule: the id must
+    /// outlive the dispatch, which a string literal does and a temporary
+    /// `std::string` does not.
+    std::string_view modelTypeId;
 
     /// @brief String id of the action type (from `ActionTraits`).
-    std::string actionTypeId;
+    ///
+    /// Same storage rule as `modelTypeId`.
+    std::string_view actionTypeId;
 
-    /// @brief Serialises the action to JSON. Called only on the remote path.
-    std::function<std::string()> serializeAction;
+    /// @brief Type-erased owner of the action object `serializeAction` and
+    ///        `localOp` read.
+    ///
+    /// Null only for a hand-built call whose callables ignore their action
+    /// argument.
+    std::shared_ptr<void> action;
+
+    /// @brief Serialises `action` to JSON. Called only on the remote path.
+    std::string (*serializeAction)(const void* action) = nullptr;
 
     /// @brief Deserialises a JSON reply into the opaque result `shared_ptr<void>`.
-    std::function<std::shared_ptr<void>(std::string_view)> deserializeResult;
+    std::shared_ptr<void> (*deserializeResult)(std::string_view json) = nullptr;
 
-    /// @brief Executes the action directly against a model holder. Used on the local path.
-    std::function<std::shared_ptr<void>(::morph::model::detail::IModelHolder&)> localOp;
+    /// @brief Executes `action` directly against a model holder. Used on the local path.
+    ///
+    /// Takes the action as a mutable pointer because the local path recomputes
+    /// an action's computed fields in place before the validator or the model
+    /// sees it (`Bridge::executeVia`, `morph::forms::recomputeAll`).
+    std::shared_ptr<void> (*localOp)(::morph::model::detail::IModelHolder& holder, void* action) = nullptr;
 
     /// @brief Session context attached to this call.
     ///
     /// Local backends thread it through a thread-local before invoking `localOp`;
     /// remote backends serialise it into the wire envelope.
     ::morph::session::Context session;
+
+    /// @brief Invokes `serializeAction` on the action this call owns.
+    ///
+    /// The one place the borrow in `serializeAction`'s signature is closed, so
+    /// no remote backend has to remember to pair the pointer with its owner --
+    /// and the one place the null check lives. An empty `std::function` used to
+    /// raise `std::bad_function_call` here; a null function pointer would be
+    /// undefined behaviour instead, so the check is explicit and names the
+    /// field.
+    ///
+    /// @return The JSON body for the wire envelope.
+    /// @throws std::runtime_error if `serializeAction` is null.
+    [[nodiscard]] std::string serializeBody() const {
+        if (serializeAction == nullptr) {
+            throw std::runtime_error{"ActionCall::serializeAction is null: nothing to serialise"};
+        }
+        return serializeAction(action.get());
+    }
 };
 
 /// @brief The two identities a model instance can carry, passed together.
@@ -1236,10 +1298,15 @@ public:
             return comp;
         }
         trackPending(compState);
-        auto localOp = std::move(call.localOp);
+        auto* const localOp = call.localOp;
+        // The action handle travels with `localOp` into the strand task, not
+        // just as far as this function: `ActionCall::localOp` borrows the
+        // action rather than owning it (see that struct), and `call` is gone
+        // long before the task runs.
+        auto action = std::move(call.action);
         auto session = std::move(call.session);
-        auto modelTypeId = std::move(call.modelTypeId);
-        auto actionTypeId = std::move(call.actionTypeId);
+        auto const modelTypeId = call.modelTypeId;
+        auto const actionTypeId = call.actionTypeId;
         // Captured by shared_ptr, never by raw `this`: see the Global
         // Constraints note on `~StrandExecutor`'s member-destruction-order
         // subtlety. A shared_ptr copy has its own lifetime, independent of
@@ -1250,9 +1317,8 @@ public:
         auto const inFlightAfterInc = inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
-        _strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder), compState,
-                           session = std::move(session), modelTypeId = std::move(modelTypeId),
-                           actionTypeId = std::move(actionTypeId), inFlightCounter, hydration]() mutable {
+        _strand.post(mid, [localOp, holder = std::move(holder), compState, session = std::move(session), modelTypeId,
+                           actionTypeId, inFlightCounter, hydration, action = std::move(action)]() mutable {
             auto const start = std::chrono::steady_clock::now();
             auto const spanId = ::morph::observe::detail::beginSpan(session.requestId, modelTypeId, actionTypeId);
             bool ok = false;
@@ -1266,7 +1332,16 @@ public:
             std::exception_ptr error;
             try {
                 ::morph::session::detail::ScopedContext const scoped{session};
-                value = localOp(*holder);
+                // Explicit, because `localOp` is a function pointer now and
+                // a null one is undefined behaviour rather than the
+                // `std::bad_function_call` an empty `std::function` used to
+                // raise. Same outcome for the caller -- the completion
+                // resolves through its error sink -- with a diagnostic that
+                // names the field instead of the library.
+                if (localOp == nullptr) {
+                    throw std::runtime_error{"ActionCall::localOp is null: nothing to execute"};
+                }
+                value = localOp(*holder, action.get());
                 ok = true;
             } catch (...) {
                 error = std::current_exception();

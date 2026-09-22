@@ -409,7 +409,7 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     env.modelId = mid.v;
     env.modelType = call.modelTypeId;
     env.actionType = call.actionTypeId;
-    env.body = call.serializeAction();
+    env.body = call.serializeBody();
     env.session = std::move(call.session);
 
     {
