@@ -41,18 +41,72 @@ struct ActionTraits;
 
 namespace detail {
 
-/// @brief Hash functor for `std::pair<std::string, std::string>` keys used by registries.
-/// Shared between `ActionDispatcher` (server-side dispatch) and `ActionExecuteRegistry`
-/// (client-side generic-execute) since their key types are structurally identical.
+/// @brief A `(modelId, actionId)` pair as a pair of views, for lookups.
+///
+/// The type a caller looks a registry entry up *with*. The stored key is a
+/// pair of `std::string`s, because the registry owns its ids; a caller has
+/// `string_view`s, because every id it can name arrives as one — a wire
+/// envelope's decoded field, or a `constexpr` `ModelTraits<M>::typeId()`.
+/// Materialising the stored type just to hash it charged every lookup up to
+/// two `std::string` constructions (morph#572, Part C), so the hash and
+/// equality below are transparent and this is what `find()` is given.
+using PairKeyView = std::pair<std::string_view, std::string_view>;
+
+/// @brief Transparent hash functor for `(modelId, actionId)` registry keys.
+///
+/// Shared between `ActionDispatcher` (server-side dispatch) and
+/// `ActionExecuteRegistry` (client-side generic-execute) since their key types
+/// are structurally identical.
+///
+/// Both overloads reduce to the same `string_view` body rather than calling
+/// `std::hash<std::string>` on one side and `std::hash<std::string_view>` on
+/// the other. Those two happen to agree on every standard library morph
+/// builds against, but "happens to agree" is not a property a heterogeneous
+/// lookup may rest on: if they ever disagreed, a transparent `find()` would
+/// hash into the wrong bucket and report a registered action as unknown, with
+/// no diagnostic anywhere. Routing both through one body makes the agreement
+/// structural instead of coincidental.
 struct PairKeyHash {
+    /// @brief Marks the functor transparent, enabling heterogeneous lookup.
+    using is_transparent = void;
+
     /// @brief Combines the hashes of `key.first` and `key.second`.
-    /// @param key The pair to hash.
+    /// @param key The pair of views to hash.
+    /// @return The combined hash value.
+    [[nodiscard]] std::size_t operator()(PairKeyView key) const noexcept {
+        std::size_t seed = std::hash<std::string_view>{}(key.first);
+        // NOLINTNEXTLINE(readability-magic-numbers, cppcoreguidelines-avoid-magic-numbers)
+        seed ^= std::hash<std::string_view>{}(key.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        return seed;
+    }
+
+    /// @brief Hashes a stored key by viewing it.
+    /// @param key The stored pair to hash.
     /// @return The combined hash value.
     [[nodiscard]] std::size_t operator()(const std::pair<std::string, std::string>& key) const noexcept {
-        std::size_t seed = std::hash<std::string>{}(key.first);
-        // NOLINTNEXTLINE(readability-magic-numbers, cppcoreguidelines-avoid-magic-numbers)
-        seed ^= std::hash<std::string>{}(key.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        return seed;
+        return (*this)(PairKeyView{key.first, key.second});
+    }
+};
+
+/// @brief Transparent equality functor for `(modelId, actionId)` registry keys.
+///
+/// The second half of what `unordered_map`'s heterogeneous lookup needs: a
+/// transparent hash alone is not enough, the equality must accept the lookup
+/// type too.
+struct PairKeyEqual {
+    /// @brief Marks the functor transparent, enabling heterogeneous lookup.
+    using is_transparent = void;
+
+    /// @brief Compares two keys of any mix of owned and viewed halves.
+    /// @tparam LhsT Left-hand pair type; both halves must view as `string_view`.
+    /// @tparam RhsT Right-hand pair type; both halves must view as `string_view`.
+    /// @param lhs Left-hand key.
+    /// @param rhs Right-hand key.
+    /// @return `true` if both halves compare equal as text.
+    template <typename LhsT, typename RhsT>
+    [[nodiscard]] bool operator()(const LhsT& lhs, const RhsT& rhs) const noexcept {
+        return std::string_view{lhs.first} == std::string_view{rhs.first} &&
+               std::string_view{lhs.second} == std::string_view{rhs.second};
     }
 };
 
@@ -474,8 +528,8 @@ public:
     /// @throws ValidationError if the decoded action fails `ActionValidator<Action>::ready`.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
-        Key const key{std::string{modelId}, std::string{actionId}};
-        _runners[key] = [](IModelHolder& holder, std::string_view payloadJson) {
+        ActionEntry& entry = _actions[Key{std::string{modelId}, std::string{actionId}}];
+        entry.runner = [](IModelHolder& holder, std::string_view payloadJson) {
             auto action = ActionTraits<Action>::fromJson(payloadJson);
             // Retag any Quantity fields to their declared precision so a
             // hand-built wire payload matches the schema's advertised
@@ -546,25 +600,31 @@ public:
                 throw;
             }
         };
-        _coalesce[key] = ActionLogPolicy<Action>::coalesce;
-        _schema[key] = detail::actionPayloadSchema<Action>();
+        entry.coalesce = ActionLogPolicy<Action>::coalesce;
+        entry.schema = detail::actionPayloadSchema<Action>();
         // Deliberately a thunk, not the description itself: registration runs
         // at static-init time, where `buildActionDescription`'s throw path (an
         // action with self-contradicting `formRules`) would abort the process
         // before `main` rather than surface as an `err` reply. The thunk defers
         // the whole computation to the first caller who asks.
-        _describe[key] = []() -> const ActionDescription& { return actionDescription<Action>(); };
+        entry.describe = []() -> const ActionDescription& { return actionDescription<Action>(); };
     }
 
     /// @brief Dispatches an action against @p holder and returns the JSON-encoded result.
     std::string dispatch(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
                          std::string_view payload) {
-        Key const key{std::string{modelId}, std::string{actionId}};
-        auto iter = _runners.find(key);
-        if (iter == _runners.end()) {
-            throw std::runtime_error("unknown action: " + key.first + "/" + key.second);
+        // Looked up by view. Building the stored `Key` to hash it cost two
+        // `std::string` constructions per dispatch -- and two heap allocations
+        // whenever an id passed the SSO threshold, which `"CreateSwimlane"`
+        // (14 characters) misses by one. See morph#572, Part C.
+        auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        if (iter == _actions.end()) {
+            // The concatenation here is the one string cost left, and it is on
+            // the error path only: a dispatch that is about to throw can pay
+            // for its own diagnostic.
+            throw std::runtime_error("unknown action: " + std::string{modelId} + "/" + std::string{actionId});
         }
-        return iter->second(holder, payload);
+        return iter->second.runner(holder, payload);
     }
 
     /// @brief Returns whether `(modelId, actionId)` was registered with
@@ -574,8 +634,8 @@ public:
     /// `LogEntry` stream, which entries collapse to their latest occurrence.
     /// Unknown pairs (never registered) default to `false` — every entry kept.
     [[nodiscard]] bool coalesce(std::string_view modelId, std::string_view actionId) const {
-        auto iter = _coalesce.find(Key{std::string{modelId}, std::string{actionId}});
-        return iter != _coalesce.end() && iter->second;
+        auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        return iter != _actions.end() && iter->second.coalesce;
     }
 
     /// @brief Returns the payload fingerprint `(modelId, actionId)` was
@@ -593,8 +653,8 @@ public:
     /// @param actionId Action type-id.
     /// @return The registered fingerprint, or `""` if the pair is unregistered.
     [[nodiscard]] std::string schemaFor(std::string_view modelId, std::string_view actionId) const {
-        auto iter = _schema.find(Key{std::string{modelId}, std::string{actionId}});
-        return iter == _schema.end() ? std::string{} : iter->second;
+        auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        return iter == _actions.end() ? std::string{} : iter->second.schema;
     }
 
     /// @brief Returns the `{actionType: schema}` document for every action
@@ -619,7 +679,7 @@ public:
     ///         at generation time.
     [[nodiscard]] std::string schemasJson(std::string_view modelId) const {
         std::vector<std::string_view> actionIds;
-        for (const auto& [key, thunk] : _describe) {
+        for (const auto& [key, entry] : _actions) {
             if (key.first == modelId) {
                 actionIds.emplace_back(key.second);
             }
@@ -639,7 +699,7 @@ public:
             (void)glz::write_json(std::string{actionId}, quoted);
             out += quoted;
             out += ':';
-            const auto& desc = _describe.at(Key{std::string{modelId}, std::string{actionId}})();
+            const auto& desc = _actions.find(detail::PairKeyView{modelId, actionId})->second.describe();
             out += desc.schema.empty() ? "{}" : desc.schema;
         }
         out += '}';
@@ -661,12 +721,12 @@ public:
     /// @return Pointer to the required-field list, or `nullptr`.
     [[nodiscard]] const std::vector<std::string>* requiredFieldsFor(std::string_view modelId,
                                                                     std::string_view actionId) const {
-        auto iter = _describe.find(Key{std::string{modelId}, std::string{actionId}});
-        if (iter == _describe.end()) {
+        auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        if (iter == _actions.end()) {
             return nullptr;
         }
         try {
-            return &iter->second().required;
+            return &iter->second.describe().required;
         } catch (const std::exception&) {
             return nullptr;
         }
@@ -684,10 +744,28 @@ private:
     /// than the value so the cost (and the throw path) lands on the first
     /// caller instead of on static init.
     using Describer = std::function<const ActionDescription&()>;
-    std::unordered_map<Key, Runner, PairKeyHash> _runners;
-    std::unordered_map<Key, bool, PairKeyHash> _coalesce;
-    std::unordered_map<Key, std::string, PairKeyHash> _schema;
-    std::unordered_map<Key, Describer, PairKeyHash> _describe;
+
+    /// @brief Everything registered under one `(modelId, actionId)` pair.
+    ///
+    /// One record, not four parallel maps keyed identically. The four were
+    /// filled together by `registerAction` and could not go out of step in
+    /// practice, but nothing said so -- and `RemoteServer::handle` pays for
+    /// three separate lookups of the same key on the way through one request
+    /// (`schemaFor`, `requiredFieldsFor`, `dispatch`). Merging them makes the
+    /// lockstep structural and makes those three one hash each rather than one
+    /// hash into a different table each (morph#572, Part C).
+    struct ActionEntry {
+        /// @brief Type-erased decode/execute/encode runner.
+        Runner runner;
+        /// @brief `ActionLogPolicy<Action>::coalesce` as registered.
+        bool coalesce = false;
+        /// @brief `payloadFingerprint<Action>()` as registered.
+        std::string schema;
+        /// @brief Thunk yielding the process-lifetime `ActionDescription`.
+        Describer describe;
+    };
+
+    std::unordered_map<Key, ActionEntry, PairKeyHash, PairKeyEqual> _actions;
 };
 
 /// @brief Registry that creates `IModelHolder` instances by string type-id.

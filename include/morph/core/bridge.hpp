@@ -118,7 +118,11 @@ private:
     };
     struct KeyHash {
         std::size_t operator()(const Key& key) const noexcept {
-            std::size_t const modelHash = ::morph::model::detail::PairKeyHash{}({key.modelId, key.actionId});
+            // Spelled with the view type rather than a braced list: `PairKeyHash`
+            // is transparent now, so a braced `{modelId, actionId}` is equally
+            // convertible to both of its overloads and would be ambiguous.
+            std::size_t const modelHash =
+                ::morph::model::detail::PairKeyHash{}(::morph::model::detail::PairKeyView{key.modelId, key.actionId});
             return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));
         }
     };

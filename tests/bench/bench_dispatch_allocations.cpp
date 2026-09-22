@@ -36,6 +36,7 @@
 // Build: `-DMORPH_BUILD_LOAD_TESTS=ON`, target `morph_bench_alloc`. See
 // docs/spec/testing_strategy.md.
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -138,6 +139,40 @@ struct BenchAllocModel {
 BRIDGE_REGISTER_MODEL(BenchAllocModel, "BenchAlloc_Model")
 BRIDGE_REGISTER_ACTION(BenchAllocModel, BenchAllocPing, "BenchAlloc_Ping")
 
+// Two more registered pairs, existing only to be looked up. Their ids sit
+// deliberately on either side of libstdc++'s 15-character SSO threshold, so
+// the lookup census below reports the two cases separately instead of
+// averaging them. morph#529 (folded into morph#572 as Part C) left exactly
+// that question open: it observed that the registry built two `std::string`s
+// per lookup, but not whether morph's own ids are long enough for those
+// constructions to reach the heap. morph's real ids straddle the boundary --
+// this file's own `"BenchAlloc_Model"` is 16 characters and allocates,
+// `"BenchAlloc_Ping"` is 15 and does not -- so the census measures both ends
+// rather than asserting either.
+struct BenchAllocTinyPing {
+    int x = 0;
+};
+struct BenchAllocTinyPong {
+    int y = 0;
+};
+struct BenchAllocTinyModel {
+    BenchAllocTinyPong execute(const BenchAllocTinyPing& action) { return BenchAllocTinyPong{.y = action.x * 2}; }
+};
+struct BenchAllocLongIdPing {
+    int x = 0;
+};
+struct BenchAllocLongIdPong {
+    int y = 0;
+};
+struct BenchAllocLongIdModel {
+    BenchAllocLongIdPong execute(const BenchAllocLongIdPing& action) { return BenchAllocLongIdPong{.y = action.x * 2}; }
+};
+
+BRIDGE_REGISTER_MODEL(BenchAllocTinyModel, "BA_M")
+BRIDGE_REGISTER_ACTION(BenchAllocTinyModel, BenchAllocTinyPing, "BA_A")
+BRIDGE_REGISTER_MODEL(BenchAllocLongIdModel, "BenchAllocLongId_ModelTypeId")
+BRIDGE_REGISTER_ACTION(BenchAllocLongIdModel, BenchAllocLongIdPing, "BenchAllocLongId_ActionTypeId")
+
 namespace {
 
 // Runs each task on the calling thread, so the callback executor contributes
@@ -153,8 +188,43 @@ public:
 
 constexpr int kWarmup = 50;
 constexpr int kCalls = 200;
+constexpr int kLookups = 200;
 
-int run(bool attribute, double budget) {
+// Allocation census for `ActionDispatcher`'s key lookups -- morph#572 Part C,
+// which is about the server-side dispatch path rather than the client-side one
+// `run()` measures. `coalesce` and `requiredFieldsFor` are the two lookups
+// that do nothing *but* look up: no JSON is decoded, no runner executes, and
+// neither returns anything that has to be built. What they allocate is
+// therefore exactly what building the stored `std::pair<std::string,
+// std::string>` key costs, which is the whole of Part C's claim.
+//
+// Both are warmed first: `requiredFieldsFor` calls a thunk that builds the
+// action's `ActionDescription` on first use and caches it for the process, so
+// an unwarmed run would charge that one-off construction to the census.
+//
+// @param modelId  Registered model type-id to look up.
+// @param actionId Registered action type-id to look up.
+// @return Allocations per single lookup, averaged over `2 * kLookups` of them.
+double lookupCensus(std::string_view modelId, std::string_view actionId) {
+    Census& state = census();
+    auto& dispatcher = ::morph::model::detail::ActionDispatcher::instance();
+    for (int i = 0; i < kWarmup; ++i) {
+        (void)dispatcher.coalesce(modelId, actionId);
+        (void)dispatcher.requiredFieldsFor(modelId, actionId);
+    }
+    auto const before = state.allocations.load();
+    state.counting.store(true, std::memory_order_relaxed);
+    for (int i = 0; i < kLookups; ++i) {
+        (void)dispatcher.coalesce(modelId, actionId);
+        (void)dispatcher.requiredFieldsFor(modelId, actionId);
+    }
+    state.counting.store(false, std::memory_order_relaxed);
+    auto const after = state.allocations.load();
+    // Two lookups per iteration, and the figure is per lookup.
+    return static_cast<double>(after - before) / (2.0 * kLookups);
+}
+
+int run(bool attribute, double budget, double lookupBudget) {
     Census& state = census();
     ::morph::exec::ThreadPoolExecutor pool{1};
     InlineCallbackExecutor callbackExec;
@@ -203,14 +273,39 @@ int run(bool attribute, double budget) {
         }
     }
 
+    // Run after the dispatch census, not before: `lookupCensus` toggles the
+    // same global counter, and interleaving the two would fold one into the
+    // other.
+    double const longIdLookups = lookupCensus("BenchAllocLongId_ModelTypeId", "BenchAllocLongId_ActionTypeId");
+    double const shortIdLookups = lookupCensus("BA_M", "BA_A");
+    std::cout << std::format("\nActionDispatcher lookups   : {} (coalesce + requiredFieldsFor, {} times each)\n",
+                             2 * kLookups, kLookups)
+              << std::format("  both ids past SSO        : {:.2f} allocations per lookup\n", longIdLookups)
+              << std::format("  both ids inside SSO      : {:.2f} allocations per lookup\n", shortIdLookups);
+
+    int status = 0;
     if (budget > 0.0) {
         if (perCall > budget) {
             std::cout << std::format("FAIL: {:.2f} allocations per call exceeds --budget={:.2f}\n", perCall, budget);
-            return 1;
+            status = 1;
+        } else {
+            std::cout << std::format("ok: {:.2f} allocations per call within --budget={:.2f}\n", perCall, budget);
         }
-        std::cout << std::format("ok: {:.2f} allocations per call within --budget={:.2f}\n", perCall, budget);
     }
-    return 0;
+    if (lookupBudget >= 0.0) {
+        double const worst = std::max(longIdLookups, shortIdLookups);
+        if (worst > lookupBudget) {
+            std::cout << std::format("FAIL: {:.2f} allocations per dispatcher lookup exceeds "
+                                     "--lookup-budget={:.2f}\n",
+                                     worst, lookupBudget);
+            status = 1;
+        } else {
+            std::cout << std::format("ok: {:.2f} allocations per dispatcher lookup within "
+                                     "--lookup-budget={:.2f}\n",
+                                     worst, lookupBudget);
+        }
+    }
+    return status;
 }
 
 }  // namespace
@@ -223,6 +318,10 @@ int main(int argc, char** argv) {
     try {
         bool attribute = false;
         double budget = 0.0;
+        // Negative means "not requested": zero is a meaningful ceiling for the
+        // lookup census (the registry should reach the heap not at all), so it
+        // cannot double as the off switch the way it can for --budget.
+        double lookupBudget = -1.0;
         std::span<char*> const args{argv, static_cast<std::size_t>(argc)};
         for (std::size_t i = 1; i < args.size(); ++i) {
             std::string_view const arg{args[i]};
@@ -230,12 +329,15 @@ int main(int argc, char** argv) {
                 attribute = true;
             } else if (arg.starts_with("--budget=")) {
                 budget = std::stod(std::string{arg.substr(std::string_view{"--budget="}.size())});
+            } else if (arg.starts_with("--lookup-budget=")) {
+                lookupBudget = std::stod(std::string{arg.substr(std::string_view{"--lookup-budget="}.size())});
             } else {
-                std::cout << "usage: morph_bench_alloc [--attribute] [--budget=<allocations per call>]\n";
+                std::cout << "usage: morph_bench_alloc [--attribute] [--budget=<allocations per call>] "
+                             "[--lookup-budget=<allocations per dispatcher lookup>]\n";
                 return 2;
             }
         }
-        return run(attribute, budget);
+        return run(attribute, budget, lookupBudget);
     } catch (const std::exception& exc) {
         std::cout << "FAIL: " << exc.what() << "\n";
         return 1;
