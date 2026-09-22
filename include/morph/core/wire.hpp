@@ -2,11 +2,13 @@
 
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -348,6 +350,113 @@ struct EscapingWriteOpts : glz::opts {
     bool escape_control_characters = true;
 };
 
+/// @brief The `Envelope` keys `encode` omits when the member holds its default.
+///
+/// `Envelope` is a union-of-all-kinds struct: an `ok` reply uses three of its
+/// thirteen members and a `deregister` request uses two, but glaze writes every
+/// member of a struct it is handed, so a minimal reply carrying an 8-byte
+/// payload cost 255 bytes on the wire, 213 of them fields the kind does not use
+/// (morph#524).
+///
+/// Omitting a member that holds its default is **not** a protocol change. The
+/// decoder default-initialises the `Envelope` and reads with
+/// `error_on_unknown_keys = false`; a key that is absent therefore leaves the
+/// member at exactly the value the omitted key would have written. The
+/// `kProtocolVersion` bump that `docs/spec/core/wire.md` requires for a field
+/// removal or retype does not apply, because nothing is removed or retyped —
+/// see "Omitted default fields" there, and `test_wire_omitted_fields.cpp`,
+/// which decodes both forms and requires the results to be equal.
+///
+/// `kind` is deliberately absent from this list: it is the discriminator, an
+/// envelope without one is malformed, and keeping it unconditional means the
+/// first key of every message is still `"kind"`.
+inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
+    "callId",    "typeId",     "contextKey", "primary", "shared",  "modelId",
+    "modelType", "actionType", "body",       "message", "session", "protocolVersion"};
+
+/// @brief Whether a session context carries nothing worth sending.
+///
+/// @param ctx Session context to inspect.
+/// @return `true` when every member is empty, so the whole `session` object can
+///         be left out of the envelope.
+[[nodiscard]] inline bool isDefaultSession(const ::morph::session::Context& ctx) noexcept {
+    // A field-by-field test rather than `ctx == Context{}`, because `Context` is
+    // a plain aggregate with no `operator==` and giving it one would reach
+    // outside this header. The assertion is what stops the two drifting: a new
+    // member would otherwise be dropped from every envelope whose other session
+    // fields happen to be empty, silently and only on the wire.
+    static_assert(glz::reflect<::morph::session::Context>::size == 5,
+                  "session::Context gained or lost a member: update isDefaultSession, or the new "
+                  "member is silently dropped from every envelope with an otherwise-empty session.");
+    return ctx.principal.empty() && ctx.token.empty() && ctx.requestId.empty() && ctx.locale.empty() &&
+           ctx.metadata.empty();
+}
+
+/// @brief Collects the keys `encode` should leave out of @p env.
+///
+/// @param env Envelope about to be serialised.
+/// @param out Storage for the key list; only the returned prefix is meaningful.
+/// @return The keys to exclude, as a view into @p out.
+[[nodiscard]] inline std::span<const std::string_view> defaultValuedKeys(
+    const Envelope& env, std::array<std::string_view, kOmittableEnvelopeKeys.size()>& out) noexcept {
+    // Every name below must be a real reflected key of `Envelope`: glaze's
+    // exclude-write reports `unknown_key` for one that is not, which would turn
+    // a member rename into a throw from *every* `encode` call at runtime. This
+    // makes it a compile error instead.
+    static_assert(glz::reflect<Envelope>::size == 13,
+                  "Envelope gained or lost a member: decide whether it is omittable when default "
+                  "and update kOmittableEnvelopeKeys. A new member left off that list is always "
+                  "written, which is merely the old behaviour; one added with a wrong spelling is "
+                  "caught by the assertion below.");
+    static_assert(std::ranges::all_of(kOmittableEnvelopeKeys,
+                                      [](std::string_view key) {
+                                          return std::ranges::find(glz::reflect<Envelope>::keys, key) !=
+                                                 std::ranges::end(glz::reflect<Envelope>::keys);
+                                      }),
+                  "kOmittableEnvelopeKeys names a key Envelope does not have — a rename, or a typo.");
+
+    std::size_t count = 0;
+    auto omit = [&out, &count](std::string_view key) noexcept { out.at(count++) = key; };
+
+    if (env.callId == 0) {
+        omit("callId");
+    }
+    if (env.typeId.empty()) {
+        omit("typeId");
+    }
+    if (env.contextKey.empty()) {
+        omit("contextKey");
+    }
+    if (env.primary.empty()) {
+        omit("primary");
+    }
+    if (!env.shared) {
+        omit("shared");
+    }
+    if (env.modelId == 0) {
+        omit("modelId");
+    }
+    if (env.modelType.empty()) {
+        omit("modelType");
+    }
+    if (env.actionType.empty()) {
+        omit("actionType");
+    }
+    if (env.body.empty()) {
+        omit("body");
+    }
+    if (env.message.empty()) {
+        omit("message");
+    }
+    if (isDefaultSession(env.session)) {
+        omit("session");
+    }
+    if (env.protocolVersion == 0) {
+        omit("protocolVersion");
+    }
+    return std::span<const std::string_view>{out.data(), count};
+}
+
 /// @brief Best-effort recovery of an envelope's `callId` without decoding it.
 ///
 /// For the one case where a transport must answer a message it has decided
@@ -475,7 +584,11 @@ struct WireCodecOps {
     ///        `encode` would otherwise make directly.
     /// @return Glaze's error context; falsy on success.
     std::function<glz::error_ctx(const Envelope& env, std::string& out)> writeEnvelope =
-        [](const Envelope& env, std::string& out) { return glz::write<detail::EscapingWriteOpts{}>(env, out); };
+        [](const Envelope& env, std::string& out) {
+            std::array<std::string_view, detail::kOmittableEnvelopeKeys.size()> omitted{};
+            return glz::write_json_exclude<detail::EscapingWriteOpts{}>(env, detail::defaultValuedKeys(env, omitted),
+                                                                       out);
+        };
 };
 
 /// @brief The shared default `WireCodecOps`.

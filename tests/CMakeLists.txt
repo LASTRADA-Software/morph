@@ -84,6 +84,7 @@ add_executable(morph_tests
     test_strong_id_keys.cpp
     test_wire_encode_fault.cpp
     test_wire_hardening.cpp
+    test_wire_omitted_fields.cpp
     test_remote_reply_envelopes.cpp
     test_reply_router.cpp
     test_wire_schemas.cpp

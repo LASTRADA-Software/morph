@@ -9,6 +9,7 @@ carries all request and reply variants, discriminated by a `kind` string field.
 - [Envelope](#envelope)
 - [Factory functions](#factory-functions)
 - [Encode and decode](#encode-and-decode)
+  - [Omitted default fields](#omitted-default-fields)
 - [Parsing guarantees and hardening](#parsing-guarantees-and-hardening)
 - [Protocol version negotiation](#protocol-version-negotiation)
 - [Serving action schemas](#serving-action-schemas)
@@ -85,7 +86,7 @@ it internally.
 
 | Function | Signature | Notes |
 |---|---|---|
-| `encode` | `std::string encode(const Envelope&)` | Serializes to a single JSON line via `glz::write<detail::EscapingWriteOpts{}>`. Throws `std::runtime_error` on failure (should never happen for valid input). Escapes ASCII control bytes — see [Control bytes in string fields](#control-bytes-in-string-fields). |
+| `encode` | `std::string encode(const Envelope&)` | Serializes to a single JSON line via `glz::write_json_exclude<detail::EscapingWriteOpts{}>`, leaving out every member that holds its default — see [Omitted default fields](#omitted-default-fields). Throws `std::runtime_error` on failure (should never happen for valid input). Escapes ASCII control bytes — see [Control bytes in string fields](#control-bytes-in-string-fields). |
 | `decode` | `Envelope decode(std::string_view)` | Deserializes from JSON via `glz::read<{.error_on_unknown_keys = false}>`. Rejects input longer than `kMaxEnvelopeBytes` and throws `std::runtime_error` on an oversized or syntactically malformed envelope. **Ignores unknown/extra keys** (forward compatibility) and **does not reject duplicate JSON keys** — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
 
 glaze reflects the struct's public members, so the JSON object keys are exactly
@@ -100,6 +101,76 @@ this is the wire's forward-compatibility contract. Syntactically malformed JSON
 is still a hard parse error that throws. Servers catch that thrown exception and
 turn it into an `"err"` reply rather than propagating it (see
 `RemoteServer::handle` / `handleInline`).
+
+### Omitted default fields
+
+`Envelope` is a union of all kinds: an `ok` reply uses three of its thirteen
+members and a `deregister` request uses two. glaze writes every member of a
+struct it is handed, so before morph#524 a minimal `ok` reply carrying an
+8-byte payload was **255 bytes, 213 of them fields the kind does not use**:
+
+```
+{"kind":"ok","callId":7,"typeId":"","contextKey":"","primary":"","shared":false,
+ "modelId":0,"modelType":"","actionType":"","body":"{\"y\":42}","message":"",
+ "session":{"principal":"","token":"","requestId":"","locale":"","metadata":{}},
+ "protocolVersion":0}
+```
+
+`encode` now writes through glaze's exclude-by-key-list form, omitting every
+member that holds its default. The same reply is **44 bytes**:
+
+```
+{"kind":"ok","callId":7,"body":"{\"y\":42}"}
+```
+
+Measured on the change that introduced it, x86-64 Linux, clang 22.1.8,
+glaze 7.4.0, `-O2`:
+
+| message | before | after |
+|---|---|---|
+| `ok` reply, 8-byte payload | 255 B | 44 B |
+| `execute`, 8-byte payload, one-character ids | 262 B | 94 B |
+| `execute`, 8-byte payload, `"Kanban_BoardModel"` / `"CreateSwimlane"` | 291 B | 123 B |
+| `ok` reply, 50-row (1,781 B) payload | 2,426 B (1.36x) | 2,215 B (1.24x) |
+
+**This is not a `kProtocolVersion` bump, and the reason is worth stating
+precisely.** `decode` starts from a default-constructed `Envelope` and reads
+with `error_on_unknown_keys = false`. A key that is *absent* therefore leaves
+its member at exactly the value the omitted key would have written — so a
+peer's decode of the short form and of the old all-keys form produce equal
+envelopes. Nothing is removed from the schema and nothing is retyped, which is
+what the [Action-evolution policy](#action-evolution-policy) requires a bump
+for. `tests/test_wire_omitted_fields.cpp` holds the pre-change bytes as a
+literal and requires the two forms to decode equal, rather than leaving that as
+an argument.
+
+Two properties are load-bearing and are each pinned by a case in that file:
+
+- **`kind` is never omitted.** It is the discriminator; an envelope without one
+  is malformed. It also keeps `"kind"` the first key of every message.
+- **`callId` *is* omitted when it is `0`**, which is why
+  [`detail::peekCallId`](#detailpeekcallid--addressing-a-reply-to-a-message-never-decoded)
+  needed re-checking rather than assuming. It still lands second whenever it is
+  present, and its absence means `0` — which is the value `peekCallId` returns
+  for a message that has none. The two agree by construction.
+
+The failure mode the design has to survive is a member being added or renamed
+without this list following it. Both are compile errors:
+`detail::defaultValuedKeys` `static_assert`s that `Envelope` still has thirteen
+reflected members, and that every name in `detail::kOmittableEnvelopeKeys` is
+one of the reflected keys — a rename would otherwise make glaze report
+`unknown_key` and turn *every* `encode` call into a throw at runtime.
+`detail::isDefaultSession` carries the same assertion for
+`session::Context`'s five members, because a new session member left out of
+that emptiness test would be silently dropped from every envelope whose other
+session fields are empty.
+
+What this does **not** address is the other half of morph#524: `body` still
+holds JSON that is escaped as a JSON string, so a payload is expanded on the
+way out and re-parsed on the way in. That change (`glz::raw_json`) *is* a
+retype, does need a version bump, and interacts with the
+[`body` double-parse hazard](#the-body-double-parse-hazard) and the size cap
+that exists to bound it. It is deliberately not in this change.
 
 ### Control bytes in string fields
 
@@ -139,9 +210,12 @@ A transport that rejects a frame *before* decoding it (e.g.
 must be addressed. `wire::detail::peekCallId(json, maxScanBytes = 1024)`
 recovers `callId` with a bounded prefix scan, returning `0` when absent,
 unparseable, or out of range. The bound keeps the size cap meaningful as a cost
-guard; `callId` is the second field `encode` writes, so it lands well inside
-even a small window, and a `"callId":` sequence cannot be forged from an earlier
-string field because `encode` escapes any embedded quote.
+guard; `callId` is the second field `encode` writes **whenever it is present**
+(it is omitted when `0` — see [Omitted default fields](#omitted-default-fields)),
+so it lands well inside even a small window, and a `"callId":` sequence cannot
+be forged from an earlier string field because `encode` escapes any embedded
+quote. An omitted `callId` and a `peekCallId` that finds none both mean `0`, so
+the omission costs this function nothing.
 
 Replying with a zeroed `callId` is not a harmless degradation: `0` is the
 client's *synchronous-reply discriminator*, so such a reply resumes whatever
@@ -150,13 +224,21 @@ result, while the execute it was meant for never resolves at all.
 
 ### The write-failure arm, and how it is covered
 
-`encode` throws if `glz::write` reports an error. **No `Envelope` value can
-reach that arm.** Glaze only sets a write-time error for
-`invalid_partial_key`/`unknown_key` (its partial-write-by-key-list feature,
-which `encode` does not use) or `invalid_variant_object` (a `std::variant`
-member, which `Envelope` does not have). Confirmed by experiment as well as by
-reading glaze: five flavours of invalid UTF-8, an embedded NUL, a raw control
-byte and an 8 MiB payload all encode successfully.
+`encode` throws if glaze reports a write error. **No `Envelope` value can reach
+that arm.** Glaze sets a write-time error only for
+`invalid_partial_key`/`unknown_key` or `invalid_variant_object` (a
+`std::variant` member, which `Envelope` does not have). Confirmed by experiment
+as well as by reading glaze: five flavours of invalid UTF-8, an embedded NUL, a
+raw control byte and an 8 MiB payload all encode successfully.
+
+`encode` *does* now use a key list — the exclude list of
+[Omitted default fields](#omitted-default-fields) — so `unknown_key` is no
+longer structurally impossible the way it was when `encode` called plain
+`glz::write`. It is instead impossible by construction: every name in that list
+is `static_assert`ed against `glz::reflect<Envelope>::keys` at compile time, so
+a misspelling or a renamed member fails the build rather than throwing from
+every `encode` at runtime. The arm is still unreachable through any `Envelope`
+*value*, which is what `WireCodecOps` exists for.
 
 That left a branch guarding a real invariant permanently uncovered.
 `WireCodecOps` closes it the way this repository already closes the identical
@@ -571,6 +653,9 @@ client.
 | Symbol | Signature | Throws |
 |---|---|---|
 | `encode` | `std::string encode(const Envelope&)` | `std::runtime_error` on serialisation failure |
+| `detail::kOmittableEnvelopeKeys` | `constexpr std::array<std::string_view, 12>` | — the envelope keys `encode` leaves out when the member is at its default (everything but `kind`). |
+| `detail::defaultValuedKeys` | `std::span<const std::string_view> defaultValuedKeys(const Envelope&, std::array<std::string_view, 12>&)` | — which of those keys this envelope omits; writes into the caller's array so the per-message path allocates nothing. |
+| `detail::isDefaultSession` | `bool isDefaultSession(const ::morph::session::Context&)` | — whether the whole `session` object can be left out. |
 | `decode` | `Envelope decode(std::string_view)` | `std::runtime_error` if the input exceeds `kMaxEnvelopeBytes` or is a syntactically malformed envelope. Unknown/extra keys are **ignored** (`error_on_unknown_keys = false`); duplicate keys do **not** throw (last-wins) — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
 
 ### Constants
@@ -584,7 +669,8 @@ client.
 
 | Decision | Choice | Why |
 |---|---|---|
-| Single struct vs. discriminated union | **One `Envelope` struct, all fields present** | The JSON shape is fixed and predictable; callers populate only what their kind needs. Avoids a tagged-union complexity that would add no benefit over a single struct with a `kind` string. |
+| Single struct vs. discriminated union | **One `Envelope` struct; every kind's fields are members of it** | The C++ shape is fixed and predictable; callers populate only what their kind needs. Avoids a tagged-union complexity that would add no benefit over a single struct with a `kind` string. |
+| Shrinking the serialized form | **Omit members at their default, rather than reshaping `Envelope`** | The 255-byte minimal reply was a *serialization* problem, not a struct problem. Omitting defaults needs no `std::optional` members (which would change every call site's `env.typeId = ...`), no variant, and no `kProtocolVersion` bump — a default-initialising, unknown-key-tolerant decoder cannot tell the two forms apart. 255 B → 44 B on a minimal reply. See [Omitted default fields](#omitted-default-fields) (morph#524). |
 | `kind` as a string vs. enum | **`std::string`** | JSON naturally discriminates by string; avoids an enum-to-string mapping. The factory functions (`makeRegister`, etc.) ensure callers never set `kind` manually. |
 | `"execute"` has no factory | **No factory** | `"execute"` envelopes are typically constructed by higher-level APIs (`Client`, `RemoteServer`), not by end users. Adding a factory would be dead code at the wire layer. |
 | Factory functions are `inline` | **Header-only** | The entire wire module lives in the header. Wrapping each factory as a named function keeps construction safe (correct `kind`, no forgotten fields) without a separate compilation unit. |
