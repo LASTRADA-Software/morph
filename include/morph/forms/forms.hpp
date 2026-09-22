@@ -2451,6 +2451,12 @@ void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& propert
 /// Carrying nothing is strictly better than both: one instantiation per
 /// *type*, no cap, and no rejection. The runtime recursion is stopped by
 /// @p visited, not by the type system.
+///
+/// morph therefore imposes no depth limit, but the *compiler* does, and MSVC's
+/// is low: 15 levels of nested aggregate initialisation inside an instantiated
+/// template, past which `A probe{}` in `mergeSchemaExtras` is
+/// `fatal error C1054`. See `docs/spec/forms/forms.md`, "Nesting depth in
+/// practice", for the measurement on all three toolchains.
 /// @tparam Member The static type of the member `annotateBasicMemberProperty`
 ///                 was just applied to.
 /// @param dom      The whole schema DOM, wrapped (so a `$ref`'s `$defs` entry can be found);
@@ -2921,6 +2927,11 @@ template <typename A>
     // so `rejectUnsatisfiableRules` can match the emitted rule nodes' `fields`
     // against it without re-reading the DOM array it just built.
     std::vector<std::string_view> requiredMemberNames{};
+    // The line MSVC reports as `fatal error C1054: compiler limit:
+    // initializers nested too deeply` when A roots a chain of nested
+    // aggregates more than 14 levels deep. That is cl's limit, not morph's
+    // (measured: docs/spec/forms/forms.md, "Nesting depth in practice"); the
+    // diagnostic names neither A nor the nesting, so the pointer lives here.
     A probe{};
 
     // Shared across the whole member walk, not per member: a `$defs` entry two

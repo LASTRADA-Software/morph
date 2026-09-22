@@ -13,7 +13,10 @@
 // whatever depth it has: there is no depth limit, and a self- or mutually-
 // referential type is described rather than rejected (morph#703 -- see
 // docs/spec/forms/forms.md, "Nested aggregates (recursive, cycle-safe)"). Both
-// of those cases are exercised at the bottom of this file.
+// of those cases are exercised at the bottom of this file. What *is* bounded
+// is what a given compiler will instantiate: see `kDeepChainLevels` below for
+// the measured per-toolchain ceiling and why this file's deep chain is not the
+// same length on all four CI legs.
 
 #include <algorithm>
 #include <array>
@@ -121,7 +124,9 @@ struct Bee {
 
 // An acyclic chain four levels past the old 16-level cap, which is the other
 // thing morph#703 removed. Written out rather than macro-generated so the
-// fixture reads as what it is.
+// fixture reads as what it is. How much of it each toolchain can actually
+// compile is decided at `DeepChain` below -- and it is not the same number on
+// all three.
 struct Deep0 {
     int leaf = 0;
 };
@@ -185,6 +190,45 @@ struct Deep19 {
 struct Deep20 {
     Deep19 inner;
 };
+
+// How deep the chain the deep-nesting case actually uses is. Not a morph
+// limit -- morph has had none since morph#703 -- but a *compiler* one, and it
+// is MSVC's. `mergeSchemaExtras<A>` default-constructs `A probe{}`, and for a
+// chain-rooted action that one initialiser is as deeply nested as the chain
+// is; past a point cl gives up at that line with
+//
+//   fatal error C1054: compiler limit: initializers nested too deeply
+//
+// which names neither the action type nor the nesting, and so is strictly
+// worse than the static_assert morph#703 removed. Measured rather than
+// guessed, on cl 19.44 / 19.50 / 19.51 (CI runs 19.51.36256.0), by bisecting a
+// reduced `template <typename A> void f() { A probe{}; }` over a chain of
+// plain aggregates -- see docs/spec/forms/forms.md, "Nesting depth in
+// practice", for the numbers and the method:
+//
+//   cl                  15 levels of nested aggregate initialisation; the
+//                       16th is C1054. Only inside an instantiated template:
+//                       at namespace scope cl took 120 without complaint.
+//   clang 22 / clang-cl >= 700
+//   gcc 16              >= 800
+//
+// The action type is itself one of cl's 15 levels, so cl tops out at a
+// 14-link chain below it. 12 is what this fixture keeps there: one link of
+// margin, because forms.hpp default-constructs a probe at four sites and a
+// future one could add a wrapper level. That is *below* the 16-level cap
+// morph#703 removed, so on MSVC this case no longer demonstrates what it was
+// written to demonstrate -- it still proves the walk descends and annotates
+// every level, which is the part that can regress. The 20-level case is real
+// coverage on the other three CI legs (Linux gcc, Linux clang, Windows
+// clang-cl), and reducing it to 12 everywhere would have deleted that
+// coverage to please one compiler.
+#if defined(_MSC_VER) && !defined(__clang__)
+using DeepChain = Deep12;
+inline constexpr int kDeepChainLevels = 12;
+#else
+using DeepChain = Deep20;
+inline constexpr int kDeepChainLevels = 20;
+#endif
 
 // Specimen and Attachment are each used from two places below, so glaze
 // deduplicates both via a shared `$defs` entry referenced by `$ref`.
@@ -303,9 +347,10 @@ using nestedforms::Attachment;
 using nestedforms::Ay;
 using nestedforms::BareQuantityRecord;
 using nestedforms::DeclaredOptionalRecord;
-using nestedforms::Deep20;
+using nestedforms::DeepChain;
 using nestedforms::DeepRecord;
 using nestedforms::DeepSpecimen;
+using nestedforms::kDeepChainLevels;
 using nestedforms::Origin;
 using nestedforms::PlainMetaRecord;
 using nestedforms::Provenance;
@@ -760,6 +805,13 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: a self-referential nested-aggrega
 // walk is stopped by the `$defs` visited set -- a cyclic type is always in
 // `$defs`, because glaze inlines only a type used exactly once in the whole
 // schema and a self-reference is never that.
+//
+// The two cyclic cases are unconditional and cost no initialiser nesting at
+// all: a cycle is bounded by the `$defs` visited set at *runtime*, and the
+// probe for `SelfReferentialAction` is two levels deep whatever the type
+// graph does. Only the acyclic-chain case below is toolchain-capped, and only
+// on MSVC -- see `kDeepChainLevels`. So removing the cap is still regression-
+// tested on every leg; what one leg cannot reach is 20 levels of it.
 
 struct SelfReferentialAction {
     std::int64_t id = 0;
@@ -773,7 +825,7 @@ struct MutuallyReferentialAction {
 
 struct DeeplyNestedAction {
     std::int64_t id = 0;
-    Deep20 deep;
+    DeepChain deep;
 };
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: a self-referential member yields a finite $ref-cyclic schema",
@@ -847,22 +899,26 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: a mutually referential pair yield
     CHECK(beeRequired->get_array().size() == 2);
 }
 
-TEST_CASE("Forms::SchemaJson::NestedAggregate: nesting past the old 16-level cap compiles and is annotated",
+TEST_CASE("Forms::SchemaJson::NestedAggregate: a deep acyclic chain compiles and is annotated at every level",
           "[forms][nested][issue703]") {
+    // 20 levels -- four past the cap morph#703 removed -- everywhere except
+    // MSVC, where cl's own 15-level initialiser-nesting limit caps it at 12:
+    // see `kDeepChainLevels`. The name no longer says "past the old 16-level
+    // cap" because on one of the four CI legs that is not what runs.
     auto const& json = morph::forms::schemaJson<DeeplyNestedAction>();
     REQUIRE_FALSE(json.empty());
 
     glz::generic_u64 dom{};
     REQUIRE_FALSE(glz::read_json(dom, json));
 
-    // Walk all twenty levels down and check the leaf is annotated: a
-    // recursion that gave up part-way would leave `x-order` missing somewhere
-    // along this chain.
+    // Walk every level down and check the leaf is annotated: a recursion that
+    // gave up part-way would leave `x-order` missing somewhere along this
+    // chain.
     auto const* node = morph::forms::detail::findMember(dom, "properties");
     REQUIRE(node != nullptr);
     node = morph::forms::detail::findMember(*node, "deep");
     REQUIRE(node != nullptr);
-    for (int level = 0; level < 20; ++level) {
+    for (int level = 0; level < kDeepChainLevels; ++level) {
         auto const* const props = morph::forms::detail::findMember(*node, "properties");
         REQUIRE(props != nullptr);
         auto const* const inner = morph::forms::detail::findMember(*props, "inner");

@@ -2689,7 +2689,9 @@ struct Bee { std::string tag; std::vector<Ay>  ays;  };
 — one `$defs` entry, self-referential by `$ref`, with `x-order`, `title` and
 `required` applied exactly as for an acyclic nested aggregate. The mutually
 referential `Ay`/`Bee` pair behaves the same way, and a straight 20-level
-acyclic chain — four levels past the old cap — compiles too. Compiled against
+acyclic chain — four levels past the old cap — compiles too, on this toolchain
+(see [Nesting depth in practice](#nesting-depth-in-practice): MSVC stops
+lower). Compiled against
 the previous revision, the identical fixture fails with three
 `static assertion failed ... '16UL < kMaxNestDepth'` errors. That control is
 what says the change is responsible for the difference, rather than the fixture
@@ -2700,6 +2702,63 @@ The cap existed only because a depth counter cannot tell a cycle from a deep
 graph; with nothing carried in the type system there is nothing to bound. It
 was introduced by morph#573 step 3 where previously there had been no limit at
 all, so removing it restores the older contract rather than inventing a new one.
+
+#### Nesting depth in practice
+
+morph imposes no depth limit. **The compiler does**, and on one of the three
+supported toolchains the ceiling is low enough to matter, so it is recorded
+here rather than discovered again from a build failure.
+
+`mergeSchemaExtras<A>` opens with `A probe{}`, and for an action rooted at a
+chain of nested aggregates that single initialiser is as deeply nested as the
+chain. MSVC caps that. Measured by bisecting a reduced
+
+```cpp
+struct Deep0 { int leaf = 0; };
+struct Deep1 { Deep0 inner; };   // ... through DeepN
+template <typename A> int make() { A probe{}; return 0; }
+int sink = make<DeepN>();
+```
+
+| toolchain | deepest accepted | how it fails |
+| --- | --- | --- |
+| `cl` 19.44, 19.50, 19.51 (`/std:c++20` and `/std:c++latest`) | **15** nested initialiser levels | 16 → `fatal error C1054: compiler limit: initializers nested too deeply` |
+| clang 22.1.8, and clang-cl | ≥ 700 | segfaults at 800 (stack exhaustion, machine-dependent) |
+| g++ 16.2.1 | ≥ 800 | not reached |
+
+Two things about MSVC's number. It is **specific to an instantiated template**:
+the same chain initialised at namespace scope compiled at 120 levels without
+complaint, so it is not a limit on aggregate nesting as such but on the
+initialiser MSVC builds while instantiating. And it is **lower than the
+16-level cap this change removed** — a 15- or 16-level chain would have hit
+C1054 on MSVC even before morph#703, ahead of the `static_assert` that was
+supposed to be the diagnostic. Nothing in the repository had ever nested more
+than three levels, so nobody found out.
+
+The action type counts as one of the 15, so `cl` accepts a chain of **14**
+below it. `tests/test_nested_forms.cpp` uses 20 (four past the removed cap)
+everywhere and 12 on MSVC — one link of margin — selected at `kDeepChainLevels`
+with the measurement in a comment beside it.
+
+C1054 is a worse diagnostic than the `static_assert` it replaced: it names
+neither the action type nor the nesting, and points at `forms.hpp`'s `A probe{}`
+rather than at the domain type responsible. That is a real cost of removing the
+cap, and it is not recoverable — morph cannot detect a limit the compiler does
+not expose. What is recoverable is knowing the number, which is what this
+section is for.
+
+**Verification status.** The per-toolchain numbers above are *measured*, on the
+reduced probe, not on morph's own headers: `cl` via Compiler Explorer's
+19.44/19.50/19.51 (CI runs 19.51.36256.0), clang and g++ locally. The
+consequence for morph's real fixture — that a 12-link chain under
+`DeeplyNestedAction` compiles on `cl` — is *inferred* from the reduced
+measurement plus one link of margin, and is confirmed or refuted by the next
+`Windows / cl-*` run.
+
+Nothing *executes* these numbers: they are a record, not a check, so a
+toolchain upgrade that moves MSVC's limit down would be found by a red
+`Windows / cl-*` leg rather than by a named guard. A compile-check on the model
+of `forms_dag_budget.cmake` is filed as morph#744.
 
 A "diamond" was never affected and still is not — the same type reused from two
 unrelated places in the schema, e.g. an `Address` nested under both a `Company`
