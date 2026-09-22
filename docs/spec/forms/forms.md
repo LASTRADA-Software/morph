@@ -1555,6 +1555,54 @@ Display formatting is the renderer's duty; the wire stays canonical:
   `qtLocale.negativeSign` from the same object at all three call sites. The
   member is defaulted, so a caller that names only the separators is unchanged.
 
+  **`displayLocale` is a `QLocale` *name*; Qt resolves it, and morph does not**
+  (morph#629). `DynamicForm.displayLocale` (`src/qt/forms/qml/DynamicForm.qml`)
+  is a plain string, and every locale fact the two numeric edges receive comes
+  out of the `QLocale` that `Qt.locale(displayLocale)` returns — not out of the
+  string. That resolution is Qt's, and it is **not** an identity: a name with no
+  script subtag resolves to the language/territory's *default* script, which for
+  a script-split locale need not be the script whose digits the caller wanted.
+  Measured with Qt 6.11.2 by enumerating
+  `QLocale::matchingLocales(AnyLanguage, AnyScript, AnyTerritory)` — 711
+  locales, eleven distinct `zeroDigit` values — and then reconstructing a
+  `QLocale` from each group's own reported `name()`:
+
+  ```
+  mni_IN       zeroDigit U+09E6    matchingLocales entry named mni_IN: U+ABF0
+  ff_BF        zeroDigit U+0030    matchingLocales entry named ff_BF:  U+1E950 (Adlam)
+  ff_Adlm_BF   zeroDigit U+1E950
+  ```
+
+  Nine of the eleven representative names round-trip; those two do not.
+  `QLocale("ff_BF")` is the Latin-script Fulah and reports ASCII digits, while
+  the `matchingLocales` entry whose `name()` is `ff_BF` is the Adlam-script one.
+  The third row is the remedy and was measured through QML's `Qt.locale(...)`,
+  so the QML path resolves identically.
+
+  **The contract, therefore: the name is the caller's and its resolution is
+  Qt's.** A caller that wants a particular script passes the script-qualified
+  form — `ff_Adlm_BF`, not `ff_BF`. morph neither validates nor normalises
+  `displayLocale`, and deliberately does not warn when
+  `Qt.locale(displayLocale).name() !== displayLocale`: Qt normalises names for
+  many reasons unrelated to scripts, so such a warning would fire on callers
+  with nothing wrong with them, and there is no measured consumer to protect.
+  Measured on this revision, the complete set of names anything in this tree
+  puts through `Qt.locale(displayLocale)` is `{C, de, eu_ES}` — the property's
+  default, the two entries of the example's `ComboBox` model
+  (`examples/forms/gui_qml/qml/Main.qml`), and one test locale. None is
+  script-split, so nothing here can reach the behaviour above. A rung or example
+  that adopts a script-split name is the trigger to revisit this paragraph.
+
+  Two consequences worth stating rather than leaving to be re-derived. First,
+  the round trip is safe under a mis-resolution: both edges read their facts
+  from the *same* `qtLocale` object, so entry and display agree on whatever Qt
+  resolved, and the failure mode is "quietly the wrong locale", never "the
+  display edge emits text the entry edge rejects". Second, `displayLocale` is
+  also the **translation catalog key** (`catalog.lookup(displayLocale, …)`), and
+  there it is used *unresolved* — the raw string. So the one property is read
+  two ways, and a script-qualified name is the spelling the catalog must be
+  keyed on as well.
+
   **A leading positive sign is accepted on entry and never emitted on
   display** (morph#596). `normalizeLocaleNumber` reads
   `NumericLocale::positiveSign`, matched exactly as `negativeSign` is —
