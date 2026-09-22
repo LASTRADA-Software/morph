@@ -204,17 +204,73 @@ overhead from business logic):
 
 - **Latency** — 2000 serial (concurrency-1) round trips; reports p50/p95/p99
   wall time in milliseconds (nearest-rank percentile over the sorted sample).
-- **Throughput** — a 500 ms window at each of concurrency 1/2/4/8/16, reporting
-  executes/second.
-- Writes `bench_dispatch_latency.json` into the build directory (`{"p50_ms":
-  ..., "p95_ms": ..., "p99_ms": ..., "throughput": [{"concurrency": ...,
-  "executes_per_sec": ...}, ...]}`) so successive runs can be archived and
-  diffed for a regression.
-- Enforces two coarse regression gates via `REQUIRE`: `p99 <=
+- **Throughput** — a window at each of concurrency 1/2/4/8/16, reporting
+  executes/second (`MORPH_BENCH_WINDOW_MS`, default 200 ms).
+- **Both phases run `MORPH_BENCH_TRIALS` times (default 5)**, and the run
+  reports the best, median and worst trial of every figure rather than one
+  number — morph#687, below.
+- Writes `bench_dispatch_latency.json` into the build directory. The
+  `p50_ms`/`p95_ms`/`p99_ms`/`throughput` keys of the old schema are still
+  there and now carry the *best* trial; `trials`,
+  `latency_samples_per_trial`, `throughput_window_ms`,
+  `p99_ms_median_trial`, `p99_ms_worst_trial`, each throughput point's
+  `executes_per_sec_worst_trial`, and a `trial_detail` array with every
+  trial's own figures are additive. Successive runs are archived and diffed
+  for a regression, and `trial_detail` is what a diff finer than the gates
+  below has to read.
+- Enforces two coarse regression gates via `CHECK`: `p99 <=
   MORPH_BENCH_P99_MS_MAX` (default 50.0 ms) and concurrency-1 throughput `>=
   MORPH_BENCH_MIN_THROUGHPUT` (default 500.0 executes/sec). Both are
   environment-variable-overridable so CI hardware differences don't need a
-  code change.
+  code change, and both read the **best** trial — see below.
+
+**The serial phase used to report the test harness's polling step (morph#687).**
+It waited on each reply with `morph::testing::WaitReply`, whose `await()` calls
+`waitUntil`, which sleeps 5 ms between predicate checks. Measured on
+`e9dad027`, same binary, 20 processes per configuration, Release:
+
+| | idle | 16-way oversubscribed |
+| --- | --- | --- |
+| p50 | 5.0562 / 5.0714 / 5.0740 ms | 0.0166 / 0.0167 / 0.0216 ms |
+| c=1 executes/sec | 171467 / 175928 / 178855 | 311.9 / 1749.9 / 18627.1 |
+
+A **302x** swing in the headline figure, selected by machine load, and neither
+mode was the dispatch latency: the same idle processes reported ~176k
+executes/sec at concurrency 1, i.e. a round trip of about 5.7 µs. An idle
+machine reported one whole sleep step per call; a busy one reported the case
+where the reply beat the caller's first predicate check. 311.9 executes/sec is
+also *below* the 500/sec floor the file has always enforced, so the gate was
+already firing on machine load rather than on morph. The benchmark now uses a
+local condition-variable reply sink, and a blocking drain at the end of each
+throughput window for the same reason — the old polling drain sat inside the
+window's own elapsed time.
+
+**It reports a distribution because a wall-clock figure has no regime to pin.**
+`morph_bench_alloc` answers morph#687 by pinning its race, and an allocation
+count then comes out exact. Contention is not a mode, it is a tax, so this
+benchmark takes morph#687's other option and reports the spread over trials.
+The gates read the best trial: contention can only make latency worse and
+throughput lower, so the best of N is the least contaminated estimate of what
+the code costs, while a real regression moves every trial including the best.
+Measured, 20 processes per configuration, best-of-five figures:
+
+| | p99 (ms) | c=1 executes/sec |
+| --- | --- | --- |
+| Release idle | 0.0090 / 0.0096 / 0.0104 | 173169 / 176282 / 181641 |
+| Release loaded | 0.0181 / 0.0210 / 0.0259 | 56825 / 61211 / 63479 |
+| Debug idle | 0.0325 / 0.0343 / 0.0360 | 42560 / 43150 / 43996 |
+| Debug loaded | 0.0598 / 0.0608 / 1.8717 | 1549 / 22684 / 22990 |
+
+The Debug rows are the ones the defaults must hold for: the only CI leg setting
+`MORPH_BUILD_LOAD_TESTS=ON` is `linux-all-features`, on the `gcc-debug` /
+`clang-debug` presets, and its `ctest --preset` passes no label filter. **The
+two ceilings are therefore unchanged, and that is a measurement rather than
+timidity**: Debug-under-load still spans 28x on throughput and 57x on p99 for
+the same binary, so no pair of constants separates a regression from a
+contended runner. 50 ms is ~27x the worst best-trial p99 measured and 500/sec
+~3.1x below the worst best-trial throughput — a dispatch path made three times
+slower passes both. That limit is morph#707; setting the floor from a 12-core
+box was tried and turned 3 of 20 Debug-under-load processes red.
 
 The echo model/action (`BenchEchoModel`/`BenchEchoAction`) are declared at
 file scope, not inside the file's anonymous namespace with its other local
