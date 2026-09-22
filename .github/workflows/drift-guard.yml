@@ -443,6 +443,47 @@ jobs:
       - name: Self-test the mutation-survivor citation gate
         run: python3 scripts/check_mutation_survivors.py --self-test
 
+  # ── Every line-cited allowlist's citations, resolved in one place ──────
+  # Three files in this repository cite source lines by `{file, line, source}`:
+  # scripts/branch_partial_allowlist.json, scripts/error_path_allowlist.json
+  # (wired up, entries currently empty) and scripts/mutation_survivors.json.
+  # All three are resolved by one function, and until morph#705 they were
+  # resolved by *different jobs* -- the survivors file by the job above, the
+  # branch allowlist 20 minutes into ci.yml's coverage leg -- with no ordering
+  # between them. So an author fixed the one CI named, pushed, and met the
+  # other a cycle later.
+  #
+  # Three occurrences in one week, the instructive one being morph#710: that
+  # lane ran every allowlist locally *because it was told to*, then committed
+  # clang-tidy fixes that inserted one line above three citations and went red
+  # on two jobs. The gates were green when run and stale when pushed. Nothing
+  # re-ran them, because running them was a manual act at a moment the author
+  # chose.
+  #
+  # scripts/check_allowlist_citations.py is the single command that answers for
+  # all three, locally and here. It reads JSON and headers only -- no build, no
+  # network, no coverage data -- which is what lets it run per-PR in seconds
+  # instead of behind a build leg. The per-allowlist *site* checks (is this
+  # still a partial branch? still a throw/catch arm?) stay where they are,
+  # because each needs the LCOV this job deliberately does not have; only the
+  # citation resolution aggregates.
+  #
+  # It also audits check_branch_coverage.py's PENDING_CONTEXT in both
+  # directions (morph#701's migration list), so that list can only shrink: a
+  # pin nothing cites, one whose text stopped being ambiguous, and one every
+  # citing entry has already migrated past are each an error.
+  allowlist-citation-lint:
+    name: Line-cited allowlists (every citation, one run)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the allowlist-citation aggregate
+        run: python3 scripts/check_allowlist_citations.py --self-test
+
+      - name: Resolve every line-cited allowlist's citations
+        run: python3 scripts/check_allowlist_citations.py
+
   # ── The coverage-object gate's own self-test ───────────────────────────
   # The gate itself (scripts/check_coverage_objects.sh) runs inside
   # scripts/coverage.sh, in ci.yml's linux-coverage job, because it compares the
