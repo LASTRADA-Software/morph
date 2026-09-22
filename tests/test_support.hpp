@@ -247,6 +247,34 @@ private:
 // Catch2 `BENCHMARK` busy-waits on `yield()` rather than sleeping, and
 // `examples/common/testkit/test_fault_proxy.cpp`'s assertion across `pumpUntil`
 // is a *lower* bound, which quantisation can only ever make easier to satisfy.
+//
+// ── What the step costs a suite run, measured ────────────────────────────────
+//
+// morph#708 listed this as unmeasured. It is not free, and the bill reads the
+// same two independent ways. Measured on an otherwise-quiet 12-core Linux box
+// (clang 22.1.8, Release, load average 0.9-2.1), one binary instrumented to
+// take the step from the environment so that the two arms differ in nothing
+// else — not even code layout:
+//
+//     poll step | inside waitUntil | morph_tests wall | serial ctest
+//     ----------+------------------+------------------+---------------
+//        5 ms   | 17.27 s (n=3)    | 84.9 / 88.2 s    | 110.6 / 111.5 s
+//        1 ms   |  7.53 s (n=3)    | 75.2 / 77.5 s    | 102.0 / 104.3 s
+//
+// The call count is identical at both steps — 2691 calls, 3443 sleeps at 5 ms
+// against 7161 at 1 ms — so the 9.7 s between the first column's rows is the
+// quantisation and nothing else. It is not more waiting; it is the same waiting
+// rounded up. The wall-clock delta agrees with it, about 10 s on the binary and
+// about 8 s under `ctest`, which is how CI runs the suite. Roughly 11% of a
+// `morph_tests` run is this step.
+//
+// The step is nonetheless left at 5 ms, and lowering it is a separate change
+// that needs its own evidence. 433 call sites inherit this default, and the
+// first trials of the table above were taken while another build held this
+// machine at load 13-16, where 1 ms came out *slower* by 43 s rather than
+// faster by 10. A default that only wins on an idle machine is how a suite
+// becomes flaky on a shared runner rather than faster on one, and the runner is
+// the configuration that would have to be measured before changing it.
 
 /// @brief Default polling budget for `waitUntil`. Picked to cover the slowest
 ///        TSan/Valgrind runs without making green tests visibly slow.
