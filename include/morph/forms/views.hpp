@@ -193,14 +193,31 @@ concept HasViewActions = requires {
     if (hidden) {
         entry["v-hidden"] = true;
     }
+    // Deliberately still a subscript, and one of only two reads in this file
+    // that are: `"properties"` is guaranteed present rather than merely
+    // likely. glaze's schema writer emits the key unconditionally for every
+    // reflectable aggregate (measured -- see deriveColumns below), and
+    // deriveColumns, this function's only caller, has already returned "[]"
+    // if it were absent. A findMember null check here would add a second
+    // branch nothing can take -- untestable code and a future branch-coverage
+    // allowlist entry, which is the cost morph#706 warns against paying (see
+    // `docs/spec/forms/forms.md`, "Reading the DOM with `findMember`").
     auto const& propsObj = rowDom["properties"].get_object();
     auto iter = propsObj.find(field);
     if (iter == propsObj.end()) {
         return entry;  // declared/derived field not on the row type: bare column, no crash
     }
     auto const& prop = iter->second;
-    if (prop.contains("x-decimalPlaces")) {
-        entry["x-decimalPlaces"] = prop["x-decimalPlaces"];
+    if (auto const* const decimals = ::morph::forms::detail::findMember(prop, "x-decimalPlaces")) {
+        // A *write* into the entry being built: `operator[]`'s insert is the
+        // behaviour wanted, exactly as morph#706 left `forms.hpp`'s writes
+        // alone. Converting a write to a null check would change behaviour
+        // rather than make it safe. The directive is here, and on the two
+        // below, only because converting the read beside it moved this line
+        // into the diff, and `clang-tidy-diff` reports on changed lines --
+        // the piecemeal bill morph#677 describes.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        entry["x-decimalPlaces"] = *decimals;
     }
     // A Quantity field's ExtUnits sits directly on the property node when its
     // Quantity type occurs only once in Row (glaze inlines a single-use
@@ -209,15 +226,20 @@ concept HasViewActions = requires {
     // occurs on more than one property (see forms.md's "CFSharedDefFields"
     // fixture) — deriveColumns must read whichever shape schemaJson<Row>()
     // actually produced for this particular row type.
-    if (prop.contains("ExtUnits")) {
-        entry["ExtUnits"] = prop["ExtUnits"];
-    } else if (prop.contains("$ref") && rowDom.contains("$defs")) {
-        auto const ref = prop["$ref"].get_string();
-        auto const defName = ref.substr(ref.find_last_of('/') + 1);
-        auto const& defs = rowDom["$defs"].get_object();
-        auto defIter = defs.find(defName);
-        if (defIter != defs.end() && defIter->second.contains("ExtUnits")) {
-            entry["ExtUnits"] = defIter->second["ExtUnits"];
+    if (auto const* const units = ::morph::forms::detail::findMember(prop, "ExtUnits")) {
+        // A write; see the directive above.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        entry["ExtUnits"] = *units;
+    } else if (auto const* const ref = ::morph::forms::detail::findMember(prop, "$ref")) {
+        auto const refText = ref->get_string();
+        auto const defName = refText.substr(refText.find_last_of('/') + 1);
+        auto const* const defs = ::morph::forms::detail::findMember(rowDom, "$defs");
+        auto const* const def = (defs == nullptr) ? nullptr : ::morph::forms::detail::findMember(*defs, defName);
+        auto const* const defUnits = (def == nullptr) ? nullptr : ::morph::forms::detail::findMember(*def, "ExtUnits");
+        if (defUnits != nullptr) {
+            // A write; see the directive above.
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+            entry["ExtUnits"] = *defUnits;
         }
     }
     return entry;
@@ -266,11 +288,14 @@ template <typename V, typename Row>
             columns.emplace_back(buildColumnEntry(rowDom, std::string{colOverride.field}, label, colOverride.hidden));
         }
     } else {
+        // Guaranteed present -- the early return above has already tested it.
+        // See buildColumnEntry for why this stays a subscript.
         auto const& propsObj = rowDom["properties"].get_object();
         std::vector<std::pair<std::string, std::uint64_t>> ordered;
         ordered.reserve(propsObj.size());
         for (auto const& [name, prop] : propsObj) {
-            auto const order = prop.contains("x-order") ? prop["x-order"].template get<std::uint64_t>() : 0;
+            auto const* const orderNode = ::morph::forms::detail::findMember(prop, "x-order");
+            auto const order = (orderNode == nullptr) ? 0 : orderNode->template get<std::uint64_t>();
             ordered.emplace_back(name, order);
         }
         std::ranges::sort(ordered, [](auto const& a, auto const& b) { return a.second < b.second; });

@@ -298,7 +298,8 @@ same syntax, and only one of them is safe to leave unchecked:
 member, or `nullptr` when `node` is not an object or holds no such key; the
 caller branches on that instead of subscripting. It replaces a
 `contains(key)` + `operator[](key)` pair, which probed the same map twice, at
-every read site in `forms.hpp` and `instance_constraints.hpp`. The pointer is
+every read site in `forms.hpp`, `instance_constraints.hpp` and `views.hpp`
+whose key is not guaranteed present — see "Not every read" below. The pointer is
 into `node`'s own storage, so a caller may write through it — and, exactly like
 the reference `operator[]` returns, it is invalidated by any insertion into
 `node`.
@@ -333,6 +334,51 @@ file red rather than leaving this rationale quietly stale.
 The sites that still carry a standing
 `NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)` are the
 writes, and the directive now says so.
+
+**Not every read** (morph#714). `views.hpp` reads a *const* DOM, where
+`operator[]` throws rather than inserts — a different and louder failure than
+the mutating walkers', but still one the caller cannot see coming. Its reads
+were converted with one deliberate exception, stated here because the
+exception is the interesting part: **a read whose key is guaranteed present by
+construction keeps its subscript.** Turning such a read into a null check adds
+a branch nothing can take — untestable code, and a branch-coverage allowlist
+entry someone must later write a justification for. That is a cost, not a
+safety improvement, and it is the lesson morph#706 paid for.
+
+Two reads of `rowDom["properties"]` are that exception. glaze's schema writer
+emits `"properties"` unconditionally for every reflectable aggregate, including
+a zero-member one (measured with a standalone `glz::write_json_schema<T>()`
+probe; `llvm-cov` reports 0 hits on `deriveColumns`'s `!contains("properties")`
+early return across all ten instantiations the suite exercises), and
+`deriveColumns` has already tested the key before `buildColumnEntry` can read
+it. So the split in `views.hpp` is six reads converted and two left, against
+21 writes untouched — measured with
+
+```
+clang-tidy -p build/clang-debug --extra-arg=-std=c++23 \
+    --extra-arg=-Wno-missing-include-dirs --quiet \
+    --checks='-*,cppcoreguidelines-pro-bounds-avoid-unchecked-container-access' \
+    include/morph/forms/views.hpp
+```
+
+which reports 29 findings in the file before (21 writes + 8 reads) and 20
+after, with no new category. 23 of those 29 remain in the source; three of them
+now carry a
+`NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)`, because
+converting a read moved the *write* beside it onto a changed line and
+`clang-tidy-diff` reports on changed lines. Those three are the first
+suppressions of this check in `views.hpp`, and each says in one word what it
+is: a write. The other 18 writes are untouched and still unsuppressed, which is
+the piecemeal bill morph#677 describes and does not try to settle here.
+
+Counted a second way as well, through `tests/test_views.cpp`, a translation unit
+that actually *instantiates* the templates: the two measurements agree exactly,
+site for site, before and after. That is worth recording because it does
+**not** generalise — `forms.hpp` under-reports when analysed as a main
+file, because a subscript inside an uninstantiated template body is dependent
+and the check cannot see it. `views.hpp`'s subscripts are all on the
+non-dependent `glz::generic_u64`, so there is nothing for instantiation to
+reveal.
 
 ## Field metadata — `FieldMeta`
 
