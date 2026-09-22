@@ -161,8 +161,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a1fdfff80a8b535fb2c19621d6cf13d4e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the configured maximum depth, or <span class="tt">std::nullopt</span> if unbounded.  <br /></td></tr>
 <tr class="memitem:a4be4a6a891c066c4c0af7e902f101739" id="r_a4be4a6a891c066c4c0af7e902f101739"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4be4a6a891c066c4c0af7e902f101739">markDone</a> (uint64_t itemId) override</td></tr>
 <tr class="memdesc:a4be4a6a891c066c4c0af7e902f101739"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tombstones <code class="param">itemId</code>. No-op if not found.  <br /></td></tr>
-<tr class="memitem:ae9a56e0f6a28daa3e4047ae8ecc052f5" id="r_ae9a56e0f6a28daa3e4047ae8ecc052f5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae9a56e0f6a28daa3e4047ae8ecc052f5">setAttempts</a> (uint64_t itemId, uint32_t attempts) override</td></tr>
-<tr class="memdesc:ae9a56e0f6a28daa3e4047ae8ecc052f5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Persists an updated attempt count for <code class="param">itemId</code>. No-op if not found.  <br /></td></tr>
+<tr class="memitem:aa2f0108bf94c389f23caaaeda9aaa8be" id="r_aa2f0108bf94c389f23caaaeda9aaa8be"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa2f0108bf94c389f23caaaeda9aaa8be">setAttempts</a> (uint64_t itemId, <a class="el" href="../../d5/da0/classmorph_1_1offline_1_1Attempts.html">Attempts</a> attempts) override</td></tr>
+<tr class="memdesc:aa2f0108bf94c389f23caaaeda9aaa8be"><td class="mdescLeft">&#160;</td><td class="mdescRight">Persists an updated attempt count for <code class="param">itemId</code>. No-op if not found.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
@@ -171,7 +171,7 @@ Protected Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Reference append-only, NDJSON-backed <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span> that persists <span class="tt">payload</span>, <span class="tt">idempotencyKey</span>, and <span class="tt">attempts</span> across process restarts with no third-party dependency. </p>
-<p>Each mutation (<span class="tt"><a class="el" href="#a128b884f80e0ad01d4c5142466b9c0b0" title="Appends payload with no idempotency key.">enqueue</a></span>, <span class="tt"><a class="el" href="#a4be4a6a891c066c4c0af7e902f101739" title="Tombstones itemId. No-op if not found.">markDone</a></span>, <span class="tt"><a class="el" href="#ae9a56e0f6a28daa3e4047ae8ecc052f5" title="Persists an updated attempt count for itemId. No-op if not found.">setAttempts</a></span>, <span class="tt"><a class="el" href="#af6a72b2805560d317866b924d4cb8039" title="Stamps an idempotency key onto an already-enqueued item. No-op if itemId is not found....">setIdempotencyKey</a></span>) appends one JSON line and immediately <span class="tt">fflush</span>+<span class="tt">fsync</span>s it, so it is a committed transaction before the call returns. On construction, the file is replayed line by line (last-write-wins per id — a later "put" overwrites an earlier one, a "done" tombstones it) and then rewritten in compacted form (one "put" line per surviving item), which both bounds file growth and heals a torn trailing line left by a crash mid-write — the same tolerance <span class="tt">FileActionLog::entries()</span> (<span class="tt"><a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">include/morph/journal/file_action_log.hpp</a></span>) gives a malformed <em>trailing</em> line: it is logged and skipped, not thrown: a malformed line anywhere else is genuine corruption and is rethrown.</p>
+<p>Each mutation (<span class="tt"><a class="el" href="#a128b884f80e0ad01d4c5142466b9c0b0" title="Appends payload with no idempotency key.">enqueue</a></span>, <span class="tt"><a class="el" href="#a4be4a6a891c066c4c0af7e902f101739" title="Tombstones itemId. No-op if not found.">markDone</a></span>, <span class="tt"><a class="el" href="#aa2f0108bf94c389f23caaaeda9aaa8be" title="Persists an updated attempt count for itemId. No-op if not found.">setAttempts</a></span>, <span class="tt"><a class="el" href="#af6a72b2805560d317866b924d4cb8039" title="Stamps an idempotency key onto an already-enqueued item. No-op if itemId is not found....">setIdempotencyKey</a></span>) appends one JSON line and immediately <span class="tt">fflush</span>+<span class="tt">fsync</span>s it, so it is a committed transaction before the call returns. On construction, the file is replayed line by line (last-write-wins per id — a later "put" overwrites an earlier one, a "done" tombstones it) and then rewritten in compacted form (one "put" line per surviving item), which both bounds file growth and heals a torn trailing line left by a crash mid-write — the same tolerance <span class="tt">FileActionLog::entries()</span> (<span class="tt"><a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">include/morph/journal/file_action_log.hpp</a></span>) gives a malformed <em>trailing</em> line: it is logged and skipped, not thrown: a malformed line anywhere else is genuine corruption and is rethrown.</p>
 <p>New ids resume from the highest id ever seen in the file (including tombstoned ones), so a fresh item can never collide with an old tombstone — unlike <span class="tt">FileActionLog</span>'s process-local <span class="tt">seq</span>, which does not need this property because it never reuses/removes entries.</p>
 <dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe (guarded by an internal mutex). Not safe for multiple processes to open the same path concurrently — same restriction as <span class="tt">FileActionLog</span>.</dd></dl>
 <dl class="section user"><dt>Idempotency-key dedup</dt><dd>A keyed <span class="tt"><a class="el" href="#a128b884f80e0ad01d4c5142466b9c0b0" title="Appends payload with no idempotency key.">enqueue</a></span> does a linear scan over the currently-pending items to look for a matching <span class="tt">idempotencyKey</span> — O(pending items) per call. That is fine at the queue depths this reference implementation targets; a host with high-volume keyed enqueues should prefer <span class="tt"><a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html" title="Reference SQLite-backed IOfflineQueue: persists payload, idempotencyKey, and attempts across process ...">SqliteOfflineQueue</a></span>, whose dedup is index-backed. </dd></dl>
@@ -481,8 +481,8 @@ Protected Member Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="ae9a56e0f6a28daa3e4047ae8ecc052f5" name="ae9a56e0f6a28daa3e4047ae8ecc052f5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae9a56e0f6a28daa3e4047ae8ecc052f5">&#9670;&#160;</a></span>setAttempts()</h2>
+<a id="aa2f0108bf94c389f23caaaeda9aaa8be" name="aa2f0108bf94c389f23caaaeda9aaa8be"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa2f0108bf94c389f23caaaeda9aaa8be">&#9670;&#160;</a></span>setAttempts()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -498,7 +498,7 @@ Protected Member Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">uint32_t</td>          <td class="paramname"><span class="paramname"><em>attempts</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../d5/da0/classmorph_1_1offline_1_1Attempts.html">Attempts</a></td>          <td class="paramname"><span class="paramname"><em>attempts</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -517,7 +517,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019">morph::offline::IOfflineQueue</a>.</p>
+<p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#afe70e6b66397727a5e84b9235f64d1da">morph::offline::IOfflineQueue</a>.</p>
 
 <p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 

@@ -140,6 +140,7 @@ var annotated_dup =
         [ "ScopedObserveOverride", "d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html", "d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride" ]
       ] ],
       [ "offline", null, [
+        [ "Attempts", "d5/da0/classmorph_1_1offline_1_1Attempts.html", "d5/da0/classmorph_1_1offline_1_1Attempts" ],
         [ "FileOfflineQueue", "df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html", "df/d07/classmorph_1_1offline_1_1FileOfflineQueue" ],
         [ "FileOfflineQueueError", "d6/d90/structmorph_1_1offline_1_1FileOfflineQueueError.html", null ],
         [ "InMemoryOfflineQueue", "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html", "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue" ],

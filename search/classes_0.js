@@ -11,5 +11,6 @@ var searchData=
   ['and_8',['And',['../d3/d81/structmorph_1_1forms_1_1And.html',1,'morph::forms']]],
   ['app_9',['App',['../d8/d09/structmorph_1_1app_1_1App.html',1,'morph::app']]],
   ['apptraits_10',['AppTraits',['../d9/dfd/structmorph_1_1app_1_1AppTraits.html',1,'morph::app']]],
-  ['atleastoneof_11',['AtLeastOneOf',['../de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html',1,'morph::forms']]]
+  ['atleastoneof_11',['AtLeastOneOf',['../de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html',1,'morph::forms']]],
+  ['attempts_12',['Attempts',['../d5/da0/classmorph_1_1offline_1_1Attempts.html',1,'morph::offline']]]
 ];

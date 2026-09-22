@@ -141,7 +141,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>An item stored in the offline queue. </p>
 <p>The payload is an opaque string — the caller controls the serialisation format (JSON, binary-hex, plain text, etc.). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00021">21</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a2a14f744ed7ff3f42104b17239932e84" name="a2a14f744ed7ff3f42104b17239932e84"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2a14f744ed7ff3f42104b17239932e84">&#9670;&#160;</a></span>id</h2>
@@ -158,7 +158,7 @@ Public Attributes</h2></td></tr>
 <p>Stable identifier assigned at enqueue time. </p>
 <p>Local to <em>this</em> queue instance; it is <b>not</b> a cross-subsystem idempotency key (it is queue-local and the journal never sees it; both shipped durable queues re-present the <em>stored</em> id after a restart). Use <span class="tt"><a class="el" href="#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">idempotencyKey</a></span> to dedup a replay against already-applied ops. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +176,7 @@ Public Attributes</h2></td></tr>
 
 <p>Opaque serialised representation of the queued action. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00031">31</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -197,7 +197,7 @@ Public Attributes</h2></td></tr>
 <p>The queue never <em>interprets</em> the key, and the interface does not <b>require</b> an implementation to enforce uniqueness on it — a replay consumer must therefore always dedup on the key itself, because a conforming queue may hand it the same key twice. An implementation is nonetheless <b>permitted</b> to dedup a non-empty key at enqueue time as a strengthening of that floor; see <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40" title="Appends payload carrying the cross-subsystem idempotencyKey.">IOfflineQueue::enqueue(std::string,
 std::string)</a></span> for exactly what a dedup hit does. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,9 +214,9 @@ std::string)</a></span> for exactly what a dedup hit does. </p>
 </div><div class="memdoc">
 
 <p>Durable retry count for this item, authoritative when the queue persists it. </p>
-<p>Defaults to <span class="tt">0</span>. A queue that overrides <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019" title="Persists an updated attempt count for an item. Default: no-op.">IOfflineQueue::setAttempts()</a></span> to store this value makes the retry budget survive a process restart: <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> seeds its own attempt counter from the larger of this field and its in-memory count, and writes the updated count back via <span class="tt">setAttempts()</span> after every failed replay. A queue that leaves <span class="tt">setAttempts()</span> as the default no-op never advances this field, so <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>'s in-memory counter stays authoritative — today's process-local retry behavior, unchanged. </p>
+<p>Defaults to <span class="tt">0</span>. A queue that overrides <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#afe70e6b66397727a5e84b9235f64d1da" title="Persists an updated attempt count for an item. Default: no-op.">IOfflineQueue::setAttempts()</a></span> to store this value makes the retry budget survive a process restart: <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> seeds its own attempt counter from the larger of this field and its in-memory count, and writes the updated count back via <span class="tt">setAttempts()</span> after every failed replay. A queue that leaves <span class="tt">setAttempts()</span> as the default no-op never advances this field, so <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>'s in-memory counter stays authoritative — today's process-local retry behavior, unchanged. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>

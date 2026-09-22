@@ -103,6 +103,7 @@ var hierarchy =
     [ "morph::observe::MetricEvent", "de/dce/structmorph_1_1observe_1_1MetricEvent.html", null ],
     [ "morph::observe::ScopedObserveOverride", "d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html", null ],
     [ "morph::observe::TraceSink", "d5/d5e/structmorph_1_1observe_1_1TraceSink.html", null ],
+    [ "morph::offline::Attempts", "d5/da0/classmorph_1_1offline_1_1Attempts.html", null ],
     [ "morph::offline::IOfflineQueue", "d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html", [
       [ "morph::offline::FileOfflineQueue", "df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html", null ],
       [ "morph::offline::InMemoryOfflineQueue", "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html", null ],

@@ -151,8 +151,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:af3f1c800c9e4e8030dc28ffc0fc3cdf3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the configured maximum depth, or <span class="tt">std::nullopt</span> if unbounded.  <br /></td></tr>
 <tr class="memitem:acf32c7e9f21fcd15b45be6cc41ea1c4a" id="r_acf32c7e9f21fcd15b45be6cc41ea1c4a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#acf32c7e9f21fcd15b45be6cc41ea1c4a">markDone</a> (uint64_t itemId) override</td></tr>
 <tr class="memdesc:acf32c7e9f21fcd15b45be6cc41ea1c4a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes the item with <code class="param">itemId</code> from the queue. Thread-safe.  <br /></td></tr>
-<tr class="memitem:a5c7f807ec5cddac608f8da633188b40d" id="r_a5c7f807ec5cddac608f8da633188b40d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5c7f807ec5cddac608f8da633188b40d">setAttempts</a> (uint64_t itemId, uint32_t attempts) override</td></tr>
-<tr class="memdesc:a5c7f807ec5cddac608f8da633188b40d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Updates the persisted attempt count on the in-deque item with <code class="param">itemId</code>. No-op if <code class="param">itemId</code> is not found. Thread-safe.  <br /></td></tr>
+<tr class="memitem:aa95d031d5173014fe54d1052744828e4" id="r_aa95d031d5173014fe54d1052744828e4"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa95d031d5173014fe54d1052744828e4">setAttempts</a> (uint64_t itemId, <a class="el" href="../../d5/da0/classmorph_1_1offline_1_1Attempts.html">Attempts</a> attempts) override</td></tr>
+<tr class="memdesc:aa95d031d5173014fe54d1052744828e4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Updates the persisted attempt count on the in-deque item with <code class="param">itemId</code>. No-op if <code class="param">itemId</code> is not found. Thread-safe.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-inherited" class="groupheader"><a id="inherited" name="inherited"></a>
 Additional Inherited Members</h2></td></tr>
@@ -164,7 +164,7 @@ Additional Inherited Members</h2></td></tr>
 <div class="textblock"><p>Thread-safe in-memory implementation of <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span>. </p>
 <p>Suitable for testing and for applications that do not require persistence across process restarts. Items are stored in a <span class="tt">std::deque</span> protected by a mutex. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ae151ab117418f95516371bb84af282e6" name="ae151ab117418f95516371bb84af282e6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae151ab117418f95516371bb84af282e6">&#9670;&#160;</a></span>InMemoryOfflineQueue()</h2>
@@ -197,7 +197,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00267">267</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +236,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00272">272</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00344">344</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -285,7 +285,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -317,7 +317,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ad11f945b889e1f6d582a6bbd4fdfeaa5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00295">295</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00367">367</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -349,7 +349,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ac534551aa850902cd9b8fd45e134ade3">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00302">302</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00374">374</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -381,7 +381,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a5fd0dc329f73f72e5d64689c5956058d">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00309">309</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00381">381</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -418,12 +418,12 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a1399eda29916d144d93c728f1e0d06e5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00315">315</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a5c7f807ec5cddac608f8da633188b40d" name="a5c7f807ec5cddac608f8da633188b40d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5c7f807ec5cddac608f8da633188b40d">&#9670;&#160;</a></span>setAttempts()</h2>
+<a id="aa95d031d5173014fe54d1052744828e4" name="aa95d031d5173014fe54d1052744828e4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa95d031d5173014fe54d1052744828e4">&#9670;&#160;</a></span>setAttempts()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -439,7 +439,7 @@ Additional Inherited Members</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">uint32_t</td>          <td class="paramname"><span class="paramname"><em>attempts</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../d5/da0/classmorph_1_1offline_1_1Attempts.html">Attempts</a></td>          <td class="paramname"><span class="paramname"><em>attempts</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -458,9 +458,9 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019">morph::offline::IOfflineQueue</a>.</p>
+<p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#afe70e6b66397727a5e84b9235f64d1da">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00404">404</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>

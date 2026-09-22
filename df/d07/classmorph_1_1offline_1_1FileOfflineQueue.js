@@ -8,6 +8,6 @@ var classmorph_1_1offline_1_1FileOfflineQueue =
     [ "size", "df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af96a2cf6553f3a44390fe07629b2d4a2", null ],
     [ "maxDepth", "df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a1fdfff80a8b535fb2c19621d6cf13d4e", null ],
     [ "markDone", "df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a4be4a6a891c066c4c0af7e902f101739", null ],
-    [ "setAttempts", "df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#ae9a56e0f6a28daa3e4047ae8ecc052f5", null ],
+    [ "setAttempts", "df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#aa2f0108bf94c389f23caaaeda9aaa8be", null ],
     [ "setIdempotencyKey", "df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af6a72b2805560d317866b924d4cb8039", null ]
 ];
