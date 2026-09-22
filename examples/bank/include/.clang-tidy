@@ -1,0 +1,139 @@
+# One identifier spelling exempted from readability-identifier-naming, inside
+# the bank example's own headers: `TableName`, the member name the LASTRADA
+# Lightweight ORM reads a record's SQL table off. Nothing else is subtracted --
+# not a check, not a declaration kind, not a directory's worth of code.
+#
+# ── What fires, and why the check's own fix is wrong here ────────────────────
+#
+# The repository-root .clang-tidy sets `readability-identifier-naming.
+# VariableCase: camelBack`, and a Lightweight record declares
+#
+#     static constexpr std::string_view TableName = "morph_offline_queue";
+#
+# which clang-tidy 22.1.8 reports as
+#
+#     examples/bank/include/bank/offline/lightweight_offline_queue.hpp:52:39:
+#       error: invalid case style for variable 'TableName'
+#       [readability-identifier-naming,-warnings-as-errors]
+#
+# The name is not ours to pick. Lightweight hard-codes it, by spelling, in
+# `Lightweight/Utils.hpp`'s `RecordTableNameImpl`:
+#
+#     if constexpr (requires { Record::TableName; })
+#         return Record::TableName;
+#     else
+#         ... Reflection::TypeNameOf<Record> ...   // the C++ type's own name
+#
+# So the rename the check asks for is not merely unavailable -- it is silently
+# wrong. `tableName` does not fail to compile and does not fail to link: the
+# `requires` clause goes false, the `else` branch runs, and the record is
+# mapped to a table named after the C++ type instead. A record renamed to
+# satisfy a lint writes to the wrong table, and the first thing that tells
+# anyone is a missing table at run time.
+#
+# ── Why an ignore-by-name, and not `-readability-identifier-naming` ──────────
+#
+# Subtracting the check for a directory would stop it measuring every other
+# identifier there, which is the failure mode AGENTS.md names first. An
+# `IgnoredRegexp` subtracts a spelling instead, and that claim is measured
+# rather than asserted. A probe header placed beside the queue, carrying three
+# findings -- `TableName`, a second static constexpr member `OtherThing`, and a
+# local `BadLocal` -- analysed with clang-tidy 22.1.8 against this repository's
+# real configuration:
+#
+#   no config here                    TableName, OtherThing, BadLocal reported
+#   VariableIgnoredRegexp             OtherThing, BadLocal still reported
+#   ClassConstantIgnoredRegexp        only BadLocal -- OtherThing went quiet
+#   ConstexprVariableIgnoredRegexp    only BadLocal -- OtherThing went quiet
+#
+# The last two lines are why the key below is `VariableIgnoredRegexp` and not
+# either of the two that read as more specific. clang-tidy picks a
+# declaration's naming style by walking a list of candidate kinds and taking
+# the first that has *any* option configured. Naming `ClassConstant` or
+# `ConstexprVariable` at all -- even only to set its IgnoredRegexp -- moves the
+# declaration onto a kind with no `Case` configured, so every static constexpr
+# member in reach stops being case-checked whatever it is called. That is a
+# gate that stops measuring, wearing the narrower option's clothes. `Variable`
+# is the kind the diagnostic actually names ("invalid case style for
+# *variable*"), so setting its IgnoredRegexp changes nothing but the one
+# spelling.
+#
+# Not a NOLINT either, though the sibling translation unit
+# (examples/bank/src/offline/lightweight_offline_queue.cpp) uses one for
+# LIGHTWEIGHT_SQL_MIGRATION and argues there for a call-site suppression over a
+# directory-scoped one. The two cases differ in the way that argument turns on.
+# That NOLINTBEGIN subtracts five whole checks, so confining it to the macro's
+# three lines is what keeps it from covering unrelated code; there is exactly
+# one migration in that file and nothing to generalise. `TableName` is the
+# opposite shape: twelve declarations in this directory tree today, one per
+# record, and what is subtracted is a spelling rather than a check -- so a
+# per-line directive would have to be repeated twelve times to say what one key
+# says once, and each copy would be a place for the reason to go stale.
+#
+# ── Why this directory, and no wider or narrower ─────────────────────────────
+#
+# clang-tidy resolves configuration by walking up from the file it is
+# analysing and offers no finer granularity than a directory, so the only
+# choice is which directory.
+#
+# `examples/bank/include/` is the bank example's own header tree and holds no
+# .cpp at all, so this file governs declarations and nothing else. Twelve of
+# the repository's 71 `static constexpr std::string_view TableName`
+# declarations are under it -- eleven across nine files in `bank/db/`, and the
+# queue's one in `bank/offline/` -- and they are every one of the bank
+# example's. Measured with clang-tidy 22.1.8 on this revision, each of the
+# twelve is reported without this file and clean with it. The other four
+# subdirectories (`app/`, `core/`, `dto/`, `models/`) are in reach and contain
+# no `TableName` to exempt; the ignore has nothing to do there and does
+# nothing.
+#
+# One directory up, at `examples/`, is not available and should not be:
+# scripts/check_rung_filters.sh fails outright if `examples/.clang-tidy`
+# exists, because a config there governs every rung's src/, include/ and
+# gui_lib/ together and is the shape in which a narrow suppression quietly
+# becomes a wide one. That gate was written about the Catch2 suppression, and
+# the reasoning holds here regardless of how narrow this key is: the file would
+# be reaching seven rungs' production code on the strength of an argument made
+# about the bank example.
+#
+# That leaves the other 59 declarations -- 13 in crm's `db/`, 12 in ledger's,
+# 11 in kanban's, 9 in lims', 6 in polls', 5 in bookmarks', 1 in pastebin's,
+# and 2 in examples/common/testkit/ -- unexempted and, today, unreported:
+# clang-tidy-diff analyses only changed lines, so a declaration nobody has
+# touched has never been judged (morph#677). They are latent, not fixed, and
+# deliberately left to the rung that owns each one rather than settled from
+# here. The two under examples/common/testkit/ are the sharpest of them,
+# because they sit in .cpp files that do have compile commands in this job's
+# database: editing either of those lines fails clang-tidy-diff the same way
+# this header did.
+#
+# `InheritParentConfig: true` is load-bearing and not decoration. Without it
+# clang-tidy *replaces* the root configuration rather than extending it: the
+# same probe run with the key commented out reported no findings at all against
+# the queue header, against six with it -- the whole check list gone, silently,
+# while still exiting 0 on a clean file. It is the trap
+# scripts/check_rung_filters.sh checks for in every
+# examples/<rung>/tests/.clang-tidy, and it applies here identically.
+#
+# ── Reach, stated rather than guessed ────────────────────────────────────────
+#
+# This file is read when clang-tidy analyses a file under
+# `examples/bank/include/` as a main file. For these headers that is the whole
+# story: the root `HeaderFilterRegex` is `include/morph/.*`, which no example
+# header matches, so a `TableName` reached from a .cpp is discarded as non-user
+# code regardless of what this file says. The case that reaches CI is
+# clang-tidy-diff analysing a *changed header* as a main file, which is how
+# bank/offline/lightweight_offline_queue.hpp became the first of the 71
+# declarations ever to be judged at all.
+#
+# The residue: a local variable or ordinary member spelled exactly `TableName`,
+# written anywhere under examples/bank/include/ for some reason unrelated to
+# the ORM, is not case-checked. Nothing else about it is suppressed, no other
+# check is affected, and no other spelling is -- the probe above is the
+# evidence for that rather than the intention.
+
+InheritParentConfig: true
+
+CheckOptions:
+  - key:   readability-identifier-naming.VariableIgnoredRegexp
+    value: '^TableName$'
