@@ -2333,7 +2333,7 @@ Two boundaries follow the framework's own:
 
 | Signature | Returns |
 |---|---|
-| `template <typename A> std::string schemaJson()` | The merged schema JSON. Cached per type. On internal failure returns the raw glaze schema, or an empty string if glaze's own schema generation failed — it never throws over malformed *input*. Throws `UnsatisfiableFormError` for a self-contradicting *declaration* ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)). |
+| `template <typename A> const std::string& schemaJson()` | The merged schema JSON. Cached per type and returned **by reference** (the same shape `model::payloadFingerprint<A>()` and `model::payloadShapeString<A>()` use): the cache is built once per type per process, is never mutated afterwards, and lives until the process exits, so the reference stays valid for as long as any caller could hold it. A caller that needs its own mutable copy asks for one (`std::string mine = schemaJson<A>();`); an *explicit specialisation* of this template must likewise return a reference to something that outlives the call, not to a temporary. On internal failure returns the raw glaze schema, or an empty string if glaze's own schema generation failed — it never throws over malformed *input*. Throws `UnsatisfiableFormError` for a self-contradicting *declaration* ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)). |
 
 ### `allRequiredEngaged<A>()`
 

@@ -3265,13 +3265,24 @@ template <typename A>
 /// unsubmittable form (see `detail::rejectUnsatisfiableRules`). Because the
 /// cache is a function-local `static`, the throw leaves it uninitialised and a
 /// later call re-runs the check rather than serving a half-built schema.
+///
+/// Returned **by reference**, like `model::payloadFingerprint<A>()` and
+/// `model::payloadShapeString<A>()` (`core/payload_schema.hpp`), which cache the
+/// same way: the cached string is created once per type per process, is never
+/// mutated afterwards, and lives until the process exits, so the reference stays
+/// valid for as long as any caller could hold it. Returning it by value made
+/// every call — including the per-request ones on a server's descriptor path —
+/// an allocation plus a copy of the whole schema for a string the caller almost
+/// always only reads. A caller that genuinely needs its own mutable copy asks
+/// for one (`std::string mine = schemaJson<A>();`), which is what the by-value
+/// signature used to do unconditionally.
 /// @tparam A Action type (a reflectable aggregate).
-/// @return The merged schema JSON.
+/// @return Reference to the process-lifetime merged schema JSON for `A`.
 /// @throws UnsatisfiableFormError if `A::formRules` declares a capping rule
 ///         (`exactlyOneOf` / `mutuallyExclusive`) over two or more fields that
 ///         are also in `A`'s derived `required` array.
 template <typename A>
-[[nodiscard]] std::string schemaJson() {
+[[nodiscard]] const std::string& schemaJson() {
     static const std::string cached =
         detail::mergeSchemaExtras<A>(glz::write_json_schema<A>().value_or(std::string{}));
     return cached;
