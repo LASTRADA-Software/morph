@@ -117,7 +117,8 @@ def resolve_allowlist(repo_root, sites, hits, allowlist_path, failures):
     {(path, line, kind)} set it accounts for.
 
     The source-text-keyed line resolution (find `source`'s current line,
-    catching a moved or ambiguous hint) is check_branch_coverage.py's
+    catching a moved hint, and refusing an ambiguous one unless the entry
+    carries a `context` disambiguator -- morph#701) is check_branch_coverage.py's
     resolve_allowlist_source_line() -- shared rather than reimplemented, since
     it is the fix for a defect this repository has already found three times
     over in an allowlist keyed by line number alone (morph#349, morph#355,
@@ -153,7 +154,8 @@ def resolve_allowlist(repo_root, sites, hits, allowlist_path, failures):
             continue
 
         resolved = check_branch_coverage.resolve_allowlist_source_line(
-            repo_root, path, hint, wanted, allowlist_path, failures)
+            repo_root, path, hint, wanted, allowlist_path, failures,
+            context=entry.get("context"))
         if resolved is None:
             continue
 
@@ -400,6 +402,60 @@ def self_test():
                  buf.getvalue())
         else:
             note("ok: an allowlist entry citing moved text resolves and reports the new line")
+
+        # ── 5b. an ambiguous citation, with and without a `context` ──────────
+        # morph#701 reaches this consumer through the shared resolver, and this
+        # case is what proves the `context` field is actually forwarded here
+        # rather than only in the two allowlists that carry entries today. This
+        # one's `entries` array is empty (morph#705), so without a fixture the
+        # wiring would be covered by nothing at all.
+        _fixture_tree(root, {
+            "core/x.hpp": (
+                "void handler() {\n"                                  # 1
+                "    try { f(); } catch (const std::exception& e) {\n"  # 2
+                "    }\n"
+                "}\n"
+                + "// filler\n" * 50 +                                # 5..54
+                "void fallback() {\n"                                 # 55
+                "    try { f(); } catch (const std::exception& e) {\n"  # 56
+                "    }\n"
+                "}\n"
+            ),
+        })
+        _fixture_lcov(lcov, {"include/morph/core/x.hpp": {2: 0, 56: 0}})
+
+        def catch_entry(**overrides):
+            base = {"file": "include/morph/core/x.hpp", "kind": "catch",
+                    "source": "try { f(); } catch (const std::exception& e) {",
+                    "reason": "fixture: an arm no test reaches"}
+            base.update(overrides)
+            return base
+
+        def write_allowlist(entries):
+            with open(allowlist, "w", encoding="utf-8") as handle:
+                json.dump({"entries": entries}, handle)
+
+        # Both arms allowlisted; only the second one names which arm it means,
+        # so only the first is refused.
+        write_allowlist([catch_entry(line=56),
+                         catch_entry(line=2, context="void handler() {")])
+        buf = io.StringIO()
+        rc = check(lcov, root, out=buf, allowlist_path=allowlist)
+        if rc != 1:
+            fail("an ambiguous entry with no `context` passed this gate", buf.getvalue())
+        elif "does not say which occurrence is meant" not in buf.getvalue():
+            fail("an ambiguous entry failed with the wrong message", buf.getvalue())
+        else:
+            note("ok: an ambiguous entry with no `context` is refused here too")
+
+        write_allowlist([catch_entry(line=56, context="void fallback() {"),
+                         catch_entry(line=2, context="void handler() {")])
+        buf = io.StringIO()
+        rc = check(lcov, root, out=buf, allowlist_path=allowlist)
+        if rc != 0:
+            fail("a `context`-disambiguated entry was not accepted", buf.getvalue())
+        else:
+            note("ok: a `context` resolves an ambiguous entry in this gate too")
 
         # ── 6. missing allowlist file -> fails, naming it ────────────────────
         missing = os.path.join(root, "does_not_exist.json")

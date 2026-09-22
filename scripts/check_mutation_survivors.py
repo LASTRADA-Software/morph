@@ -201,7 +201,8 @@ def check(survivors_path, repo_root, out=sys.stdout):
             continue
 
         resolved = check_branch_coverage.resolve_allowlist_source_line(
-            repo_root, path, hint, wanted, survivors_path, failures)
+            repo_root, path, hint, wanted, survivors_path, failures,
+            context=entry.get("context"))
         if resolved is None:
             continue
         audited += 1
@@ -331,7 +332,9 @@ def self_test():
             note("ok: a citation whose source text is gone fails, and says the code changed")
 
         # 4. the cited text now appears twice, at neither the hinted line ->
-        #    ambiguous, and refused rather than guessed at.
+        #    ambiguous, and refused rather than guessed at. Since morph#701 the
+        #    refusal does not depend on where the hint points (cases 11-13
+        #    below), so the message is the one that asks for a `context`.
         write_header(
             "void f() {\n"
             "    out.reserve(text.size());\n"
@@ -342,7 +345,7 @@ def self_test():
         rc, output = run()
         if rc == 0:
             fail("an ambiguous citation passed the gate", output)
-        elif "not decidable" not in output:
+        elif "does not say which occurrence is meant" not in output:
             fail("an ambiguous citation failed with the wrong message", output)
         else:
             note("ok: a citation matching several lines is refused as ambiguous")
@@ -421,6 +424,53 @@ def self_test():
             fail("the free-text citation count was wrong or missing", output)
         else:
             note("ok: free-text citations are counted and reported, not gated")
+
+        # 11-13. The `context` disambiguator reaches this consumer too
+        #     (morph#701). Case 4 above covers the hint matching *nothing*;
+        #     these three cover the case that used to pass silently -- a hint
+        #     that matches one of several occurrences, which this file has two
+        #     live instances of (backend.hpp's registerCount and executeInFlight
+        #     emissions, both with a twin the entry's prose excludes).
+        ambiguous = (
+            "void registerModel() {\n"           # 1
+            "    emitMetric(registerCount);\n"   # 2
+            "}\n"                                # 3
+            + "// filler\n" * 50 +               # 4..53
+            "void registerModelShared() {\n"     # 54
+            "    emitMetric(registerCount);\n"   # 55
+            "}\n"                                # 56
+        )
+        write_header(ambiguous)
+
+        write_survivors(entry(line=55, source="emitMetric(registerCount);"))
+        rc, output = run()
+        if rc == 0:
+            fail("a citation naming one of two identical arms passed with no `context`",
+                 output)
+        elif "does not say which occurrence is meant" not in output:
+            fail("an ambiguous-but-matching citation failed with the wrong message", output)
+        else:
+            note("ok: a hint that matches one of several occurrences is refused")
+
+        write_survivors(entry(line=55, source="emitMetric(registerCount);",
+                              context="void registerModel() {"))
+        rc, output = run()
+        if rc == 0:
+            fail("a `context` naming a different arm than `line` passed the gate", output)
+        elif "resolves through its `context` to line 2" not in output:
+            fail("a `context`/`line` disagreement failed with the wrong message", output)
+        else:
+            note("ok: a `context` that contradicts the `line` hint fails, and names the arm")
+
+        write_survivors(entry(line=2, source="emitMetric(registerCount);",
+                              context="void registerModel() {"))
+        rc, output = run()
+        if rc != 0:
+            fail("a citation disambiguated by `context` did not pass", output)
+        elif "ok: 1 structured citation" not in output:
+            fail("a disambiguated citation was not counted as audited", output)
+        else:
+            note("ok: a `context` resolves an otherwise ambiguous citation, and it counts")
 
     finally:
         shutil.rmtree(work, ignore_errors=True)
