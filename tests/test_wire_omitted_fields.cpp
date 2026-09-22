@@ -23,7 +23,14 @@
 //
 // The fourth case is the one that stops the saving from becoming a data loss:
 // every omittable field, set to a non-default value, must appear in the output.
+//
+// The fifth pins what is *not* omittable, which is the half that cost a ladder
+// regression to learn: `kind` and `callId` are written unconditionally, because
+// their defaults are not absences. `callId == 0` in particular is both
+// transports' "hand this to the parked synchronous call" sentinel, so a peer
+// cannot route a frame it is missing from. Elide payload, never elide identity.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <morph/core/wire.hpp>
 #include <string>
@@ -129,11 +136,12 @@ TEST_CASE("morph::wire: a minimal reply stays small", "[wire][omitted-fields]") 
     INFO("encoded: " << text);
     CHECK(text.size() <= kMinimalReplyBudget);
 
-    // And a `deregister`, which carries even less.
+    // And a `deregister`, which carries even less — the two unconditional
+    // fields plus its one populated member.
     morph::wire::Envelope dereg;
     dereg.kind = "deregister";
     dereg.modelId = 3;
-    CHECK(morph::wire::encode(dereg) == R"({"kind":"deregister","modelId":3})");
+    CHECK(morph::wire::encode(dereg) == R"({"kind":"deregister","callId":0,"modelId":3})");
 }
 
 TEST_CASE("morph::wire: an all-default session is omitted, a populated one is not", "[wire][omitted-fields]") {
@@ -173,9 +181,9 @@ TEST_CASE("morph::wire: an all-default session is omitted, a populated one is no
 }
 
 TEST_CASE("morph::wire: peekCallId still finds the id in the shortened form", "[wire][omitted-fields]") {
-    // `callId` is omittable, so this is the case that matters: it is the second
-    // key written whenever it is present, and absent exactly when it is 0 —
-    // which is the value peekCallId returns for a message that has none.
+    // `callId` is *not* omittable, so peekCallId's scan window argument holds
+    // unconditionally: it is the second key of every envelope morph encodes,
+    // whatever its value.
     morph::wire::Envelope env;
     env.kind = "err";
     env.callId = 987654321U;
@@ -184,4 +192,32 @@ TEST_CASE("morph::wire: peekCallId still finds the id in the shortened form", "[
 
     env.callId = 0;
     CHECK(morph::wire::detail::peekCallId(morph::wire::encode(env)) == 0U);
+}
+
+TEST_CASE("morph::wire: a zero callId is written, not omitted", "[wire][omitted-fields]") {
+    // The correlation-field carve-out, pinned rather than argued. `callId == 0`
+    // is not "no callId": it is both transports' discriminator for "hand this
+    // reply to whichever synchronous control call is parked"
+    // (`QtWebSocketBackend::onTextMessage`,
+    // `SocketBackend::dispatchIncomingEnvelope`). A peer that never sees the
+    // key has to reconstruct that sentinel before it can route the frame —
+    // which morph's own `decode` does for free by default-initialising, and
+    // which the Python scenario driver did not, reading absence as `None` and
+    // failing to match the reply to its request at all.
+    //
+    // So: elide payload, never elide identity.
+    morph::wire::Envelope err;
+    err.kind = "err";
+    err.message = "envelope decode failed: boom";
+    REQUIRE(err.callId == 0U);
+
+    const auto text = morph::wire::encode(err);
+    INFO("encoded: " << text);
+    CHECK(text.contains(R"("callId":0)"));
+    CHECK(text == R"({"kind":"err","callId":0,"message":"envelope decode failed: boom"})");
+
+    // And `callId` is absent from the omittable list, which is what keeps the
+    // "every omittable field survives" case above from silently covering it.
+    CHECK(std::ranges::find(morph::wire::detail::kOmittableEnvelopeKeys, "callId") ==
+          std::ranges::end(morph::wire::detail::kOmittableEnvelopeKeys));
 }

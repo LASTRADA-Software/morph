@@ -367,12 +367,40 @@ struct EscapingWriteOpts : glz::opts {
 /// see "Omitted default fields" there, and `test_wire_omitted_fields.cpp`,
 /// which decodes both forms and requires the results to be equal.
 ///
-/// `kind` is deliberately absent from this list: it is the discriminator, an
-/// envelope without one is malformed, and keeping it unconditional means the
-/// first key of every message is still `"kind"`.
-inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
-    "callId",    "typeId",     "contextKey", "primary", "shared",  "modelId",
-    "modelType", "actionType", "body",       "message", "session", "protocolVersion"};
+/// **Two fields are deliberately absent from this list, and for the same
+/// reason: their default is not "unset".** The rule the rest of the list obeys
+/// is that omitting a member is safe when its default means *nothing* — when
+/// "absent" and "present, holding the default" are the same statement. That
+/// holds for the payload and addressing fields: an empty `typeId` means no type
+/// id, a `modelId` of `0` means no model id (`remote.hpp` tests exactly that),
+/// and a `protocolVersion` of `0` is documented on the member as "unspecified /
+/// legacy peer" — precisely what an encoder that had never heard of the field
+/// would produce. For these two it does not hold:
+///
+/// - **`kind`** is the discriminator; an envelope without one is malformed.
+///   Keeping it unconditional also means the first key of every message is
+///   still `"kind"`.
+/// - **`callId` is a correlation field, and `0` is a live routing instruction
+///   rather than an absence.** Both transports discriminate on it: a reply with
+///   a non-zero `callId` is matched against the pending-execute map, and one
+///   with `callId == 0` is handed to whichever synchronous control call is
+///   parked (`QtWebSocketBackend::onTextMessage`,
+///   `SocketBackend::dispatchIncomingEnvelope`). A peer therefore cannot treat
+///   an absent `callId` as "no information"; it has to *reconstruct* the
+///   sentinel before it can route the frame at all. morph's own `decode` does
+///   that for free by default-initialising, which is why omitting it
+///   round-tripped cleanly in C++ and still broke the scenario driver, a second
+///   decoder that read absence as `None` (morph#524). Emitting correlation
+///   fields unconditionally costs eleven bytes on the one message shape that
+///   carries a zero id, and keeps "how do I route this frame" answerable from
+///   the frame.
+///
+/// The general form of the rule, for anyone adding a member: **elide payload,
+/// never elide identity.** If a peer has to know the field's value to decide
+/// where the message goes, it is written even at its default.
+inline constexpr std::array<std::string_view, 11> kOmittableEnvelopeKeys{
+    "typeId",     "contextKey", "primary", "shared",  "modelId",        "modelType",
+    "actionType", "body",       "message", "session", "protocolVersion"};
 
 /// @brief Whether a session context carries nothing worth sending.
 ///
@@ -418,9 +446,9 @@ inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
     std::size_t count = 0;
     auto omit = [&out, &count](std::string_view key) noexcept { out.at(count++) = key; };
 
-    if (env.callId == 0) {
-        omit("callId");
-    }
+    // No `callId` arm, deliberately: see `kOmittableEnvelopeKeys`. It is a
+    // correlation field whose zero is a routing sentinel, so it is written
+    // unconditionally, exactly like `kind`.
     if (env.typeId.empty()) {
         omit("typeId");
     }
@@ -469,10 +497,17 @@ inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
 /// parked, handing it a reply belonging to another call entirely.
 ///
 /// Scans at most @p maxScanBytes, so the size cap it serves keeps its value as
-/// a cost bound; `callId` is the second field `encode` writes, so it lands well
-/// inside even a small window. A `"callId":` sequence cannot be forged from
-/// within an earlier string field, because `encode` escapes any embedded quote
-/// (yielding `\"callId\":`, which does not match).
+/// a cost bound; `callId` is the second field `encode` writes and is never
+/// omitted (see `kOmittableEnvelopeKeys`), so for any envelope morph encoded it
+/// lands well inside even a small window. A `"callId":` sequence cannot be
+/// forged from within an earlier string field, because `encode` escapes any
+/// embedded quote (yielding `\"callId\":`, which does not match).
+///
+/// The `0`-on-absence return is still load-bearing rather than vestigial: the
+/// input here is by definition a frame that was *not* produced under morph's
+/// own invariants — it is whatever a peer sent, at a size this side already
+/// refused to parse — so "no `callId` in the first KiB" remains a case that has
+/// to have an answer.
 ///
 /// @param json         Raw, undecoded envelope text.
 /// @param maxScanBytes Prefix length to search. Default 1 KiB.

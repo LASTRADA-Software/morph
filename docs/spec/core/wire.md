@@ -86,7 +86,7 @@ it internally.
 
 | Function | Signature | Notes |
 |---|---|---|
-| `encode` | `std::string encode(const Envelope&)` | Serializes to a single JSON line via `glz::write_json_exclude<detail::EscapingWriteOpts{}>`, leaving out every member that holds its default — see [Omitted default fields](#omitted-default-fields). Throws `std::runtime_error` on failure (should never happen for valid input). Escapes ASCII control bytes — see [Control bytes in string fields](#control-bytes-in-string-fields). |
+| `encode` | `std::string encode(const Envelope&)` | Serializes to a single JSON line via `glz::write_json_exclude<detail::EscapingWriteOpts{}>`, leaving out every member that holds its default apart from the identity fields `kind` and `callId`, which are always written — see [Omitted default fields](#omitted-default-fields). Throws `std::runtime_error` on failure (should never happen for valid input). Escapes ASCII control bytes — see [Control bytes in string fields](#control-bytes-in-string-fields). |
 | `decode` | `Envelope decode(std::string_view)` | Deserializes from JSON via `glz::read<{.error_on_unknown_keys = false}>`. Rejects input longer than `kMaxEnvelopeBytes` and throws `std::runtime_error` on an oversized or syntactically malformed envelope. **Ignores unknown/extra keys** (forward compatibility) and **does not reject duplicate JSON keys** — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
 
 glaze reflects the struct's public members, so the JSON object keys are exactly
@@ -117,7 +117,8 @@ struct it is handed, so before morph#524 a minimal `ok` reply carrying an
 ```
 
 `encode` now writes through glaze's exclude-by-key-list form, omitting every
-member that holds its default. The same reply is **44 bytes**:
+member that holds its default *except* the two identity fields held out below.
+The same reply is **44 bytes**:
 
 ```
 {"kind":"ok","callId":7,"body":"{\"y\":42}"}
@@ -144,15 +145,71 @@ for. `tests/test_wire_omitted_fields.cpp` holds the pre-change bytes as a
 literal and requires the two forms to decode equal, rather than leaving that as
 an argument.
 
-Two properties are load-bearing and are each pinned by a case in that file:
+#### Elide payload, never elide identity
+
+Not every member on the struct is a candidate. The rule the omittable list obeys
+is that **dropping a member is safe exactly when its default means nothing** —
+when "absent" and "present, holding the default" are the same statement to a
+reader. That holds for the payload and addressing fields: an empty `typeId`
+means no type id, a `modelId` of `0` means no model id (`remote.hpp` tests
+`peek.modelId != 0` for precisely that), and `protocolVersion == 0` is
+documented on the member itself as "unspecified / legacy peer" — which is
+exactly what an encoder that had never heard of the field would produce.
+
+Two fields are held out of the list, and are each pinned by a case in
+`tests/test_wire_omitted_fields.cpp`:
 
 - **`kind` is never omitted.** It is the discriminator; an envelope without one
   is malformed. It also keeps `"kind"` the first key of every message.
-- **`callId` *is* omitted when it is `0`**, which is why
+- **`callId` is never omitted either, including when it is `0`.** It is a
+  correlation field, and on this wire zero is not an absence but a *live routing
+  instruction*. Both transports discriminate on it: a reply with a non-zero
+  `callId` is matched against the pending-execute map, and one with `callId == 0`
+  is handed to whichever synchronous control call is parked — see
+  `QtWebSocketBackend::onTextMessage` and
+  `SocketBackend::dispatchIncomingEnvelope`. A peer that never sees the key has
+  to *reconstruct* the sentinel before it can route the frame at all.
+
+  This was not the original disposition. `callId` was omitted when zero, on the
+  argument that morph's `decode` default-initialises and so recovers the value
+  for free. That is true, and it is a statement about one decoder. The scenario
+  driver in `scripts/scenario/morph_scenario.py` is a second one, and it read an
+  absent key as Python's `None`, which matched neither its correlation check nor
+  its documented carve-out for the undecodable-envelope reply — so the whole
+  `pastebin` rung went red. The fix is at the source rather than in each
+  consumer: emitting the field unconditionally costs eleven bytes on the one
+  message shape that carries a zero id, and keeps "where does this frame go"
+  answerable from the frame. Teaching every present and future client that
+  absence means zero is the larger blast radius and the weaker invariant.
+
+  The consequence for
   [`detail::peekCallId`](#detailpeekcallid--addressing-a-reply-to-a-message-never-decoded)
-  needed re-checking rather than assuming. It still lands second whenever it is
-  present, and its absence means `0` — which is the value `peekCallId` returns
-  for a message that has none. The two agree by construction.
+  is that its scan-window argument now holds unconditionally: `callId` is the
+  second key of *every* envelope `encode` produces. Its `0`-on-absence return is
+  still load-bearing rather than vestigial, because its input is by definition a
+  frame this side already declined to parse — whatever a peer sent, at a size
+  over the cap — and so is under no obligation to obey morph's own invariants.
+
+**The general form, for anyone adding an `Envelope` member:** if a peer has to
+know the field's value to decide *where the message goes*, it is written even at
+its default. If the field is payload, it is elided.
+
+#### What "no version bump" is and is not a claim about
+
+The compatibility argument above is a claim about **decoders that
+default-initialise and ignore unknown keys** — which is what `morph::wire::decode`
+does, and what `test_wire_omitted_fields.cpp` pins. It was stated too broadly
+when this change first landed: eliding a field is transparent to *that* decoder,
+not to every consumer of the wire. A consumer that distinguishes "key absent"
+from "key present at its default" — as the Python scenario driver's
+`decoded.get("callId")` does, yielding `None` rather than `0` — observes the
+change whether or not the C++ round-trip is lossless.
+
+That does not make it a `kProtocolVersion` bump: nothing is removed from the
+schema and nothing is retyped, which is what the
+[Action-evolution policy](#action-evolution-policy) sets the bar at. It does
+mean the bar is about schema compatibility and not about "no consumer can
+notice", and a second implementation is the thing that finds the difference.
 
 The failure mode the design has to survive is a member being added or renamed
 without this list following it. Both are compile errors:
