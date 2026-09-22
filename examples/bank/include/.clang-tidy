@@ -108,12 +108,28 @@
 # this header did.
 #
 # `InheritParentConfig: true` is load-bearing and not decoration. Without it
-# clang-tidy *replaces* the root configuration rather than extending it: the
-# same probe run with the key commented out reported no findings at all against
-# the queue header, against six with it -- the whole check list gone, silently,
-# while still exiting 0 on a clean file. It is the trap
-# scripts/check_rung_filters.sh checks for in every
-# examples/<rung>/tests/.clang-tidy, and it applies here identically.
+# clang-tidy *replaces* the root configuration rather than extending it, and
+# this file's `CheckOptions` alone enable nothing -- the whole check list gone.
+#
+# This paragraph used to say that happened *silently*, "while still exiting 0
+# on a clean file". It does not (morph#716). Re-measured on this revision with
+# clang-tidy 22.1.8 and the same compile database as the probe above, which is
+# the gap the earlier measurement left open:
+#
+#     $ sed -i 's/^InheritParentConfig: true$/# &/' examples/bank/include/.clang-tidy
+#     $ clang-tidy -p build examples/bank/include/bank/offline/lightweight_offline_queue.hpp
+#     Error: no checks enabled.
+#     $ echo $?
+#     1
+#
+# against `6 warnings treated as errors` from the same command with the key in
+# place. So dropping the key is a red build with a message naming the problem,
+# not a quietly unlinted directory. The conclusion is unchanged -- the key is
+# required, and scripts/check_rung_filters.sh is right to check for it in every
+# examples/<rung>/tests/.clang-tidy -- but the reason is a loud failure caught
+# early rather than a silent one caught never, and a reader deciding whether
+# some other config needs the same protection should be reasoning from the
+# former.
 #
 # ── Reach, stated rather than guessed ────────────────────────────────────────
 #

@@ -95,7 +95,7 @@ jobs:
         run: bash scripts/test_check_sanitizer_instrumentation.sh
 
   dep-cache-selftest:
-    name: Dependency-cache self-test & FetchContent pin agreement
+    name: Dependency-cache self-test & single-statement FetchContent pins
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -110,29 +110,34 @@ jobs:
         run: bash scripts/test_dep_cache.sh
 
       # scripts/check_dep_pins.py, in this job because it is the same cache's
-      # other half. Every dependency states its revision twice -- once as
+      # other half. Every dependency used to state its revision twice -- once as
       # `morph_cache_dep(<name> <url> <tag>)`, once as the GIT_TAG of the
       # `FetchContent_Declare` beside it -- and until morph#693 nothing compared
-      # the two. DepCache.cmake was written against exactly this failure class
-      # and says so ("the one that is hardest to notice because everything still
-      # builds"), but it keys on the tag it is *handed*, not the tag FetchContent
-      # is handed, so splitting the pin across two calls reintroduces it one
-      # level up.
+      # the two. The divergence was asymmetric in the worst way: a warm cache
+      # served morph_cache_dep's tag, an uncached configure (the default for a
+      # local build) fetched GIT_TAG's, so a mismatch built a different revision
+      # in CI than on the author's machine, both successfully and with no
+      # diagnostic.
       #
-      # The divergence is asymmetric in the worst way: a warm cache serves
-      # morph_cache_dep's tag, an uncached configure (the default for a local
-      # build) fetches GIT_TAG's. So a mismatch builds a different revision in CI
-      # than on the author's machine, both successfully and with no diagnostic.
+      # morph#712 removed the second copy rather than keeping a gate over it:
+      # `morph_declare_dep(<name> <url> <tag> [args...])` states the pin once and
+      # hands it to both the cache and FetchContent, and refuses GIT_REPOSITORY/
+      # GIT_TAG among its forwarded arguments so the second copy cannot be
+      # smuggled back in. This step therefore no longer compares two copies --
+      # that comparison would have an invariant body, which is the failure mode
+      # the whole job exists about. It checks the invariant that makes the
+      # comparison unnecessary: no hand-written git `FetchContent_Declare` and no
+      # direct `morph_cache_dep` call outside cmake/DepCache.cmake, which are the
+      # only shapes in which a second pin can be written at all.
       #
-      # All five paired sites agree today, so this is preventive and its
-      # acceptance test is not "it passes here" -- it would pass here if it
-      # parsed nothing. The self-test above it skews a pin by one character and
-      # requires the failure to name both lines; the same was done on the real
-      # tree before this step was added. Reads CMake text only.
-      - name: Self-test the dependency-pin checker
+      # Its acceptance test is not "it passes here" -- it would pass here if it
+      # parsed nothing. The self-test below writes the old two-copy shape back
+      # and requires the failure to name its line; the same was done on the real
+      # tree before this step was narrowed. Reads CMake text only.
+      - name: Self-test the dependency-declaration checker
         run: python3 scripts/check_dep_pins.py --self-test
 
-      - name: Check every FetchContent pin agrees with its cache entry
+      - name: Check every FetchContent pin is stated exactly once
         run: python3 scripts/check_dep_pins.py
 
   prose-lint:

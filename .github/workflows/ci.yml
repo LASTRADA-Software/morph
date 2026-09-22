@@ -585,12 +585,30 @@ jobs:
         run: |
           # morph::testkit::OomInjector (tests/oom_injector.cpp) overrides
           # the process-wide operator new/delete to force std::bad_alloc on
-          # demand -- ASan and TSan's own runtimes already interpose
-          # operator new/delete themselves, and linking a second, competing
-          # definition fails with "multiple definition of `operator
-          # new(unsigned long)'" (confirmed in CI). Excluded by test name on
-          # exactly these two legs; every other CI leg (plain clang/gcc,
-          # Windows, ubsan, coverage) runs these tests normally.
+          # demand. ASan and TSan's own runtimes already interpose operator
+          # new/delete themselves, so the file compiles its overrides *out*
+          # under either sanitizer rather than linking a second definition
+          # beside theirs.
+          #
+          # This comment used to say the link failed with "multiple definition
+          # of `operator new(unsigned long)'", and called that confirmed in CI.
+          # It is not what happens (morph#718): the link succeeds, and the
+          # tests fail at *runtime* instead, because OomInjector's constructor
+          # throws when its overrides are compiled out --
+          #
+          #     OomInjector: unusable under ASan/TSan (operator new/delete
+          #     overrides are compiled out)
+          #
+          # -- which is precisely what a ctest-level exclusion handles, and is
+          # why the exclusion below works at all. With it bypassed, morph#719's
+          # lane measured six failures on each of the two legs (the five
+          # OomInjector cases plus the morph#108 one). Deleting the -E filter
+          # on the strength of the old wording would turn both legs red.
+          #
+          # Excluded by test name on exactly these two legs; every other CI leg
+          # (plain clang/gcc, Windows, ubsan, coverage) runs these tests
+          # normally -- the guard keys on __SANITIZE_ADDRESS__/
+          # __SANITIZE_THREAD__, which no other leg defines.
           EXCLUDE_ARGS=()
           if [ "${{ matrix.preset }}" = "clang-asan" ] || [ "${{ matrix.preset }}" = "clang-tsan" ]; then
             EXCLUDE_ARGS+=(-E "OomInjector|morph#108")

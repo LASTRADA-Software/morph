@@ -202,8 +202,14 @@ expect_caught "a tests/.clang-tidy naming the check only in its comments" \
     "does not subtract bugprone-chained-comparison"
 
 # The trap this half of check 5 exists for. Without InheritParentConfig,
-# clang-tidy replaces the root configuration instead of extending it, and the
-# directory is linted by nothing at all -- silently, and greenly.
+# clang-tidy replaces the root configuration instead of extending it and the
+# directory has no checks enabled at all -- loudly, not silently: the next
+# analysis of anything in it exits non-zero with `Error: no checks enabled.`
+# (measured with clang-tidy 22.1.8 and a compile database; morph#716 corrected
+# the "silently, and greenly" this comment used to claim). The gate is still
+# worth having: it names the file and the key on the introducing PR rather than
+# in a clang-tidy leg 20 minutes later, and it fires even on a PR that changes
+# nothing in that directory, where clang-tidy-diff would analyse nothing there.
 expect_caught "a tests/.clang-tidy that replaces the root config instead of extending it" \
     "edit examples/lims/tests/.clang-tidy -e '/^InheritParentConfig:/d'" \
     "has no 'InheritParentConfig: true'"

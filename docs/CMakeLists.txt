@@ -3,12 +3,7 @@ message(STATUS "Doxygen found: ${DOXYGEN_EXECUTABLE}")
 
 include(FetchContent)
 include(${CMAKE_SOURCE_DIR}/cmake/DepCache.cmake)
-morph_cache_dep(doxygen-awesome-css https://github.com/jothepro/doxygen-awesome-css.git v2.3.4)
-FetchContent_Declare(
-    doxygen-awesome-css
-    GIT_REPOSITORY https://github.com/jothepro/doxygen-awesome-css.git
-    GIT_TAG        v2.3.4
-)
+morph_declare_dep(doxygen-awesome-css https://github.com/jothepro/doxygen-awesome-css.git v2.3.4)
 FetchContent_MakeAvailable(doxygen-awesome-css)
 
 # ── Doxygen settings ────────────────────────────────────────────────────────
