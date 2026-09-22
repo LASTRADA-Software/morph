@@ -555,7 +555,8 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves
     glz::generic_u64 property{};
     property["$ref"] = std::uint64_t{42};  // malformed: $ref present but not a string
     morph::forms::detail::NestedDefsVisited visited{};
-    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(dom, property, visited);
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(property.contains("required"));
 }
 
@@ -565,7 +566,8 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves
     glz::generic_u64 property{};
     property["$ref"] = std::string{"#/other/Specimen"};
     morph::forms::detail::NestedDefsVisited visited{};
-    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(dom, property, visited);
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(dom.contains("$defs"));
 }
 
@@ -577,7 +579,8 @@ TEST_CASE(
     glz::generic_u64 property{};
     property["type"] = std::string{"string"};  // glaze emitted something other than an object schema
     morph::forms::detail::NestedDefsVisited visited{};
-    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(dom, property, visited);
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(property.contains("required"));
     CHECK(property["type"].get<std::string>() == "string");
 }
@@ -596,7 +599,8 @@ TEST_CASE(
     glz::generic_u64 property{};
     property["$ref"] = std::string{"#/$defs/Specimen"};
     morph::forms::detail::NestedDefsVisited visited{};
-    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(dom, property, visited);
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(dom.contains("$defs"));
     CHECK(property["$ref"].get<std::string>() == "#/$defs/Specimen");
 }
@@ -612,7 +616,8 @@ TEST_CASE(
     glz::generic_u64 property{};
     property["$ref"] = std::string{"#/$defs/Specimen"};
     morph::forms::detail::NestedDefsVisited visited{};
-    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(dom, property, visited);
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(dom["$defs"].contains("Specimen"));
 }
 
@@ -629,7 +634,8 @@ TEST_CASE(
     glz::generic_u64 property{};
     property["type"] = std::string{"array"};  // no "items" key
     morph::forms::detail::NestedDefsVisited visited{};
-    morph::forms::detail::recurseIntoNestedAggregateIfAny<std::vector<Specimen>, 1>(dom, property, visited);
+    morph::forms::detail::recurseIntoNestedAggregateIfAny<std::vector<Specimen>, 1>(
+        morph::forms::detail::SchemaDomRef{dom}, property, visited);
     CHECK_FALSE(property.contains("items"));
     CHECK_FALSE(dom.contains("$defs"));
 }

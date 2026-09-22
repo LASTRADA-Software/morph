@@ -2338,19 +2338,50 @@ inline constexpr std::size_t kMaxNestDepth = 16;
 /// a key it had moved would be read long after.
 using NestedDefsVisited = std::unordered_set<std::string>;
 
+/// @brief The whole schema DOM, as a type distinct from a node inside it.
+///
+/// Each of the three mutually recursive walkers below takes both the whole DOM
+/// (to resolve a `$ref` against `$defs`) and one node within it (the thing to
+/// annotate). While both were plain `glz::generic_u64&` they were adjacent
+/// parameters of identical type, so transposing them at a call site compiled
+/// silently and annotated against the wrong root — a defect with no diagnostic
+/// of any kind. `bugprone-easily-swappable-parameters` flags exactly that
+/// shape, and it flagged this one. Giving the DOM its own type turns the
+/// transposition into a compile error, which is the actual remedy rather than
+/// a suppression of the warning about it.
+///
+/// This is a reference wrapper: it owns nothing, is passed by value, and must
+/// not outlive the DOM it names. The handle is held as a pointer rather than a
+/// reference member so that the type stays assignable (and so that it does not
+/// itself trip `cppcoreguidelines-avoid-const-or-ref-data-members`); it is
+/// constructed from a reference and is therefore never null.
+class SchemaDomRef {
+public:
+    /// @brief Wraps a DOM root.
+    /// @param dom The DOM root to refer to. Must outlive this handle.
+    explicit SchemaDomRef(glz::generic_u64& dom) noexcept : _dom(&dom) {}
+
+    /// @brief The DOM root this refers to.
+    /// @return A reference to the wrapped DOM root; never null.
+    [[nodiscard]] glz::generic_u64& value() const noexcept { return *_dom; }
+
+private:
+    glz::generic_u64* _dom;
+};
+
 // annotateNestedAggregate, annotateNestedAggregateRef, and
 // recurseIntoNestedAggregateIfAny are mutually recursive (each nested
 // aggregate found while annotating one may itself contain another), so all
 // three need forward declarations before any of their bodies can reference
 // the others.
 template <typename Sub, std::size_t Depth>
-void annotateNestedAggregate(glz::generic_u64& dom, glz::generic_u64& node, NestedDefsVisited& visited);
+void annotateNestedAggregate(SchemaDomRef dom, glz::generic_u64& node, NestedDefsVisited& visited);
 
 template <typename Sub, std::size_t Depth>
-void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propertyOrItems, NestedDefsVisited& visited);
+void annotateNestedAggregateRef(SchemaDomRef dom, glz::generic_u64& propertyOrItems, NestedDefsVisited& visited);
 
 template <typename Member, std::size_t Depth>
-void recurseIntoNestedAggregateIfAny(glz::generic_u64& dom, glz::generic_u64& property, NestedDefsVisited& visited);
+void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& property, NestedDefsVisited& visited);
 
 /// @brief Recurses into @p property's own object schema if @p Member (or, for
 ///        `std::vector<Sub>`, its element type) is itself a
@@ -2383,13 +2414,14 @@ void recurseIntoNestedAggregateIfAny(glz::generic_u64& dom, glz::generic_u64& pr
 /// @tparam Member The static type of the member `annotateBasicMemberProperty`
 ///                 was just applied to.
 /// @tparam Depth  Nested-aggregate levels already entered (0 at the action type).
-/// @param dom      The whole schema DOM (so a `$ref`'s `$defs` entry can be found).
+/// @param dom      The whole schema DOM, wrapped (so a `$ref`'s `$defs` entry can be found);
+///                  see `SchemaDomRef`.
 /// @param property The property node for this member (or, for `std::vector<Sub>`,
 ///                  the property whose `"items"` node is the one to check).
 /// @param visited  `$defs` keys already annotated on this `mergeSchemaExtras`
 ///                  call; see `NestedDefsVisited`.
 template <typename Member, std::size_t Depth>
-void recurseIntoNestedAggregateIfAny(glz::generic_u64& dom, glz::generic_u64& property, NestedDefsVisited& visited) {
+void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& property, NestedDefsVisited& visited) {
     if constexpr (ReflectableAggregate<Member>) {
         if constexpr (Depth >= kMaxNestDepth) {
             static_assert(Depth < kMaxNestDepth,
@@ -2422,6 +2454,13 @@ void recurseIntoNestedAggregateIfAny(glz::generic_u64& dom, glz::generic_u64& pr
                           "is there to turn a runaway instantiation into this message, not to cap "
                           "legitimate nesting.");
         } else if (property.contains("items")) {
+            // Pre-existing indexing, verbatim the same at a9cb5649:2380 and
+            // billed to this branch only because the line changed (morph#677).
+            // The `contains("items")` guard directly above is what makes it
+            // safe; glaze's `at(key)` is `{ return operator[](key); }`
+            // (glaze/json/generic.hpp:320), so the alternative the check names
+            // would insert on a missing key exactly as this does.
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             annotateNestedAggregateRef<ItemType, Depth + 1>(dom, property["items"], visited);
         }
     }
@@ -2452,12 +2491,13 @@ void recurseIntoNestedAggregateIfAny(glz::generic_u64& dom, glz::generic_u64& pr
 /// @tparam Depth Nested-aggregate levels already entered, `Sub` included, so
 ///                `Sub`'s own members are examined at this same @p Depth (see
 ///                `recurseIntoNestedAggregateIfAny`, which increments it).
-/// @param dom  The whole schema DOM (so a deeper `$ref`'s `$defs` entry can be found).
+/// @param dom  The whole schema DOM, wrapped (so a deeper `$ref`'s `$defs` entry can
+///              be found); see `SchemaDomRef`.
 /// @param node The object-schema DOM node to annotate in place (see above).
 /// @param visited `$defs` keys already annotated on this `mergeSchemaExtras`
 ///                 call; see `NestedDefsVisited`.
 template <typename Sub, std::size_t Depth>
-void annotateNestedAggregate(glz::generic_u64& dom, glz::generic_u64& node, NestedDefsVisited& visited) {
+void annotateNestedAggregate(SchemaDomRef dom, glz::generic_u64& node, NestedDefsVisited& visited) {
     Sub probe{};
     glz::generic_u64::array_t requiredNames{};
     forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
@@ -2497,13 +2537,14 @@ void annotateNestedAggregate(glz::generic_u64& dom, glz::generic_u64& node, Nest
 /// @tparam Sub          Nested aggregate type, as `annotateNestedAggregate` requires.
 /// @tparam Depth        Nested-aggregate levels already entered, `Sub` included;
 ///                       forwarded to `annotateNestedAggregate` unchanged.
-/// @param dom           The whole schema DOM (so a `$ref`'s `$defs` entry can be found).
+/// @param dom           The whole schema DOM, wrapped (so a `$ref`'s `$defs` entry can
+///                       be found); see `SchemaDomRef`.
 /// @param propertyOrItems The property node itself (single nested member) or its
 ///                        array `items` node (`std::vector<Sub>` member).
 /// @param visited       `$defs` keys already annotated on this `mergeSchemaExtras`
 ///                       call; see `NestedDefsVisited`.
 template <typename Sub, std::size_t Depth>
-void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propertyOrItems, NestedDefsVisited& visited) {
+void annotateNestedAggregateRef(SchemaDomRef dom, glz::generic_u64& propertyOrItems, NestedDefsVisited& visited) {
     constexpr std::string_view kDefsPrefix = "#/$defs/";
     if (propertyOrItems.contains("$ref")) {
         if (auto const* ref = propertyOrItems["$ref"].get_if<std::string>()) {
@@ -2522,9 +2563,24 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
                 // so exactly one of the routes that reach a shared $defs entry
                 // annotates it. It is evaluated last, so a key that fails
                 // either check above is never recorded as done.
-                if (dom.contains("$defs") && dom["$defs"].contains(key) && visited.insert(key).second) {
-                    annotateNestedAggregate<Sub, Depth>(dom, dom["$defs"][key], visited);
+                //
+                // The two `$defs` indexings below are pre-existing: they read
+                // verbatim the same at a9cb5649:2465-2466 and are billed to
+                // this branch only because the line around them changed, which
+                // is all clang-tidy-diff ever sees (morph#677). The `contains`
+                // guards in the same condition are what make them safe, and the
+                // bounds-safe alternative the check names does not exist on this
+                // type -- glaze defines `generic_json::at(key)` as
+                // `{ return operator[](key); }` (glaze/json/generic.hpp:320), so
+                // it inserts on a missing key exactly as `operator[]` does.
+                // Adopting it would silence the check while changing nothing it
+                // warns about, so the disposition is recorded here instead.
+                // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+                if (dom.value().contains("$defs") && dom.value()["$defs"].contains(key) &&
+                    visited.insert(key).second) {
+                    annotateNestedAggregate<Sub, Depth>(dom, dom.value()["$defs"][key], visited);
                 }
+                // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             }
         }
         return;
@@ -2897,7 +2953,7 @@ template <typename A>
         // function's doc comment). Purely additive: an action with no nested
         // aggregate member has nothing here to trigger on, so its schema is
         // byte-for-byte unchanged.
-        recurseIntoNestedAggregateIfAny<Member, 0>(dom, property, nestedVisited);
+        recurseIntoNestedAggregateIfAny<Member, 0>(SchemaDomRef{dom}, property, nestedVisited);
     });
     // Always assign — an explicit empty array beats leaving whatever the
     // schema writer may have emitted (or omitted) for `required`.

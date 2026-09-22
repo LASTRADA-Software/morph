@@ -2456,6 +2456,16 @@ nested type's own reflection. Each recursive step passes along two things: a
 recursion, and a **runtime set of the `$defs` keys already annotated**, which
 is what keeps a shared nested type from being annotated once per route to it.
 
+Each step also carries the **whole DOM** alongside the node it is annotating,
+because resolving a `$ref` means looking its key up under the DOM's `$defs`.
+Those two were both plain `glz::generic_u64&` and adjacent in the parameter
+list, so transposing them at a call site compiled silently and annotated
+against the wrong root — a defect with no diagnostic of any kind. The DOM is
+therefore passed as `detail::SchemaDomRef`, a non-owning handle whose only job
+is to be a *different type* from a node, which turns that transposition into a
+compile error. It is the remedy for what `bugprone-easily-swappable-parameters`
+reports on this signature, rather than a suppression of the report.
+
 **Instantiations are per (type, depth), not per route.** The recursion
 originally carried the ancestor *chain* as a variadic template parameter pack,
 which made `annotateNestedAggregate<Leaf, Ancestors...>` a distinct
