@@ -2333,10 +2333,58 @@ jobs:
       # Includes the fuzz *replay* tests on the clang leg: each committed seed
       # and crash reproducer is replayed once and must not crash. This is a
       # deterministic regression check, not a fuzzing campaign.
-      - name: Test (offscreen Qt platform)
+      #
+      # ── --parallel: the one leg in this repository that runs ctest in
+      #    parallel, deliberately (morph#685) ─────────────────────────────────
+      #
+      # Every other ctest invocation in .github/workflows/ is serial, and until
+      # this line all sixteen of them were. That made a whole class of defect
+      # invisible to CI by construction: two ctest cases sharing an on-disk
+      # database, a port, or a temp path cannot collide when only one runs at a
+      # time. morph#682 is the measured instance -- bank's suites were 0/21 at
+      # `ctest -j 12` on a workstation and 21/21 serially, and CI was green
+      # throughout, on every leg, for as long as the defect existed.
+      #
+      # This leg and not another: it is the only one whose ctest covers the
+      # bank suites morph#682 was about *and* every ladder rung *and* Qt *and*
+      # the core suites, so it is the only place where one flag exposes the
+      # whole class rather than one corner of it. It also costs no new leg --
+      # a second job would add its own configure and build to every future PR,
+      # for the same coverage this already has.
+      #
+      # Measured, with the caveat stated rather than smoothed over. On a
+      # 12-core workstation, clang-debug with MORPH_BUILD_NET, MORPH_BUILD_QT
+      # and MORPH_BUILD_OFFLINE_SQLITE on -- 1898 tests, which is this tree's
+      # core/forms/net/qt/offline set but *not* the ladder or bank:
+      #
+      #     ctest                   1898/1898 passed, 275.06 s
+      #     ctest --parallel 12     1898/1898 passed,  98.25 s
+      #     ctest --parallel 12     1898/1898 passed, 127.53 s
+      #     ctest --parallel 12     1898/1898 passed,  78.80 s
+      #     ctest --parallel 4      1898/1898 passed, 109.38 s   (hosted vCPU count)
+      #
+      # So for the part that could be measured locally this is a saving, not a
+      # cost: the test step gets faster, and the leg's wall time with it.
+      # morph#685 separately measured bank at 21/21 in 1.1 s parallel against
+      # 5.7 s serial after morph#686's per-case databases landed.
+      #
+      # NOT measured, and this is the risk: the ladder rungs in parallel with
+      # each other. They declare RESOURCE_LOCK (cmake/morph_add_rung.cmake),
+      # which is what ctest --parallel consults to serialise the cases that
+      # need it -- a mechanism that exists precisely for this and that no leg
+      # has ever exercised. morph#658 (`SQLite database is locked`, ledger
+      # corpus) is the reason to expect a first bill here.
+      #
+      # If this leg goes red or flaky on contention rather than on a real
+      # regression, the failing case is the finding -- file it, fix the
+      # isolation, and keep the flag. Dropping `--parallel` again puts the
+      # whole class back out of CI's sight, which is the state morph#685 exists
+      # to end. $(nproc) rather than a literal: hosted runners give 4, the
+      # self-hosted fleet gives more, and the point is contention, not a number.
+      - name: Test (offscreen Qt platform, ctest in parallel)
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+        run: ctest --preset ${{ matrix.preset }} --parallel "$(nproc)" --output-on-failure
 
       # A guard that never fires is indistinguishable from one that works, so
       # assert the fuzz replay actually ran the committed crash reproducers
