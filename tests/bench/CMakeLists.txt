@@ -23,9 +23,7 @@ catch_discover_tests(morph_bench DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 60 L
 # Allocation census for one local dispatch (morph#572). A binary of its own,
 # not a case in morph_bench, because it replaces the global operator new: the
 # replacement is process-wide and would perturb every other measurement in the
-# same binary. Deliberately **not** registered with ctest -- it asserts nothing
-# by default (an allocation count is toolchain-specific, so no ceiling is right
-# everywhere), and a test that cannot fail is noise in a suite. Run it by hand:
+# same binary. Run it by hand for the numbers and the per-allocation breakdown:
 #   ./build/tests/bench/morph_bench_alloc [--attribute]
 # See the file's own header comment for the method, and
 # docs/spec/testing_strategy.md.
@@ -42,4 +40,66 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(morph_bench_alloc ${AF_SANITIZER})
+endif()
+
+# ── The allocation budget, as a ctest gate ───────────────────────────────────
+#
+# morph#572 asks for "a benchmark that *fails* when the budget regresses", and
+# names why: `tests/bench/bench_dispatch_latency.json` is produced and never
+# diffed, which is the "control that measures nothing" failure AGENTS.md warns
+# about. A census nobody compares is the same thing with extra steps, so the
+# census is compared here.
+#
+# **The ceiling is a per-toolchain figure, and that is why it is a cache
+# variable rather than a constant.** An allocation count depends on the
+# standard library's small-object thresholds, not only on morph's code: a
+# number that is right on libstdc++ can be wrong on MSVC's STL, where
+# `std::function`'s inline buffer is larger. So the default below is the
+# figure measured on the toolchains that actually run this target in CI, and
+# anything else can set its own. Setting it to 0 disables the gate.
+#
+# Measured on this tree with morph#572's Part A and Part C applied, 10 or more
+# processes per configuration, once idle and once with the machine 16-way
+# oversubscribed:
+#
+#   clang 22.1.8 / libstdc++ 16.2.1, Release : 14.06 per call, every process
+#   clang 22.1.8 / libstdc++ 16.2.1, Debug   : 14.06 per call, every process
+#   gcc 16.2.1   / libstdc++ 16.2.1, Debug   : 14.06 per call, every process
+#
+# The CI legs that build this target are Linux `clang-debug` and `gcc-debug`
+# (.github/workflows/ci.yml, the "every optional feature" matrix), so the last
+# two rows are the ones the default has to hold for.
+#
+# **There is no spread to leave headroom for, and that is recent.** Before the
+# worker gate this file's benchmark now uses, the figure was bimodal -- ~17 on
+# an idle machine and ~13 on a loaded one, for the same binary -- because
+# whether the caller beat the pool thread to attaching its handlers decided
+# which `CompletionState` path they took. That is morph#687, and a ceiling
+# under it would have been either flaky or blind: the pre-fix loaded mode
+# (13.06) sits *below* the post-fix idle mode (14.06), so no single number
+# could have separated a regression from a busy runner. With the race pinned
+# the figure is exact, so 15.0 is not a tolerance band -- it is "one more
+# allocation per call than we spend now", which is the smallest regression
+# worth a red build.
+#
+# MSVC's STL is excluded by default rather than guessed at: nothing in CI
+# measures it, and a ceiling nobody has measured is exactly the kind of control
+# this gate exists to be the opposite of.
+if(MSVC)
+    set(_morph_alloc_budget_default 0)
+else()
+    set(_morph_alloc_budget_default 15.0)
+endif()
+set(MORPH_ALLOC_BUDGET_PER_CALL "${_morph_alloc_budget_default}" CACHE STRING
+    "Ceiling, in heap allocations per local execute round trip, that morph_bench_alloc enforces as a ctest case. 0 disables the gate. See tests/bench/CMakeLists.txt for how the default was measured.")
+
+if(NOT MORPH_ALLOC_BUDGET_PER_CALL EQUAL 0)
+    # --lookup-budget=0 is exact, not a ceiling with headroom: morph#572's
+    # Part C made `ActionDispatcher`'s key lookups allocate nothing at all, for
+    # ids of any length, and "nothing at all" is a property that either holds
+    # or has regressed. There is no toolchain on which a transparent lookup
+    # allocates, so this half needs no per-toolchain default.
+    add_test(NAME bench.alloc_budget
+             COMMAND morph_bench_alloc "--budget=${MORPH_ALLOC_BUDGET_PER_CALL}" "--lookup-budget=0")
+    set_tests_properties(bench.alloc_budget PROPERTIES TIMEOUT 120 LABELS "bench")
 endif()
