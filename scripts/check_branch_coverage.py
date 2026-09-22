@@ -195,8 +195,73 @@ def summarise(files):
 
 ALLOWLIST = "scripts/branch_partial_allowlist.json"
 
+# How far from an occurrence an entry's `context` line may sit, in either
+# direction, and still be accepted as naming that occurrence.
+#
+# A bound is what makes `context` checkable rather than decorative: without one,
+# any line anywhere in the file would "disambiguate" every occurrence equally and
+# the field would resolve nothing. Forty lines is wide enough to reach the
+# enclosing function's signature for the shapes this repository actually cites
+# (the deepest live case, include/morph/core/bridge.hpp's continuation lambdas,
+# is 14 lines from its `catch`), and narrow enough that two occurrences of the
+# same statement in neighbouring overloads do not both fall inside it. When they
+# do, the resolution is refused as still-ambiguous rather than guessed at, so the
+# failure direction of a badly chosen window is a demand for a better `context`,
+# never a wrong answer.
+CONTEXT_WINDOW = 40
 
-def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path, failures):
+# (file, source text) pairs whose citations predate the `context` requirement
+# below, with the ticket that migrates them.
+#
+# These are the entries that were already ambiguous when morph#701 was fixed, in
+# two files this change is not allowed to touch while morph#710 is open. Each is
+# pinned by its *text*, not by a line number, deliberately: the lines move (that
+# is the whole complaint), the text is what the exemption is about, and a pin
+# that went stale every time a header shifted would be a third thing to maintain
+# rather than a migration list.
+#
+# It is a migration list, not a permanent carve-out. It is audited in both
+# directions by scripts/check_allowlist_citations.py -- a pin nothing cites any
+# more is an error, and so is a pin whose text has stopped being ambiguous -- so
+# it can only shrink. Removing the last one removes this constant with it.
+PENDING_CONTEXT = {
+    ("include/morph/core/backend.hpp",
+     "::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);"):
+        "morph#701: registerModel vs. registerModelShared; the entry's reason already "
+        "names the arm in prose. Migrate to a `context` once morph#710 releases "
+        "scripts/mutation_survivors.json.",
+    ("include/morph/core/backend.hpp",
+     "::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,"):
+        "morph#701: the increment side vs. its decrement twin in the posted task. "
+        "Same file, same release condition as the registerCount pin above.",
+    ("include/morph/util/rational.hpp",
+     "if (!std::is_constant_evaluated()) {"):
+        "morph#701: both occurrences are allowlisted, one entry each, so the pair is "
+        "already accounted for -- but neither entry says which is which. Migrate to a "
+        "`context` once morph#710 releases scripts/branch_partial_allowlist.json.",
+    ("include/morph/core/bridge.hpp",
+     "if (deadlineHandle && schedulerRef) {"):
+        "morph#701: the `catch` arm that undoes _pendingCalls, not the .then()/"
+        ".onError() continuations. Same file, same release condition as the "
+        "rational.hpp pin above.",
+}
+
+
+def context_matches(source_lines, occurrence, context):
+    """Does `context` appear within CONTEXT_WINDOW lines of `occurrence`?
+
+    The occurrence's own line is excluded: a `context` equal to the `source`
+    text would otherwise disambiguate every occurrence of it, which is the
+    opposite of the field's purpose.
+    """
+    low = max(1, occurrence - CONTEXT_WINDOW)
+    high = min(len(source_lines), occurrence + CONTEXT_WINDOW)
+    return any(source_lines[n - 1].strip() == context
+               for n in range(low, high + 1) if n != occurrence)
+
+
+def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path, failures,
+                                  context=None):
     """Resolve one allowlist entry's `source` text to its current line number.
 
     Shared by this module's own resolve_allowlist() (keyed on partial branch
@@ -218,6 +283,33 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
     caller to stop, because the allowlist's own `line` hint has drifted and
     an update is still needed before the entry should be trusted -- see the
     "has moved to line" message below.
+
+    Ambiguity, and the `context` field (morph#701)
+    ----------------------------------------------
+    Until morph#701 this function answered an ambiguous citation with whatever
+    the entry had already said: `if hint in matches: return hint` accepted *any*
+    occurrence of the text, so a hint that named the wrong one of three passed
+    exactly as a right one did. That is a gate that stops measuring at the moment
+    someone interacts with it, and it fired twice in one week -- on
+    include/morph/core/backend.hpp's two `emitMetric(registerCount)` arms and on
+    include/morph/core/bridge.hpp's three `if (deadlineHandle && schedulerRef)`
+    sites -- with the entry's own `reason` naming the right site in prose that
+    nothing could check.
+
+    So an ambiguous `source` is now refused unless the entry supplies a
+    `context`: a second verbatim source line, within CONTEXT_WINDOW lines of the
+    occurrence it means, that exactly one occurrence carries. Then "unambiguous"
+    is a property of the file rather than of whoever typed the number, and the
+    wrong duplicate fails whether or not it happens to be a line the text sits
+    on.
+
+    `context` is validated whenever it is supplied, not only when the text is
+    ambiguous: a disambiguator that has stopped matching is the same drift as a
+    `source` that has, and one that resolves to a *different* occurrence than the
+    `line` hint is the defect itself.
+
+    PENDING_CONTEXT grandfathers the pairs that were already ambiguous when this
+    rule arrived, keyed by text; see that constant.
     """
     source_file = os.path.join(repo_root, path)
     if not os.path.exists(source_file):
@@ -226,6 +318,7 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
     with open(source_file) as handle:
         source_lines = handle.read().splitlines()
 
+    context = (context or "").strip()
     matches = [n for n, text in enumerate(source_lines, 1) if text.strip() == wanted]
     if not matches:
         failures.append(
@@ -234,10 +327,49 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
             f"did not; re-read it rather than moving the number."
         )
         return None
+
+    if context:
+        narrowed = [n for n in matches if context_matches(source_lines, n, context)]
+        if not narrowed:
+            failures.append(
+                f"{path}:{hint} carries the disambiguator {context!r}, which is not "
+                f"within {CONTEXT_WINDOW} lines of any of the {len(matches)} place(s) "
+                f"the cited source text appears (lines {matches}). The `context` has "
+                f"drifted the way a bare line number would; re-read the site and "
+                f"quote a line that is still beside it."
+            )
+            return None
+        if len(narrowed) > 1:
+            failures.append(
+                f"{path}:{hint} carries the disambiguator {context!r}, which sits "
+                f"within {CONTEXT_WINDOW} lines of {len(narrowed)} of the cited "
+                f"occurrences (lines {narrowed}), so it does not say which one is "
+                f"meant. Quote a line that is beside exactly one of them."
+            )
+            return None
+        matches = narrowed
+    elif len(matches) > 1 and (path, wanted) not in PENDING_CONTEXT:
+        failures.append(
+            f"{path}:{hint} is allowlisted by a source line that appears "
+            f"{len(matches)} times (lines {matches}), so the `line` hint alone does "
+            f"not say which occurrence is meant -- and this gate would accept any of "
+            f"them (morph#701). Add a `context`: a verbatim source line within "
+            f"{CONTEXT_WINDOW} lines of the occurrence you mean, and beside no other."
+        )
+        return None
+
     if hint in matches:
         return hint
     if len(matches) == 1:
         resolved = matches[0]
+        if context:
+            failures.append(
+                f"{path}:{hint} resolves through its `context` to line {resolved}, "
+                f"not to {hint}. The disposition still has a site -- update the "
+                f"`line` hint to {resolved}, or fix the `context` if {hint} is the "
+                f"site you meant."
+            )
+            return None
         failures.append(
             f"{path}:{hint} has moved to line {resolved}. The text still matches, so "
             f"nothing is wrong with the disposition -- update the `line` hint."
@@ -288,7 +420,8 @@ def resolve_allowlist(repo_root, partial_lines, allowlist_path, failures):
                             f"suppression is not a disposition.")
             continue
 
-        resolved = resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path, failures)
+        resolved = resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
+                                                 failures, context=entry.get("context"))
         if resolved is None:
             continue
 
@@ -666,6 +799,110 @@ def self_test():
         fail("an allowlist entry with no reason was accepted", output)
     else:
         note("ok: an allowlist entry with no stated reason is rejected")
+
+    # ── The `context` disambiguator (morph#701) ────────────────────────────
+    # Before morph#701 the resolver returned the hint whenever the hint was *a*
+    # match, so cases 11 and 12 below both passed -- including 12, which names
+    # the occurrence the entry's own reason excludes. These seven cases are the
+    # fix, and the pair 11/12 is what makes them non-vacuous: a change that only
+    # let the right answer through would still pass 13.
+    AMBIGUOUS_PATH = "include/morph/util/ambiguous.hpp"
+    AMBIGUOUS_SOURCE = (
+        "// header\n"                                  # 1
+        "void inHandler() {\n"                         # 2
+        "    if (!std::is_constant_evaluated()) {\n"   # 3
+        "    }\n"                                      # 4
+        "}\n"                                          # 5
+        + "// filler\n" * 50 +                         # 6..55
+        "void inFallback() {\n"                        # 56
+        "    if (!std::is_constant_evaluated()) {\n"   # 57
+        "    }\n"                                      # 58
+        "}\n"                                          # 59
+    )
+
+    def with_ambiguous_partials(numbers=(3, 57)):
+        padding = [(200 + n, 1, [True, True]) for n in range(40)]
+        return _every_subsystem(
+            {AMBIGUOUS_PATH: [(n, 1, [True, False]) for n in numbers] + padding})
+
+    def ambiguous_entry(**overrides):
+        base = {"file": AMBIGUOUS_PATH, "line": 3,
+                "source": "if (!std::is_constant_evaluated()) {",
+                "reason": "fixture: the inHandler() arm, not inFallback()'s"}
+        base.update(overrides)
+        return [base]
+
+    def run_ambiguous(allowlist):
+        return run(with_ambiguous_partials(), allowlist=allowlist,
+                   sources={AMBIGUOUS_PATH: AMBIGUOUS_SOURCE})
+
+    # 11. The *right* occurrence, with no disambiguator -> still refused. The
+    #     entry is not wrong; it is unverifiable, and the gate says so rather
+    #     than agreeing with it.
+    code, output = run_ambiguous(ambiguous_entry())
+    if code != 0 and "does not say which occurrence is meant" in output:
+        note("ok: an ambiguous citation with no `context` is refused, right answer or not")
+    else:
+        fail("an ambiguous citation with no `context` was accepted", output)
+
+    # 12. The *wrong* occurrence, with no disambiguator -> refused identically.
+    #     This is the case that passed before morph#701.
+    code, output = run_ambiguous(ambiguous_entry(line=57))
+    if code != 0 and "does not say which occurrence is meant" in output:
+        note("ok: the wrong duplicate is refused, not accepted for matching something")
+    else:
+        fail("a hint naming the wrong duplicate was accepted", output)
+
+    # 13. A `context` beside exactly one occurrence resolves it, and the entry
+    #     passes -- so 11 and 12 are a demand for evidence, not a dead end.
+    code, output = run_ambiguous(ambiguous_entry(context="void inHandler() {"))
+    if code == 0 and "partial lines are recorded" in output:
+        note("ok: a `context` beside one occurrence resolves an ambiguous citation")
+    else:
+        fail("a disambiguated citation was not accepted", output)
+
+    # 14. The same `context` with the wrong `line` -> refused, and told which
+    #     occurrence the context actually names. The disambiguator outranks the
+    #     hint, which is the point of having one.
+    code, output = run_ambiguous(ambiguous_entry(line=57, context="void inHandler() {"))
+    if code != 0 and "resolves through its `context` to line 3" in output:
+        note("ok: a `context` that names a different occurrence than `line` fails, "
+             "and names it")
+    else:
+        fail("a `context`/`line` disagreement was not reported", output)
+
+    # 15. A `context` that is nowhere near any occurrence -> refused. A
+    #     disambiguator that has drifted is the same defect as a `source` that
+    #     has, and must not be quietly ignored.
+    code, output = run_ambiguous(ambiguous_entry(context="void deletedHelper() {"))
+    if code != 0 and f"not within {CONTEXT_WINDOW} lines" in output:
+        note("ok: a `context` that no longer sits beside the site is refused")
+    else:
+        fail("a drifted `context` was ignored", output)
+
+    # 16. A `context` beside *both* occurrences disambiguates nothing, and is
+    #     refused rather than resolved to the first. Without this case the field
+    #     could be satisfied by quoting any nearby boilerplate.
+    code, output = run_ambiguous(ambiguous_entry(context="    }"))
+    if code != 0 and "does not say which one is meant" in output:
+        note("ok: a `context` beside several occurrences is refused as still ambiguous")
+    else:
+        fail("a non-disambiguating `context` was accepted", output)
+
+    # 17. A PENDING_CONTEXT pin accepts the pre-existing citation unchanged --
+    #     the migration path for entries written before this rule, in files a
+    #     given change is not allowed to touch. Audited in both directions by
+    #     scripts/check_allowlist_citations.py, so it can only shrink.
+    pin = (AMBIGUOUS_PATH, "if (!std::is_constant_evaluated()) {")
+    PENDING_CONTEXT[pin] = "fixture"
+    try:
+        code, output = run_ambiguous(ambiguous_entry())
+    finally:
+        del PENDING_CONTEXT[pin]
+    if code == 0:
+        note("ok: a PENDING_CONTEXT pin accepts a citation that predates the rule")
+    else:
+        fail("a grandfathered ambiguous citation was refused", output)
 
     # ── The manifest-aware vacuity rule (morph#404 follow-up) ───────────────
     # `cmake --preset clang-coverage` with nothing else profiles morph_tests

@@ -95,7 +95,7 @@ jobs:
         run: bash scripts/test_check_sanitizer_instrumentation.sh
 
   dep-cache-selftest:
-    name: Dependency-cache self-test
+    name: Dependency-cache self-test & FetchContent pin agreement
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -108,6 +108,32 @@ jobs:
       # does not have; this self-test is what caught it.
       - name: Self-test the FetchContent dependency cache
         run: bash scripts/test_dep_cache.sh
+
+      # scripts/check_dep_pins.py, in this job because it is the same cache's
+      # other half. Every dependency states its revision twice -- once as
+      # `morph_cache_dep(<name> <url> <tag>)`, once as the GIT_TAG of the
+      # `FetchContent_Declare` beside it -- and until morph#693 nothing compared
+      # the two. DepCache.cmake was written against exactly this failure class
+      # and says so ("the one that is hardest to notice because everything still
+      # builds"), but it keys on the tag it is *handed*, not the tag FetchContent
+      # is handed, so splitting the pin across two calls reintroduces it one
+      # level up.
+      #
+      # The divergence is asymmetric in the worst way: a warm cache serves
+      # morph_cache_dep's tag, an uncached configure (the default for a local
+      # build) fetches GIT_TAG's. So a mismatch builds a different revision in CI
+      # than on the author's machine, both successfully and with no diagnostic.
+      #
+      # All five paired sites agree today, so this is preventive and its
+      # acceptance test is not "it passes here" -- it would pass here if it
+      # parsed nothing. The self-test above it skews a pin by one character and
+      # requires the failure to name both lines; the same was done on the real
+      # tree before this step was added. Reads CMake text only.
+      - name: Self-test the dependency-pin checker
+        run: python3 scripts/check_dep_pins.py --self-test
+
+      - name: Check every FetchContent pin agrees with its cache entry
+        run: python3 scripts/check_dep_pins.py
 
   prose-lint:
     name: Spec-citation, banned-terminology & CI-clang-pin lint
@@ -442,6 +468,47 @@ jobs:
 
       - name: Self-test the mutation-survivor citation gate
         run: python3 scripts/check_mutation_survivors.py --self-test
+
+  # ── Every line-cited allowlist's citations, resolved in one place ──────
+  # Three files in this repository cite source lines by `{file, line, source}`:
+  # scripts/branch_partial_allowlist.json, scripts/error_path_allowlist.json
+  # (wired up, entries currently empty) and scripts/mutation_survivors.json.
+  # All three are resolved by one function, and until morph#705 they were
+  # resolved by *different jobs* -- the survivors file by the job above, the
+  # branch allowlist 20 minutes into ci.yml's coverage leg -- with no ordering
+  # between them. So an author fixed the one CI named, pushed, and met the
+  # other a cycle later.
+  #
+  # Three occurrences in one week, the instructive one being morph#710: that
+  # lane ran every allowlist locally *because it was told to*, then committed
+  # clang-tidy fixes that inserted one line above three citations and went red
+  # on two jobs. The gates were green when run and stale when pushed. Nothing
+  # re-ran them, because running them was a manual act at a moment the author
+  # chose.
+  #
+  # scripts/check_allowlist_citations.py is the single command that answers for
+  # all three, locally and here. It reads JSON and headers only -- no build, no
+  # network, no coverage data -- which is what lets it run per-PR in seconds
+  # instead of behind a build leg. The per-allowlist *site* checks (is this
+  # still a partial branch? still a throw/catch arm?) stay where they are,
+  # because each needs the LCOV this job deliberately does not have; only the
+  # citation resolution aggregates.
+  #
+  # It also audits check_branch_coverage.py's PENDING_CONTEXT in both
+  # directions (morph#701's migration list), so that list can only shrink: a
+  # pin nothing cites, one whose text stopped being ambiguous, and one every
+  # citing entry has already migrated past are each an error.
+  allowlist-citation-lint:
+    name: Line-cited allowlists (every citation, one run)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the allowlist-citation aggregate
+        run: python3 scripts/check_allowlist_citations.py --self-test
+
+      - name: Resolve every line-cited allowlist's citations
+        run: python3 scripts/check_allowlist_citations.py
 
   # ── The coverage-object gate's own self-test ───────────────────────────
   # The gate itself (scripts/check_coverage_objects.sh) runs inside
