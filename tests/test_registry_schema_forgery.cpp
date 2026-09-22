@@ -90,6 +90,13 @@ struct RegSchemaForgeModel {
 // pair -- resolves `::morph::forms::schemaJson<A>()` to this specialization
 // rather than implicitly instantiating (and thereby closing off
 // specialization of) the primary, glaze-driven template.
+//
+// Each specialization returns `const std::string&`, matching the primary
+// template (morph#573 step 1). A specialization therefore has to own its text
+// for at least as long as the caller reads it, which is what the function-local
+// statics below are for -- returning a reference to a temporary would dangle.
+// That is the same contract the primary template meets with its own cache, and
+// it is why these read as constants rather than as expressions.
 namespace morph::forms {
 
 /// R1's first sub-condition (`glz::read_json` fails) and R3
@@ -97,14 +104,16 @@ namespace morph::forms {
 /// `buildActionDescription`'s degrade path leaves `desc.schema` exactly as
 /// `schemaJson<A>()` returned it (unmodified) on a read failure.
 template <>
-inline std::string schemaJson<RegSchemaForgeEmptyAction>() {
-    return "";
+inline const std::string& schemaJson<RegSchemaForgeEmptyAction>() {
+    static const std::string kForged{};
+    return kForged;
 }
 
 /// R1's second sub-condition: valid, parseable JSON that is not an object.
 template <>
-inline std::string schemaJson<RegSchemaForgeArrayAction>() {
-    return "[1,2,3]";
+inline const std::string& schemaJson<RegSchemaForgeArrayAction>() {
+    static const std::string kForged{"[1,2,3]"};
+    return kForged;
 }
 
 /// R1's third sub-condition (registry.hpp:378): a `"required"` key that is
@@ -112,8 +121,9 @@ inline std::string schemaJson<RegSchemaForgeArrayAction>() {
 /// `dom["required"].is_array()` is false, so the `required`-collection loop
 /// is skipped entirely and `desc.required` stays empty.
 template <>
-inline std::string schemaJson<RegSchemaForgeRequiredNotArrayAction>() {
-    return R"({"required":"nope"})";
+inline const std::string& schemaJson<RegSchemaForgeRequiredNotArrayAction>() {
+    static const std::string kForged{R"({"required":"nope"})"};
+    return kForged;
 }
 
 /// R1's fourth sub-condition (registry.hpp:380): a `"required"` array that
@@ -121,8 +131,9 @@ inline std::string schemaJson<RegSchemaForgeRequiredNotArrayAction>() {
 /// `name.is_string()` is false for the number, so it's skipped, while the
 /// string element after it is still collected.
 template <>
-inline std::string schemaJson<RegSchemaForgeRequiredNonStringAction>() {
-    return R"({"required":[1,"a"]})";
+inline const std::string& schemaJson<RegSchemaForgeRequiredNonStringAction>() {
+    static const std::string kForged{R"({"required":[1,"a"]})"};
+    return kForged;
 }
 
 }  // namespace morph::forms

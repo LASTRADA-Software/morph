@@ -381,16 +381,20 @@ template <typename V>
 ///
 /// A **new, separate top-level document** from `morph::forms::schemaJson<A>()`
 /// — never merged into any action schema. Computed once per type and cached,
-/// exactly like `schemaJson<A>()`.
+/// exactly like `schemaJson<A>()` — and, like it, returned **by reference**:
+/// the cache is created once per type per process, never mutated afterwards,
+/// and lives until the process exits, so the reference stays valid for as long
+/// as any caller could hold it. A caller that needs its own mutable copy asks
+/// for one (`std::string mine = viewSchemaJson<V>();`).
 /// @tparam V View descriptor: `using kind = CollectionView` (or
 ///           `MasterDetailView`); `using query = <registered query action>`;
 ///           optional `static constexpr std::string_view title`, `rowKey`,
 ///           `std::array<ColumnOverride, N> columns`,
 ///           `ActionDescriptor rowAction`, and
 ///           `std::array<ActionDescriptor, N> actions`.
-/// @return The view-schema JSON.
+/// @return Reference to the process-lifetime view-schema JSON for `V`.
 template <typename V>
-[[nodiscard]] std::string viewSchemaJson() {
+[[nodiscard]] const std::string& viewSchemaJson() {
     static const std::string cached = detail::buildViewSchema<V>();
     return cached;
 }
@@ -416,13 +420,22 @@ public:
     /// @param viewId String type-id (`ViewTraits<V>::typeId()`).
     template <typename V>
     void registerView(std::string_view viewId) {
-        _providers.insert_or_assign(std::string{viewId}, [] { return viewSchemaJson<V>(); });
+        // `-> const std::string&` explicitly: a deduced return type would decay
+        // the reference to a value and reintroduce, inside the registry, the
+        // per-call copy `viewSchemaJson<V>()` no longer makes.
+        _providers.insert_or_assign(std::string{viewId}, []() -> const std::string& { return viewSchemaJson<V>(); });
     }
 
     /// @brief Returns the cached `viewSchemaJson<V>()` for @p viewId.
+    ///
+    /// Forwards the provider's reference through unchanged, so enumerating every
+    /// registered view copies no schema text; the referent is
+    /// `viewSchemaJson<V>()`'s process-lifetime cache.
     /// @param viewId String type-id previously passed to `registerView`.
-    /// @return The view-schema JSON.
-    [[nodiscard]] std::string schemaJson(std::string_view viewId) const {
+    /// @return Reference to the process-lifetime view-schema JSON registered
+    ///         under @p viewId.
+    /// @throws std::runtime_error if no view is registered under @p viewId.
+    [[nodiscard]] const std::string& schemaJson(std::string_view viewId) const {
         auto iter = _providers.find(std::string{viewId});
         if (iter == _providers.end()) {
             throw std::runtime_error("unknown view: " + std::string{viewId});
@@ -449,7 +462,7 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, std::function<std::string()>> _providers;
+    std::unordered_map<std::string, std::function<const std::string&()>> _providers;
 };
 
 namespace detail {

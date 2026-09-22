@@ -304,7 +304,7 @@ nothing renders twice.
 
 | Signature | Returns |
 |---|---|
-| `template <typename V> std::string viewSchemaJson()` | The view-schema JSON. Cached per type. Never throws — internal DOM (parsed JSON document tree) failure yields an empty string, matching `schemaJson<A>()`. |
+| `template <typename V> const std::string& viewSchemaJson()` | The view-schema JSON. Cached per type and returned **by reference**, exactly like `schemaJson<A>()` — the cache is built once per type per process, never mutated afterwards and lives until the process exits, so the reference stays valid for as long as any caller could hold it; a caller wanting its own mutable copy asks for one (`std::string mine = viewSchemaJson<V>();`). Never throws — internal DOM (parsed JSON document tree) failure yields an empty string, matching `schemaJson<A>()`. |
 
 ### `ActionDescriptor` / `describeAction<Action>()` / `ColumnOverride`
 
@@ -323,8 +323,8 @@ nothing renders twice.
 |---|---|---|
 | `ViewTraits<V>` | class template | **Customisation point.** `static constexpr std::string_view typeId()`. Specialise via `BRIDGE_REGISTER_VIEW`. |
 | `BRIDGE_REGISTER_VIEW(V, NAME)` | macro | Specialises `ViewTraits<V>` and registers `V` with `ViewRegistry` at static-init time. |
-| `ViewRegistry::registerView<V>(viewId)` | method template | Registers `V`'s schema provider (last-write-wins on a repeated `viewId`). |
-| `ViewRegistry::schemaJson(viewId) const` | method | Returns the cached `viewSchemaJson<V>()` for `viewId`; throws `std::runtime_error` if unknown. |
+| `ViewRegistry::registerView<V>(viewId)` | method template | Registers `V`'s schema provider — a `std::function<const std::string&()>`, so the registry does not reintroduce the per-call copy `viewSchemaJson<V>()` avoids (last-write-wins on a repeated `viewId`). |
+| `ViewRegistry::schemaJson(viewId) const` | method | Returns the cached `viewSchemaJson<V>()` for `viewId`, by `const std::string&` — the provider's reference is forwarded through, so enumerating every registered view copies no schema text; throws `std::runtime_error` if unknown. |
 | `ViewRegistry::viewIds() const` | method | Every registered view id. |
 | `ViewRegistry::instance()` | static method | Process-level singleton. |
 

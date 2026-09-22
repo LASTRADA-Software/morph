@@ -9,11 +9,12 @@
 // *inlines* the object schema directly into the property when the nested
 // type is used exactly once in the whole schema, and *deduplicates* it via a
 // shared `$defs` entry (referenced by `$ref`) when it is used two or more
-// times. Both are exercised below. Recursion continues to whatever depth the
-// type graph actually has, stopping only at a genuine cycle -- a compile-time
-// `static_assert`, not something this runtime test suite can exercise
-// directly (see docs/spec/forms/forms.md, "Nested aggregates (recursive,
-// cycle-guarded)").
+// times. Both are exercised below. Recursion continues into the type graph
+// down to morph::forms::detail::kMaxNestDepth levels below the action type,
+// past which -- and for a cyclic graph, which has no bottom -- it is a
+// compile-time `static_assert`, not something this runtime test suite can
+// exercise directly (see docs/spec/forms/forms.md, "Nested aggregates
+// (recursive, depth-bounded)").
 
 #include <algorithm>
 #include <array>
@@ -96,10 +97,11 @@ struct DeepSpecimen {
 // A self-referential nested-aggregate type (a tree node). Never passed to
 // morph::forms::schemaJson<A>() anywhere in this file -- neither as the
 // top-level action type itself nor nested inside another action's member --
-// either use would trip forms.hpp's cycle-guard static_assert (see
-// docs/spec/forms/forms.md, "Nested aggregates (recursive, cycle-guarded)").
-// This only proves the type itself, and ordinary glaze JSON round-tripping
-// over it, are completely unaffected by that guard.
+// either use would recurse into TreeNode forever and so trip forms.hpp's
+// kMaxNestDepth static_assert (see docs/spec/forms/forms.md, "Nested
+// aggregates (recursive, depth-bounded)"). This only proves the type itself,
+// and ordinary glaze JSON round-tripping over it, are completely unaffected
+// by that bound.
 struct TreeNode {
     std::string name;
     std::vector<TreeNode> children;
@@ -540,13 +542,21 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: optionalFields marks a non-std::o
 // rather than through schemaJson<A>(), because glaze itself never actually
 // produces the malformed shapes these branches guard against -- see the
 // function's own doc comment ("left untouched rather than guessed at").
+//
+// The explicit `1` is the depth NTTP the recursion carries since morph#573
+// step 3 (one nested-aggregate level below the action type -- any value below
+// kMaxNestDepth exercises the same code), and the `visited` set is the
+// shared-$defs bookkeeping it threads through. A fresh, empty set per call is
+// what mergeSchemaExtras hands the recursion at the start of each schema.
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves a non-string $ref untouched",
           "[forms][nested][issue25]") {
     glz::generic_u64 dom{};
     glz::generic_u64 property{};
     property["$ref"] = std::uint64_t{42};  // malformed: $ref present but not a string
-    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    morph::forms::detail::NestedDefsVisited visited{};
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(property.contains("required"));
 }
 
@@ -555,7 +565,9 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves
     glz::generic_u64 dom{};
     glz::generic_u64 property{};
     property["$ref"] = std::string{"#/other/Specimen"};
-    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    morph::forms::detail::NestedDefsVisited visited{};
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(dom.contains("$defs"));
 }
 
@@ -566,7 +578,9 @@ TEST_CASE(
     glz::generic_u64 dom{};
     glz::generic_u64 property{};
     property["type"] = std::string{"string"};  // glaze emitted something other than an object schema
-    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    morph::forms::detail::NestedDefsVisited visited{};
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(property.contains("required"));
     CHECK(property["type"].get<std::string>() == "string");
 }
@@ -584,7 +598,9 @@ TEST_CASE(
     glz::generic_u64 dom{};
     glz::generic_u64 property{};
     property["$ref"] = std::string{"#/$defs/Specimen"};
-    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    morph::forms::detail::NestedDefsVisited visited{};
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(dom.contains("$defs"));
     CHECK(property["$ref"].get<std::string>() == "#/$defs/Specimen");
 }
@@ -599,7 +615,9 @@ TEST_CASE(
     dom["$defs"]["SomeOtherType"]["properties"] = glz::generic_u64::object_t{};
     glz::generic_u64 property{};
     property["$ref"] = std::string{"#/$defs/Specimen"};
-    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    morph::forms::detail::NestedDefsVisited visited{};
+    morph::forms::detail::annotateNestedAggregateRef<Specimen, 1>(morph::forms::detail::SchemaDomRef{dom}, property,
+                                                                  visited);
     CHECK_FALSE(dom["$defs"].contains("Specimen"));
 }
 
@@ -615,7 +633,9 @@ TEST_CASE(
     glz::generic_u64 dom{};
     glz::generic_u64 property{};
     property["type"] = std::string{"array"};  // no "items" key
-    morph::forms::detail::recurseIntoNestedAggregateIfAny<std::vector<Specimen>>(dom, property);
+    morph::forms::detail::NestedDefsVisited visited{};
+    morph::forms::detail::recurseIntoNestedAggregateIfAny<std::vector<Specimen>, 1>(
+        morph::forms::detail::SchemaDomRef{dom}, property, visited);
     CHECK_FALSE(property.contains("items"));
     CHECK_FALSE(dom.contains("$defs"));
 }
@@ -627,7 +647,7 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: a self-referential nested-aggrega
     // TreeNode is never passed to morph::forms::schemaJson<A>() in this file
     // -- see its doc comment. This only proves the type itself, and ordinary
     // glaze JSON round-tripping over it, are completely unaffected by
-    // forms.hpp's cycle-guard static_assert, which fires only when a type
+    // forms.hpp's kMaxNestDepth static_assert, which fires only when a type
     // like this is actually nested under some schemaJson<A>() instantiation.
     TreeNode root{};
     root.name = "root";
