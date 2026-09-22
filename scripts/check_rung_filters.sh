@@ -257,10 +257,35 @@ shopt -u nullglob
 # ones. The file must subtract the check -- and it must carry
 # `InheritParentConfig: true`, because without that key clang-tidy *replaces*
 # the parent configuration instead of extending it: a directory holding
-# `Checks: '-bugprone-chained-comparison'` alone runs with no checks enabled
-# whatsoever and reports green while linting nothing. A suppression that
-# silences more than the false positive is worse than the finding it hides, so
-# it is checked here rather than left to review.
+# `Checks: '-bugprone-chained-comparison'` alone enables no checks at all.
+#
+# It then fails loudly, which this paragraph used to deny (morph#716). The
+# claim here was "reports green while linting nothing". Measured instead, on
+# this revision with clang-tidy 22.1.8 and a real compile database:
+#
+#     $ sed -i '/^InheritParentConfig: true$/d' examples/bank/tests/.clang-tidy
+#     $ clang-tidy -p build examples/bank/tests/test_account.cpp
+#     Error: no checks enabled.
+#     $ echo $?
+#     1
+#
+# against `169 warnings treated as errors` from the same command with the key
+# restored. So this gate is not catching an invisible failure; it is catching a
+# red build with a clear message, and turning it into one that names the file
+# and the missing key on the PR that introduces it rather than 20 minutes into
+# a clang-tidy leg -- and one that fires even when nothing in that directory
+# changed, which is when clang-tidy-diff would analyse nothing there and say
+# nothing either way.
+#
+# That is a weaker reason than "reports green while linting nothing", and still
+# a sufficient one. It is worth stating correctly because the wrong version
+# propagates: a reader deciding whether some *other* config needs the same
+# protection reasons from it, and anyone auditing this gate for vacuity goes
+# looking for the silent case, fails to reproduce it, and may conclude the gate
+# is unnecessary.
+#
+# A suppression that silences more than the false positive is worse than the
+# finding it hides, so it is checked here rather than left to review.
 #
 # The third condition is morph#652: every .cpp the suppression reaches must
 # actually be a Catch2 translation unit. clang-tidy resolves configuration
@@ -301,7 +326,7 @@ check_test_dir_tidy_config() {
         return
     fi
     if ! printf '%s\n' "$body" | grep -qE '^[[:space:]]*InheritParentConfig:[[:space:]]*true[[:space:]]*$'; then
-        fail "${dir}/.clang-tidy has no 'InheritParentConfig: true', so it REPLACES the repository-root check list rather than subtracting one entry from it -- that directory would be linted by nothing at all"
+        fail "${dir}/.clang-tidy has no 'InheritParentConfig: true', so it REPLACES the repository-root check list rather than subtracting one entry from it -- clang-tidy would then enable no checks at all there and exit non-zero with 'Error: no checks enabled.' the next time anything in that directory is analysed"
         return
     fi
     note "${dir}/.clang-tidy subtracts ${tidy_false_positive} and inherits every other check"
