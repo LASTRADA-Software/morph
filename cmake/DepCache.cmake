@@ -70,9 +70,9 @@ include(FetchContent)
 # that was supposed to end it.
 #
 # Everything else in ARGN is forwarded to `FetchContent_Declare` verbatim.
-# Today that is only `GIT_SHALLOW` -- TRUE for glaze and Catch2 (tags, which a
-# shallow clone resolves), FALSE for both Lightweight sites (a commit SHA,
-# which it does not), and unset for doxygen-awesome-css -- but forwarding the
+# Today that is only `GIT_SHALLOW` -- TRUE for glaze, Catch2 and
+# doxygen-awesome-css (tags, which a shallow clone resolves), FALSE for both
+# Lightweight sites (a commit SHA, which it does not) -- but forwarding the
 # rest of the argument list rather than one named option means a site that
 # needs `SOURCE_SUBDIR` or `PATCH_COMMAND` next does not have to widen this
 # function to get it.

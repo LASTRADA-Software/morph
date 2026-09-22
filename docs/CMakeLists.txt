@@ -3,7 +3,22 @@ message(STATUS "Doxygen found: ${DOXYGEN_EXECUTABLE}")
 
 include(FetchContent)
 include(${CMAKE_SOURCE_DIR}/cmake/DepCache.cmake)
-morph_declare_dep(doxygen-awesome-css https://github.com/jothepro/doxygen-awesome-css.git v2.3.4)
+# GIT_SHALLOW TRUE because `v2.3.4` is a tag, which a shallow clone resolves --
+# the same reason glaze and Catch2 carry it, and the opposite of both Lightweight
+# sites, whose pins are commit SHAs and are therefore GIT_SHALLOW FALSE. Without
+# it an uncached configure clones 232 commits of a stylesheet repository to use
+# one file, `doxygen-awesome.css` (morph#724).
+#
+# What this does *not* speed up: wherever `cmake/DepCache.cmake`'s dependency
+# cache is active -- which is every CI job, since a hosted runner sets `CI` and
+# `HOME` -- `morph_cache_dep` pre-clones at full depth and points FetchContent at
+# the result via FETCHCONTENT_SOURCE_DIR_DOXYGEN-AWESOME-CSS, so FetchContent
+# never clones and GIT_SHALLOW is inert. The saving is on the uncached
+# configure: a developer building the docs target locally. Recorded because the
+# three tag pins previously differed here with no reason written beside any of
+# them, which is what made this look deliberate.
+morph_declare_dep(doxygen-awesome-css https://github.com/jothepro/doxygen-awesome-css.git v2.3.4
+    GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(doxygen-awesome-css)
 
 # ── Doxygen settings ────────────────────────────────────────────────────────
