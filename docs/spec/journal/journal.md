@@ -369,6 +369,29 @@ class PayloadMigrationRegistry {
 PayloadMigrationRegistry& defaultPayloadMigrations();
 ```
 
+The backing store is
+`unordered_map<pair<string, string>, Migration, model::detail::PairKeyHash,
+model::detail::PairKeyEqual>`, and **both functors matter** (morph#699). This
+map named `PairKeyHash` alone for as long as it existed;
+`std::unordered_map` enables heterogeneous lookup only when the hash *and* the
+equality are transparent, so `find` silently built a `pair<string, string>` to
+probe with while looking like it did not. With `PairKeyEqual` in place `find`
+takes a `detail::PairKeyView` directly. `add` still builds a key, because it
+inserts one.
+
+**Measured** with `morph_bench_alloc`'s migration census (clang 22.1.8 /
+libstdc++ 16.2.1, 200 lookups, 50 warm-up excluded): for a pair whose ids both
+exceed libstdc++'s 15-character SSO buffer, **2.00 → 0.00** allocations per
+`find`; for a pair whose ids both fit inside it, **0.00 → 0.00**. `find` hashes,
+probes and returns a pointer and can do nothing else, so that figure is the
+key's whole cost. The ctest gate `bench.alloc_budget` holds it at zero through
+`--lookup-budget=0`, alongside `ActionDispatcher`'s.
+
+The rate is low and worth stating plainly: `replay()` calls `find` only on the
+branch where a recorded entry's schema fingerprint differs from this build's,
+so a journal written by the current build never reaches it at all. What it
+costs is two allocations per *migrated* entry, across a whole replay.
+
 A migration is a pure function over the recorded payload JSON: given the bytes
 the older build wrote, return the bytes this build's `fromJson` should see. It
 is applied in memory, per replayed entry; the sink is untouched. Not

@@ -716,12 +716,45 @@ it answers and does not:
 Process-level singleton (`instance()`). Maps a **three-part key** —
 `(modelTypeId, actionTypeId, typeid(Sharing))` — to `Executor` values
 (`std::function<Completion<string>(void*, string_view)>`). The backing store is
-`unordered_map<Key, Executor, KeyHash>`, where `Key` is
+`unordered_map<Key, Executor, KeyHash, KeyEqual>`, where `Key` is
 `{string modelId; string actionId; std::type_index sharing;}` and `KeyHash`
 mixes the `type_index`'s `hash_code()` into the `morph::model::detail::PairKeyHash`
 the server-side `ActionDispatcher` uses over the two strings alone. Populated by
 `registerActionExecutorOnce<Model, Action>()`, which
 `BRIDGE_REGISTER_ACTION` calls during static initialization.
+
+**No key is built to look one up** (morph#699). `KeyHash` and `KeyEqual` are
+both transparent, so `execute` probes with `KeyView`
+(`{string_view modelId; string_view actionId; std::type_index sharing;}`) and
+the two `std::string`s the old `Key{...}` temporary constructed are gone.
+`KeyView` is a type of its own rather than a reuse of
+`morph::model::detail::PairKeyView`: this key carries the sharing tag as well
+as the two ids, and a reuse would have to drop it. Both `KeyHash` overloads
+reduce to the `KeyView` body for the reason `PairKeyHash`'s do — a lookup hash
+that disagreed with the stored hash would miss the bucket and report a
+registered action as unknown, with no diagnostic anywhere.
+
+`BridgeHandler::executeJson` also stopped copying
+`ModelTraits<Model>::typeId()` into a `std::string` to pass it. That was the
+same allocation, on the same call, for the same reason; the traits accessor is
+a `constexpr std::string_view` over a string literal, so it is passed through.
+
+**Measured** with `morph_bench_alloc`'s `executeJson` census
+(clang 22.1.8 / libstdc++ 16.2.1, Release, 200 round trips, 50 warm-up
+excluded), for a model and action whose ids both exceed libstdc++'s
+15-character SSO buffer and again for a pair whose ids both fit inside it:
+
+| | ids past SSO | ids inside SSO |
+| --- | --- | --- |
+| before | 24.07 allocations per call | 21.06 |
+| after | 21.07 | 21.06 |
+
+Three allocations per user action for long ids — the `Key`'s two plus
+`executeJson`'s own — and none for short ones, which is why the census reports
+both sides rather than averaging them. The figure is a whole round trip, codec
+included, because this registry cannot be probed on its own: it dispatches
+whatever it finds. The gap between the two columns is what the ctest gate
+`bench.alloc_budget` watches, via `--id-length-budget`.
 
 ### Why the key carries the sharing policy
 

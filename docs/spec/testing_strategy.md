@@ -287,12 +287,23 @@ counts the heap allocations one `Ping -> Pong` round trip costs through
 no socket — and prints the total, the bytes, and (with `--attribute`) the size
 of every allocation in one steady-state call.
 
-It also runs a second, much narrower census: `ActionDispatcher::coalesce` and
-`requiredFieldsFor`, 200 times each, over two registered pairs whose ids sit on
-either side of libstdc++'s 15-character SSO buffer. Those two calls decode
-nothing and execute nothing, so what they allocate is exactly what looking a
-registry key up costs — which is what makes the figure a measurement of
-morph#572's Part C rather than of the JSON codec.
+It also runs a group of narrower censuses over morph's four registry lookups,
+each one taken over ids past libstdc++'s 15-character SSO buffer and again over
+ids inside it — the cost is entirely id-length-dependent, so a census over one
+side alone either measures zero or overstates the saving, and morph's real ids
+straddle the line (`"CreateSwimlane"` is 14 characters, one under):
+
+| census | before | after | pure lookup? |
+| --- | --- | --- | --- |
+| `ActionDispatcher::coalesce` + `requiredFieldsFor` | 2.00 / 0.00 | 0.00 / 0.00 | yes (morph#572 Part C) |
+| `PayloadMigrationRegistry::find` | 2.00 / 0.00 | 0.00 / 0.00 | yes (morph#699) |
+| `BridgeHandler::executeJson` | 24.07 / 21.06 | 21.07 / 21.06 | no — a whole round trip (morph#699) |
+| `ModelRegistryFactory::create` | 2.00 / 1.00 | unchanged | no — constructs a holder (morph#709, parked) |
+
+The first two decode nothing and execute nothing, so what they allocate is
+exactly what looking a registry key up costs. The last two do more than look
+up, so their figure is a floor plus the key and what is comparable between runs
+is the *difference* between the long-id and short-id columns.
 
 It exists because morph#572 is scoped by a number that three later pull
 requests invalidated, and re-deriving such a number from a prose description of
@@ -317,9 +328,29 @@ to 0 to disable the gate. `tests/bench/CMakeLists.txt` carries the
 measurements the default was chosen from and the headroom argument.
 
 The `--lookup-budget` half takes no headroom at all: after morph#572's Part C
-a registry lookup allocates *nothing*, for ids of any length, and that is a
-property which either holds or has regressed. The ctest case passes
-`--lookup-budget=0`.
+and morph#699 a *pure* registry lookup allocates **nothing**, for ids of any
+length, and that is a property which either holds or has regressed. The ctest
+case passes `--lookup-budget=0`, and it covers `ActionDispatcher` and
+`PayloadMigrationRegistry`.
+
+`--id-length-budget` covers the third registry, `ActionExecuteRegistry`, which
+cannot be probed on its own — it dispatches whatever it finds — so what is
+gated is the gap between an `executeJson` over long ids and one over short
+ones. **0.5 rather than 0, and the 0.5 is measured**: the figure reads 0.01
+because of a deterministic two-allocation one-off across a census's 200 calls,
+shown to follow census *order* rather than id length by swapping the two
+censuses, and identical in all of 10 processes. Reverting either half of
+morph#699's change to that path takes the gap to 3.00 (the `Key`'s two
+`std::string`s, plus the one `executeJson` built from
+`ModelTraits<Model>::typeId()`), so 0.5 separates the residue from the thing
+guarded with wide margin on both sides. Like the lookup half it needs no
+per-toolchain default: it is a difference between two runs of one build.
+
+All three ceilings were checked against a reverted fix. Removing
+`PayloadMigrationRegistry`'s `PairKeyEqual` takes `--lookup-budget` to 2.00 and
+turns the case red; restoring `ActionExecuteRegistry`'s `Key{...}` temporary
+takes `--id-length-budget` to 2.01; restoring `executeJson`'s
+`std::string{typeId()}` alone takes it to 1.01.
 
 **Both halves were checked against a reverted fix rather than only against
 themselves** — see morph#572's pull request for the red runs. A budget that has

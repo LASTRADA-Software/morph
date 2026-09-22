@@ -12,8 +12,9 @@
 //
 // **Whether it is an instrument or a gate depends on the flags.** Run bare it
 // counts and prints and fails nothing, and a green run of it in that mode is
-// evidence of nothing -- read the number. Given `--budget=<n>` or
-// `--lookup-budget=<n>` it fails when the figure exceeds the ceiling, and
+// evidence of nothing -- read the number. Given `--budget=<n>`,
+// `--lookup-budget=<n>` or `--id-length-budget=<n>` it fails when the
+// corresponding figure exceeds the ceiling, and
 // `tests/bench/CMakeLists.txt` registers it with ctest in exactly that form
 // (`bench.alloc_budget`). The ceiling lives in CMake rather than here because
 // an allocation count is standard-library specific -- `std::function`'s inline
@@ -38,10 +39,17 @@
 //     in morph#572's re-measurement comment was produced. `-no-pie` matters:
 //     without it the recorded frames are runtime addresses and addr2line
 //     resolves every one of them to `_end`.
-//   * A second, separate census counts what an `ActionDispatcher` key lookup
-//     allocates (`coalesce` + `requiredFieldsFor`, over ids on either side of
-//     the SSO threshold). It decodes nothing and executes nothing, so the
-//     figure is the key's cost and not the codec's -- morph#572's Part C.
+//   * A second group of censuses counts what a *registry lookup* allocates,
+//     always over ids on either side of libstdc++'s 15-character SSO
+//     threshold, because the cost is entirely id-length-dependent and a
+//     census over one side alone either measures zero or overstates the
+//     saving. `ActionDispatcher` (`coalesce` + `requiredFieldsFor`) and
+//     `journal::PayloadMigrationRegistry::find` decode nothing and execute
+//     nothing, so their figure *is* the key's cost -- morph#572's Part C and
+//     morph#699. `ModelRegistryFactory::create` and
+//     `BridgeHandler::executeJson` do more than look up, so theirs is a floor
+//     plus the key, and what is comparable between runs is the difference
+//     between a long-id and a short-id run.
 //
 // **The worker is gated, and that is what makes the figure comparable at all.**
 // A dispatch and the handlers attached to it race: the caller returns from
@@ -70,6 +78,24 @@
 // loaded alike. Take more than one run anyway -- a single process is a single
 // sample -- but if two runs disagree here, something has changed.
 //
+// ── What the registry censuses measured (morph#699) ─────────────────────────
+//
+// On `e9dad027`, x86-64 Linux, clang 22.1.8 / libstdc++ 16.2.1, Release,
+// before and after making `ActionExecuteRegistry` and
+// `PayloadMigrationRegistry` transparent:
+//
+//                                       ids past SSO      ids inside SSO
+//     PayloadMigrationRegistry::find    2.00 -> 0.00      0.00 -> 0.00
+//     BridgeHandler::executeJson       24.07 -> 21.07    21.06 -> 21.06
+//     ModelRegistryFactory::create      2.00 -> 2.00      1.00 -> 1.00
+//
+// `executeJson`'s three are the `Key`'s two `std::string`s plus the one the
+// method itself built from `ModelTraits<Model>::typeId()`; after the change a
+// long id and a short one cost the same, which is the property the
+// `--lookup-budget` gate now holds. `create` is unchanged on purpose: it runs
+// per model *instantiation*, not per request, and parking it rather than
+// carrying it along for symmetry is morph#709.
+//
 // Build: `-DMORPH_BUILD_LOAD_TESTS=ON`, target `morph_bench_alloc`. See
 // docs/spec/testing_strategy.md.
 
@@ -89,6 +115,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/journal/journal.hpp>
 #include <mutex>
 #include <new>
 #include <span>
@@ -349,12 +376,116 @@ double lookupCensus(std::string_view modelId, std::string_view actionId) {
     return static_cast<double>(after - before) / (2.0 * kLookups);
 }
 
-int run(bool attribute, double budget, double lookupBudget) {
+// Allocation census for `ModelRegistryFactory::create` -- morph#699's first
+// site. Unlike the two above this is *not* a pure lookup: `create` calls the
+// registered factory, which news up a holder, and then hands the holder its
+// primary key. So the figure has a floor that has nothing to do with the key,
+// and what a fix moves is the difference between two runs of this, not the
+// figure itself.
+//
+// @param modelId Registered model type-id to instantiate.
+// @return Allocations per single `create`, averaged over `kLookups` of them.
+double registryCreateCensus(std::string_view modelId) {
+    Census& state = census();
+    auto& registry = ::morph::model::detail::ModelRegistryFactory::instance();
+    for (int i = 0; i < kWarmup; ++i) {
+        (void)registry.create(modelId);
+    }
+    auto const before = state.allocations.load();
+    state.counting.store(true, std::memory_order_relaxed);
+    for (int i = 0; i < kLookups; ++i) {
+        auto holder = registry.create(modelId);
+        // Destroyed here, inside the counted region. `operator delete` is
+        // replaced but does not count, so only the construction shows up --
+        // which is what "per create" has to mean for the figure to be
+        // comparable between runs.
+        (void)holder;
+    }
+    state.counting.store(false, std::memory_order_relaxed);
+    auto const after = state.allocations.load();
+    return static_cast<double>(after - before) / kLookups;
+}
+
+// Allocation census for `PayloadMigrationRegistry::find` -- morph#699's third
+// site, and the only one of the three that is a pure lookup: `find` hashes,
+// probes and returns a pointer. Nothing else in it can allocate, so the figure
+// *is* the key's cost and a fix has to take it to zero.
+//
+// @param actionType Registered action type-id to look up.
+// @param fromSchema Registered schema fingerprint to look up.
+// @return Allocations per single `find`, averaged over `kLookups` of them.
+double migrationFindCensus(std::string_view actionType, std::string_view fromSchema) {
+    Census& state = census();
+    ::morph::journal::PayloadMigrationRegistry migrations;
+    migrations.add(actionType, fromSchema, [](std::string_view payload) { return std::string{payload}; });
+    for (int i = 0; i < kWarmup; ++i) {
+        (void)migrations.find(actionType, fromSchema);
+    }
+    auto const before = state.allocations.load();
+    state.counting.store(true, std::memory_order_relaxed);
+    for (int i = 0; i < kLookups; ++i) {
+        (void)migrations.find(actionType, fromSchema);
+    }
+    state.counting.store(false, std::memory_order_relaxed);
+    auto const after = state.allocations.load();
+    return static_cast<double>(after - before) / kLookups;
+}
+
+// Allocation census for one `BridgeHandler::executeJson` round trip --
+// morph#699's second site, `ActionExecuteRegistry::execute`, measured through
+// the only caller it has. Also not a pure lookup: `executeJson` decodes the
+// body, dispatches, runs the action and encodes the result, so most of this
+// figure is the codec. That is why it is measured rather than the lookup
+// alone -- morph#699 asks how hot the site is before it asks for the fix, and
+// "N allocations out of M" is the answer in the form the question wants.
+//
+// Gated exactly as `roundTrip` is, for the reason the file header gives.
+//
+// @tparam Model Registered model whose handler dispatches.
+// @param pool     The gated worker the bridge runs on.
+// @param handler  Handler for @p Model, already bound.
+// @param actionId Registered action type-id to execute.
+// @return Allocations per completed `executeJson`, averaged over `kCalls` of them.
+template <typename Model>
+double executeJsonCensus(GatedWorkerExecutor& pool, ::morph::bridge::BridgeHandler<Model>& handler,
+                         std::string_view actionId) {
+    Census& state = census();
+    std::atomic<int> settled{0};
+    auto once = [&] {
+        int const target = settled.load(std::memory_order_relaxed) + 1;
+        pool.hold();
+        handler.executeJson(actionId, R"({"x":1})")
+            .then([&settled](const std::string&) { settled.fetch_add(1, std::memory_order_relaxed); })
+            .onError([&settled](const std::exception_ptr&) { settled.fetch_add(1, std::memory_order_relaxed); });
+        pool.release();
+        while (settled.load(std::memory_order_acquire) < target) {
+            std::this_thread::yield();
+        }
+    };
+    for (int i = 0; i < kWarmup; ++i) {
+        once();
+    }
+    auto const before = state.allocations.load();
+    state.counting.store(true, std::memory_order_relaxed);
+    for (int i = 0; i < kCalls; ++i) {
+        once();
+    }
+    state.counting.store(false, std::memory_order_relaxed);
+    auto const after = state.allocations.load();
+    return static_cast<double>(after - before) / kCalls;
+}
+
+int run(bool attribute, double budget, double lookupBudget, double idLengthBudget) {
     Census& state = census();
     GatedWorkerExecutor pool;
     InlineCallbackExecutor callbackExec;
     ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool)};
     ::morph::bridge::BridgeHandler<BenchAllocModel> handler{bridge, &callbackExec};
+    // Only `executeJsonCensus` uses these two; they exist so that census can
+    // be taken on both sides of the SSO boundary rather than on whichever
+    // side `BenchAllocModel`'s own ids happen to fall.
+    ::morph::bridge::BridgeHandler<BenchAllocTinyModel> tinyHandler{bridge, &callbackExec};
+    ::morph::bridge::BridgeHandler<BenchAllocLongIdModel> longIdHandler{bridge, &callbackExec};
 
     std::atomic<int> settled{0};
     auto roundTrip = [&handler, &settled, &pool](int value) {
@@ -413,6 +544,31 @@ int run(bool attribute, double budget, double lookupBudget) {
               << std::format("  both ids past SSO        : {:.2f} allocations per lookup\n", longIdLookups)
               << std::format("  both ids inside SSO      : {:.2f} allocations per lookup\n", shortIdLookups);
 
+    // morph#699's three sites. Every one is reported for ids past the SSO
+    // buffer and again for ids inside it, because the cost is entirely
+    // id-length-dependent and a census over one side only would either
+    // measure zero or overstate the saving. morph's real ids straddle the
+    // line -- `"CreateSwimlane"` is 14 characters, one under.
+    double const longMigrationFind =
+        migrationFindCensus("BenchAllocLongId_ActionTypeId", "BenchAllocLongId_SchemaFingerprint");
+    double const shortMigrationFind = migrationFindCensus("BA_A", "BA_S");
+    double const longCreate = registryCreateCensus("BenchAllocLongId_ModelTypeId");
+    double const shortCreate = registryCreateCensus("BA_M");
+    double const longExecuteJson = executeJsonCensus(pool, longIdHandler, "BenchAllocLongId_ActionTypeId");
+    double const shortExecuteJson = executeJsonCensus(pool, tinyHandler, "BA_A");
+    std::cout << std::format("\nPayloadMigrationRegistry   : find, {} times\n", kLookups)
+              << std::format("  both ids past SSO        : {:.2f} allocations per lookup\n", longMigrationFind)
+              << std::format("  both ids inside SSO      : {:.2f} allocations per lookup\n", shortMigrationFind)
+              << std::format("\nModelRegistryFactory       : create, {} times (holder construction included)\n",
+                             kLookups)
+              << std::format("  id past SSO              : {:.2f} allocations per create\n", longCreate)
+              << std::format("  id inside SSO            : {:.2f} allocations per create\n", shortCreate)
+              << std::format("\nBridgeHandler::executeJson : {} round trips (codec included)\n", kCalls)
+              << std::format("  both ids past SSO        : {:.2f} allocations per call\n", longExecuteJson)
+              << std::format("  both ids inside SSO      : {:.2f} allocations per call\n", shortExecuteJson)
+              << std::format("  cost of the id length    : {:.2f} allocations per call\n",
+                             longExecuteJson - shortExecuteJson);
+
     int status = 0;
     if (budget > 0.0) {
         if (perCall > budget) {
@@ -423,18 +579,60 @@ int run(bool attribute, double budget, double lookupBudget) {
         }
     }
     if (lookupBudget >= 0.0) {
-        double const worst = std::max(longIdLookups, shortIdLookups);
+        // Two registries under one ceiling, because both make the same claim:
+        // `ActionDispatcher`'s lookups and `PayloadMigrationRegistry::find`
+        // are pure lookups -- they hash, probe and return -- so the figure
+        // *is* the key's cost, and zero is the only right answer for it on
+        // any standard library (morph#572 Part C, morph#699). The third
+        // registry, `ActionExecuteRegistry`, is gated separately by
+        // `--id-length-budget` below, because it can only be reached through
+        // a whole `executeJson` round trip.
+        double const worst = std::max({longIdLookups, shortIdLookups, longMigrationFind, shortMigrationFind});
         if (worst > lookupBudget) {
             std::cout << std::format(
-                "FAIL: {:.2f} allocations per dispatcher lookup exceeds "
+                "FAIL: {:.2f} allocations per registry lookup exceeds "
                 "--lookup-budget={:.2f}\n",
                 worst, lookupBudget);
             status = 1;
         } else {
             std::cout << std::format(
-                "ok: {:.2f} allocations per dispatcher lookup within "
+                "ok: {:.2f} allocations per registry lookup within "
                 "--lookup-budget={:.2f}\n",
                 worst, lookupBudget);
+        }
+    }
+    if (idLengthBudget >= 0.0) {
+        // **This ceiling is 0.5 rather than 0, and the 0.5 is measured.**
+        // `ActionExecuteRegistry::execute` cannot be probed on its own -- it
+        // dispatches what it finds -- so what is gated is the gap between an
+        // `executeJson` over ids past the SSO buffer and one over ids inside
+        // it. That gap is what building the key charged, and it should be
+        // nothing.
+        //
+        // It reads 0.01 rather than 0.00, and that residue is a deterministic
+        // one-off rather than noise: two allocations across a census's 200
+        // calls, identical in all of 10 processes, and swapping the order of
+        // the two censuses moves the two allocations to whichever now runs
+        // first instead of to whichever has the longer ids. So it is not an
+        // id-length cost, and a ceiling of exactly zero would fail on it.
+        //
+        // 0.5 separates that residue from the thing being guarded by a wide
+        // margin in both directions: the residue is 0.01, and reverting
+        // either half of morph#699's change to this path takes the gap to
+        // 3.00 per call (two `std::string`s for the `Key`, one for
+        // `executeJson`'s own copy of `ModelTraits<Model>::typeId()`).
+        double const idLengthCost = longExecuteJson - shortExecuteJson;
+        if (idLengthCost > idLengthBudget) {
+            std::cout << std::format(
+                "FAIL: {:.2f} allocations per executeJson charged to the id's "
+                "length exceeds --id-length-budget={:.2f}\n",
+                idLengthCost, idLengthBudget);
+            status = 1;
+        } else {
+            std::cout << std::format(
+                "ok: {:.2f} allocations per executeJson charged to the id's "
+                "length within --id-length-budget={:.2f}\n",
+                idLengthCost, idLengthBudget);
         }
     }
     return status;
@@ -454,6 +652,9 @@ int main(int argc, char** argv) {
         // lookup census (the registry should reach the heap not at all), so it
         // cannot double as the off switch the way it can for --budget.
         double lookupBudget = -1.0;
+        // Same convention as --lookup-budget: negative means "not requested",
+        // because zero is a meaningful ceiling here too.
+        double idLengthBudget = -1.0;
         std::span<char*> const args{argv, static_cast<std::size_t>(argc)};
         for (std::size_t i = 1; i < args.size(); ++i) {
             std::string_view const arg{args[i]};
@@ -463,13 +664,16 @@ int main(int argc, char** argv) {
                 budget = std::stod(std::string{arg.substr(std::string_view{"--budget="}.size())});
             } else if (arg.starts_with("--lookup-budget=")) {
                 lookupBudget = std::stod(std::string{arg.substr(std::string_view{"--lookup-budget="}.size())});
+            } else if (arg.starts_with("--id-length-budget=")) {
+                idLengthBudget = std::stod(std::string{arg.substr(std::string_view{"--id-length-budget="}.size())});
             } else {
                 std::cout << "usage: morph_bench_alloc [--attribute] [--budget=<allocations per call>] "
-                             "[--lookup-budget=<allocations per dispatcher lookup>]\n";
+                             "[--lookup-budget=<allocations per registry lookup>] "
+                             "[--id-length-budget=<allocations per executeJson charged to id length>]\n";
                 return 2;
             }
         }
-        return run(attribute, budget, lookupBudget);
+        return run(attribute, budget, lookupBudget, idLengthBudget);
     } catch (const std::exception& exc) {
         std::cout << "FAIL: " << exc.what() << "\n";
         return 1;

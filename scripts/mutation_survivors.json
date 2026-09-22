@@ -73,11 +73,11 @@
         },
         {
           "file": "include/morph/core/bridge.hpp",
-          "line": 126,
+          "line": 144,
           "mutants": 3,
           "mutator": "cxx_add_to_sub",
           "source": "return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));",
-          "reason": "Bridge::KeyHash is the same mix over the same kind of value, for _executors' bucket index, and equivalent for the same reason: the hash is internal to one unordered_map in one process and reaches no wire, no file and no assertion."
+          "reason": "Bridge::KeyHash is the same mix over the same kind of value, for _executors' bucket index, and equivalent for the same reason: the hash is internal to one unordered_map in one process and reaches no wire, no file and no assertion. Re-cited in morph#699: the mix moved from line 126 to line 144 and its text is unchanged, because KeyHash became transparent and the mix now lives in the KeyView overload rather than in the sole Key one. The mutant moved, it did not cease to exist -- the same three additions in the same mix are still there, on one line, still cxx_add_to_sub targets. Transparency adds one clause to the disposition rather than removing it: the `const Key&` overload delegates to the KeyView body instead of mixing separately, so a mutation of these additions applies identically to the stored-key hash and the lookup hash and cannot desynchronise the two into a transparent find() that misses a registered action. Verified by reading the code at line 144 on this branch; the mutant count was not re-measured, the campaign being scheduled rather than per-PR."
         },
         {
           "file": "include/morph/core/backend.hpp",

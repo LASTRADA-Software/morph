@@ -129,7 +129,7 @@ public:
     ///         into this registry, so valid only for as long as it is.
     [[nodiscard]] const Migration* find(std::string_view actionType,
                                         std::string_view fromSchema) const MORPH_LIFETIMEBOUND {
-        auto iter = _migrations.find(Key{std::string{actionType}, std::string{fromSchema}});
+        auto iter = _migrations.find(::morph::model::detail::PairKeyView{actionType, fromSchema});
         return iter == _migrations.end() ? nullptr : &iter->second;
     }
 
@@ -142,7 +142,13 @@ public:
 
 private:
     using Key = std::pair<std::string, std::string>;
-    std::unordered_map<Key, Migration, ::morph::model::detail::PairKeyHash> _migrations;
+    // Both functors, not just the hash. This map named `PairKeyHash` alone for
+    // as long as it has existed, and `unordered_map` enables heterogeneous
+    // lookup only when the hash *and* the equality are transparent -- so every
+    // `find` built a `Key` to probe with, silently, while looking like it did
+    // not (morph#699). `add` still builds one, because it inserts.
+    std::unordered_map<Key, Migration, ::morph::model::detail::PairKeyHash, ::morph::model::detail::PairKeyEqual>
+        _migrations;
 };
 
 /// @brief Returns the process-level migration registry `replay()` uses by
