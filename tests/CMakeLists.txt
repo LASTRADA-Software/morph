@@ -61,6 +61,7 @@ add_executable(morph_tests
     test_async_registration.cpp
     test_network_monitor.cpp
     test_forms_boolean_anyof_wire.cpp
+    test_forms_dom_access.cpp
     test_forms_exact_bounds.cpp
     test_offline_queue.cpp
     test_file_offline_queue.cpp

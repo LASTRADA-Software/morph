@@ -2311,6 +2311,57 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
     }
 }
 
+/// @brief The member of @p node named @p key, or `nullptr` when there is none.
+///
+/// The checked read over a `glz::generic_u64` object node, and morph's own
+/// because glaze has no such thing. `generic_json::at(key)` is defined as
+/// `{ return operator[](key); }` for *both* overloads (glaze v7.4.0,
+/// `glaze/json/generic.hpp:320` and `:322`), and the non-const `operator[]`
+/// it forwards to **inserts** a default-constructed member for a missing key
+/// (`generic.hpp:201-211`). So on the mutating DOM walks below, `at()` is not
+/// a bounds-safe alternative to `operator[]` -- it is the same function, and
+/// on a missing key it turns a read into a write to the schema being emitted.
+/// The const `operator[]` does check, by calling `glaze_error("Key not
+/// found.")`, i.e. by throwing. Which of the two a call gets is decided by the
+/// constness of the DOM, not by the spelling, which is why the remedy
+/// `cppcoreguidelines-pro-bounds-avoid-unchecked-container-access` suggests
+/// cannot be adopted mechanically here (morph#706).
+///
+/// This returns a pointer instead: absence is a value the caller branches on,
+/// a read never grows the document, and nothing throws. It also replaces the
+/// `contains(key)` + `operator[](key)` pair every read site used to spell,
+/// which probed the same map twice for one answer.
+///
+/// Only *reads* belong here. A site that means to create the member --
+/// `property["x-order"] = ...` building the schema -- wants `operator[]`'s
+/// insert and keeps it; converting one of those to a null check would change
+/// behaviour, not make it safe. See `docs/spec/forms/forms.md`, "Reading the
+/// DOM with `findMember`".
+///
+/// The returned pointer is into @p node's own object storage and is
+/// invalidated by any insertion into @p node, exactly as the reference
+/// `operator[]` returns is.
+///
+/// @tparam Node `glz::generic_u64` or `const glz::generic_u64`, deduced from
+///               the argument, so a const DOM yields a const member and no
+///               `const_cast` is needed to offer both.
+/// @param node  The node to read. A node that is not an object -- including a
+///               null one -- has no members and yields `nullptr`, rather than
+///               being turned into an object as `operator[]` would.
+/// @param key   Wire name of the member to find.
+/// @return A pointer to the member, or `nullptr` when @p node is not an object
+///         or holds no such key.
+template <typename Node>
+    requires std::same_as<std::remove_const_t<Node>, glz::generic_u64>
+[[nodiscard]] Node* findMember(Node& node, std::string_view key) {
+    auto* const object = node.template get_if<glz::generic_u64::object_t>();
+    if (object == nullptr) {
+        return nullptr;
+    }
+    auto* const entry = object->find(key);
+    return (entry == object->end()) ? nullptr : &entry->second;
+}
+
 /// @brief How many nested-aggregate levels below the action type the schema
 ///        generator will descend before refusing to instantiate any deeper.
 ///

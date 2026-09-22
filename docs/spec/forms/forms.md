@@ -280,6 +280,60 @@ iterates reflected members via `forEachNamedMember`, and patches the DOM in
 place. If the input schema is not valid JSON the raw string passes through
 unchanged.
 
+#### Reading the DOM with `findMember`
+
+Patching the DOM in place means the walkers do two different things through the
+same syntax, and only one of them is safe to leave unchecked:
+
+- **A write** — `property["x-order"] = I`, `dom["required"] = names` — *means*
+  to create the member. `operator[]`'s insert-on-missing is the behaviour
+  wanted, and these sites keep it.
+- **A read** — "is there an `items` node?", "does `$defs` hold this key?" —
+  must not create anything. A read that inserts adds a null member to the
+  schema being emitted, and (because `glz::generic_u64`'s object storage
+  reallocates on insert) can invalidate a node reference an enclosing frame of
+  the mutually recursive walk still holds.
+
+`detail::findMember(node, key)` is the read. It returns a pointer to the
+member, or `nullptr` when `node` is not an object or holds no such key; the
+caller branches on that instead of subscripting. It replaces a
+`contains(key)` + `operator[](key)` pair, which probed the same map twice, at
+every read site in `forms.hpp` and `instance_constraints.hpp`. The pointer is
+into `node`'s own storage, so a caller may write through it — and, exactly like
+the reference `operator[]` returns, it is invalidated by any insertion into
+`node`.
+
+`Node` is deduced, so a `const` DOM yields a `const` member and both
+constnesses share one implementation with no `const_cast` and no copy.
+
+**Why this is morph's own rather than glaze's.**
+`cppcoreguidelines-pro-bounds-avoid-unchecked-container-access` fires on every
+one of these subscripts and advises a "bounds-safe alternative". On
+`glz::generic_json` there is none. `at(key)` is defined as
+`{ return operator[](key); }` for *both* overloads (glaze v7.4.0,
+`glaze/json/generic.hpp:320` and `:322`), and the non-const `operator[]` it
+forwards to inserts a default-constructed member for a missing key
+(`generic.hpp:201-211`):
+
+| spelling | non-const DOM | const DOM |
+|---|---|---|
+| `node[key]` | inserts a null member and returns it | `glaze_error("Key not found.")` — throws |
+| `node.at(key)` | identical: it *is* `operator[]` | identical: it *is* the const `operator[]` |
+| `findMember(node, key)` | `nullptr`, DOM unchanged | `nullptr`, DOM unchanged |
+
+So the checking depends on the constness of the DOM, not on the spelling, and
+these walkers are mutating by construction. A mechanical `operator[]` → `at()`
+sweep over them would silence ~70 findings while changing a read into a write
+on exactly the inputs the check warns about (morph#706).
+`tests/test_forms_dom_access.cpp` asserts both halves — that `findMember` leaves
+the document byte-identical on a miss, and that `at()` on the pinned glaze does
+not — so a glaze release that gives `at()` real checked semantics turns that
+file red rather than leaving this rationale quietly stale.
+
+The sites that still carry a standing
+`NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)` are the
+writes, and the directive now says so.
+
 ## Field metadata — `FieldMeta`
 
 An action declares per-field presentation — label, help, placeholder,
@@ -2316,6 +2370,7 @@ Two boundaries follow the framework's own:
 | `detail::HasOptionalFields<A>` | concept | `true` when `A` has a `static constexpr` iterable `optionalFields`. |
 | `detail::declaredOptional<A>(name)` | constexpr function | `true` when `name` appears in `A::optionalFields`. |
 | `detail::forEachNamedMember(action, visitor)` | function template | Calls `visitor.operator()<I>(name, member)` for every reflected member of `action` (uses glaze pure reflection). |
+| `detail::findMember(node, key)` | function template | The checked read over a `glz::generic_u64` object node: a pointer to the member, or `nullptr` when `node` is not an object or has no such key. Never inserts, never throws; `const`-preserving. See [Reading the DOM with `findMember`](#reading-the-dom-with-findmember). |
 | `detail::mergeSchemaExtras<A>(raw)` | function | Post-processes a glaze-generated schema to inject `required`, `x-decimalPlaces`, `x-order`, `x-unitAlternatives`, `x-optionsAction`, `title`, `description`/`x-placeholder`/`x-readonly`/`x-hidden` etc. onto the property nodes. Called by `schemaJson<A>()`. |
 | `reconcileDeclaredPrecision<A>(action)` | function | **Rounds** every `Quantity` member of `action` in place to its declared precision (`atDeclaredPrecision()`, an exact `Rational` re-rounding — not a retag), so a decoded wire value *equals* the schema's advertised `x-decimalPlaces`, not merely displays at it. Empty members stay empty. No-op for non-`Quantity` members and for action types glaze cannot reflect. Called on both wire dispatch paths (`bridge.hpp`, `registry.hpp`); not on the in-process `localOp` path, which decodes no JSON. |
 | `FieldMeta` | struct | Per-field descriptor: `field`, `label`, `help`, `placeholder`, `widget` (control-selection override, see [Widget hints](#widget-hints--multiline--ranged)), `readOnly`, `hidden`, `i18nKey`, plus the scalar bounds `minimum`/`maximum`/`multipleOf`, and the `withPlaceholder`/`withReadOnly`/`withHidden`/`withMinimum`/`withMaximum`/`withMultipleOf` fluent copies. See "Field metadata" above. |
