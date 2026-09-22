@@ -206,6 +206,48 @@ private:
     std::deque<std::function<void()>> _queue;
 };
 
+// ── The wait primitives are for liveness. Never time across one (morph#708) ──
+//
+// `waitUntil` below, and `WaitReply::await` further down, answer *"did this
+// eventually happen?"*. They do not answer *"how long did this take?"*, and
+// they cannot be made to: the `sleep_for` in the loop quantises every wait they
+// return from up to a whole polling step, so an elapsed time taken across one
+// of these calls reports the step and not the thing being waited for. On an
+// idle machine that is the step almost exactly; on a busy one it is whatever
+// the first predicate check happened to observe. Neither is the measurement.
+//
+// This is not hypothetical. `tests/bench/bench_dispatch_latency.cpp` timed
+// `WaitReply::await()` around each of 2000 serial round trips and published a
+// p50 of 5074 us, while the same processes reported ~176k executes/sec at
+// concurrency 1 — a round trip of about 5.7 us. Three orders of magnitude, on
+// a figure that had a CI gate on it. morph#710 fixes that file by replacing
+// the waiter with a condition variable (`BlockingReply` there); copy that
+// shape if you need to time something.
+//
+// ── Audit, master @ 6f95f49a (morph#708) ─────────────────────────────────────
+//
+// 433 poll sites were classified: 211 direct `waitUntil(` invocations across 43
+// files, plus 222 `await()` invocations, which reach the same loop through
+// `WaitReply::await`. Exactly one block in the tree takes an elapsed time or
+// publishes a figure across one of them, and it is `bench_dispatch_latency.cpp`'s
+// single `TEST_CASE` — three sites: the latency `await()`s, and the throughput
+// drain, which sat *inside* the window it was divided into. Every other site is
+// a liveness assertion, where the step costs suite latency and never
+// correctness, and none of them were changed.
+//
+// Three sweeps produced that split, and re-running them is how to check the
+// claim has not rotted: every call site's enclosing block scanned for a timing
+// or figure construct; every duration subtraction anywhere in `tests/` and
+// `examples/` (22 of them) checked for a poll inside the interval it measures;
+// and every figure publisher — benchmark artifacts, Catch2 `BENCHMARK`, stdout
+// — checked for a poll upstream of its number. The near misses are worth
+// knowing, because each looks like a hit until the measured interval is read:
+// `tests/net/test_socket_server.cpp`'s four elapsed-time `REQUIRE`s bracket
+// `close()` and `~SocketServer()` directly, `tests/test_server_limits.cpp`'s
+// Catch2 `BENCHMARK` busy-waits on `yield()` rather than sleeping, and
+// `examples/common/testkit/test_fault_proxy.cpp`'s assertion across `pumpUntil`
+// is a *lower* bound, which quantisation can only ever make easier to satisfy.
+
 /// @brief Default polling budget for `waitUntil`. Picked to cover the slowest
 ///        TSan/Valgrind runs without making green tests visibly slow.
 inline constexpr std::chrono::milliseconds kDefaultWaitBudget{2000};
@@ -214,6 +256,10 @@ inline constexpr std::chrono::milliseconds kDefaultWaitBudget{2000};
 inline constexpr std::chrono::milliseconds kDefaultWaitStep{5};
 
 /// @brief Polls @p pred until it returns `true` or @p budget elapses.
+///
+/// **Liveness only: never take an elapsed time across this call.** The step
+/// quantises what it returns from — see the audit above `kDefaultWaitBudget`
+/// for what that cost the one benchmark that tried.
 ///
 /// Returns `true` if the predicate eventually became `true`, `false` if the
 /// budget expired first. Sleeps for @p step between polls so we don't burn the
@@ -262,6 +308,12 @@ struct WaitReply {
     }
 
     /// @brief Blocks (polling) until the reply arrives or @p budget elapses.
+    ///
+    /// This is `waitUntil` under another name, and the "never time across one"
+    /// note above `kDefaultWaitBudget` counts this function's call sites too.
+    /// A round trip timed across `await()` reports the polling step.
+    ///
+    /// @param budget Longest time to wait for the reply.
     /// @return `true` if a reply arrived within the budget.
     bool await(std::chrono::milliseconds budget = kDefaultWaitBudget) {
         return waitUntil([this] { return ready.load(); }, budget);
