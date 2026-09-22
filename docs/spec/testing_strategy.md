@@ -272,6 +272,66 @@ contended runner. 50 ms is ~27x the worst best-trial p99 measured and 500/sec
 slower passes both. That limit is morph#707; setting the floor from a 12-core
 box was tried and turned 3 of 20 Debug-under-load processes red.
 
+**The property those ceilings were feared to be leaving ungated is gated
+elsewhere, tightly.** morph#707 asks that an allocation gate be weighed before
+any wall-clock ceiling is tightened. It already exists: `bench.alloc_budget`
+(below) fails above 15.0 allocations per round trip against a figure measured
+at exactly 14.06 on every one of 20 processes across three toolchains, idle and
+loaded alike — a one-allocation margin, on a quantity machine load cannot move.
+So "dispatch does not get more expensive" is already gated to a resolution no
+wall-clock constant on any host can approach. What the two ceilings gate is the
+residue: a regression that costs time without costing allocations — a spin, a
+syscall, a lock held longer. That is a real class, and it is the only class
+they are for.
+
+**Two things a future tightening needs, which the benchmark now produces.**
+
+- **A cross-process distribution** (`bench_dispatch_latency.jsonl`, beside the
+  per-process `.json`, overridable with `MORPH_BENCH_LEDGER`, `off` to
+  disable). This is morph#687's remaining half: `MORPH_BENCH_TRIALS` gives a
+  distribution over trials *within* a process, which mitigates the spread but
+  does not record it — one process still prints one triple and cannot say
+  where it sits among others. Each run appends one line (`pid`, the headline
+  percentiles, concurrency-1 throughput, `load_1m`, `inject_delay_us`) and
+  prints its own rank among every line already there, so N unorchestrated runs
+  produce the distribution a candidate ceiling would be read off. The load
+  average is on the row and not only on stdout, because morph#710's sweeps put
+  the same binary 28x apart on throughput between an idle box and a loaded one:
+  a figure without its load is not comparable with another figure. Rows are
+  appended `O_APPEND` in one write and a row that cannot be parsed is skipped,
+  because a diagnostic ledger must never redden a benchmark.
+- **An injectable regression** (`MORPH_BENCH_INJECT_DELAY_US`), which spins for
+  that many microseconds inside the model's `execute` — inside the round trip
+  both phases measure. A spin and not a sleep: a sleep yields the core and
+  would flatter the throughput phase. This is what makes "what size of
+  regression does this gate catch?" a command rather than an argument, and it
+  is what any candidate ceiling should be shown firing against before it lands.
+  A run carrying an injection says so on stdout and on its ledger row.
+
+**Both ceilings fire, and the size they fire at is measured.** Release, clang
+22.1.8, 12-core x86-64 Linux, `MORPH_BENCH_TRIALS=1`, load average 11.9–12.8:
+
+| injected | p99 (ms) | c=1 executes/sec | p99 gate | throughput gate |
+| --- | --- | --- | --- | --- |
+| 0 | 0.0142 | 168862 | pass | pass |
+| 1000 µs | 1.02685 | 989.2 | pass | pass |
+| 2000 µs | 2.03428 | 495.5 | pass | **FAIL** |
+| 3000 µs | 3.18618 | 331.2 | pass | **FAIL** |
+| 60000 µs | 61.0339 | 16.7 | **FAIL** | **FAIL** |
+
+This is the first time either `CHECK` has been shown firing on anything. The
+baseline round trip is ~5.9 µs, so the throughput floor — the tighter of the
+two — first speaks at roughly a **340×** regression and the p99 ceiling at
+roughly **8500×**, confirming morph#707's ~800× estimate by measurement and
+understating it for the p99 half. The ratio, not the time, is the portable
+part: reproduce the table on any host with `MORPH_BENCH_INJECT_DELAY_US`.
+
+What is still **not** done, and is why morph#707 stays open: nobody has
+characterised the CI runner. Both sets of figures above come from a
+workstation, which morph#707 identifies as exactly the misleading
+configuration, so the ceilings are not tightened here. Guessing a second time
+from the same box would be the first mistake with a different number.
+
 The echo model/action (`BenchEchoModel`/`BenchEchoAction`) are declared at
 file scope, not inside the file's anonymous namespace with its other local
 helpers — Glaze's reflection needs external linkage to mangle the type name,
