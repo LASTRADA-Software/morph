@@ -87,6 +87,7 @@ add_library(bank_lib STATIC
     src/models/budget_model.cpp
     src/models/notification_model.cpp
     src/models/statement_model.cpp
+    src/offline/lightweight_offline_queue.cpp
     src/app/app.cpp
 )
 target_include_directories(bank_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -207,10 +208,20 @@ if(MORPH_BUILD_TESTS)
             tests/test_statement.cpp
             tests/test_remote.cpp
             tests/test_offline.cpp
+            tests/test_lightweight_offline_queue.cpp
             tests/test_relations.cpp
             tests/test_stateful_account.cpp
         )
-        target_include_directories(bank_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+        # ${PROJECT_SOURCE_DIR}/tests is morph's own test directory, and it is
+        # on the include path for exactly one header:
+        # tests/offline_queue_conformance.hpp, the implementation-agnostic
+        # IOfflineQueue suite every shipped queue is measured against. The
+        # Lightweight-backed queue in this example is measured against the same
+        # suite, unedited -- that is the whole acceptance gate of morph#549, and
+        # a copy of the suite next to this example would have measured nothing.
+        target_include_directories(bank_tests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
+            ${PROJECT_SOURCE_DIR}/tests)
         target_link_libraries(bank_tests PRIVATE bank_lib morph_test_main)
         target_compile_features(bank_tests PRIVATE cxx_std_23)
         apply_bigobj(bank_tests)
