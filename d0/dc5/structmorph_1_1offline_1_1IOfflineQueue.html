@@ -281,7 +281,9 @@ Protected Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Returns all pending items in enqueue order without removing them. </p>
-<p>Items remain in the queue until <span class="tt"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5" title="Removes the item identified by itemId.">markDone()</a></span> is called. It is safe to call <span class="tt"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> multiple times — items survive a crash between <span class="tt"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> and the corresponding <span class="tt"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5" title="Removes the item identified by itemId.">markDone()</a></span> call. </p><dl class="section return"><dt>Returns</dt><dd>Snapshot of all pending items. </dd></dl>
+<p>Items remain in the queue until <span class="tt"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5" title="Removes the item identified by itemId.">markDone()</a></span> is called. It is safe to call <span class="tt"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> multiple times — items survive a crash between <span class="tt"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> and the corresponding <span class="tt"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5" title="Removes the item identified by itemId.">markDone()</a></span> call.</p>
+<dl class="section user"><dt>Enqueue order is the implementation's to keep; the id does not imply it</dt><dd>"Enqueue order" is a property this method <b>requires</b> and that <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84" title="Stable identifier assigned at enqueue time.">QueueItem::id</a></span> does not supply. Every implementation morph ships mints ids that happen to increase with insertion — an in-memory counter, a file offset, SQLite's <span class="tt">INTEGER PRIMARY KEY AUTOINCREMENT</span> — so each of them satisfies this method by presenting rows ordered by id. That is a property of those three stores, not of the type: a <span class="tt">uint64_t</span> neither promises monotonicity nor rules out an id minted from a GUID, a content hash, or a sharded sequence, and a store that reuses the id of a removed row does not order correctly either. An implementation over such a store must carry its own insertion sequence and order on <em>that</em>; ordering by the id would compile, survive a casual smoke test, and replay a user's actions out of order. <span class="tt">tests/offline_queue_conformance.hpp</span> asserts the ordering, so an implementation that gets this wrong fails there. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Snapshot of all pending items. </dd></dl>
 
 <p>Implemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#ac85206bc18b57fcf9f75c8e541e27286">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a5e86e43f6de125aacba972686352c6a3">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7d84c59b8a7487daff9ae3d10b8ae868">morph::offline::SqliteOfflineQueue</a>.</p>
 
@@ -350,7 +352,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af96a2cf6553f3a44390fe07629b2d4a2">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a60f482c2c96bcedf88298b9f4357d9f0">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -382,7 +384,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a1fdfff80a8b535fb2c19621d6cf13d4e">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#af3f1c800c9e4e8030dc28ffc0fc3cdf3">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -424,7 +426,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#ae9a56e0f6a28daa3e4047ae8ecc052f5">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a5c7f807ec5cddac608f8da633188b40d">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00238">238</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -466,7 +468,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af6a72b2805560d317866b924d4cb8039">morph::offline::FileOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
