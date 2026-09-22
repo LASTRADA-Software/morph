@@ -87,17 +87,18 @@
 /// `morph::time::Timestamp` members need no extension keys: their schema
 /// carries the standard `"format": "date-time"` annotation.
 ///
-/// **Nested aggregates (recursive, depth-bounded).** A member whose type is
+/// **Nested aggregates (recursive, cycle-safe).** A member whose type is
 /// itself a reflectable aggregate — a plain nested struct, or
 /// `std::vector<Sub>` — gets its own members annotated too: `x-order`,
 /// title/`FieldMeta`, `required`, and the `Quantity`/`Choice`/widget/
 /// ranged-bounds rules above, applied against the nested type's own
-/// reflection. Unlike the top level, this recurses into the type graph, down
-/// to `detail::kMaxNestDepth` levels; anything deeper — including a cycle,
-/// which has no bottom at all — is a compile-time `static_assert` rather than
-/// infinite recursion. Computed fields/`formLayout`/`fieldSpans`/`formRules`
+/// reflection. Unlike the top level, this recurses into the type graph, to
+/// whatever depth it has: there is no depth limit, and a self- or
+/// mutually-referential type is described rather than rejected — glaze emits
+/// a finite `$ref`-cyclic schema for it, and the runtime `$defs` visited set
+/// walks that once. Computed fields/`formLayout`/`fieldSpans`/`formRules`
 /// remain top-level-only regardless of depth. See docs/spec/forms/forms.md,
-/// "Nested aggregates (recursive, depth-bounded)", and
+/// "Nested aggregates (recursive, cycle-safe)", and
 /// `detail::annotateNestedAggregateRef`.
 ///
 /// @par Declaring optional fields
@@ -2084,8 +2085,8 @@ struct IsStdVector<std::vector<T, Alloc>> : std::true_type {
 
 /// @brief Concept: `T` is glaze-reflectable as a JSON object -- the same test
 ///        that decides whether glaze emits a member into `$defs`/`$ref`
-///        rather than inline. Shared by the depth-bounded nested-aggregate
-///        recursion below and `reconcileDeclaredPrecision` elsewhere.
+///        rather than inline. Shared by the nested-aggregate recursion below
+///        and `reconcileDeclaredPrecision` elsewhere.
 template <typename T>
 concept ReflectableAggregate = glz::reflectable<T> || glz::glaze_object_t<T>;
 
@@ -2362,20 +2363,6 @@ template <typename Node>
     return (entry == object->end()) ? nullptr : &entry->second;
 }
 
-/// @brief How many nested-aggregate levels below the action type the schema
-///        generator will descend before refusing to instantiate any deeper.
-///
-/// The recursion below is driven by the type graph, so it needs *some* bound to
-/// turn a cyclic type into a diagnostic rather than a compiler that runs until
-/// it hits its own instantiation-depth limit. This is that bound, and it is the
-/// only thing that stops the recursion: a type graph deeper than this fails to
-/// compile whether or not it is cyclic (see `recurseIntoNestedAggregateIfAny`'s
-/// `static_assert`). Sixteen is far past anything a renderable form has any use
-/// for — the deepest nesting in this repository's examples is two — and raising
-/// it costs nothing that is not actually reached, because instantiations are
-/// only created for the (type, depth) pairs the graph really has.
-inline constexpr std::size_t kMaxNestDepth = 16;
-
 /// @brief The `$defs` keys already annotated during one `mergeSchemaExtras`
 ///        call, so a shared nested aggregate is annotated once instead of once
 ///        per route to it.
@@ -2425,93 +2412,67 @@ private:
 // aggregate found while annotating one may itself contain another), so all
 // three need forward declarations before any of their bodies can reference
 // the others.
-template <typename Sub, std::size_t Depth>
+template <typename Sub>
 void annotateNestedAggregate(SchemaDomRef dom, glz::generic_u64& node, NestedDefsVisited& visited);
 
-template <typename Sub, std::size_t Depth>
+template <typename Sub>
 void annotateNestedAggregateRef(SchemaDomRef dom, glz::generic_u64& propertyOrItems, NestedDefsVisited& visited);
 
-template <typename Member, std::size_t Depth>
+template <typename Member>
 void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& property, NestedDefsVisited& visited);
 
 /// @brief Recurses into @p property's own object schema if @p Member (or, for
 ///        `std::vector<Sub>`, its element type) is itself a
 ///        `ReflectableAggregate` -- the single decision point shared by
 ///        `mergeSchemaExtras`'s top-level loop and `annotateNestedAggregate`'s
-///        own loop, so the cycle guard below has exactly one implementation.
+///        own loop, so there is exactly one implementation of it.
 ///
-/// @p Depth is how many nested-aggregate levels below the action type the
-/// caller already is; this function enters the next one at `Depth + 1`. The
-/// recursion is driven by the member types themselves, so a self-referential
-/// type (e.g. `struct Node { std::vector<Node> children; };`) or a mutual
-/// reference between two types would re-enter it forever. `kMaxNestDepth`
-/// bounds that: past it a `static_assert` (whose condition depends on @p Depth,
-/// so it only fires for the instantiation that actually ran past the limit, not
-/// for every use of this generator) rejects the type at compile time, and the
-/// `if constexpr` around it is what stops the deeper instantiation from being
-/// created at all.
+/// **This function template carries no varying template argument, and that is
+/// the whole termination argument.** `recurseIntoNestedAggregateIfAny<Member>`
+/// reaches `annotateNestedAggregate<Sub>`, which reaches
+/// `recurseIntoNestedAggregateIfAny<Member'>` for `Sub`'s own members. Every
+/// specialisation is keyed on a *type* alone, the reachable type set of any
+/// program is finite, and a specialisation already on the instantiation stack
+/// is not instantiated again -- so a self-referential type
+/// (`struct Node { std::vector<Node> children; };`) or a mutual reference
+/// between two types costs one instantiation per type and stops, rather than
+/// recursing forever (morph#703, measured: see
+/// `docs/spec/forms/forms.md`, "Nested aggregates (recursive, cycle-safe)").
 ///
-/// Depth, rather than the ancestor *chain*, is what is carried: an ancestor
-/// type list made every distinct root-to-member route through the type graph
-/// its own instantiation, so a domain model that is a DAG rather than a tree --
-/// an `Address` under both a `Customer` and a `Supplier`, a `Money`
-/// everywhere -- cost one instantiation per route, and route count grows
-/// exponentially in the graph's size (morph#573, Part B: a fixture whose route
-/// count is Fibonacci(n) reached 86 s at 2,584 routes). A depth counter caps it
-/// at one instantiation per (type, depth) pair instead. What is lost is the
-/// ability to tell a genuine cycle from a merely very deep graph, which is why
-/// the message below names both. See `docs/spec/forms/forms.md`, "Nested
-/// aggregates (recursive, depth-bounded)".
+/// Two earlier designs are why this is worth stating. An ancestor *type list*
+/// made every distinct root-to-member route through the type graph its own
+/// instantiation, so a domain model that is a DAG rather than a tree -- an
+/// `Address` under both a `Customer` and a `Supplier`, a `Money` everywhere --
+/// cost one instantiation per route, and route count grows exponentially in
+/// the graph's size (morph#573, Part B: a fixture whose route count is
+/// Fibonacci(n) reached 86 s at 2,584 routes). A depth counter (morph#573
+/// step 3) cut that to one instantiation per (type, depth) pair, at the price
+/// of a 16-level cap and a `static_assert` that rejected every cyclic type.
+/// Carrying nothing is strictly better than both: one instantiation per
+/// *type*, no cap, and no rejection. The runtime recursion is stopped by
+/// @p visited, not by the type system.
 /// @tparam Member The static type of the member `annotateBasicMemberProperty`
 ///                 was just applied to.
-/// @tparam Depth  Nested-aggregate levels already entered (0 at the action type).
 /// @param dom      The whole schema DOM, wrapped (so a `$ref`'s `$defs` entry can be found);
 ///                  see `SchemaDomRef`.
 /// @param property The property node for this member (or, for `std::vector<Sub>`,
 ///                  the property whose `"items"` node is the one to check).
 /// @param visited  `$defs` keys already annotated on this `mergeSchemaExtras`
 ///                  call; see `NestedDefsVisited`.
-template <typename Member, std::size_t Depth>
+template <typename Member>
 void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& property, NestedDefsVisited& visited) {
     if constexpr (ReflectableAggregate<Member>) {
-        if constexpr (Depth >= kMaxNestDepth) {
-            static_assert(Depth < kMaxNestDepth,
-                          "morph::forms: nested-aggregate schema deeper than morph::forms::detail::"
-                          "kMaxNestDepth. Either this member's type contains itself -- directly, or through "
-                          "some type further down (a self- or mutually-referential type, e.g. `struct Node "
-                          "{ std::vector<Node> children; };`) -- or its type graph is genuinely nested that "
-                          "deep. A cycle cannot be supported at all: the schema it describes has no bottom, "
-                          "so the recursion that writes it would not terminate. Restructure the domain type "
-                          "(flatten the self-reference, or represent the recursive edge as an opaque id "
-                          "instead of a nested value). If the graph is acyclic and really is this deep, "
-                          "raise kMaxNestDepth in forms.hpp -- the limit is there to turn a runaway "
-                          "instantiation into this message, not to cap legitimate nesting.");
-        } else {
-            annotateNestedAggregateRef<Member, Depth + 1>(dom, property, visited);
-        }
+        annotateNestedAggregateRef<Member>(dom, property, visited);
     } else if constexpr (IsStdVector<Member>::value && ReflectableAggregate<typename IsStdVector<Member>::ValueType>) {
         using ItemType = typename IsStdVector<Member>::ValueType;
-        if constexpr (Depth >= kMaxNestDepth) {
-            static_assert(Depth < kMaxNestDepth,
-                          "morph::forms: nested-aggregate schema deeper than morph::forms::detail::"
-                          "kMaxNestDepth. Either this std::vector<Sub> member's element type contains "
-                          "itself -- directly, or through some type further down (a self- or mutually-"
-                          "referential type, e.g. `struct Node { std::vector<Node> children; };`) -- or its "
-                          "type graph is genuinely nested that deep. A cycle cannot be supported at all: "
-                          "the schema it describes has no bottom, so the recursion that writes it would not "
-                          "terminate. Restructure the domain type (flatten the self-reference, or represent "
-                          "the recursive edge as an opaque id instead of a nested value). If the graph is "
-                          "acyclic and really is this deep, raise kMaxNestDepth in forms.hpp -- the limit "
-                          "is there to turn a runaway instantiation into this message, not to cap "
-                          "legitimate nesting.");
-        } else if (auto* const items = findMember(property, "items")) {
+        if (auto* const items = findMember(property, "items")) {
             // A read, so it goes through findMember: a `std::vector<Sub>`
             // property glaze emitted without an `items` node is left alone
             // rather than given an empty one. The `contains` + `operator[]`
             // pair this replaces probed the same map twice and needed a
             // standing suppression to say why the subscript was safe
             // (morph#706).
-            annotateNestedAggregateRef<ItemType, Depth + 1>(dom, *items, visited);
+            annotateNestedAggregateRef<ItemType>(dom, *items, visited);
         }
     }
 }
@@ -2536,17 +2497,19 @@ void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& propert
 /// top-level-only regardless of depth; a nested `Sub` declaring any of those
 /// has no effect here.
 ///
+/// For a `Sub` that is reachable from itself, this is entered once: the
+/// caller's @p visited set records the `$defs` key on first arrival, and a
+/// cyclic type is always in `$defs` (glaze inlines only a type used exactly
+/// once in the whole schema, which a self-reference is not).
+///
 /// @tparam Sub   Nested aggregate type (default-constructible, glaze-reflectable
 ///                -- the same requirements the top-level action type already has).
-/// @tparam Depth Nested-aggregate levels already entered, `Sub` included, so
-///                `Sub`'s own members are examined at this same @p Depth (see
-///                `recurseIntoNestedAggregateIfAny`, which increments it).
 /// @param dom  The whole schema DOM, wrapped (so a deeper `$ref`'s `$defs` entry can
 ///              be found); see `SchemaDomRef`.
 /// @param node The object-schema DOM node to annotate in place (see above).
 /// @param visited `$defs` keys already annotated on this `mergeSchemaExtras`
 ///                 call; see `NestedDefsVisited`.
-template <typename Sub, std::size_t Depth>
+template <typename Sub>
 void annotateNestedAggregate(SchemaDomRef dom, glz::generic_u64& node, NestedDefsVisited& visited) {
     Sub probe{};
     glz::generic_u64::array_t requiredNames{};
@@ -2558,7 +2521,7 @@ void annotateNestedAggregate(SchemaDomRef dom, glz::generic_u64& node, NestedDef
         auto& property = node["properties"][std::string{name}];
         property["x-order"] = std::uint64_t{I};
         annotateBasicMemberProperty<Sub, Member>(property, name);
-        recurseIntoNestedAggregateIfAny<Member, Depth>(dom, property, visited);
+        recurseIntoNestedAggregateIfAny<Member>(dom, property, visited);
     });
     // Idempotent if two members (or two actions sharing this schema call)
     // resolve to the same $defs entry: re-deriving the identical required
@@ -2570,7 +2533,7 @@ void annotateNestedAggregate(SchemaDomRef dom, glz::generic_u64& node, NestedDef
 
 /// @brief Resolves the object-schema DOM node for a nested-aggregate member,
 ///        given the property (or array `items`) node glaze wrote for it, and
-///        annotates it via `annotateNestedAggregate<Sub, Depth>`.
+///        annotates it via `annotateNestedAggregate<Sub>`.
 ///
 /// Handles both forms `Sub` can take in the schema (see
 /// `annotateNestedAggregate`'s doc comment): a `$ref` into `$defs` (`Sub` used
@@ -2585,15 +2548,13 @@ void annotateNestedAggregate(SchemaDomRef dom, glz::generic_u64& node, NestedDef
 /// it with byte-identical content. The first arrival annotates it and records
 /// the key; later arrivals return without touching the DOM.
 /// @tparam Sub          Nested aggregate type, as `annotateNestedAggregate` requires.
-/// @tparam Depth        Nested-aggregate levels already entered, `Sub` included;
-///                       forwarded to `annotateNestedAggregate` unchanged.
 /// @param dom           The whole schema DOM, wrapped (so a `$ref`'s `$defs` entry can
 ///                       be found); see `SchemaDomRef`.
 /// @param propertyOrItems The property node itself (single nested member) or its
 ///                        array `items` node (`std::vector<Sub>` member).
 /// @param visited       `$defs` keys already annotated on this `mergeSchemaExtras`
 ///                       call; see `NestedDefsVisited`.
-template <typename Sub, std::size_t Depth>
+template <typename Sub>
 void annotateNestedAggregateRef(SchemaDomRef dom, glz::generic_u64& propertyOrItems, NestedDefsVisited& visited) {
     constexpr std::string_view kDefsPrefix = "#/$defs/";
     if (auto* const refNode = findMember(propertyOrItems, "$ref")) {
@@ -2618,7 +2579,7 @@ void annotateNestedAggregateRef(SchemaDomRef dom, glz::generic_u64& propertyOrIt
                 // annotates it. It is evaluated last, so a key that fails
                 // the lookup above is never recorded as done.
                 if (entry != nullptr && visited.insert(key).second) {
-                    annotateNestedAggregate<Sub, Depth>(dom, *entry, visited);
+                    annotateNestedAggregate<Sub>(dom, *entry, visited);
                 }
             }
         }
@@ -2627,7 +2588,7 @@ void annotateNestedAggregateRef(SchemaDomRef dom, glz::generic_u64& propertyOrIt
     // The inlined form needs no `visited` check: glaze inlines exactly when the
     // type is referenced once in the whole schema, so this node has one route.
     if (propertyOrItems.contains("properties")) {
-        annotateNestedAggregate<Sub, Depth>(dom, propertyOrItems, visited);
+        annotateNestedAggregate<Sub>(dom, propertyOrItems, visited);
     }
 }
 
@@ -3008,20 +2969,20 @@ template <typename A>
         // identical rules (see annotateBasicMemberProperty's doc comment).
         annotateBasicMemberProperty<A, Member>(property, name);
 
-        // Nested aggregates (recursive, depth-bounded -- docs/spec/forms/forms.md,
-        // "Nested aggregates (recursive, depth-bounded)"): a member whose type
+        // Nested aggregates (recursive, cycle-safe -- docs/spec/forms/forms.md,
+        // "Nested aggregates (recursive, cycle-safe)"): a member whose type
         // is itself a reflectable aggregate gets an object schema from glaze --
         // either inlined directly into this property (the type is used exactly
         // once in the whole schema) or shared via `$defs`/`$ref` (used 2+
         // times). `recurseIntoNestedAggregateIfAny` resolves whichever form it
         // is and recurses so that object schema's own members get
         // `x-order`/`required`/title/Quantity/Choice/widget annotations too,
-        // however deep the type graph goes, up to kMaxNestDepth levels (past
-        // which, and for a cyclic type, it is a compile error -- see that
-        // function's doc comment). Purely additive: an action with no nested
-        // aggregate member has nothing here to trigger on, so its schema is
-        // byte-for-byte unchanged.
-        recurseIntoNestedAggregateIfAny<Member, 0>(SchemaDomRef{dom}, property, nestedVisited);
+        // however deep the type graph goes -- there is no depth limit, and a
+        // cyclic type is described rather than rejected (see that function's
+        // doc comment). `nestedVisited` is what stops the walk. Purely
+        // additive: an action with no nested aggregate member has nothing here
+        // to trigger on, so its schema is byte-for-byte unchanged.
+        recurseIntoNestedAggregateIfAny<Member>(SchemaDomRef{dom}, property, nestedVisited);
     });
     // Always assign — an explicit empty array beats leaving whatever the
     // schema writer may have emitted (or omitted) for `required`.
