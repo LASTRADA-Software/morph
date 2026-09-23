@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <poll.h>
 #include <sys/socket.h>
 
 #include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <cerrno>
 #include <chrono>
 #include <functional>
 #include <future>
@@ -27,7 +29,9 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <thread>
+#include <utility>
 #include <vector>
 
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based
@@ -149,16 +153,34 @@ class FakeWsServer {
 public:
     // Reads frames sent by the client under test (a real SocketBackend),
     // which RFC 6455 §5.1 requires to mask every frame it sends.
-    FakeWsServer() : _listener(morph::net::detail::TcpSocket::listen(0)), _reader(/*expectMasked=*/true) {}
+    FakeWsServer() : _listener(morph::net::detail::TcpSocket::listen(0)), _reader(/*expectMasked=*/true) {
+        // Non-blocking so `acceptAndHandshake()` can put a bound on the wait;
+        // see the comment there. `tryAccept()` still hands back a *blocking*
+        // connection socket, so nothing downstream changes.
+        if (!_listener.setNonBlocking()) {
+            throw std::runtime_error("FakeWsServer: could not put the listener into non-blocking mode");
+        }
+    }
 
     [[nodiscard]] std::uint16_t port() const { return _listener.boundPort(); }
 
     // Accepts the pending connection and completes a real WS handshake.
-    // Blocking, but the client (a SocketBackend under test) is already
-    // connecting concurrently on its own io thread by the time this is
-    // called, so it returns promptly.
+    //
+    // The client (a SocketBackend under test) is already connecting
+    // concurrently on its own io thread by the time this is called, so this
+    // normally returns promptly -- but "normally" is not a bound. A blocking
+    // `accept()` here parks the *main test thread* with nothing else in the
+    // process able to satisfy it if the client never connects, which is how
+    // morph#559 saw a net test hang indefinitely in `accept()` under
+    // concurrent machine load: a hang costs a whole CI job, where a failure
+    // costs one line. Every test in this file goes through here, so bounding
+    // it once bounds all of them.
+    //
+    // This is a bound on a *starvation* failure, not a fix for whatever
+    // caused the client not to connect: if this throws, the thing to
+    // investigate is the client, not the timeout.
     void acceptAndHandshake() {
-        _socket = _listener.accept();
+        _socket = acceptWithin(std::chrono::seconds{20});
         std::string const leftover = morph::net::detail::performServerHandshake(_socket);
         _reader.feed(leftover);
     }
@@ -215,6 +237,34 @@ public:
     }
 
 private:
+    // `poll()` supplies the bound and `tryAccept()` never parks, so the wait
+    // is bounded even in the case the listener's own docs call out: a peer
+    // that resets between the readability report and the `accept` takes the
+    // pending connection away again, and a blocking `accept()` would park on
+    // the wakeup it had already consumed.
+    morph::net::detail::TcpSocket acceptWithin(std::chrono::milliseconds timeout) {
+        auto const deadline = std::chrono::steady_clock::now() + timeout;
+        for (;;) {
+            if (auto accepted = _listener.tryAccept()) {
+                return std::move(*accepted);
+            }
+            auto const remaining =
+                std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+            if (remaining <= std::chrono::milliseconds::zero()) {
+                throw std::runtime_error("FakeWsServer::acceptAndHandshake: no client connected within " +
+                                         std::to_string(timeout.count()) + "ms");
+            }
+            pollfd pfd{};
+            pfd.fd = _listener.nativeHandle();
+            pfd.events = POLLIN;
+            int const ready = ::poll(&pfd, 1, static_cast<int>(remaining.count()));
+            if (ready < 0 && errno != EINTR) {
+                throw std::runtime_error("FakeWsServer::acceptAndHandshake: poll() failed: " +
+                                         std::system_category().message(errno));
+            }
+        }
+    }
+
     morph::net::detail::TcpSocket _listener;
     morph::net::detail::TcpSocket _socket;
     morph::net::detail::WsFrameReader _reader;

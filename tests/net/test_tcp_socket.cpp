@@ -42,16 +42,26 @@ bool makeNonBlocking(int rawFd) {
 
 namespace {
 
-// Highest fd currently open in this process, scanned up to `limit`. Same
-// technique as tests/net/test_socket_server.cpp's own `highestOpenFd()`.
-int highestOpenFd(int limit) {
+// What a scan of this process's fd table found, up to some ceiling: the
+// highest fd open, and how many fds in that range are open at all. Same
+// technique as tests/net/test_socket_server.cpp's own `highestOpenFd()`,
+// with the count added -- `highest + 1 - open` is the size of the gap that
+// `FdLimitClamp` exists to fill, and morph#559 asks for it to be *reported*
+// rather than assumed away.
+struct FdScan {
     int highest = -1;
+    int open = 0;
+};
+
+FdScan scanOpenFds(int limit) {
+    FdScan scan;
     for (int fd = 0; fd < limit; ++fd) {
         if (::fcntl(fd, F_GETFD) != -1) {
-            highest = fd;
+            scan.highest = fd;
+            ++scan.open;
         }
     }
-    return highest;
+    return scan;
 }
 
 // RAII guard: forces the fd table to genuinely zero headroom and restores the
@@ -74,23 +84,39 @@ int highestOpenFd(int limit) {
 // then actually opens `/dev/null` repeatedly until `open()` itself fails,
 // filling any such gap for real rather than assuming there isn't one. Only
 // once real exhaustion has been *observed* does the syscall under test run.
+//
+// morph#559 reported this test failing under concurrent machine load and asked
+// for the clamp to *say* what it measured rather than leave the next reader
+// guessing. `exhausted()` and `summary()` are that: every call site asserts
+// `exhausted()` before the syscall under test -- so a clamp that did not bite
+// fails on its own terms instead of being mistaken for a bug in `accept()` --
+// and `INFO(summary())` puts the whole measurement (ambient fd table, limit
+// applied, fds it took to fill, and the errno the fill loop stopped on) into
+// the failure output of whichever assertion follows.
+//
+// The `exhausted()` check is deliberately *not* a REQUIRE inside this
+// constructor: a Catch2 assertion failure there throws out of a half-built
+// object, whose destructor never runs, leaving the process clamped and the
+// filler fds leaked for every test after it.
 class FdLimitClamp {
 public:
     FdLimitClamp() {
         REQUIRE(::getrlimit(RLIMIT_NOFILE, &_original) == 0);
-        int const highest = highestOpenFd(
-            _original.rlim_cur < static_cast<rlim_t>(65536) ? static_cast<int>(_original.rlim_cur) : 65536);
-        REQUIRE(highest >= 0);
+        _ambient = scanOpenFds(_original.rlim_cur < static_cast<rlim_t>(65536) ? static_cast<int>(_original.rlim_cur)
+                                                                               : 65536);
+        REQUIRE(_ambient.highest >= 0);
         // A little headroom above `highest` so the fill loop below has a
         // small, bounded number of fds to open rather than racing to a huge
         // platform-default ceiling.
         rlimit constrained = _original;
-        constrained.rlim_cur = static_cast<rlim_t>(highest + 17);
+        constrained.rlim_cur = static_cast<rlim_t>(_ambient.highest + 17);
+        _clampedTo = constrained.rlim_cur;
         REQUIRE(::setrlimit(RLIMIT_NOFILE, &constrained) == 0);
 
         for (;;) {
             int const fd = ::open("/dev/null", O_RDONLY);
             if (fd < 0) {
+                _fillErrno = errno;
                 break;
             }
             _dummyFds.push_back(fd);
@@ -109,8 +135,30 @@ public:
         ::setrlimit(RLIMIT_NOFILE, &_original);
     }
 
+    /// `true` only if the fill loop stopped because the fd table was full.
+    /// Any other stopping errno means the syscall under test is about to run
+    /// against an fd table that still has headroom, so whatever it does next
+    /// measures nothing.
+    [[nodiscard]] bool exhausted() const { return _fillErrno == EMFILE; }
+
+    /// Everything the clamp measured, on one line, for `INFO()` at a call
+    /// site: the ambient fd table it found, the limit it applied, how many
+    /// fds it had to open to fill the table, and why the fill loop stopped.
+    [[nodiscard]] std::string summary() const {
+        return "FdLimitClamp: ambient highest fd=" + std::to_string(_ambient.highest) +
+               " open fds=" + std::to_string(_ambient.open) +
+               " gap=" + std::to_string(_ambient.highest + 1 - _ambient.open) + "; RLIMIT_NOFILE soft " +
+               std::to_string(_original.rlim_cur) + " -> " + std::to_string(_clampedTo) +
+               "; filler fds opened=" + std::to_string(_dummyFds.size()) +
+               "; fill loop stopped on errno=" + std::to_string(_fillErrno) + " (" +
+               std::system_category().message(_fillErrno) + ")";
+    }
+
 private:
     rlimit _original{};
+    FdScan _ambient{};
+    rlim_t _clampedTo = 0;
+    int _fillErrno = 0;
     std::vector<int> _dummyFds;
 };
 
@@ -373,6 +421,8 @@ TEST_CASE("TcpSocket::connect: fails cleanly when a black-holed peer never compl
 TEST_CASE("TcpSocket::connect: fails cleanly when socket() runs out of file descriptors", "[net][tcp]") {
     {
         FdLimitClamp const clamp;
+        INFO(clamp.summary());
+        REQUIRE(clamp.exhausted());
         REQUIRE_THROWS_AS(TcpSocket::connect("127.0.0.1", 54321, std::chrono::milliseconds{200}), std::runtime_error);
     }
     // The constraint was scoped to just that one call: a normal connect()
@@ -385,6 +435,8 @@ TEST_CASE("TcpSocket::connect: fails cleanly when socket() runs out of file desc
 TEST_CASE("TcpSocket::listen: fails cleanly when socket() runs out of file descriptors", "[net][tcp]") {
     {
         FdLimitClamp const clamp;
+        INFO(clamp.summary());
+        REQUIRE(clamp.exhausted());
         REQUIRE_THROWS_AS(TcpSocket::listen(0), std::runtime_error);
     }
     // The constraint was scoped to just that one call: a normal listen()
@@ -432,7 +484,26 @@ TEST_CASE("TcpSocket::accept: throws when accept() itself runs out of file descr
     // (not a wait) is what it actually observes.
     auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
 
+    // ...but that is a *precondition*, not something `connect()` returning
+    // establishes on its own. A loopback `connect()` completes when the
+    // SYN-ACK arrives, which is a different instant from the one at which the
+    // listener's accept queue gains the child socket (the final ACK). On a
+    // machine under load those two can separate, and the blocking `accept()`
+    // below would then park -- morph#559 saw a net test park in `accept()`
+    // indefinitely and take a whole run with it. Waiting for the listener to
+    // actually report readable turns that into a bounded, named failure here,
+    // and leaves `accept()` with a connection genuinely queued so the EMFILE
+    // it hits is the one under test.
+    pollfd listenerReady{};
+    listenerReady.fd = listener.nativeHandle();
+    listenerReady.events = POLLIN;
+    int const queued = ::poll(&listenerReady, 1, 5000);
+    INFO("poll() on the listener returned " << queued << " (revents=" << listenerReady.revents << ")");
+    REQUIRE(queued == 1);
+
     FdLimitClamp const clamp;
+    INFO(clamp.summary());
+    REQUIRE(clamp.exhausted());
     REQUIRE_THROWS_AS(listener.accept(), std::runtime_error);
 }
 
