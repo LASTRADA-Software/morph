@@ -462,6 +462,45 @@ void BoardModel::logFailure(const Action& action, const std::string& error) cons
     _log->flush();
 }
 
+template <typename Action>
+void BoardModel::logFailureForCurrentException(const Action& action) const {
+    try {
+        // `throw;` re-raises the exception this function's caller is
+        // handling, so the three clauses below are a type switch over it
+        // without any handler having to name it. The original object is not
+        // copied and not consumed: the caller's own `throw;`, after this
+        // returns, is what actually propagates it.
+        try {
+            throw;
+        } catch (const KanbanError& error) {
+            // A refusal this rung decided on. `what()` is the message the
+            // caller is being given, and it is what the journal recorded for
+            // these before morph#757 -- unchanged, deliberately.
+            logFailure(action, error.what());
+        } catch (const std::exception& error) {
+            // Not a refusal -- something broke. Prefixed rather than recorded
+            // bare, because an auditor reading `LogEntry::error` has no other
+            // field telling the two apart, and "the board refused you" and
+            // "the board fell over" are not the same finding.
+            logFailure(action, std::string{"unexpected failure: "} + error.what());
+        } catch (...) {
+            logFailure(action, "unexpected failure: non-std::exception");
+        }
+    } catch (...) {
+        // The journalling itself failed -- see this function's declaration
+        // for why nothing may escape from here. Every statement in this
+        // handler is non-throwing by construction: `log::logError` is
+        // `noexcept` and the argument is a string literal, so there is no
+        // allocation to fail. That costs the nested exception's own text,
+        // which is the price of not replacing the caller's diagnosis with
+        // it; the cause is usually the same one the caller is about to be
+        // told about anyway.
+        ::morph::log::logError(
+            "[kanban::BoardModel] a failed action could not be journalled; the original "
+            "failure is the one reaching the caller");
+    }
+}
+
 void BoardModel::requireRoleOn(std::uint64_t projectDbId, Role minimum) const {
     const auto& principal = requireOwner();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
@@ -559,8 +598,8 @@ GetBoardResult BoardModel::execute(const CreateColumn& action) {
         // caller the CreateColumn failed.
         runPostCommitTail([&] { logAction(action, result); }, "CreateColumn");
         return result;
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }
@@ -611,8 +650,8 @@ GetBoardResult BoardModel::execute(const CreateSwimlane& action) {
         // caller the CreateSwimlane failed.
         runPostCommitTail([&] { logAction(action, result); }, "CreateSwimlane");
         return result;
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }
@@ -678,8 +717,8 @@ GetBoardResult BoardModel::execute(const CreateTask& action) {
         // caller the CreateTask failed.
         runPostCommitTail([&] { logAction(action, result); }, "CreateTask");
         return result;
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }
@@ -733,8 +772,8 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
         // caller the AddComment failed.
         runPostCommitTail([&] { logAction(action, result); }, "AddComment");
         return result;
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }
@@ -790,8 +829,8 @@ Ack BoardModel::execute(const AddAttachment& action) {
         // make the attachment un-added.
         runPostCommitTail([&] { logAction(action, Ack{}); }, "AddAttachment");
         return Ack{};
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }
@@ -867,8 +906,8 @@ Ack BoardModel::execute(const RemoveAttachment& action) {
         // ── post-commit tail (morph#751) ────────────────────────────────
         runPostCommitTail([&] { logAction(action, Ack{}); }, "RemoveAttachment");
         return Ack{};
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }
@@ -928,8 +967,8 @@ CreateRuleResult BoardModel::execute(const CreateRule& action) {
         // ── post-commit tail (morph#751) ────────────────────────────────
         runPostCommitTail([&] { logAction(action, result); }, "CreateRule");
         return result;
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }
@@ -1004,8 +1043,8 @@ Ack BoardModel::execute(const DeleteRule& action) {
         // ── post-commit tail (morph#751) ────────────────────────────────
         runPostCommitTail([&] { logAction(action, Ack{}); }, "DeleteRule");
         return Ack{};
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }
@@ -1039,8 +1078,8 @@ ApplyTagMutationResult BoardModel::execute(const ApplyTagMutation& action) {
         // visible in this function.
         runPostCommitTail([&] { logAction(action, ApplyTagMutationResult{}); }, "ApplyTagMutation");
         return ApplyTagMutationResult{};
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }
@@ -1329,8 +1368,8 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
                 return buildState(mapper.Get(), project);
             },
             result, "MoveTaskPosition");
-    } catch (const KanbanError& error) {
-        logFailure(action, error.what());
+    } catch (...) {
+        logFailureForCurrentException(action);
         throw;
     }
 }

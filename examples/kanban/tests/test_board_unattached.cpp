@@ -349,14 +349,13 @@ TEST_CASE("A rejected contextKey still produces the raw key as the journal entit
     // CreateColumn, not GetBoardState: GetBoardState is Loggable::No and its
     // execute() has no try/catch at all, so it never reaches logFailure.
     // CreateColumn's own attach guard throw is caught by its execute()'s
-    // KanbanError handler, which does. The attach guard still refuses "foo"
+    // catch-all handler, which does. The attach guard still refuses "foo"
     // as a board either way -- this is the existing #368 behavior, unaffected
     // by #422's split.
     CHECK_THROWS_AS(model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}), kanban::NotFound);
 
-    // The refusal above is a KanbanError, so CreateColumn's own catch block
-    // already ran logFailure for it before rethrowing -- exactly the path
-    // that used to stamp "" instead of "foo".
+    // CreateColumn's own catch block already journalled the refusal before
+    // rethrowing -- exactly the path that used to stamp "" instead of "foo".
     const auto entries = log->entries();
     REQUIRE(entries.size() == 1);
     CHECK(entries.front().entityKey == "foo");
